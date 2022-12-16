@@ -1,23 +1,55 @@
-#[cfg(feature = "clap")]
-use anyhow::anyhow;
 use anyhow::Result;
 use heck::*;
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
+use crate::component;
 use wasmtime_environ::component::{
     CanonicalOptions, Component, CoreDef, CoreExport, Export, ExportItem, GlobalInitializer,
-    InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex, StringEncoding,
+    InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex, StringEncoding
 };
 use wasmtime_environ::{EntityIndex, ModuleTranslation, PrimaryMap};
-use wit_bindgen_core::component::ComponentGenerator;
-use wit_bindgen_core::wit_parser::abi::{
-    AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType,
-};
-use wit_bindgen_core::{
-    uwrite, uwriteln, wit_parser::*, Files, InterfaceGenerator, WorldGenerator,
-};
+use wit_parser::*;
+use wit_parser::abi::{AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType};
+use wit_bindgen_core::{uwrite, uwriteln, Files, InterfaceGenerator, WorldGenerator};
+
+#[derive(Default)]
+pub struct Opts {
+    /// Disables generation of `*.d.ts` files and instead only generates `*.js`
+    /// source files.
+    pub no_typescript: bool,
+    /// Provide a custom JS instantiation API for the component instead
+    /// of the direct importable native ESM output.
+    pub instantiation: bool,
+    /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of
+    /// component import specifiers to JS import specifiers.
+    pub map: Option<HashMap<String, String>>,
+    /// Enables all compat flags: --tla-compat.
+    pub compat: bool,
+    /// Disables compatibility in Node.js without a fetch global.
+    pub no_nodejs_compat: bool,
+    /// Set the cutoff byte size for base64 inlining core Wasm in instantiation mode
+    /// (set to 0 to disable all base64 inlining)
+    pub base64_cutoff: usize,
+    /// Enables compatibility for JS environments without top-level await support
+    /// via an async $init promise export to wait for instead.
+    pub tla_compat: bool,
+    /// Disable verification of component Wasm data structures when
+    /// lifting as a production optimization
+    pub valid_lifting_optimization: bool,
+}
+
+impl Opts {
+    pub fn build(self) -> Result<Box<dyn component::ComponentGenerator>> {
+        let mut gen = Js::default();
+        gen.opts = self;
+        if gen.opts.compat {
+            gen.opts.tla_compat = true;
+        }
+        Ok(Box::new(gen))
+    }
+}
 
 #[derive(Default)]
 struct Js {
@@ -43,61 +75,6 @@ struct Js {
 
     /// List of all intrinsics emitted to `src` so far.
     all_intrinsics: BTreeSet<Intrinsic>,
-}
-
-#[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "clap", derive(clap::Args))]
-pub struct Opts {
-    /// Disables generation of `*.d.ts` files and instead only generates `*.js`
-    /// source files.
-    #[cfg_attr(feature = "clap", arg(long))]
-    pub no_typescript: bool,
-    /// Provide a custom JS instantiation API for the component instead
-    /// of the direct importable native ESM output.
-    #[cfg_attr(
-        feature = "clap",
-        arg(
-            long,
-            short = 'I',
-            conflicts_with = "compatibility",
-            conflicts_with = "no-compatibility",
-            conflicts_with = "compat"
-        )
-    )]
-    pub instantiation: bool,
-    /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of
-    /// component import specifiers to JS import specifiers.
-    #[cfg_attr(feature = "clap", arg(long), clap(value_parser = maps_str_to_map))]
-    pub map: Option<HashMap<String, String>>,
-    /// Enables all compat flags: --tla-compat.
-    #[cfg_attr(feature = "clap", arg(long, short = 'c'))]
-    pub compat: bool,
-    /// Disables compatibility in Node.js without a fetch global.
-    #[cfg_attr(feature = "clap", arg(long, group = "no-compatibility"))]
-    pub no_nodejs_compat: bool,
-    /// Set the cutoff byte size for base64 inlining core Wasm in instantiation mode
-    /// (set to 0 to disable all base64 inlining)
-    #[cfg_attr(feature = "clap", arg(long, short = 'b', default_value_t = 5000))]
-    pub base64_cutoff: usize,
-    /// Enables compatibility for JS environments without top-level await support
-    /// via an async $init promise export to wait for instead.
-    #[cfg_attr(feature = "clap", arg(long, group = "compatibility"))]
-    pub tla_compat: bool,
-    /// Disable verification of component Wasm data structures when
-    /// lifting as a production optimization
-    #[cfg_attr(feature = "clap", arg(long))]
-    pub valid_lifting_optimization: bool,
-}
-
-impl Opts {
-    pub fn build(self) -> Result<Box<dyn ComponentGenerator>> {
-        let mut gen = Js::default();
-        gen.opts = self;
-        if gen.opts.compat {
-            gen.opts.tla_compat = true;
-        }
-        Ok(Box::new(gen))
-    }
 }
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -195,7 +172,7 @@ struct JsInterface<'a> {
     needs_ty_result: bool,
 }
 
-impl ComponentGenerator for Js {
+impl component::ComponentGenerator for Js {
     fn instantiate(
         &mut self,
         component: &Component,
@@ -2762,20 +2739,6 @@ fn to_js_ident(name: &str) -> &str {
         "import" => "import_",
         s => s,
     }
-}
-
-#[cfg(feature = "clap")]
-fn maps_str_to_map(maps: &str) -> Result<HashMap<String, String>> {
-    let mut map_hash = HashMap::<String, String>::new();
-    for mapping in maps.split(",") {
-        match mapping.split_once('=') {
-            Some((left, right)) => {
-                map_hash.insert(left.into(), right.into());
-            }
-            None => return Err(anyhow!(format!("Invalid mapping entry \"{}\"", &mapping))),
-        };
-    }
-    Ok(map_hash)
 }
 
 // https://tc39.es/ecma262/#prod-IdentifierStartChar
