@@ -1,0 +1,48 @@
+world wasm-tools-js {
+  import console: interface {
+    log: func(msg: string)
+    error: func(msg: string)
+  }
+
+  default export interface {
+    /// Translate the WebAssembly text format to binary
+    parse: func(wat: string) -> result<list<u8>, string>
+
+    /// Translate the WebAssembly binary format to text
+    print: func(binary: list<u8>) -> result<string, string>
+
+    record component-opts {
+      /// The "world" that the input binary implements.
+      ///
+      /// This argument is a `*.wit` file which describes the imports and exports
+      /// of the core wasm module. Users of `wit-bindgen` don't need this as those
+      /// generators already embed this information into the input core wasm
+      /// binary.
+      wit: option<string>,
+      /// Generate a "types only" component which is a binary encoding of the
+      /// input wit file or the wit already encoded into the module.
+      types-only: option<bool>,
+      /// An adapter module can be used to translate the `wasi_snapshot_preview1`
+      /// ABI, for example, to one that uses the component model.
+      adapters: option<list<tuple<string, list<u8>>>>,
+      /// The expected string encoding format for the component.
+      ///
+      /// Supported values are: `utf8` (default), `utf16`, and `compact-utf16`.
+      /// This is only applicable to the `--wit` argument to describe the string
+      /// encoding of the functions in that world.
+      string-encoding: option<string-encoding>
+    }
+
+    enum string-encoding {
+      utf8,
+      utf16,
+      compact-utf16
+    }
+
+    /// Create a component from a core wasm binary
+    component-new: func(binary: list<u8>, opts: option<component-opts>) -> result<list<u8>, string>
+
+    /// Extract a *.wit interface from a component
+    component-wit: func(binary: list<u8>) -> result<string, string>
+  }
+}
