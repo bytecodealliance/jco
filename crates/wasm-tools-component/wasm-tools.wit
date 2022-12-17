@@ -44,5 +44,9 @@ world wasm-tools-js {
 
     /// Extract a *.wit interface from a component
     component-wit: func(binary: list<u8>) -> result<string, string>
+
+    /// Extract the core modules from a component
+    /// (strictly speaking this makes it Wasm Tools + Extract Core Modules)
+    extract-core-modules: func(component: list<u8>) -> result<list<tuple<u32, u32>>, string>
   }
 }

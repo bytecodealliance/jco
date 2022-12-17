@@ -502,6 +502,7 @@ name = "wasm-tools-js"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "wasmparser",
  "wasmprinter",
  "wat",
  "wit-bindgen-guest-rust",

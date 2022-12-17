@@ -42,8 +42,15 @@ world js-transpiler-bindgen {
       valid-lifting-optimization: option<bool>,
     }
 
+    record transpiled {
+      files: files,
+      imports: list<string>,
+      exports: list<string>
+    }
+
     /// Generate the file structure for the transpilation of a component
-    /// into a JS embedding
-    generate: func(component: list<u8>, options: generate-options) -> result<files, string>
+    /// into a JS embedding, returns the file list and imports and exports of the
+    /// output JS transpiled component
+    generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>
   }
 }
