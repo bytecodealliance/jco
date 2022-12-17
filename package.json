@@ -1,9 +1,18 @@
 {
   "name": "js-component-tools",
+  "version": "1.0.0",
+  "main": "dist/api.mjs",
+  "type": "module",
+  "author": "Guy Bedford",
+  "bin": {
+    "jsct": "./dist/cli.mjs"
+  },
   "devDependencies": {
     "@types/node": "^15.12.2",
     "@typescript-eslint/eslint-plugin": "^5.41.0",
     "@typescript-eslint/parser": "^5.41.0",
+    "@vercel/ncc": "^0.36.0",
+    "binaryen": "^111.0.0",
     "chalk-template": "^0.4.0",
     "commander": "^9.4.1",
     "eslint": "^8.26.0",
@@ -14,16 +23,19 @@
     "terser": "^5.16.1",
     "typescript": "^4.3.2"
   },
-  "type": "module",
   "scripts": {
-    "build": "npm run build:wasm ; mkdir -p obj ; npm run build:js-transpiler-bindgen ; npm run build:wasm-tools",
+    "build": "npm run dev && ./build-dist.sh",
+    "dev": "npm run build:wasm && mkdir -p obj && npm run build:js-transpiler-bindgen && npm run build:wasm-tools",
     "build:wasm": "cargo build --workspace --target wasm32-unknown-unknown --release",
-    "build:js-transpiler-bindgen": "npm run build:component:js-transpiler-bindgen ; npm run build:transpile:js-transpiler-bindgen",
-    "build:wasm-tools": "npm run build:component:wasm-tools ; npm run build:transpile:wasm-tools",
-    "build:component:js-transpiler-bindgen": "wasm-tools component new target/wasm32-unknown-unknown/release/js_transpiler_bindgen.wasm -o obj/js-transpiler-bindgen.wasm",
-    "build:component:wasm-tools": "wasm-tools component new target/wasm32-unknown-unknown/release/wasm_tools_js.wasm -o obj/wasm-tools.wasm",
-    "build:transpile:js-transpiler-bindgen": "../wit-bindgen/target/debug/wit-bindgen host js obj/js-transpiler-bindgen.wasm --map console=../lib/console.js --out-dir obj",
-    "build:transpile:wasm-tools": "../wit-bindgen/target/debug/wit-bindgen host js obj/wasm-tools.wasm --map console=../lib/console.js --out-dir obj",
+    "build:js-transpiler-bindgen": "npm run build:component:js-transpiler-bindgen && npm run build:transpile:js-transpiler-bindgen",
+    "build:wasm-tools": "npm run build:component:wasm-tools && npm run build:transpile:wasm-tools",
+    "build:component:js-transpiler-bindgen": "./dist/cli.mjs new target/wasm32-unknown-unknown/release/js_transpiler_bindgen.wasm -o obj/js-transpiler-bindgen.wasm",
+    "build:component:wasm-tools": "./dist/cli.mjs new target/wasm32-unknown-unknown/release/wasm_tools_js.wasm -o obj/wasm-tools.wasm",
+    "build:transpile:js-transpiler-bindgen": "./dist/cli.mjs transpile obj/js-transpiler-bindgen.wasm --compat --map console=../lib/console.js --out-dir obj",
+    "build:transpile:wasm-tools": "./dist/cli.mjs transpile obj/wasm-tools.wasm --map console=../lib/console.js --compat --out-dir obj",
     "test": "mocha -b -u tdd tests/*.js"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

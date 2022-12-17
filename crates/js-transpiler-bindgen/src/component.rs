@@ -7,14 +7,19 @@
 //! The main definition here is the `ComponentGenerator` trait as well as the
 //! `generate` function.
 
-use wit_bindgen_core::{Files, WorldGenerator};
 use anyhow::{Context, Result};
 use wasmtime_environ::component::{
-    Component, ComponentTypesBuilder, StaticModuleIndex, Translator,
+    Component, ComponentTypesBuilder, Export, StaticModuleIndex, Translator,
 };
 use wasmtime_environ::wasmparser::{Validator, WasmFeatures};
 use wasmtime_environ::{ModuleTranslation, PrimaryMap, ScopeVec, Tunables};
+use wit_bindgen_core::{Files, WorldGenerator};
 use wit_parser::World;
+
+pub struct ComponentInfo {
+    pub imports: Vec<String>,
+    pub exports: Vec<String>,
+}
 
 /// Generate bindings to load and instantiate the specific binary component
 /// provided.
@@ -23,7 +28,7 @@ pub fn generate(
     name: &str,
     binary: &[u8],
     files: &mut Files,
-) -> Result<()> {
+) -> Result<ComponentInfo> {
     // Use the `wit-component` crate here to parse `binary` and discover
     // the type-level descriptions and `Interface`s corresponding to the
     // component binary. This is effectively a step that infers a "world" of
@@ -77,7 +82,25 @@ pub fn generate(
 
     gen.finish_component(name, files);
 
-    Ok(())
+    let imports = world
+        .imports
+        .iter()
+        .map(|impt| impt.0.to_string())
+        .collect();
+
+    let exports = component
+        .exports
+        .iter()
+        .filter(|expt| {
+            matches!(
+                expt.1,
+                Export::Instance(_) | Export::Module(_) | Export::LiftedFunction { .. }
+            )
+        })
+        .map(|expt| expt.0.to_string())
+        .collect();
+
+    Ok(ComponentInfo { imports, exports })
 }
 
 /// Trait for hosts that can execute a component by generating bindings for a

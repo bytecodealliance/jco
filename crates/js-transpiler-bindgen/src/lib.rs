@@ -1,10 +1,12 @@
 use anyhow::Result;
 use std::sync::Once;
-use wit_bindgen_core::{Files};
+use wit_bindgen_core::Files;
 mod bindgen;
 mod component;
 
 wit_bindgen_guest_rust::generate!("js-transpiler-bindgen.wit");
+
+use js_transpiler_bindgen::*;
 
 struct JsTranspilerBindgen;
 
@@ -22,13 +24,8 @@ fn init() {
 }
 
 impl js_transpiler_bindgen::JsTranspilerBindgen for JsTranspilerBindgen {
-    fn generate(
-        component: Vec<u8>,
-        options: js_transpiler_bindgen::GenerateOptions,
-    ) -> Result<Vec<(String, Vec<u8>)>, String> {
+    fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         init();
-
-        let mut out: Vec<(String, Vec<u8>)> = Vec::new();
 
         let opts = bindgen::Opts {
             no_typescript: options.no_typescript.unwrap_or(false),
@@ -44,19 +41,29 @@ impl js_transpiler_bindgen::JsTranspilerBindgen for JsTranspilerBindgen {
             valid_lifting_optimization: options.valid_lifting_optimization.unwrap_or(false),
         };
 
-        generate(component, &options.name, opts, &mut out)
-            .map_err(|e| format!("{:?}", e))?;
+        let out = generate(component, &options.name, opts).map_err(|e| format!("{:?}", e))?;
 
         Ok(out)
     }
 }
 
-fn generate (component: Vec<u8>, name: &str, opts: bindgen::Opts, out: &mut Vec<(String, Vec<u8>)>) -> Result<(), anyhow::Error> {
+fn generate(
+    component: Vec<u8>,
+    name: &str,
+    opts: bindgen::Opts,
+) -> Result<Transpiled, anyhow::Error> {
     let mut gen = opts.build()?;
-    let mut files = Files::default();
-    component::generate(&mut *gen, name, &component, &mut files)?;
-    for (name, source) in files.iter() {
-        out.push((String::from(name), source.to_vec()));
+    let mut files_obj = Files::default();
+    let component::ComponentInfo { imports, exports } =
+        component::generate(&mut *gen, name, &component, &mut files_obj)?;
+
+    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+    for (name, source) in files_obj.iter() {
+        files.push((String::from(name), source.to_vec()));
     }
-    Ok(())
+    Ok(Transpiled {
+        files,
+        imports,
+        exports,
+    })
 }

@@ -1,18 +1,18 @@
+use crate::component;
 use anyhow::Result;
 use heck::*;
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
-use crate::component;
 use wasmtime_environ::component::{
     CanonicalOptions, Component, CoreDef, CoreExport, Export, ExportItem, GlobalInitializer,
-    InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex, StringEncoding
+    InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex, StringEncoding,
 };
 use wasmtime_environ::{EntityIndex, ModuleTranslation, PrimaryMap};
-use wit_parser::*;
-use wit_parser::abi::{AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType};
 use wit_bindgen_core::{uwrite, uwriteln, Files, InterfaceGenerator, WorldGenerator};
+use wit_parser::abi::{AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType};
+use wit_parser::*;
 
 #[derive(Default)]
 pub struct Opts {
