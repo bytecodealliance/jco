@@ -1,4 +1,3 @@
-use crate::component;
 use anyhow::Result;
 use heck::*;
 use indexmap::IndexMap;
@@ -10,9 +9,11 @@ use wasmtime_environ::component::{
     InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex, StringEncoding,
 };
 use wasmtime_environ::{EntityIndex, ModuleTranslation, PrimaryMap};
-use wit_bindgen_core::{uwrite, uwriteln, Files, InterfaceGenerator, WorldGenerator};
 use wit_parser::abi::{AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType};
 use wit_parser::*;
+use crate::{uwrite, uwriteln};
+use crate::files::Files;
+use crate::source;
 
 #[derive(Default)]
 pub struct Opts {
@@ -41,18 +42,18 @@ pub struct Opts {
 }
 
 impl Opts {
-    pub fn build(self) -> Result<Box<dyn component::ComponentGenerator>> {
-        let mut gen = Js::default();
+    pub fn build(self) -> Result<JsTranspiler> {
+        let mut gen = JsTranspiler::default();
         gen.opts = self;
         if gen.opts.compat {
             gen.opts.tla_compat = true;
         }
-        Ok(Box::new(gen))
+        Ok(gen)
     }
 }
 
 #[derive(Default)]
-struct Js {
+pub struct JsTranspiler {
     /// The source code for the "main" file that's going to be created for the
     /// component we're generating bindings for. This is incrementally added to
     /// over time and primarily contains the main `instantiate` function as well
@@ -63,9 +64,9 @@ struct Js {
     imports: HashMap<String, Vec<(String, String)>>,
 
     /// Type script definitions which will become the import object
-    import_object: wit_bindgen_core::Source,
+    import_object: source::Source,
     /// Type script definitions which will become the export object
-    export_object: wit_bindgen_core::Source,
+    export_object: source::Source,
 
     /// Core module count
     core_module_cnt: usize,
@@ -166,14 +167,14 @@ impl Intrinsic {
 /// typescript definitions.
 struct JsInterface<'a> {
     src: Source,
-    gen: &'a mut Js,
+    gen: &'a mut JsTranspiler,
     iface: &'a Interface,
     needs_ty_option: bool,
     needs_ty_result: bool,
 }
 
-impl component::ComponentGenerator for Js {
-    fn instantiate(
+impl JsTranspiler {
+    pub fn instantiate(
         &mut self,
         component: &Component,
         modules: &PrimaryMap<StaticModuleIndex, ModuleTranslation<'_>>,
@@ -232,9 +233,18 @@ impl component::ComponentGenerator for Js {
         assert!(instantiator.src.ts.is_empty());
     }
 
-    fn finish_component(&mut self, name: &str, files: &mut Files) {
-        let mut output = wit_bindgen_core::Source::default();
-        let mut compilation_promises = wit_bindgen_core::Source::default();
+    pub fn core_file_name(&mut self, name: &str, idx: u32) -> String {
+        let i_str = if idx == 0 {
+            String::from("")
+        } else {
+            (idx + 1).to_string()
+        };
+        format!("{}.core{i_str}.wasm", name)
+    }
+
+    pub fn finish_component(&mut self, name: &str, files: &mut Files) {
+        let mut output = source::Source::default();
+        let mut compilation_promises = source::Source::default();
 
         // Setup the compilation data and compilation promises
         let mut removed = BTreeSet::new();
@@ -362,7 +372,7 @@ impl component::ComponentGenerator for Js {
     }
 }
 
-impl WorldGenerator for Js {
+impl JsTranspiler {
     fn import(&mut self, name: &str, iface: &Interface, files: &mut Files) {
         self.generate_interface(
             name,
@@ -434,7 +444,25 @@ impl WorldGenerator for Js {
     }
 }
 
-impl Js {
+impl JsTranspiler {
+    pub fn generate(&mut self, world: &World, files: &mut Files) {
+        self.preprocess(&world.name);
+        for (name, import) in world.imports.iter() {
+            self.import(name, import, files);
+        }
+        for (name, export) in world.exports.iter() {
+            self.export(name, export, files);
+        }
+        if let Some(iface) = &world.default {
+            self.export_default(&world.name, iface, files);
+        }
+        self.finish(world, files);
+    }
+
+    fn preprocess(&mut self, name: &str) {
+        drop(name);
+    }
+
     fn generate_interface(
         &mut self,
         name: &str,
@@ -842,7 +870,7 @@ impl Js {
 /// This is the main structure for parsing the output of Wasmtime.
 struct Instantiator<'a> {
     src: Source,
-    gen: &'a mut Js,
+    gen: &'a mut JsTranspiler,
     modules: &'a PrimaryMap<StaticModuleIndex, ModuleTranslation<'a>>,
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
     world: &'a World,
@@ -1430,9 +1458,32 @@ impl<'a> JsInterface<'a> {
     }
 }
 
-impl<'a> InterfaceGenerator<'a> for JsInterface<'a> {
+impl<'a> JsInterface<'a> {
     fn iface(&self) -> &'a Interface {
         self.iface
+    }
+
+    fn types(&mut self) {
+        for (id, ty) in self.iface().types.iter() {
+            let name = match &ty.name {
+                Some(name) => name,
+                None => continue,
+            };
+            match &ty.kind {
+                TypeDefKind::Record(record) => self.type_record(id, name, record, &ty.docs),
+                TypeDefKind::Flags(flags) => self.type_flags(id, name, flags, &ty.docs),
+                TypeDefKind::Tuple(tuple) => self.type_tuple(id, name, tuple, &ty.docs),
+                TypeDefKind::Enum(enum_) => self.type_enum(id, name, enum_, &ty.docs),
+                TypeDefKind::Variant(variant) => self.type_variant(id, name, variant, &ty.docs),
+                TypeDefKind::Option(t) => self.type_option(id, name, t, &ty.docs),
+                TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
+                TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
+                TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
+                TypeDefKind::Type(t) => self.type_alias(id, name, t, &ty.docs),
+                TypeDefKind::Future(_) => todo!("generate for future"),
+                TypeDefKind::Stream(_) => todo!("generate for stream"),
+            }
+        }
     }
 
     fn type_record(&mut self, _id: TypeId, name: &str, record: &Record, docs: &Docs) {
@@ -1608,10 +1659,6 @@ impl<'a> InterfaceGenerator<'a> for JsInterface<'a> {
         self.print_list(ty, Mode::Lift);
         self.src.ts(";\n");
     }
-
-    fn type_builtin(&mut self, _id: TypeId, name: &str, ty: &Type, docs: &Docs) {
-        drop((_id, name, ty, docs));
-    }
 }
 
 #[derive(PartialEq)]
@@ -1622,12 +1669,12 @@ enum ErrHandling {
 }
 
 struct FunctionBindgen<'a> {
-    gen: &'a mut Js,
+    gen: &'a mut JsTranspiler,
     sizes: SizeAlign,
     err: ErrHandling,
     tmp: usize,
     src: Source,
-    block_storage: Vec<wit_bindgen_core::Source>,
+    block_storage: Vec<source::Source>,
     blocks: Vec<(String, Vec<String>)>,
     params: Vec<String>,
     memory: Option<String>,
@@ -2780,10 +2827,10 @@ fn is_js_identifier(s: &str) -> bool {
 
 #[derive(Default)]
 struct Source {
-    js: wit_bindgen_core::Source,
-    js_intrinsics: wit_bindgen_core::Source,
-    js_init: wit_bindgen_core::Source,
-    ts: wit_bindgen_core::Source,
+    js: source::Source,
+    js_intrinsics: source::Source,
+    js_init: source::Source,
+    ts: source::Source,
 }
 
 impl Source {
