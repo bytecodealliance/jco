@@ -8,13 +8,11 @@
 //! `generate` function.
 
 use anyhow::{Context, Result};
-use wasmtime_environ::component::{
-    Component, ComponentTypesBuilder, Export, StaticModuleIndex, Translator,
-};
+use wasmtime_environ::component::{ComponentTypesBuilder, Export, Translator};
 use wasmtime_environ::wasmparser::{Validator, WasmFeatures};
-use wasmtime_environ::{ModuleTranslation, PrimaryMap, ScopeVec, Tunables};
-use wit_bindgen_core::{Files, WorldGenerator};
-use wit_parser::World;
+use wasmtime_environ::{ScopeVec, Tunables};
+use crate::files::Files;
+use crate::bindgen::JsTranspiler;
 
 pub struct ComponentInfo {
     pub imports: Vec<String>,
@@ -24,7 +22,7 @@ pub struct ComponentInfo {
 /// Generate bindings to load and instantiate the specific binary component
 /// provided.
 pub fn generate(
-    gen: &mut dyn ComponentGenerator,
+    gen: &mut JsTranspiler,
     name: &str,
     binary: &[u8],
     files: &mut Files,
@@ -101,33 +99,4 @@ pub fn generate(
         .collect();
 
     Ok(ComponentInfo { imports, exports })
-}
-
-/// Trait for hosts that can execute a component by generating bindings for a
-/// single component.
-///
-/// This trait inherits from `WorldGenerator` to describe type-level bindings
-/// for the host in question. This then additionally defines an `instantiate`
-/// method which will generate code to perform the precise instantiation for
-/// the component specified.
-///
-/// This trait is used in conjunction with the [`generate`] method.
-pub trait ComponentGenerator: WorldGenerator {
-    fn instantiate(
-        &mut self,
-        component: &Component,
-        modules: &PrimaryMap<StaticModuleIndex, ModuleTranslation<'_>>,
-        world: &World,
-    );
-
-    fn core_file_name(&mut self, name: &str, idx: u32) -> String {
-        let i_str = if idx == 0 {
-            String::from("")
-        } else {
-            (idx + 1).to_string()
-        };
-        format!("{}.core{i_str}.wasm", name)
-    }
-
-    fn finish_component(&mut self, name: &str, files: &mut Files);
 }

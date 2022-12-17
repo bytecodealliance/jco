@@ -1,8 +1,36 @@
 use anyhow::Result;
 use std::sync::Once;
-use wit_bindgen_core::Files;
 mod bindgen;
 mod component;
+mod files;
+mod ns;
+mod source;
+
+/// Calls [`write!`] with the passed arguments and unwraps the result.
+///
+/// Useful for writing to things with infallible `Write` implementations like
+/// `Source` and `String`.
+///
+/// [`write!`]: std::write
+#[macro_export]
+macro_rules! uwrite {
+    ($dst:expr, $($arg:tt)*) => {
+        write!($dst, $($arg)*).unwrap()
+    };
+}
+
+/// Calls [`writeln!`] with the passed arguments and unwraps the result.
+///
+/// Useful for writing to things with infallible `Write` implementations like
+/// `Source` and `String`.
+///
+/// [`writeln!`]: std::writeln
+#[macro_export]
+macro_rules! uwriteln {
+    ($dst:expr, $($arg:tt)*) => {
+        writeln!($dst, $($arg)*).unwrap()
+    };
+}
 
 wit_bindgen_guest_rust::generate!("js-transpiler-bindgen.wit");
 
@@ -53,9 +81,9 @@ fn generate(
     opts: bindgen::Opts,
 ) -> Result<Transpiled, anyhow::Error> {
     let mut gen = opts.build()?;
-    let mut files_obj = Files::default();
+    let mut files_obj = files::Files::default();
     let component::ComponentInfo { imports, exports } =
-        component::generate(&mut *gen, name, &component, &mut files_obj)?;
+        component::generate(&mut gen, name, &component, &mut files_obj)?;
 
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
     for (name, source) in files_obj.iter() {

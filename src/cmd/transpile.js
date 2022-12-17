@@ -132,7 +132,6 @@ export async function transpileComponent (component, opts) {
         }
         return output;
       }));
-      console.log('q');
 
       const asms = asmFiles.map((asm, i) =>`function asm${i}(imports) {
   ${
