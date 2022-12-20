@@ -40,7 +40,7 @@ world wasm-tools-js {
     }
 
     /// Create a component from a core wasm binary
-    component-new: func(binary: list<u8>, opts: option<component-opts>) -> result<list<u8>, string>
+    component-new: func(binary: option<list<u8>>, opts: option<component-opts>) -> result<list<u8>, string>
 
     /// Extract a *.wit interface from a component
     component-wit: func(binary: list<u8>) -> result<string, string>

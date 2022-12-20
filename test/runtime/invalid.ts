@@ -1,6 +1,6 @@
 // Flags: --instantiation
 
-import { instantiate } from "./invalid.js";
+import { instantiate } from "../output/invalid/invalid.js";
 import * as helpers from "./helpers.js";
 // @ts-ignore
 import * as assert from 'assert';

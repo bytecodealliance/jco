@@ -1,4 +1,4 @@
-import { extractCoreModules } from '../../obj/wasm-tools.js';
+import { $init, extractCoreModules, print } from '../../obj/wasm-tools.js';
 import { readFile, writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import c from 'chalk-template';
@@ -40,9 +40,10 @@ ${table(coreModules.map(([s, e], i) => [
  * 
  * @param {Uint8Array} componentBytes 
  * @param {{ quiet: boolean, optArgs?: string[] }} options?
- * @returns {Promise<{ component: Uint8Array, coreModules: any, optimizedCoreModules: Uint8Array[]}>}
+ * @returns {Promise<Uint8Array>}
  */
 export async function optimizeComponent (componentBytes, opts) {
+  await $init;
   const showSpinner = getShowSpinner();
   let spinner;
   try {
@@ -103,16 +104,12 @@ export async function optimizeComponent (componentBytes, opts) {
 
     // verify it still parses ok
     try {
-      await parse(outComponentBytes);
+      await print(outComponentBytes);
     } catch (e) {
       throw new Error(`Internal error performing optimization.\n${e.message}`)
     }
 
-    return {
-      component: outComponentBytes,
-      coreModules,
-      optimizedCoreModules
-    };
+    return outComponentBytes;
   }
   finally {
     if (spinner)

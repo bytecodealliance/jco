@@ -5,7 +5,7 @@ import { ok, strictEqual } from 'assert';
 import { readFile } from 'fs/promises';
 // @ts-ignore
 import { fileURLToPath } from 'url';
-import { thunk } from './exports_only.js';
+import { thunk } from '../output/exports_only/exports_only.js';
 
 const result = thunk();
 strictEqual(result, 'test');

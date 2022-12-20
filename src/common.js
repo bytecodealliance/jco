@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import path from 'path';
+import { resolve, extname } from 'path';
 import { tmpdir } from 'os';
 import { readFile, writeFile, unlink } from 'fs/promises';
 import { spawn } from 'child_process';
@@ -49,7 +49,7 @@ export function table (data, align = []) {
 }
 
 export function getTmpFile (source, ext) {
-  return path.resolve(tmpdir(), crypto.createHash('sha256').update(source).update(Math.random().toString()).digest('hex') + ext);
+  return resolve(tmpdir(), crypto.createHash('sha256').update(source).update(Math.random().toString()).digest('hex') + ext);
 }
 
 export async function spawnIOTmp (cmd, input, args) {

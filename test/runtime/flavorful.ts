@@ -1,4 +1,4 @@
-// Flags: --map testwasi=./helpers.js,imports=./host.js
+// Flags: --map testwasi=../helpers.js,imports=../flavorful.js
 
 // @ts-ignore
 import * as assert from 'assert';
@@ -48,7 +48,7 @@ export function listOfVariants(bools: any, results: any, enums: any) {
 }
 
 export async function run () {
-  const wasm = await import('./flavorful.js');
+  const wasm = await import('../output/flavorful/flavorful.js');
 
   wasm.testImports();
   wasm.fListInRecord1({ a: "list_in_record1" });

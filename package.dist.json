@@ -1,0 +1,10 @@
+{
+  "name": "js-component-tools",
+  "version": "1.0.0",
+  "exports": "./api.mjs",
+  "types": "api.d.ts",
+  "author": "Guy Bedford",
+  "bin": {
+    "jsct": "./cli.mjs"
+  }
+}

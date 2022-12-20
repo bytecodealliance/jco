@@ -1,7 +1,7 @@
 // Flags: --instantiation
 
-import * as helpers from "./helpers.js";
-import { instantiate } from "./strings.js";
+import * as helpers from './helpers.js';
+import { instantiate } from '../output/strings_utf16/strings_utf16.js';
 
 // @ts-ignore
 import * as assert from 'assert';
