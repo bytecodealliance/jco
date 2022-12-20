@@ -1,7 +1,7 @@
 // Flags: --instantiation
 
 import * as helpers from "./helpers.js";
-import { instantiate } from "./numbers.js";
+import { instantiate } from "../output/numbers/numbers.js";
 
 function assertEq(x: any, y: any) {
   if (x !== y)

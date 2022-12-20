@@ -35,7 +35,7 @@ impl wasm_tools_js::WasmToolsJs for WasmToolsJs {
         wat::parse_str(wat).map_err(|e| format!("{:?}", e))
     }
 
-    fn component_new(binary: Vec<u8>, opts: Option<wasm_tools_js::ComponentOpts>) -> Result<Vec<u8>, String> {
+    fn component_new(binary: Option<Vec<u8>>, opts: Option<wasm_tools_js::ComponentOpts>) -> Result<Vec<u8>, String> {
         init();
 
         let mut encoder = ComponentEncoder::default();
@@ -63,7 +63,9 @@ impl wasm_tools_js::WasmToolsJs for WasmToolsJs {
             }
         }
 
-        encoder = encoder.module(&binary).map_err(|e| format!("{:?}", e))?;
+        if let Some(binary) = binary {
+            encoder = encoder.module(&binary).map_err(|e| format!("{:?}", e))?;
+        }
 
         let bytes = encoder.encode().map_err(|e| format!("{:?}", e))?;
 

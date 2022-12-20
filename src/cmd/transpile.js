@@ -1,4 +1,4 @@
-import { generate } from '../../obj/js-transpiler-bindgen.js';
+import { $init, generate } from '../../obj/js-transpiler-bindgen.js';
 import { readFile, writeFile } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { dirname, extname, basename } from 'path';
@@ -19,7 +19,9 @@ export async function transpile (componentPath, opts, program) {
     setShowSpinner(true);
   if (!opts.name)
     opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
-  const files = await transpileComponent(component, opts);
+  if (opts.map)
+    opts.map = Object.fromEntries(opts.map.split(',').map(mapping => mapping.split('=')));
+  const { files } = await transpileComponent(component, opts);
 
   await Promise.all(Object.entries(files).map(async ([name, file]) => {
     await mkdir(dirname(name), { recursive: true });
@@ -28,7 +30,7 @@ export async function transpile (componentPath, opts, program) {
 
   if (!opts.quiet)
     console.log(c`
-{bold Wit Bindgen Generated JS Component Files:}
+{bold Transpiled JS Component Files:}
 
 ${table(Object.entries(files).map(([name, source]) => [
   c` - {italic ${name}}  `,
@@ -74,18 +76,19 @@ async function wasm2Js (source) {
  *   optimize?: bool,
  *   optArgs?: string[],
  * }} opts 
- * @returns {Promise<{ [filename: string]: Uint8Array }>}
+ * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: string[] }>}
  */
-export async function transpileComponent (component, opts) {
+export async function transpileComponent (component, opts = {}) {
+  await $init;
   let spinner;
   const showSpinner = getShowSpinner();
   if (opts.optimize) {
     if (showSpinner) setShowSpinner(true);
-    ({ component } = await optimizeComponent(component, opts));
+    component = await optimizeComponent(component, opts);
   }
 
   let { files, imports, exports } = generate(component, {
-    name: opts.name,
+    name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? []),
     instantiation: opts.instantiation || opts.asm,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
@@ -94,11 +97,10 @@ export async function transpileComponent (component, opts) {
     tlaCompat: opts.tlaCompat ?? false,
     base64Cutoff: opts.asm ? 0 : opts.base64Cutoff ?? 5000
   });
- 
-  let outDir = opts.outDir.replace(/\\/g, '/') || './';
-  if (!outDir.endsWith('/'))
-    outDir += '/';
 
+  let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
+  if (!outDir.endsWith('/') && outDir !== '')
+    outDir += '/';
   files = files.map(([name, source]) => [`${outDir}${name}`, source]);
 
   const jsFile = files.find(([name]) => name.endsWith('.js'));
@@ -184,7 +186,7 @@ ${opts.tlaCompat || opts.compat ? '' : '\nawait $init;\n'}`;
     }));
   }
 
-  return Object.fromEntries(files);
+  return { files: Object.fromEntries(files), imports, exports };
 }
 
 // emscripten asm mangles specifiers to be valid identifiers

@@ -1,6 +1,4 @@
 #!/usr/local/bin/node
-import { $init as jsTranspilerBindgenInit } from '../obj/js-transpiler-bindgen.js';
-import { $init as wasmToolsInit } from '../obj/wasm-tools.js';
 import { program } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile } from './cmd/transpile.js';
@@ -13,6 +11,10 @@ program
   .usage('<command> [options]')
   .version('0.1.0');
 
+function myParseInt(value) {
+  return parseInt(value, 10);
+}
+
 program.command('transpile')
   .description('Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution')
   .usage('<component-path> -o <out-dir>')
@@ -24,11 +26,11 @@ program.command('transpile')
   .option('-a, --args', 'when using --optimize, custom binaryen argument flags to pass')
   .option('--no-typescript', 'do not output TypeScript .d.ts types')
   .option('--valid-lifting-optimization', 'optimize component binary validations assuming all lifted values are valid')
-  .option('-b, --base64-cutoff <bytes>', 'set the byte size under which core Wasm binaries will be inlined as base64')
+  .option('-b, --base64-cutoff <bytes>', 'set the byte size under which core Wasm binaries will be inlined as base64', myParseInt)
   .option('-c, --compat', 'enables all compat flags: --nodejs-compat, --tla-compat')
   .option('--tla-compat', 'enables compatibility for JS environments without top-level await support via an async $init promise export')
   .option('--no-nodejs-compat', 'disables compatibility in Node.js without a fetch global')
-  .option('--map', 'comma-separated specifier=./output custom mappings for the component imports')
+  .option('-m, --map <mappings>', 'comma-separated specifier=./output custom mappings for the component imports')
   .option('-a, --asm', 'output asm.js instead of core WebAssembly')
   .option('-I, --instantiation', 'output for custom module instantiation')
   .option('-q, --quiet', 'disable logging')
@@ -75,7 +77,6 @@ function asyncAction (cmd) {
   return function () {
     const args = [...arguments];
     (async () => {
-      await Promise.all([jsTranspilerBindgenInit, wasmToolsInit]);
       try {
         await cmd.apply(null, args);
       }
