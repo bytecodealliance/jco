@@ -17,3 +17,4 @@ rm -r dist-api dist-cli
 
 cp package.dist.json dist/package.json
 cp api.d.ts dist/
+cp README.md dist/
