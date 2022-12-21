@@ -46,17 +46,6 @@ program.command('opt')
   .option('--', 'custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(opt));
 
-program.command('new')
-  .description('create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]')
-  .argument('[module]', 'Wasm core module filepath')
-  .requiredOption('-o, --output <output-file>', 'Wasm component output filepath')
-  .option('--name <name>', 'custom output name')
-  .option('--wit <wit>', 'WIT file to use')
-  .option('--types-only', 'types only component generation')
-  .option('--adapter <adapter>', 'adapter component')
-  .option('--encoding <utf8|utf16|compact-utf6>', 'string encoding for WIT')
-  .action(asyncAction(componentNew));
-
 program.command('wit')
   .description('extract the WIT from a WebAssembly Component [wasm-tools component wit]')
   .argument('<component-path>', 'Wasm component binary filepath')
@@ -74,6 +63,17 @@ program.command('parse')
   .argument('<input>', 'input file to process')
   .requiredOption('-o, --output <output-file>', 'output binary file path')
   .action(asyncAction(parse));
+
+program.command('new')
+  .description('create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]')
+  .argument('[module]', 'Wasm core module filepath')
+  .requiredOption('-o, --output <output-file>', 'Wasm component output filepath')
+  .option('--name <name>', 'custom output name')
+  .option('--wit <wit>', 'WIT file to use')
+  .option('--types-only', 'types only component generation')
+  .option('--adapter <adapter>', 'adapter component')
+  .option('--encoding <utf8|utf16|compact-utf6>', 'string encoding for WIT')
+  .action(asyncAction(componentNew));
 
 program.parse();
 
