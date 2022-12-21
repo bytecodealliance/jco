@@ -53,7 +53,7 @@ export async function apiTest (fixtures) {
       ok(source.includes('testwasi'));
       ok(source.includes('FUNCTION_TABLE'));
       ok(source.includes('export const $init'));
-    }).timeout(60_000);
+    });
 
     test('Optimize', async () => {
       const component = await readFile(`test/fixtures/${fixtures[0]}`);

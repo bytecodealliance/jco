@@ -57,7 +57,7 @@ export async function cliTest (fixtures) {
       finally {
         await cleanup();
       }
-    }).timeout(60_000);
+    });
 
     test('Optimize', async () => {
       try {
