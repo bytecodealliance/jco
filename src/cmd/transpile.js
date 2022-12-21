@@ -38,10 +38,11 @@ ${table(Object.entries(files).map(([name, source]) => [
 ]))}`);
 }
 
+let WASM_2_JS;
 try {
-  var WASM_2_JS = fileURLToPath(new URL('../../node_modules/binaryen/bin/wasm2js', import.meta.url));
+  WASM_2_JS = fileURLToPath(new URL('../../node_modules/binaryen/bin/wasm2js', import.meta.url));
 } catch {
-  var WASM_2_JS = new URL('../../node_modules/binaryen/bin/wasm2js', import.meta.url);
+  WASM_2_JS = new URL('../../node_modules/binaryen/bin/wasm2js', import.meta.url);
 }
 
 /**
@@ -107,7 +108,7 @@ export async function transpileComponent (component, opts = {}) {
   if (opts.asm) {
     const source = Buffer.from(jsFile[1]).toString('utf8')
       // update imports manging to match emscripten asm
-      .replace(/exports(\d+)\[\'([^\']+)\']/g, (_, i, s) => `exports${i}[\'${asmMangle(s)}\']`);
+      .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`);
     
     const wasmFiles = files.filter(([name]) => name.endsWith('.wasm'));
     files = files.filter(([name]) => !name.endsWith('.wasm'));
@@ -140,7 +141,7 @@ export async function transpileComponent (component, opts = {}) {
         asm
         .replace(/import \* as [^ ]+ from '[^']*';/g, '')
         .replace('function asmFunc(imports) {', '')
-        .replace(/export var ([^ ]+) = ([^\. ]+)\.([^ ]+);/g, '')
+        .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
         .replace(/var retasmFunc = [\s\S]*$/, '').trim()
       }`).join(',\n');
 
@@ -196,10 +197,10 @@ function asmMangle (name) {
     return '$';
   
   let mightBeKeyword = true;
-  let i = 1, ch;
+  let i = 1;
   
   // Names must start with a character, $ or _
-  switch (ch = name[0]) {
+  switch (name[0]) {
     case '0':
     case '1':
     case '2':
@@ -231,7 +232,7 @@ function asmMangle (name) {
   // Names must contain only characters, digits, $ or _
   let len = name.length;
   for (; i < len; ++i) {
-    switch (ch = name[i]) {
+    switch (name[i]) {
       case '0':
       case '1':
       case '2':
@@ -263,73 +264,89 @@ function asmMangle (name) {
       case 'a': {
         if (name == "arguments")
           return name + '_';
+        break;
       }
       case 'b': {
         if (name == "break")
           return name + '_';
+        break;
       }
       case 'c': {
         if (name == "case" || name == "continue" || name == "catch" ||
             name == "const" || name == "class")
           return name + '_';
+        break;
       }
       case 'd': {
         if (name == "do" || name == "default" || name == "debugger")
           return name + '_';
+        break;
       }
       case 'e': {
         if (name == "else" || name == "enum" || name == "eval" || // to be sure
             name == "export" || name == "extends")
           return name + '_';
+        break;
       }
       case 'f': {
         if (name == "for" || name == "false" || name == "finally" ||
             name == "function")
           return name + '_';
+        break;
       }
       case 'i': {
         if (name == "if" || name == "in" || name == "import" ||
             name == "interface" || name == "implements" ||
             name == "instanceof")
           return name + '_';
+        break;
       }
       case 'l': {
         if (name == "let")
           return name + '_';
+        break;
       }
       case 'n': {
         if (name == "new" || name == "null")
           return name + '_';
+        break;
       }
       case 'p': {
         if (name == "public" || name == "package" || name == "private" ||
             name == "protected")
           return name + '_';
+        break;
       }
       case 'r': {
         if (name == "return")
           return name + '_';
+        break;
       }
       case 's': {
         if (name == "super" || name == "static" || name == "switch")
           return name + '_';
+        break;
       }
       case 't': {
         if (name == "try" || name == "this" || name == "true" ||
             name == "throw" || name == "typeof")
           return name + '_';
+        break;
       }
       case 'v': {
         if (name == "var" || name == "void")
           return name + '_';
+        break;
       }
       case 'w': {
         if (name == "with" || name == "while")
           return name + '_';
+        break;
       }
       case 'y': {
         if (name == "yield")
           return name + '_';
+        break;
       }
     }
   }

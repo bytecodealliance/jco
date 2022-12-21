@@ -32,6 +32,7 @@
     "build:component:wasm-tools": "./dist/cli.mjs new target/wasm32-unknown-unknown/release/wasm_tools_js.wasm -o obj/wasm-tools.wasm",
     "build:transpile:js-transpiler-bindgen": "./dist/cli.mjs transpile obj/js-transpiler-bindgen.wasm --compat --map console=../lib/console.js --out-dir obj",
     "build:transpile:wasm-tools": "./dist/cli.mjs transpile obj/wasm-tools.wasm --map console=../lib/console.js --compat --out-dir obj",
+    "lint": "eslint -c eslintrc.cjs src/**/*.js",
     "test": "mocha -u tdd test/test.js",
     "test:dev": "mocha -u tdd -b test/test.js -n conditions=test"
   }
