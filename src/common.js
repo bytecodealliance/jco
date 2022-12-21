@@ -25,10 +25,14 @@ export function sizeStr (num) {
 
 export function fixedDigitDisplay (num, maxChars) {
   const significantDigits = String(num).split('.')[0].length;
-  if (significantDigits >= maxChars - 1) return String(Math.round(num));
-  const decimalPlaces = maxChars - significantDigits - 1;
-  const rounding = 10 ** decimalPlaces;
-  let str = String(Math.round(num * rounding) / rounding);
+  let str;
+  if (significantDigits >= maxChars - 1) {
+    str = String(Math.round(num));
+  } else {
+    const decimalPlaces = maxChars - significantDigits - 1;
+    const rounding = 10 ** decimalPlaces;
+    str = String(Math.round(num * rounding) / rounding);
+  }
   return ' '.repeat(maxChars - str.length) + str;
 }
 

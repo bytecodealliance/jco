@@ -1,6 +1,6 @@
-// Flags: --map testwasi=../helpers.js,imports=../flavorful.js
+// Flags: --map testwasi=../helpers.js,imports=../flavorful.js --asm
 
-// @ts-ignore
+// @ts-nocheck
 import * as assert from 'assert';
 
 // Imports

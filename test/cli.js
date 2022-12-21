@@ -41,7 +41,7 @@ export async function cliTest (fixtures) {
       finally {
         await cleanup();
       }
-    }).timeout(20_000);
+    });
 
     test('Transpile asm.js', async () => {
       try {

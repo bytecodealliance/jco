@@ -30,7 +30,7 @@ export async function apiTest (fixtures) {
       strictEqual(exports.length, 1);
       strictEqual(exports[0], 'thunk');
       ok(files[name + '.js'].length < 8000);
-    }).timeout(20_000);
+    });
 
     test('Transpile asm.js', async () => {
       const name = fixtures[1].replace('.component.wasm', '');
@@ -47,7 +47,7 @@ export async function apiTest (fixtures) {
       });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 10);
-      strictEqual(exports[0], 'test-imports');
+      strictEqual(exports[0], 'testImports');
       const source = Buffer.from(files[name + '.js']).toString();
       ok(source.includes('./wasi.js'));
       ok(source.includes('testwasi'));

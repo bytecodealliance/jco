@@ -116,7 +116,7 @@ export async function transpileComponent (component, opts = {}) {
     // TODO: imports as specifier list
 
     let completed = 0;
-    const spinnerText = () => c`{cyan ${completed} / ${wasmFiles.length}} Running Binaryen wasm2js on WebAssembly Component internal core modules... (this can take a while) \n`;
+    const spinnerText = () => c`{cyan ${completed} / ${wasmFiles.length}} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
     if (showSpinner) {
       spinner = ora({
         color: 'cyan',
@@ -142,11 +142,18 @@ export async function transpileComponent (component, opts = {}) {
         .replace(/import \* as [^ ]+ from '[^']*';/g, '')
         .replace('function asmFunc(imports) {', '')
         .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
-        .replace(/var retasmFunc = [\s\S]*$/, '').trim()
+        .replace(/var retasmFunc = [\s\S]*$/, '')
+        .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
+        // "imports" as the name of the imports clashes with internal asm.js naming
+        // so we have to do a late patchup
+        .replace('var imports = imports.imports;', 'var imports_ = imports.imports;')
+        .replace(/([^$]) = imports\["/g, '$1 = imports_["')
+        .replace('memory.grow = __wasm_memory_grow;', '')
+        .trim()
       }`).join(',\n');
 
       const outSource = `${
-        imports.map((impt, i) => `import import${i} from '${opts?.map?.[impt] ? opts?.map?.[impt] : impt}';`).join('\n')}
+        imports.map((impt, i) => `import * as import${i} from '${impt}';`).join('\n')}
 ${source.replace('export async function instantiate', 'async function instantiate')}
 
 let ${exports.map(name => '_' + name).join(', ')};
@@ -250,7 +257,7 @@ function asmMangle (name) {
       }
       default: {
         let chNum = name.charCodeAt(i);
-        if (!(chNum >= 'a' && chNum <= 'z') && !(chNum >= 'A' && chNum <= 'Z')) {
+        if (!(chNum >= 97 && chNum <= 122) && !(chNum >= 65 && chNum <= 90)) {
           name = name.substr(0, i) + '_' + name.substr(i + 1);
           mightBeKeyword = false;
         }
