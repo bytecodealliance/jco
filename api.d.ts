@@ -11,25 +11,25 @@ export interface TranspileOpts {
   name?: string,
   /// instead of a direct ES module, output the raw 
   /// instantiation function for custom virtualization.
-  instantiation?: bool,
+  instantiation?: boolean,
   /// remap Component imports
   map?: Record<string, string>,
   /// optimization to reduce code size
-  validLiftingOptimization?: bool,
+  validLiftingOptimization?: boolean,
   /// enables all compat options
-  compat?: bool,
+  compat?: boolean,
   /// disables Node.js compatible output
-  noNodejsCompat?: bool,
+  noNodejsCompat?: boolean,
   /// enable compat in JS runtimes without TLA support
-  tlaCompat?: bool,
+  tlaCompat?: boolean,
   /// size in bytes, under which Wasm modules get inlined as base64.
   base64Cutoff?: number,
   /// use asm.js instead of core WebAssembly for execution.
-  asm?: bool,
+  asm?: boolean,
   /// minify the output JS.
-  minify?: bool,
+  minify?: boolean,
   /// optimize the Component with Binaryen wasm-opt first.
-  optimize?: bool,
+  optimize?: boolean,
   /// if using optimize, custom optimization options
   /// (defaults to best optimization, but this is very slow)
   optArgs?: string[],

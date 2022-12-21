@@ -23,23 +23,28 @@ export async function readFlags (fixture) {
 
 export async function codegenTest (fixtures) {
   suite(`Transpiler codegen`, () => {
+
     for (const fixture of fixtures) {
       const name = fixture.replace('.component.wasm', '');
       test(`${fixture} transpile`, async () => {
         const flags = await readFlags(`test/runtime/${name}.ts`);
         var { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);
         strictEqual(stderr, '');
-      });
+      }).timeout(20_000);
+
       test(`${fixture} lint`, async () => {
+        const flags = await readFlags(`test/runtime/${name}.ts`);
+        if (flags.includes('--asm'))
+          return;
         var { stderr } = await exec(eslintPath, `test/output/${name}/${name}.js`, '-c', 'test/eslintrc.cjs');
         strictEqual(stderr, '');
-      });
+      }).timeout(20_000);
     }
 
     // TypeScript tests _must_ run after codegen to complete successfully
     test('TypeScript Compilation', async () => {
       var { stderr } = await exec(tscPath, '-p', 'test/tsconfig.json');
       strictEqual(stderr, '');
-    }).timeout(20_000);
+    });
   });
 }

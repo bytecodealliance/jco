@@ -72,7 +72,7 @@ pub struct JsTranspiler {
     core_module_cnt: usize,
 
     /// Various options for code generation.
-    opts: Opts,
+    pub opts: Opts,
 
     /// List of all intrinsics emitted to `src` so far.
     all_intrinsics: BTreeSet<Intrinsic>,

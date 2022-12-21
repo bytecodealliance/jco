@@ -7,9 +7,12 @@
 //! The main definition here is the `ComponentGenerator` trait as well as the
 //! `generate` function.
 
+use std::collections::HashMap;
+
 use crate::bindgen::JsTranspiler;
 use crate::files::Files;
 use anyhow::{Context, Result};
+use heck::*;
 use wasmtime_environ::component::{ComponentTypesBuilder, Export, Translator};
 use wasmtime_environ::wasmparser::{Validator, WasmFeatures};
 use wasmtime_environ::{ScopeVec, Tunables};
@@ -84,6 +87,16 @@ pub fn generate(
         .imports
         .iter()
         .map(|impt| impt.0.to_string())
+        .map(|impt| {
+            if let Some(map) = &gen.opts.map {
+                match map.get(&impt) {
+                    Some(impt) => impt.to_string(),
+                    None => impt.to_string(),
+                }
+            } else {
+                impt.to_string()
+            }
+        })
         .collect();
 
     let exports = component
@@ -95,7 +108,7 @@ pub fn generate(
                 Export::Instance(_) | Export::Module(_) | Export::LiftedFunction { .. }
             )
         })
-        .map(|expt| expt.0.to_string())
+        .map(|expt| expt.0.to_lower_camel_case())
         .collect();
 
     Ok(ComponentInfo { imports, exports })

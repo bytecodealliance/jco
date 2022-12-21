@@ -4,6 +4,7 @@ import { exec } from './helpers.js';
 
 export async function runtimeTest (fixtures) {
   suite('Runtime', () => {
+    
     for (const fixture of fixtures) {
       const runtimeJs = fixture.replace('.component.wasm', '.js');
       if (!existsSync(`test/output/${runtimeJs}`))
