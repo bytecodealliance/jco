@@ -62,7 +62,6 @@ async function wasm2Js (source) {
  * 
  * @param {Uint8Array} component 
  * @param {{
- *   minify?: bool,
  *   name: string,
  *   instantiation?: bool,
  *   map?: Record<string, string>,
@@ -84,12 +83,12 @@ export async function transpileComponent (component, opts = {}) {
   const showSpinner = getShowSpinner();
   if (opts.optimize) {
     if (showSpinner) setShowSpinner(true);
-    component = await optimizeComponent(component, opts);
+    ({ component } = await optimizeComponent(component, opts));
   }
 
   let { files, imports, exports } = generate(component, {
     name: opts.name ?? 'component',
-    map: Object.entries(opts.map ?? []),
+    map: Object.entries(opts.map ?? {}),
     instantiation: opts.instantiation || opts.asm,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     compat: opts.compat ?? false,
@@ -146,7 +145,7 @@ export async function transpileComponent (component, opts = {}) {
       }`).join(',\n');
 
       const outSource = `${
-        imports.map((impt, i) => `import import${i} from '${impt}';`).join('\n')}
+        imports.map((impt, i) => `import import${i} from '${opts?.map?.[impt] ? opts?.map?.[impt] : impt}';`).join('\n')}
 ${source.replace('export async function instantiate', 'async function instantiate')}
 
 let ${exports.map(name => '_' + name).join(', ')};

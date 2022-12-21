@@ -1,3 +1,6 @@
+use crate::files::Files;
+use crate::source;
+use crate::{uwrite, uwriteln};
 use anyhow::Result;
 use heck::*;
 use indexmap::IndexMap;
@@ -11,9 +14,6 @@ use wasmtime_environ::component::{
 use wasmtime_environ::{EntityIndex, ModuleTranslation, PrimaryMap};
 use wit_parser::abi::{AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, WasmType};
 use wit_parser::*;
-use crate::{uwrite, uwriteln};
-use crate::files::Files;
-use crate::source;
 
 #[derive(Default)]
 pub struct Opts {

@@ -7,7 +7,7 @@ import c from 'chalk-template';
 
 program
   .name('jsct')
-  .description(c`{bold JSCT - WebAssembly JS Component Tools}`)
+  .description(c`{bold JSCT - WebAssembly JS Component Tools}\n       JS Component Transpilation Bindgen & Wasm Tools for JS`)
   .usage('<command> [options]')
   .version('0.1.0');
 
@@ -48,9 +48,13 @@ program.command('opt')
 
 program.command('new')
   .description('create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]')
-  .argument('<module>', 'Wasm core module filepath')
+  .argument('[module]', 'Wasm core module filepath')
   .requiredOption('-o, --output <output-file>', 'Wasm component output filepath')
   .option('--name <name>', 'custom output name')
+  .option('--wit <wit>', 'WIT file to use')
+  .option('--types-only', 'types only component generation')
+  .option('--adapter <adapter>', 'adapter component')
+  .option('--encoding <utf8|utf16|compact-utf6>', 'string encoding for WIT')
   .action(asyncAction(componentNew));
 
 program.command('wit')
@@ -60,7 +64,7 @@ program.command('wit')
   .action(asyncAction(componentWit));
 
 program.command('print')
-  .description('print the WebAssembly "WAT" text for a binary file [wasm-tools print]')
+  .description('print the WebAssembly WAT text for a binary file [wasm-tools print]')
   .argument('<input>', 'input file to process')
   .option('-o, --output <output-file>', 'output file path')
   .action(asyncAction(print));

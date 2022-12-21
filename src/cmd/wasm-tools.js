@@ -27,7 +27,7 @@ export async function print(file, opts) {
 
 export async function componentWit(file, opts) {
   await $init;
-  const source = (await readFile(file)).toString();
+  const source = await readFile(file);
   const output = componentWitFn(source);
   if (opts.output) {
     await writeFile(opts.output, output);
@@ -38,7 +38,11 @@ export async function componentWit(file, opts) {
 
 export async function componentNew(file, opts) {
   await $init;
-  const source = await readFile(file);
+  const source = file ? await readFile(file) : null;
+  if (opts.wit)
+    opts.wit = await readFile(opts.wit, 'utf8');
+  if (opts.adapter)
+    opts.adapter = [opts.adapter, await readFile(opts.adapter)];
   const output = componentNewFn(source, opts);
   await writeFile(opts.output, output);
 }

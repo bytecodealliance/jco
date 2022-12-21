@@ -19,7 +19,7 @@ export async function opt (componentPath, opts, program) {
 
   if (!opts.quiet) setShowSpinner(true);
   const optPromise = optimizeComponent(componentBytes, opts);
-  const { component, coreModules, optimizedCoreModules } = await optPromise;
+  const { component, compressionInfo } = await optPromise;
 
   await writeFile(opts.output, component);
 
@@ -27,12 +27,12 @@ export async function opt (componentPath, opts, program) {
     console.log(c`
 {bold Optimized WebAssembly Component Internal Core Modules:}
 
-${table(coreModules.map(([s, e], i) => [
+${table(compressionInfo.map(({ beforeBytes, afterBytes }, i) => [
   c` - Core Module ${i + 1}: `,
-  c`{black ${sizeStr(e - s)}}`,
+  c`{black ${sizeStr(beforeBytes)}}`,
   ' -> ',
-  c`{cyan ${sizeStr(optimizedCoreModules[i].byteLength)}} `,
-  c`{italic (${fixedDigitDisplay(optimizedCoreModules[i].byteLength / (e - s) * 100, 2)}%)}`
+  c`{cyan ${sizeStr(afterBytes)}} `,
+  c`{italic (${fixedDigitDisplay(afterBytes / beforeBytes * 100, 2)}%)}`
 ]), [,,,,'right'])}`);
 }
 
@@ -40,7 +40,7 @@ ${table(coreModules.map(([s, e], i) => [
  * 
  * @param {Uint8Array} componentBytes 
  * @param {{ quiet: boolean, optArgs?: string[] }} options?
- * @returns {Promise<Uint8Array>}
+ * @returns {Promise<{ component: Uint8Array, compressionInfo: { beforeBytes: number, afterBytes: number }[] >}
  */
 export async function optimizeComponent (componentBytes, opts) {
   await $init;
@@ -109,7 +109,10 @@ export async function optimizeComponent (componentBytes, opts) {
       throw new Error(`Internal error performing optimization.\n${e.message}`)
     }
 
-    return outComponentBytes;
+    return {
+      component: outComponentBytes,
+      compressionInfo: coreModules.map(([s, e], i) => ({ beforeBytes: e - s, afterBytes: optimizedCoreModules[i].byteLength }))
+    };
   }
   finally {
     if (spinner)

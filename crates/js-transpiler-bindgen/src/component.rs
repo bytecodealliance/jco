@@ -7,12 +7,12 @@
 //! The main definition here is the `ComponentGenerator` trait as well as the
 //! `generate` function.
 
+use crate::bindgen::JsTranspiler;
+use crate::files::Files;
 use anyhow::{Context, Result};
 use wasmtime_environ::component::{ComponentTypesBuilder, Export, Translator};
 use wasmtime_environ::wasmparser::{Validator, WasmFeatures};
 use wasmtime_environ::{ScopeVec, Tunables};
-use crate::files::Files;
-use crate::bindgen::JsTranspiler;
 
 pub struct ComponentInfo {
     pub imports: Vec<String>,

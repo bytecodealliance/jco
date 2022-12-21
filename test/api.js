@@ -1,42 +1,63 @@
 import { ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { transpile, opt, print, parse, componentWit, componentNew } from 'js-component-tools';
+import { transpile, opt, print, parse, componentWit, componentNew, $init } from 'js-component-tools';
 
-// TODO - CLI versions
 export async function apiTest (fixtures) {
+  await $init;
   suite('API', () => {
     test('Transpile', async () => {
+      const name = fixtures[0].replace('.component.wasm', '');
       const component = await readFile(`test/fixtures/${fixtures[0]}`);
-      const { files, imports, exports } = await transpile(component, { name: 'exports_only' });
+      const { files, imports, exports } = await transpile(component, { name });
       strictEqual(imports.length, 0);
       strictEqual(exports.length, 1);
       strictEqual(exports[0], 'thunk');
-      ok(files['exports_only.js']);
+      ok(files[name + '.js']);
     });
 
-    // TODO
-    // test('Transpile & Optimize', async () => {
-    //   const component = await readFile(`test/fixtures/${fixtures[0]}`);
-    //   const { files, imports, exports } = await transpile(component, { name: 'exports_only' });
-    //   strictEqual(imports.length, 0);
-    //   strictEqual(exports.length, 1);
-    //   strictEqual(exports[0], 'thunk');
-    //   ok(files['exports_only.js']);
-    // });
+    test('Transpile & Optimize & Minify', async () => {
+      const name = fixtures[0].replace('.component.wasm', '');
+      const component = await readFile(`test/fixtures/${fixtures[0]}`);
+      const { files, imports, exports } = await transpile(component, {
+        name,
+        minify: true,
+        validLiftingOptimization: true,
+        compat: true,
+        optimize: true,
+        base64Cutoff: 0,
+      });
+      strictEqual(imports.length, 0);
+      strictEqual(exports.length, 1);
+      strictEqual(exports[0], 'thunk');
+      ok(files[name + '.js'].length < 8000);
+    }).timeout(20_000);
 
-    // TODO
-    // test('Transpile & Optimize asm.js', async () => {
-    //   const component = await readFile(`test/fixtures/${fixtures[0]}`);
-    //   const { files, imports, exports } = await transpile(component, { name: 'exports_only' });
-    //   strictEqual(imports.length, 0);
-    //   strictEqual(exports.length, 1);
-    //   strictEqual(exports[0], 'thunk');
-    //   ok(files['exports_only.js']);
-    // });
+    test('Transpile asm.js', async () => {
+      const name = fixtures[1].replace('.component.wasm', '');
+      const component = await readFile(`test/fixtures/${fixtures[1]}`);
+      const { files, imports, exports } = await transpile(component, {
+        map: {
+          'testwasi': './wasi.js'
+        },
+        name,
+        validLiftingOptimization: true,
+        compat: true,
+        base64Cutoff: 0,
+        asm: true,
+      });
+      strictEqual(imports.length, 2);
+      strictEqual(exports.length, 10);
+      strictEqual(exports[0], 'test-imports');
+      const source = Buffer.from(files[name + '.js']).toString();
+      ok(source.includes('./wasi.js'));
+      ok(source.includes('testwasi'));
+      ok(source.includes('FUNCTION_TABLE'));
+      ok(source.includes('export const $init'));
+    }).timeout(60_000);
 
     test('Optimize', async () => {
       const component = await readFile(`test/fixtures/${fixtures[0]}`);
-      const optimizedComponent = await opt(component);
+      const { component: optimizedComponent } = await opt(component);
       ok(optimizedComponent.byteLength < component.byteLength);
     });
 
