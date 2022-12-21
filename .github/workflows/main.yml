@@ -57,6 +57,16 @@ jobs:
     - name: Test
       run: npm run test
 
+  eslint:
+    name: ES Lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install NPM packages
+      run: npm install
+    - name: Lint
+      run: npm run lint
+
   rustfmt:
     name: Rustfmt
     runs-on: ubuntu-latest

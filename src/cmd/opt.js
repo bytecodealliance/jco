@@ -5,10 +5,11 @@ import c from 'chalk-template';
 import { sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import ora from 'ora';
 
+let WASM_OPT;
 try {
-  var WASM_OPT = fileURLToPath(new URL('../../node_modules/binaryen/bin/wasm-opt', import.meta.url));
+  WASM_OPT = fileURLToPath(new URL('../../node_modules/binaryen/bin/wasm-opt', import.meta.url));
 } catch (e) {
-  var WASM_OPT = new URL('../../node_modules/binaryen/bin/wasm-opt', import.meta.url);
+  WASM_OPT = new URL('../../node_modules/binaryen/bin/wasm-opt', import.meta.url);
 }
 
 export async function opt (componentPath, opts, program) {
