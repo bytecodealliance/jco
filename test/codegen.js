@@ -30,7 +30,7 @@ export async function codegenTest (fixtures) {
         const flags = await readFlags(`test/runtime/${name}.ts`);
         var { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);
         strictEqual(stderr, '');
-      }).timeout(20_000);
+      });
 
       test(`${fixture} lint`, async () => {
         const flags = await readFlags(`test/runtime/${name}.ts`);
@@ -38,7 +38,7 @@ export async function codegenTest (fixtures) {
           return;
         var { stderr } = await exec(eslintPath, `test/output/${name}/${name}.js`, '-c', 'test/eslintrc.cjs');
         strictEqual(stderr, '');
-      }).timeout(20_000);
+      });
     }
 
     // TypeScript tests _must_ run after codegen to complete successfully
