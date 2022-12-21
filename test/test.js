@@ -19,8 +19,10 @@ const componentFixtures = env.COMPONENT_FIXTURES ? env.COMPONENT_FIXTURES.split(
 
 import { codegenTest } from './codegen.js';
 import { runtimeTest } from './runtime.js';
+import { apiTest } from './api.js';
+import { cliTest } from './cli.js';
 
 await codegenTest(componentFixtures);
 await runtimeTest(componentFixtures);
 await apiTest(componentFixtures);
-import { apiTest } from './api.js';
+await cliTest(componentFixtures);

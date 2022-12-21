@@ -1,8 +1,8 @@
 use std::fmt::{self, Write};
 use std::ops::Deref;
 
-pub use wit_parser;
 pub use crate::ns::Ns;
+pub use wit_parser;
 
 #[derive(Default)]
 pub struct Source {
