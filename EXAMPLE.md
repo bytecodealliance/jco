@@ -89,4 +89,4 @@ Or it can be executed in a browser via a module script:
 <script type="module" src="test.mjs"></script>
 ```
 
-There are a number of custom transpilation options available, detailed in the API section below.
+There are a number of custom transpilation options available, detailed in the [API section](README.md#API).

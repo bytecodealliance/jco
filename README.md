@@ -20,11 +20,11 @@ Features include:
 
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
 * Optimization helpers for Components, including Binaryen and asm.js support.
-* Component operations from a JS-native build of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools).
+* Component helpers available as a build of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools).
 
-> This tool is designed primarily for working with already-created Component binaries, and not for creating Component binaries to begin with. For creating Components, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
+This tool is designed primarily for working with already-created Component binaries, and not for creating Component binaries to begin with. For creating Components, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
-> **Node**: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future.
+> **Note**: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future.
 
 ## Installation
 
@@ -51,13 +51,13 @@ import { $init } from 'js-component-tools';
 await $init;
 ```
 
-This is because it is itself transpiled via `jsct transpile --tla-compat`.
+This is because it is itself transpiled with compatibility for JS environments without top-level await via `jsct transpile --tla-compat`.
 
 #### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
 
-_Transpile a Component to JS._
+Transpile a Component to JS.
 
-Transpilation options:
+**Transpilation options:**
 
 * `name?: string` - name for the generated JS file.
 * `instantiation?: bool` - instead of a direct ES module, output the raw instantiation function for custom virtualization.
@@ -92,9 +92,7 @@ Print the WAT for a Component binary.
 
 Extract the WIT world from a component binary.
 
-## JSCT CLI
-
-The CLI is available via the `jsct` command:
+## CLI
 
 ```shell
 Usage: jsct <command> [options]
