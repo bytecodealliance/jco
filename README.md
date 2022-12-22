@@ -14,7 +14,7 @@
 
 ## Overview
 
-JS Component Tools provides a JS ecosystem tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification in JavaScript.
+JS Component Tools is a fully native JS tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification in JavaScript.
 
 Features include:
 
@@ -22,128 +22,36 @@ Features include:
 * Optimization helpers for Components, including Binaryen and asm.js support.
 * Component operations from a JS-native build of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools).
 
-The Rust transpiler and Wasm Tools crates are both compiled from Rust into JS using Wasm Component tools itself.
+> This tool is designed primarily for working with already-created Component binaries, and not for creating Component binaries to begin with. For creating Components, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
-> This tool is designed primarily for working with already-created Components, and not for creating Components. For creating Components, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) projects.
-
-_Note: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future._
+> **Node**: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future.
 
 ## Installation
 
-This is a fully-native JS & Wasm library which can be installed from npm directly.
-
-```sh
+```shell
 npm install js-component-tools
 ```
 
-JS Component Tools can be used as either a library (e.g. `import { transpile } from 'js-component-tools'`) or as a CLI via the `jsct` CLI command.
+JS Component Tools can be used as either a library or as a CLI via the `jsct` CLI command.
 
 ## Example
 
-Given an existing Wasm Component, `jsct` provides the tooling necessary to work with this Component fully natively in JS.
+See the [example workflow](EXAMPLE.md) page for a full usage example.
 
-For an example, consider a Component `cowsay.wasm`:
+## API
 
-```sh
-- cowsay.wasm
-```
+The below is an outline of the available API functions, see [api.d.ts](api.d.ts) file for the exact options.
 
-Where we would like to use and run this Component in a JS environment.
+#### `$init: Promise<void>`
 
-### Inspecting Component WIT
-
-As a first step, we might like to look instead this binary black box of a Component and see what it actually does.
-
-To do this, we can use `jsct wit` to extract the "WIT world" of the Component ([WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) is the typing language used for defining Components).
-
-```sh
-> jsct wit cowsay.wasm
-
-world component {
-  default export interface {
-    enum cows {
-      default,
-      cheese,
-      daemon,
-      dragon-and-cow,
-      dragon,
-      elephant-in-snake,
-      elephant,
-      eyes,
-      flaming-sheep,
-      ...
-    }
-
-    cow-say: func(text: string, cow: option<cows>) -> string
-  }
-}
-```
-
-From the above we can see that this Component exports an interface with a single function export, `say`, which takes
-as input a string, an optional cow, and returns a string.
-
-Alternatively `jsct print cowsay.wasm -o out.wat` would output the full concrete Wasm WAT to inspect the Component,
-with all the implementation details (don't forget the `-o` flag...).
-
-### Transpiling to JS
-
-To execute the Component in a JS environment, use the `jsct transpile` command to generate the JS for the Component:
-
-```sh
-> jsct transpile cowsay.wasm --minify -o wunderbar
-
-Transpiled JS Component Files:
-
- - cowsay/cowsay.core.wasm      2.01 MiB
- - cowsay/cowsay.d.ts           0.73 KiB
- - cowsay/cowsay.js             6.01 KiB
-```
-
-Now the Component can be directly imported and used as an ES module:
-
-test.mjs
-```js
-import { cowSay } from './cowsawy/cowsawy.js';
-
-console.log(cowSay('Hello Wasm Components!'));
-```
-
-The above JavaScript can be executed in Node.js:
-
-```sh
-> node test.mjs
-
- ________________________
-< Hello Wasm Components! >
- ------------------------
-        \   ^__^
-         \  (oo)\_______
-            (__)\       )\/\
-                ||----w |
-                ||     ||
-```
-
-Or it can be executed in a browser via a module script:
-
-```html
-<script type="module" src="test.mjs"></script>
-```
-
-There are a number of custom transpilation options available, detailed in the API section below.
-
-## JSCT API
-
-Note if using a synchronous API function, the `$init` method should be imported and awaited first:
+If using a synchronous API function, the `$init` method should be imported and awaited first:
 
 ```js
 import { $init } from 'js-component-tools';
-
 await $init;
 ```
 
-This is because the JSCT API is built with top-level await compatibility (via `jsct transpile --tla-compat`).
-
-The below is an outline of the available API functions, see [api.d.ts](api.d.ts) file for the exact options.
+This is because it is itself transpiled via `jsct transpile --tla-compat`.
 
 #### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
 
@@ -166,28 +74,47 @@ Transpilation options:
 
 #### `opt(component: Uint8Array, opts?): Promise<{ component: Uint8Array }>`
 
-_Optimize a Component with the [Binaryen Wasm-opt](https://www.npmjs.com/package/binaryen) project._
+Optimize a Component with the [Binaryen Wasm-opt](https://www.npmjs.com/package/binaryen) project.
 
 #### `parse(wat: string): Uint8Array`
 
-_Parse a compoment WAT to output a Component binary._
+Parse a compoment WAT to output a Component binary.
 
 #### `print(component: Uint8Array): string`
 
-_Print the WAT for a Component binary._
+Print the WAT for a Component binary.
 
 #### `componentNew(coreWasm: Uint8Array | null, opts?): Uint8Array`
 
-_"WIT Component" Component creation tool._
+"WIT Component" Component creation tool.
 
 #### `componentWit(component: Uint8Array): string`
 
-_Extract the WIT world from a component binary._
+Extract the WIT world from a component binary.
 
 ## JSCT CLI
 
-The CLI is available via the `jsct` command, providing all the same
-functions and options as the API.
+The CLI is available via the `jsct` command:
+
+```shell
+Usage: jsct <command> [options]
+
+JSCT - WebAssembly JS Component Tools
+       JS Component Transpilation Bindgen & Wasm Tools for JS
+
+Options:
+  -V, --version                         output the version number
+  -h, --help                            display help for command
+
+Commands:
+  transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
+  opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations
+  wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
+  print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]
+  parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
+  new [options] [module]                create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
+  help [command]                        display help for command
+```
 
 # License
 
