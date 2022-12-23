@@ -33,7 +33,7 @@ export async function cliTest (fixtures) {
     test('Transpile & Optimize & Minify', async () => {
       try {
         const name = fixtures[0].replace('.component.wasm', '');
-        const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${fixtures[0]}`, '--name', name, '--valid-lifting-optimization', '--compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
+        const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${fixtures[0]}`, '--name', name, '--valid-lifting-optimization', '--tla-compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
         ok(source.toString().includes('export function thunk'));
@@ -46,7 +46,7 @@ export async function cliTest (fixtures) {
     test('Transpile asm.js', async () => {
       try {
         const name = fixtures[1].replace('.component.wasm', '');
-        const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${fixtures[1]}`, '--name', name, '--map', 'testwasi=./wasi.js', '--valid-lifting-optimization', '--compat', '--asm', '--base64-cutoff=0', '-o', outDir);
+        const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${fixtures[1]}`, '--name', name, '--map', 'testwasi=./wasi.js', '--valid-lifting-optimization', '--tla-compat', '--asm', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`, 'utf8');
         ok(source.includes('./wasi.js'));

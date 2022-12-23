@@ -21,7 +21,7 @@ export async function apiTest (fixtures) {
         name,
         minify: true,
         validLiftingOptimization: true,
-        compat: true,
+        tlaCompat: true,
         optimize: true,
         base64Cutoff: 0,
       });
@@ -40,7 +40,7 @@ export async function apiTest (fixtures) {
         },
         name,
         validLiftingOptimization: true,
-        compat: true,
+        tlaCompat: true,
         base64Cutoff: 0,
         asm: true,
       });
@@ -51,7 +51,8 @@ export async function apiTest (fixtures) {
       ok(source.includes('./wasi.js'));
       ok(source.includes('testwasi'));
       ok(source.includes('FUNCTION_TABLE'));
-      ok(source.includes('export const $init'));
+      for (let i = 0; i < 10; i++)
+        ok(source.includes(exports[i]));
     });
 
     test('Optimize', async () => {

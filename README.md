@@ -52,7 +52,6 @@ Transpile a Component to JS.
 * `instantiation?: bool` - instead of a direct ES module, output the raw instantiation function for custom virtualization.
 * `map?: Record<string, string>` - remap component imports
 * `validLiftingOptimization?: bool` - optimization to reduce code size
-* `compat?: bool` - enables all compat options
 * `noNodejsCompat?: bool` - disables Node.js compatible output
 * `tlaCompat?: bool` - enable compat in JS runtimes without TLA support
 * `base64Cutoff?: number` - size in bytes, under which Wasm modules get inlined as base64.
