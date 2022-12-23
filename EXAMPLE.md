@@ -50,7 +50,7 @@ with all the implementation details (don't forget the `-o` flag...).
 To execute the Component in a JS environment, use the `jsct transpile` command to generate the JS for the Component:
 
 ```shell
-> jsct transpile cowsay.wasm --minify -o wunderbar
+> jsct transpile cowsay.wasm --minify -o cowsay
 
 Transpiled JS Component Files:
 

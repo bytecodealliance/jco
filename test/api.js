@@ -79,5 +79,15 @@ export async function apiTest (fixtures) {
       const output = await print(generatedComponent);
       strictEqual(output.slice(0, 10), '(component');
     });
+
+    test('Component new adapt', async () => {
+      const component = await readFile(`test/fixtures/exitcode.wasm`);
+
+      const generatedComponent = await componentNew(component, {
+        adapters: [['wasi_snapshot_preview1', await readFile('test/fixtures/wasi_snapshot_preview1.wasm')]]
+      });
+
+      await print(generatedComponent);
+    });
   });
 }

@@ -20,7 +20,7 @@ export async function transpile (componentPath, opts, program) {
   if (!opts.name)
     opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
   if (opts.map)
-    opts.map = Object.fromEntries(opts.map.split(',').map(mapping => mapping.split('=')));
+    opts.map = Object.fromEntries(opts.map.map(mapping => mapping.split('=')));
   const { files } = await transpileComponent(component, opts);
 
   await Promise.all(Object.entries(files).map(async ([name, file]) => {

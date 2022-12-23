@@ -123,5 +123,25 @@ export async function cliTest (fixtures) {
         await cleanup();
       }
     });
+
+    test('Component new adapt', async () => {
+      try {
+        const { stderr } = await exec(jsctPath,
+            'new',
+            'test/fixtures/exitcode.wasm',
+            '--adapt',
+            'test/fixtures/wasi_snapshot_preview1.wasm',
+            '-o', outFile);
+        strictEqual(stderr, '');
+        {
+          const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
+          strictEqual(stderr, '');
+          strictEqual(stdout.slice(0, 10), '(component');
+        }
+      }
+      finally {
+        await cleanup();
+      }
+    });
   });
 }
