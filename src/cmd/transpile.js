@@ -67,7 +67,6 @@ async function wasm2Js (source) {
  *   instantiation?: bool,
  *   map?: Record<string, string>,
  *   validLiftingOptimization?: bool,
- *   compat?: bool,
  *   noNodejsCompat?: bool,
  *   tlaCompat?: bool,
  *   base64Cutoff?: bool,
@@ -91,7 +90,6 @@ export async function transpileComponent (component, opts = {}) {
     map: Object.entries(opts.map ?? {}),
     instantiation: opts.instantiation || opts.asm,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
-    compat: opts.compat ?? false,
     noNodejsCompat: !(opts.nodejsCompat ?? true),
     tlaCompat: opts.tlaCompat ?? false,
     base64Cutoff: opts.asm ? 0 : opts.base64Cutoff ?? 5000
@@ -163,13 +161,13 @@ ${exports.map(name => `\nexport function ${name} () {
 
 const asmInit = [${asms}];
 
-${opts.tlaCompat || opts.compat ? 'export ' : ''}const $init = (async () => {
+${opts.tlaCompat ? 'export ' : ''}const $init = (async () => {
   let idx = 0;
   ({ ${exports.map(name => `${name}: _${name}`).join(',\n')} } = await instantiate(n => idx++, {
 ${imports.map((impt, i) => `    '${impt}': import${i},`).join('\n')}
   }, (i, imports) => ({ exports: asmInit[i](imports) })));
 })();
-${opts.tlaCompat || opts.compat ? '' : '\nawait $init;\n'}`;
+${opts.tlaCompat ? '' : '\nawait $init;\n'}`;
 
       jsFile[1] = Buffer.from(outSource);
     }

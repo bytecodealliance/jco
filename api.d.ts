@@ -16,8 +16,6 @@ export interface TranspileOpts {
   map?: Record<string, string>,
   /// optimization to reduce code size
   validLiftingOptimization?: boolean,
-  /// enables all compat options
-  compat?: boolean,
   /// disables Node.js compatible output
   noNodejsCompat?: boolean,
   /// enable compat in JS runtimes without TLA support
