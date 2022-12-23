@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import {
   $init,
   print as printFn,
@@ -6,6 +6,7 @@ import {
   componentWit as componentWitFn,
   componentNew as componentNewFn,
 } from "../../obj/wasm-tools.js";
+import { basename, extname } from 'node:path';
 
 export async function parse(file, opts) {
   await $init;
@@ -41,8 +42,17 @@ export async function componentNew(file, opts) {
   const source = file ? await readFile(file) : null;
   if (opts.wit)
     opts.wit = await readFile(opts.wit, 'utf8');
-  if (opts.adapter)
-    opts.adapter = [opts.adapter, await readFile(opts.adapter)];
+  if (opts.adapt) {
+    opts.adapters = await Promise.all(opts.adapt.map(async adapt => {
+      let adapter;
+      if (adapt.includes('='))
+        adapter = adapt.split('=');
+      else 
+        adapter = [basename(adapt).slice(0, -extname(adapt).length), adapt];
+      adapter[1] = await readFile(adapter[1]);
+      return adapter;
+    }));
+  }
   const output = componentNewFn(source, opts);
   await writeFile(opts.output, output);
 }

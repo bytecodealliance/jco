@@ -1,4 +1,4 @@
-// Flags: --compat --map testwasi=../helpers.js,imports=../smoke.js --base64-cutoff=2500
+// Flags: --compat --map testwasi=../helpers.js --map imports=../smoke.js --base64-cutoff=2500
 function assert(x: boolean, msg: string) {
   if (!x)
     throw new Error(msg);

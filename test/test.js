@@ -15,7 +15,9 @@
 import { env } from 'node:process';
 import { readdir } from 'node:fs/promises';
 
-const componentFixtures = env.COMPONENT_FIXTURES ? env.COMPONENT_FIXTURES.split(',') : await readdir('test/fixtures');
+const componentFixtures = env.COMPONENT_FIXTURES
+  ? env.COMPONENT_FIXTURES.split(',')
+  : (await readdir('test/fixtures')).filter(name => name.endsWith('.component.wasm'));
 
 import { codegenTest } from './codegen.js';
 import { runtimeTest } from './runtime.js';
