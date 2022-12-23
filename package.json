@@ -30,8 +30,8 @@
     "build:wasm-tools": "npm run build:component:wasm-tools && npm run build:transpile:wasm-tools",
     "build:component:js-transpiler-bindgen": "jsct new target/wasm32-unknown-unknown/release/js_transpiler_bindgen.wasm -o obj/js-transpiler-bindgen.wasm",
     "build:component:wasm-tools": "jsct new target/wasm32-unknown-unknown/release/wasm_tools_js.wasm -o obj/wasm-tools.wasm",
-    "build:transpile:js-transpiler-bindgen": "jsct transpile obj/js-transpiler-bindgen.wasm --compat --map console=../lib/console.js --out-dir obj",
-    "build:transpile:wasm-tools": "jsct transpile obj/wasm-tools.wasm --map console=../lib/console.js --compat --out-dir obj",
+    "build:transpile:js-transpiler-bindgen": "jsct transpile obj/js-transpiler-bindgen.wasm --map console=../lib/console.js --out-dir obj",
+    "build:transpile:wasm-tools": "jsct transpile obj/wasm-tools.wasm --map console=../lib/console.js --out-dir obj",
     "lint": "eslint -c eslintrc.cjs src/**/*.js",
     "test": "mocha -u tdd test/test.js --timeout 60000",
     "test:dev": "mocha -u tdd -b test/test.js --timeout 60000 -n conditions=test"

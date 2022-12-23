@@ -42,17 +42,6 @@ See the [example workflow](EXAMPLE.md) page for a full usage example.
 
 The below is an outline of the available API functions, see [api.d.ts](api.d.ts) file for the exact options.
 
-#### `$init: Promise<void>`
-
-If using a synchronous API function, the `$init` method should be imported and awaited first:
-
-```js
-import { $init } from 'js-component-tools';
-await $init;
-```
-
-This is because it is itself transpiled with compatibility for JS environments without top-level await via `jsct transpile --tla-compat`.
-
 #### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
 
 Transpile a Component to JS.
