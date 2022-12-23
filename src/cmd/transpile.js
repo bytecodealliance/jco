@@ -1,4 +1,4 @@
-import { $init, generate } from '../../obj/js-transpiler-bindgen.js';
+import { generate } from '../../obj/js-transpiler-bindgen.js';
 import { readFile, writeFile } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { dirname, extname, basename } from 'path';
@@ -79,7 +79,6 @@ async function wasm2Js (source) {
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: string[] }>}
  */
 export async function transpileComponent (component, opts = {}) {
-  await $init;
   let spinner;
   const showSpinner = getShowSpinner();
   if (opts.optimize) {

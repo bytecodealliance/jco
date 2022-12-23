@@ -1,9 +1,8 @@
 import { ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { transpile, opt, print, parse, componentWit, componentNew, $init } from 'js-component-tools';
+import { transpile, opt, print, parse, componentWit, componentNew } from 'js-component-tools';
 
 export async function apiTest (fixtures) {
-  await $init;
   suite('API', () => {
     test('Transpile', async () => {
       const name = fixtures[0].replace('.component.wasm', '');

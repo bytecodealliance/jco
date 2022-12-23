@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import {
-  $init,
   print as printFn,
   parse as parseFn,
   componentWit as componentWitFn,
@@ -9,14 +8,12 @@ import {
 import { basename, extname } from 'node:path';
 
 export async function parse(file, opts) {
-  await $init;
   const source = (await readFile(file)).toString();
   const output = parseFn(source);
   await writeFile(opts.output, output);
 }
 
 export async function print(file, opts) {
-  await $init;
   const source = await readFile(file);
   const output = printFn(source);
   if (opts.output) {
@@ -27,7 +24,6 @@ export async function print(file, opts) {
 }
 
 export async function componentWit(file, opts) {
-  await $init;
   const source = await readFile(file);
   const output = componentWitFn(source);
   if (opts.output) {
@@ -38,7 +34,6 @@ export async function componentWit(file, opts) {
 }
 
 export async function componentNew(file, opts) {
-  await $init;
   const source = file ? await readFile(file) : null;
   if (opts.wit)
     opts.wit = await readFile(opts.wit, 'utf8');

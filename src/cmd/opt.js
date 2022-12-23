@@ -1,4 +1,4 @@
-import { $init, extractCoreModules, print } from '../../obj/wasm-tools.js';
+import { extractCoreModules, print } from '../../obj/wasm-tools.js';
 import { readFile, writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import c from 'chalk-template';
@@ -44,7 +44,6 @@ ${table(compressionInfo.map(({ beforeBytes, afterBytes }, i) => [
  * @returns {Promise<{ component: Uint8Array, compressionInfo: { beforeBytes: number, afterBytes: number }[] >}
  */
 export async function optimizeComponent (componentBytes, opts) {
-  await $init;
   const showSpinner = getShowSpinner();
   let spinner;
   try {
