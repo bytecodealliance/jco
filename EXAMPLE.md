@@ -39,7 +39,7 @@ world component {
 }
 ```
 
-From the above we can see that this Component exports an interface with a single function export, `say`, which takes
+From the above we can see that this Component exports an interface with a single function export, `cow-say`, which takes
 as input a string, an optional cow, and returns a string.
 
 Alternatively `jsct print cowsay.wasm -o out.wat` would output the full concrete Wasm WAT to inspect the Component,
@@ -63,7 +63,7 @@ Now the Component can be directly imported and used as an ES module:
 
 test.mjs
 ```js
-import { cowSay } from './cowsawy/cowsawy.js';
+import { cowSay } from './cowsay/cowsay.js';
 
 console.log(cowSay('Hello Wasm Components!'));
 ```
