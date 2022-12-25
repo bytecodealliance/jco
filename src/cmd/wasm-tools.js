@@ -48,6 +48,8 @@ export async function componentNew(file, opts) {
       return adapter;
     }));
   }
+  if (opts.encoding)
+    opts.stringEncoding = opts.encoding;
   const output = componentNewFn(source, opts);
   await writeFile(opts.output, output);
 }
