@@ -1,8 +1,9 @@
-import crypto from 'crypto';
-import { resolve, extname } from 'path';
-import { tmpdir } from 'os';
-import { readFile, writeFile, unlink } from 'fs/promises';
-import { spawn } from 'child_process';
+import crypto from 'node:crypto';
+import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { readFile, writeFile, unlink } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { argv0 } from 'node:process';
 
 let _showSpinner = false;
 export function setShowSpinner (val) {
@@ -62,7 +63,7 @@ export async function spawnIOTmp (cmd, input, args) {
 
   await writeFile(inFile, input);
 
-  const cp = spawn(cmd, [inFile, ...args, outFile], { stdio: 'pipe' });
+  const cp = spawn(argv0, [cmd, inFile, ...args, outFile], { stdio: 'pipe' });
 
   let stderr = '';
   const p = new Promise((resolve, reject) => {
