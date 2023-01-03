@@ -34,6 +34,8 @@ export function fixedDigitDisplay (num, maxChars) {
     const rounding = 10 ** decimalPlaces;
     str = String(Math.round(num * rounding) / rounding);
   }
+  if (maxChars - str.length < 0)
+    return str;
   return ' '.repeat(maxChars - str.length) + str;
 }
 

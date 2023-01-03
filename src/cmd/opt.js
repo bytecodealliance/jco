@@ -24,17 +24,29 @@ export async function opt (componentPath, opts, program) {
 
   await writeFile(opts.output, component);
 
+  let totalBeforeBytes = 0, totalAfterBytes = 0;
+
   if (!opts.quiet)
     console.log(c`
 {bold Optimized WebAssembly Component Internal Core Modules:}
 
-${table(compressionInfo.map(({ beforeBytes, afterBytes }, i) => [
-  c` - Core Module ${i + 1}: `,
-  c`{black ${sizeStr(beforeBytes)}}`,
-  ' -> ',
-  c`{cyan ${sizeStr(afterBytes)}} `,
-  c`{italic (${fixedDigitDisplay(afterBytes / beforeBytes * 100, 2)}%)}`
-]), [,,,,'right'])}`);
+${table([...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
+  totalBeforeBytes += beforeBytes;
+  totalAfterBytes += afterBytes;
+  return [
+    ` - Core Module ${i + 1}:  `,
+    sizeStr(beforeBytes),
+    ' -> ',
+    c`{cyan ${sizeStr(afterBytes)}} `,
+    `(${fixedDigitDisplay(afterBytes / beforeBytes * 100, 2)}%)`
+  ];
+}), ['', '', '', '', ''], [
+  ` = Total:  `,
+  `${sizeStr(totalBeforeBytes)}`,
+  ` => `,
+  c`{cyan ${sizeStr(totalAfterBytes)}} `,
+  `(${fixedDigitDisplay(totalAfterBytes / totalBeforeBytes * 100, 2)}%)`
+]], [,,,,'right'])}`);
 }
 
 /**
