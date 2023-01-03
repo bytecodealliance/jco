@@ -31,7 +31,7 @@ export async function apiTest (fixtures) {
       ok(files[name + '.js'].length < 8000);
     });
 
-    test('Transpile asm.js', async () => {
+    test('Transpile to JS', async () => {
       const name = fixtures[1].replace('.component.wasm', '');
       const component = await readFile(`test/fixtures/${fixtures[1]}`);
       const { files, imports, exports } = await transpile(component, {
@@ -42,7 +42,7 @@ export async function apiTest (fixtures) {
         validLiftingOptimization: true,
         tlaCompat: true,
         base64Cutoff: 0,
-        asm: true,
+        js: true,
       });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 10);

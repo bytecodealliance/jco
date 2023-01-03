@@ -19,7 +19,7 @@ JS Component Tools is a fully native JS tool for working with the emerging [WebA
 Features include:
 
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-* Optimization helpers for Components, including Binaryen and asm.js support.
+* Optimization helpers for Components via Binaryen
 * Component helpers available as a build of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools).
 
 This tool is designed primarily for working with already-created Component binaries, and not for creating Component binaries to begin with. For creating Components, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
@@ -55,7 +55,7 @@ Transpile a Component to JS.
 * `noNodejsCompat?: bool` - disables Node.js compatible output
 * `tlaCompat?: bool` - enable compat in JS runtimes without TLA support
 * `base64Cutoff?: number` - size in bytes, under which Wasm modules get inlined as base64.
-* `asm?: bool` - use asm.js instead of core WebAssembly for execution.
+* `js?: bool` - convert Wasm into JS instead for execution compatibility in JS environments without Wasm support.
 * `minify?: bool` - minify the output JS.
 * `optimize?: bool` - optimize the component with Binaryen wasm-opt first.
 * `optArgs?: string[]` - if using optimize, custom optimization options (defaults to best optimization, but this is very slow)

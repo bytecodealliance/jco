@@ -70,7 +70,7 @@ async function wasm2Js (source) {
  *   noNodejsCompat?: bool,
  *   tlaCompat?: bool,
  *   base64Cutoff?: bool,
- *   asm?: bool,
+ *   js?: bool,
  *   minify?: bool,
  *   optimize?: bool,
  *   optArgs?: string[],
@@ -88,11 +88,11 @@ export async function transpileComponent (component, opts = {}) {
   let { files, imports, exports } = generate(component, {
     name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? {}),
-    instantiation: opts.instantiation || opts.asm,
+    instantiation: opts.instantiation || opts.js,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     noNodejsCompat: !(opts.nodejsCompat ?? true),
     tlaCompat: opts.tlaCompat ?? false,
-    base64Cutoff: opts.asm ? 0 : opts.base64Cutoff ?? 5000
+    base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000
   });
 
   let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
@@ -102,7 +102,7 @@ export async function transpileComponent (component, opts = {}) {
 
   const jsFile = files.find(([name]) => name.endsWith('.js'));
 
-  if (opts.asm) {
+  if (opts.js) {
     const source = Buffer.from(jsFile[1]).toString('utf8')
       // update imports manging to match emscripten asm
       .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`);
