@@ -34,7 +34,7 @@ export async function codegenTest (fixtures) {
 
       test(`${fixture} lint`, async () => {
         const flags = await readFlags(`test/runtime/${name}.ts`);
-        if (flags.includes('--asm'))
+        if (flags.includes('--js'))
           return;
         var { stderr } = await exec(eslintPath, `test/output/${name}/${name}.js`, '-c', 'test/eslintrc.cjs');
         strictEqual(stderr, '');
