@@ -60,7 +60,7 @@ export async function optimizeComponent (componentBytes, opts) {
     }
 
     const optimizedCoreModules = await Promise.all(coreModules.map(async ([coreModuleStart, coreModuleEnd]) => {
-      const optimized = wasmOpt(componentBytes.subarray(coreModuleStart, coreModuleEnd), opts?.args);
+      const optimized = wasmOpt(componentBytes.subarray(coreModuleStart, coreModuleEnd), opts?.optArgs);
       if (spinner) {
         completed++;
         spinner.text = spinnerText();
@@ -124,7 +124,7 @@ export async function optimizeComponent (componentBytes, opts) {
  * @param {Uint8Array} source 
  * @returns {Promise<Uint8Array>}
  */
-async function wasmOpt (source, args = ['-tnh', '--gufa', '--flatten', '--rereloop', '-Oz', '-Oz', '--low-memory-unused']) {
+async function wasmOpt (source, args = ['-tnh', '--gufa', '--flatten', '--rereloop', '-Oz', '-Oz', '--low-memory-unused', '--enable-bulk-memory']) {
   try {
     return await spawnIOTmp(WASM_OPT, source, [
       ...args, '-o'
