@@ -1,4 +1,4 @@
-world js-transpiler-bindgen {
+world js-component-bindgen-component {
   import console: interface {
     log: func(msg: string)
     error: func(msg: string)

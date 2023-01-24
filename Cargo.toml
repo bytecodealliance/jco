@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/js-transpiler-bindgen", "crates/wasm-tools-component"]
+members = ["crates/js-component-bindgen", "crates/js-component-bindgen-component", "crates/wasm-tools-component"]
 resolver = "2"
 
 [workspace.package]

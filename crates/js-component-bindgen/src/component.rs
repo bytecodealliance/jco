@@ -7,9 +7,7 @@
 //! The main definition here is the `ComponentGenerator` trait as well as the
 //! `generate` function.
 
-use std::collections::HashMap;
-
-use crate::bindgen::JsTranspiler;
+use crate::bindgen::JsBindgen;
 use crate::files::Files;
 use anyhow::{Context, Result};
 use heck::*;
@@ -25,7 +23,7 @@ pub struct ComponentInfo {
 /// Generate bindings to load and instantiate the specific binary component
 /// provided.
 pub fn generate(
-    gen: &mut JsTranspiler,
+    gen: &mut JsBindgen,
     name: &str,
     binary: &[u8],
     files: &mut Files,

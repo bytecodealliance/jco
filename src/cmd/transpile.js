@@ -1,4 +1,4 @@
-import { generate } from '../../obj/js-transpiler-bindgen.js';
+import { generate } from '../../obj/js-component-bindgen.js';
 import { readFile, writeFile } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { dirname, extname, basename } from 'path';

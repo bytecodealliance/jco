@@ -16,7 +16,8 @@ use wit_parser::abi::{AbiVariant, Bindgen, Bitcast, Instruction, LiftLower, Wasm
 use wit_parser::*;
 
 #[derive(Default)]
-pub struct Opts {
+pub struct GenerationOpts {
+    pub name: String,
     /// Disables generation of `*.d.ts` files and instead only generates `*.js`
     /// source files.
     pub no_typescript: bool,
@@ -41,9 +42,9 @@ pub struct Opts {
     pub valid_lifting_optimization: bool,
 }
 
-impl Opts {
-    pub fn build(self) -> Result<JsTranspiler> {
-        let mut gen = JsTranspiler::default();
+impl GenerationOpts {
+    pub fn build(self) -> Result<JsBindgen> {
+        let mut gen = JsBindgen::default();
         gen.opts = self;
         if gen.opts.compat {
             gen.opts.tla_compat = true;
@@ -53,7 +54,7 @@ impl Opts {
 }
 
 #[derive(Default)]
-pub struct JsTranspiler {
+pub struct JsBindgen {
     /// The source code for the "main" file that's going to be created for the
     /// component we're generating bindings for. This is incrementally added to
     /// over time and primarily contains the main `instantiate` function as well
@@ -72,7 +73,7 @@ pub struct JsTranspiler {
     core_module_cnt: usize,
 
     /// Various options for code generation.
-    pub opts: Opts,
+    pub opts: GenerationOpts,
 
     /// List of all intrinsics emitted to `src` so far.
     all_intrinsics: BTreeSet<Intrinsic>,
@@ -167,13 +168,13 @@ impl Intrinsic {
 /// typescript definitions.
 struct JsInterface<'a> {
     src: Source,
-    gen: &'a mut JsTranspiler,
+    gen: &'a mut JsBindgen,
     iface: &'a Interface,
     needs_ty_option: bool,
     needs_ty_result: bool,
 }
 
-impl JsTranspiler {
+impl JsBindgen {
     pub fn instantiate(
         &mut self,
         component: &Component,
@@ -372,7 +373,7 @@ impl JsTranspiler {
     }
 }
 
-impl JsTranspiler {
+impl JsBindgen {
     fn import(&mut self, name: &str, iface: &Interface, files: &mut Files) {
         self.generate_interface(
             name,
@@ -444,7 +445,7 @@ impl JsTranspiler {
     }
 }
 
-impl JsTranspiler {
+impl JsBindgen {
     pub fn generate(&mut self, world: &World, files: &mut Files) {
         self.preprocess(&world.name);
         for (name, import) in world.imports.iter() {
@@ -870,7 +871,7 @@ impl JsTranspiler {
 /// This is the main structure for parsing the output of Wasmtime.
 struct Instantiator<'a> {
     src: Source,
-    gen: &'a mut JsTranspiler,
+    gen: &'a mut JsBindgen,
     modules: &'a PrimaryMap<StaticModuleIndex, ModuleTranslation<'a>>,
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
     world: &'a World,
@@ -1669,7 +1670,7 @@ enum ErrHandling {
 }
 
 struct FunctionBindgen<'a> {
-    gen: &'a mut JsTranspiler,
+    gen: &'a mut JsBindgen,
     sizes: SizeAlign,
     err: ErrHandling,
     tmp: usize,
