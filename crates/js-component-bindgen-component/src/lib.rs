@@ -1,10 +1,6 @@
 use anyhow::Result;
+use js_component_bindgen::transpile;
 use std::sync::Once;
-mod bindgen;
-mod component;
-mod files;
-mod ns;
-mod source;
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -32,13 +28,13 @@ macro_rules! uwriteln {
     };
 }
 
-wit_bindgen_guest_rust::generate!("js-transpiler-bindgen.wit");
+wit_bindgen_guest_rust::generate!("js-component-bindgen.wit");
 
-use js_transpiler_bindgen::*;
+use crate::js_component_bindgen_component::*;
 
-struct JsTranspilerBindgen;
+struct JsComponentBindgenComponent;
 
-export_js_transpiler_bindgen!(JsTranspilerBindgen);
+export_js_component_bindgen_component!(JsComponentBindgenComponent);
 
 fn init() {
     static INIT: Once = Once::new();
@@ -51,11 +47,12 @@ fn init() {
     });
 }
 
-impl js_transpiler_bindgen::JsTranspilerBindgen for JsTranspilerBindgen {
+impl js_component_bindgen_component::JsComponentBindgenComponent for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         init();
 
-        let opts = bindgen::Opts {
+        let opts = js_component_bindgen::GenerationOpts {
+            name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),
             instantiation: options.instantiation.unwrap_or(false),
             map: match options.map {
@@ -69,29 +66,18 @@ impl js_transpiler_bindgen::JsTranspilerBindgen for JsTranspilerBindgen {
             valid_lifting_optimization: options.valid_lifting_optimization.unwrap_or(false),
         };
 
-        let out = generate(component, &options.name, opts).map_err(|e| format!("{:?}", e))?;
+        let js_component_bindgen::Transpiled {
+            files,
+            imports,
+            exports,
+        } = transpile(component, opts)
+            .map_err(|e| format!("{:?}", e))
+            .map_err(|e| e.to_string())?;
 
-        Ok(out)
+        Ok(Transpiled {
+            files,
+            imports,
+            exports,
+        })
     }
-}
-
-fn generate(
-    component: Vec<u8>,
-    name: &str,
-    opts: bindgen::Opts,
-) -> Result<Transpiled, anyhow::Error> {
-    let mut gen = opts.build()?;
-    let mut files_obj = files::Files::default();
-    let component::ComponentInfo { imports, exports } =
-        component::generate(&mut gen, name, &component, &mut files_obj)?;
-
-    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
-    for (name, source) in files_obj.iter() {
-        files.push((String::from(name), source.to_vec()));
-    }
-    Ok(Transpiled {
-        files,
-        imports,
-        exports,
-    })
 }

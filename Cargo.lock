@@ -199,7 +199,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "js-transpiler-bindgen"
+name = "js-component-bindgen"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -207,6 +207,22 @@ dependencies = [
  "clap",
  "heck",
  "indexmap",
+ "wasmtime-environ",
+ "wit-bindgen-guest-rust",
+ "wit-component",
+ "wit-parser",
+]
+
+[[package]]
+name = "js-component-bindgen-component"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "heck",
+ "indexmap",
+ "js-component-bindgen",
  "wasmtime-environ",
  "wit-bindgen-guest-rust",
  "wit-component",
