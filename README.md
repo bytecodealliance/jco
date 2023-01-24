@@ -72,11 +72,11 @@ Parse a compoment WAT to output a Component binary.
 
 Print the WAT for a Component binary.
 
-#### `componentNew(coreWasm: Uint8Array | null, opts?): Uint8Array`
+#### `componentNew(coreWasm: Uint8Array | null, adapters?: [String, Uint8Array][]): Uint8Array`
 
-"WIT Component" Component creation tool.
+"WIT Component" Component creation tool, optionally providing a set of named adapter binaries.
 
-#### `componentWit(component: Uint8Array): string`
+#### `componentWit(component: Uint8Array, document?: string): string`
 
 Extract the WIT world from a component binary.
 
@@ -101,6 +101,14 @@ Commands:
   new [options] [module]                create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
   help [command]                        display help for command
 ```
+
+## Contributing
+
+Development is based on a standard `npm install && npm run build && npm run test` workflow.
+
+Tests can be run without a build via `npm run build:dev && npm run test:dev`.
+
+Specific tests can be run adding the mocha `--grep` flag, for example: `npm run test:dev -- --grep exports_only`.
 
 # License
 

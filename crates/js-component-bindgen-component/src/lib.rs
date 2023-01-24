@@ -69,7 +69,7 @@ impl js_component_bindgen_component::JsComponentBindgenComponent for JsComponent
         let js_component_bindgen::Transpiled {
             files,
             imports,
-            exports,
+            mut exports,
         } = transpile(component, opts)
             .map_err(|e| format!("{:?}", e))
             .map_err(|e| e.to_string())?;
@@ -77,7 +77,11 @@ impl js_component_bindgen_component::JsComponentBindgenComponent for JsComponent
         Ok(Transpiled {
             files,
             imports,
-            exports,
+            exports: exports.drain(..).map(|(name, expt)| (name, match expt {
+                wasmtime_environ::component::Export::LiftedFunction { .. } => ExportType::Function,
+                wasmtime_environ::component::Export::Instance(_) => ExportType::Instance,
+                _ => panic!("Unexpected export type"),
+            })).collect(),
         })
     }
 }

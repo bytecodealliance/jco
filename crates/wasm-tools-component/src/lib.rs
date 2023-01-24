@@ -1,7 +1,6 @@
-use std::{path::Path, sync::Once};
+use std::sync::Once;
 use wasmparser;
-use wit_component::{decode_world, ComponentEncoder, StringEncoding, WorldPrinter};
-use wit_parser::Document;
+use wit_component::{ComponentEncoder, DecodedWasm, DocumentPrinter};
 
 wit_bindgen_guest_rust::generate!("wasm-tools.wit");
 
@@ -34,61 +33,47 @@ impl wasm_tools_js::WasmToolsJs for WasmToolsJs {
     }
 
     fn component_new(
-        binary: Option<Vec<u8>>,
-        opts: Option<wasm_tools_js::ComponentOpts>,
+        binary: Vec<u8>,
+        adapters: Option<Vec<(String, Vec<u8>)>>
     ) -> Result<Vec<u8>, String> {
         init();
 
-        let mut encoder = ComponentEncoder::default();
+        let mut encoder = ComponentEncoder::default()
+            .validate(true)
+            .module(&binary)
+            .map_err(|e| format!("Failed to decode Wasm\n{:?}", e))?;
 
-        if let Some(opts) = opts {
-            if let Some(adapters) = opts.adapters {
-                for (name, binary) in adapters {
-                    encoder = encoder
-                        .adapter(&name, &binary)
-                        .map_err(|e| format!("{:?}", e))?;
-                }
-            }
-            if let Some(types_only) = opts.types_only {
-                if opts.wit.is_none() {
-                    return Err("Must provide a WIT for types-only component generation.".into());
-                }
-                encoder = encoder.types_only(types_only);
-            }
-            if let Some(wit) = opts.wit {
-                let encoding = match opts.string_encoding {
-                    Some(wasm_tools_js::StringEncoding::Utf8) | None => StringEncoding::UTF8,
-                    Some(wasm_tools_js::StringEncoding::Utf16) => StringEncoding::UTF16,
-                    Some(wasm_tools_js::StringEncoding::CompactUtf16) => {
-                        StringEncoding::CompactUTF16
-                    }
-                };
-                let doc =
-                    Document::parse(Path::new("<input>"), &wit).map_err(|e| format!("{:?}", e))?;
+        if let Some(adapters) = adapters {
+            for (name, binary) in adapters {
                 encoder = encoder
-                    .world(doc.into_world().map_err(|e| format!("{:?}", e))?, encoding)
+                    .adapter(&name, &binary)
                     .map_err(|e| format!("{:?}", e))?;
             }
         }
 
-        if let Some(binary) = binary {
-            encoder = encoder.module(&binary).map_err(|e| format!("{:?}", e))?;
-        }
-
-        let bytes = encoder.encode().map_err(|e| format!("{:?}", e))?;
+        let bytes = encoder
+            .encode()
+            .map_err(|e| format!("failed to encode a component from module\n${:?}", e))?;
 
         Ok(bytes)
     }
 
-    fn component_wit(binary: Vec<u8>) -> Result<String, String> {
+    fn component_wit(binary: Vec<u8>, name: Option<String>) -> Result<String, String> {
         init();
 
-        let world = decode_world("component", &binary)
-            .map_err(|e| format!("Failed to decode world\n{:?}", e))?;
-        let mut printer = WorldPrinter::default();
-        let output = printer
-            .print(&world)
-            .map_err(|e| format!("Failed to print world\n{:?}", e))?;
+        let decoded = wit_component::decode(&name.unwrap_or(String::from("component")), &binary)
+            .map_err(|e| format!("Failed to decode wit component\n{:?}", e))?;
+
+        // let world = decode_world("component", &binary);
+ 
+        let doc = match &decoded {
+            DecodedWasm::WitPackage(_resolve, _pkg) => panic!("Unexpected wit package"),
+            DecodedWasm::Component(resolve, world) => resolve.worlds[*world].document,
+        };
+
+
+        let output = DocumentPrinter::default().print(decoded.resolve(), doc)
+            .map_err(|e| format!("Unable to print wit\n${:?}", e))?;
         Ok(output)
     }
 

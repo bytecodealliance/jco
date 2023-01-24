@@ -75,7 +75,7 @@ async function wasm2Js (source) {
  *   optimize?: bool,
  *   optArgs?: string[],
  * }} opts 
- * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: string[] }>}
+ * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
 export async function transpileComponent (component, opts = {}) {
   let spinner;
@@ -153,17 +153,17 @@ export async function transpileComponent (component, opts = {}) {
         imports.map((impt, i) => `import * as import${i} from '${impt}';`).join('\n')}
 ${source.replace('export async function instantiate', 'async function instantiate')}
 
-let ${exports.map(name => '_' + name).join(', ')};
+let ${exports.filter(([, ty]) => ty === 'function').map(([name]) => '_' + name).join(', ')};
 
-${exports.map(name => `\nexport function ${name} () {
+${exports.map(([name, ty]) => ty === 'function' ? `\nexport function ${name} () {
   return _${name}.apply(this, arguments);
-}`).join('\n')}
+}` : `\nexport let ${name};`).join('\n')}
 
 const asmInit = [${asms}];
 
 ${opts.tlaCompat ? 'export ' : ''}const $init = (async () => {
   let idx = 0;
-  ({ ${exports.map(name => `${name}: _${name}`).join(',\n')} } = await instantiate(n => idx++, {
+  ({ ${exports.map(([name, ty]) => ty === 'function' ? `${name}: _${name}` : `${name}`).join(',\n')} } = await instantiate(n => idx++, {
 ${imports.map((impt, i) => `    '${impt}': import${i},`).join('\n')}
   }, (i, imports) => ({ exports: asmInit[i](imports) })));
 })();
