@@ -1,6 +1,6 @@
 use anyhow::Result;
-use std::sync::Once;
 use js_component_bindgen::transpile;
+use std::sync::Once;
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -66,8 +66,18 @@ impl js_component_bindgen_component::JsComponentBindgenComponent for JsComponent
             valid_lifting_optimization: options.valid_lifting_optimization.unwrap_or(false),
         };
 
-        let js_component_bindgen::Transpiled { files, imports, exports } = transpile(component, opts).map_err(|e| format!("{:?}", e)).map_err(|e| e.to_string())?;
+        let js_component_bindgen::Transpiled {
+            files,
+            imports,
+            exports,
+        } = transpile(component, opts)
+            .map_err(|e| format!("{:?}", e))
+            .map_err(|e| e.to_string())?;
 
-        Ok(Transpiled { files, imports, exports })
+        Ok(Transpiled {
+            files,
+            imports,
+            exports,
+        })
     }
 }
