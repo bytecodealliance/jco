@@ -17,10 +17,10 @@ env_logger = "0.9.1"
 indexmap = "1.9"
 wasmtime = { git = 'https://github.com/bytecodealliance/wasmtime', features = ["component-model"] }
 wasmtime-environ = { git = 'https://github.com/bytecodealliance/wasmtime' }
-wasmprinter = "0.2.44"
-wasmparser = "0.95.0"
-wasm-encoder = "0.20.0"
-wat = "1.0.52"
+wasmprinter = "0.2.46"
+wasmparser = "0.97.0"
+wasm-encoder = "0.21.0"
+wat = "1.0.53"
 wit-bindgen-guest-rust = { git = 'https://github.com/bytecodealliance/wit-bindgen', default-features = false, features = ['macros'] }
-wit-component = "0.3.2"
-wit-parser = "0.3.1"
+wit-component = "0.4.1"
+wit-parser = "0.4.0"

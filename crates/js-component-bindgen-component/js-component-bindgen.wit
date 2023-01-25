@@ -42,10 +42,15 @@ world js-component-bindgen-component {
       valid-lifting-optimization: option<bool>,
     }
 
+    enum export-type {
+      function,
+      instance,
+    }
+
     record transpiled {
       files: files,
       imports: list<string>,
-      exports: list<string>
+      exports: list<tuple<string, export-type>>
     }
 
     /// Generate the file structure for the transpilation of a component

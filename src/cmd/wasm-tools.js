@@ -25,7 +25,7 @@ export async function print(file, opts) {
 
 export async function componentWit(file, opts) {
   const source = await readFile(file);
-  const output = componentWitFn(source);
+  const output = componentWitFn(source, opts.document);
   if (opts.output) {
     await writeFile(opts.output, output);
   } else {
@@ -35,10 +35,9 @@ export async function componentWit(file, opts) {
 
 export async function componentNew(file, opts) {
   const source = file ? await readFile(file) : null;
-  if (opts.wit)
-    opts.wit = await readFile(opts.wit, 'utf8');
-  if (opts.adapt) {
-    opts.adapters = await Promise.all(opts.adapt.map(async adapt => {
+  let adapters = null;
+  if (opts.adapt)
+    adapters = await Promise.all(opts.adapt.map(async adapt => {
       let adapter;
       if (adapt.includes('='))
         adapter = adapt.split('=');
@@ -47,9 +46,6 @@ export async function componentNew(file, opts) {
       adapter[1] = await readFile(adapter[1]);
       return adapter;
     }));
-  }
-  if (opts.encoding)
-    opts.stringEncoding = opts.encoding;
-  const output = componentNewFn(source, opts);
+  const output = componentNewFn(source, adapters);
   await writeFile(opts.output, output);
 }

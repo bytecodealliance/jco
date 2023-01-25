@@ -6,6 +6,7 @@ mod ns;
 mod source;
 
 pub use bindgen::GenerationOpts;
+use wasmtime_environ::component::Export;
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -36,7 +37,7 @@ macro_rules! uwriteln {
 pub struct Transpiled {
     pub files: Vec<(String, Vec<u8>)>,
     pub imports: Vec<String>,
-    pub exports: Vec<String>,
+    pub exports: Vec<(String, Export)>,
 }
 
 /// Generate the JS transpilation bindgen for a given Wasm component binary

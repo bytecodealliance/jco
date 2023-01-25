@@ -169,7 +169,7 @@ impl Intrinsic {
 struct JsInterface<'a> {
     src: Source,
     gen: &'a mut JsBindgen,
-    iface: &'a Interface,
+    resolve: &'a Resolve,
     needs_ty_option: bool,
     needs_ty_result: bool,
 }
@@ -179,9 +179,11 @@ impl JsBindgen {
         &mut self,
         component: &Component,
         modules: &PrimaryMap<StaticModuleIndex, ModuleTranslation<'_>>,
-        world: &World,
+        resolve: &Resolve,
+        id: WorldId,
     ) {
         self.core_module_cnt = modules.len();
+        let world = &resolve.worlds[id];
 
         // Generate the TypeScript definition of the `instantiate` function
         // which is the main workhorse of the generated bindings.
@@ -222,12 +224,15 @@ impl JsBindgen {
         // structure.
         let mut instantiator = Instantiator {
             src: Source::default(),
+            sizes: SizeAlign::default(),
             gen: self,
             modules,
             instances: Default::default(),
-            world,
+            resolve,
+            world: id,
             component,
         };
+        instantiator.sizes.fill(resolve);
         instantiator.instantiate();
         instantiator.gen.src.js(&instantiator.src.js);
         instantiator.gen.src.js_init(&instantiator.src.js_init);
@@ -374,10 +379,17 @@ impl JsBindgen {
 }
 
 impl JsBindgen {
-    fn import(&mut self, name: &str, iface: &Interface, files: &mut Files) {
+    fn import_interface(
+        &mut self,
+        resolve: &Resolve,
+        name: &str,
+        id: InterfaceId,
+        files: &mut Files,
+    ) {
         self.generate_interface(
             name,
-            iface,
+            resolve,
+            id,
             "imports",
             "Imports",
             files,
@@ -390,37 +402,62 @@ impl JsBindgen {
         );
     }
 
-    fn export(&mut self, name: &str, iface: &Interface, files: &mut Files) {
+    fn import_funcs(
+        &mut self,
+        resolve: &Resolve,
+        _world: WorldId,
+        funcs: &[(&str, &Function)],
+        _files: &mut Files,
+    ) {
+        let mut gen = self.js_interface(resolve);
+        for (_, func) in funcs {
+            gen.ts_func(func, AbiVariant::GuestImport);
+        }
+        gen.gen.import_object.push_str(&gen.src.ts);
+        assert!(gen.src.js.is_empty());
+    }
+
+    fn export_interface(
+        &mut self,
+        resolve: &Resolve,
+        name: &str,
+        id: InterfaceId,
+        files: &mut Files,
+    ) {
         self.generate_interface(
             name,
-            iface,
+            resolve,
+            id,
             "exports",
             "Exports",
             files,
             AbiVariant::GuestExport,
         );
         let camel = name.to_upper_camel_case();
-        uwriteln!(self.src.ts, "export const {name}: typeof {camel}Exports;");
+        uwriteln!(
+            self.export_object,
+            "export const {name}: typeof {camel}Exports;"
+        );
     }
 
-    fn export_default(&mut self, _name: &str, iface: &Interface, _files: &mut Files) {
-        let instantiation = self.opts.instantiation;
-        let mut gen = self.js_interface(iface);
-        for func in iface.functions.iter() {
+    fn export_funcs(
+        &mut self,
+        resolve: &Resolve,
+        _world: WorldId,
+        funcs: &[(&str, &Function)],
+        _files: &mut Files,
+    ) {
+        let mut gen = self.js_interface(resolve);
+        for (_, func) in funcs {
             gen.ts_func(func, AbiVariant::GuestExport);
         }
-        if instantiation {
-            gen.gen.export_object.push_str(&mem::take(&mut gen.src.ts));
-        }
 
-        // After the default interface has its function definitions
-        // inlined the rest of the types are generated here as well.
-        gen.types();
-        gen.post_types();
-        gen.gen.src.ts(&mem::take(&mut gen.src.ts));
+        gen.gen.export_object.push_str(&gen.src.ts);
+        assert!(gen.src.js.is_empty());
     }
 
-    fn finish(&mut self, world: &World, _files: &mut Files) {
+    fn finish(&mut self, resolve: &Resolve, id: WorldId, _files: &mut Files) {
+        let world = &resolve.worlds[id];
         let camel = world.name.to_upper_camel_case();
 
         // Generate a type definition for the import object to type-check
@@ -441,45 +478,63 @@ impl JsBindgen {
             uwriteln!(self.src.ts, "export namespace {camel} {{",);
             self.src.ts(&self.export_object);
             uwriteln!(self.src.ts, "}}");
+        } else {
+            self.src.ts(&self.export_object);
         }
     }
 }
 
 impl JsBindgen {
-    pub fn generate(&mut self, world: &World, files: &mut Files) {
-        self.preprocess(&world.name);
+    pub fn generate(&mut self, resolve: &Resolve, id: WorldId, files: &mut Files) {
+        let world = &resolve.worlds[id];
+        self.preprocess(resolve, &world.name);
+
+        let mut funcs = Vec::new();
+
         for (name, import) in world.imports.iter() {
-            self.import(name, import, files);
+            match import {
+                WorldItem::Function(f) => funcs.push((name.as_str(), f)),
+                WorldItem::Interface(id) => self.import_interface(resolve, name, *id, files),
+            }
         }
+        if !funcs.is_empty() {
+            self.import_funcs(resolve, id, &funcs, files);
+        }
+        funcs.clear();
         for (name, export) in world.exports.iter() {
-            self.export(name, export, files);
+            match export {
+                WorldItem::Function(f) => funcs.push((name.as_str(), f)),
+                WorldItem::Interface(id) => self.export_interface(resolve, name, *id, files),
+            }
         }
-        if let Some(iface) = &world.default {
-            self.export_default(&world.name, iface, files);
+        if !funcs.is_empty() {
+            self.export_funcs(resolve, id, &funcs, files);
         }
-        self.finish(world, files);
+        self.finish(resolve, id, files);
     }
 
-    fn preprocess(&mut self, name: &str) {
+    fn preprocess(&mut self, resolve: &Resolve, name: &str) {
+        drop(resolve);
         drop(name);
     }
 
     fn generate_interface(
         &mut self,
         name: &str,
-        iface: &Interface,
+        resolve: &Resolve,
+        id: InterfaceId,
         dir: &str,
         extra: &str,
         files: &mut Files,
         abi: AbiVariant,
     ) {
         let camel = name.to_upper_camel_case();
-        let mut gen = self.js_interface(iface);
-        gen.types();
+        let mut gen = self.js_interface(resolve);
+        gen.types(id);
         gen.post_types();
 
         uwriteln!(gen.src.ts, "export namespace {camel} {{");
-        for func in iface.functions.iter() {
+        for (_, func) in resolve.interfaces[id].functions.iter() {
             gen.ts_func(func, abi);
         }
         uwriteln!(gen.src.ts, "}}");
@@ -491,15 +546,7 @@ impl JsBindgen {
 
         uwriteln!(
             self.src.ts,
-            "{} {{ {camel} as {camel}{extra} }} from './{dir}/{name}';",
-            // In instance mode, we have no way to assert the imported types
-            // in the ambient declaration file. Instead we just export the
-            // import namespace types for users to use.
-            if self.opts.instantiation {
-                "import"
-            } else {
-                "export"
-            }
+            "import {{ {camel} as {camel}{extra} }} from './{dir}/{name}';",
         );
     }
 
@@ -512,11 +559,11 @@ impl JsBindgen {
         impt.into()
     }
 
-    fn js_interface<'a>(&'a mut self, iface: &'a Interface) -> JsInterface<'a> {
+    fn js_interface<'a>(&'a mut self, resolve: &'a Resolve) -> JsInterface<'a> {
         JsInterface {
             src: Source::default(),
             gen: self,
-            iface,
+            resolve,
             needs_ty_option: false,
             needs_ty_result: false,
         }
@@ -801,7 +848,7 @@ impl JsBindgen {
         name
     }
 
-    fn array_ty(&self, iface: &Interface, ty: &Type) -> Option<&'static str> {
+    fn array_ty(&self, resolve: &Resolve, ty: &Type) -> Option<&'static str> {
         match ty {
             Type::Bool => None,
             Type::U8 => Some("Uint8Array"),
@@ -816,28 +863,28 @@ impl JsBindgen {
             Type::Float64 => Some("Float64Array"),
             Type::Char => None,
             Type::String => None,
-            Type::Id(id) => match &iface.types[*id].kind {
-                TypeDefKind::Type(t) => self.array_ty(iface, t),
+            Type::Id(id) => match &resolve.types[*id].kind {
+                TypeDefKind::Type(t) => self.array_ty(resolve, t),
                 _ => None,
             },
         }
     }
 
     /// Returns whether `null` is a valid value of type `ty`
-    fn maybe_null(&self, iface: &Interface, ty: &Type) -> bool {
-        self.as_nullable(iface, ty).is_some()
+    fn maybe_null(&self, resolve: &Resolve, ty: &Type) -> bool {
+        self.as_nullable(resolve, ty).is_some()
     }
 
     /// Tests whether `ty` can be represented with `null`, and if it can then
     /// the "other type" is returned. If `Some` is returned that means that `ty`
     /// is `null | <return>`. If `None` is returned that means that `null` can't
     /// be used to represent `ty`.
-    fn as_nullable<'a>(&self, iface: &'a Interface, ty: &'a Type) -> Option<&'a Type> {
+    fn as_nullable<'a>(&self, resolve: &'a Resolve, ty: &'a Type) -> Option<&'a Type> {
         let id = match ty {
             Type::Id(id) => *id,
             _ => return None,
         };
-        match &iface.types[id].kind {
+        match &resolve.types[id].kind {
             // If `ty` points to an `option<T>`, then `ty` can be represented
             // with `null` if `t` itself can't be represented with null. For
             // example `option<option<u32>>` can't be represented with `null`
@@ -854,13 +901,13 @@ impl JsBindgen {
             // It's doubtful anyone would actually rely on that though due to
             // how confusing it is.
             TypeDefKind::Option(t) => {
-                if !self.maybe_null(iface, t) {
+                if !self.maybe_null(resolve, t) {
                     Some(t)
                 } else {
                     None
                 }
             }
-            TypeDefKind::Type(t) => self.as_nullable(iface, t),
+            TypeDefKind::Type(t) => self.as_nullable(resolve, t),
             _ => None,
         }
     }
@@ -874,7 +921,9 @@ struct Instantiator<'a> {
     gen: &'a mut JsBindgen,
     modules: &'a PrimaryMap<StaticModuleIndex, ModuleTranslation<'a>>,
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
-    world: &'a World,
+    resolve: &'a Resolve,
+    world: WorldId,
+    sizes: SizeAlign,
     component: &'a Component,
 }
 
@@ -903,11 +952,7 @@ impl Instantiator<'_> {
             self.src.js("return ");
         }
 
-        self.exports(
-            &self.component.exports,
-            0,
-            self.world.default.as_ref().map(|i| (None, i)),
-        );
+        self.exports(&self.component.exports);
     }
 
     fn instantiation_global_initializer(&mut self, init: &GlobalInitializer) {
@@ -1005,9 +1050,7 @@ impl Instantiator<'_> {
         uwriteln!(self.src.js, "let exports{iu32};");
         uwriteln!(
             self.src.js_init,
-            "
-                ({{ exports: exports{iu32} }} = await {instantiate}(await module{}{imports}));\
-            ",
+            "({{ exports: exports{iu32} }} = await {instantiate}(await module{}{imports}));",
             idx.as_u32()
         );
     }
@@ -1018,9 +1061,16 @@ impl Instantiator<'_> {
         // where instances export functions.
         let (import_index, path) = &self.component.imports[import.import];
         let (import_name, _import_ty) = &self.component.import_types[*import_index];
-        assert_eq!(path.len(), 1);
-        let iface = &self.world.imports[import_name.as_str()];
-        let func = iface.functions.iter().find(|f| f.name == path[0]).unwrap();
+        let func = match &self.resolve.worlds[self.world].imports[import_name.as_str()] {
+            WorldItem::Function(f) => {
+                assert_eq!(path.len(), 0);
+                f
+            }
+            WorldItem::Interface(i) => {
+                assert_eq!(path.len(), 1);
+                &self.resolve.interfaces[*i].functions[&path[0]]
+            }
+        };
 
         let index = import.index.as_u32();
         let callee = format!("lowering{index}Callee");
@@ -1051,7 +1101,8 @@ impl Instantiator<'_> {
         }
 
         uwrite!(self.src.js_init, "\nfunction lowering{index}");
-        let nparams = iface
+        let nparams = self
+            .resolve
             .wasm_signature(AbiVariant::GuestImport, func)
             .params
             .len();
@@ -1060,7 +1111,6 @@ impl Instantiator<'_> {
             nparams,
             callee,
             &import.options,
-            iface,
             func,
             AbiVariant::GuestImport,
         );
@@ -1077,7 +1127,6 @@ impl Instantiator<'_> {
         nparams: usize,
         callee: String,
         opts: &CanonicalOptions,
-        iface: &Interface,
         func: &Function,
         abi: AbiVariant,
     ) {
@@ -1116,12 +1165,10 @@ impl Instantiator<'_> {
             );
         }
 
-        let mut sizes = SizeAlign::default();
-        sizes.fill(iface);
         let mut f = FunctionBindgen {
-            sizes,
+            sizes: &self.sizes,
             gen: self.gen,
-            err: if func.results.throws(iface).is_some() {
+            err: if func.results.throws(self.resolve).is_some() {
                 match abi {
                     AbiVariant::GuestExport => ErrHandling::ThrowResultErr,
                     AbiVariant::GuestImport => ErrHandling::ResultCatchHandler,
@@ -1140,7 +1187,7 @@ impl Instantiator<'_> {
             encoding: opts.string_encoding,
             src: Source::default(),
         };
-        iface.call(
+        self.resolve.call(
             abi,
             match abi {
                 AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
@@ -1191,12 +1238,7 @@ impl Instantiator<'_> {
         }
     }
 
-    fn exports(
-        &mut self,
-        exports: &IndexMap<String, Export>,
-        depth: usize,
-        iface: Option<(Option<&str>, &Interface)>,
-    ) {
+    fn exports(&mut self, exports: &IndexMap<String, Export>) {
         if exports.is_empty() {
             if self.gen.opts.instantiation {
                 self.src.js("{}");
@@ -1209,54 +1251,54 @@ impl Instantiator<'_> {
         }
 
         for (name, export) in exports {
-            let js_name = if self.gen.opts.instantiation {
-                name.clone()
-            } else {
-                // When generating direct ES-module exports namespace functions
-                // by their exported interface name, if applicable.
-                match iface {
-                    Some((Some(iface_name), _)) => format!("{iface_name}-{name}"),
-                    _ => name.clone(),
-                }
-            };
-            let camel = js_name.to_lower_camel_case();
+            let item = &self.resolve.worlds[self.world].exports[name];
+            let camel = name.to_lower_camel_case();
             match export {
                 Export::LiftedFunction {
                     ty: _,
                     func,
                     options,
                 } => {
-                    assert!(depth < 2);
-                    if self.gen.opts.instantiation {
-                        uwrite!(self.src.js, "{camel}");
-                    } else {
-                        uwrite!(self.src.js, "\nexport function {camel}");
-                    }
-                    let callee = self.core_def(func);
-                    let (_, iface) = iface.unwrap();
-                    let func = iface.functions.iter().find(|f| f.name == *name).unwrap();
-                    self.bindgen(
-                        func.params.len(),
-                        callee,
-                        options,
-                        iface,
+                    self.export_bindgen(
+                        name,
+                        None,
                         func,
-                        AbiVariant::GuestExport,
+                        options,
+                        match item {
+                            WorldItem::Function(f) => f,
+                            WorldItem::Interface(_) => unreachable!(),
+                        },
                     );
-                    if self.gen.opts.instantiation {
-                        self.src.js(",\n");
-                    } else {
-                        self.src.js("\n");
-                    }
                 }
                 Export::Instance(exports) => {
+                    let id = match item {
+                        WorldItem::Interface(id) => *id,
+                        WorldItem::Function(_) => unreachable!(),
+                    };
                     if self.gen.opts.instantiation {
-                        uwrite!(self.src.js, "{camel}: ");
+                        uwriteln!(self.src.js, "{camel}: {{");
+                    } else {
+                        uwriteln!(self.src.js, "export const {camel} = {{");
                     }
-                    let iface = &self.world.exports[name.as_str()];
-                    self.exports(exports, depth + 1, Some((Some(name.as_str()), iface)));
+                    for (func_name, export) in exports {
+                        let (func, options) = match export {
+                            Export::LiftedFunction { func, options, .. } => (func, options),
+                            Export::Type(_) => continue, // ignored
+                            _ => unreachable!(),
+                        };
+                        self.export_bindgen(
+                            func_name,
+                            Some(name),
+                            func,
+                            options,
+                            &self.resolve.interfaces[id].functions[func_name],
+                        );
+                    }
+                    self.src.js("\n}");
                     if self.gen.opts.instantiation {
                         self.src.js(",\n");
+                    } else {
+                        self.src.js(";\n");
                     }
                 }
 
@@ -1269,6 +1311,35 @@ impl Instantiator<'_> {
         }
         if self.gen.opts.instantiation {
             self.src.js("}");
+        }
+    }
+
+    fn export_bindgen(
+        &mut self,
+        name: &str,
+        instance_name: Option<&str>,
+        def: &CoreDef,
+        options: &CanonicalOptions,
+        func: &Function,
+    ) {
+        let name = name.to_lower_camel_case();
+        if self.gen.opts.instantiation || instance_name.is_some() {
+            self.src.js.push_str(&name);
+        } else {
+            uwrite!(self.src.js, "\nexport function {name}");
+        }
+        let callee = self.core_def(def);
+        self.bindgen(
+            func.params.len(),
+            callee,
+            options,
+            func,
+            AbiVariant::GuestExport,
+        );
+        if self.gen.opts.instantiation || instance_name.is_some() {
+            self.src.js(",\n");
+        } else {
+            self.src.js("\n");
         }
     }
 }
@@ -1295,8 +1366,31 @@ impl<'a> JsInterface<'a> {
         }
     }
 
+    fn types(&mut self, iface: InterfaceId) {
+        let iface = &self.resolve().interfaces[iface];
+        for (name, id) in iface.types.iter() {
+            let id = *id;
+            let ty = &self.resolve().types[id];
+            match &ty.kind {
+                TypeDefKind::Record(record) => self.type_record(id, name, record, &ty.docs),
+                TypeDefKind::Flags(flags) => self.type_flags(id, name, flags, &ty.docs),
+                TypeDefKind::Tuple(tuple) => self.type_tuple(id, name, tuple, &ty.docs),
+                TypeDefKind::Enum(enum_) => self.type_enum(id, name, enum_, &ty.docs),
+                TypeDefKind::Variant(variant) => self.type_variant(id, name, variant, &ty.docs),
+                TypeDefKind::Option(t) => self.type_option(id, name, t, &ty.docs),
+                TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
+                TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
+                TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
+                TypeDefKind::Type(t) => self.type_alias(id, name, t, &ty.docs),
+                TypeDefKind::Future(_) => todo!("generate for future"),
+                TypeDefKind::Stream(_) => todo!("generate for stream"),
+                TypeDefKind::Unknown => unreachable!(),
+            }
+        }
+    }
+
     fn array_ty(&self, ty: &Type) -> Option<&'static str> {
-        self.gen.array_ty(self.iface, ty)
+        self.gen.array_ty(self.resolve, ty)
     }
 
     fn print_ty(&mut self, ty: &Type, mode: Mode) {
@@ -1314,7 +1408,7 @@ impl<'a> JsInterface<'a> {
             Type::Char => self.src.ts("string"),
             Type::String => self.src.ts("string"),
             Type::Id(id) => {
-                let ty = &self.iface.types[*id];
+                let ty = &self.resolve.types[*id];
                 if let Some(name) = &ty.name {
                     return self.src.ts(&name.to_upper_camel_case());
                 }
@@ -1348,6 +1442,7 @@ impl<'a> JsInterface<'a> {
                     TypeDefKind::List(v) => self.print_list(v, mode),
                     TypeDefKind::Future(_) => todo!("anonymous future"),
                     TypeDefKind::Stream(_) => todo!("anonymous stream"),
+                    TypeDefKind::Unknown => unreachable!(),
                 }
             }
         }
@@ -1415,7 +1510,7 @@ impl<'a> JsInterface<'a> {
             AbiVariant::GuestExport => Mode::Lift,
             AbiVariant::GuestImport => Mode::Lower,
         };
-        if let Some((ok_ty, _)) = func.results.throws(self.iface) {
+        if let Some((ok_ty, _)) = func.results.throws(self.resolve) {
             self.print_optional_ty(ok_ty, result_mode);
         } else {
             match func.results.len() {
@@ -1437,14 +1532,14 @@ impl<'a> JsInterface<'a> {
     }
 
     fn maybe_null(&self, ty: &Type) -> bool {
-        self.gen.maybe_null(self.iface, ty)
+        self.gen.maybe_null(self.resolve, ty)
     }
 
     fn as_nullable<'b>(&self, ty: &'b Type) -> Option<&'b Type>
     where
         'a: 'b,
     {
-        self.gen.as_nullable(self.iface, ty)
+        self.gen.as_nullable(self.resolve, ty)
     }
 
     fn post_types(&mut self) {
@@ -1460,31 +1555,8 @@ impl<'a> JsInterface<'a> {
 }
 
 impl<'a> JsInterface<'a> {
-    fn iface(&self) -> &'a Interface {
-        self.iface
-    }
-
-    fn types(&mut self) {
-        for (id, ty) in self.iface().types.iter() {
-            let name = match &ty.name {
-                Some(name) => name,
-                None => continue,
-            };
-            match &ty.kind {
-                TypeDefKind::Record(record) => self.type_record(id, name, record, &ty.docs),
-                TypeDefKind::Flags(flags) => self.type_flags(id, name, flags, &ty.docs),
-                TypeDefKind::Tuple(tuple) => self.type_tuple(id, name, tuple, &ty.docs),
-                TypeDefKind::Enum(enum_) => self.type_enum(id, name, enum_, &ty.docs),
-                TypeDefKind::Variant(variant) => self.type_variant(id, name, variant, &ty.docs),
-                TypeDefKind::Option(t) => self.type_option(id, name, t, &ty.docs),
-                TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
-                TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
-                TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => self.type_alias(id, name, t, &ty.docs),
-                TypeDefKind::Future(_) => todo!("generate for future"),
-                TypeDefKind::Stream(_) => todo!("generate for stream"),
-            }
-        }
+    fn resolve(&self) -> &'a Resolve {
+        self.resolve
     }
 
     fn type_record(&mut self, _id: TypeId, name: &str, record: &Record, docs: &Docs) {
@@ -1671,7 +1743,7 @@ enum ErrHandling {
 
 struct FunctionBindgen<'a> {
     gen: &'a mut JsBindgen,
-    sizes: SizeAlign,
+    sizes: &'a SizeAlign,
     err: ErrHandling,
     tmp: usize,
     src: Source,
@@ -1760,17 +1832,17 @@ impl Bindgen for FunctionBindgen<'_> {
         self.blocks.push((src.into(), mem::take(operands)));
     }
 
-    fn return_pointer(&mut self, _iface: &Interface, _size: usize, _align: usize) -> String {
+    fn return_pointer(&mut self, _size: usize, _align: usize) -> String {
         unimplemented!()
     }
 
-    fn is_list_canonical(&self, iface: &Interface, ty: &Type) -> bool {
-        self.gen.array_ty(iface, ty).is_some()
+    fn is_list_canonical(&self, resolve: &Resolve, ty: &Type) -> bool {
+        self.gen.array_ty(resolve, ty).is_some()
     }
 
     fn emit(
         &mut self,
-        iface: &Interface,
+        resolve: &Resolve,
         inst: &Instruction<'_>,
         operands: &mut Vec<String>,
         results: &mut Vec<String>,
@@ -2267,7 +2339,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(none, "variant{tmp}_{i} = {none_result};");
                 }
 
-                if self.gen.maybe_null(iface, payload) {
+                if self.gen.maybe_null(resolve, payload) {
                     uwriteln!(
                         self.src.js,
                         "switch (variant{tmp}.tag) {{
@@ -2308,7 +2380,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let operand = &operands[0];
 
-                let (v_none, v_some) = if self.gen.maybe_null(iface, payload) {
+                let (v_none, v_some) = if self.gen.maybe_null(resolve, payload) {
                     (
                         "{ tag: 'none' }",
                         format!(
@@ -2578,7 +2650,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src.js, "const ptr{tmp} = {};", operands[0]);
                 uwriteln!(self.src.js, "const len{tmp} = {};", operands[1]);
                 // TODO: this is the wrong endianness
-                let array_ty = self.gen.array_ty(iface, element).unwrap();
+                let array_ty = self.gen.array_ty(resolve, element).unwrap();
                 uwriteln!(
                     self.src.js,
                     "const result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {}));",

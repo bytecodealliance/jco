@@ -36,7 +36,11 @@ export interface TranspileOpts {
 /**
  * Transpile a Component into a JS-executable package
  */
-export function transpile(component: Uint8Array, opts?: TranspileOpts): Promise<{ files, imports, exports }>;
+export function transpile(component: Uint8Array, opts?: TranspileOpts): Promise<{
+  files: Record<string, Uint8Array>,
+  imports: string[],
+  exports: [string, 'function' | 'instance'][]
+}>;
 
 /**
  * Parse a WAT string into a Wasm binary
@@ -51,27 +55,13 @@ export function print(binary: Uint8Array | ArrayBuffer): string;
 /**
  * WIT Component - create a Component from a Wasm core binary
  */
-export function componentNew(binary: Uint8Array | ArrayBuffer | null, opts: ComponentOpts | null): Uint8Array;
+export function componentNew(binary: Uint8Array | ArrayBuffer, adapters?: [string, Uint8Array][] | null): Uint8Array;
 
 /**
  * Extract the WIT world from a Wasm Component
  */
-export function componentWit(binary: Uint8Array | ArrayBuffer): string;
+export function componentWit(binary: Uint8Array | ArrayBuffer, document?: string | null): string;
 
 export type StringEncoding = 'utf8' | 'utf16' | 'compact-utf16';
-
-export interface ComponentOpts {
-  /// wit world for the Component
-  /// (only needed if not provided in the Component itself,
-  /// which it usually is)
-  wit?: string,
-  /// create a type only Component shell, without implementations
-  typesOnly?: boolean,
-  /// adapters to use
-  adapters?: [string, Uint8Array][],
-  /// string encoding used by the Component (this should
-  /// also be picked up from the Component itself)
-  stringEncoding?: StringEncoding,
-}
 
 export const $init: Promise<void>;
