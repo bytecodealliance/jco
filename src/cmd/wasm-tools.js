@@ -1,11 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
-import {
-  print as printFn,
-  parse as parseFn,
-  componentWit as componentWitFn,
-  componentNew as componentNewFn,
-} from "../../obj/wasm-tools.js";
+import { exports } from "../../obj/wasm-tools.js";
 import { basename, extname } from 'node:path';
+
+const {
+  print: printFn,
+  parse: parseFn,
+  componentWit: componentWitFn,
+  componentNew: componentNewFn
+} = exports;
 
 export async function parse(file, opts) {
   const source = (await readFile(file)).toString();

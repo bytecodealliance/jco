@@ -2,7 +2,7 @@ use std::sync::Once;
 use wasmparser;
 use wit_component::{ComponentEncoder, DecodedWasm, DocumentPrinter};
 
-wit_bindgen_guest_rust::generate!("wasm-tools.wit");
+wit_bindgen_guest_rust::generate!("wasm-tools");
 
 struct WasmToolsJs;
 
@@ -19,7 +19,7 @@ fn init() {
     });
 }
 
-impl wasm_tools_js::WasmToolsJs for WasmToolsJs {
+impl exports::Exports for WasmToolsJs {
     fn print(component: Vec<u8>) -> Result<String, String> {
         init();
 

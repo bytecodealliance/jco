@@ -1,4 +1,4 @@
-import { generate } from '../../obj/js-component-bindgen-component.js';
+import { exports } from '../../obj/js-component-bindgen-component.js';
 import { readFile, writeFile } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { dirname, extname, basename } from 'path';
@@ -8,6 +8,9 @@ import { optimizeComponent } from './opt.js';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
 import ora from 'ora';
+
+// pending default export support
+const { generate } = exports;
 
 export async function transpile (componentPath, opts, program) {
   const varIdx = program.parent.rawArgs.indexOf('--');

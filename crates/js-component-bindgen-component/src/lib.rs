@@ -28,9 +28,9 @@ macro_rules! uwriteln {
     };
 }
 
-wit_bindgen_guest_rust::generate!("js-component-bindgen.wit");
+wit_bindgen_guest_rust::generate!("js-component-bindgen");
 
-use crate::js_component_bindgen_component::*;
+use crate::exports::*;
 
 struct JsComponentBindgenComponent;
 
@@ -47,7 +47,7 @@ fn init() {
     });
 }
 
-impl js_component_bindgen_component::JsComponentBindgenComponent for JsComponentBindgenComponent {
+impl exports::Exports for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         init();
 
