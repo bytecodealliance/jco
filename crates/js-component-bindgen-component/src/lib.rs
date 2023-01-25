@@ -77,11 +77,23 @@ impl js_component_bindgen_component::JsComponentBindgenComponent for JsComponent
         Ok(Transpiled {
             files,
             imports,
-            exports: exports.drain(..).map(|(name, expt)| (name, match expt {
-                wasmtime_environ::component::Export::LiftedFunction { .. } => ExportType::Function,
-                wasmtime_environ::component::Export::Instance(_) => ExportType::Instance,
-                _ => panic!("Unexpected export type"),
-            })).collect(),
+            exports: exports
+                .drain(..)
+                .map(|(name, expt)| {
+                    (
+                        name,
+                        match expt {
+                            wasmtime_environ::component::Export::LiftedFunction { .. } => {
+                                ExportType::Function
+                            }
+                            wasmtime_environ::component::Export::Instance(_) => {
+                                ExportType::Instance
+                            }
+                            _ => panic!("Unexpected export type"),
+                        },
+                    )
+                })
+                .collect(),
         })
     }
 }

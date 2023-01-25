@@ -379,7 +379,13 @@ impl JsBindgen {
 }
 
 impl JsBindgen {
-    fn import_interface(&mut self, resolve: &Resolve, name: &str, id: InterfaceId, files: &mut Files) {
+    fn import_interface(
+        &mut self,
+        resolve: &Resolve,
+        name: &str,
+        id: InterfaceId,
+        files: &mut Files,
+    ) {
         self.generate_interface(
             name,
             resolve,
@@ -411,7 +417,13 @@ impl JsBindgen {
         assert!(gen.src.js.is_empty());
     }
 
-    fn export_interface(&mut self, resolve: &Resolve, name: &str, id: InterfaceId, files: &mut Files) {
+    fn export_interface(
+        &mut self,
+        resolve: &Resolve,
+        name: &str,
+        id: InterfaceId,
+        files: &mut Files,
+    ) {
         self.generate_interface(
             name,
             resolve,
@@ -422,10 +434,19 @@ impl JsBindgen {
             AbiVariant::GuestExport,
         );
         let camel = name.to_upper_camel_case();
-        uwriteln!(self.export_object, "export const {name}: typeof {camel}Exports;");
+        uwriteln!(
+            self.export_object,
+            "export const {name}: typeof {camel}Exports;"
+        );
     }
 
-    fn export_funcs(&mut self, resolve: &Resolve, _world: WorldId, funcs: &[(&str, &Function)], _files: &mut Files) {
+    fn export_funcs(
+        &mut self,
+        resolve: &Resolve,
+        _world: WorldId,
+        funcs: &[(&str, &Function)],
+        _files: &mut Files,
+    ) {
         let mut gen = self.js_interface(resolve);
         for (_, func) in funcs {
             gen.ts_func(func, AbiVariant::GuestExport);
@@ -1246,7 +1267,7 @@ impl Instantiator<'_> {
                         match item {
                             WorldItem::Function(f) => f,
                             WorldItem::Interface(_) => unreachable!(),
-                        }
+                        },
                     );
                 }
                 Export::Instance(exports) => {

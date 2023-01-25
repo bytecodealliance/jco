@@ -34,7 +34,7 @@ impl wasm_tools_js::WasmToolsJs for WasmToolsJs {
 
     fn component_new(
         binary: Vec<u8>,
-        adapters: Option<Vec<(String, Vec<u8>)>>
+        adapters: Option<Vec<(String, Vec<u8>)>>,
     ) -> Result<Vec<u8>, String> {
         init();
 
@@ -65,14 +65,14 @@ impl wasm_tools_js::WasmToolsJs for WasmToolsJs {
             .map_err(|e| format!("Failed to decode wit component\n{:?}", e))?;
 
         // let world = decode_world("component", &binary);
- 
+
         let doc = match &decoded {
             DecodedWasm::WitPackage(_resolve, _pkg) => panic!("Unexpected wit package"),
             DecodedWasm::Component(resolve, world) => resolve.worlds[*world].document,
         };
 
-
-        let output = DocumentPrinter::default().print(decoded.resolve(), doc)
+        let output = DocumentPrinter::default()
+            .print(decoded.resolve(), doc)
             .map_err(|e| format!("Unable to print wit\n${:?}", e))?;
         Ok(output)
     }
