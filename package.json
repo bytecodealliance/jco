@@ -23,8 +23,10 @@
     "typescript": "^4.3.2"
   },
   "scripts": {
-    "build": "echo './node_modules/.bin/jsct $@' > jsct.sh && npm run build:dev && ./build-dist.sh",
-    "build:self": "echo './src/jsct.js $@' > jsct.sh && npm run build:dev && ./build-dist.sh",
+    "build": "npm run build:set-last && npm run build:dev && ./build-dist.sh",
+    "build:self": "npm run build:set-self && npm run build:dev && ./build-dist.sh",
+    "build:set-last": "echo './node_modules/.bin/jsct $@' > jsct.sh && chmod +x jsct.sh",
+    "build:set-self": "echo './src/jsct.js $@' > jsct.sh && chmod +x jsct.sh",
     "build:dev": "npm run build:wasm && mkdir -p obj && npm run build:js-component-bindgen-component && npm run build:wasm-tools",
     "build:wasm": "cargo build --workspace --target wasm32-unknown-unknown --release",
     "build:js-component-bindgen-component": "npm run build:component:js-component-bindgen-component && npm run build:transpile:js-component-bindgen-component",
