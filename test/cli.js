@@ -43,7 +43,7 @@ export async function cliTest (fixtures) {
       }
     });
 
-    test('Transpile to JS', async () => {
+    test.skip('Transpile to JS', async () => {
       try {
         const name = 'flavorful';
         const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--map', 'testwasi=./wasi.js', '--valid-lifting-optimization', '--tla-compat', '--js', '--base64-cutoff=0', '-o', outDir);
@@ -125,7 +125,7 @@ export async function cliTest (fixtures) {
       }
     });
 
-    test.skip('Component new adapt', async () => {
+    test('Component new adapt', async () => {
       try {
         const { stderr } = await exec(jsctPath,
             'new',

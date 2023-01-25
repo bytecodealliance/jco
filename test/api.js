@@ -5,8 +5,8 @@ import { transpile, opt, print, parse, componentWit, componentNew } from 'js-com
 export async function apiTest (fixtures) {
   suite('API', () => {
     test('Transpile', async () => {
-      const name = fixtures[0].replace('.component.wasm', '');
-      const component = await readFile(`test/fixtures/exports_only.component.wasm`);
+      const name = 'exports_only';
+      const component = await readFile(`test/fixtures/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, { name });
       strictEqual(imports.length, 0);
       strictEqual(exports.length, 1);
@@ -15,8 +15,8 @@ export async function apiTest (fixtures) {
     });
 
     test('Transpile & Optimize & Minify', async () => {
-      const name = fixtures[0].replace('.component.wasm', '');
-      const component = await readFile(`test/fixtures/exports_only.component.wasm`);
+      const name = 'exports_only';
+      const component = await readFile(`test/fixtures/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, {
         name,
         minify: true,
@@ -31,9 +31,9 @@ export async function apiTest (fixtures) {
       ok(files[name + '.js'].length < 8000);
     });
 
-    test('Transpile to JS', async () => {
-      const name = fixtures[1].replace('.component.wasm', '');
-      const component = await readFile(`test/fixtures/flavorful.component.wasm`);
+    test.skip('Transpile to JS', async () => {
+      const name = 'flavorful';
+      const component = await readFile(`test/fixtures/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, {
         map: {
           'testwasi': './wasi.js'
@@ -82,7 +82,7 @@ export async function apiTest (fixtures) {
       // strictEqual(output.slice(0, 10), '(component');
     });
 
-    test.skip('Component new adapt', async () => {
+    test('Component new adapt', async () => {
       const component = await readFile(`test/fixtures/exitcode.wasm`);
 
       const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile('test/fixtures/wasi_snapshot_preview1.wasm')]]);

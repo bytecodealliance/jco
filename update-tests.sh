@@ -32,3 +32,7 @@ do
   echo "cp $t ../test/fixtures/${name:8}_utf16.component.wasm"
   cp $t ../test/fixtures/${name:8}_utf16.component.wasm
 done
+
+cd test/fixtures
+rm wasi_snapshot_preview1.wasm
+wget https://github.com/bytecodealliance/preview2-prototyping/releases/download/latest/wasi_snapshot_preview1.wasm
