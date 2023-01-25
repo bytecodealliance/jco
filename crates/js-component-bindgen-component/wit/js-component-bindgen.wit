@@ -1,10 +1,7 @@
-world js-component-bindgen-component {
-  import console: interface {
-    log: func(msg: string)
-    error: func(msg: string)
-  }
+default world js-component-bindgen-component {
+  import console: pkg.console
 
-  default export interface {
+  export exports: interface {
     type files = list<tuple<string, list<u8>>>
     type maps = list<tuple<string, string>>
 

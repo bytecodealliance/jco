@@ -1,10 +1,7 @@
-world wasm-tools-js {
-  import console: interface {
-    log: func(msg: string)
-    error: func(msg: string)
-  }
+default world wasm-tools-js {
+  import console: pkg.console
 
-  default export interface {
+  export exports: interface {
     /// Translate the WebAssembly text format to binary
     parse: func(wat: string) -> result<list<u8>, string>
 
