@@ -31,7 +31,7 @@ export async function apiTest (fixtures) {
       ok(files[name + '.js'].length < 8000);
     });
 
-    test.skip('Transpile to JS', async () => {
+    test('Transpile to JS', async () => {
       const name = 'flavorful';
       const component = await readFile(`test/fixtures/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, {
