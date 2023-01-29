@@ -23,7 +23,7 @@ export async function cliTest (fixtures) {
         const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
-        ok(source.toString().includes('export function thunk'));
+        ok(source.toString().includes('export { thunk'));
       }
       finally {
         await cleanup();
@@ -36,7 +36,7 @@ export async function cliTest (fixtures) {
         const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--valid-lifting-optimization', '--tla-compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
-        ok(source.toString().includes('export function thunk'));
+        ok(source.toString().includes('as thunk}'));
       }
       finally {
         await cleanup();
