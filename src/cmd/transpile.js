@@ -1,9 +1,9 @@
 import { exports } from '../../obj/js-component-bindgen-component.js';
-import { readFile, writeFile } from 'fs/promises';
+import { writeFile } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { dirname, extname, basename } from 'path';
 import c from 'chalk-template';
-import { sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
+import { readFile, sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import { optimizeComponent } from './opt.js';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';

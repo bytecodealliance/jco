@@ -14,11 +14,20 @@ default world wasm-tools-js {
       compact-utf16
     }
 
-    /// Create a component from a core wasm binary
+    /// Create a component from a core wasm binary that implements and embeds a component type
     component-new: func(binary: list<u8>, adapters: option<list<tuple<string, list<u8>>>>) -> result<list<u8>, string>
 
     /// Extract a *.wit interface from a component, optionally providing a document name to extract
     component-wit: func(binary: list<u8>, document: option<string>) -> result<string, string>
+
+    /// Embed a WIT type into a component.
+    /// Only a singular WIT document without use resolutions is supported for this API.
+    record embed-opts {
+      string-encoding: option<string-encoding>,
+      dummy: option<bool>,
+      %world: option<string>,
+    }
+    component-embed: func(binary: option<list<u8>>, wit: string, opts: option<embed-opts>) -> result<list<u8>, string>
 
     /// Extract the core modules from a component
     /// (strictly speaking this makes it Wasm Tools + Extract Core Modules)

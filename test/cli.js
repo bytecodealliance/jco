@@ -107,18 +107,17 @@ export async function cliTest (fixtures) {
           strictEqual(stdout, '');
         }
 
-        // TODO: reenable for dummy generation
-        // {
-        //   const { stderr, stdout } = await exec(jsctPath, 'new', '--types-only', '--wit', outFile, '-o', outFile);
-        //   strictEqual(stderr, '');
-        //   strictEqual(stdout, '');
-        // }
+        {
+          const { stderr, stdout } = await exec(jsctPath, 'embed', '--dummy', '--wit', outFile, '-o', outFile);
+          strictEqual(stderr, '');
+          strictEqual(stdout, '');
+        }
 
-        // {
-        //   const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
-        //   strictEqual(stderr, '');
-        //   strictEqual(stdout.slice(0, 10), '(component');
-        // }
+        {
+          const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
+          strictEqual(stderr, '');
+          strictEqual(stdout.slice(0, 10), '(component');
+        }
       }
       finally {
         await cleanup();

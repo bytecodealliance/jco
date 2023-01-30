@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
+import { readFile } from '../common.js';
 import { exports } from "../../obj/wasm-tools.js";
 import { basename, extname } from 'node:path';
 
@@ -6,7 +7,8 @@ const {
   print: printFn,
   parse: parseFn,
   componentWit: componentWitFn,
-  componentNew: componentNewFn
+  componentNew: componentNewFn,
+  componentEmbed: componentEmbedFn,
 } = exports;
 
 export async function parse(file, opts) {
@@ -49,5 +51,12 @@ export async function componentNew(file, opts) {
       return adapter;
     }));
   const output = componentNewFn(source, adapters);
+  await writeFile(opts.output, output);
+}
+
+export async function componentEmbed(file, opts) {  
+  const source = file ? await readFile(file) : null;
+  const wit = await readFile(opts.wit, 'utf8');
+  const output = componentEmbedFn(source, wit, opts);
   await writeFile(opts.output, output);
 }

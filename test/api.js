@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { transpile, opt, print, parse, componentWit, componentNew } from 'js-component-tools';
+import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed } from '../src/api.js';
 
 export async function apiTest (fixtures) {
   suite('API', () => {
@@ -76,10 +76,9 @@ export async function apiTest (fixtures) {
       const wit = await componentWit(component);
       strictEqual(wit.slice(0, 25), 'default world component {');
 
-      // TODO: reenable when dummy is supported
-      // const generatedComponent = await componentNew(null, { wit });
-      // const output = await print(generatedComponent);
-      // strictEqual(output.slice(0, 10), '(component');
+      const generatedComponent = await componentEmbed(null, wit, { dummy: true });
+      const output = await print(generatedComponent);
+      strictEqual(output.slice(0, 10), '(component');
     });
 
     test('Component new adapt', async () => {

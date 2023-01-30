@@ -2,7 +2,7 @@
 import { program } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile } from './cmd/transpile.js';
-import { parse, print, componentNew, componentWit } from './cmd/wasm-tools.js';
+import { parse, print, componentNew, componentEmbed, componentWit } from './cmd/wasm-tools.js';
 import c from 'chalk-template';
 
 program
@@ -66,11 +66,21 @@ program.command('parse')
 
 program.command('new')
   .description('create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]')
-  .argument('[core-module]', 'Wasm core module filepath')
+  .argument('<core-module>', 'Wasm core module filepath')
   .requiredOption('-o, --output <output-file>', 'Wasm component output filepath')
   .option('--name <name>', 'custom output name')
   .option('--adapt <[NAME=]adapter...>', 'component adapters to apply')
   .action(asyncAction(componentNew));
+
+program.command('embed')
+  .description('embed the component typing section into a core Wasm module [wasm-tools component embed]')
+  .argument('[core-module]', 'Wasm core module filepath')
+  .requiredOption('-o, --output <output-file>', 'Wasm component output filepath')
+  .requiredOption('--wit <wit-world>', 'WIT world path')
+  .option('--dummy', 'generate a dummy component')
+  .option('--string-encoding <utf8|utf16|compact-utf16>', 'set the component string encoding')
+  .option('--world <world-name>', 'positional world path to embed')
+  .action(asyncAction(componentEmbed));
 
 program.parse();
 
