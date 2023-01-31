@@ -58,6 +58,15 @@ export function print(binary: Uint8Array | ArrayBuffer): string;
 export function componentNew(binary: Uint8Array | ArrayBuffer, adapters?: [string, Uint8Array][] | null): Uint8Array;
 
 /**
+ * Embed a world into a Wasm core binary
+ */
+export function componentEmbed(binary: Uint8Array | ArrayBuffer | null, wit: string, opts: {
+  stringEncoding?: 'utf8' | 'utf16' | 'compact-utf16',
+  dummy?: boolean,
+  world?: string,
+}): Uint8Array;
+
+/**
  * Extract the WIT world from a Wasm Component
  */
 export function componentWit(binary: Uint8Array | ArrayBuffer, document?: string | null): string;

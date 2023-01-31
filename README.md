@@ -64,21 +64,25 @@ Transpile a Component to JS.
 
 Optimize a Component with the [Binaryen Wasm-opt](https://www.npmjs.com/package/binaryen) project.
 
-#### `parse(wat: string): Uint8Array`
+#### `componentWit(component: Uint8Array, document?: string): string`
 
-Parse a compoment WAT to output a Component binary.
+Extract the WIT world from a component binary.
 
 #### `print(component: Uint8Array): string`
 
 Print the WAT for a Component binary.
 
+#### `parse(wat: string): Uint8Array`
+
+Parse a compoment WAT to output a Component binary.
+
 #### `componentNew(coreWasm: Uint8Array | null, adapters?: [String, Uint8Array][]): Uint8Array`
 
 "WIT Component" Component creation tool, optionally providing a set of named adapter binaries.
 
-#### `componentWit(component: Uint8Array, document?: string): string`
+#### `componentEmbed(coreWasm: Uint8Array | null, wit: String, opts?: { stringEncoding?, dummy?, world? }): Uint8Array`
 
-Extract the WIT world from a component binary.
+"WIT Component" Component embedding tool, for embedding component types into core binaries, as an advanced use case of component generation.
 
 ## CLI
 
@@ -98,7 +102,8 @@ Commands:
   wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
   print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]
   parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
-  new [options] [module]                create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
+  new [options] <core-module>           create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
+  embed [options] [core-module]         embed the component typing section into a core Wasm module [wasm-tools component embed]
   help [command]                        display help for command
 ```
 

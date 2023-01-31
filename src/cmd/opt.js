@@ -1,8 +1,8 @@
 import { exports } from '../../obj/wasm-tools.js';
-import { readFile, writeFile } from 'fs/promises';
+import { writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import c from 'chalk-template';
-import { sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
+import { readFile, sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import ora from 'ora';
 
 const { extractCoreModules, print } = exports;

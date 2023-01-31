@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { readFile, writeFile, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { argv0 } from 'node:process';
+import c from 'chalk-template';
 
 let _showSpinner = false;
 export function setShowSpinner (val) {
@@ -58,6 +59,16 @@ export function table (data, align = []) {
 export function getTmpFile (source, ext) {
   return resolve(tmpdir(), crypto.createHash('sha256').update(source).update(Math.random().toString()).digest('hex') + ext);
 }
+
+async function readFileCli (file, encoding) {
+  try {
+    return await readFile(file, encoding)
+  }
+  catch (e) {
+    throw c`Unable to read file {bold ${file}}`;
+  }
+}
+export { readFileCli as readFile }
 
 export async function spawnIOTmp (cmd, input, args) {
   const inFile = getTmpFile(input, '.wasm');
