@@ -9,6 +9,9 @@ edition.workspace = true
 [lib]
 crate-type = ["lib"]
 
+[features]
+raw-bindgen = []
+
 [dependencies]
 anyhow = { workspace = true }
 heck = { workspace = true }

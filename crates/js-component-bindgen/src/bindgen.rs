@@ -42,6 +42,7 @@ pub struct GenerationOpts {
     pub valid_lifting_optimization: bool,
     /// Provide raw function and interface bindgen only, without
     /// handling initialization, imports or exports
+    #[cfg(feature = "raw-bindgen")]
     pub raw_bindgen: bool,
 }
 
