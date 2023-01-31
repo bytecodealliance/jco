@@ -40,6 +40,10 @@ pub struct GenerationOpts {
     /// Disable verification of component Wasm data structures when
     /// lifting as a production optimization
     pub valid_lifting_optimization: bool,
+    /// Provide raw function and interface bindgen only, without
+    /// handling initialization, imports or exports
+    #[cfg(feature = "raw-bindgen")]
+    pub raw_bindgen: bool,
 }
 
 impl GenerationOpts {
@@ -48,6 +52,10 @@ impl GenerationOpts {
         gen.opts = self;
         if gen.opts.compat {
             gen.opts.tla_compat = true;
+        }
+        if gen.opts.raw_bindgen {
+            gen.opts.no_typescript = true;
+            gen.opts.tla_compat = false;
         }
         Ok(gen)
     }
@@ -306,6 +314,9 @@ impl JsBindgen {
                 &self.src.js_init as &str,
                 &self.src.js as &str,
             );
+        } else if self.opts.raw_bindgen {
+            output.push_str(&self.src.js_intrinsics);
+            output.push_str(&self.src.js);
         } else {
             // Import statements render first in JS instance mode
             for (specifier, bindings) in &self.imports {
@@ -1100,7 +1111,7 @@ impl Instantiator<'_> {
             imports_vec.push((id, callee.clone()));
         }
 
-        uwrite!(self.src.js_init, "\nfunction lowering{index}");
+        uwrite!(self.src.js, "\nfunction lowering{index}");
         let nparams = self
             .resolve
             .wasm_signature(AbiVariant::GuestImport, func)
@@ -1118,8 +1129,8 @@ impl Instantiator<'_> {
         assert!(latest.ts.is_empty());
         assert!(latest.js_init.is_empty());
         self.src.js_intrinsics(&latest.js_intrinsics);
-        self.src.js_init(&latest.js);
-        uwriteln!(self.src.js_init, "");
+        self.src.js(&latest.js);
+        uwriteln!(self.src.js, "");
     }
 
     fn bindgen(
@@ -1250,6 +1261,7 @@ impl Instantiator<'_> {
             uwriteln!(self.src.js, "{{");
         }
 
+        let mut camel_exports = Vec::new();
         for (name, export) in exports {
             let item = &self.resolve.worlds[self.world].exports[name];
             let camel = name.to_lower_camel_case();
@@ -1278,7 +1290,7 @@ impl Instantiator<'_> {
                     if self.gen.opts.instantiation {
                         uwriteln!(self.src.js, "{camel}: {{");
                     } else {
-                        uwriteln!(self.src.js, "export const {camel} = {{");
+                        uwriteln!(self.src.js, "const {camel} = {{");
                     }
                     for (func_name, export) in exports {
                         let (func, options) = match export {
@@ -1308,9 +1320,12 @@ impl Instantiator<'_> {
                 // This can't be tested at this time so leave it unimplemented
                 Export::Module(_) => unimplemented!(),
             }
+            camel_exports.push(camel);
         }
         if self.gen.opts.instantiation {
             self.src.js("}");
+        } else if !self.gen.opts.raw_bindgen {
+            uwriteln!(self.src.js, "\nexport {{ {} }}", camel_exports.join(", "));
         }
     }
 
@@ -1326,7 +1341,7 @@ impl Instantiator<'_> {
         if self.gen.opts.instantiation || instance_name.is_some() {
             self.src.js.push_str(&name);
         } else {
-            uwrite!(self.src.js, "\nexport function {name}");
+            uwrite!(self.src.js, "\nfunction {name}");
         }
         let callee = self.core_def(def);
         self.bindgen(
