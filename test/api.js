@@ -77,8 +77,16 @@ export async function apiTest (fixtures) {
       strictEqual(wit.slice(0, 25), 'default world component {');
 
       const generatedComponent = await componentEmbed(null, wit, { dummy: true });
-      const output = await print(generatedComponent);
-      strictEqual(output.slice(0, 10), '(component');
+      {
+        const output = await print(generatedComponent);
+        strictEqual(output.slice(0, 7), '(module');
+      }
+
+      const newComponent = await componentNew(generatedComponent);
+      {
+        const output = await print(newComponent);
+        strictEqual(output.slice(0, 10), '(component');
+      }
     });
 
     test('Component new adapt', async () => {

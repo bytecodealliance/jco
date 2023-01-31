@@ -116,6 +116,18 @@ export async function cliTest (fixtures) {
         {
           const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
           strictEqual(stderr, '');
+          strictEqual(stdout.slice(0, 7), '(module');
+        }
+
+        {
+          const { stderr, stdout } = await exec(jsctPath, 'new', outFile, '-o', outFile);
+          strictEqual(stderr, '');
+          strictEqual(stdout, '');
+        }
+
+        {
+          const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
+          strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 10), '(component');
         }
       }
