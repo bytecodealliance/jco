@@ -21,6 +21,6 @@ wasmprinter = "0.2.51"
 wasmparser = "0.101.0"
 wasm-encoder = "0.24.0"
 wat = "1.0.59"
-wit-bindgen-guest-rust = { git = 'https://github.com/bytecodealliance/wit-bindgen', default-features = false, features = ['macros'] }
+wit-bindgen = { git = 'https://github.com/bytecodealliance/wit-bindgen', default-features = false, features = ['macros'] }
 wit-component = { version = "0.7.0", features = ['dummy-module'] }
 wit-parser = "0.6.1"

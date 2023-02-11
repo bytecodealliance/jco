@@ -406,10 +406,11 @@ impl JsBindgen {
             files,
             AbiVariant::GuestImport,
         );
-        let camel = name.to_upper_camel_case();
+        let upper_camel = name.to_upper_camel_case();
+        let lower_camel = name.to_lower_camel_case();
         uwriteln!(
             self.import_object,
-            "export const {name}: typeof {camel}Imports;"
+            "declare const {lower_camel}: typeof {upper_camel}Imports;"
         );
     }
 
@@ -509,6 +510,20 @@ impl JsBindgen {
                 WorldItem::Type(_) => unimplemented!("type imports"),
             }
         }
+        // We will be following the ECMA262 normative:
+        // https://github.com/tc39/ecma262/pull/2154
+        uwriteln!(self.import_object, "export {{");
+        for (name, import) in world.imports.iter() {
+            match import {
+                WorldItem::Function(_) => {}
+                WorldItem::Interface(_) => {
+                    let camel = name.to_lower_camel_case();
+                    uwriteln!(self.import_object, "{camel} as '{name}',");
+                }
+                WorldItem::Type(_) => {}
+            }
+        }
+        uwriteln!(self.import_object, "}};");
         if !funcs.is_empty() {
             self.import_funcs(resolve, id, &funcs, files);
         }

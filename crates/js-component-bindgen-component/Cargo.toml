@@ -15,7 +15,7 @@ heck = { workspace = true }
 clap = { workspace = true, optional = true }
 js-component-bindgen = { path = "../js-component-bindgen", features = ['raw-bindgen'] }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
-wit-bindgen-guest-rust = { workspace = true, features = ['default'] }
+wit-bindgen = { workspace = true, features = ['default'] }
 wit-component = { workspace = true }
 wit-parser = { workspace = true }
 indexmap = { workspace = true }

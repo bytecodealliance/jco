@@ -4,7 +4,7 @@ use wasmparser;
 use wit_component::{ComponentEncoder, DecodedWasm, DocumentPrinter, StringEncoding};
 use wit_parser::{Resolve, UnresolvedPackage};
 
-wit_bindgen_guest_rust::generate!("wasm-tools");
+wit_bindgen::generate!("wasm-tools");
 
 struct WasmToolsJs;
 
