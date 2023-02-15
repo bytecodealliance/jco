@@ -5,17 +5,17 @@ import { transpile, opt, print, parse, componentWit, componentNew, componentEmbe
 export async function apiTest (fixtures) {
   suite('API', () => {
     test('Transpile', async () => {
-      const name = 'exports_only';
+      const name = 'flavorful';
       const component = await readFile(`test/fixtures/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, { name });
-      strictEqual(imports.length, 0);
-      strictEqual(exports.length, 1);
-      deepStrictEqual(exports[0], ['thunk', 'function']);
+      strictEqual(imports.length, 2);
+      strictEqual(exports.length, 2);
+      deepStrictEqual(exports[0], ['exports', 'instance']);
       ok(files[name + '.js']);
     });
 
     test('Transpile & Optimize & Minify', async () => {
-      const name = 'exports_only';
+      const name = 'flavorful';
       const component = await readFile(`test/fixtures/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, {
         name,
@@ -25,10 +25,10 @@ export async function apiTest (fixtures) {
         optimize: true,
         base64Cutoff: 0,
       });
-      strictEqual(imports.length, 0);
-      strictEqual(exports.length, 1);
-      deepStrictEqual(exports[0], ['thunk', 'function']);
-      ok(files[name + '.js'].length < 8000);
+      strictEqual(imports.length, 2);
+      strictEqual(exports.length, 2);
+      deepStrictEqual(exports[0], ['exports', 'instance']);
+      ok(files[name + '.js'].length < 11_000);
     });
 
     test('Transpile to JS', async () => {
@@ -57,13 +57,13 @@ export async function apiTest (fixtures) {
     });
 
     test('Optimize', async () => {
-      const component = await readFile(`test/fixtures/exports_only.component.wasm`);
+      const component = await readFile(`test/fixtures/flavorful.component.wasm`);
       const { component: optimizedComponent } = await opt(component);
       ok(optimizedComponent.byteLength < component.byteLength);
     });
 
     test('Print & Parse', async () => {
-      const component = await readFile(`test/fixtures/exports_only.component.wasm`);
+      const component = await readFile(`test/fixtures/flavorful.component.wasm`);
       const output = await print(component);
       strictEqual(output.slice(0, 10), '(component');
 
@@ -72,9 +72,10 @@ export async function apiTest (fixtures) {
     });
 
     test('Wit & New', async () => {
-      const component = await readFile(`test/fixtures/exports_only.component.wasm`);
+      const component = await readFile(`test/fixtures/flavorful.component.wasm`);
       const wit = await componentWit(component);
-      strictEqual(wit.slice(0, 25), 'default world component {');
+
+      strictEqual(wit.slice(0, 19), 'interface imports {');
 
       const generatedComponent = await componentEmbed(null, wit, { dummy: true });
       {

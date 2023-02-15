@@ -4,11 +4,11 @@ version = 3
 
 [[package]]
 name = "ahash"
-version = "0.7.6"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcb51a0695d8f838b1ee009b3fbf66bda078cd64590202a864a8f3e8c4315c47"
+checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
- "getrandom",
+ "cfg-if",
  "once_cell",
  "version_check",
 ]
@@ -93,8 +93,8 @@ dependencies = [
 
 [[package]]
 name = "cranelift-entity"
-version = "0.93.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#ec6922ff2407bb81f148bd8b14ee66642ea38a5f"
+version = "0.94.0"
+source = "git+https://github.com/bytecodealliance/wasmtime#f0137c2618812666b5495ed20d1bb24b0397485b"
 dependencies = [
  "serde",
 ]
@@ -124,21 +124,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "getrandom"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c05aeb6a22b8f62540c194aac980f2115af067bfe15a0734d7277a768d396b31"
-dependencies = [
- "cfg-if",
- "libc",
- "wasi",
-]
-
-[[package]]
 name = "gimli"
-version = "0.26.2"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22030e2c5a68ec659fde1e949a745124b48e6fa8b045b7ed5bd1fe4ccc5c4e5d"
+checksum = "ad0a93d233ebf96623465aad4046a8d3aa4da22d4f4beba5388838c8a434bbb4"
 dependencies = [
  "fallible-iterator",
  "stable_deref_trait",
@@ -149,6 +138,12 @@ name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+
+[[package]]
+name = "hashbrown"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 dependencies = [
  "ahash",
 ]
@@ -194,7 +189,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
 dependencies = [
  "autocfg",
- "hashbrown",
+ "hashbrown 0.12.3",
  "serde",
 ]
 
@@ -258,12 +253,12 @@ checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
 name = "object"
-version = "0.29.0"
+version = "0.30.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21158b2c33aa6d4561f1c0a6ea283ca92bc54802a93b263e910746d679a7eb53"
+checksum = "ea86265d3d3dcb6a27fc51bd29a4bf387fae9d2986b823079d4986af253eb439"
 dependencies = [
  "crc32fast",
- "hashbrown",
+ "hashbrown 0.13.2",
  "indexmap",
  "memchr",
 ]
@@ -498,25 +493,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
-name = "wasi"
-version = "0.11.0+wasi-snapshot-preview1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
-
-[[package]]
 name = "wasm-encoder"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29ab2fe77b325731603297debb4573e002d06ae0aa1f4dc108585c81961e0609"
+checksum = "ef126be0e14bdf355ac1a8b41afc89195289e5c7179f80118e3abddb472f0810"
 dependencies = [
  "leb128",
 ]
 
 [[package]]
 name = "wasm-encoder"
-version = "0.22.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef126be0e14bdf355ac1a8b41afc89195289e5c7179f80118e3abddb472f0810"
+checksum = "1c3e4bc09095436c8e7584d86d33e6c3ee67045af8fb262cbb9cc321de553428"
 dependencies = [
  "leb128",
 ]
@@ -559,9 +548,9 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.97.0"
+version = "0.99.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b98123a0d2bacf9286239231b116cbd66c65d9b89793f7c9bba3a3ae7f1b15f3"
+checksum = "9ef3b717afc67f848f412d4f02c127dd3e35a0eecd58c684580414df4fde01d3"
 dependencies = [
  "indexmap",
  "url",
@@ -569,9 +558,9 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.99.0"
+version = "0.100.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ef3b717afc67f848f412d4f02c127dd3e35a0eecd58c684580414df4fde01d3"
+checksum = "64b20236ab624147dfbb62cf12a19aaf66af0e41b8398838b66e997d07d269d4"
 dependencies = [
  "indexmap",
  "url",
@@ -599,13 +588,13 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-component-util"
-version = "6.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#ec6922ff2407bb81f148bd8b14ee66642ea38a5f"
+version = "7.0.0"
+source = "git+https://github.com/bytecodealliance/wasmtime#f0137c2618812666b5495ed20d1bb24b0397485b"
 
 [[package]]
 name = "wasmtime-environ"
-version = "6.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#ec6922ff2407bb81f148bd8b14ee66642ea38a5f"
+version = "7.0.0"
+source = "git+https://github.com/bytecodealliance/wasmtime#f0137c2618812666b5495ed20d1bb24b0397485b"
 dependencies = [
  "anyhow",
  "cranelift-entity",
@@ -616,8 +605,8 @@ dependencies = [
  "serde",
  "target-lexicon",
  "thiserror",
- "wasm-encoder 0.21.0",
- "wasmparser 0.97.0",
+ "wasm-encoder 0.23.0",
+ "wasmparser 0.100.0",
  "wasmprinter",
  "wasmtime-component-util",
  "wasmtime-types",
@@ -625,13 +614,13 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-types"
-version = "6.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#ec6922ff2407bb81f148bd8b14ee66642ea38a5f"
+version = "7.0.0"
+source = "git+https://github.com/bytecodealliance/wasmtime#f0137c2618812666b5495ed20d1bb24b0397485b"
 dependencies = [
  "cranelift-entity",
  "serde",
  "thiserror",
- "wasmparser 0.97.0",
+ "wasmparser 0.100.0",
 ]
 
 [[package]]

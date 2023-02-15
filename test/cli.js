@@ -19,11 +19,11 @@ export async function cliTest (fixtures) {
 
     test('Transpile', async () => {
       try {
-        const name = 'exports_only';
+        const name = 'flavorful';
         const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
-        ok(source.toString().includes('export { thunk'));
+        ok(source.toString().includes('export { exports'));
       }
       finally {
         await cleanup();
@@ -32,11 +32,11 @@ export async function cliTest (fixtures) {
 
     test('Transpile & Optimize & Minify', async () => {
       try {
-        const name = 'exports_only';
+        const name = 'flavorful';
         const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--valid-lifting-optimization', '--tla-compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
-        ok(source.toString().includes('as thunk}'));
+        ok(source.toString().includes('as exports,'));
       }
       finally {
         await cleanup();
@@ -61,8 +61,8 @@ export async function cliTest (fixtures) {
 
     test('Optimize', async () => {
       try {
-        const component = await readFile(`test/fixtures/exports_only.component.wasm`);
-        const { stderr, stdout } = await exec(jsctPath, 'opt', `test/fixtures/exports_only.component.wasm`, '-o', outFile);
+        const component = await readFile(`test/fixtures/flavorful.component.wasm`);
+        const { stderr, stdout } = await exec(jsctPath, 'opt', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
         strictEqual(stderr, '');
         ok(stdout.includes('Core Module 1:'));
         const optimizedComponent = await readFile(outFile);
@@ -75,11 +75,11 @@ export async function cliTest (fixtures) {
 
     test('Print & Parse', async () => {
       try {
-        const { stderr, stdout } = await exec(jsctPath, 'print', `test/fixtures/exports_only.component.wasm`);
+        const { stderr, stdout } = await exec(jsctPath, 'print', `test/fixtures/flavorful.component.wasm`);
         strictEqual(stderr, '');
         strictEqual(stdout.slice(0, 10), '(component');
         {
-          const { stderr, stdout } = await exec(jsctPath, 'print', `test/fixtures/exports_only.component.wasm`, '-o', outFile);
+          const { stderr, stdout } = await exec(jsctPath, 'print', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
@@ -97,12 +97,12 @@ export async function cliTest (fixtures) {
 
     test('Wit & New', async () => {
       try {
-        const { stderr, stdout } = await exec(jsctPath, 'wit', `test/fixtures/exports_only.component.wasm`);
+        const { stderr, stdout } = await exec(jsctPath, 'wit', `test/fixtures/flavorful.component.wasm`);
         strictEqual(stderr, '');
         ok(stdout.includes('world component {'));
 
         {
-          const { stderr, stdout } = await exec(jsctPath, 'wit', `test/fixtures/exports_only.component.wasm`, '-o', outFile);
+          const { stderr, stdout } = await exec(jsctPath, 'wit', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
