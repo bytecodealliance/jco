@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile, rm } from 'node:fs/promises';
-import { exec, jsctPath } from './helpers.js';
+import { exec, jcoPath } from './helpers.js';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -20,7 +20,7 @@ export async function cliTest (fixtures) {
     test('Transpile', async () => {
       try {
         const name = 'flavorful';
-        const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '-o', outDir);
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
         ok(source.toString().includes('export { exports'));
@@ -33,7 +33,7 @@ export async function cliTest (fixtures) {
     test('Transpile & Optimize & Minify', async () => {
       try {
         const name = 'flavorful';
-        const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--valid-lifting-optimization', '--tla-compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--valid-lifting-optimization', '--tla-compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
         ok(source.toString().includes('as exports,'));
@@ -46,7 +46,7 @@ export async function cliTest (fixtures) {
     test('Transpile to JS', async () => {
       try {
         const name = 'flavorful';
-        const { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--map', 'testwasi=./wasi.js', '--valid-lifting-optimization', '--tla-compat', '--js', '--base64-cutoff=0', '-o', outDir);
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--map', 'testwasi=./wasi.js', '--valid-lifting-optimization', '--tla-compat', '--js', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`, 'utf8');
         ok(source.includes('./wasi.js'));
@@ -62,7 +62,7 @@ export async function cliTest (fixtures) {
     test('Optimize', async () => {
       try {
         const component = await readFile(`test/fixtures/flavorful.component.wasm`);
-        const { stderr, stdout } = await exec(jsctPath, 'opt', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
+        const { stderr, stdout } = await exec(jcoPath, 'opt', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
         strictEqual(stderr, '');
         ok(stdout.includes('Core Module 1:'));
         const optimizedComponent = await readFile(outFile);
@@ -75,16 +75,16 @@ export async function cliTest (fixtures) {
 
     test('Print & Parse', async () => {
       try {
-        const { stderr, stdout } = await exec(jsctPath, 'print', `test/fixtures/flavorful.component.wasm`);
+        const { stderr, stdout } = await exec(jcoPath, 'print', `test/fixtures/flavorful.component.wasm`);
         strictEqual(stderr, '');
         strictEqual(stdout.slice(0, 10), '(component');
         {
-          const { stderr, stdout } = await exec(jsctPath, 'print', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'print', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
         {
-          const { stderr, stdout } = await exec(jsctPath, 'parse', outFile, '-o', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'parse', outFile, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
           ok(await readFile(outFile));
@@ -97,39 +97,39 @@ export async function cliTest (fixtures) {
 
     test('Wit & New', async () => {
       try {
-        const { stderr, stdout } = await exec(jsctPath, 'wit', `test/fixtures/flavorful.component.wasm`);
+        const { stderr, stdout } = await exec(jcoPath, 'wit', `test/fixtures/flavorful.component.wasm`);
         strictEqual(stderr, '');
         ok(stdout.includes('world component {'));
 
         {
-          const { stderr, stdout } = await exec(jsctPath, 'wit', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'wit', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
 
         {
-          const { stderr, stdout } = await exec(jsctPath, 'embed', '--dummy', '--wit', outFile, '-m', 'language=javascript', '-m', 'processed-by=dummy-gen@test', '-o', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'embed', '--dummy', '--wit', outFile, '-m', 'language=javascript', '-m', 'processed-by=dummy-gen@test', '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
 
         {
-          const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'print', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 7), '(module');
         }
         {
-          const { stderr, stdout } = await exec(jsctPath, 'new', outFile, '-o', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'new', outFile, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
         {
-          const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'print', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 10), '(component');
         }
         {
-          const { stdout, stderr } = await exec(jsctPath, 'metadata-show', outFile, '--json');
+          const { stdout, stderr } = await exec(jcoPath, 'metadata-show', outFile, '--json');
           strictEqual(stderr, '');
           const meta = JSON.parse(stdout);
           deepStrictEqual(meta[0].metaType, { tag: 'component', val: 4 });
@@ -146,7 +146,7 @@ export async function cliTest (fixtures) {
 
     test('Component new adapt', async () => {
       try {
-        const { stderr } = await exec(jsctPath,
+        const { stderr } = await exec(jcoPath,
             'new',
             'test/fixtures/exitcode.wasm',
             '--adapt',
@@ -154,7 +154,7 @@ export async function cliTest (fixtures) {
             '-o', outFile);
         strictEqual(stderr, '');
         {
-          const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'print', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 10), '(component');
         }
@@ -166,7 +166,7 @@ export async function cliTest (fixtures) {
 
     test('Extract metadata', async () => {
       try {
-        const { stdout, stderr } = await exec(jsctPath,
+        const { stdout, stderr } = await exec(jcoPath,
             'metadata-show',
             'test/fixtures/exitcode.wasm',
             '--json');

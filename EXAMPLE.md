@@ -1,6 +1,6 @@
-## JSCT Example Workflow
+## JCO Example Workflow
 
-Given an existing Wasm Component, `jsct` provides the tooling necessary to work with this Component fully natively in JS.
+Given an existing Wasm Component, `jco` provides the tooling necessary to work with this Component fully natively in JS.
 
 For an example, consider a Component `cowsay.wasm`:
 
@@ -14,13 +14,12 @@ Where we would like to use and run this Component in a JS environment.
 
 As a first step, we might like to look instead this binary black box of a Component and see what it actually does.
 
-To do this, we can use `jsct wit` to extract the "WIT world" of the Component ([WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) is the typing language used for defining Components).
+To do this, we can use `jco wit` to extract the "WIT world" of the Component ([WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) is the typing language used for defining Components).
 
 ```shell
-> jsct wit cowsay.wasm
-
-world component {
-  default export interface {
+> jco wit cowsay.wasm
+world cowsay {
+  export cow: interface {
     enum cows {
       default,
       cheese,
@@ -34,23 +33,21 @@ world component {
       ...
     }
 
-    cow-say: func(text: string, cow: option<cows>) -> string
+    say: func(text: string, cow: option<cows>) -> string
   }
 }
 ```
 
-From the above we can see that this Component exports an interface with a single function export, `cow-say`, which takes
-as input a string, an optional cow, and returns a string.
+From the above we can see that this Component exports a `cow` interface with a single function export, `say`, taking as input a string, an optional cow, and returning a string.
 
-Alternatively `jsct print cowsay.wasm -o out.wat` would output the full concrete Wasm WAT to inspect the Component,
-with all the implementation details (don't forget the `-o` flag...).
+Alternatively `jco print cowsay.wasm -o out.wat` would output the full concrete Wasm WAT to inspect the Component, with all the implementation details (don't forget the `-o` flag...).
 
 ### Transpiling to JS
 
-To execute the Component in a JS environment, use the `jsct transpile` command to generate the JS for the Component:
+To execute the Component in a JS environment, use the `jco transpile` command to generate the JS for the Component:
 
 ```shell
-> jsct transpile cowsay.wasm --minify -o cowsay
+> jco transpile cowsay.wasm --minify -o cowsay
 
 Transpiled JS Component Files:
 
@@ -63,9 +60,9 @@ Now the Component can be directly imported and used as an ES module:
 
 test.mjs
 ```js
-import { cowSay } from './cowsay/cowsay.js';
+import { cow } from './cowsay/cowsay.js';
 
-console.log(cowSay('Hello Wasm Components!'));
+console.log(cow.say('Hello Wasm Components!'));
 ```
 
 The above JavaScript can be executed in Node.js:

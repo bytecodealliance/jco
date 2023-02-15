@@ -1,38 +1,38 @@
 <div align="center">
-  <h1><code>js-component-tools</code></h1>
+  <h1><code>JCO</code></h1>
 
   <p>
-    <strong>JavaScript tooling for working with <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
+    <strong>JavaScript component toolchain for working with <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
   </p>
 
   <strong>A <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project</strong>
 
   <p>
-    <a href="https://github.com/bytecodealliance/js-component-tools/actions?query=workflow%3ACI"><img src="https://github.com/bytecodealliance/js-component-tools/workflows/CI/badge.svg" alt="build status" /></a>
+    <a href="https://github.com/bytecodealliance/jco/actions?query=workflow%3ACI"><img src="https://github.com/bytecodealliance/jco/workflows/CI/badge.svg" alt="build status" /></a>
   </p>
 </div>
 
 ## Overview
 
-JS Component Tools is a fully native JS tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification in JavaScript.
+JCO is a fully native JS tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification in JavaScript.
 
 Features include:
 
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
 * Optimization helpers for Components via Binaryen
-* Component helpers available as a build of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools).
+* Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments.
 
-This tool is designed primarily for working with already-created Component binaries, and not for creating Component binaries to begin with. For creating Components, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
+For creating components, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
 > **Note**: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future.
 
 ## Installation
 
 ```shell
-npm install js-component-tools
+npm install @bytecodealliance/jco
 ```
 
-JS Component Tools can be used as either a library or as a CLI via the `jsct` CLI command.
+JCO can be used as either a library or as a CLI via the `jco` CLI command.
 
 ## Example
 
@@ -95,10 +95,10 @@ Add new producer metadata to a component or core Wasm binary.
 ## CLI
 
 ```shell
-Usage: jsct <command> [options]
+Usage: jco <command> [options]
 
-JSCT - WebAssembly JS Component Tools
-       JS Component Transpilation Bindgen & Wasm Tools for JS
+JCO - WebAssembly JS Component Tools
+      JS Component Bindgen & Wasm Tools for JS
 
 Options:
   -V, --version                         output the version number
