@@ -153,7 +153,7 @@ impl exports::Exports for WasmToolsJs {
             binary.unwrap()
         };
 
-        let encoded = wit_component::metadata::encode(&resolve, world, string_encoding)
+        let encoded = wit_component::metadata::encode(&resolve, world, string_encoding, None)
             .map_err(|e| e.to_string())?;
 
         let section = wasm_encoder::CustomSection {

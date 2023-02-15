@@ -506,6 +506,7 @@ impl JsBindgen {
             match import {
                 WorldItem::Function(f) => funcs.push((name.as_str(), f)),
                 WorldItem::Interface(id) => self.import_interface(resolve, name, *id, files),
+                WorldItem::Type(_) => unimplemented!("type imports"),
             }
         }
         if !funcs.is_empty() {
@@ -516,6 +517,7 @@ impl JsBindgen {
             match export {
                 WorldItem::Function(f) => funcs.push((name.as_str(), f)),
                 WorldItem::Interface(id) => self.export_interface(resolve, name, *id, files),
+                WorldItem::Type(_) => unimplemented!("type exports"),
             }
         }
         if !funcs.is_empty() {
@@ -1081,6 +1083,7 @@ impl Instantiator<'_> {
                 assert_eq!(path.len(), 1);
                 &self.resolve.interfaces[*i].functions[&path[0]]
             }
+            WorldItem::Type(_) => unreachable!(),
         };
 
         let index = import.index.as_u32();
@@ -1278,14 +1281,14 @@ impl Instantiator<'_> {
                         options,
                         match item {
                             WorldItem::Function(f) => f,
-                            WorldItem::Interface(_) => unreachable!(),
+                            WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
                         },
                     );
                 }
                 Export::Instance(exports) => {
                     let id = match item {
                         WorldItem::Interface(id) => *id,
-                        WorldItem::Function(_) => unreachable!(),
+                        WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
                     if self.gen.opts.instantiation {
                         uwriteln!(self.src.js, "{camel}: {{");
