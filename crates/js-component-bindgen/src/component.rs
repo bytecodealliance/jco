@@ -37,6 +37,7 @@ pub fn generate(
     // bindings generation as-if a `*.wit` file was input.
     let decoded = wit_component::decode(name, binary)
         .context("failed to extract interface information from component")?;
+
     let (resolve, world_id) = match decoded {
         DecodedWasm::WitPackage(..) => bail!("unexpected wit package as input"),
         DecodedWasm::Component(resolve, world_id) => (resolve, world_id),
@@ -63,6 +64,7 @@ pub fn generate(
         component_model: true,
         ..WasmFeatures::default()
     });
+
     let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)
         .translate(binary)
         .context("failed to parse the input component")?;

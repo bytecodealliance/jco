@@ -76,6 +76,7 @@ impl exports::Exports for WasmToolsJs {
         let output = DocumentPrinter::default()
             .print(decoded.resolve(), doc)
             .map_err(|e| format!("Unable to print wit\n${:?}", e))?;
+
         Ok(output)
     }
 
@@ -153,7 +154,7 @@ impl exports::Exports for WasmToolsJs {
             binary.unwrap()
         };
 
-        let encoded = wit_component::metadata::encode(&resolve, world, string_encoding)
+        let encoded = wit_component::metadata::encode(&resolve, world, string_encoding, None)
             .map_err(|e| e.to_string())?;
 
         let section = wasm_encoder::CustomSection {
@@ -204,11 +205,6 @@ impl exports::Exports for WasmToolsJs {
                     } else {
                         break;
                     }
-                }
-                // Component unsupported core module sections ignored
-                // CustomSection { name, .. } => {},
-                wasmparser::Payload::CustomSection { .. } => {
-                    panic!("Unsupported section");
                 }
                 _ => {}
             }
