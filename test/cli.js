@@ -131,14 +131,12 @@ export async function cliTest (fixtures) {
         {
           const { stdout, stderr } = await exec(jsctPath, 'metadata-show', outFile, '--json');
           strictEqual(stderr, '');
-          deepStrictEqual(JSON.parse(stdout), [{
-            metaType: { tag: 'component' },
-            producers: [
-              ['language', [['javascript', '']]],
-              ['processed-by', [['dummy-gen', 'test']]]
-            ],
-            name: null
-          }]); 
+          const meta = JSON.parse(stdout);
+          deepStrictEqual(meta[0].metaType, { tag: 'component', val: 4 });
+          deepStrictEqual(meta[1].producers, [
+            ['processed-by', [['wit-component', '0.7.0'], ['dummy-gen', 'test']]],
+            ['language', [['javascript', '']]],
+          ]);
         }
       }
       finally {
@@ -175,7 +173,7 @@ export async function cliTest (fixtures) {
         strictEqual(stderr, '');
         deepStrictEqual(JSON.parse(stdout), [{
           metaType: { tag: 'module' },
-          metadata: [],
+          producers: [],
           name: null
         }]);
       }

@@ -92,13 +92,12 @@ export async function apiTest (fixtures) {
         strictEqual(output.slice(0, 10), '(component');
       }
 
-      const meta = metadata(newComponent);
+      const meta = metadataShow(newComponent);
       deepStrictEqual(meta[0].metaType, {
         tag: 'component',
         val: 4
       });
-      console.log(JSON.stringify(meta, null, 2));
-      deepStrictEqual(meta[0].producers[0], meta[0])
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.7.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]])
     });
 
     test('Component new adapt', async () => {

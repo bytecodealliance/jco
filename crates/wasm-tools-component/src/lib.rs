@@ -158,10 +158,10 @@ impl exports::Exports for WasmToolsJs {
             binary.unwrap()
         };
 
-        let mut producers = Producers::default();
-        match opts {
+        let producers = match opts {
             Some(ref opts) => match &opts.metadata {
                 Some(metadata_fields) => {
+                    let mut producers = Producers::default();
                     for (field_name, items) in metadata_fields {
                         if field_name != "sdk"
                             && field_name != "language"
@@ -173,14 +173,16 @@ impl exports::Exports for WasmToolsJs {
                             producers.add(&field_name, &name, &version);
                         }
                     }
+                    Some(producers)
                 }
-                None => {}
+                None => None,
             },
-            None => {}
+            None => None,
         };
 
-        let encoded = wit_component::metadata::encode(&resolve, world, string_encoding, None)
-            .map_err(|e| e.to_string())?;
+        let encoded =
+            wit_component::metadata::encode(&resolve, world, string_encoding, producers.as_ref())
+                .map_err(|e| e.to_string())?;
 
         let section = wasm_encoder::CustomSection {
             name: "component-type",
