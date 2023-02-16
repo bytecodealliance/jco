@@ -1,4 +1,4 @@
-import { ok, strictEqual } from 'node:assert';
+import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile, rm } from 'node:fs/promises';
 import { exec, jsctPath } from './helpers.js';
 import { tmpdir } from 'node:os';
@@ -108,7 +108,7 @@ export async function cliTest (fixtures) {
         }
 
         {
-          const { stderr, stdout } = await exec(jsctPath, 'embed', '--dummy', '--wit', outFile, '-o', outFile);
+          const { stderr, stdout } = await exec(jsctPath, 'embed', '--dummy', '--wit', outFile, '-m', 'language=javascript', '-m', 'processed-by=dummy-gen@test', '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
@@ -117,6 +117,18 @@ export async function cliTest (fixtures) {
           const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 7), '(module');
+        }
+        {
+          const { stdout, stderr } = await exec(jsctPath, 'metadata', outFile, '--json');
+          strictEqual(stderr, '');
+          deepStrictEqual(JSON.parse(stdout), [{
+            metaType: { tag: 'module' },
+            metadata: [
+              ['language', [['javascript', '']]],
+              ['processed-by', [['dummy-gen', 'test']]]
+            ],
+            name: null
+          }]); 
         }
 
         {
@@ -150,6 +162,24 @@ export async function cliTest (fixtures) {
           strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 10), '(component');
         }
+      }
+      finally {
+        await cleanup();
+      }
+    });
+
+    test('Extract metadata', async () => {
+      try {
+        const { stdout, stderr } = await exec(jsctPath,
+            'metadata',
+            'test/fixtures/exitcode.wasm',
+            '--json');
+        strictEqual(stderr, '');
+        deepStrictEqual(JSON.parse(stdout), [{
+          metaType: { tag: 'module' },
+          metadata: [],
+          name: null
+        }]);
       }
       finally {
         await cleanup();

@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed } from '../src/api.js';
+import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadata } from '../src/api.js';
 
 export async function apiTest (fixtures) {
   suite('API', () => {
@@ -77,11 +77,23 @@ export async function apiTest (fixtures) {
 
       strictEqual(wit.slice(0, 19), 'interface imports {');
 
-      const generatedComponent = await componentEmbed(null, wit, { dummy: true });
+      const meta = [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]];
+
+      const generatedComponent = await componentEmbed(null, wit, { dummy: true, metadata: meta });
       {
         const output = await print(generatedComponent);
         strictEqual(output.slice(0, 7), '(module');
       }
+
+      deepStrictEqual(metadata(generatedComponent), [
+        {
+          metaType: {
+            tag: 'module'
+          },
+          metadata: meta,
+          name: null
+        }
+      ]);
 
       const newComponent = await componentNew(generatedComponent);
       {
@@ -96,6 +108,18 @@ export async function apiTest (fixtures) {
       const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile('test/fixtures/wasi_snapshot_preview1.wasm')]]);
 
       await print(generatedComponent);
+    });
+
+    test('Extract metadata', async () => {
+      const component = await readFile(`test/fixtures/exitcode.wasm`);
+
+      const meta = metadata(component);
+
+      deepStrictEqual(meta, [{
+        metaType: { tag: 'module' },
+        metadata: [],
+        name: null
+      }]);
     });
   });
 }

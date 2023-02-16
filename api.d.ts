@@ -57,6 +57,8 @@ export function print(binary: Uint8Array | ArrayBuffer): string;
  */
 export function componentNew(binary: Uint8Array | ArrayBuffer, adapters?: [string, Uint8Array][] | null): Uint8Array;
 
+type Metadata = [string, [string, string][]][];
+
 /**
  * Embed a world into a Wasm core binary
  */
@@ -64,7 +66,17 @@ export function componentEmbed(binary: Uint8Array | ArrayBuffer | null, wit: str
   stringEncoding?: 'utf8' | 'utf16' | 'compact-utf16',
   dummy?: boolean,
   world?: string,
+  metadata?: Metadata
 }): Uint8Array;
+
+/**
+ * Extract the producer metadata for a Wasm component or core module
+ */
+export function metadata(binary: Uint8Array | ArrayBuffer): {
+  name?: string,
+  metaType: { tag: 'module' } | { tag: 'component', val: number },
+  metadata: Metadata
+}[];
 
 /**
  * Extract the WIT world from a Wasm Component

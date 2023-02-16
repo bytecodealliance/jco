@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { readFile } from '../common.js';
 import { exports } from "../../obj/wasm-tools.js";
 import { basename, extname } from 'node:path';
+import c from 'chalk-template';
 
 const {
   print: printFn,
@@ -9,6 +10,7 @@ const {
   componentWit: componentWitFn,
   componentNew: componentNewFn,
   componentEmbed: componentEmbedFn,
+  metadata: componentMetadataFn,
 } = exports;
 
 export async function parse(file, opts) {
@@ -54,9 +56,49 @@ export async function componentNew(file, opts) {
   await writeFile(opts.output, output);
 }
 
-export async function componentEmbed(file, opts) {  
+export async function componentEmbed(file, opts) {
+  if (opts.metadata)
+    opts.metadata = opts.metadata.map(meta => {
+      const [field, data = ''] = meta.split('=');
+      const [name, version = ''] = data.split('@');
+      return [field, [[name, version]]];
+    });
   const source = file ? await readFile(file) : null;
   const wit = await readFile(opts.wit, 'utf8');
   const output = componentEmbedFn(source, wit, opts);
   await writeFile(opts.output, output);
+}
+
+export async function componentMetadata(file, opts) {
+  const source = file ? await readFile(file) : null;
+  let output = '', stack = [1];
+  const meta = componentMetadataFn(source);
+  if (opts.json) {
+    console.log(JSON.stringify(meta, null, 2));
+  }
+  else {
+    for (const { name, metaType, metadata } of meta) {
+      output += '  '.repeat(stack.length - 1);
+      const indent = '  '.repeat(stack.length);
+      if (metaType.tag === 'component') {
+        output += c`{bold [component${name ? ' ' + name : ''}]}\n`;
+        if (metaType.val > 0)
+          stack.push(metaType.val);
+      } else {
+        output += c`{bold [module${name ? ' ' + name : ''}]}\n`;
+      }
+      if (metadata.length === 0)
+        output += `${indent}(no metadata)\n`;
+      for (const [field, items] of metadata) {
+        for (const [name, version] of items) {
+          output += `${indent}${(field + ':').padEnd(13, ' ')} ${name}${version ? c`{cyan  ${version}}` : ''}\n`;
+        }
+      }
+      output += '\n';
+      if (stack[stack.length - 1] === 0)
+        stack.pop();
+      stack[stack.length - 1]--;
+    }
+    process.stdout.write(output);
+  }
 }
