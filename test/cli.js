@@ -1,4 +1,4 @@
-import { ok, strictEqual } from 'node:assert';
+import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile, rm } from 'node:fs/promises';
 import { exec, jsctPath } from './helpers.js';
 import { tmpdir } from 'node:os';
@@ -108,7 +108,7 @@ export async function cliTest (fixtures) {
         }
 
         {
-          const { stderr, stdout } = await exec(jsctPath, 'embed', '--dummy', '--wit', outFile, '-o', outFile);
+          const { stderr, stdout } = await exec(jsctPath, 'embed', '--dummy', '--wit', outFile, '-m', 'language=javascript', '-m', 'processed-by=dummy-gen@test', '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
@@ -118,17 +118,25 @@ export async function cliTest (fixtures) {
           strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 7), '(module');
         }
-
         {
           const { stderr, stdout } = await exec(jsctPath, 'new', outFile, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
-
         {
           const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 10), '(component');
+        }
+        {
+          const { stdout, stderr } = await exec(jsctPath, 'metadata-show', outFile, '--json');
+          strictEqual(stderr, '');
+          const meta = JSON.parse(stdout);
+          deepStrictEqual(meta[0].metaType, { tag: 'component', val: 4 });
+          deepStrictEqual(meta[1].producers, [
+            ['processed-by', [['wit-component', '0.7.0'], ['dummy-gen', 'test']]],
+            ['language', [['javascript', '']]],
+          ]);
         }
       }
       finally {
@@ -150,6 +158,24 @@ export async function cliTest (fixtures) {
           strictEqual(stderr, '');
           strictEqual(stdout.slice(0, 10), '(component');
         }
+      }
+      finally {
+        await cleanup();
+      }
+    });
+
+    test('Extract metadata', async () => {
+      try {
+        const { stdout, stderr } = await exec(jsctPath,
+            'metadata-show',
+            'test/fixtures/exitcode.wasm',
+            '--json');
+        strictEqual(stderr, '');
+        deepStrictEqual(JSON.parse(stdout), [{
+          metaType: { tag: 'module' },
+          producers: [],
+          name: null
+        }]);
       }
       finally {
         await cleanup();

@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed } from '../src/api.js';
+import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadataShow, metadataAdd } from '../src/api.js';
 
 export async function apiTest (fixtures) {
   suite('API', () => {
@@ -77,7 +77,10 @@ export async function apiTest (fixtures) {
 
       strictEqual(wit.slice(0, 19), 'interface imports {');
 
-      const generatedComponent = await componentEmbed(null, wit, { dummy: true });
+      const generatedComponent = await componentEmbed(null, wit, {
+        dummy: true,
+        metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
+      });
       {
         const output = await print(generatedComponent);
         strictEqual(output.slice(0, 7), '(module');
@@ -88,6 +91,13 @@ export async function apiTest (fixtures) {
         const output = await print(newComponent);
         strictEqual(output.slice(0, 10), '(component');
       }
+
+      const meta = metadataShow(newComponent);
+      deepStrictEqual(meta[0].metaType, {
+        tag: 'component',
+        val: 4
+      });
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.7.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]])
     });
 
     test('Component new adapt', async () => {
@@ -96,6 +106,18 @@ export async function apiTest (fixtures) {
       const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile('test/fixtures/wasi_snapshot_preview1.wasm')]]);
 
       await print(generatedComponent);
+    });
+
+    test('Extract metadata', async () => {
+      const component = await readFile(`test/fixtures/exitcode.wasm`);
+
+      const meta = metadataShow(component);
+
+      deepStrictEqual(meta, [{
+        metaType: { tag: 'module' },
+        producers: [],
+        name: null
+      }]);
     });
   });
 }

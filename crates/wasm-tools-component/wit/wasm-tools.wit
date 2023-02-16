@@ -20,14 +20,36 @@ default world wasm-tools-js {
     /// Extract a *.wit interface from a component, optionally providing a document name to extract
     component-wit: func(binary: list<u8>, document: option<string>) -> result<string, string>
 
+    type producers-fields = list<tuple<string, list<tuple<string, string>>>>
+
     /// Embed a WIT type into a component.
     /// Only a singular WIT document without use resolutions is supported for this API.
     record embed-opts {
       string-encoding: option<string-encoding>,
       dummy: option<bool>,
       %world: option<string>,
+      metadata: option<producers-fields>
     }
+
     component-embed: func(binary: option<list<u8>>, wit: string, opts: option<embed-opts>) -> result<list<u8>, string>
+
+    variant module-meta-type {
+      module,
+      // the number of nested modules
+      component(u32),
+    }
+
+    record module-metadata {
+      name: option<string>,
+      meta-type: module-meta-type,
+      producers: producers-fields,
+    }
+
+    /// Extract the metadata for a component
+    metadata-show: func(binary: list<u8>) -> result<list<module-metadata>, string>
+
+    /// Append producer metadata to a component
+    metadata-add: func(binary: list<u8>, metadata: producers-fields) -> result<list<u8>, string>
 
     /// Extract the core modules from a component
     /// (strictly speaking this makes it Wasm Tools + Extract Core Modules)

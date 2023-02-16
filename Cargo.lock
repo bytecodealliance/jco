@@ -538,6 +538,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "wasm-encoder 0.24.0",
+ "wasm-metadata",
  "wasmparser 0.101.0",
  "wasmprinter",
  "wat",
