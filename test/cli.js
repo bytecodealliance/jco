@@ -129,7 +129,7 @@ export async function cliTest (fixtures) {
           strictEqual(stdout.slice(0, 10), '(component');
         }
         {
-          const { stdout, stderr } = await exec(jsctPath, 'metadata', outFile, '--json');
+          const { stdout, stderr } = await exec(jsctPath, 'metadata-show', outFile, '--json');
           strictEqual(stderr, '');
           deepStrictEqual(JSON.parse(stdout), [{
             metaType: { tag: 'component' },
@@ -169,7 +169,7 @@ export async function cliTest (fixtures) {
     test('Extract metadata', async () => {
       try {
         const { stdout, stderr } = await exec(jsctPath,
-            'metadata',
+            'metadata-show',
             'test/fixtures/exitcode.wasm',
             '--json');
         strictEqual(stderr, '');
