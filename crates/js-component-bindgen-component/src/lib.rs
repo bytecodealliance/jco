@@ -28,7 +28,7 @@ macro_rules! uwriteln {
     };
 }
 
-wit_bindgen_guest_rust::generate!("js-component-bindgen");
+wit_bindgen::generate!("js-component-bindgen");
 
 use crate::exports::*;
 
