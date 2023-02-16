@@ -72,6 +72,10 @@ Extract the WIT world from a component binary.
 
 Print the WAT for a Component binary.
 
+#### `metadataShow(wasm: Uint8Array): Metadata`
+
+Extract the producer toolchain metadata for a component and its nested modules.
+
 #### `parse(wat: string): Uint8Array`
 
 Parse a compoment WAT to output a Component binary.
@@ -80,9 +84,13 @@ Parse a compoment WAT to output a Component binary.
 
 "WIT Component" Component creation tool, optionally providing a set of named adapter binaries.
 
-#### `componentEmbed(coreWasm: Uint8Array | null, wit: String, opts?: { stringEncoding?, dummy?, world? }): Uint8Array`
+#### `componentEmbed(coreWasm: Uint8Array | null, wit: String, opts?: { stringEncoding?, dummy?, world?, metadata? }): Uint8Array`
 
 "WIT Component" Component embedding tool, for embedding component types into core binaries, as an advanced use case of component generation.
+
+#### `metadataAdd(wasm: Uint8Array, metadata): Uint8Array`
+
+Add new producer metadata to a component or core Wasm binary.
 
 ## CLI
 
@@ -101,6 +109,7 @@ Commands:
   opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations
   wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
   print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]
+  metadata [options] [module]           extract the producer metadata for a Wasm binary [wasm-tools metadata show]
   parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
   new [options] <core-module>           create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
   embed [options] [core-module]         embed the component typing section into a core Wasm module [wasm-tools component embed]

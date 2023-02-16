@@ -17,7 +17,7 @@ anyhow = { workspace = true }
 heck = { workspace = true }
 clap = { workspace = true, optional = true }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
-wit-bindgen = { workspace = true, features = ['default'] }
+wit-bindgen = { workspace = true }
 wit-component = { workspace = true }
 wit-parser = { workspace = true }
 indexmap = { workspace = true }

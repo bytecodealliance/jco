@@ -11,10 +11,11 @@ doctest = false
 
 [dependencies]
 anyhow = { workspace = true }
+wasm-encoder = { workspace = true }
+wasm-metadata = { workspace = true }
 wasmparser = { workspace = true }
 wasmprinter = { workspace = true }
-wasm-encoder = { workspace = true }
 wat = { workspace = true }
-wit-bindgen = { workspace = true, features = ['default'] }
+wit-bindgen = { workspace = true }
 wit-component = { workspace = true }
 wit-parser = { workspace = true }

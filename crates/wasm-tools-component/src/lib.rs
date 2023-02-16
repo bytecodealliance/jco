@@ -1,5 +1,7 @@
+use std::collections::VecDeque;
 use std::{path::PathBuf, sync::Once};
 use wasm_encoder::{Encode, Section};
+use wasm_metadata::Producers;
 use wasmparser;
 use wit_component::{ComponentEncoder, DecodedWasm, DocumentPrinter, StringEncoding};
 use wit_parser::{Resolve, UnresolvedPackage};
@@ -9,6 +11,8 @@ wit_bindgen::generate!("wasm-tools");
 struct WasmToolsJs;
 
 export_wasm_tools_js!(WasmToolsJs);
+
+use crate::exports::*;
 
 fn init() {
     static INIT: Once = Once::new();
@@ -154,8 +158,31 @@ impl exports::Exports for WasmToolsJs {
             binary.unwrap()
         };
 
-        let encoded = wit_component::metadata::encode(&resolve, world, string_encoding, None)
-            .map_err(|e| e.to_string())?;
+        let producers = match opts {
+            Some(ref opts) => match &opts.metadata {
+                Some(metadata_fields) => {
+                    let mut producers = Producers::default();
+                    for (field_name, items) in metadata_fields {
+                        if field_name != "sdk"
+                            && field_name != "language"
+                            && field_name != "processed-by"
+                        {
+                            return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
+                        }
+                        for (name, version) in items {
+                            producers.add(&field_name, &name, &version);
+                        }
+                    }
+                    Some(producers)
+                }
+                None => None,
+            },
+            None => None,
+        };
+
+        let encoded =
+            wit_component::metadata::encode(&resolve, world, string_encoding, producers.as_ref())
+                .map_err(|e| e.to_string())?;
 
         let section = wasm_encoder::CustomSection {
             name: "component-type",
@@ -166,6 +193,71 @@ impl exports::Exports for WasmToolsJs {
         section.encode(&mut core_binary);
 
         Ok(core_binary)
+    }
+
+    fn metadata_add(binary: Vec<u8>, metadata: ProducersFields) -> Result<Vec<u8>, String> {
+        let mut producers = Producers::default();
+
+        for (field_name, items) in metadata {
+            if field_name != "sdk" && field_name != "language" && field_name != "processed-by" {
+                return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
+            }
+            for (name, version) in items {
+                producers.add(&field_name, &name, &version);
+            }
+        }
+        producers
+            .add_to_wasm(&binary[0..])
+            .map_err(|e| e.to_string())
+    }
+
+    fn metadata_show(binary: Vec<u8>) -> Result<Vec<ModuleMetadata>, String> {
+        let metadata =
+            wasm_metadata::Metadata::from_binary(&binary).map_err(|e| format!("{:?}", e))?;
+        let mut module_metadata: Vec<ModuleMetadata> = Vec::new();
+        let mut to_flatten: VecDeque<wasm_metadata::Metadata> = VecDeque::new();
+        to_flatten.push_back(metadata);
+        while let Some(metadata) = to_flatten.pop_front() {
+            let (name, producers, meta_type) = match metadata {
+                wasm_metadata::Metadata::Component {
+                    name,
+                    producers,
+                    children,
+                } => {
+                    let children_len = children.len();
+                    for child in children {
+                        to_flatten.push_back(*child);
+                    }
+                    (
+                        name,
+                        producers,
+                        ModuleMetaType::Component(children_len as u32),
+                    )
+                }
+                wasm_metadata::Metadata::Module { name, producers } => {
+                    (name, producers, ModuleMetaType::Module)
+                }
+            };
+
+            let mut metadata: Vec<(String, Vec<(String, String)>)> = Vec::new();
+            if let Some(producers) = producers {
+                for (key, fields) in producers.iter() {
+                    metadata.push((
+                        key.to_string(),
+                        fields
+                            .iter()
+                            .map(|(value, version)| (value.to_string(), version.to_string()))
+                            .collect(),
+                    ));
+                }
+            }
+            module_metadata.push(ModuleMetadata {
+                name,
+                meta_type,
+                producers: metadata,
+            });
+        }
+        Ok(module_metadata)
     }
 
     fn extract_core_modules(binary: Vec<u8>) -> Result<Vec<(u32, u32)>, String> {
