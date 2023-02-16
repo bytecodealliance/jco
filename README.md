@@ -72,7 +72,7 @@ Extract the WIT world from a component binary.
 
 Print the WAT for a Component binary.
 
-#### `metadata(wasm: Uint8Array): Metadata`
+#### `metadataShow(wasm: Uint8Array): Metadata`
 
 Extract the producer toolchain metadata for a component and its nested modules.
 
@@ -87,6 +87,10 @@ Parse a compoment WAT to output a Component binary.
 #### `componentEmbed(coreWasm: Uint8Array | null, wit: String, opts?: { stringEncoding?, dummy?, world?, metadata? }): Uint8Array`
 
 "WIT Component" Component embedding tool, for embedding component types into core binaries, as an advanced use case of component generation.
+
+#### `metadataAdd(wasm: Uint8Array, metadata): Uint8Array`
+
+Add new producer metadata to a component or core Wasm binary.
 
 ## CLI
 

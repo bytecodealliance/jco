@@ -158,6 +158,27 @@ impl exports::Exports for WasmToolsJs {
             binary.unwrap()
         };
 
+        let mut producers = Producers::default();
+        match opts {
+            Some(ref opts) => match &opts.metadata {
+                Some(metadata_fields) => {
+                    for (field_name, items) in metadata_fields {
+                        if field_name != "sdk"
+                            && field_name != "language"
+                            && field_name != "processed-by"
+                        {
+                            return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
+                        }
+                        for (name, version) in items {
+                            producers.add(&field_name, &name, &version);
+                        }
+                    }
+                }
+                None => {}
+            },
+            None => {}
+        };
+
         let encoded = wit_component::metadata::encode(&resolve, world, string_encoding, None)
             .map_err(|e| e.to_string())?;
 
@@ -169,37 +190,26 @@ impl exports::Exports for WasmToolsJs {
         core_binary.push(section.id());
         section.encode(&mut core_binary);
 
-        let mut producer_section = wasm_encoder::ProducersSection::new();
-
-        match opts {
-            Some(ref opts) => match &opts.metadata {
-                Some(metadata_fields) => {
-                    for (field_name, items) in metadata_fields {
-                        if field_name != "sdk"
-                            && field_name != "language"
-                            && field_name != "processed-by"
-                        {
-                            return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
-                        }
-                        let mut field = wasm_encoder::ProducersField::new();
-                        for (name, version) in items {
-                            field.value(&name, &version);
-                        }
-                        producer_section.field(&field_name, &field);
-                    }
-                }
-                None => {}
-            },
-            None => {}
-        };
-
-        core_binary.push(producer_section.id());
-        producer_section.encode(&mut core_binary);
-
         Ok(core_binary)
     }
 
-    fn metadata(binary: Vec<u8>) -> Result<Vec<ModuleMetadata>, String> {
+    fn metadata_add(binary: Vec<u8>, metadata: ProducersFields) -> Result<Vec<u8>, String> {
+        let mut producers = Producers::default();
+
+        for (field_name, items) in metadata {
+            if field_name != "sdk" && field_name != "language" && field_name != "processed-by" {
+                return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
+            }
+            for (name, version) in items {
+                producers.add(&field_name, &name, &version);
+            }
+        }
+        producers
+            .add_to_wasm(&binary[0..])
+            .map_err(|e| e.to_string())
+    }
+
+    fn metadata_show(binary: Vec<u8>) -> Result<Vec<ModuleMetadata>, String> {
         let metadata =
             wasm_metadata::Metadata::from_binary(&binary).map_err(|e| format!("{:?}", e))?;
         let mut module_metadata: Vec<ModuleMetadata> = Vec::new();
@@ -242,7 +252,7 @@ impl exports::Exports for WasmToolsJs {
             module_metadata.push(ModuleMetadata {
                 name,
                 meta_type,
-                metadata,
+                producers: metadata,
             });
         }
         Ok(module_metadata)

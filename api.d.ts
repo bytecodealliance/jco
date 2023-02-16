@@ -72,11 +72,16 @@ export function componentEmbed(binary: Uint8Array | ArrayBuffer | null, wit: str
 /**
  * Extract the producer metadata for a Wasm component or core module
  */
-export function metadata(binary: Uint8Array | ArrayBuffer): {
+export function metadataShow(binary: Uint8Array | ArrayBuffer): {
   name?: string,
   metaType: { tag: 'module' } | { tag: 'component', val: number },
   metadata: Metadata
 }[];
+
+/**
+ * Extract the producer metadata for a Wasm component or core module
+ */
+export function metadataAdd(binary: Uint8Array | ArrayBuffer, metadata: Metadata): Uint8Array;
 
 /**
  * Extract the WIT world from a Wasm Component

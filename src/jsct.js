@@ -2,7 +2,7 @@
 import { program } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile } from './cmd/transpile.js';
-import { parse, print, componentNew, componentEmbed, componentMetadata, componentWit } from './cmd/wasm-tools.js';
+import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
 import c from 'chalk-template';
 
 program
@@ -58,11 +58,18 @@ program.command('print')
   .option('-o, --output <output-file>', 'output file path')
   .action(asyncAction(print));
 
-program.command('metadata')
+program.command('metadata-show')
   .description('extract the producer metadata for a Wasm binary [wasm-tools metadata show]')
   .argument('[module]', 'Wasm component or core module filepath')
   .option('--json', 'output component metadata as JSON')
-  .action(asyncAction(componentMetadata));
+  .action(asyncAction(metadataShow));
+
+program.command('metadata-add')
+  .description('add producer metadata for a Wasm binary [wasm-tools metadata add]')
+  .argument('[module]', 'Wasm component or core module filepath')
+  .requiredOption('-m, --metadata <metadata...>', 'field=name[@version] producer metadata to add with the embedding')
+  .requiredOption('-o, --output <output-file>', 'output binary path')
+  .action(asyncAction(metadataAdd));
 
 program.command('parse')
   .description('parses the Wasm text format into a binary file [wasm-tools parse]')

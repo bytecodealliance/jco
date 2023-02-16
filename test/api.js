@@ -77,29 +77,28 @@ export async function apiTest (fixtures) {
 
       strictEqual(wit.slice(0, 19), 'interface imports {');
 
-      const meta = [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]];
-
-      const generatedComponent = await componentEmbed(null, wit, { dummy: true, metadata: meta });
+      const generatedComponent = await componentEmbed(null, wit, {
+        dummy: true,
+        metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
+      });
       {
         const output = await print(generatedComponent);
         strictEqual(output.slice(0, 7), '(module');
       }
-
-      deepStrictEqual(metadata(generatedComponent), [
-        {
-          metaType: {
-            tag: 'module'
-          },
-          metadata: meta,
-          name: null
-        }
-      ]);
 
       const newComponent = await componentNew(generatedComponent);
       {
         const output = await print(newComponent);
         strictEqual(output.slice(0, 10), '(component');
       }
+
+      const meta = metadata(newComponent);
+      deepStrictEqual(meta[0].metaType, {
+        tag: 'component',
+        val: 4
+      });
+      console.log(JSON.stringify(meta, null, 2));
+      deepStrictEqual(meta[0].producers[0], meta[0])
     });
 
     test('Component new adapt', async () => {
@@ -117,7 +116,7 @@ export async function apiTest (fixtures) {
 
       deepStrictEqual(meta, [{
         metaType: { tag: 'module' },
-        metadata: [],
+        producers: [],
         name: null
       }]);
     });

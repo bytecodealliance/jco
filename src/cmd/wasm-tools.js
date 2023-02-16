@@ -10,7 +10,8 @@ const {
   componentWit: componentWitFn,
   componentNew: componentNewFn,
   componentEmbed: componentEmbedFn,
-  metadata: componentMetadataFn,
+  metadataAdd: metadataAddFn,
+  metadataShow: metadataShowFn,
 } = exports;
 
 export async function parse(file, opts) {
@@ -69,15 +70,26 @@ export async function componentEmbed(file, opts) {
   await writeFile(opts.output, output);
 }
 
-export async function componentMetadata(file, opts) {
-  const source = file ? await readFile(file) : null;
+export async function metadataAdd(file, opts) {
+  const metadata = opts.metadata.map(meta => {
+    const [field, data = ''] = meta.split('=');
+    const [name, version = ''] = data.split('@');
+    return [field, [[name, version]]];
+  });
+  const source = await readFile(file);
+  const output = metadataAddFn(source, metadata);
+  await writeFile(opts.output, output);
+}
+
+export async function metadataShow(file, opts) {
+  const source = await readFile(file);
   let output = '', stack = [1];
-  const meta = componentMetadataFn(source);
+  const meta = metadataShowFn(source);
   if (opts.json) {
     console.log(JSON.stringify(meta, null, 2));
   }
   else {
-    for (const { name, metaType, metadata } of meta) {
+    for (const { name, metaType, producers } of meta) {
       output += '  '.repeat(stack.length - 1);
       const indent = '  '.repeat(stack.length);
       if (metaType.tag === 'component') {
@@ -87,9 +99,9 @@ export async function componentMetadata(file, opts) {
       } else {
         output += c`{bold [module${name ? ' ' + name : ''}]}\n`;
       }
-      if (metadata.length === 0)
+      if (producers.length === 0)
         output += `${indent}(no metadata)\n`;
-      for (const [field, items] of metadata) {
+      for (const [field, items] of producers) {
         for (const [name, version] of items) {
           output += `${indent}${(field + ':').padEnd(13, ' ')} ${name}${version ? c`{cyan  ${version}}` : ''}\n`;
         }

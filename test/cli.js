@@ -119,28 +119,26 @@ export async function cliTest (fixtures) {
           strictEqual(stdout.slice(0, 7), '(module');
         }
         {
+          const { stderr, stdout } = await exec(jsctPath, 'new', outFile, '-o', outFile);
+          strictEqual(stderr, '');
+          strictEqual(stdout, '');
+        }
+        {
+          const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
+          strictEqual(stderr, '');
+          strictEqual(stdout.slice(0, 10), '(component');
+        }
+        {
           const { stdout, stderr } = await exec(jsctPath, 'metadata', outFile, '--json');
           strictEqual(stderr, '');
           deepStrictEqual(JSON.parse(stdout), [{
-            metaType: { tag: 'module' },
-            metadata: [
+            metaType: { tag: 'component' },
+            producers: [
               ['language', [['javascript', '']]],
               ['processed-by', [['dummy-gen', 'test']]]
             ],
             name: null
           }]); 
-        }
-
-        {
-          const { stderr, stdout } = await exec(jsctPath, 'new', outFile, '-o', outFile);
-          strictEqual(stderr, '');
-          strictEqual(stdout, '');
-        }
-
-        {
-          const { stderr, stdout } = await exec(jsctPath, 'print', outFile);
-          strictEqual(stderr, '');
-          strictEqual(stdout.slice(0, 10), '(component');
         }
       }
       finally {
