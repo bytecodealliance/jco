@@ -22,6 +22,6 @@ wasmprinter = "0.2.51"
 wasmtime = { git = 'https://github.com/bytecodealliance/wasmtime', features = ["component-model"] }
 wasmtime-environ = { git = 'https://github.com/bytecodealliance/wasmtime' }
 wat = "1.0.59"
-wit-bindgen-guest-rust = { git = 'https://github.com/bytecodealliance/wit-bindgen', default-features = false, features = ['macros'] }
+wit-bindgen = { git = 'https://github.com/bytecodealliance/wit-bindgen' }
 wit-component = { version = "0.7.0", features = ['dummy-module'] }
 wit-parser = "0.6.1"
