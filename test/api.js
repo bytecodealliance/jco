@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadata } from '../src/api.js';
+import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadataShow, metadataAdd } from '../src/api.js';
 
 export async function apiTest (fixtures) {
   suite('API', () => {
@@ -112,7 +112,7 @@ export async function apiTest (fixtures) {
     test('Extract metadata', async () => {
       const component = await readFile(`test/fixtures/exitcode.wasm`);
 
-      const meta = metadata(component);
+      const meta = metadataShow(component);
 
       deepStrictEqual(meta, [{
         metaType: { tag: 'module' },
