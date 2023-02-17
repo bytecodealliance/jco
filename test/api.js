@@ -36,7 +36,7 @@ export async function apiTest (fixtures) {
       const component = await readFile(`test/fixtures/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, {
         map: {
-          'testwasi': './wasi.js'
+          'test*': './*.js'
         },
         name,
         validLiftingOptimization: true,
