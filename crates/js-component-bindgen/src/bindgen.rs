@@ -221,7 +221,7 @@ impl JsBindgen {
                     */
                     export function instantiate(
                         compileCore: (path: string, imports: Record<string, any>) => Promise<WebAssembly.Module>,
-                        imports: typeof ImportObject,
+                        imports: ImportObject,
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
                     ): Promise<typeof {camel}>;
                 ",
@@ -407,10 +407,7 @@ impl JsBindgen {
             AbiVariant::GuestImport,
         );
         let camel = name.to_upper_camel_case();
-        uwriteln!(
-            self.import_object,
-            "export const {name}: typeof {camel}Imports;"
-        );
+        uwriteln!(self.import_object, "'{name}': typeof {camel}Imports,");
     }
 
     fn import_funcs(
@@ -478,7 +475,7 @@ impl JsBindgen {
         // per-imported-interface where the type of that field is defined by the
         // interface itself.
         if self.opts.instantiation {
-            uwriteln!(self.src.ts, "export namespace ImportObject {{");
+            uwriteln!(self.src.ts, "export interface ImportObject {{");
             self.src.ts(&self.import_object);
             uwriteln!(self.src.ts, "}}");
         }
