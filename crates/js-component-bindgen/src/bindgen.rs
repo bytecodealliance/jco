@@ -221,7 +221,7 @@ impl JsBindgen {
                     */
                     export function instantiate(
                         compileCore: (path: string, imports: Record<string, any>) => Promise<WebAssembly.Module>,
-                        imports: typeof ImportObject,
+                        imports: ImportObject,
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
                     ): Promise<typeof {camel}>;
                 ",
@@ -406,12 +406,8 @@ impl JsBindgen {
             files,
             AbiVariant::GuestImport,
         );
-        let upper_camel = name.to_upper_camel_case();
-        let lower_camel = name.to_lower_camel_case();
-        uwriteln!(
-            self.import_object,
-            "declare const {lower_camel}: typeof {upper_camel}Imports;"
-        );
+        let camel = name.to_upper_camel_case();
+        uwriteln!(self.import_object, "'{name}': typeof {camel}Imports,");
     }
 
     fn import_funcs(
@@ -479,7 +475,7 @@ impl JsBindgen {
         // per-imported-interface where the type of that field is defined by the
         // interface itself.
         if self.opts.instantiation {
-            uwriteln!(self.src.ts, "export namespace ImportObject {{");
+            uwriteln!(self.src.ts, "export interface ImportObject {{");
             self.src.ts(&self.import_object);
             uwriteln!(self.src.ts, "}}");
         }
@@ -510,20 +506,6 @@ impl JsBindgen {
                 WorldItem::Type(_) => unimplemented!("type imports"),
             }
         }
-        // We will be following the ECMA262 normative:
-        // https://github.com/tc39/ecma262/pull/2154
-        uwriteln!(self.import_object, "export {{");
-        for (name, import) in world.imports.iter() {
-            match import {
-                WorldItem::Function(_) => {}
-                WorldItem::Interface(_) => {
-                    let camel = name.to_lower_camel_case();
-                    uwriteln!(self.import_object, "{camel} as '{name}',");
-                }
-                WorldItem::Type(_) => {}
-            }
-        }
-        uwriteln!(self.import_object, "}};");
         if !funcs.is_empty() {
             self.import_funcs(resolve, id, &funcs, files);
         }
