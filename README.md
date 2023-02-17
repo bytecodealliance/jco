@@ -1,5 +1,5 @@
 <div align="center">
-  <h1><code>JCO</code></h1>
+  <h1><code>jco</code></h1>
 
   <p>
     <strong>JavaScript component toolchain for working with <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
@@ -14,7 +14,7 @@
 
 ## Overview
 
-JCO is a fully native JS tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification in JavaScript.
+`jco` is a fully native JS tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification in JavaScript.
 
 Features include:
 
@@ -32,7 +32,7 @@ For creating components, see the [Cargo Component](https://github.com/bytecodeal
 npm install @bytecodealliance/jco
 ```
 
-JCO can be used as either a library or as a CLI via the `jco` CLI command.
+jco can be used as either a library or as a CLI via the `jco` CLI command.
 
 ## Example
 
@@ -97,7 +97,7 @@ Add new producer metadata to a component or core Wasm binary.
 ```shell
 Usage: jco <command> [options]
 
-JCO - WebAssembly JS Component Tools
+jco - WebAssembly JS Component Tools
       JS Component Bindgen & Wasm Tools for JS
 
 Options:

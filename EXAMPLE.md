@@ -1,4 +1,4 @@
-## JCO Example Workflow
+## jco Example Workflow
 
 Given an existing Wasm Component, `jco` provides the tooling necessary to work with this Component fully natively in JS.
 

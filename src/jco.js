@@ -7,7 +7,7 @@ import c from 'chalk-template';
 
 program
   .name('jco')
-  .description(c`{bold JCO - WebAssembly JS Component Tools}\n       JS Component Transpilation Bindgen & Wasm Tools for JS`)
+  .description(c`{bold jco - WebAssembly JS Component Tools}\n       JS Component Transpilation Bindgen & Wasm Tools for JS`)
   .usage('<command> [options]')
   .version('0.1.0');
 
