@@ -2,7 +2,7 @@ import { execArgv } from 'node:process';
 import { spawn } from 'node:child_process';
 
 export const dev = execArgv.includes('--conditions=test');
-export const jsctPath = dev ? 'src/jsct.js' : 'dist/cli.mjs';
+export const jcoPath = dev ? 'src/jco.js' : 'dist/cli.mjs';
 
 export async function exec (cmd, ...args) {
   let stdout = '', stderr = '';

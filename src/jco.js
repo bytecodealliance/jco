@@ -6,8 +6,8 @@ import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, 
 import c from 'chalk-template';
 
 program
-  .name('jsct')
-  .description(c`{bold JSCT - WebAssembly JS Component Tools}\n       JS Component Transpilation Bindgen & Wasm Tools for JS`)
+  .name('jco')
+  .description(c`{bold jco - WebAssembly JS Component Tools}\n       JS Component Transpilation Bindgen & Wasm Tools for JS`)
   .usage('<command> [options]')
   .version('0.1.0');
 

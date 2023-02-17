@@ -1,4 +1,4 @@
-./node_modules/.bin/ncc build src/jsct.js -o dist-cli
+./node_modules/.bin/ncc build src/jco.js -o dist-cli
 chmod +x dist-cli/wasm2js dist-cli/wasm-opt
 echo {} > dist-cli/package.json
 mv dist-cli/index.js dist-cli/cli.mjs

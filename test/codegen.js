@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { exec, jsctPath } from './helpers.js';
+import { exec, jcoPath } from './helpers.js';
 import { strictEqual } from 'node:assert';
 
 const eslintPath = 'node_modules/.bin/eslint';
@@ -28,7 +28,7 @@ export async function codegenTest (fixtures) {
       const name = fixture.replace('.component.wasm', '');
       test(`${fixture} transpile`, async () => {
         const flags = await readFlags(`test/runtime/${name}.ts`);
-        var { stderr } = await exec(jsctPath, 'transpile', `test/fixtures/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);
+        var { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);
         strictEqual(stderr, '');
       });
 
