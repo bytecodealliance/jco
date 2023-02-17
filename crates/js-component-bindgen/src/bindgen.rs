@@ -565,6 +565,20 @@ impl JsBindgen {
 
     fn map_import(&self, impt: &str) -> String {
         if let Some(map) = self.opts.map.as_ref() {
+            for (key, mapping) in map {
+                if key == impt {
+                    return mapping.into();
+                }
+                if let Some(wildcard_idx) = key.find('*') {
+                    let lhs = &key[0..wildcard_idx];
+                    let rhs = &key[wildcard_idx + 1..];
+                    if impt.starts_with(lhs) && impt.ends_with(rhs) {
+                        let matched =
+                            &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
+                        return mapping.replace('*', matched);
+                    }
+                }
+            }
             if let Some(mapping) = map.get(impt) {
                 return mapping.into();
             }
