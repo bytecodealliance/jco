@@ -1,0 +1,9 @@
+export * as clocks from "./types/wasi-clocks";
+export * as defaultClocks from "./types/wasi-default-clocks";
+export * as exit from "./types/wasi-exit";
+export * as filesystem from "./types/wasi-filesystem";
+export * as io from "./types/wasi-io";
+export * as logging from "./types/wasi-logging";
+export * as poll from "./types/wasi-poll";
+export * as random from "./types/wasi-random";
+export * as stderr from "./types/wasi-stderr";
