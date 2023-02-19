@@ -58,7 +58,7 @@ jobs:
       run: npm run test
 
   test-workspaces:
-    name: Preview2 Shim
+    name: Test Workspaces
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2

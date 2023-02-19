@@ -1,7 +1,7 @@
 {
   "name": "@bytecodealliance/preview2-shim",
-  "version": "0.0.1",
-  "description": "WASI Preview2 shim in JavaScript environments",
+  "version": "0.0.2",
+  "description": "WASI Preview2 shim for JS environments",
   "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
   "type": "module",
   "exports": {
@@ -15,12 +15,8 @@
     "test": "mocha -u tdd test/test.js --timeout 10000"
   },
   "files": [
-    "index.js",
-    "index.d.ts",
-    "browser/",
-    "http/",
-    "nodejs/",
-    "types/"
+    "types",
+    "lib"
   ],
   "devDependencies": {
     "mocha": "^10.2.0"

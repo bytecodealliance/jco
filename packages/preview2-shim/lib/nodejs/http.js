@@ -1,7 +1,7 @@
 import { createSyncFn } from "synckit";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { UnexpectedError } from "../../http/error.js";
+import { UnexpectedError } from "../http/error.js";
 
 export function send(req) {
   console.log(`[http] Send (nodejs) ${req.uri}`);
