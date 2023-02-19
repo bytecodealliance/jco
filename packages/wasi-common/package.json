@@ -11,8 +11,11 @@
         "index.js",
         "index.d.ts",
         "browser/",
+        "http/",
         "nodejs/",
         "types/"
     ],
-    "dependencies": {}
+    "dependencies": {
+        "synckit": "^0.8.5"
+    }
 }
