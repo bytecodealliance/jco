@@ -1,7 +1,7 @@
 {
     "name": "@bytecodealliance/preview2-shim",
     "version": "0.0.1",
-    "description": "WASI implementation in JavaScript for the Browser and Node.js",
+    "description": "WASI Preview2 shim in JavaScript for the Browser and Node.js",
     "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
     "type": "module",
     "exports": {
