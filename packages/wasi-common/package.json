@@ -4,8 +4,10 @@
     "description": "WASI implementation in JavaScript for the Browser and Node.js",
     "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
     "type": "module",
-    "main": "./index.js",
-    "browser": "./browser/index.js",
+    "exports": {
+      "node": "./nodejs/index.js",
+      "default": "./browser/index.js"
+    }
     "types": "index.d.ts",
     "files": [
         "index.js",
