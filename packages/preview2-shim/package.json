@@ -1,0 +1,23 @@
+{
+    "name": "@bytecodealliance/preview2-shim",
+    "version": "0.0.1",
+    "description": "WASI Preview2 shim in JavaScript for the Browser and Node.js",
+    "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
+    "type": "module",
+    "exports": {
+      "node": "./nodejs/index.js",
+      "default": "./browser/index.js"
+    },
+    "types": "index.d.ts",
+    "files": [
+        "index.js",
+        "index.d.ts",
+        "browser/",
+        "http/",
+        "nodejs/",
+        "types/"
+    ],
+    "dependencies": {
+        "synckit": "^0.8.5"
+    }
+}
