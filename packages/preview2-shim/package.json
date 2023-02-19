@@ -1,23 +1,28 @@
 {
-    "name": "@bytecodealliance/preview2-shim",
-    "version": "0.0.1",
-    "description": "WASI Preview2 shim in JavaScript for the Browser and Node.js",
-    "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
-    "type": "module",
-    "exports": {
-      "node": "./nodejs/index.js",
-      "default": "./browser/index.js"
-    },
-    "types": "index.d.ts",
-    "files": [
-        "index.js",
-        "index.d.ts",
-        "browser/",
-        "http/",
-        "nodejs/",
-        "types/"
-    ],
-    "dependencies": {
-        "synckit": "^0.8.5"
+  "name": "@bytecodealliance/preview2-shim",
+  "version": "0.0.1",
+  "description": "WASI Preview2 shim in JavaScript environments",
+  "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
+  "type": "module",
+  "exports": {
+    "./*": {
+      "types": "./types/*.js",
+      "node": "./lib/nodejs/*.js",
+      "default": "./lib/browser/*.js"
     }
+  },
+  "scripts": {
+    "test": "mocha -u tdd test/test.js --timeout 10000"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "browser/",
+    "http/",
+    "nodejs/",
+    "types/"
+  ],
+  "devDependencies": {
+    "mocha": "^10.2.0"
+  }
 }

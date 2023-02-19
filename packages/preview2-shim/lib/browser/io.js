@@ -7,16 +7,18 @@ export function dropOutputStream(f) {
 }
 
 export function read(src, len) {
-  console.log(`[io] Read ${src}`);
+  console.log(`[io] Read ${src} ${len}`);
 }
 
 export function write(dst, buf) {
   switch (dst) {
     case 0:
       throw new Error(`TODO: write stdin`);
-    case 1:
-      process.stdout.write(buf);
+    case 1: {
+      const decoder = new TextDecoder();
+      console.log(decoder.decode(buf));
       return BigInt(buf.byteLength);
+    }
     case 2:
       throw new Error(`TODO: write stdout`);
     default:
@@ -25,9 +27,9 @@ export function write(dst, buf) {
 }
 
 export function skip(src, len) {
-  console.log(`[io] Skip ${src}`);
+  console.log(`[io] Skip ${src}`, len);
 }
 
 export function write_repeated(dst, byte, len) {
-  console.log(`[io] Write repeated ${dst}`);
+  console.log(`[io] Write repeated ${dst}`, byte, len);
 }

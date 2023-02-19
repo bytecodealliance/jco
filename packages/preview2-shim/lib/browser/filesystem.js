@@ -6,7 +6,7 @@ export function setFlags(fd, flags) {
   console.log(`[filesystem] SET FLAGS ${fd} ${JSON.stringify(flags)}`);
 }
 
-export function close(fd) {
+export function dropDescriptor(fd) {
   console.log(`[filesystem] CLOSE: ${fd}`);
 }
 
@@ -31,7 +31,7 @@ export function readViaStream(fd, offset) {
 }
 
 export function openAt(fd, atFlags, path, offset) {
-  console.log(`[filesystem] OPEN AT ${fd}`);
+  console.log(`[filesystem] OPEN AT ${fd}`, atFlags, path, offset);
 }
 
 export function stat(fd) {
@@ -42,6 +42,6 @@ export function todoType(fd) {
   console.log(`[filesystem] TODO TYPE: ${fd}`);
 }
 
-export function closeDirEntryStream(s) {
-  console.log(`[filesystem] CLOSE DIR ENTRY STREAM`);
+export function dropDirEntryStream(s) {
+  console.log(`[filesystem] CLOSE DIR ENTRY STREAM: ${s}`);
 }

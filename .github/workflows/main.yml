@@ -57,6 +57,16 @@ jobs:
     - name: Test
       run: npm run test
 
+  test-workspaces:
+    name: Preview2 Shim
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install NPM packages
+      run: npm install
+    - name: Test Workspaces
+      run: npm run test --workspaces
+
   eslint:
     name: ESLint
     runs-on: ubuntu-latest

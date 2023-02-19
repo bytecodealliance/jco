@@ -1,3 +1,3 @@
 export function print(message) {
-  console.error(`${message}\n`);
+  process.stderr.write(message);
 }

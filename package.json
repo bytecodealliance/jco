@@ -35,8 +35,11 @@
     "build:component:wasm-tools": "./jco.sh new target/wasm32-unknown-unknown/release/wasm_tools_js.wasm -o obj/wasm-tools.wasm",
     "build:transpile:js-component-bindgen-component": "./jco.sh transpile obj/js-component-bindgen-component.wasm --map console=../lib/console.js --out-dir obj",
     "build:transpile:wasm-tools": "./jco.sh transpile obj/wasm-tools.wasm --map console=../lib/console.js --out-dir obj",
-    "lint": "eslint -c eslintrc.cjs src/**/*.js",
+    "lint": "eslint -c eslintrc.cjs lib/**/*.js packages/*/lib/**/*.js",
     "test": "mocha -u tdd test/test.js --timeout 120000",
     "test:dev": "mocha -u tdd test/test.js --timeout 120000 -n conditions=test"
-  }
+  },
+  "workspaces": [
+    "packages/preview2-shim"
+  ]
 }
