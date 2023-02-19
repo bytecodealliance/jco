@@ -1,3 +1,3 @@
 export namespace WasiExit {
-  export function exit(status: Result<void, void>): void;
+  export function exit(status: { tag: 'err' | 'ok' }): void;
 }
