@@ -20,5 +20,14 @@
   ],
   "devDependencies": {
     "mocha": "^10.2.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytecodealliance/componentize-js.git"
+  },
+  "license": "(Apache-2.0 WITH LLVM-exception)",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/componentize-js/issues"
+  },
+  "homepage": "https://github.com/bytecodealliance/componentize-js#readme"
 }

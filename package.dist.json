@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bytecodealliance/js-component-tools.git"
+    "url": "git+https://github.com/bytecodealliance/jco.git"
   },
   "keywords": [
     "Wasm",
@@ -19,7 +19,7 @@
   ],
   "license": "(Apache-2.0 WITH LLVM-exception)",
   "bugs": {
-    "url": "https://github.com/bytecodealliance/js-component-tools/issues"
+    "url": "https://github.com/bytecodealliance/jco/issues"
   },
-  "homepage": "https://github.com/bytecodealliance/js-component-tools#readme"
+  "homepage": "https://github.com/bytecodealliance/jco#readme"
 }
