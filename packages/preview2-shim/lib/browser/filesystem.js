@@ -45,3 +45,7 @@ export function todoType(fd) {
 export function dropDirEntryStream(s) {
   console.log(`[filesystem] CLOSE DIR ENTRY STREAM: ${s}`);
 }
+
+export function getPreopens () {
+  console.log(`[filesystem] GET PREOPENS`);
+}
