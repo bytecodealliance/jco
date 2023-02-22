@@ -98,7 +98,7 @@ Add new producer metadata to a component or core Wasm binary.
 Usage: jco <command> [options]
 
 jco - WebAssembly JS Component Tools
-      JS Component Bindgen & Wasm Tools for JS
+       JS Component Transpilation Bindgen & Wasm Tools for JS
 
 Options:
   -V, --version                         output the version number
@@ -109,7 +109,8 @@ Commands:
   opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations
   wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
   print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]
-  metadata [options] [module]           extract the producer metadata for a Wasm binary [wasm-tools metadata show]
+  metadata-show [options] [module]      extract the producer metadata for a Wasm binary [wasm-tools metadata show]
+  metadata-add [options] [module]       add producer metadata for a Wasm binary [wasm-tools metadata add]
   parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
   new [options] <core-module>           create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
   embed [options] [core-module]         embed the component typing section into a core Wasm module [wasm-tools component embed]

@@ -15,13 +15,13 @@ env_logger = "0.9.1"
 heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "1.9"
 pulldown-cmark = { version = "0.8", default-features = false }
-wasm-encoder = "0.24.0"
-wasm-metadata = "0.2.0"
-wasmparser = "0.101.0"
-wasmprinter = "0.2.51"
+wasm-encoder = { git = 'https://github.com/bytecodealliance/wasm-tools' }
+wasm-metadata = { git = 'https://github.com/bytecodealliance/wasm-tools' }
+wasmparser = { git = 'https://github.com/bytecodealliance/wasm-tools' }
+wasmprinter = { git = 'https://github.com/bytecodealliance/wasm-tools' }
 wasmtime = { git = 'https://github.com/bytecodealliance/wasmtime', features = ["component-model"] }
 wasmtime-environ = { git = 'https://github.com/bytecodealliance/wasmtime' }
 wat = "1.0.59"
 wit-bindgen = { git = 'https://github.com/bytecodealliance/wit-bindgen' }
-wit-component = { version = "0.7.0", features = ['dummy-module'] }
-wit-parser = "0.6.1"
+wit-component = { git = 'https://github.com/bytecodealliance/wasm-tools', features = ["dummy-module"] }
+wit-parser = { git = 'https://github.com/bytecodealliance/wasm-tools' }

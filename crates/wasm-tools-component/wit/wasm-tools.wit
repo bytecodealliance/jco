@@ -42,6 +42,7 @@ default world wasm-tools-js {
     record module-metadata {
       name: option<string>,
       meta-type: module-meta-type,
+      range: tuple<u32, u32>,
       producers: producers-fields,
     }
 
@@ -50,9 +51,5 @@ default world wasm-tools-js {
 
     /// Append producer metadata to a component
     metadata-add: func(binary: list<u8>, metadata: producers-fields) -> result<list<u8>, string>
-
-    /// Extract the core modules from a component
-    /// (strictly speaking this makes it Wasm Tools + Extract Core Modules)
-    extract-core-modules: func(component: list<u8>) -> result<list<tuple<u32, u32>>, string>
   }
 }
