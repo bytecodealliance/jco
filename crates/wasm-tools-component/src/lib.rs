@@ -197,11 +197,12 @@ impl exports::Exports for WasmToolsJs {
         let mut to_flatten: VecDeque<wasm_metadata::Metadata> = VecDeque::new();
         to_flatten.push_back(metadata);
         while let Some(metadata) = to_flatten.pop_front() {
-            let (name, producers, meta_type) = match metadata {
+            let (name, producers, meta_type, range) = match metadata {
                 wasm_metadata::Metadata::Component {
                     name,
                     producers,
                     children,
+                    range,
                 } => {
                     let children_len = children.len();
                     for child in children {
@@ -211,11 +212,14 @@ impl exports::Exports for WasmToolsJs {
                         name,
                         producers,
                         ModuleMetaType::Component(children_len as u32),
+                        range,
                     )
                 }
-                wasm_metadata::Metadata::Module { name, producers } => {
-                    (name, producers, ModuleMetaType::Module)
-                }
+                wasm_metadata::Metadata::Module {
+                    name,
+                    producers,
+                    range,
+                } => (name, producers, ModuleMetaType::Module, range),
             };
 
             let mut metadata: Vec<(String, Vec<(String, String)>)> = Vec::new();
@@ -234,53 +238,9 @@ impl exports::Exports for WasmToolsJs {
                 name,
                 meta_type,
                 producers: metadata,
+                range: (range.start as u32, range.end as u32),
             });
         }
         Ok(module_metadata)
-    }
-
-    fn extract_core_modules(binary: Vec<u8>) -> Result<Vec<(u32, u32)>, String> {
-        let mut core_modules = Vec::<(u32, u32)>::new();
-
-        let mut bytes = &binary[0..];
-        let mut parser = wasmparser::Parser::new(0);
-        let mut parsers = Vec::new();
-        let mut last_consumed = 0;
-        loop {
-            bytes = &bytes[last_consumed..];
-            let payload = match parser.parse(bytes, true).map_err(|e| format!("{:?}", e))? {
-                wasmparser::Chunk::NeedMoreData(_) => unreachable!(),
-                wasmparser::Chunk::Parsed { payload, consumed } => {
-                    last_consumed = consumed;
-                    payload
-                }
-            };
-            match payload {
-                wasmparser::Payload::Version { encoding, .. } => {
-                    if !matches!(encoding, wasmparser::Encoding::Component) {
-                        return Err("Not a WebAssembly Component".into());
-                    }
-                }
-                wasmparser::Payload::ModuleSection { range, .. } => {
-                    bytes = &bytes[range.end - range.start..];
-                    core_modules.push((range.start as u32, range.end as u32));
-                }
-                wasmparser::Payload::ComponentSection { parser: inner, .. } => {
-                    parsers.push(parser);
-                    parser = inner;
-                }
-                wasmparser::Payload::ComponentStartSection { .. } => {}
-                wasmparser::Payload::End(_) => {
-                    if let Some(parent_parser) = parsers.pop() {
-                        parser = parent_parser;
-                    } else {
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        Ok(core_modules)
     }
 }

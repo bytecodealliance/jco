@@ -116,7 +116,11 @@ export async function apiTest (fixtures) {
       deepStrictEqual(meta, [{
         metaType: { tag: 'module' },
         producers: [],
-        name: null
+        name: null,
+        range: [
+          0,
+          262
+        ]
       }]);
     });
   });

@@ -5,7 +5,7 @@ import c from 'chalk-template';
 import { readFile, sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import ora from 'ora';
 
-const { extractCoreModules, print } = exports;
+const { metadataShow, print } = exports;
 
 let WASM_OPT;
 try {
@@ -61,7 +61,7 @@ export async function optimizeComponent (componentBytes, opts) {
   const showSpinner = getShowSpinner();
   let spinner;
   try {
-    const coreModules = extractCoreModules(componentBytes);
+    const coreModules = metadataShow(componentBytes).slice(1, -1).map(({ range }) => range);
 
     let completed = 0;
     const spinnerText = () => c`{cyan ${completed} / ${coreModules.length}} Running Binaryen on WebAssembly Component Internal Core Modules \n`;
