@@ -1,9 +1,9 @@
-./node_modules/.bin/ncc build src/jco.js -o dist-cli
+./node_modules/.bin/ncc build src/jco.js -o dist-cli --external @bytecodealliance/componentize-js
 chmod +x dist-cli/wasm2js dist-cli/wasm-opt
 echo {} > dist-cli/package.json
 mv dist-cli/index.js dist-cli/cli.mjs
 
-./node_modules/.bin/ncc build src/api.js -o dist-api
+./node_modules/.bin/ncc build src/api.js -o dist-api --external @bytecodealliance/componentize-js
 chmod +x dist-api/wasm2js dist-api/wasm-opt
 mv dist-api/index.js dist-api/api.mjs
 

@@ -1,5 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile, rm } from 'node:fs/promises';
+import { fileURLToPath } from 'url';
 import { exec, jcoPath } from './helpers.js';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -180,6 +181,29 @@ export async function cliTest (fixtures) {
             262
           ]
         }]);
+      }
+      finally {
+        await cleanup();
+      }
+    });
+
+    test('Componentize', async () => {
+      try {
+        const { stdout, stderr } = await exec(jcoPath,
+            'componentize',
+            'test/fixtures/source.js',
+            '-w',
+            'test/fixtures/source.wit',
+            '-o',
+            outFile);
+        strictEqual(stderr, '');
+        const outDir = fileURLToPath(new URL('./output/componentize', import.meta.url));
+        {
+          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', 'componentize', '--map', 'wasi-*=@bytecodealliance/preview2-shim/*', '-o', outDir);
+          strictEqual(stderr, '');
+        }
+        const m = await import(`${outDir}/componentize.js`);
+        strictEqual(m.hello(), 'world');
       }
       finally {
         await cleanup();

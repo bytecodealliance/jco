@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { componentize as componentizeFn } from '../../../componentize-js/lib/componentize.js';
+import { componentize as componentizeFn } from '@bytecodealliance/componentize-js';
 import c from 'chalk-template';
 
 export async function componentize (jsSource, opts) {
