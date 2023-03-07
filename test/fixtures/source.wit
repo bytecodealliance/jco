@@ -1,0 +1,3 @@
+default world test {
+  export hello: func() -> string
+}

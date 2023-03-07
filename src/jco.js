@@ -3,17 +3,26 @@ import { program } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile } from './cmd/transpile.js';
 import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
+import { componentize } from './cmd/componentize.js';
 import c from 'chalk-template';
 
 program
   .name('jco')
-  .description(c`{bold jco - WebAssembly JS Component Tools}\n       JS Component Transpilation Bindgen & Wasm Tools for JS`)
+  .description(c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`)
   .usage('<command> [options]')
   .version('0.1.0');
 
 function myParseInt(value) {
   return parseInt(value, 10);
 }
+
+program.command('componentize')
+  .description('Create a component from a JavaScript module')
+  .usage('<js-source> -o <component-path>')
+  .argument('<js-source>', 'JS source file to build')
+  .requiredOption('-w, --wit <world>', 'WIT world to build with')
+  .requiredOption('-o, --out <out>', 'output component file')
+  .action(asyncAction(componentize));
 
 program.command('transpile')
   .description('Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution')
@@ -23,7 +32,6 @@ program.command('transpile')
   .requiredOption('-o, --out-dir <out-dir>', 'output directory')
   .option('-m, --minify', 'minify the JS output (--optimize / opt cmd still required)')
   .option('-O, --optimize', 'optimize the component first')
-  .option('-a, --args', 'when using --optimize, custom binaryen argument flags to pass')
   .option('--no-typescript', 'do not output TypeScript .d.ts types')
   .option('--valid-lifting-optimization', 'optimize component binary validations assuming all lifted values are valid')
   .option('-b, --base64-cutoff <bytes>', 'set the byte size under which core Wasm binaries will be inlined as base64', myParseInt)

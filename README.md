@@ -18,11 +18,12 @@
 
 Features include:
 
+* Creating WebAssembly Components from JavaScript sources and a WIT world
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-* Optimization helpers for Components via Binaryen
+* Optimization helpers for Components via Binaryen.
 * Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments.
 
-For creating components, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
+For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
 > **Note**: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future.
 
@@ -38,9 +39,41 @@ jco can be used as either a library or as a CLI via the `jco` CLI command.
 
 See the [example workflow](EXAMPLE.md) page for a full usage example.
 
+## CLI
+
+```shell
+Usage: jco <command> [options]
+
+jco - WebAssembly JS Component Tools
+      JS Component Transpilation Bindgen & Wasm Tools for JS
+
+Options:
+  -V, --version                         output the version number
+  -h, --help                            display help for command
+
+Commands:
+  componentize [options] <js-source>    Create a component from a JavaScript module
+  transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
+  opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations
+  wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
+  print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]
+  metadata-show [options] [module]      extract the producer metadata for a Wasm binary [wasm-tools metadata show]
+  metadata-add [options] [module]       add producer metadata for a Wasm binary [wasm-tools metadata add]
+  parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
+  new [options] <core-module>           create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
+  embed [options] [core-module]         embed the component typing section into a core Wasm module [wasm-tools component embed]
+  help [command]                        display help for command
+```
+
 ## API
 
 The below is an outline of the available API functions, see [api.d.ts](api.d.ts) file for the exact options.
+
+#### `componentize(jsSource: String, witWorld: String, opts?): Promise<{ component: Uint8Array }>`
+
+Creates a component from a JS file and WIT world definition, via a Spidermonkey engine embedding.
+
+See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
 
 #### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
 
@@ -91,31 +124,6 @@ Parse a compoment WAT to output a Component binary.
 #### `metadataAdd(wasm: Uint8Array, metadata): Uint8Array`
 
 Add new producer metadata to a component or core Wasm binary.
-
-## CLI
-
-```shell
-Usage: jco <command> [options]
-
-jco - WebAssembly JS Component Tools
-       JS Component Transpilation Bindgen & Wasm Tools for JS
-
-Options:
-  -V, --version                         output the version number
-  -h, --help                            display help for command
-
-Commands:
-  transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
-  opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations
-  wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
-  print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]
-  metadata-show [options] [module]      extract the producer metadata for a Wasm binary [wasm-tools metadata show]
-  metadata-add [options] [module]       add producer metadata for a Wasm binary [wasm-tools metadata add]
-  parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
-  new [options] <core-module>           create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
-  embed [options] [core-module]         embed the component typing section into a core Wasm module [wasm-tools component embed]
-  help [command]                        display help for command
-```
 
 ## Contributing
 
