@@ -9,18 +9,20 @@ export function send(req) {
   try {
     const xhr = new XMLHttpRequest();
     xhr.open(req.method.toString(), req.uri, false);
-    xhr.responseType = "arraybuffer";
     for (let [name, value] of req.headers) {
-      xhr.setRequestHeader(name, value);
+      if (name !== "user-agent") {
+        xhr.setRequestHeader(name, value);
+      }
     }
     xhr.send(req.body.length > 0 ? req.body : null);
+    const body = xhr.response ? new TextEncoder().encode(xhr.response) : undefined;
     return {
       status: xhr.status,
       headers: xhr
         .getAllResponseHeaders()
         .trim()
         .split(/[\r\n]+/),
-      body: xhr.response.byteLength > 0 ? xhr.response : undefined,
+      body,
     };
   } catch (err) {
     throw new UnexpectedError(err.message);
