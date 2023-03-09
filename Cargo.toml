@@ -7,21 +7,21 @@ edition = "2021"
 version = "0.1.0"
 
 [workspace.dependencies]
-anyhow = "1.0.65"
-base64 = "0.13.1"
+anyhow = "1.0.69"
+base64 = "0.21.0"
 bitflags = "1.3.2"
-clap = { version = "4.0.9", features = ["derive"] }
-env_logger = "0.9.1"
+clap = { version = "4.1.8", features = ["derive"] }
+env_logger = "0.10.0"
 heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "1.9"
 pulldown-cmark = { version = "0.8", default-features = false }
-wasm-encoder = { git = 'https://github.com/bytecodealliance/wasm-tools' }
-wasm-metadata = { git = 'https://github.com/bytecodealliance/wasm-tools' }
-wasmparser = { git = 'https://github.com/bytecodealliance/wasm-tools' }
-wasmprinter = { git = 'https://github.com/bytecodealliance/wasm-tools' }
+wasm-encoder = "0.25.0"
+wasm-metadata = "0.3.1"
+wasmparser = "0.102.0"
+wasmprinter = "0.2.53"
 wasmtime = { git = 'https://github.com/bytecodealliance/wasmtime', features = ["component-model"] }
 wasmtime-environ = { git = 'https://github.com/bytecodealliance/wasmtime' }
 wat = "1.0.59"
 wit-bindgen = { git = 'https://github.com/bytecodealliance/wit-bindgen' }
-wit-component = { git = 'https://github.com/bytecodealliance/wasm-tools', features = ["dummy-module"] }
-wit-parser = { git = 'https://github.com/bytecodealliance/wasm-tools' }
+wit-component = { version = "0.7.3", features = ['dummy-module'] }
+wit-parser = "0.6.4"

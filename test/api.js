@@ -97,13 +97,13 @@ export async function apiTest (fixtures) {
         tag: 'component',
         val: 4
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.7.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]])
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.7.3'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]])
     });
 
     test('Component new adapt', async () => {
       const component = await readFile(`test/fixtures/exitcode.wasm`);
 
-      const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile('test/fixtures/wasi_snapshot_preview1.wasm')]]);
+      const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile('test/fixtures/wasi_snapshot_preview1.reactor.wasm')]]);
 
       await print(generatedComponent);
     });
