@@ -1,4 +1,4 @@
-import { runAsWorker } from "synckit";
+import { runAsWorker } from "./synckit/index.js";
 
 /**
  * @param {import("../types/wasi-http").Request} req
