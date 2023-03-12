@@ -25,3 +25,5 @@ export const importObject = {
     "wasi-stderr": stderr,
     "wasi-wall-clock": wallClock,
 };
+
+export default importObject;

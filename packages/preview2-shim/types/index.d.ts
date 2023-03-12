@@ -1,3 +1,4 @@
+import * as clocks from "./wasi-clocks";
 import * as defaultClocks from "./wasi-default-clocks";
 import * as environment from "./wasi-environment";
 import * as exit from "./wasi-exit";
@@ -11,7 +12,8 @@ import * as random from "./wasi-random";
 import * as stderr from "./wasi-stderr";
 import * as wallClock from "./wasi-wall-clock";
 
-export interface importObject {
+interface ImportObject {
+    "wasi-clocks": typeof clocks,
     "wasi-default-clocks": typeof defaultClocks,
     "wasi-environment": typeof environment,
     "wasi-exit": typeof exit,
@@ -25,3 +27,7 @@ export interface importObject {
     "wasi-stderr": typeof stderr,
     "wasi-wall-clock": typeof wallClock,
 }
+
+export declare const importObject: ImportObject;
+
+export default importObject;
