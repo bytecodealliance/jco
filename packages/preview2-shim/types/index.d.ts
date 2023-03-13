@@ -1,9 +1,31 @@
-export * as clocks from "./types/wasi-clocks";
-export * as defaultClocks from "./types/wasi-default-clocks";
-export * as exit from "./types/wasi-exit";
-export * as filesystem from "./types/wasi-filesystem";
-export * as io from "./types/wasi-io";
-export * as logging from "./types/wasi-logging";
-export * as poll from "./types/wasi-poll";
-export * as random from "./types/wasi-random";
-export * as stderr from "./types/wasi-stderr";
+import * as defaultClocks from "./default-clocks";
+import * as environment from "./environment";
+import * as exit from "./exit";
+import * as filesystem from "./filesystem";
+import * as http from "./http";
+import * as io from "./io";
+import * as logging from "./logging";
+import * as monotonicClock from "./monotonic-clock";
+import * as poll from "./poll";
+import * as random from "./random";
+import * as stderr from "./stderr";
+import * as wallClock from "./wall-clock";
+
+export interface ImportObject {
+    "default-clocks": typeof defaultClocks,
+    "environment": typeof environment,
+    "exit": typeof exit,
+    "filesystem": typeof filesystem,
+    "http": typeof http,
+    "io": typeof io,
+    "logging": typeof logging,
+    "monotonic-clock": typeof monotonicClock,
+    "poll": typeof poll,
+    "random": typeof random,
+    "stderr": typeof stderr,
+    "wall-clock": typeof wallClock,
+}
+
+export declare const importObject: ImportObject;
+
+export default importObject;

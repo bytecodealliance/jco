@@ -50,6 +50,6 @@ export interface HttpErrorUnexpectedError {
   tag: 'unexpected-error',
   val: string,
 }
-export namespace WasiHttp {
+export namespace Http {
   export function send(req: Request): Response;
 }

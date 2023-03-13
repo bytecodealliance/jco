@@ -139,7 +139,7 @@ export interface Mode {
   writeable?: boolean,
   executable?: boolean,
 }
-export namespace WasiFilesystem {
+export namespace Filesystem {
   export function readViaStream(fd: Descriptor, offset: Filesize): InputStream;
   export function writeViaStream(fd: Descriptor, offset: Filesize): OutputStream;
   export function appendViaStream(fd: Descriptor): OutputStream;
@@ -147,4 +147,5 @@ export namespace WasiFilesystem {
   export function stat(fd: Descriptor): DescriptorStat;
   export function openAt(fd: Descriptor, atFlags: AtFlags, path: string, oFlags: OFlags, flags: DescriptorFlags, mode: Mode): Descriptor;
   export function close(fd: Descriptor): void;
+  export function dropDescriptor(fd: Descriptor): void;
 }

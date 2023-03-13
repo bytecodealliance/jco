@@ -5,8 +5,13 @@
   "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
   "type": "module",
   "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "node": "./lib/nodejs/index.js",
+      "default": "./lib/browser/index.js"
+    },
     "./*": {
-      "types": "./types/*.js",
+      "types": "./types/*.d.ts",
       "node": "./lib/nodejs/*.js",
       "default": "./lib/browser/*.js"
     }
@@ -23,11 +28,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bytecodealliance/componentize-js.git"
+    "url": "git+https://github.com/bytecodealliance/jco.git"
   },
   "license": "(Apache-2.0 WITH LLVM-exception)",
   "bugs": {
-    "url": "https://github.com/bytecodealliance/componentize-js/issues"
+    "url": "https://github.com/bytecodealliance/jco/issues"
   },
-  "homepage": "https://github.com/bytecodealliance/componentize-js#readme"
+  "homepage": "https://github.com/bytecodealliance/jco#readme"
 }

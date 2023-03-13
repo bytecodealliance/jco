@@ -1,7 +1,7 @@
-import { runAsWorker } from "synckit";
+import { runAsWorker } from "./synckit/index.js";
 
 /**
- * @param {import("../types/wasi-http").Request} req
+ * @param {import("../types/http").Request} req
  * @returns {Promise<string>}
  */
 async function makeRequest(req) {
