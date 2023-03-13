@@ -12,18 +12,18 @@ import * as stderr from "./stderr.js";
 import * as wallClock from "./wall-clock.js";
 
 export const importObject = {
-    "wasi-default-clocks": defaultClocks,
-    "wasi-environment": environment,
-    "wasi-exit": exit,
-    "wasi-filesystem": filesystem,
-    "wasi-http": http,
-    "wasi-io": io,
-    "wasi-logging": logging,
-    "wasi-monotonic-clock": monotonicClock,
-    "wasi-poll": poll,
-    "wasi-random": random,
-    "wasi-stderr": stderr,
-    "wasi-wall-clock": wallClock,
+    "default-clocks": defaultClocks,
+    "environment": environment,
+    "exit": exit,
+    "filesystem": filesystem,
+    "http": http,
+    "io": io,
+    "logging": logging,
+    "monotonic-clock": monotonicClock,
+    "poll": poll,
+    "random": random,
+    "stderr": stderr,
+    "wall-clock": wallClock,
 };
 
 export default importObject;

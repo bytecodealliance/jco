@@ -1,3 +1,3 @@
-export namespace WasiEnvironment {
+export namespace Environment {
   export function getEnvironment(): [string,string][];
 }

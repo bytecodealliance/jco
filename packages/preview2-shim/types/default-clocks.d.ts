@@ -1,6 +1,6 @@
 export type MonotonicClock = MonotonicClock;
 export type WallClock = WallClock;
-export namespace WasiDefaultClocks {
+export namespace DefaultClocks {
   export function defaultMonotonicClock(): MonotonicClock;
   export function defaultWallClock(): WallClock;
 }
