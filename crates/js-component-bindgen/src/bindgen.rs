@@ -540,8 +540,6 @@ impl JsBindgen {
     ) {
         let camel = name.to_upper_camel_case();
         let mut gen = self.js_interface(resolve);
-        gen.types(id);
-        gen.post_types();
 
         uwriteln!(gen.src.ts, "export namespace {camel} {{");
         for (_, func) in resolve.interfaces[id].functions.iter() {
@@ -551,6 +549,8 @@ impl JsBindgen {
 
         assert!(gen.src.js.is_empty());
         if !gen.gen.opts.no_typescript {
+            gen.types(id);
+            gen.post_types();
             files.push(&format!("{dir}/{name}.d.ts"), gen.src.ts.as_bytes());
         }
 
@@ -1574,7 +1574,7 @@ impl<'a> JsInterface<'a> {
     fn post_types(&mut self) {
         if mem::take(&mut self.needs_ty_option) {
             self.src
-                .ts("export type Option<T> = { tag: 'none' } | { tag: 'some', val; T };\n");
+                .ts("export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };\n");
         }
         if mem::take(&mut self.needs_ty_result) {
             self.src
