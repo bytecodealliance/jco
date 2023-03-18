@@ -8,9 +8,10 @@ import * as helpers from "./helpers.js";
 async function run() {
   const wasm = await instantiate(helpers.loadWasm, importObject);
 
-  const run = () => wasm.HTTP.handle(0, 1);
-
-  assert.throws(run, Error(""));
+  // TODO: Should be changed when incoming HTTP is implemented
+  assert.equal(wasm.HTTP, undefined);
+  // const run = () => wasm.HTTP.handle(0, 1);
+  // assert.throws(run, Error(""));
 }
 
 await run()
