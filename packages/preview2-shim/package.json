@@ -4,6 +4,7 @@
   "description": "WASI Preview2 shim for JS environments",
   "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
   "type": "module",
+  "types": "./types/index.d.ts",
   "exports": {
     ".": {
       "types": "./types/index.d.ts",

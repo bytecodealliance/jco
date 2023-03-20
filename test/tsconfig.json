@@ -3,6 +3,7 @@
   "compilerOptions": {
     "outDir": "output",
     "module": "esnext",
+    "moduleResolution": "node",
     "target": "es2020",
     "strict": true,
     "strictNullChecks": true

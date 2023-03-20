@@ -6,17 +6,9 @@ fn main() {
         let current_dir = std::env::current_dir().unwrap();
         let target_dir = current_dir.join("./target");
         let fixtures_dir = current_dir.join("./test/fixtures");
-        for world in ["proxy", "reactor"] {
-            let module_path = fixtures_dir.join(format!("dummy_{}.component.wasm", world));
-            let module = fs::read(&module_path).unwrap();
-            let component = ComponentEncoder::default()
-                .module(module.as_slice())
-                .unwrap()
-                .validate(true)
-                .encode()
-                .expect("component to be decoded");
-            let component_path = target_dir.join("component.wasm");
-            fs::write(&component_path, &component).expect("component to be written to file");
+        for world in ["reactor", "proxy"] {
+            let component_path = fixtures_dir.join(format!("dummy_{}.component.wasm", world));
+            let component = fs::read(&component_path).expect("component to be read from file");
 
             let import_map = HashMap::from([]);
             let opts = js_component_bindgen::GenerationOpts {
@@ -44,7 +36,7 @@ fn main() {
                     file.write_all(contents).unwrap();
                 }
             }
-            println!("cargo:rerun-if-changed={:?}", module_path);
+            println!("cargo:rerun-if-changed={:?}", component_path);
         }
     }
     println!("cargo:rerun-if-changed=build.rs");
