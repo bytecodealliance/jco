@@ -6,6 +6,10 @@
     "moduleResolution": "node",
     "target": "es2020",
     "strict": true,
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "baseUrl": "../",
+    "paths": {
+      "@bytecodealliance/preview2-shim": ["package/preview2-shim"]
+    }
   }
 }
