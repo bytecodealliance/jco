@@ -223,7 +223,7 @@ impl JsBindgen {
                         compileCore: (path: string, imports: Record<string, any>) => Promise<WebAssembly.Module>,
                         imports: ImportObject,
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
-                    ): Promise<typeof {camel}>;
+                    ): Promise<{camel}>;
                 ",
             );
         }
@@ -419,7 +419,7 @@ impl JsBindgen {
     ) {
         let mut gen = self.js_interface(resolve);
         for (_, func) in funcs {
-            gen.ts_func(func, AbiVariant::GuestImport);
+            gen.ts_func(func, AbiVariant::GuestImport, ",");
         }
         gen.gen.import_object.push_str(&gen.src.ts);
         assert!(gen.src.js.is_empty());
@@ -442,10 +442,7 @@ impl JsBindgen {
             AbiVariant::GuestExport,
         );
         let camel = name.to_upper_camel_case();
-        uwriteln!(
-            self.export_object,
-            "export const {name}: typeof {camel}Exports;"
-        );
+        uwriteln!(self.export_object, "'{name}': typeof {camel}Exports,");
     }
 
     fn export_funcs(
@@ -454,10 +451,14 @@ impl JsBindgen {
         _world: WorldId,
         funcs: &[(&str, &Function)],
         _files: &mut Files,
+        end_character: &str,
     ) {
         let mut gen = self.js_interface(resolve);
         for (_, func) in funcs {
-            gen.ts_func(func, AbiVariant::GuestExport);
+            if end_character == ";" {
+                gen.src.ts("export function ");
+            }
+            gen.ts_func(func, AbiVariant::GuestExport, end_character);
         }
 
         gen.gen.export_object.push_str(&gen.src.ts);
@@ -483,7 +484,7 @@ impl JsBindgen {
         // Generate a type definition for the export object from instantiating
         // the component.
         if self.opts.instantiation {
-            uwriteln!(self.src.ts, "export namespace {camel} {{",);
+            uwriteln!(self.src.ts, "export interface {camel} {{",);
             self.src.ts(&self.export_object);
             uwriteln!(self.src.ts, "}}");
         } else {
@@ -518,7 +519,12 @@ impl JsBindgen {
             }
         }
         if !funcs.is_empty() {
-            self.export_funcs(resolve, id, &funcs, files);
+            let end_character = if self.opts.instantiation {
+                ","
+            } else {
+                ";"
+            };
+            self.export_funcs(resolve, id, &funcs, files, end_character);
         }
         self.finish(resolve, id, files);
     }
@@ -543,7 +549,8 @@ impl JsBindgen {
 
         uwriteln!(gen.src.ts, "export namespace {camel} {{");
         for (_, func) in resolve.interfaces[id].functions.iter() {
-            gen.ts_func(func, abi);
+            gen.src.ts("export function ");
+            gen.ts_func(func, abi, ";");
         }
         uwriteln!(gen.src.ts, "}}");
 
@@ -1509,10 +1516,9 @@ impl<'a> JsInterface<'a> {
         self.src.ts("]");
     }
 
-    fn ts_func(&mut self, func: &Function, abi: AbiVariant) {
+    fn ts_func(&mut self, func: &Function, abi: AbiVariant, end_character: &str) {
         self.docs(&func.docs);
 
-        self.src.ts("export function ");
         self.src.ts(&func.item_name().to_lower_camel_case());
         self.src.ts("(");
 
@@ -1557,7 +1563,7 @@ impl<'a> JsInterface<'a> {
                 }
             }
         }
-        self.src.ts(";\n");
+        self.src.ts(format!("{}\n", end_character).as_str());
     }
 
     fn maybe_null(&self, ty: &Type) -> bool {
