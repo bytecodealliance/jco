@@ -519,11 +519,7 @@ impl JsBindgen {
             }
         }
         if !funcs.is_empty() {
-            let end_character = if self.opts.instantiation {
-                ","
-            } else {
-                ";"
-            };
+            let end_character = if self.opts.instantiation { "," } else { ";" };
             self.export_funcs(resolve, id, &funcs, files, end_character);
         }
         self.finish(resolve, id, files);
