@@ -37,8 +37,10 @@ export namespace Filesystem {
 }
 export type Descriptor = number;
 export type Filesize = bigint;
-export type InputStream = InputStream;
-export type OutputStream = OutputStream;
+import type { InputStream } from '../imports/streams';
+export { InputStream };
+import type { OutputStream } from '../imports/streams';
+export { OutputStream };
 /**
  * # Variants
  * 
@@ -162,7 +164,8 @@ export interface DescriptorFlags {
  * ## `"socket"`
  */
 export type DescriptorType = 'unknown' | 'block-device' | 'character-device' | 'directory' | 'fifo' | 'symbolic-link' | 'regular-file' | 'socket';
-export type Datetime = Datetime;
+import type { Datetime } from '../imports/wall-clock';
+export { Datetime };
 export type NewTimestamp = NewTimestampNoChange | NewTimestampNow | NewTimestampTimestamp;
 export interface NewTimestampNoChange {
   tag: 'no-change',

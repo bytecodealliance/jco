@@ -20,12 +20,17 @@ export namespace Udp {
   export function dropUdpSocket(this: UdpSocket): void;
 }
 export type UdpSocket = number;
-export type Network = Network;
-export type IpSocketAddress = IpSocketAddress;
-export type Error = Error;
+import type { Network } from '../imports/network';
+export { Network };
+import type { IpSocketAddress } from '../imports/network';
+export { IpSocketAddress };
+import type { Error } from '../imports/network';
+export { Error };
 export interface Datagram {
   data: Uint8Array,
   remoteAddress: IpSocketAddress,
 }
-export type IpAddressFamily = IpAddressFamily;
-export type Pollable = Pollable;
+import type { IpAddressFamily } from '../imports/network';
+export { IpAddressFamily };
+import type { Pollable } from '../imports/poll';
+export { Pollable };

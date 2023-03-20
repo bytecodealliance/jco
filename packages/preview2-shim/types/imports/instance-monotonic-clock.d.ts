@@ -1,4 +1,5 @@
 export namespace InstanceMonotonicClock {
   export function instanceMonotonicClock(): MonotonicClock;
 }
-export type MonotonicClock = MonotonicClock;
+import type { MonotonicClock } from '../imports/monotonic-clock';
+export { MonotonicClock };

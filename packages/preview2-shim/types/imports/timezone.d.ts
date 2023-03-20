@@ -4,7 +4,8 @@ export namespace Timezone {
   export function dropTimezone(this: Timezone): void;
 }
 export type Timezone = number;
-export type Datetime = Datetime;
+import type { Datetime } from '../imports/wall-clock';
+export { Datetime };
 export interface TimezoneDisplay {
   utcOffset: number,
   name: string,

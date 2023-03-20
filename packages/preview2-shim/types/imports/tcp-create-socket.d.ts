@@ -1,6 +1,9 @@
 export namespace TcpCreateSocket {
   export function createTcpSocket(addressFamily: IpAddressFamily): TcpSocket;
 }
-export type IpAddressFamily = IpAddressFamily;
-export type TcpSocket = TcpSocket;
-export type Error = Error;
+import type { IpAddressFamily } from '../imports/network';
+export { IpAddressFamily };
+import type { TcpSocket } from '../imports/tcp';
+export { TcpSocket };
+import type { Error } from '../imports/network';
+export { Error };

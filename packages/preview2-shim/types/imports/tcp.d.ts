@@ -26,13 +26,20 @@ export namespace Tcp {
   export function dropTcpSocket(this: TcpSocket): void;
 }
 export type TcpSocket = number;
-export type Network = Network;
-export type IpSocketAddress = IpSocketAddress;
-export type Error = Error;
-export type InputStream = InputStream;
-export type OutputStream = OutputStream;
-export type IpAddressFamily = IpAddressFamily;
-export type Pollable = Pollable;
+import type { Network } from '../imports/network';
+export { Network };
+import type { IpSocketAddress } from '../imports/network';
+export { IpSocketAddress };
+import type { Error } from '../imports/network';
+export { Error };
+import type { InputStream } from '../imports/streams';
+export { InputStream };
+import type { OutputStream } from '../imports/streams';
+export { OutputStream };
+import type { IpAddressFamily } from '../imports/network';
+export { IpAddressFamily };
+import type { Pollable } from '../imports/poll';
+export { Pollable };
 /**
  * # Variants
  * 

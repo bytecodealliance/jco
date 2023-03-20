@@ -13,8 +13,8 @@ export interface ImportObject {
   'types': typeof TypesImports,
   'default-outgoing-HTTP': typeof DefaultOutgoingHttpImports,
 }
-export namespace WasiProxy {
-  export const HTTP: typeof HttpExports;
+export interface WasiProxy {
+  'HTTP': typeof HttpExports,
 }
 
 /**
@@ -40,5 +40,5 @@ export function instantiate(
 compileCore: (path: string, imports: Record<string, any>) => Promise<WebAssembly.Module>,
 imports: ImportObject,
 instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
-): Promise<typeof WasiProxy>;
+): Promise<WasiProxy>;
 

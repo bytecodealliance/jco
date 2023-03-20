@@ -34,10 +34,12 @@ export namespace Types {
   export function listenToFutureIncomingResponse(f: FutureIncomingResponse): Pollable;
 }
 export type Fields = number;
-export type InputStream = InputStream;
+import type { InputStream } from '../imports/streams';
+export { InputStream };
 export type IncomingStream = InputStream;
 export type Trailers = Fields;
-export type OutputStream = OutputStream;
+import type { OutputStream } from '../imports/streams';
+export { OutputStream };
 export type OutgoingStream = OutputStream;
 export type IncomingRequest = number;
 export type OutgoingRequest = number;
@@ -107,7 +109,8 @@ export interface ErrorUnexpectedError {
 export type IncomingResponse = number;
 export type StatusCode = number;
 export type FutureIncomingResponse = number;
-export type Pollable = Pollable;
+import type { Pollable } from '../imports/poll';
+export { Pollable };
 export interface RequestOptions {
   connectTimeoutMs?: number,
   firstByteTimeoutMs?: number,

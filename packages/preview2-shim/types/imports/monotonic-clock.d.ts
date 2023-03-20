@@ -6,4 +6,5 @@ export namespace MonotonicClock {
 }
 export type MonotonicClock = number;
 export type Instant = bigint;
-export type Pollable = Pollable;
+import type { Pollable } from '../imports/poll';
+export { Pollable };

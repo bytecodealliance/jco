@@ -18,5 +18,6 @@ export namespace Streams {
 export type InputStream = number;
 export interface StreamError {
 }
-export type Pollable = Pollable;
+import type { Pollable } from '../imports/poll';
+export { Pollable };
 export type OutputStream = number;

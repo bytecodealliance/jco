@@ -1,4 +1,5 @@
 export namespace InstanceWallClock {
   export function instanceWallClock(): WallClock;
 }
-export type WallClock = WallClock;
+import type { WallClock } from '../imports/wall-clock';
+export { WallClock };

@@ -1,4 +1,5 @@
 export namespace EnvironmentPreopens {
   export function preopens(): [Descriptor, string][];
 }
-export type Descriptor = Descriptor;
+import type { Descriptor } from '../imports/filesystem';
+export { Descriptor };

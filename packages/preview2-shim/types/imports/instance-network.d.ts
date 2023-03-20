@@ -1,4 +1,5 @@
 export namespace InstanceNetwork {
   export function instanceNetwork(): Network;
 }
-export type Network = Network;
+import type { Network } from '../imports/network';
+export { Network };

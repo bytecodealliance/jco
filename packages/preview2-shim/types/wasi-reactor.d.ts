@@ -40,7 +40,7 @@ export interface ImportObject {
   'exit': typeof ExitImports,
   'stderr': typeof StderrImports,
 }
-export namespace WasiReactor {
+export interface WasiReactor {
 }
 
 /**
@@ -66,5 +66,5 @@ export function instantiate(
 compileCore: (path: string, imports: Record<string, any>) => Promise<WebAssembly.Module>,
 imports: ImportObject,
 instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
-): Promise<typeof WasiReactor>;
+): Promise<WasiReactor>;
 
