@@ -1,10 +1,8 @@
 use std::{collections::HashMap, env, fs, io::Write, path::PathBuf};
-use wit_component::ComponentEncoder;
 
 fn main() {
     if env::var("PREVIEW2_SHIM_TYPES").is_ok() {
         let current_dir = std::env::current_dir().unwrap();
-        let target_dir = current_dir.join("./target");
         let fixtures_dir = current_dir.join("./test/fixtures");
         for world in ["reactor", "proxy"] {
             let component_path = fixtures_dir.join(format!("dummy_{}.component.wasm", world));
