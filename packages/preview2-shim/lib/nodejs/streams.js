@@ -16,8 +16,18 @@ export function subscribeToInputStream(s) {
 export function dropInputStream(s) {
   console.log(`[streams] Drop input stream ${s}`);
 }
-export function write(s, _buf) {
-  console.log(`[streams] Write ${s}`);
+export function write(s, buf) {
+  switch (s) {
+    case 0:
+      throw new Error(`TODO: write stdin`);
+    case 1:
+      process.stdout.write(buf);
+      return BigInt(buf.byteLength);
+    case 2:
+      throw new Error(`TODO: write stdout`);
+    default:
+      throw new Error(`TODO: write ${s}`);
+  }
 }
 export function blockingWrite(s, _buf) {
   console.log(`[streams] Blocking write ${s}`);
