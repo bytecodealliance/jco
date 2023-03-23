@@ -1,15 +1,12 @@
 {
   "name": "@bytecodealliance/jco",
   "description": "JavaScript tooling for working with WebAssembly Components",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "exports": "./api.mjs",
   "types": "api.d.ts",
   "author": "Guy Bedford",
   "bin": {
     "jco": "cli.mjs"
-  },
-  "dependencies": {
-    "@bytecodealliance/componentize-js": "^0.0.1"
   },
   "repository": {
     "type": "git",
