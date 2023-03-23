@@ -1427,18 +1427,17 @@ impl<'a> JsInterface<'a> {
                                             self.src.ts,
                                             "import type {{ {name} }} from '../imports/{interface_name}';",
                                         );
-                                        self.src
-                                            .ts(&format!("export {{ {} }};\n", name));
+                                        self.src.ts(&format!("export {{ {} }};\n", name));
                                     } else {
                                         self.type_alias(id, name, t, &ty.docs);
                                     }
                                 }
                                 _ => self.type_alias(id, name, t, &ty.docs),
                             }
-                        },
+                        }
                         _ => self.type_alias(id, name, t, &ty.docs),
                     };
-                },
+                }
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),

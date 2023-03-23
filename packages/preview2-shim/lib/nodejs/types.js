@@ -1,99 +1,99 @@
-export function dropFields(fields) {
+export function dropFields(_fields) {
   console.log("[types] Drop fields");
 }
-export function newFields(entries) {
+export function newFields(_entries) {
   console.log("[types] New fields");
 }
-export function fieldsGet(fields, name) {
+export function fieldsGet(_fields, _name) {
   console.log("[types] Fields get");
 }
-export function fieldsSet(fields, name, value) {
+export function fieldsSet(_fields, _name, _value) {
   console.log("[types] Fields set");
 }
-export function fieldsDelete(fields, name) {
+export function fieldsDelete(_fields, _name) {
   console.log("[types] Fields delete");
 }
-export function fieldsAppend(fields, name, value) {
+export function fieldsAppend(_fields, _name, _value) {
   console.log("[types] Fields append");
 }
-export function fieldsEntries(fields) {
+export function fieldsEntries(_fields) {
   console.log("[types] Fields entries");
 }
-export function fieldsClone(fields) {
+export function fieldsClone(_fields) {
   console.log("[types] Fields clone");
 }
 export function finishIncomingStream(s) {
   console.log(`[types] Finish incoming stream ${s}`);
 }
-export function finishOutgoingStream(s, trailers) {
+export function finishOutgoingStream(s, _trailers) {
   console.log(`[types] Finish outgoing stream ${s}`);
 }
-export function dropIncomingRequest(req) {
+export function dropIncomingRequest(_req) {
   console.log("[types] Drop incoming request");
 }
-export function dropOutgoingRequest(req) {
+export function dropOutgoingRequest(_req) {
   console.log("[types] Drop outgoing request");
 }
-export function incomingRequestMethod(req) {
+export function incomingRequestMethod(_req) {
   console.log("[types] Incoming request method");
 }
-export function incomingRequestPath(req) {
+export function incomingRequestPath(_req) {
   console.log("[types] Incoming request path");
 }
-export function incomingRequestQuery(req) {
+export function incomingRequestQuery(_req) {
   console.log("[types] Incoming request query");
 }
-export function incomingRequestScheme(req) {
+export function incomingRequestScheme(_req) {
   console.log("[types] Incoming request scheme");
 }
-export function incomingRequestAuthority(req) {
+export function incomingRequestAuthority(_req) {
   console.log("[types] Incoming request authority");
 }
-export function incomingRequestHeaders(req) {
+export function incomingRequestHeaders(_req) {
   console.log("[types] Incoming request headers");
 }
-export function incomingRequestConsume(req) {
+export function incomingRequestConsume(_req) {
   console.log("[types] Incoming request consume");
 }
-export function newOutgoingRequest(method, path, query, scheme, authority, headers) {
+export function newOutgoingRequest(_method, _path, _query, _scheme, _authority, _headers) {
   console.log("[types] New outgoing request");
 }
-export function outgoingRequestWrite(req) {
+export function outgoingRequestWrite(_req) {
   console.log("[types] Outgoing request write");
 }
-export function dropResponseOutparam(res) {
+export function dropResponseOutparam(_res) {
   console.log("[types] Drop response outparam");
 }
-export function setResponseOutparam(response) {
+export function setResponseOutparam(_response) {
   console.log("[types] Drop fields");
 }
-export function dropIncomingResponse(res) {
+export function dropIncomingResponse(_res) {
   console.log("[types] Drop incoming response");
 }
-export function dropOutgoingResponse(res) {
+export function dropOutgoingResponse(_res) {
   console.log("[types] Drop outgoing response");
 }
-export function incomingResponseStatus(res) {
+export function incomingResponseStatus(_res) {
   console.log("[types] Incoming response status");
 }
-export function incomingResponseHeaders(res) {
+export function incomingResponseHeaders(_res) {
   console.log("[types] Incoming response headers");
 }
-export function incomingResponseConsume(res) {
+export function incomingResponseConsume(_res) {
   console.log("[types] Incoming response consume");
 }
-export function newOutgoingResponse(statusCode, headers) {
+export function newOutgoingResponse(_statusCode, _headers) {
   console.log("[types] New outgoing response");
 }
-export function outgoingResponseWrite(res) {
+export function outgoingResponseWrite(_res) {
   console.log("[types] Outgoing response write");
 }
-export function dropFutureIncomingResponse(f) {
+export function dropFutureIncomingResponse(_f) {
   console.log("[types] Drop future incoming response");
 }
-export function futureIncomingResponseGet(f) {
+export function futureIncomingResponseGet(_f) {
   console.log("[types] Future incoming response get");
 }
-export function listenToFutureIncomingResponse(f) {
+export function listenToFutureIncomingResponse(_f) {
   console.log("[types] Listen to future incoming response");
 }

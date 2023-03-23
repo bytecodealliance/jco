@@ -10,6 +10,7 @@ module.exports = {
         "sourceType": "module"
     },
     "rules": {
-      "no-sparse-arrays": 0
+      "no-sparse-arrays": 0,
+      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
     }
 };
