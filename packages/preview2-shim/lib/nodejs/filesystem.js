@@ -56,3 +56,9 @@ export function getType(fd) {
 export function dropDirectoryEntryStream(s) {
   console.log(`[filesystem] CLOSE DIR ENTRY STREAM ${s}`);
 }
+
+// backwards compat
+export function getPreopens() {
+  return [];
+}
+export { getFlags as flags, getType as todoType, dropDirectoryEntryStream as dropDirEntryStream }

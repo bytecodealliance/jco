@@ -83,8 +83,6 @@ See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for mo
 
 ## API
 
-The below is an outline of the available API functions, see [api.d.ts](api.d.ts) file for the exact options.
-
 #### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
 
 Transpile a Component to JS.
