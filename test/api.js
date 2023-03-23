@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadataShow, metadataAdd } from '../src/api.js';
+import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadataShow, preview1AdapterReactorPath } from '../src/api.js';
 
 export async function apiTest (fixtures) {
   suite('API', () => {
@@ -103,7 +103,7 @@ export async function apiTest (fixtures) {
     test('Component new adapt', async () => {
       const component = await readFile(`test/fixtures/exitcode.wasm`);
 
-      const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile('test/fixtures/wasi_snapshot_preview1.reactor.wasm')]]);
+      const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile(preview1AdapterReactorPath())]]);
 
       await print(generatedComponent);
     });
