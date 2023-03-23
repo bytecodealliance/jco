@@ -18,10 +18,10 @@
 
 Features include:
 
-* Creating WebAssembly Components from JavaScript sources and a WIT world
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
 * Optimization helpers for Components via Binaryen.
 * Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments.
+* "Componentize" for WebAssembly Components from JavaScript sources and a WIT world
 
 For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
@@ -65,15 +65,25 @@ Commands:
   help [command]                        display help for command
 ```
 
+### Componentize
+
+To componentize a JS file run:
+
+```
+jco componentize app.js --world world.wit -o component.wasm
+```
+
+Creates a component from a JS module implementing a WIT world definition, via a Spidermonkey engine embedding.
+
+Currently requires an explicit install of the componentize-js engine via `npm install @bytecodealliance/componentize-js`.
+
+See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
+
+> Additional engines may be supported in future via an `--engine` field or otherwise.
+
 ## API
 
 The below is an outline of the available API functions, see [api.d.ts](api.d.ts) file for the exact options.
-
-#### `componentize(jsSource: String, witWorld: String, opts?): Promise<{ component: Uint8Array }>`
-
-Creates a component from a JS file and WIT world definition, via a Spidermonkey engine embedding.
-
-See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
 
 #### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
 

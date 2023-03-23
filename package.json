@@ -6,9 +6,6 @@
   },
   "type": "module",
   "private": true,
-  "dependencies": {
-    "@bytecodealliance/componentize-js": "^0.0.1"
-  },
   "devDependencies": {
     "@types/node": "^18.11.17",
     "@typescript-eslint/eslint-plugin": "^5.41.0",

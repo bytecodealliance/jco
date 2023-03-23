@@ -1,8 +1,13 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { componentize as componentizeFn } from '@bytecodealliance/componentize-js';
 import c from 'chalk-template';
 
 export async function componentize (jsSource, opts) {
+  let componentizeFn;
+  try {
+    ({ componentize: componentizeFn } = await import('@bytecodealliance/componentize-js'));
+  } catch (e) {
+    throw new Error(`componentize-js must first be installed separately via "npm install @bytecodealliance/componentize-js".`);
+  }
   const source = await readFile(jsSource, 'utf8');
   const wit = await readFile(opts.wit, 'utf8');
   const { component, imports } = await componentizeFn(source, wit);
