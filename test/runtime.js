@@ -6,6 +6,7 @@ export async function runtimeTest (fixtures) {
   suite('Runtime', () => {
     
     for (const fixture of fixtures) {
+      if (fixture.startsWith('dummy_')) continue;
       const runtimeJs = fixture.replace('.component.wasm', '.js');
       if (!existsSync(`test/output/${runtimeJs}`))
         continue;
