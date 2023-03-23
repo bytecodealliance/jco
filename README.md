@@ -73,7 +73,7 @@ To componentize a JS file run:
 jco componentize app.js --world world.wit -o component.wasm
 ```
 
-Creates a component from a JS file and WIT world definition, via a Spidermonkey engine embedding.
+Creates a component from a JS module implementing a WIT world definition, via a Spidermonkey engine embedding.
 
 Currently requires an explicit install of the componentize-js engine via `npm install @bytecodealliance/componentize-js`.
 

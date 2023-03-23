@@ -4,7 +4,7 @@ import c from 'chalk-template';
 export async function componentize (jsSource, opts) {
   let componentizeFn;
   try {
-    ({ componentize: componentizeFn } = await('@bytecodealliance/componentize-js'));
+    ({ componentize: componentizeFn } = await import('@bytecodealliance/componentize-js'));
   } catch (e) {
     throw new Error(`componentize-js must first be installed separately via "npm install @bytecodealliance/componentize-js".`);
   }
