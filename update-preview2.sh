@@ -1,9 +1,10 @@
 cd lib
 rm wasi_snapshot_preview1.command.wasm
 rm wasi_snapshot_preview1.reactor.wasm
-rm dummy_proxy.component.wasm
-rm dummy_reactor.component.wasm
 wget https://github.com/bytecodealliance/preview2-prototyping/releases/download/latest/wasi_snapshot_preview1.command.wasm
 wget https://github.com/bytecodealliance/preview2-prototyping/releases/download/latest/wasi_snapshot_preview1.reactor.wasm
+cd ../test/fixtures
+rm dummy_proxy.component.wasm
+rm dummy_reactor.component.wasm
 wget https://github.com/bytecodealliance/preview2-prototyping/releases/download/latest/dummy_proxy.component.wasm
 wget https://github.com/bytecodealliance/preview2-prototyping/releases/download/latest/dummy_reactor.component.wasm
