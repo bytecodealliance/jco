@@ -1,7 +1,7 @@
 import { runAsWorker } from "./synckit/index.js";
 
 /**
- * @param {import("../types/http").Request} req
+ * @param {import("../types/imports/types").Request} req
  * @returns {Promise<string>}
  */
 async function makeRequest(req) {

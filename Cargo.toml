@@ -1,3 +1,18 @@
+[package]
+name = "jco"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "jco"
+path = "bin/main.rs"
+
+[build-dependencies]
+js-component-bindgen = { path = "./crates/js-component-bindgen", features = ['raw-bindgen'] }
+wit-component = { workspace = true }
+
+
 [workspace]
 members = ["crates/js-component-bindgen", "crates/js-component-bindgen-component", "crates/wasm-tools-component"]
 resolver = "2"

@@ -236,6 +236,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "jco"
+version = "0.1.0"
+dependencies = [
+ "js-component-bindgen",
+ "wit-component",
+]
+
+[[package]]
 name = "js-component-bindgen"
 version = "0.1.0"
 dependencies = [

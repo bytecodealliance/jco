@@ -1,7 +1,7 @@
 import { UnexpectedError } from "../http/error.js";
 
 /**
- * @param {import("../types/http").Request} req
+ * @param {import("../types/imports/types").Request} req
  * @returns {string}
  */
 export function send(req) {

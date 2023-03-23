@@ -1413,7 +1413,31 @@ impl<'a> JsInterface<'a> {
                 TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
                 TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => self.type_alias(id, name, t, &ty.docs),
+                TypeDefKind::Type(t) => {
+                    match t {
+                        Type::Id(type_def_id) => {
+                            let ty = &self.resolve.types[*type_def_id];
+                            match ty.owner {
+                                TypeOwner::Interface(owner) => {
+                                    let interface = &self.resolve.interfaces[owner].name;
+                                    if ty.name == Some(name.clone()) && iface.name != *interface {
+                                        let name = name.to_upper_camel_case();
+                                        let interface_name = interface.clone().unwrap();
+                                        uwriteln!(
+                                            self.src.ts,
+                                            "import type {{ {name} }} from '../imports/{interface_name}';",
+                                        );
+                                        self.src.ts(&format!("export {{ {} }};\n", name));
+                                    } else {
+                                        self.type_alias(id, name, t, &ty.docs);
+                                    }
+                                }
+                                _ => self.type_alias(id, name, t, &ty.docs),
+                            }
+                        }
+                        _ => self.type_alias(id, name, t, &ty.docs),
+                    };
+                }
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
