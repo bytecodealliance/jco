@@ -9,7 +9,7 @@
 //   ctim: Timestamp,
 // }
 
-export function flags(fd) {
+export function getFlags(fd) {
   console.log(`[filesystem] FLAGS FOR ${fd}`);
 }
 
@@ -49,14 +49,10 @@ export function stat(fd) {
   console.log(`[filesystem] STAT: ${fd}`);
 }
 
-export function todoType(fd) {
+export function getType(fd) {
   console.log(`[filesystem] TODO TYPE: ${fd}`);
 }
 
-export function dropDirEntryStream(s) {
+export function dropDirectoryEntryStream(s) {
   console.log(`[filesystem] CLOSE DIR ENTRY STREAM ${s}`);
-}
-
-export function getPreopens () {
-  console.log(`[filesystem] GET PREOPENS`);
 }

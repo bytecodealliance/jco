@@ -12,3 +12,7 @@ export function now(clock) {
   }
   console.log("[clocks] UNKNOWN CLOCK");
 }
+
+export function instanceMonotonicClock () {
+  return 0;
+}

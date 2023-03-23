@@ -10,3 +10,7 @@ export function now(clock) {
 export function resolution(clock) {
   console.log(`[clocks] Wall clock resolution ${clock}`);
 }
+
+export function instanceWallClock () {
+  return 1;
+}
