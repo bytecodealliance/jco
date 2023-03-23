@@ -151,7 +151,7 @@ export async function cliTest (fixtures) {
             'new',
             'test/fixtures/exitcode.wasm',
             '--adapt',
-            'lib/wasi_snapshot_preview1.reactor.wasm',
+            'wasi_snapshot_preview1=lib/wasi_snapshot_preview1.reactor.wasm',
             '-o', outFile);
         strictEqual(stderr, '');
         {
