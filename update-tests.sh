@@ -11,11 +11,3 @@ do
   echo "cp $t ../test/fixtures/${name}.component.wasm"
   cp $t ../test/fixtures/${name}.component.wasm
 done
-
-cd ../test/fixtures
-rm wasi_snapshot_preview1.reactor.wasm
-rm dummy_proxy.component.wasm
-rm dummy_reactor.component.wasm
-wget https://github.com/bytecodealliance/preview2-prototyping/releases/download/latest/wasi_snapshot_preview1.reactor.wasm
-wget https://github.com/bytecodealliance/preview2-prototyping/releases/download/latest/dummy_proxy.component.wasm
-wget https://github.com/bytecodealliance/preview2-prototyping/releases/download/latest/dummy_reactor.component.wasm
