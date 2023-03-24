@@ -70,7 +70,7 @@ Commands:
 To componentize a JS file run:
 
 ```
-jco componentize app.js --world world.wit -o component.wasm
+jco componentize app.js --wit world.wit -o component.wasm
 ```
 
 Creates a component from a JS module implementing a WIT world definition, via a Spidermonkey engine embedding.
