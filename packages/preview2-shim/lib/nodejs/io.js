@@ -1,33 +1,25 @@
-export function dropInputStream(f) {
-  console.log(`[io] Drop input stream ${f}`);
-}
-
-export function dropOutputStream(f) {
-  console.log(`[io] Drop output stream ${f}`);
-}
-
-export function read(src, len) {
-  console.log(`[io] Read ${src}`, len);
-}
-
-export function write(dst, buf) {
-  switch (dst) {
+export function read(s, len) {
+  switch (s) {
     case 0:
-      throw new Error(`TODO: write stdin`);
-    case 1:
-      process.stdout.write(buf);
-      return BigInt(buf.byteLength);
-    case 2:
-      throw new Error(`TODO: write stdout`);
+      return [process.stdin.read(len), true];
     default:
-      throw new Error(`TODO: write ${dst}`);
+      throw new Error(`TODO: write ${s}`);
   }
 }
 
-export function skip(src, len) {
-  console.log(`[io] Skip ${src}`, len);
-}
-
-export function write_repeated(dst, byte, len) {
-  console.log(`[io] Write repeated ${dst}`, byte, len);
+export function write(s, buf) {
+  switch (s) {
+    case 0:
+      throw new Error(`TODO: write stdin`);
+    case 1: {
+      process.stdout.write(buf);
+      return BigInt(buf.byteLength);
+    }
+    case 2: {
+      process.stderr.write(buf);
+      return BigInt(buf.byteLength);
+    }
+    default:
+      throw new Error(`TODO: write ${s}`);
+  }
 }

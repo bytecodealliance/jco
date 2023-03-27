@@ -25,8 +25,11 @@ export function write(s, buf) {
       console.log(decoder.decode(buf));
       return BigInt(buf.byteLength);
     }
-    case 2:
-      throw new Error(`TODO: write stdout`);
+    case 2: {
+      const decoder = new TextDecoder();
+      console.error(decoder.decode(buf));
+      return BigInt(buf.byteLength);
+    }
     default:
       throw new Error(`TODO: write ${s}`);
   }
