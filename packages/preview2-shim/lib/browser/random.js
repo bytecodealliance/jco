@@ -1,7 +1,7 @@
 const MAX_BYTES = 65536;
 
 export function getRandomBytes(len) {
-  const bytes = new Uint8Array(len);
+  const bytes = new Uint8Array(Number(len));
 
   if (len > MAX_BYTES) {
     // this is the max bytes crypto.getRandomValues
