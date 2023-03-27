@@ -9,19 +9,24 @@ export function send(req) {
   try {
     const xhr = new XMLHttpRequest();
     xhr.open(req.method.toString(), req.uri, false);
-    for (let [name, value] of req.headers) {
-      if (name !== "user-agent") {
+    const requestHeaders = new Headers(req.headers);
+    for (let [name, value] of requestHeaders.entries()) {
+      if (name !== "user-agent" && name !== "host") {
         xhr.setRequestHeader(name, value);
       }
     }
-    xhr.send(req.body.length > 0 ? req.body : null);
+    xhr.send(req.body && req.body.length > 0 ? req.body : null);
     const body = xhr.response ? new TextEncoder().encode(xhr.response) : undefined;
+    const headers = [];
+    xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).forEach((line) => {
+      var parts = line.split(': ');
+      var key = parts.shift();
+      var value = parts.join(': ');
+      headers.push([key, value]);
+    });
     return {
       status: xhr.status,
-      headers: xhr
-        .getAllResponseHeaders()
-        .trim()
-        .split(/[\r\n]+/),
+      headers,
       body,
     };
   } catch (err) {
