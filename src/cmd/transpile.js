@@ -91,16 +91,17 @@ export async function transpileComponent (component, opts = {}) {
   if (opts.wasiShim) {
     opts.map = Object.assign({
       'environment-preopens': '@bytecodealliance/preview2-shim/environment-preopens',
-      'instance-wall-clock': '@bytecodealliance/preview2-shim/instance-wall-clock',
-      'instance-monotonic-clock': '@bytecodealliance/preview2-shim/instance-monotonic-clock',
-      'streams': '@bytecodealliance/preview2-shim/streams',
-      'monotonic-clock': '@bytecodealliance/preview2-shim/monotonic-clock',
-      'filesystem': '@bytecodealliance/preview2-shim/filesystem',
-      'wall-clock': '@bytecodealliance/preview2-shim/wall-clock',
       'environment': '@bytecodealliance/preview2-shim/environment',
-      'random': '@bytecodealliance/preview2-shim/random',
       'exit': '@bytecodealliance/preview2-shim/exit',
-      'stderr': '@bytecodealliance/preview2-shim/stderr'
+      'filesystem': '@bytecodealliance/preview2-shim/filesystem',
+      'instance-monotonic-clock': '@bytecodealliance/preview2-shim/instance-monotonic-clock',
+      'instance-wall-clock': '@bytecodealliance/preview2-shim/instance-wall-clock',
+      'monotonic-clock': '@bytecodealliance/preview2-shim/monotonic-clock',
+      'preopens': '@bytecodealliance/preview2-shim/preopens',
+      'random': '@bytecodealliance/preview2-shim/random',
+      'stderr': '@bytecodealliance/preview2-shim/stderr',
+      'streams': '@bytecodealliance/preview2-shim/streams',
+      'wall-clock': '@bytecodealliance/preview2-shim/wall-clock'
     }, opts.map || {});
   }
 
