@@ -199,7 +199,7 @@ export async function cliTest (fixtures) {
         strictEqual(stderr, '');
         const outDir = fileURLToPath(new URL('./output/componentize', import.meta.url));
         {
-          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', 'componentize', '--map', 'wasi-*=@bytecodealliance/preview2-shim/*', '-o', outDir);
+          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', 'componentize', '--wasi-shim', '-o', outDir);
           strictEqual(stderr, '');
         }
         const m = await import(`${outDir}/componentize.js`);

@@ -12,10 +12,10 @@
  * @typedef {import("../../types/imports/types").RequestOptions} RequestOptions
  * @typedef {import("../../types/imports/types").Scheme} Scheme
  * @typedef {import("../../types/imports/types").StatusCode} StatusCode
- * 
  */
 
-import { importObject } from "@bytecodealliance/preview2-shim";
+import * as io from '@bytecodealliance/preview2-shim/io';
+import * as http from '@bytecodealliance/preview2-shim/http';
 
 export class WasiHttp {
   requestIdBase = 1;
@@ -34,13 +34,11 @@ export class WasiHttp {
    * @param {RequestOptions | null} options
    * @returns {FutureIncomingResponse}
    */
-  handle = (requestId, options) => {
-    const opts = options ?? {
-      connectTimeoutMs: 600 * 1000,
-      firstByteTimeoutMs: 600 * 1000,
-      betweenBytesTimeoutMs: 600 * 1000,
-    };
-
+  handle = (requestId, {
+    connectTimeoutMs: _connectTimeoutMs = 600_000,
+    firstByteTimeoutMs: _firstByteTimeoutMs = 600_000,
+    betweenBytesTimeoutMs: _betweenBytesTimeoutMs = 600_000
+  } = {}) => {
     const request = this.requests.get(requestId);
     if (!request) throw Error("not found!");
 
@@ -59,7 +57,7 @@ export class WasiHttp {
     }
     const body =  this.streams.get(request.body);
 
-    const res = importObject["http"].send({
+    const res = http.send({
       method: request.method.tag,
       uri: url,
       headers: headers,
@@ -86,7 +84,7 @@ export class WasiHttp {
    */
   read = (stream, len) => {
     if (stream < 3) {
-      return importObject["io"].read(stream, buf);
+      return io.read(stream);
     }
     const s = this.streams.get(stream);
     if (!s) throw Error(`stream not found: ${stream}`);
@@ -105,7 +103,7 @@ export class WasiHttp {
    * @param {InputStream} stream 
    * @returns {Pollable}
    */
-  subscribeToInputStream = (stream) => {
+  subscribeToInputStream = (_stream) => {
     throw Error("unimplemented: subscribeToInputStream");
   }
 
@@ -125,7 +123,7 @@ export class WasiHttp {
    */
   write = (stream, buf) => {
     if (stream < 3) {
-      return importObject["io"].write(stream, buf);
+      return io.write(stream, buf);
     }
     this.streams.set(stream, buf);
     return BigInt(buf.byteLength);
@@ -135,7 +133,7 @@ export class WasiHttp {
    * @param {OutputStream} stream 
    * @returns {Pollable}
    */
-  subscribeToOutputStream = (stream) => {
+  subscribeToOutputStream = (_stream) => {
     throw Error("unimplemented: subscribeToOutputStream");
   }
 

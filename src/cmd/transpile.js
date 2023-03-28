@@ -88,6 +88,22 @@ export async function transpileComponent (component, opts = {}) {
     ({ component } = await optimizeComponent(component, opts));
   }
 
+  if (opts.wasiShim) {
+    opts.map = Object.assign({
+      'environment-preopens': '@bytecodealliance/preview2-shim/environment-preopens',
+      'instance-wall-clock': '@bytecodealliance/preview2-shim/instance-wall-clock',
+      'instance-monotonic-clock': '@bytecodealliance/preview2-shim/instance-monotonic-clock',
+      'streams': '@bytecodealliance/preview2-shim/streams',
+      'monotonic-clock': '@bytecodealliance/preview2-shim/monotonic-clock',
+      'filesystem': '@bytecodealliance/preview2-shim/filesystem',
+      'wall-clock': '@bytecodealliance/preview2-shim/wall-clock',
+      'environment': '@bytecodealliance/preview2-shim/environment',
+      'random': '@bytecodealliance/preview2-shim/random',
+      'exit': '@bytecodealliance/preview2-shim/exit',
+      'stderr': '@bytecodealliance/preview2-shim/stderr'
+    }, opts.map || {});
+  }
+
   let { files, imports, exports } = generate(component, {
     name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? {}),
