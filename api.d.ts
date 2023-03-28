@@ -31,6 +31,9 @@ export interface TranspileOpts {
   /// if using optimize, custom optimization options
   /// (defaults to best optimization, but this is very slow)
   optArgs?: string[],
+  /// rewrite WASI imports to the @bytecodealliance/preview2-shim
+  /// defaults to false
+  wasiShim?: boolean
 }
 
 /**

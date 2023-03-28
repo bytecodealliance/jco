@@ -8,6 +8,7 @@
   "private": true,
   "devDependencies": {
     "@bytecodealliance/componentize-js": "0.0.3",
+    "@bytecodealliance/jco": "^0.5.2",
     "@types/node": "^18.11.17",
     "@typescript-eslint/eslint-plugin": "^5.41.0",
     "@typescript-eslint/parser": "^5.41.0",
@@ -16,7 +17,6 @@
     "chalk-template": "^0.4.0",
     "commander": "^9.4.1",
     "eslint": "^8.30.0",
-    "js-component-tools": "^0.4.0",
     "mkdirp": "^1.0.4",
     "mocha": "^10.2.0",
     "ora": "^6.1.2",
@@ -26,7 +26,7 @@
   "scripts": {
     "build": "npm run build:set-last && npm run build:dev && ./build-dist.sh",
     "build:self": "npm run build:set-self && npm run build:dev && ./build-dist.sh",
-    "build:set-last": "echo './node_modules/.bin/jsct $@' > jco.sh && chmod +x jco.sh",
+    "build:set-last": "echo './node_modules/.bin/jco $@' > jco.sh && chmod +x jco.sh",
     "build:set-self": "echo './src/jco.js $@' > jco.sh && chmod +x jco.sh",
     "build:dev": "npm run build:wasm && mkdir -p obj && npm run build:js-component-bindgen-component && npm run build:wasm-tools",
     "build:wasm": "cargo build --workspace --target wasm32-unknown-unknown --release",
