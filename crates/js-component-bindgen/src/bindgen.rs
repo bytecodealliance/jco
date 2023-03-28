@@ -1413,31 +1413,7 @@ impl<'a> JsInterface<'a> {
                 TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
                 TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => {
-                    match t {
-                        Type::Id(type_def_id) => {
-                            let ty = &self.resolve.types[*type_def_id];
-                            match ty.owner {
-                                TypeOwner::Interface(owner) => {
-                                    let interface = &self.resolve.interfaces[owner].name;
-                                    if ty.name == Some(name.clone()) && iface.name != *interface {
-                                        let name = name.to_upper_camel_case();
-                                        let interface_name = interface.clone().unwrap();
-                                        uwriteln!(
-                                            self.src.ts,
-                                            "import type {{ {name} }} from '../imports/{interface_name}';",
-                                        );
-                                        self.src.ts(&format!("export {{ {} }};\n", name));
-                                    } else {
-                                        self.type_alias(id, name, t, &ty.docs);
-                                    }
-                                }
-                                _ => self.type_alias(id, name, t, &ty.docs),
-                            }
-                        }
-                        _ => self.type_alias(id, name, t, &ty.docs),
-                    };
-                }
+                TypeDefKind::Type(t) => self.type_alias(id, name, t, &iface.name, &ty.docs),
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
@@ -1772,12 +1748,40 @@ impl<'a> JsInterface<'a> {
         self.src.ts(";\n");
     }
 
-    fn type_alias(&mut self, _id: TypeId, name: &str, ty: &Type, docs: &Docs) {
-        self.docs(docs);
-        self.src
-            .ts(&format!("export type {} = ", name.to_upper_camel_case()));
-        self.print_ty(ty, Mode::Lift);
-        self.src.ts(";\n");
+    fn type_alias(
+        &mut self,
+        _id: TypeId,
+        name: &str,
+        ty: &Type,
+        interface: &Option<String>,
+        docs: &Docs,
+    ) {
+        let owner = match ty {
+            Type::Id(type_def_id) => {
+                let ty = &self.resolve.types[*type_def_id];
+                match ty.owner {
+                    TypeOwner::Interface(i) => self.resolve.interfaces[i].name.clone(),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        let type_name = name.to_upper_camel_case();
+        match owner {
+            Some(interface_name) if owner != *interface => {
+                uwriteln!(
+                    self.src.ts,
+                    "import type {{ {type_name} }} from '../imports/{interface_name}';",
+                );
+                self.src.ts(&format!("export {{ {} }};\n", type_name));
+            }
+            _ => {
+                self.docs(docs);
+                self.src.ts(&format!("export type {} = ", type_name));
+                self.print_ty(ty, Mode::Lift);
+                self.src.ts(";\n");
+            }
+        }
     }
 
     fn type_list(&mut self, _id: TypeId, name: &str, ty: &Type, docs: &Docs) {

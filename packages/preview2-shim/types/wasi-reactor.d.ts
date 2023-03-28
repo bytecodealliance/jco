@@ -16,6 +16,7 @@ import { UdpCreateSocket as UdpCreateSocketImports } from './imports/udp-create-
 import { Random as RandomImports } from './imports/random';
 import { Environment as EnvironmentImports } from './imports/environment';
 import { EnvironmentPreopens as EnvironmentPreopensImports } from './imports/environment-preopens';
+import { Preopens as PreopensImports } from './imports/preopens';
 import { Exit as ExitImports } from './imports/exit';
 import { Stderr as StderrImports } from './imports/stderr';
 export interface ImportObject {
@@ -37,6 +38,7 @@ export interface ImportObject {
   'random': typeof RandomImports,
   'environment': typeof EnvironmentImports,
   'environment-preopens': typeof EnvironmentPreopensImports,
+  'preopens': typeof PreopensImports,
   'exit': typeof ExitImports,
   'stderr': typeof StderrImports,
 }

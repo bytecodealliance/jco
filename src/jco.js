@@ -38,6 +38,7 @@ program.command('transpile')
   .option('--tla-compat', 'enables compatibility for JS environments without top-level await support via an async $init promise export')
   .option('--no-nodejs-compat', 'disables compatibility in Node.js without a fetch global')
   .option('-M, --map <mappings...>', 'specifier=./output custom mappings for the component imports')
+  .option('-w, --wasi-shim', 'automatically rewrite WASI imports to use @bytecodealliance/preview2-shim')
   .option('--js', 'output JS instead of core WebAssembly')
   .option('-I, --instantiation', 'output for custom module instantiation')
   .option('-q, --quiet', 'disable logging')
@@ -114,7 +115,7 @@ function asyncAction (cmd) {
         await cmd.apply(null, args);
       }
       catch (e) {
-        process.stdout.write(`(jsct ${cmd.name}) `);
+        process.stdout.write(`(jco ${cmd.name}) `);
         if (typeof e === 'string') {
           console.error(c`{red.bold Error}: ${e}\n`);
         } else {
