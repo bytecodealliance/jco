@@ -34,11 +34,7 @@ export class WasiHttp {
    * @param {RequestOptions | null} options
    * @returns {FutureIncomingResponse}
    */
-  handle = (requestId, {
-    connectTimeoutMs: _connectTimeoutMs = 600_000,
-    firstByteTimeoutMs: _firstByteTimeoutMs = 600_000,
-    betweenBytesTimeoutMs: _betweenBytesTimeoutMs = 600_000
-  } = {}) => {
+  handle = (requestId, _options) => {
     const request = this.requests.get(requestId);
     if (!request) throw Error("not found!");
 
