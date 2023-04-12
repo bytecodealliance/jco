@@ -10,22 +10,26 @@
  * @typedef {import("../../types/imports/types").Method} Method
  * @typedef {import("../../types/imports/types").OutgoingRequest} OutgoingRequest
  * @typedef {import("../../types/imports/types").RequestOptions} RequestOptions
+ * @typedef {import("../../types/imports/types").Result} Result
  * @typedef {import("../../types/imports/types").Scheme} Scheme
  * @typedef {import("../../types/imports/types").StatusCode} StatusCode
- */
+*/
 
 import * as io from '@bytecodealliance/preview2-shim/io';
 import * as http from '@bytecodealliance/preview2-shim/http';
+import { UnexpectedError } from './error.js';
 
 export class WasiHttp {
   requestIdBase = 1;
   responseIdBase = 1;
   fieldsIdBase = 1;
-  streamsIdBase = 3;
+  streamIdBase = 3;
+  futureIdBase = 1;
   /** @type {Map<number,ActiveRequest>} */ requests = new Map();
   /** @type {Map<number,ActiveResponse>} */ responses = new Map();
   /** @type {Map<number,Map<string,string[]>>} */ fields = new Map();
   /** @type {Map<number,Uint8Array>} */ streams = new Map();
+  /** @type {Map<number,ActiveFuture>} */ futures = new Map();
 
   constructor() {}
 
@@ -66,11 +70,16 @@ export class WasiHttp {
       response.responseHeaders.set(key, [value]);
     }
     const buf = res.body;
-    response.body = this.streamsIdBase;
-    this.streamsIdBase = this.streamsIdBase + 1;
+    response.body = this.streamIdBase;
+    this.streamIdBase += 1;
     this.streams.set(response.body, buf);
     this.responses.set(responseId, response);
-    return responseId;
+
+    const futureId = this.futureIdBase;
+    this.futureIdBase += 1;
+    const future = new ActiveFuture(futureId, responseId);
+    this.futures.set(futureId, future);
+    return futureId;
   }
 
   /**
@@ -143,6 +152,13 @@ export class WasiHttp {
   }
 
   /**
+   * @param {Fields} fields
+   */
+  dropFields = (fields) => {
+    this.fields.delete(fields);
+  }
+
+  /**
    * @param {[string, string][]} entries
    * @returns {Fields}
    */
@@ -150,7 +166,7 @@ export class WasiHttp {
     const map = new Map(entries);
 
     const id = this.fieldsIdBase;
-    this.fieldsIdBase = id + 1;
+    this.fieldsIdBase += 1;
     this.fields.set(id, map);
 
     return id;
@@ -194,6 +210,17 @@ export class WasiHttp {
     this.requests.set(id, req);
     return id;
   }
+
+  /**
+   * @param {OutgoingRequest} request
+   * @returns {OutgoingStream}
+   */
+  outgoingRequestWrite = (request) => {
+    const req = this.requests.get(request);
+    req.body = this.streamIdBase;
+    this.streamIdBase += 1;
+    return req.body;
+  }
   
   /**
    * @param {IncomingResponse} response
@@ -218,7 +245,7 @@ export class WasiHttp {
   incomingResponseHeaders = (response) => {
     const r = this.responses.get(response);
     const id = this.fieldsIdBase;
-    this.fieldsIdBase = this.fieldsIdBase + 1;
+    this.fieldsIdBase += 1;
 
     this.fields.set(id, r.responseHeaders);
     return id;
@@ -231,6 +258,41 @@ export class WasiHttp {
   incomingResponseConsume = (response) => {
     const r = this.responses.get(response);
     return r.body;
+  }
+
+  /**
+   * @param {FutureIncomingResponse} future
+   */
+  dropFutureIncomingResponse = (future) => {
+    return this.futures.delete(future);
+  }
+
+  /**
+   * @param {FutureIncomingResponse} future
+   * @returns {Result<IncomingResponse, Error> | null}
+   */
+  futureIncomingResponseGet = (future) => {
+    const f = this.futures.get(future);
+    if (!f) {
+      return {
+        tag: "err",
+        val: UnexpectedError(`no such future ${f}`),
+      };
+    }
+    // For now this will assume the future will return
+    // the response immediately
+    const response = f.responseId;
+    const r = this.responses.get(response);
+    if (!r) {
+      return {
+        tag: "err",
+        val: UnexpectedError(`no such response ${response}`),
+      };
+    }
+    return {
+      tag: "ok",
+      val: response,
+    };
   }
 }
 
@@ -259,5 +321,15 @@ class ActiveResponse {
 
   constructor(id) {
     this.id = id;
+  }
+}
+
+class ActiveFuture {
+  /** @type {number} */ id;
+  /** @type {number} */ responseId;
+
+  constructor(id, responseId) {
+    this.id = id;
+    this.responseId = responseId;
   }
 }
