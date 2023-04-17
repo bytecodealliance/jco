@@ -33,8 +33,8 @@ export async function preview2Test () {
 
         const runPath = resolve(tmpdir, 'run.js');
         await writeFile(runPath, `
-          import { run } from './hello_stdout.js';
-          run();
+          import { main } from './hello_stdout.js';
+          main();
         `);
 
         await chmod(runPath, 0o777);
