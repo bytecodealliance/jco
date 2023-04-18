@@ -1,18 +1,14 @@
 import { hrtime } from "node:process";
 
-export function resolution(clock) {
-  console.log(`[clocks] Monotonic clock resolution ${clock}`);
+export function resolution() {
+  console.log(`[monotonic-clock] Monotonic clock resolution`);
 }
 
 let hrStart = hrtime.bigint();
-
-export function now(clock) {
-  if (clock === 0) {
-    return hrtime.bigint() - hrStart;
-  }
-  console.log("[clocks] UNKNOWN CLOCK");
+export function now() {
+  return hrtime.bigint() - hrStart;
 }
 
-export function instanceMonotonicClock () {
-  return 0;
+export function subscribe (_when, _absolute) {
+  console.log(`[monotonic-clock] Subscribe`);
 }

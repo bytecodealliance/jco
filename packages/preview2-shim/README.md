@@ -6,26 +6,16 @@ Currently supports Node.js and browser versions, but alternative implementations
 
 ## Implementation Status
 
-| Interface       | Node.js               |Browser               |
-| --------------- | ---------------------:|---------------------:|
-| Command         | :x:                   | :x:                  |
-| Default Clocks  | :heavy_check_mark:    | :heavy_check_mark:   |
-| DNS             | :x:                   | :x:                  |
-| Environment     | :x:                   | :x:                  |
-| Exit            | :heavy_check_mark:    | :heavy_check_mark:   |
-| Filesystem      | :x:                   | :x:                  |
-| Http            | Experimental          | Experimental         |
-| IO              | Partial               | Partial              |
-| IP              | :x:                   | :x:                  |
-| Logging         | :heavy_check_mark:    | :heavy_check_mark:   |
-| Monotonic Clock | Missing `resolution`  | Missing `resolution` |
-| Net             | :x:                   | :x:                  |
-| Poll            | :x:                   | :x:                  |
-| Random          | :heavy_check_mark:    | :heavy_check_mark:   |
-| Stderr          | :heavy_check_mark:    | :heavy_check_mark:   |
-| TCP             | :x:                   | :x:                  |
-| Timezone        | :x:                   | :x:                  |
-| Wall Clock      | Missing `resolution`  | Missing `resolution` |
+| Interface       | Node.js                      | Browser                      |
+| --------------- | ----------------------------:|-----------------------------:|
+| Clocks          | Pending timezone, resolution | Pending timezone, resolution |
+| Filesystem      | :x:                          | :x:                          |
+| HTTP            | :x:                          | :x:                          |
+| IO              | :x:                          | :x:                          |
+| Logging         | :heavy_check_mark:           | :heavy_check_mark:           |
+| Poll            | :x:                          | :x:                          |
+| Random          | :heavy_check_mark:           | :heavy_check_mark:           |
+| Sockets         | :x:                          | :x:                          |
 
 # License
 

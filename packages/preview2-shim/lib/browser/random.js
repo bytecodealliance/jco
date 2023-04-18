@@ -17,3 +17,16 @@ export function getRandomBytes(len) {
 
   return bytes;
 }
+
+export function getRandomU64 () {
+  return crypto.getRandomValues(new BigUint64Array(1))[0];
+}
+
+let insecureRandomValue1, insecureRandomValue2;
+export function insecureRandom () {
+  if (insecureRandomValue1 === undefined) {
+    insecureRandomValue1 = getRandomU64();
+    insecureRandomValue2 = getRandomU64();
+  }
+  return [insecureRandomValue1, insecureRandomValue2];
+}
