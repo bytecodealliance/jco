@@ -4,13 +4,9 @@ export function now(clock) {
     const nanoseconds = (Date.now() % 1000) * 1000 * 1000;
     return { seconds, nanoseconds };
   }
-  console.log("[clocks] UNKNOWN CLOCK");
+  console.log(`[wall-clock] now() UNKNOWN CLOCK ${clock}`);
 }
 
 export function resolution(clock) {
-  console.log(`[clocks] Wall clock resolution ${clock}`);
-}
-
-export function instanceWallClock () {
-  return 1;
+  console.log(`[wall-clock] Wall clock resolution ${clock}`);
 }
