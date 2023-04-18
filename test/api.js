@@ -97,7 +97,7 @@ export async function apiTest (fixtures) {
         tag: 'component',
         val: 4
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.7.4'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]])
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.8.1'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]])
     });
 
     test('Component new adapt', async () => {
