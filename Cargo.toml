@@ -31,12 +31,12 @@ heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "1.9"
 pulldown-cmark = { version = "0.8", default-features = false }
 wasm-encoder = "0.25.0"
-wasm-metadata = "0.3.1"
-wasmparser = "0.102.0"
-wasmprinter = "0.2.54"
+wasm-metadata = "0.4.0"
+wasmparser = "0.103.0"
+wasmprinter = "0.2.55"
 wasmtime = { version = "7.0.0", features = ["component-model"] }
 wasmtime-environ = "7.0.0"
-wat = "1.0.61"
+wat = "1.0.62"
 wit-bindgen = { git = 'https://github.com/bytecodealliance/wit-bindgen' }
-wit-component = { version = "0.7.4", features = ['dummy-module'] }
-wit-parser = "0.6.4"
+wit-component = { version = "0.8.1", features = ['dummy-module'] }
+wit-parser = "0.7.0"
