@@ -4,6 +4,8 @@ mod component;
 mod files;
 mod ns;
 mod source;
+mod function_bindgen;
+mod intrinsics;
 
 pub use bindgen::GenerationOpts;
 use wasmtime_environ::component::Export;
