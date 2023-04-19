@@ -9,7 +9,6 @@ import * as poll from "./poll.js";
 import * as preopens from "./preopens.js";
 import * as random from "./random.js";
 import * as streams from "./streams.js";
-import * as types from "./types.js";
 import * as wallClock from "./wall-clock.js";
 
 export const importObject = {
@@ -24,7 +23,6 @@ export const importObject = {
     "preopens": preopens,
     "random": random,
     "streams": streams,
-    "types": types,
     "wall-clock": wallClock,
 };
 
