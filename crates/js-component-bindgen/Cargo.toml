@@ -10,7 +10,9 @@ edition.workspace = true
 crate-type = ["lib"]
 
 [features]
-raw-bindgen = []
+default = ["transpile-bindgen"]
+transpile-bindgen = []
+componentize-bindgen = []
 
 [dependencies]
 anyhow = { workspace = true }
