@@ -51,7 +51,7 @@ impl exports::Exports for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         init();
 
-        let opts = js_component_bindgen::GenerationOpts {
+        let opts = js_component_bindgen::TranspileOpts {
             name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),
             instantiation: options.instantiation.unwrap_or(false),
@@ -59,12 +59,10 @@ impl exports::Exports for JsComponentBindgenComponent {
                 Some(map) => Some(map.into_iter().collect()),
                 None => None,
             },
-            compat: options.compat.unwrap_or(false),
             no_nodejs_compat: options.no_nodejs_compat.unwrap_or(false),
             base64_cutoff: options.base64_cutoff.unwrap_or(5000) as usize,
-            tla_compat: options.tla_compat.unwrap_or(false),
+            tla_compat: options.tla_compat.unwrap_or(options.compat.unwrap_or(false)),
             valid_lifting_optimization: options.valid_lifting_optimization.unwrap_or(false),
-            raw_bindgen: false,
         };
 
         let js_component_bindgen::Transpiled {

@@ -9,17 +9,15 @@ fn main() {
             let component = fs::read(&component_path).expect("component to be read from file");
 
             let import_map = HashMap::from([]);
-            let opts = js_component_bindgen::GenerationOpts {
+            let opts = js_component_bindgen::TranspileOpts {
                 name: format!("wasi-{}", world),
                 no_typescript: false,
                 instantiation: true,
                 map: Some(import_map),
-                compat: false,
                 no_nodejs_compat: true,
                 base64_cutoff: 5000_usize,
                 tla_compat: false,
                 valid_lifting_optimization: false,
-                raw_bindgen: false,
             };
 
             let transpiled = js_component_bindgen::transpile(component, opts)

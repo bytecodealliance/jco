@@ -1,11 +1,11 @@
+use crate::intrinsics::Intrinsic;
 use crate::source;
 use crate::{uwrite, uwriteln};
-use crate::intrinsics::Intrinsic;
 use heck::*;
-use std::collections::{BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::{StringEncoding};
+use wasmtime_environ::component::StringEncoding;
 use wit_parser::abi::{Bindgen, Bitcast, Instruction, WasmType};
 use wit_parser::*;
 
@@ -341,7 +341,10 @@ impl Bindgen for FunctionBindgen<'_> {
                     results.push(name);
                 }
 
-                uwrite!(self.src, "if (typeof {op0} === 'object' && {op0} !== null) {{\n");
+                uwrite!(
+                    self.src,
+                    "if (typeof {op0} === 'object' && {op0} !== null) {{\n"
+                );
 
                 for (i, chunk) in flags.flags.chunks(32).enumerate() {
                     let result_name = &results[i];
@@ -1118,10 +1121,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let realloc = self.realloc.as_ref().unwrap();
                 let ptr = format!("ptr{tmp}");
-                uwriteln!(
-                    self.src,
-                    "const {ptr} = {realloc}(0, 0, {align}, {size});",
-                );
+                uwriteln!(self.src, "const {ptr} = {realloc}(0, 0, {align}, {size});",);
                 results.push(ptr);
             }
 
@@ -1134,7 +1134,7 @@ impl Bindgen for FunctionBindgen<'_> {
 /// the "other type" is returned. If `Some` is returned that means that `ty`
 /// is `null | <return>`. If `None` is returned that means that `null` can't
 /// be used to represent `ty`.
-fn as_nullable<'a>(resolve: &'a Resolve, ty: &'a Type) -> Option<&'a Type> {
+pub fn as_nullable<'a>(resolve: &'a Resolve, ty: &'a Type) -> Option<&'a Type> {
     let id = match ty {
         Type::Id(id) => *id,
         _ => return None,
@@ -1167,11 +1167,11 @@ fn as_nullable<'a>(resolve: &'a Resolve, ty: &'a Type) -> Option<&'a Type> {
     }
 }
 
-fn maybe_null(resolve: &Resolve, ty: &Type) -> bool {
+pub fn maybe_null(resolve: &Resolve, ty: &Type) -> bool {
     as_nullable(resolve, ty).is_some()
 }
 
-fn array_ty(resolve: &Resolve, ty: &Type) -> Option<&'static str> {
+pub fn array_ty(resolve: &Resolve, ty: &Type) -> Option<&'static str> {
     match ty {
         Type::Bool => None,
         Type::U8 => Some("Uint8Array"),
