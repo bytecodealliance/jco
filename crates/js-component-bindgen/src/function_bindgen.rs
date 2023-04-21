@@ -17,7 +17,7 @@ pub enum ErrHandling {
 }
 
 pub struct FunctionBindgen<'a> {
-    pub intrinsics: BTreeSet<Intrinsic>,
+    pub intrinsics: &'a mut BTreeSet<Intrinsic>,
     pub valid_lifting_optimization: bool,
     pub sizes: &'a SizeAlign,
     pub err: ErrHandling,
@@ -113,7 +113,8 @@ impl Bindgen for FunctionBindgen<'_> {
     }
 
     fn return_pointer(&mut self, _size: usize, _align: usize) -> String {
-        unimplemented!()
+        println!("UNIMPLEMENTED");
+        return String::from("ptr");
     }
 
     fn is_list_canonical(&self, resolve: &Resolve, ty: &Type) -> bool {
@@ -128,7 +129,9 @@ impl Bindgen for FunctionBindgen<'_> {
         results: &mut Vec<String>,
     ) {
         match inst {
-            Instruction::GetArg { nth } => results.push(self.params[*nth].clone()),
+            Instruction::GetArg { nth } => {
+                results.push(self.params[*nth].clone())
+            }
             Instruction::I32Const { val } => results.push(val.to_string()),
             Instruction::ConstZero { tys } => {
                 for t in tys.iter() {
@@ -891,7 +894,8 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::ListCanonLower { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
-                let realloc = self.realloc.as_ref().unwrap();
+                let str = String::from("cabi_realloc");
+                let realloc = self.realloc.as_ref().unwrap_or(&str);
 
                 let size = self.sizes.size(element);
                 let align = self.sizes.align(element);
@@ -952,7 +956,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let encode = self.intrinsic(intrinsic);
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
-                let realloc = self.realloc.as_ref().unwrap();
+                let str = String::from("cabi_realloc");
+                let realloc = self.realloc.as_ref().unwrap_or(&str);
                 uwriteln!(
                     self.src,
                     "const ptr{tmp} = {encode}({}, {realloc}, {memory});",

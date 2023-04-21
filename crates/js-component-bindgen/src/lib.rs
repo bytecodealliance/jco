@@ -12,8 +12,6 @@ mod ts_bindgen;
 mod componentize_bindgen;
 #[cfg(feature = "transpile-bindgen")]
 mod transpile_bindgen;
-#[cfg(feature = "componentize-bindgen")]
-pub use componentize_bindgen::ComponentizeOpts;
 #[cfg(feature = "transpile-bindgen")]
 pub use transpile_bindgen::TranspileOpts;
 
@@ -67,10 +65,7 @@ pub struct ComponentInfo {
 /// Generate the JS transpilation bindgen for a given Wasm component binary
 /// Outputs the file map and import and export metadata for the generation
 #[cfg(feature = "transpile-bindgen")]
-pub fn transpile(
-    component: Vec<u8>,
-    opts: TranspileOpts,
-) -> Result<Transpiled, anyhow::Error> {
+pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
     let name = opts.name.clone();
     let mut files = files::Files::default();
 
@@ -169,13 +164,7 @@ pub fn transpile(
 }
 
 #[cfg(feature = "componentize-bindgen")]
-pub fn componentize(
-    component: Vec<u8>,
-    opts: ComponentizeOpts,
-) -> Result<Transpiled, anyhow::Error> {
-    let name = opts.name.clone();
-    let mut files = files::Files::default();
-
+pub fn componentize(component: Vec<u8>, name: String) -> Result<String, anyhow::Error> {
     let decoded = wit_component::decode(&name, &component)
         .context("failed to extract interface information from component")?;
 
@@ -196,48 +185,10 @@ pub fn componentize(
         .translate(&component)
         .context("failed to parse the input component")?;
 
-    let world = &resolve.worlds[world_id];
-    let imports = world
-        .imports
-        .iter()
-        .map(|impt| impt.0.to_string())
-        .map(|impt| {
-            if let Some(map) = &opts.map {
-                match map.get(&impt) {
-                    Some(impt) => impt.to_string(),
-                    None => impt.to_string(),
-                }
-            } else {
-                impt.to_string()
-            }
-        })
-        .collect();
+    let bindings =
+        componentize_bindgen::componentize_bindgen(&component, &modules, &resolve, world_id);
 
-    let exports = component
-        .exports
-        .iter()
-        .filter(|expt| {
-            matches!(
-                expt.1,
-                Export::Instance(_) | Export::Module(_) | Export::LiftedFunction { .. }
-            )
-        })
-        .map(|expt| (expt.0.to_lower_camel_case(), expt.1.clone()))
-        .collect();
-
-    componentize_bindgen::componentize_bindgen(
-        &name, &component, &modules, &resolve, world_id, opts, &mut files,
-    );
-
-    let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
-    for (name, source) in files.iter() {
-        files_out.push((name.to_string(), source.to_vec()));
-    }
-    Ok(Transpiled {
-        files: files_out,
-        imports,
-        exports,
-    })
+    Ok(bindings)
 }
 
 fn core_file_name(name: &str, idx: u32) -> String {

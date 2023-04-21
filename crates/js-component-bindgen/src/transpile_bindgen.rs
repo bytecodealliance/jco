@@ -510,7 +510,7 @@ impl Instantiator<'_> {
         }
 
         let mut f = FunctionBindgen {
-            intrinsics: BTreeSet::new(),
+            intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
             sizes: &self.sizes,
             err: if func.results.throws(self.resolve).is_some() {
@@ -541,9 +541,6 @@ impl Instantiator<'_> {
             func,
             &mut f,
         );
-        for intrinsic in f.intrinsics {
-            self.gen.intrinsic(intrinsic);
-        }
         self.src.js(&f.src);
         self.src.js("}");
     }

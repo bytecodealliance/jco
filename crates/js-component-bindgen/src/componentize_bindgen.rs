@@ -1,4 +1,3 @@
-use crate::files::Files;
 use crate::function_bindgen::{ErrHandling, FunctionBindgen};
 use crate::identifier::is_js_identifier;
 use crate::intrinsics::{render_intrinsics, Intrinsic};
@@ -6,7 +5,7 @@ use crate::source::Source;
 use crate::{uwrite, uwriteln};
 use heck::*;
 use indexmap::IndexMap;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
 use wasmtime_environ::component::{
@@ -17,19 +16,6 @@ use wasmtime_environ::{EntityIndex, ModuleTranslation, PrimaryMap};
 use wit_parser::abi::{AbiVariant, LiftLower};
 use wit_parser::*;
 
-// opts.name = "test".to_string();
-// opts.no_typescript = true;
-// opts.valid_lifting_optimization = true;
-// opts.compat = false;
-// opts.raw_bindgen = true;
-#[derive(Default, Clone)]
-pub struct ComponentizeOpts {
-    pub name: String,
-    /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of
-    /// component import specifiers to JS import specifiers.
-    pub map: Option<HashMap<String, String>>,
-}
-
 struct JsBindgen {
     /// The source code for the "main" file that's going to be created for the
     /// component we're generating bindings for. This is incrementally added to
@@ -37,36 +23,20 @@ struct JsBindgen {
     /// as a type-description of the input/output interfaces.
     src: Source,
 
-    /// JS output imports map from imported specifier, to a list of bindings
-    imports: HashMap<String, Vec<(String, String)>>,
-
-    /// Core module count
-    core_module_cnt: usize,
-
-    /// Various options for code generation.
-    pub opts: ComponentizeOpts,
-
     /// List of all intrinsics emitted to `src` so far.
     all_intrinsics: BTreeSet<Intrinsic>,
 }
 
 pub fn componentize_bindgen(
-    name: &str,
     component: &Component,
     modules: &PrimaryMap<StaticModuleIndex, ModuleTranslation<'_>>,
     resolve: &Resolve,
     id: WorldId,
-    opts: ComponentizeOpts,
-    files: &mut Files,
-) {
+) -> String {
     let mut bindgen = JsBindgen {
         src: Source::default(),
-        imports: HashMap::new(),
-        core_module_cnt: 0,
-        opts,
         all_intrinsics: BTreeSet::new(),
     };
-    bindgen.core_module_cnt = modules.len();
 
     // bindings is the actual `instantiate` method itself, created by this
     // structure.
@@ -86,43 +56,15 @@ pub fn componentize_bindgen(
 
     let mut output = Source::default();
 
-    let js_intrinsics = render_intrinsics(&mut bindgen.all_intrinsics, false, false);
+    let js_intrinsics = render_intrinsics(&mut bindgen.all_intrinsics, false, true);
 
     output.push_str(&js_intrinsics);
     output.push_str(&bindgen.src);
 
-    let mut bytes = output.as_bytes();
-    // strip leading newline
-    if bytes[0] == b'\n' {
-        bytes = &bytes[1..];
-    }
-    files.push(&format!("{name}.js"), bytes);
+    output.to_string()
 }
 
 impl JsBindgen {
-    fn map_import(&self, impt: &str) -> String {
-        if let Some(map) = self.opts.map.as_ref() {
-            for (key, mapping) in map {
-                if key == impt {
-                    return mapping.into();
-                }
-                if let Some(wildcard_idx) = key.find('*') {
-                    let lhs = &key[0..wildcard_idx];
-                    let rhs = &key[wildcard_idx + 1..];
-                    if impt.starts_with(lhs) && impt.ends_with(rhs) {
-                        let matched =
-                            &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
-                        return mapping.replace('*', matched);
-                    }
-                }
-            }
-            if let Some(mapping) = map.get(impt) {
-                return mapping.into();
-            }
-        }
-        impt.into()
-    }
-
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
         return intrinsic.name().to_string();
@@ -261,18 +203,6 @@ impl Instantiator<'_> {
         let index = import.index.as_u32();
         let callee = format!("lowering{index}Callee");
 
-        let import_specifier = self.gen.map_import(import_name);
-
-        let id = func.name.to_lower_camel_case();
-
-        // instance imports are otherwise hoisted
-        let imports_vec = self
-            .gen
-            .imports
-            .entry(import_specifier)
-            .or_insert(Vec::new());
-        imports_vec.push((id, callee.clone()));
-
         uwrite!(self.src, "\nfunction lowering{index}");
         let nparams = self
             .resolve
@@ -325,7 +255,7 @@ impl Instantiator<'_> {
         uwriteln!(self.src, ") {{");
 
         let mut f = FunctionBindgen {
-            intrinsics: BTreeSet::new(),
+            intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: true,
             sizes: &self.sizes,
             err: if func.results.throws(self.resolve).is_some() {
@@ -356,9 +286,6 @@ impl Instantiator<'_> {
             func,
             &mut f,
         );
-        for intrinsic in f.intrinsics {
-            self.gen.intrinsic(intrinsic);
-        }
         self.src.push_str(&f.src);
         self.src.push_str("}");
     }
