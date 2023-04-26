@@ -9,17 +9,7 @@ pub mod source;
 
 mod ts_bindgen;
 
-#[cfg(feature = "componentize-bindgen")]
-mod componentize_bindgen;
-#[cfg(feature = "componentize-bindgen")]
-pub use componentize_bindgen::Componentization;
-#[cfg(feature = "componentize-bindgen")]
-pub use componentize_bindgen::CoreFn;
-#[cfg(feature = "componentize-bindgen")]
-pub use componentize_bindgen::CoreTy;
-#[cfg(feature = "transpile-bindgen")]
 mod transpile_bindgen;
-#[cfg(feature = "transpile-bindgen")]
 pub use transpile_bindgen::TranspileOpts;
 
 use anyhow::{bail, Context};
@@ -168,33 +158,6 @@ pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, 
         imports,
         exports,
     })
-}
-
-#[cfg(feature = "componentize-bindgen")]
-pub fn componentize(component: Vec<u8>, name: &str) -> Result<Componentization, anyhow::Error> {
-    let decoded = wit_component::decode(&name, &component)
-        .context("failed to extract interface information from component")?;
-
-    let (resolve, world_id) = match decoded {
-        DecodedWasm::WitPackage(..) => bail!("unexpected wit package as input"),
-        DecodedWasm::Component(resolve, world_id) => (resolve, world_id),
-    };
-
-    let scope = ScopeVec::new();
-    let tunables = Tunables::default();
-    let mut types = ComponentTypesBuilder::default();
-    let mut validator = Validator::new_with_features(WasmFeatures {
-        component_model: true,
-        ..WasmFeatures::default()
-    });
-
-    let (component, _) = Translator::new(&tunables, &mut validator, &mut types, &scope)
-        .translate(&component)
-        .context("failed to parse the input component")?;
-
-    let bindings = componentize_bindgen::componentize_bindgen(&component, &resolve, world_id, name);
-
-    Ok(bindings)
 }
 
 fn core_file_name(name: &str, idx: u32) -> String {

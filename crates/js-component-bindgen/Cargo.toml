@@ -12,7 +12,6 @@ crate-type = ["lib"]
 [features]
 default = ["transpile-bindgen"]
 transpile-bindgen = []
-componentize-bindgen = []
 
 [dependencies]
 anyhow = { workspace = true }
