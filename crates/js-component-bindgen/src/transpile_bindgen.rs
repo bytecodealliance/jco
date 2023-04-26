@@ -9,6 +9,7 @@ use heck::*;
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
+use std::mem;
 use wasmtime_environ::component::{
     CanonicalOptions, Component, CoreDef, CoreExport, Export, ExportItem, GlobalInitializer,
     InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex,
@@ -291,7 +292,8 @@ impl Instantiator<'_> {
         }
 
         if self.gen.opts.instantiation {
-            self.src.js.push_str(&self.src.js_init);
+            let js_init = mem::take(&mut self.src.js_init);
+            self.src.js.push_str(&js_init);
             self.src.js("return ");
         }
 

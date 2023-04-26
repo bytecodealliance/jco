@@ -891,8 +891,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::ListCanonLower { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
-                let str = String::from("cabi_realloc");
-                let realloc = self.realloc.unwrap_or(&str);
+                let realloc = self.realloc.unwrap();
 
                 let size = self.sizes.size(element);
                 let align = self.sizes.align(element);
