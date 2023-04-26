@@ -9,7 +9,6 @@ use heck::*;
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
-use std::mem;
 use wasmtime_environ::component::{
     CanonicalOptions, Component, CoreDef, CoreExport, Export, ExportItem, GlobalInitializer,
     InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex,
@@ -292,8 +291,7 @@ impl Instantiator<'_> {
         }
 
         if self.gen.opts.instantiation {
-            let js_init = mem::take(&mut self.src.js_init);
-            self.src.js.push_str(&js_init);
+            self.src.js.push_str(&self.src.js_init);
             self.src.js("return ");
         }
 
@@ -452,24 +450,20 @@ impl Instantiator<'_> {
             .wasm_signature(AbiVariant::GuestImport, func)
             .params
             .len();
-        let prev = mem::take(&mut self.src);
         self.bindgen(
             nparams,
-            callee,
+            &callee,
             &import.options,
             func,
             AbiVariant::GuestImport,
         );
-        let latest = mem::replace(&mut self.src, prev);
-        assert!(latest.js_init.is_empty());
-        self.src.js(&latest.js);
         uwriteln!(self.src.js, "");
     }
 
     fn bindgen(
         &mut self,
         nparams: usize,
-        callee: String,
+        callee: &str,
         opts: &CanonicalOptions,
         func: &Function,
         abi: AbiVariant,
@@ -524,11 +518,11 @@ impl Instantiator<'_> {
             block_storage: Vec::new(),
             blocks: Vec::new(),
             callee,
-            memory,
-            realloc,
+            memory: memory.as_ref(),
+            realloc: realloc.as_ref(),
             tmp: 0,
             params,
-            post_return,
+            post_return: post_return.as_ref(),
             encoding: opts.string_encoding,
             src: source::Source::default(),
         };
@@ -677,7 +671,7 @@ impl Instantiator<'_> {
         let callee = self.core_def(def);
         self.bindgen(
             func.params.len(),
-            callee,
+            &callee,
             options,
             func,
             AbiVariant::GuestExport,

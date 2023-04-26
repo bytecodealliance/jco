@@ -1,15 +1,22 @@
 use anyhow::Result;
 mod files;
-mod function_bindgen;
 mod identifier;
-mod intrinsics;
 mod ns;
-mod source;
+
+pub mod function_bindgen;
+pub mod intrinsics;
+pub mod source;
 
 mod ts_bindgen;
 
 #[cfg(feature = "componentize-bindgen")]
 mod componentize_bindgen;
+#[cfg(feature = "componentize-bindgen")]
+pub use componentize_bindgen::Componentization;
+#[cfg(feature = "componentize-bindgen")]
+pub use componentize_bindgen::CoreFn;
+#[cfg(feature = "componentize-bindgen")]
+pub use componentize_bindgen::CoreTy;
 #[cfg(feature = "transpile-bindgen")]
 mod transpile_bindgen;
 #[cfg(feature = "transpile-bindgen")]
@@ -164,7 +171,7 @@ pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, 
 }
 
 #[cfg(feature = "componentize-bindgen")]
-pub fn componentize(component: Vec<u8>, name: String) -> Result<String, anyhow::Error> {
+pub fn componentize(component: Vec<u8>, name: &str) -> Result<Componentization, anyhow::Error> {
     let decoded = wit_component::decode(&name, &component)
         .context("failed to extract interface information from component")?;
 
@@ -181,12 +188,11 @@ pub fn componentize(component: Vec<u8>, name: String) -> Result<String, anyhow::
         ..WasmFeatures::default()
     });
 
-    let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)
+    let (component, _) = Translator::new(&tunables, &mut validator, &mut types, &scope)
         .translate(&component)
         .context("failed to parse the input component")?;
 
-    let bindings =
-        componentize_bindgen::componentize_bindgen(&component, &modules, &resolve, world_id);
+    let bindings = componentize_bindgen::componentize_bindgen(&component, &resolve, world_id, name);
 
     Ok(bindings)
 }

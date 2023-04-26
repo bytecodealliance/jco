@@ -26,11 +26,11 @@ pub struct FunctionBindgen<'a> {
     pub block_storage: Vec<source::Source>,
     pub blocks: Vec<(String, Vec<String>)>,
     pub params: Vec<String>,
-    pub memory: Option<String>,
-    pub realloc: Option<String>,
-    pub post_return: Option<String>,
+    pub memory: Option<&'a String>,
+    pub realloc: Option<&'a String>,
+    pub post_return: Option<&'a String>,
     pub encoding: StringEncoding,
-    pub callee: String,
+    pub callee: &'a str,
 }
 
 impl FunctionBindgen<'_> {
@@ -113,8 +113,7 @@ impl Bindgen for FunctionBindgen<'_> {
     }
 
     fn return_pointer(&mut self, _size: usize, _align: usize) -> String {
-        println!("UNIMPLEMENTED");
-        return String::from("ptr");
+        unimplemented!();
     }
 
     fn is_list_canonical(&self, resolve: &Resolve, ty: &Type) -> bool {
@@ -129,9 +128,7 @@ impl Bindgen for FunctionBindgen<'_> {
         results: &mut Vec<String>,
     ) {
         match inst {
-            Instruction::GetArg { nth } => {
-                results.push(self.params[*nth].clone())
-            }
+            Instruction::GetArg { nth } => results.push(self.params[*nth].clone()),
             Instruction::I32Const { val } => results.push(val.to_string()),
             Instruction::ConstZero { tys } => {
                 for t in tys.iter() {
@@ -895,7 +892,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
                 let str = String::from("cabi_realloc");
-                let realloc = self.realloc.as_ref().unwrap_or(&str);
+                let realloc = self.realloc.unwrap_or(&str);
 
                 let size = self.sizes.size(element);
                 let align = self.sizes.align(element);
@@ -957,7 +954,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
                 let str = String::from("cabi_realloc");
-                let realloc = self.realloc.as_ref().unwrap_or(&str);
+                let realloc = self.realloc.unwrap_or(&str);
                 uwriteln!(
                     self.src,
                     "const ptr{tmp} = {encode}({}, {realloc}, {memory});",
@@ -1060,8 +1057,8 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::CallInterface { func } => {
-                let err_payload = self.intrinsic(Intrinsic::GetErrorPayload);
                 if self.err == ErrHandling::ResultCatchHandler {
+                    let err_payload = self.intrinsic(Intrinsic::GetErrorPayload);
                     uwriteln!(
                         self.src,
                         "let ret;

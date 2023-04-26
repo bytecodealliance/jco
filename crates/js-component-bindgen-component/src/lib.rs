@@ -61,7 +61,9 @@ impl exports::Exports for JsComponentBindgenComponent {
             },
             no_nodejs_compat: options.no_nodejs_compat.unwrap_or(false),
             base64_cutoff: options.base64_cutoff.unwrap_or(5000) as usize,
-            tla_compat: options.tla_compat.unwrap_or(options.compat.unwrap_or(false)),
+            tla_compat: options
+                .tla_compat
+                .unwrap_or(options.compat.unwrap_or(false)),
             valid_lifting_optimization: options.valid_lifting_optimization.unwrap_or(false),
         };
 
