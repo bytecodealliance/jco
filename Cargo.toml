@@ -9,7 +9,7 @@ name = "jco"
 path = "bin/main.rs"
 
 [build-dependencies]
-js-component-bindgen = { path = "./crates/js-component-bindgen", features = ['raw-bindgen'] }
+js-component-bindgen = { path = "./crates/js-component-bindgen" }
 wit-component = { workspace = true }
 
 
