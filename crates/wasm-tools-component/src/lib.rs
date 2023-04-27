@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 use std::{path::PathBuf, sync::Once};
 use wasm_encoder::{Encode, Section};
 use wasm_metadata::Producers;
-use wasmparser;
 use wit_component::{ComponentEncoder, DecodedWasm, DocumentPrinter, StringEncoding};
 use wit_parser::{Resolve, UnresolvedPackage};
 
@@ -164,8 +163,8 @@ impl exports::Exports for WasmToolsJs {
                 .map_err(|e| e.to_string())?;
 
         let section = wasm_encoder::CustomSection {
-            name: "component-type",
-            data: &encoded,
+            name: "component-type".into(),
+            data: encoded.into(),
         };
 
         core_binary.push(section.id());
