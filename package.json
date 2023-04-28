@@ -7,7 +7,7 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "0.0.3",
+    "@bytecodealliance/componentize-js": "0.0.5",
     "@bytecodealliance/jco": "^0.5.2",
     "@types/node": "^18.11.17",
     "@typescript-eslint/eslint-plugin": "^5.41.0",

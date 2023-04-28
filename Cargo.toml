@@ -34,8 +34,8 @@ wasm-encoder = "0.26.0"
 wasm-metadata = "0.5.0"
 wasmparser = "0.104.0"
 wasmprinter = "0.2.56"
-wasmtime = { version = "8.0.0", features = ["component-model"] }
-wasmtime-environ = "8.0.0"
+wasmtime = { version = "8.0.1", features = ["component-model"] }
+wasmtime-environ = "8.0.1"
 wat = "1.0.63"
 wit-bindgen = { version = "0.6.0" }
 wit-component = { version = "0.8.2", features = ['dummy-module'] }
