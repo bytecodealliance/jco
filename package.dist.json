@@ -1,7 +1,7 @@
 {
   "name": "@bytecodealliance/jco",
   "description": "JavaScript tooling for working with WebAssembly Components",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "exports": "./api.mjs",
   "types": "api.d.ts",
   "author": "Guy Bedford",
