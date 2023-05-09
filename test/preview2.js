@@ -1,5 +1,5 @@
 import { strictEqual } from 'node:assert';
-import { readFile, rm, mkdir, writeFile, symlink, chmod, access, constants } from 'node:fs/promises';
+import { readFile, rm, mkdir, writeFile, symlink, chmod } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as crypto from 'node:crypto';
@@ -33,8 +33,8 @@ export async function preview2Test () {
 
         const runPath = resolve(tmpdir, 'run.js');
         await writeFile(runPath, `
-          import { main } from './hello_stdout.js';
-          main();
+          import { run } from './hello_stdout.js';
+          run();
         `);
 
         await chmod(runPath, 0o777);
