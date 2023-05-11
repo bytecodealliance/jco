@@ -41,6 +41,7 @@ export async function componentWit(file, opts) {
 }
 
 export async function componentNew(file, opts) {
+  console.log('COMPONENT NEW');
   const source = file ? await readFile(file) : null;
   let adapters = null;
   if (opts.adapt)

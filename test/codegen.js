@@ -28,7 +28,7 @@ export async function codegenTest (fixtures) {
       const name = fixture.replace('.component.wasm', '');
       test(`${fixture} transpile`, async () => {
         const flags = await readFlags(`test/runtime/${name}.ts`);
-        var { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);
+        var { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);
         strictEqual(stderr, '');
       });
 
