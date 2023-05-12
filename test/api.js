@@ -1,6 +1,7 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadataShow, preview1AdapterReactorPath } from '../src/api.js';
+import { fileURLToPath } from 'node:url';
 
 export async function apiTest (fixtures) {
   suite('API', () => {
@@ -77,7 +78,8 @@ export async function apiTest (fixtures) {
 
       strictEqual(wit.slice(0, 19), 'interface imports {');
 
-      const generatedComponent = await componentEmbed(null, wit, {
+      const generatedComponent = await componentEmbed({
+        witSource: wit,
         dummy: true,
         metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
       });
@@ -101,11 +103,9 @@ export async function apiTest (fixtures) {
     });
 
     test('Multi-file WIT', async () => {
-      const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
-
       const generatedComponent = await componentEmbed({
-        witPath: 'etst',
         dummy: true,
+        witPath: fileURLToPath(new URL('./fixtures/componentize/source.wit', import.meta.url)),
         metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
       });
       {
@@ -122,7 +122,7 @@ export async function apiTest (fixtures) {
       const meta = metadataShow(newComponent);
       deepStrictEqual(meta[0].metaType, {
         tag: 'component',
-        val: 4
+        val: 1
       });
       deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.8.2'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
     });

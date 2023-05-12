@@ -1,16 +1,9 @@
-// export interface DescriptorStat {
-//   dev: Device,
-//   ino: Inode,
-//   type: DescriptorType,
-//   nlink: Linkcount,
-//   size: Filesize,
-//   atim: Timestamp,
-//   mtim: Timestamp,
-//   ctim: Timestamp,
-// }
+import { openSync, constants, fstatSync, closeSync } from 'node:fs';
+import { _descriptors, _addOpenedDescriptor, _removeOpenedDescriptor } from './preopens.js';
+import { _createFileStream } from './streams.js';
 
 export function readViaStream(fd, offset) {
-  console.log(`[filesystem] READ STREAM ${fd} ${offset}`);
+  return _createFileStream(fd, offset);
 }
 
 export function writeViaStream(fd, offset) {
@@ -34,7 +27,11 @@ export function getFlags(fd) {
 }
 
 export function getType(fd) {
-  console.log(`[filesystem] GET TYPE ${fd}`);
+  const type = _descriptors[fd].type;
+  if (type === null) {
+    console.log('NO TYPE');
+  }
+  return type;
 }
 
 export function setFlags(fd, flags) {
@@ -69,8 +66,74 @@ export function createDirectoryAt(fd, path) {
   console.log(`[filesystem] CREATE DIRECTORY`, fd, path);
 }
 
+const nsMagnitude = 1_000_000_000_000n;
+function nsToDateTime (ns) {
+  const seconds = ns / nsMagnitude;
+  const nanoseconds = Number(ns % seconds);
+  return { seconds, nanoseconds };
+}
+
+export function _convertFsError (e) {
+  switch (e.code) {
+    case 'EACCES': throw 'access';
+    case 'EAGAIN':
+    case 'EWOULDBLOCK': throw 'would-block';
+    case 'EALREADY': throw 'already';
+    case 'EBADF': throw 'bad-descriptor';
+    case 'EBUSY': throw 'busy';
+    case 'EDEADLK': throw 'deadlock';
+    case 'EDQUOT': throw 'quota';
+    case 'EEXIST': throw 'exist';
+    case 'EFBIG': throw 'file-too-large';
+    case 'EILSEQ': throw 'illegal-byte-sequence';
+    case 'EINPROGRESS': throw 'in-progress';
+    case 'EINTR': throw 'interrupted';
+    case 'EINVAL': throw 'invalid';
+    case 'EIO': throw 'io';
+    case 'EISDIR': throw 'is-directory';
+    case 'ELOOP': throw 'loop';
+    case 'EMLINK': throw 'too-many-links';
+    case 'EMSGSIZE': throw 'message-size';
+    case 'ENAMETOOLONG': throw 'name-too-long'
+    case 'ENODEV': throw 'no-device';
+    case 'ENOENT': throw 'no-entry';
+    case 'ENOLCK': throw 'no-lock';
+    case 'ENOMEM': throw 'insufficient-memory';
+    case 'ENOSPC': throw 'insufficient-space';
+    case 'ENOTDIR': throw 'not-directory';
+    case 'ENOTEMPTY': throw 'not-empty';
+    case 'ENOTRECOVERABLE': throw 'not-recoverable';
+    case 'ENOTSUP': throw 'unsupported';
+    case 'ENOTTY': throw 'no-tty';
+    case 'ENXIO': throw 'no-such-device';
+    case 'EOVERFLOW': throw 'overflow';
+    case 'EPERM': throw 'not-permitted';
+    case 'EPIPE': throw 'pipe';
+    case 'EROFS': throw 'read-only';
+    case 'ESPIPE': throw 'invalid-seek';
+    case 'ETXTBSY': throw 'text-file-busy';
+    case 'EXDEV': throw 'cross-device';
+  }
+}
+
 export function stat(fd) {
-  console.log(`[filesystem] STAT`, fd);
+  let stats;
+  try {
+    stats = fstatSync(fd, { bigint: true });
+  }
+  catch (e) {
+    convertError(e);
+  }
+  return {
+    device: stats.dev,
+    inode: stats.ino,
+    type: 'regular-file',
+    linkCount: stats.nlink,
+    size: stats.size,
+    dataAccessTimestamp: nsToDateTime(stats.atimeNs),
+    dataModificationTimestamp: nsToDateTime(stats.mtimeNs),
+    statusChangeTimestamp: nsToDateTime(stats.ctimeNs),
+  };
 }
 
 export function statAt(fd, pathFlags, path) {
@@ -85,8 +148,37 @@ export function linkAt(fd) {
   console.log(`[filesystem] LINK AT`, fd);
 }
 
-export function openAt(fd) {
-  console.log(`[filesystem] OPEN AT`, fd);
+export function openAt(fd, pathFlags, path, openFlags, flags, modes) {
+  // TODO
+  // if (pathFlags.symlinkFollow) {
+  //   // resolve symlink
+  // }
+  const fullPath = _descriptors[fd].path + path;
+  let fsOpenFlags = 0x0;
+  if (flags.create)
+    fsOpenFlags |= constants.O_CREAT;
+  if (flags.directory)
+    fsOpenFlags |= constants.O_DIRECTORY;
+  if (flags.exclusive)
+    fsOpenFlags |= constants.O_EXCL;
+  if (flags.truncate)
+    fsOpenFlags |= constants.O_TRUNC;
+  let fsMode = 0x0;
+  if (modes.readable)
+    fsMode |= 0o444;
+  if (modes.writeable)
+    fsMode |= 0o222;
+  if (modes.executable)
+    fsMode |= 0o111;
+  let localFd;
+  try {
+    localFd = openSync(fullPath, fsOpenFlags, fsMode);
+  }
+  catch (e) {
+    convertError(e);
+  }
+  _addOpenedDescriptor(localFd, 'regular-file', path);
+  return localFd;
 }
 
 export function readlinkAt(fd) {
@@ -138,7 +230,7 @@ export function unlock(fd) {
 }
 
 export function dropDescriptor(fd) {
-  console.log(`[filesystem] DROP DESCRIPTOR`, fd);
+  closeSync(fd);
 }
 
 export function readDirectoryEntry(stream) {

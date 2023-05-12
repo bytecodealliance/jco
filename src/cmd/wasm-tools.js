@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { readFile } from '../common.js';
 import { exports } from "../../obj/wasm-tools.js";
-import { basename, extname } from 'node:path';
+import { resolve, basename, extname } from 'node:path';
 import c from 'chalk-template';
 
 const {
@@ -41,7 +41,6 @@ export async function componentWit(file, opts) {
 }
 
 export async function componentNew(file, opts) {
-  console.log('COMPONENT NEW');
   const source = file ? await readFile(file) : null;
   let adapters = null;
   if (opts.adapt)
@@ -66,8 +65,9 @@ export async function componentEmbed(file, opts) {
       return [field, [[name, version]]];
     });
   const source = file ? await readFile(file) : null;
-  const wit = await readFile(opts.wit, 'utf8');
-  const output = componentEmbedFn(source, wit, opts);
+  opts.binary = source;
+  opts.witPath = resolve(opts.wit);
+  const output = componentEmbedFn(opts);
   await writeFile(opts.output, output);
 }
 

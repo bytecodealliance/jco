@@ -1,6 +1,5 @@
 use anyhow::Result;
 use js_component_bindgen::transpile;
-use std::sync::Once;
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///

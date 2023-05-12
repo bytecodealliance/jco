@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::{path::PathBuf, sync::Once};
+use std::path::PathBuf;
 use wasm_encoder::{Encode, Section};
 use wasm_metadata::Producers;
 use wit_component::{ComponentEncoder, DecodedWasm, DocumentPrinter, StringEncoding};
@@ -163,7 +163,7 @@ impl exports::Exports for WasmToolsJs {
         core_binary.push(section.id());
         section.encode(&mut core_binary);
 
-        Ok(core_binary.clone())
+        Ok(core_binary)
     }
 
     fn metadata_add(binary: Vec<u8>, metadata: ProducersFields) -> Result<Vec<u8>, String> {
