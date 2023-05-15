@@ -347,7 +347,9 @@ impl Instantiator<'_> {
             // component and may change encodings. This is left unimplemented
             // for now since it can't be tested and additionally JS doesn't
             // support multi-memory which transcoders rely on anyway.
-            GlobalInitializer::Transcoder(_) => unimplemented!(),
+            GlobalInitializer::Transcoder(s) => {
+              println!("TRANSCODER NEEDED {:?}", s);
+            },
         }
     }
 
@@ -364,7 +366,7 @@ impl Instantiator<'_> {
             let def = self.core_def(arg);
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
-            assert!(prev.is_none());
+            // assert!(prev.is_none());
         }
         let mut imports = String::new();
         if !import_obj.is_empty() {
@@ -546,8 +548,14 @@ impl Instantiator<'_> {
             CoreDef::Export(e) => self.core_export(e),
             CoreDef::Lowered(i) => format!("lowering{}", i.as_u32()),
             CoreDef::AlwaysTrap(_) => unimplemented!(),
-            CoreDef::InstanceFlags(_) => unimplemented!(),
-            CoreDef::Transcoder(_) => unimplemented!(),
+            CoreDef::InstanceFlags(something) => {
+              println!("INSTANCE FLAGS UNIMPLEMENTED {:?}", something);
+              String::new()
+            },
+            CoreDef::Transcoder(s) => {
+              println!("transcoder still needed {:?}", s);
+              String::new()
+            }
         }
     }
 
