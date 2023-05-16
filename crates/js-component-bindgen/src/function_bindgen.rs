@@ -824,9 +824,8 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::EnumLower { name, enum_, .. } => {
                 let tmp = self.tmp();
 
-                let to_string = self.intrinsic(Intrinsic::ToString);
                 let operand = &operands[0];
-                uwriteln!(self.src, "const val{tmp} = {to_string}({operand});");
+                uwriteln!(self.src, "const val{tmp} = {operand};");
 
                 // Declare a variable to hold the result.
                 uwriteln!(
@@ -846,11 +845,21 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 uwriteln!(
                     self.src,
-                    "default: {{
-                        throw new TypeError(`\"${{val{tmp}}}\" is not one of the cases of {name}`);
+                    "default: {{"
+                );
+                if !self.valid_lifting_optimization {
+                    uwriteln!(self.src,
+                    "if (({operand}) instanceof Error) {{
+                        console.error({operand});
+                    }}");
+                }
+                uwriteln!(
+                    self.src,
+                    "
+                            throw new TypeError(`\"${{val{tmp}}}\" is not one of the cases of {name}`);
+                        }}
                     }}"
                 );
-                uwriteln!(self.src, "}}");
 
                 results.push(format!("enum{tmp}"));
             }

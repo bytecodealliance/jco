@@ -1,5 +1,5 @@
-import { openSync, constants, fstatSync, closeSync } from 'node:fs';
-import { _descriptors, _addOpenedDescriptor, _removeOpenedDescriptor } from './preopens.js';
+import { openSync, constants, statSync, fstatSync, closeSync, readdirSync } from 'node:fs';
+import { _descriptors, _addOpenedDescriptor, _removeOpenedDescriptor, _getDescriptorType, _setSubdescriptorType, _setDescriptorType, _getFullPath } from './preopens.js';
 import { _createFileStream } from './streams.js';
 
 export function readViaStream(fd, offset) {
@@ -27,11 +27,7 @@ export function getFlags(fd) {
 }
 
 export function getType(fd) {
-  const type = _descriptors[fd].type;
-  if (type === null) {
-    console.log('NO TYPE');
-  }
-  return type;
+  return _getDescriptorType(fd);
 }
 
 export function setFlags(fd, flags) {
@@ -54,8 +50,18 @@ export function write(fd, buffer, offset) {
   console.log(`[filesystem] WRITE`, fd, buffer, offset);
 }
 
+let _dirStreams = [];
 export function readDirectory(fd) {
-  console.log(`[filesystem] READ DIR`, fd);
+  const fullPath = _getFullPath(fd);
+  let dirs;
+  try {
+    dirs = readdirSync(fullPath, { withFileTypes: true });
+  }
+  catch (e) {
+    _convertFsError(e);
+  }
+  _dirStreams.push({ fd, dirs, cursor: 0 });
+  return _dirStreams.length - 1;
 }
 
 export function sync(fd) {
@@ -113,7 +119,26 @@ export function _convertFsError (e) {
     case 'ESPIPE': throw 'invalid-seek';
     case 'ETXTBSY': throw 'text-file-busy';
     case 'EXDEV': throw 'cross-device';
+    default: throw e;
   }
+}
+
+function _lookupType (obj) {
+  if (obj.isFile())
+    return 'regular-file';
+  else if (obj.isSocket())
+    return 'socket';
+  else if (obj.isSymbolicLink())
+    return 'symbolic-link';
+  else if (obj.isFIFO())
+    return 'fifo';
+  else if (obj.isDirectory())
+    return 'directory';
+  else if (obj.isCharacterDevice())
+    return 'character-device';
+  else if (obj.isBlockDevice())
+    return 'block-device';
+  return 'unknown';
 }
 
 export function stat(fd) {
@@ -122,12 +147,14 @@ export function stat(fd) {
     stats = fstatSync(fd, { bigint: true });
   }
   catch (e) {
-    convertError(e);
+    _convertFsError(e);
   }
+  const type = _lookupType(stats);
+  _setDescriptorType(fd, type);
   return {
     device: stats.dev,
     inode: stats.ino,
-    type: 'regular-file',
+    type,
     linkCount: stats.nlink,
     size: stats.size,
     dataAccessTimestamp: nsToDateTime(stats.atimeNs),
@@ -136,8 +163,27 @@ export function stat(fd) {
   };
 }
 
-export function statAt(fd, pathFlags, path) {
-  console.log(`[filesystem] STAT`, fd, pathFlags, path);
+export function statAt(fd, { symlinkFollow }, path) {
+  const fullPath = _descriptors[fd].path + path;
+  let stats;
+  try {
+    stats = (symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
+  }
+  catch (e) {
+    _convertFsError(e);
+  }
+  const type = _lookupType(stats);
+  _setSubdescriptorType(fd, path, type);
+  return {
+    device: stats.dev,
+    inode: stats.ino,
+    type,
+    linkCount: stats.nlink,
+    size: stats.size,
+    dataAccessTimestamp: nsToDateTime(stats.atimeNs),
+    dataModificationTimestamp: nsToDateTime(stats.mtimeNs),
+    statusChangeTimestamp: nsToDateTime(stats.ctimeNs),
+  };
 }
 
 export function setTimesAt(fd) {
@@ -148,21 +194,29 @@ export function linkAt(fd) {
   console.log(`[filesystem] LINK AT`, fd);
 }
 
-export function openAt(fd, pathFlags, path, openFlags, flags, modes) {
+export function openAt(fd, pathFlags, path, openFlags, descriptorFlags, modes) {
   // TODO
   // if (pathFlags.symlinkFollow) {
   //   // resolve symlink
   // }
   const fullPath = _descriptors[fd].path + path;
   let fsOpenFlags = 0x0;
-  if (flags.create)
+  if (openFlags.create)
     fsOpenFlags |= constants.O_CREAT;
-  if (flags.directory)
+  if (openFlags.directory)
     fsOpenFlags |= constants.O_DIRECTORY;
-  if (flags.exclusive)
+  if (openFlags.exclusive)
     fsOpenFlags |= constants.O_EXCL;
-  if (flags.truncate)
+  if (openFlags.truncate)
     fsOpenFlags |= constants.O_TRUNC;
+  if (descriptorFlags.read && descriptorFlags.write)
+    fsOpenFlags |= constants.O_RDWR;
+  else if (descriptorFlags.write)
+    fsOpenFlags |= constants.O_WRONLY;
+  // if (descriptorFlags.fileIntegritySync)
+  // if (descriptorFlags.dataIntegritySync)
+  // if (descriptorFlags.requestedWriteSync)
+  // if (descriptorFlags.mutateDirectory)
   let fsMode = 0x0;
   if (modes.readable)
     fsMode |= 0o444;
@@ -175,9 +229,9 @@ export function openAt(fd, pathFlags, path, openFlags, flags, modes) {
     localFd = openSync(fullPath, fsOpenFlags, fsMode);
   }
   catch (e) {
-    convertError(e);
+    _convertFsError(e);
   }
-  _addOpenedDescriptor(localFd, 'regular-file', path);
+  _addOpenedDescriptor(localFd, path, fd);
   return localFd;
 }
 
@@ -230,13 +284,20 @@ export function unlock(fd) {
 }
 
 export function dropDescriptor(fd) {
+  _removeOpenedDescriptor(fd);
   closeSync(fd);
 }
 
 export function readDirectoryEntry(stream) {
-  console.log(`[filesystem] READ DIRECTRY ENTRY`, stream);
+  const streamValue = _dirStreams[stream];
+  if (streamValue.cursor === streamValue.dirs.length)
+    return null;
+  const dir = streamValue.dirs[streamValue.cursor++];
+  const type = _lookupType(dir);
+  _setSubdescriptorType(streamValue.fd, '/' + dir.name, type);
+  return { inode: null, type, name: dir.name };
 }
 
 export function dropDirectoryEntryStream(stream) {
-  console.log(`[filesystem] DROP DIRECTORY ENTRY`, stream);
+  _dirStreams.splice(stream, 1);
 }

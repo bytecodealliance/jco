@@ -12,7 +12,7 @@ use std::fmt::Write;
 use std::mem;
 use wasmtime_environ::component::{
     CanonicalOptions, Component, CoreDef, CoreExport, Export, ExportItem, GlobalInitializer,
-    InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex,
+    InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex, Transcoder,
 };
 use wasmtime_environ::{EntityIndex, ModuleTranslation, PrimaryMap};
 use wit_parser::abi::{AbiVariant, LiftLower};
@@ -347,7 +347,7 @@ impl Instantiator<'_> {
             // component and may change encodings. This is left unimplemented
             // for now since it can't be tested and additionally JS doesn't
             // support multi-memory which transcoders rely on anyway.
-            GlobalInitializer::Transcoder(_) => unimplemented!(),
+            GlobalInitializer::Transcoder(Transcoder { index, op, from, from64, to, to64, signature }) => unimplemented!(),
         }
     }
 

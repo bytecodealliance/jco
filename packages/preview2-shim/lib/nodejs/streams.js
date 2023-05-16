@@ -6,10 +6,11 @@ let streamCnt = 0;
 export function _createFileStream(fd, offset) {
   // note we only support offset 0
   if (Number(offset) === 0)
-    _streams[streamCnt++] = {
+    _streams[streamCnt] = {
       type: 'file',
       fd: fd
     };
+  return streamCnt++;
 }
 
 export function read(s, len) {
@@ -34,14 +35,10 @@ export function blockingRead(s, len) {
         return [new Uint8Array(buf.buffer, 0, readBytes), false];
       }
       catch (e) {
-        // stream error still todo
-        console.error(e);
-        throw {};
+        _convertFsError(e);
       }
     default: throw null;
   }
-  console.log(`[streams] Blocking read ${s} - ${_len}`);
-
 }
 export function skip(s, _len) {
   console.log(`[streams] Skip ${s}`);
@@ -54,6 +51,7 @@ export function subscribeToInputStream(s) {
 }
 export function dropInputStream(s) {
   delete _streams[s];
+
 }
 export function write(s, buf) {
   switch (s) {
