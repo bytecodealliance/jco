@@ -169,7 +169,6 @@ export function stat(fd) {
 }
 
 export function statAt(fd, { symlinkFollow }, path) {
-  console.log('STAT AT');
   const fullPath = _descriptors[fd].path + path;
   let stats;
   try {
