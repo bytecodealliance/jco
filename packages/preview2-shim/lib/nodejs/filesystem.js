@@ -1,4 +1,4 @@
-import { openSync, constants, statSync, fstatSync, closeSync, readdirSync } from 'node:fs';
+import { openSync, constants, statSync, lstatSync, fstatSync, closeSync, readdirSync } from 'node:fs';
 import { _descriptors, _addOpenedDescriptor, _removeOpenedDescriptor, _getDescriptorType, _setSubdescriptorType, _setDescriptorType, _getFullPath } from './preopens.js';
 import { _createFileStream } from './streams.js';
 

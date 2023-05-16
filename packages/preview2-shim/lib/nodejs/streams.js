@@ -26,7 +26,7 @@ export function blockingRead(s, len) {
   const stream = _streams[s];
   if (!stream) throw null;
   switch (stream.type) {
-    case 'file':
+    case 'file': {
       const buf = Buffer.alloc(Number(len));
       try {
         const readBytes = fsReadSync(stream.fd, buf, 0, Number(len));
@@ -37,6 +37,8 @@ export function blockingRead(s, len) {
       catch (e) {
         _convertFsError(e);
       }
+      break;
+    }
     default: throw null;
   }
 }
