@@ -27,7 +27,12 @@ export function getFlags(fd) {
 }
 
 export function getType(fd) {
-  return _getDescriptorType(fd);
+  let type = _getDescriptorType(fd);
+  if (type === null) {
+    stat(fd);
+    type = _getDescriptorType(fd);
+  }
+  return type;
 }
 
 export function setFlags(fd, flags) {
@@ -164,6 +169,7 @@ export function stat(fd) {
 }
 
 export function statAt(fd, { symlinkFollow }, path) {
+  console.log('STAT AT');
   const fullPath = _descriptors[fd].path + path;
   let stats;
   try {

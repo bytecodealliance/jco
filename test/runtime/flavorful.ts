@@ -28,7 +28,7 @@ let firstErr = true;
 export function errnoResult() {
   if (firstErr) {
     firstErr = false;
-    throw new Error('b');
+    throw 'b';
   }
 }
 export function listTypedefs(x: any, y: any) {

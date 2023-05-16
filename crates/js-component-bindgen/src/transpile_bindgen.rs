@@ -347,7 +347,15 @@ impl Instantiator<'_> {
             // component and may change encodings. This is left unimplemented
             // for now since it can't be tested and additionally JS doesn't
             // support multi-memory which transcoders rely on anyway.
-            GlobalInitializer::Transcoder(Transcoder { index, op, from, from64, to, to64, signature }) => unimplemented!(),
+            GlobalInitializer::Transcoder(Transcoder {
+                index,
+                op,
+                from,
+                from64,
+                to,
+                to64,
+                signature,
+            }) => unimplemented!(),
         }
     }
 

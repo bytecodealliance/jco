@@ -843,15 +843,14 @@ impl Bindgen for FunctionBindgen<'_> {
                         case = case.name
                     );
                 }
-                uwriteln!(
-                    self.src,
-                    "default: {{"
-                );
+                uwriteln!(self.src, "default: {{");
                 if !self.valid_lifting_optimization {
-                    uwriteln!(self.src,
-                    "if (({operand}) instanceof Error) {{
+                    uwriteln!(
+                        self.src,
+                        "if (({operand}) instanceof Error) {{
                         console.error({operand});
-                    }}");
+                    }}"
+                    );
                 }
                 uwriteln!(
                     self.src,
