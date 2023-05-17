@@ -8,6 +8,9 @@
   "bin": {
     "jco": "cli.mjs"
   },
+  "dependencies": {
+    "@bytecodealliance/preview2-shim": "0.0.8"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bytecodealliance/jco.git"

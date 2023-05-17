@@ -9,9 +9,9 @@ Currently supports Node.js and browser versions, but alternative implementations
 | Interface       | Node.js                      | Browser                      |
 | --------------- | ----------------------------:|-----------------------------:|
 | Clocks          | Pending timezone, resolution | Pending timezone, resolution |
-| Filesystem      | :x:                          | :x:                          |
+| Filesystem      | Basic preopens / reads       | :x:                          |
 | HTTP            | :x:                          | :x:                          |
-| IO              | :x:                          | :x:                          |
+| IO              | Basic FS Streams             | :x:                          |
 | Logging         | :heavy_check_mark:           | :heavy_check_mark:           |
 | Poll            | :x:                          | :x:                          |
 | Random          | :heavy_check_mark:           | :heavy_check_mark:           |

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use js_component_bindgen::transpile;
-use std::sync::Once;
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -36,20 +35,20 @@ struct JsComponentBindgenComponent;
 
 export_js_component_bindgen_component!(JsComponentBindgenComponent);
 
-fn init() {
-    static INIT: Once = Once::new();
-    INIT.call_once(|| {
-        let prev_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
-            console::error(&info.to_string());
-            prev_hook(info);
-        }));
-    });
-}
+// fn init() {
+//     static INIT: Once = Once::new();
+//     INIT.call_once(|| {
+//         let prev_hook = std::panic::take_hook();
+//         std::panic::set_hook(Box::new(move |info| {
+//             console::error(&info.to_string());
+//             prev_hook(info);
+//         }));
+//     });
+// }
 
 impl exports::Exports for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
-        init();
+        // init();
 
         let opts = js_component_bindgen::TranspileOpts {
             name: options.name,

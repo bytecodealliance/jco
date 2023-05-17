@@ -21,7 +21,7 @@ export async function cliTest (fixtures) {
     test('Transpile', async () => {
       try {
         const name = 'flavorful';
-        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '-o', outDir);
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--name', name, '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
         ok(source.toString().includes('export { exports'));
@@ -34,7 +34,7 @@ export async function cliTest (fixtures) {
     test('Transpile & Optimize & Minify', async () => {
       try {
         const name = 'flavorful';
-        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--valid-lifting-optimization', '--tla-compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--name', name, '--valid-lifting-optimization', '--tla-compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
         ok(source.toString().includes('as exports,'));
@@ -47,7 +47,7 @@ export async function cliTest (fixtures) {
     test('Transpile to JS', async () => {
       try {
         const name = 'flavorful';
-        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/${name}.component.wasm`, '--name', name, '--map', 'testwasi=./wasi.js', '--valid-lifting-optimization', '--tla-compat', '--js', '--base64-cutoff=0', '-o', outDir);
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--name', name, '--map', 'testwasi=./wasi.js', '--valid-lifting-optimization', '--tla-compat', '--js', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`, 'utf8');
         ok(source.includes('./wasi.js'));
@@ -62,8 +62,8 @@ export async function cliTest (fixtures) {
 
     test('Optimize', async () => {
       try {
-        const component = await readFile(`test/fixtures/flavorful.component.wasm`);
-        const { stderr, stdout } = await exec(jcoPath, 'opt', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
+        const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
+        const { stderr, stdout } = await exec(jcoPath, 'opt', `test/fixtures/components/flavorful.component.wasm`, '-o', outFile);
         strictEqual(stderr, '');
         ok(stdout.includes('Core Module 1:'));
         const optimizedComponent = await readFile(outFile);
@@ -76,11 +76,11 @@ export async function cliTest (fixtures) {
 
     test('Print & Parse', async () => {
       try {
-        const { stderr, stdout } = await exec(jcoPath, 'print', `test/fixtures/flavorful.component.wasm`);
+        const { stderr, stdout } = await exec(jcoPath, 'print', `test/fixtures/components/flavorful.component.wasm`);
         strictEqual(stderr, '');
         strictEqual(stdout.slice(0, 10), '(component');
         {
-          const { stderr, stdout } = await exec(jcoPath, 'print', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'print', `test/fixtures/components/flavorful.component.wasm`, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
@@ -98,12 +98,12 @@ export async function cliTest (fixtures) {
 
     test('Wit & New', async () => {
       try {
-        const { stderr, stdout } = await exec(jcoPath, 'wit', `test/fixtures/flavorful.component.wasm`);
+        const { stderr, stdout } = await exec(jcoPath, 'wit', `test/fixtures/components/flavorful.component.wasm`);
         strictEqual(stderr, '');
         ok(stdout.includes('world component {'));
 
         {
-          const { stderr, stdout } = await exec(jcoPath, 'wit', `test/fixtures/flavorful.component.wasm`, '-o', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'wit', `test/fixtures/components/flavorful.component.wasm`, '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
@@ -135,7 +135,7 @@ export async function cliTest (fixtures) {
           const meta = JSON.parse(stdout);
           deepStrictEqual(meta[0].metaType, { tag: 'component', val: 4 });
           deepStrictEqual(meta[1].producers, [
-            ['processed-by', [['wit-component', '0.8.2'], ['dummy-gen', 'test']]],
+            ['processed-by', [['wit-component', '0.9.0'], ['dummy-gen', 'test']]],
             ['language', [['javascript', '']]],
           ]);
         }
@@ -149,9 +149,9 @@ export async function cliTest (fixtures) {
       try {
         const { stderr } = await exec(jcoPath,
             'new',
-            'test/fixtures/exitcode.wasm',
+            'test/fixtures/modules/exitcode.wasm',
             '--adapt',
-            'wasi_snapshot_preview1=lib/wasi_snapshot_preview1.reactor.wasm',
+            'wasi_snapshot_preview1=lib/wasi_preview1_component_adapter.reactor.wasm',
             '-o', outFile);
         strictEqual(stderr, '');
         {
@@ -169,7 +169,7 @@ export async function cliTest (fixtures) {
       try {
         const { stdout, stderr } = await exec(jcoPath,
             'metadata-show',
-            'test/fixtures/exitcode.wasm',
+            'test/fixtures/modules/exitcode.wasm',
             '--json');
         strictEqual(stderr, '');
         deepStrictEqual(JSON.parse(stdout), [{
@@ -191,9 +191,9 @@ export async function cliTest (fixtures) {
       try {
         const { stdout, stderr } = await exec(jcoPath,
             'componentize',
-            'test/fixtures/source.js',
+            'test/fixtures/componentize/source.js',
             '-w',
-            'test/fixtures/source.wit',
+            'test/fixtures/componentize/source.wit',
             '-o',
             outFile);
         strictEqual(stderr, '');

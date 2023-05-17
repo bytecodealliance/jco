@@ -1,12 +1,13 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadataShow, preview1AdapterReactorPath } from '../src/api.js';
+import { fileURLToPath } from 'node:url';
 
 export async function apiTest (fixtures) {
   suite('API', () => {
     test('Transpile', async () => {
       const name = 'flavorful';
-      const component = await readFile(`test/fixtures/${name}.component.wasm`);
+      const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, { name });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 2);
@@ -16,7 +17,7 @@ export async function apiTest (fixtures) {
 
     test('Transpile & Optimize & Minify', async () => {
       const name = 'flavorful';
-      const component = await readFile(`test/fixtures/${name}.component.wasm`);
+      const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, {
         name,
         minify: true,
@@ -33,7 +34,7 @@ export async function apiTest (fixtures) {
 
     test('Transpile to JS', async () => {
       const name = 'flavorful';
-      const component = await readFile(`test/fixtures/${name}.component.wasm`);
+      const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, {
         map: {
           'test*': './*.js'
@@ -57,13 +58,13 @@ export async function apiTest (fixtures) {
     });
 
     test('Optimize', async () => {
-      const component = await readFile(`test/fixtures/flavorful.component.wasm`);
+      const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
       const { component: optimizedComponent } = await opt(component);
       ok(optimizedComponent.byteLength < component.byteLength);
     });
 
     test('Print & Parse', async () => {
-      const component = await readFile(`test/fixtures/flavorful.component.wasm`);
+      const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
       const output = await print(component);
       strictEqual(output.slice(0, 10), '(component');
 
@@ -72,12 +73,13 @@ export async function apiTest (fixtures) {
     });
 
     test('Wit & New', async () => {
-      const component = await readFile(`test/fixtures/flavorful.component.wasm`);
+      const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
       const wit = await componentWit(component);
 
       strictEqual(wit.slice(0, 19), 'interface imports {');
 
-      const generatedComponent = await componentEmbed(null, wit, {
+      const generatedComponent = await componentEmbed({
+        witSource: wit,
         dummy: true,
         metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
       });
@@ -97,11 +99,36 @@ export async function apiTest (fixtures) {
         tag: 'component',
         val: 4
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.8.2'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]])
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.9.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
+    });
+
+    test('Multi-file WIT', async () => {
+      const generatedComponent = await componentEmbed({
+        dummy: true,
+        witPath: fileURLToPath(new URL('./fixtures/componentize/source.wit', import.meta.url)),
+        metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
+      });
+      {
+        const output = await print(generatedComponent);
+        strictEqual(output.slice(0, 7), '(module');
+      }
+
+      const newComponent = await componentNew(generatedComponent);
+      {
+        const output = await print(newComponent);
+        strictEqual(output.slice(0, 10), '(component');
+      }
+
+      const meta = metadataShow(newComponent);
+      deepStrictEqual(meta[0].metaType, {
+        tag: 'component',
+        val: 1
+      });
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.9.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
     });
 
     test('Component new adapt', async () => {
-      const component = await readFile(`test/fixtures/exitcode.wasm`);
+      const component = await readFile(`test/fixtures/modules/exitcode.wasm`);
 
       const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile(preview1AdapterReactorPath())]]);
 
@@ -109,7 +136,7 @@ export async function apiTest (fixtures) {
     });
 
     test('Extract metadata', async () => {
-      const component = await readFile(`test/fixtures/exitcode.wasm`);
+      const component = await readFile(`test/fixtures/modules/exitcode.wasm`);
 
       const meta = metadataShow(component);
 

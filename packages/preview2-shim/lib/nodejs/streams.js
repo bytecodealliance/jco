@@ -1,3 +1,18 @@
+import { readSync as fsReadSync } from 'node:fs';
+import { _convertFsError } from './filesystem.js';
+
+export let _streams = {};
+let streamCnt = 0;
+export function _createFileStream(fd, offset) {
+  // note we only support offset 0
+  if (Number(offset) === 0)
+    _streams[streamCnt] = {
+      type: 'file',
+      fd: fd
+    };
+  return streamCnt++;
+}
+
 export function read(s, len) {
   switch (s) {
     case 0:
@@ -6,8 +21,26 @@ export function read(s, len) {
       throw new Error(`TODO: write ${s}`);
   }
 }
-export function blockingRead(s, _len) {
-  console.log(`[streams] Blocking read ${s}`);
+export function blockingRead(s, len) {
+  len = Number(len);
+  const stream = _streams[s];
+  if (!stream) throw null;
+  switch (stream.type) {
+    case 'file': {
+      const buf = Buffer.alloc(Number(len));
+      try {
+        const readBytes = fsReadSync(stream.fd, buf, 0, Number(len));
+        if (readBytes < Number(len))
+          return [new Uint8Array(), true];
+        return [new Uint8Array(buf.buffer, 0, readBytes), false];
+      }
+      catch (e) {
+        _convertFsError(e);
+      }
+      break;
+    }
+    default: throw null;
+  }
 }
 export function skip(s, _len) {
   console.log(`[streams] Skip ${s}`);
@@ -19,7 +52,8 @@ export function subscribeToInputStream(s) {
   console.log(`[streams] Subscribe to input stream ${s}`);
 }
 export function dropInputStream(s) {
-  console.log(`[streams] Drop input stream ${s}`);
+  delete _streams[s];
+
 }
 export function write(s, buf) {
   switch (s) {
