@@ -99,9 +99,8 @@ pub fn render_intrinsics(
               let hop = Intrinsic::HasOwnProperty.name();
               uwrite!(output, "
                   function getErrorPayload(e) {{
-                      if ({hop}.call(e, 'payload')) return e.payload;
-                      if ({hop}.call(e, 'message')) return String(e.message);
-                      return String(e);
+                      if (e && {hop}.call(e, 'payload')) return e.payload;
+                      return e;
                   }}
               ")
           },

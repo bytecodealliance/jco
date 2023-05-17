@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::{path::PathBuf, sync::Once};
+use std::path::PathBuf;
 use wasm_encoder::{Encode, Section};
 use wasm_metadata::Producers;
 use wit_component::{ComponentEncoder, DecodedWasm, DocumentPrinter, StringEncoding};
@@ -13,26 +13,26 @@ export_wasm_tools_js!(WasmToolsJs);
 
 use crate::exports::*;
 
-fn init() {
-    static INIT: Once = Once::new();
-    INIT.call_once(|| {
-        let prev_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
-            console::error(&info.to_string());
-            prev_hook(info);
-        }));
-    });
-}
+// fn init() {
+//     static INIT: Once = Once::new();
+//     INIT.call_once(|| {
+//         let prev_hook = std::panic::take_hook();
+//         std::panic::set_hook(Box::new(move |info| {
+//             console::error(&info.to_string());
+//             prev_hook(info);
+//         }));
+//     });
+// }
 
 impl exports::Exports for WasmToolsJs {
     fn parse(wat: String) -> Result<Vec<u8>, String> {
-        init();
+        // init();
 
         wat::parse_str(wat).map_err(|e| format!("{:?}", e))
     }
 
     fn print(component: Vec<u8>) -> Result<String, String> {
-        init();
+        // init();
 
         wasmprinter::print_bytes(component).map_err(|e| format!("{:?}", e))
     }
@@ -41,7 +41,7 @@ impl exports::Exports for WasmToolsJs {
         binary: Vec<u8>,
         adapters: Option<Vec<(String, Vec<u8>)>>,
     ) -> Result<Vec<u8>, String> {
-        init();
+        // init();
 
         let mut encoder = ComponentEncoder::default()
             .validate(true)
@@ -64,7 +64,7 @@ impl exports::Exports for WasmToolsJs {
     }
 
     fn component_wit(binary: Vec<u8>, name: Option<String>) -> Result<String, String> {
-        init();
+        // init();
 
         let decoded = wit_component::decode(&name.unwrap_or(String::from("component")), &binary)
             .map_err(|e| format!("Failed to decode wit component\n{:?}", e))?;
@@ -83,47 +83,43 @@ impl exports::Exports for WasmToolsJs {
         Ok(output)
     }
 
-    fn component_embed(
-        binary: Option<Vec<u8>>,
-        wit: String,
-        opts: Option<exports::EmbedOpts>,
-    ) -> Result<Vec<u8>, String> {
+    fn component_embed(embed_opts: exports::EmbedOpts) -> Result<Vec<u8>, String> {
+        let binary = &embed_opts.binary;
+
         let mut resolve = Resolve::default();
 
-        let path = PathBuf::from("component.wit");
-
-        let pkg = UnresolvedPackage::parse(&path, &wit).map_err(|e| e.to_string())?;
+        let pkg = if let Some(wit_source) = &embed_opts.wit_source {
+            let path = PathBuf::from("component.wit");
+            UnresolvedPackage::parse(&path, &wit_source).map_err(|e| e.to_string())?
+        } else {
+            let wit_path = &embed_opts.wit_path.as_ref().unwrap();
+            UnresolvedPackage::parse_file(&PathBuf::from(wit_path)).map_err(|e| e.to_string())?
+        };
 
         let id = resolve
             .push(pkg, &Default::default())
             .map_err(|e| e.to_string())?;
 
-        let world_string = match &opts {
-            Some(opts) => match &opts.world {
-                Some(world) => Some(world.to_string()),
-                None => None,
-            },
+        let world_string = match &embed_opts.world {
+            Some(world) => Some(world.to_string()),
             None => None,
         };
         let world = resolve
             .select_world(id, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
-        let string_encoding = match &opts {
-            Some(opts) => match opts.string_encoding {
-                None | Some(exports::StringEncoding::Utf8) => StringEncoding::UTF8,
-                Some(exports::StringEncoding::Utf16) => StringEncoding::UTF16,
-                Some(exports::StringEncoding::CompactUtf16) => StringEncoding::CompactUTF16,
-            },
-            None => StringEncoding::UTF8,
+        let string_encoding = match &embed_opts.string_encoding {
+            None | Some(exports::StringEncoding::Utf8) => StringEncoding::UTF8,
+            Some(exports::StringEncoding::Utf16) => StringEncoding::UTF16,
+            Some(exports::StringEncoding::CompactUtf16) => StringEncoding::CompactUTF16,
         };
 
         let mut core_binary = if matches!(
-            opts,
-            Some(exports::EmbedOpts {
+            &embed_opts,
+            exports::EmbedOpts {
                 dummy: Some(true),
                 ..
-            })
+            }
         ) {
             wit_component::dummy_module(&resolve, world)
         } else {
@@ -133,28 +129,25 @@ impl exports::Exports for WasmToolsJs {
                         .to_string(),
                 );
             }
-            binary.unwrap()
+            binary.as_ref().unwrap().clone()
         };
 
-        let producers = match &opts {
-            Some(opts) => match &opts.metadata {
-                Some(metadata_fields) => {
-                    let mut producers = Producers::default();
-                    for (field_name, items) in metadata_fields {
-                        if field_name != "sdk"
-                            && field_name != "language"
-                            && field_name != "processed-by"
-                        {
-                            return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
-                        }
-                        for (name, version) in items {
-                            producers.add(&field_name, &name, &version);
-                        }
+        let producers = match &embed_opts.metadata {
+            Some(metadata_fields) => {
+                let mut producers = Producers::default();
+                for (field_name, items) in metadata_fields {
+                    if field_name != "sdk"
+                        && field_name != "language"
+                        && field_name != "processed-by"
+                    {
+                        return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
                     }
-                    Some(producers)
+                    for (name, version) in items {
+                        producers.add(&field_name, &name, &version);
+                    }
                 }
-                None => None,
-            },
+                Some(producers)
+            }
             None => None,
         };
 

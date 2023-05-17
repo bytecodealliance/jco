@@ -1,4 +1,0 @@
-default interface console {
-  log: func(msg: string)
-  error: func(msg: string)
-}

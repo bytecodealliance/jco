@@ -13,11 +13,11 @@ function getTmpDir (name) {
 export async function preview2Test () {
   suite('Preview 2', () => {
     test('hello_stdout', async () => {
-      const component = await readFile(`test/fixtures/hello_stdout.wasm`);
+      const component = await readFile(`test/fixtures/modules/hello_stdout.wasm`);
 
       const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile(preview1AdapterCommandPath())]]);
 
-      const { files } = await transpile(generatedComponent, { name: 'hello_stdout', wasiShim: true });
+      const { files } = await transpile(generatedComponent, { name: 'hello_stdout' });
 
       const tmpdir = getTmpDir('hello_stdout');
       try {
