@@ -17,7 +17,7 @@ export async function preview2Test () {
 
       const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile(preview1AdapterCommandPath())]]);
 
-      const { files } = await transpile(generatedComponent, { name: 'hello_stdout', wasiShim: true });
+      const { files } = await transpile(generatedComponent, { name: 'hello_stdout' });
 
       const tmpdir = getTmpDir('hello_stdout');
       try {

@@ -21,7 +21,7 @@ export async function cliTest (fixtures) {
     test('Transpile', async () => {
       try {
         const name = 'flavorful';
-        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--name', name, '-o', outDir);
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--no-wasi-shim', '--name', name, '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
         ok(source.toString().includes('export { exports'));
@@ -199,7 +199,7 @@ export async function cliTest (fixtures) {
         strictEqual(stderr, '');
         const outDir = fileURLToPath(new URL('./output/componentize', import.meta.url));
         {
-          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', 'componentize', '--wasi-shim', '-o', outDir);
+          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', 'componentize', '-o', outDir);
           strictEqual(stderr, '');
         }
         const m = await import(`${outDir}/componentize.js`);

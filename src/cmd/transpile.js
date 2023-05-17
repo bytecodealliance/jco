@@ -81,6 +81,8 @@ async function wasm2Js (source) {
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
 export async function transpileComponent (component, opts = {}) {
+  if (opts.noWasiShim) opts.wasiShim = false;
+
   let spinner;
   const showSpinner = getShowSpinner();
   if (opts.optimize) {
@@ -88,7 +90,7 @@ export async function transpileComponent (component, opts = {}) {
     ({ component } = await optimizeComponent(component, opts));
   }
 
-  if (opts.wasiShim) {
+  if (opts.wasiShim !== false) {
     opts.map = Object.assign({
       'environment-preopens': '@bytecodealliance/preview2-shim/environment-preopens',
       'environment': '@bytecodealliance/preview2-shim/environment',

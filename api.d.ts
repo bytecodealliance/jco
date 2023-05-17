@@ -31,9 +31,27 @@ export interface TranspileOpts {
   /// if using optimize, custom optimization options
   /// (defaults to best optimization, but this is very slow)
   optArgs?: string[],
-  /// rewrite WASI imports to the @bytecodealliance/preview2-shim
-  /// defaults to false
+  /// rewrites WASI imports to the @bytecodealliance/preview2-shim
+  /// defaults to true
   wasiShim?: boolean
+}
+
+export interface EmbedOpts {
+  /// Component binary to embed
+  binary?: Uint8Array,
+  /// Pass an inline WIT source
+  witSource?: string,
+  /// Pass the file system path to WIT file
+  /// Either a path or a source must be passed not both
+  witPath?: string,
+  /// String encoding for the component functions
+  stringEncoding?: 'utf8' | 'utf16',
+  /// Generate a dummy component
+  dummy: option<bool>,
+  /// World name to embed
+  world?: string,
+  /// Metadata to embed
+  metadata?: Metadata
 }
 
 /**
@@ -65,12 +83,7 @@ type Metadata = [string, [string, string][]][];
 /**
  * Embed a world into a Wasm core binary
  */
-export function componentEmbed(binary: Uint8Array | ArrayBuffer | null, wit: string, opts: {
-  stringEncoding?: 'utf8' | 'utf16' | 'compact-utf16',
-  dummy?: boolean,
-  world?: string,
-  metadata?: Metadata
-}): Uint8Array;
+export function componentEmbed(opts: EmbedOpts): Uint8Array;
 
 /**
  * Extract the producer metadata for a Wasm component or core module
