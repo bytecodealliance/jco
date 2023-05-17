@@ -135,7 +135,7 @@ export async function cliTest (fixtures) {
           const meta = JSON.parse(stdout);
           deepStrictEqual(meta[0].metaType, { tag: 'component', val: 4 });
           deepStrictEqual(meta[1].producers, [
-            ['processed-by', [['wit-component', '0.8.2'], ['dummy-gen', 'test']]],
+            ['processed-by', [['wit-component', '0.9.0'], ['dummy-gen', 'test']]],
             ['language', [['javascript', '']]],
           ]);
         }
@@ -151,7 +151,7 @@ export async function cliTest (fixtures) {
             'new',
             'test/fixtures/modules/exitcode.wasm',
             '--adapt',
-            'wasi_snapshot_preview1=lib/wasi_snapshot_preview1.reactor.wasm',
+            'wasi_snapshot_preview1=lib/wasi_preview1_component_adapter.reactor.wasm',
             '-o', outFile);
         strictEqual(stderr, '');
         {
