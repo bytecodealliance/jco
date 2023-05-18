@@ -26,3 +26,9 @@ cd ..
 ./src/jco.js componentize test/fixtures/component-gen/import-fn.js --wit test/fixtures/component-gen/import-fn.wit -o test/fixtures/components/import-fn.component.wasm
 
 rm -rf wit-bindgen
+
+## wasi virt to generate composition case
+git clone https://github.com/bytecodealliance/wasi-virt
+cd wasi-virt
+cargo test
+cp tests/generated/env-allow.composed.wasm ../test/fixtures/

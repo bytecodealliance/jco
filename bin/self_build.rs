@@ -19,6 +19,10 @@ fn main() -> Result<()> {
         encoder = encoder.adapter("wasi_snapshot_preview1", &adapter)?;
 
         let adapted_component = encoder.encode()?;
+        fs::create_dir_all(PathBuf::from("./obj"))?;
+        let mut component_path = PathBuf::from("./obj").join(&name);
+        component_path.set_extension("component.wasm");
+        fs::write(component_path, &adapted_component)?;
 
         let import_map = HashMap::from([
             (

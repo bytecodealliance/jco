@@ -1,5 +1,5 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'url';
 import { exec, jcoPath } from './helpers.js';
 import { tmpdir } from 'node:os';
@@ -17,6 +17,16 @@ export async function cliTest (fixtures) {
       }
       catch {}
     }
+
+    test('Transcoding', async () => {
+      const outDir = fileURLToPath(new URL(`./output/env-allow`, import.meta.url));
+      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/env-allow.composed.wasm`, '-o', outDir);
+      strictEqual(stderr, '');
+      await writeFile(`${outDir}/package.json`, JSON.stringify({ type: 'module' }));
+      const source = await readFile(`${outDir}/env-allow.composed.js`);
+      const m = await import(`${outDir}/env-allow.composed.js`);
+      deepStrictEqual(m.testGetEnv(), [['CUSTOM', 'VAL']]);
+    });
 
     test('Transpile', async () => {
       try {

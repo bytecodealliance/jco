@@ -22,8 +22,9 @@ use wasmtime_environ::{
         GlobalInitializer, InstantiateModule, LoweredIndex, RuntimeImportIndex,
         RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
     },
+    fact::{FixedEncoding, Transcode},
+    EntityIndex, PrimaryMap,
 };
-use wasmtime_environ::{EntityIndex, PrimaryMap};
 use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
 use wit_parser::abi::AbiVariant;
@@ -431,6 +432,7 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
+        let i = i.as_u32();
         match trampoline {
             // these are hoisted before initialization
             Trampoline::LowerImport { .. } => {}
@@ -446,15 +448,48 @@ impl<'a> Instantiator<'a, '_> {
             // for now since it can't be tested and additionally JS doesn't
             // support multi-memory which transcoders rely on anyway.
             Trampoline::Transcoder {
-                op: _,
-                from: _,
-                from64: _,
-                to: _,
-                to64: _,
-            } => unimplemented!(),
+                op,
+                from,
+                from64,
+                to,
+                to64,
+            } => {
+                if *from64 || *to64 {
+                    unimplemented!("memory 64 transcoder");
+                }
+                let from = from.as_u32();
+                let to = to.as_u32();
+                match op {
+                    Transcode::Copy(FixedEncoding::Utf8) => {
+                        uwriteln!(
+                            self.src.js,
+                            "function trampoline{i} (from_ptr, len, to_ptr) {{
+                                new Uint8Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                            }}
+                            "
+                        );
+                    }
+                    Transcode::Copy(FixedEncoding::Utf16) => unimplemented!("utf16 copier"),
+                    Transcode::Copy(FixedEncoding::Latin1) => unimplemented!("latin1 copier"),
+                    Transcode::Latin1ToUtf16 => unimplemented!("latin to utf16 transcoder"),
+                    Transcode::Latin1ToUtf8 => unimplemented!("latin to utf8 transcoder"),
+                    Transcode::Utf16ToCompactProbablyUtf16 => {
+                        unimplemented!("utf16 to compact wtf16 transcoder")
+                    }
+                    Transcode::Utf16ToCompactUtf16 => {
+                        unimplemented!("utf16 to compact utf16 transcoder")
+                    }
+                    Transcode::Utf16ToLatin1 => unimplemented!("utf16 to latin1 transcoder"),
+                    Transcode::Utf16ToUtf8 => unimplemented!("utf16 to utf8 transcoder"),
+                    Transcode::Utf8ToCompactUtf16 => {
+                        unimplemented!("utf8 to compact utf16 transcoder")
+                    }
+                    Transcode::Utf8ToLatin1 => unimplemented!("utf8 to latin1 transcoder"),
+                    Transcode::Utf8ToUtf16 => unimplemented!("utf8 to utf16 transcoder"),
+                };
+            }
 
             Trampoline::ResourceNew(resource) => {
-                let i = i.as_u32();
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
@@ -468,7 +503,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceRep(resource) => {
-                let i = i.as_u32();
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
@@ -484,7 +518,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceDrop(resource) => {
-                let i = i.as_u32();
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 let resource = &self.types[*resource];
@@ -585,6 +618,10 @@ impl<'a> Instantiator<'a, '_> {
                 prev.is_none(),
                 "unsupported duplicate import of `{module}::{name}`"
             );
+            if !prev.is_none() {
+                println!("{:?}", prev);
+            }
+            // assert!(prev.is_none());
         }
         let mut imports = String::new();
         if !import_obj.is_empty() {
