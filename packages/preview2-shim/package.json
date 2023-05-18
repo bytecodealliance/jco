@@ -15,6 +15,11 @@
       "types": "./types/*.d.ts",
       "node": "./lib/nodejs/*.js",
       "default": "./lib/browser/*.js"
+    },
+    "./console": {
+      "types": "./types/*.d.ts",
+      "node": "./lib/nodejs/logging.js",
+      "default": "./lib/browser/logging.js"
     }
   },
   "scripts": {

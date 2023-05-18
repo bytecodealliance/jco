@@ -5,3 +5,7 @@ export function getEnvironment () {
 export function preopens () {
   return [];
 }
+
+export function getArguments () {
+  return [];
+}
