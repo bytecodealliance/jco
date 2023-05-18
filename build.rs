@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, fs, io::Write, path::PathBuf};
 fn main() {
     if env::var("PREVIEW2_SHIM_TYPES").is_ok() {
         let current_dir = std::env::current_dir().unwrap();
-        let fixtures_dir = current_dir.join("./test/fixtures");
+        let fixtures_dir = current_dir.join("./test/fixtures/components");
         for world in ["reactor", "proxy"] {
             let component_path = fixtures_dir.join(format!("dummy_{}.component.wasm", world));
             let component = fs::read(&component_path).expect("component to be read from file");

@@ -6,7 +6,6 @@ export namespace Filesystem {
   export function syncData(this: Descriptor): void;
   export function getFlags(this: Descriptor): DescriptorFlags;
   export function getType(this: Descriptor): DescriptorType;
-  export function setFlags(this: Descriptor, flags: DescriptorFlags): void;
   export function setSize(this: Descriptor, size: Filesize): void;
   export function setTimes(this: Descriptor, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
   export function read(this: Descriptor, length: Filesize, offset: Filesize): [Uint8Array | ArrayBuffer, boolean];
@@ -138,7 +137,6 @@ export type ErrorCode = 'access' | 'would-block' | 'already' | 'bad-descriptor' 
 export interface DescriptorFlags {
   read?: boolean,
   write?: boolean,
-  nonBlocking?: boolean,
   fileIntegritySync?: boolean,
   dataIntegritySync?: boolean,
   requestedWriteSync?: boolean,
