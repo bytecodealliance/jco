@@ -1,12 +1,12 @@
 import { hrtime } from "node:process";
 
-export function resolution() {
-  console.log(`[monotonic-clock] Monotonic clock resolution`);
+export function resolution () {
+  return 1n;
 }
 
-let hrStart = hrtime.bigint();
-export function now() {
-  return hrtime.bigint() - hrStart;
+let _hrStart = hrtime.bigint();
+export function now () {
+  return hrtime.bigint() - _hrStart;
 }
 
 export function subscribe (_when, _absolute) {

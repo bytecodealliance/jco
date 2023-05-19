@@ -92,17 +92,35 @@ export async function transpileComponent (component, opts = {}) {
 
   if (opts.wasiShim !== false) {
     opts.map = Object.assign({
+      // Deprecated
       'environment-preopens': '@bytecodealliance/preview2-shim/environment-preopens',
+      'console': '@bytecodealliance/preview2-shim/console',
+      'default-outgoing-HTTP': '@bytecodealliance/preview2-shim/default-outgoing-HTTP',
       'environment': '@bytecodealliance/preview2-shim/environment',
+      // Deprecated
+      'environment-preopens': '@bytecodealliance/preview2-shim/environment-preopens',
       'exit': '@bytecodealliance/preview2-shim/exit',
       'filesystem': '@bytecodealliance/preview2-shim/filesystem',
+      // Deprecated
       'instance-monotonic-clock': '@bytecodealliance/preview2-shim/instance-monotonic-clock',
+      // Deprecated
       'instance-wall-clock': '@bytecodealliance/preview2-shim/instance-wall-clock',
+      'instance-network': '@bytecodealliance/preview2-shim/instance-network',
+      'ip-name-lookup': '@bytecodealliance/preview2-shim/ip-name-lookup',
       'monotonic-clock': '@bytecodealliance/preview2-shim/monotonic-clock',
+      'network': '@bytecodealliance/preview2-shim/network',
+      'poll': '@bytecodealliance/preview2-shim/poll',
       'preopens': '@bytecodealliance/preview2-shim/preopens',
       'random': '@bytecodealliance/preview2-shim/random',
+      // Deprecated
       'stderr': '@bytecodealliance/preview2-shim/stderr',
       'streams': '@bytecodealliance/preview2-shim/streams',
+      'tcp-create-socket': '@bytecodealliance/preview2-shim/tcp-create-socket',
+      'tcp': '@bytecodealliance/preview2-shim/tcp',
+      'timezone': '@bytecodealliance/preview2-shim/timezone',
+      'types': '@bytecodealliance/preview2-shim/types',
+      'udp-create-socket': '@bytecodealliance/preview2-shim/udp-create-socket',
+      'udp': '@bytecodealliance/preview2-shim/udp',
       'wall-clock': '@bytecodealliance/preview2-shim/wall-clock'
     }, opts.map || {});
   }
