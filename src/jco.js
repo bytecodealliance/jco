@@ -20,7 +20,8 @@ program.command('componentize')
   .description('Create a component from a JavaScript module')
   .usage('<js-source> -o <component-path>')
   .argument('<js-source>', 'JS source file to build')
-  .requiredOption('-w, --wit <world>', 'WIT world to build with')
+  .requiredOption('-w, --wit <path>', 'WIT path to build with')
+  .option('-n, --world-name <name>', 'WIT world to build')
   .requiredOption('-o, --out <out>', 'output component file')
   .action(asyncAction(componentize));
 
