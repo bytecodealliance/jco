@@ -92,6 +92,8 @@ export async function transpileComponent (component, opts = {}) {
 
   if (opts.wasiShim !== false) {
     opts.map = Object.assign({
+      // Deprecated
+      'environment-preopens': '@bytecodealliance/preview2-shim/environment-preopens',
       'console': '@bytecodealliance/preview2-shim/console',
       'default-outgoing-HTTP': '@bytecodealliance/preview2-shim/default-outgoing-HTTP',
       'environment': '@bytecodealliance/preview2-shim/environment',
