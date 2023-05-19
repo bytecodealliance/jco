@@ -1,6 +1,6 @@
 export function now() {
-  const seconds = BigInt(Math.floor(Date.now() / 1000));
-  const nanoseconds = (Date.now() % 1000) * 1000 * 1000;
+  const seconds = BigInt(Math.floor(Date.now() / 1e3));
+  const nanoseconds = (Date.now() % 1e3) * 1e6;
   return { seconds, nanoseconds };
 }
 

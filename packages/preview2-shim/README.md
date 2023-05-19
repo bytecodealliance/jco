@@ -8,8 +8,8 @@ Currently supports Node.js and browser versions, but alternative implementations
 
 | Interface       | Node.js                      | Browser                      |
 | --------------- | ----------------------------:|-----------------------------:|
-| Clocks          | Pending timezone, resolution | Pending timezone, resolution |
-| Filesystem      | Basic preopens / reads       | :x:                          |
+| Clocks          | Pending timezone, poll       | Pending timezone, poll       |
+| Filesystem      | Basic read support           | :x:                          |
 | HTTP            | :x:                          | :x:                          |
 | IO              | Basic FS Streams             | :x:                          |
 | Logging         | :heavy_check_mark:           | :heavy_check_mark:           |
