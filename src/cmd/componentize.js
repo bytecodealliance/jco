@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import c from 'chalk-template';
 
 export async function componentize (jsSource, opts) {
@@ -11,8 +12,10 @@ export async function componentize (jsSource, opts) {
     throw e;
   }
   const source = await readFile(jsSource, 'utf8');
-  const wit = await readFile(opts.wit, 'utf8');
-  const { component, imports } = await componentizeFn(source, wit);
+  const { component, imports } = await componentizeFn(source, {
+    witPath: resolve(opts.wit),
+    worldName: opts.worldName
+  });
   await writeFile(opts.out, component);
   console.log(c`{green OK} Successfully written {bold ${opts.out}} with imports (${imports.join(', ')}).`);
 }
