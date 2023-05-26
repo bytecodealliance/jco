@@ -1,10 +1,7 @@
-import crypto from 'node:crypto';
-import { resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { readFile, writeFile, unlink } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
-import { argv0 } from 'node:process';
+import dependencies from "./dependencies.js";
 import c from 'chalk-template';
+
+const {crypto, resolve, tmpdir, readFile, writeFile, unlink, spawn, argv0} = dependencies;
 
 let _showSpinner = false;
 export function setShowSpinner (val) {

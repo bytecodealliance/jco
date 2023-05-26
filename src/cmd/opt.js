@@ -1,9 +1,9 @@
 import { exports } from '../../obj/wasm-tools.js';
-import { writeFile } from 'fs/promises';
-import { fileURLToPath } from 'url';
 import c from 'chalk-template';
 import { readFile, sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import ora from 'ora';
+import dependencies from '../dependencies.js';
+const { writeFile, fileURLToPath } = dependencies;
 
 const { metadataShow, print } = exports;
 

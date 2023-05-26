@@ -1,8 +1,9 @@
-import { writeFile } from "node:fs/promises";
 import { readFile } from '../common.js';
 import { exports } from "../../obj/wasm-tools.js";
-import { resolve, basename, extname } from 'node:path';
 import c from 'chalk-template';
+import dependencies from "../dependencies.js";
+
+const {writeFile, resolve, basename, extname} = dependencies;
 
 const {
   print: printFn,

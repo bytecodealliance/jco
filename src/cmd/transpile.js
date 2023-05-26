@@ -1,13 +1,12 @@
 import { exports } from '../../obj/js-component-bindgen-component.js';
-import { writeFile } from 'fs/promises';
-import { mkdir } from 'fs/promises';
-import { dirname, extname, basename } from 'path';
 import c from 'chalk-template';
 import { readFile, sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import { optimizeComponent } from './opt.js';
 import { minify } from 'terser';
-import { fileURLToPath } from 'url';
 import ora from 'ora';
+import dependencies from '../dependencies.js';
+
+const { writeFile, mkdir, dirname, extname, basename, fileURLToPath } = dependencies;
 
 // pending default export support
 const { generate } = exports;
