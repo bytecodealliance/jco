@@ -29,27 +29,12 @@ macro_rules! uwriteln {
 
 wit_bindgen::generate!("js-component-bindgen");
 
-use crate::exports::*;
-
 struct JsComponentBindgenComponent;
 
-export_js_component_bindgen_component!(JsComponentBindgenComponent);
+export_js_component_bindgen!(JsComponentBindgenComponent);
 
-// fn init() {
-//     static INIT: Once = Once::new();
-//     INIT.call_once(|| {
-//         let prev_hook = std::panic::take_hook();
-//         std::panic::set_hook(Box::new(move |info| {
-//             console::error(&info.to_string());
-//             prev_hook(info);
-//         }));
-//     });
-// }
-
-impl exports::Exports for JsComponentBindgenComponent {
+impl JsComponentBindgen for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
-        // init();
-
         let opts = js_component_bindgen::TranspileOpts {
             name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),

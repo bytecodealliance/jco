@@ -1,81 +1,8 @@
 import { openSync, constants, statSync, lstatSync, fstatSync, closeSync, readdirSync } from 'node:fs';
-import { _descriptors, _addOpenedDescriptor, _removeOpenedDescriptor, _getDescriptorType, _setSubdescriptorType, _setDescriptorType, _getFullPath } from './preopens.js';
-import { _createFileStream } from './streams.js';
-
-export function readViaStream(fd, offset) {
-  return _createFileStream(fd, offset);
-}
-
-export function writeViaStream(fd, offset) {
-  console.log(`[filesystem] WRITE STREAM ${fd} ${offset}`);
-}
-
-export function appendViaStream(fd) {
-  console.log(`[filesystem] APPEND STREAM ${fd}`);
-}
-
-export function advise(fd, offset, length, advice) {
-  console.log(`[filesystem] ADVISE`, fd, offset, length, advice);
-}
-
-export function syncData(fd) {
-  console.log(`[filesystem] SYNC DATA ${fd}`);
-}
-
-export function getFlags(fd) {
-  console.log(`[filesystem] FLAGS FOR ${fd}`);
-}
-
-export function getType(fd) {
-  let type = _getDescriptorType(fd);
-  if (type === null) {
-    stat(fd);
-    type = _getDescriptorType(fd);
-  }
-  return type;
-}
-
-export function setFlags(fd, flags) {
-  console.log(`[filesystem] SET FLAGS ${fd} ${JSON.stringify(flags)}`);
-}
-
-export function setSize(fd, size) {
-  console.log(`[filesystem] SET SIZE`, fd, size);
-}
-
-export function setTimes(fd, dataAccessTimestamp, dataModificationTimestamp) {
-  console.log(`[filesystem] SET TIMES`, fd, dataAccessTimestamp, dataModificationTimestamp);
-}
-
-export function read(fd, length, offset) {
-  console.log(`[filesystem] READ`, fd, length, offset);
-}
-
-export function write(fd, buffer, offset) {
-  console.log(`[filesystem] WRITE`, fd, buffer, offset);
-}
+import { _descriptors, _addOpenedDescriptor, _removeOpenedDescriptor, _getDescriptorType, _setSubdescriptorType, _setDescriptorType, _getFullPath } from './cli-base.js';
+import { _createFileStream } from './io.js';
 
 let _dirStreams = [];
-export function readDirectory(fd) {
-  const fullPath = _getFullPath(fd);
-  let dirs;
-  try {
-    dirs = readdirSync(fullPath, { withFileTypes: true });
-  }
-  catch (e) {
-    _convertFsError(e);
-  }
-  _dirStreams.push({ fd, dirs, cursor: 0 });
-  return _dirStreams.length - 1;
-}
-
-export function sync(fd) {
-  console.log(`[filesystem] SYNC`, fd);
-}
-
-export function createDirectoryAt(fd, path) {
-  console.log(`[filesystem] CREATE DIRECTORY`, fd, path);
-}
 
 const nsMagnitude = 1_000_000_000_000n;
 function nsToDateTime (ns) {
@@ -84,7 +11,7 @@ function nsToDateTime (ns) {
   return { seconds, nanoseconds };
 }
 
-export function _convertFsError (e) {
+function _convertFsError (e) {
   switch (e.code) {
     case 'EACCES': throw 'access';
     case 'EAGAIN':
@@ -146,163 +73,241 @@ function _lookupType (obj) {
   return 'unknown';
 }
 
-export function stat(fd) {
-  let stats;
-  try {
-    stats = fstatSync(fd, { bigint: true });
+export const filesystem = {
+  readViaStream(fd, offset) {
+    return _createFileStream(fd, offset);
+  },
+
+  writeViaStream(fd, offset) {
+    console.log(`[filesystem] WRITE STREAM ${fd} ${offset}`);
+  },
+
+  appendViaStream(fd) {
+    console.log(`[filesystem] APPEND STREAM ${fd}`);
+  },
+
+  advise(fd, offset, length, advice) {
+    console.log(`[filesystem] ADVISE`, fd, offset, length, advice);
+  },
+
+  syncData(fd) {
+    console.log(`[filesystem] SYNC DATA ${fd}`);
+  },
+
+  getFlags(fd) {
+    console.log(`[filesystem] FLAGS FOR ${fd}`);
+  },
+
+  getType(fd) {
+    let type = _getDescriptorType(fd);
+    if (type === null) {
+      filesystem.stat(fd);
+      type = _getDescriptorType(fd);
+    }
+    return type;
+  },
+
+  setFlags(fd, flags) {
+    console.log(`[filesystem] SET FLAGS ${fd} ${JSON.stringify(flags)}`);
+  },
+
+  setSize(fd, size) {
+    console.log(`[filesystem] SET SIZE`, fd, size);
+  },
+
+  setTimes(fd, dataAccessTimestamp, dataModificationTimestamp) {
+    console.log(`[filesystem] SET TIMES`, fd, dataAccessTimestamp, dataModificationTimestamp);
+  },
+
+  read(fd, length, offset) {
+    console.log(`[filesystem] READ`, fd, length, offset);
+  },
+
+  write(fd, buffer, offset) {
+    console.log(`[filesystem] WRITE`, fd, buffer, offset);
+  },
+
+  readDirectory(fd) {
+    const fullPath = _getFullPath(fd);
+    let dirs;
+    try {
+      dirs = readdirSync(fullPath, { withFileTypes: true });
+    }
+    catch (e) {
+      _convertFsError(e);
+    }
+    _dirStreams.push({ fd, dirs, cursor: 0 });
+    return _dirStreams.length - 1;
+  },
+
+  sync(fd) {
+    console.log(`[filesystem] SYNC`, fd);
+  },
+
+  createDirectoryAt(fd, path) {
+    console.log(`[filesystem] CREATE DIRECTORY`, fd, path);
+  },
+
+  stat(fd) {
+    let stats;
+    try {
+      stats = fstatSync(fd, { bigint: true });
+    }
+    catch (e) {
+      _convertFsError(e);
+    }
+    const type = _lookupType(stats);
+    _setDescriptorType(fd, type);
+    return {
+      device: stats.dev,
+      inode: stats.ino,
+      type,
+      linkCount: stats.nlink,
+      size: stats.size,
+      dataAccessTimestamp: nsToDateTime(stats.atimeNs),
+      dataModificationTimestamp: nsToDateTime(stats.mtimeNs),
+      statusChangeTimestamp: nsToDateTime(stats.ctimeNs),
+    };
+  },
+
+  statAt(fd, { symlinkFollow }, path) {
+    const fullPath = _descriptors[fd].path + path;
+    let stats;
+    try {
+      stats = (symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
+    }
+    catch (e) {
+      _convertFsError(e);
+    }
+    const type = _lookupType(stats);
+    _setSubdescriptorType(fd, path, type);
+    return {
+      device: stats.dev,
+      inode: stats.ino,
+      type,
+      linkCount: stats.nlink,
+      size: stats.size,
+      dataAccessTimestamp: nsToDateTime(stats.atimeNs),
+      dataModificationTimestamp: nsToDateTime(stats.mtimeNs),
+      statusChangeTimestamp: nsToDateTime(stats.ctimeNs),
+    };
+  },
+
+  setTimesAt(fd) {
+    console.log(`[filesystem] SET TIMES AT`, fd);
+  },
+
+  linkAt(fd) {
+    console.log(`[filesystem] LINK AT`, fd);
+  },
+
+  openAt(fd, pathFlags, path, openFlags, descriptorFlags, modes) {
+    // TODO
+    // if (pathFlags.symlinkFollow) {
+    //   // resolve symlink
+    // }
+    const fullPath = _descriptors[fd].path + path;
+    let fsOpenFlags = 0x0;
+    if (openFlags.create)
+      fsOpenFlags |= constants.O_CREAT;
+    if (openFlags.directory)
+      fsOpenFlags |= constants.O_DIRECTORY;
+    if (openFlags.exclusive)
+      fsOpenFlags |= constants.O_EXCL;
+    if (openFlags.truncate)
+      fsOpenFlags |= constants.O_TRUNC;
+    if (descriptorFlags.read && descriptorFlags.write)
+      fsOpenFlags |= constants.O_RDWR;
+    else if (descriptorFlags.write)
+      fsOpenFlags |= constants.O_WRONLY;
+    // if (descriptorFlags.fileIntegritySync)
+    // if (descriptorFlags.dataIntegritySync)
+    // if (descriptorFlags.requestedWriteSync)
+    // if (descriptorFlags.mutateDirectory)
+    let fsMode = 0x0;
+    if (modes.readable)
+      fsMode |= 0o444;
+    if (modes.writeable)
+      fsMode |= 0o222;
+    if (modes.executable)
+      fsMode |= 0o111;
+    let localFd;
+    try {
+      localFd = openSync(fullPath, fsOpenFlags, fsMode);
+    }
+    catch (e) {
+      _convertFsError(e);
+    }
+    _addOpenedDescriptor(localFd, path, fd);
+    return localFd;
+  },
+
+  readlinkAt(fd) {
+    console.log(`[filesystem] READLINK AT`, fd);
+  },
+
+  removeDirectoryAt(fd) {
+    console.log(`[filesystem] REMOVE DIR AT`, fd);
+  },
+
+  renameAt(fd) {
+    console.log(`[filesystem] RENAME AT`, fd);
+  },
+
+  symlinkAt(fd) {
+    console.log(`[filesystem] SYMLINK AT`, fd);
+  },
+
+  unlinkFileAt(fd) {
+    console.log(`[filesystem] UNLINK FILE AT`, fd);
+  },
+
+  changeFilePermissionsAt(fd) {
+    console.log(`[filesystem] CHANGE FILE PERMISSIONS AT`, fd);
+  },
+
+  changeDirectoryPermissionsAt(fd) {
+    console.log(`[filesystem] CHANGE DIR PERMISSIONS AT`, fd);
+  },
+
+  lockShared(fd) {
+    console.log(`[filesystem] LOCK SHARED`, fd);
+  },
+
+  lockExclusive(fd) {
+    console.log(`[filesystem] LOCK EXCLUSIVE`, fd);
+  },
+
+  tryLockShared(fd) {
+    console.log(`[filesystem] TRY LOCK SHARED`, fd);
+  },
+
+  tryLockExclusive(fd) {
+    console.log(`[filesystem] TRY LOCK EXCLUSIVE`, fd);
+  },
+
+  unlock(fd) {
+    console.log(`[filesystem] UNLOCK`, fd);
+  },
+
+  dropDescriptor(fd) {
+    _removeOpenedDescriptor(fd);
+    closeSync(fd);
+  },
+
+  readDirectoryEntry(stream) {
+    const streamValue = _dirStreams[stream];
+    if (streamValue.cursor === streamValue.dirs.length)
+      return null;
+    const dir = streamValue.dirs[streamValue.cursor++];
+    const type = _lookupType(dir);
+    _setSubdescriptorType(streamValue.fd, '/' + dir.name, type);
+    return { inode: null, type, name: dir.name };
+  },
+
+  dropDirectoryEntryStream(stream) {
+    _dirStreams.splice(stream, 1);
   }
-  catch (e) {
-    _convertFsError(e);
-  }
-  const type = _lookupType(stats);
-  _setDescriptorType(fd, type);
-  return {
-    device: stats.dev,
-    inode: stats.ino,
-    type,
-    linkCount: stats.nlink,
-    size: stats.size,
-    dataAccessTimestamp: nsToDateTime(stats.atimeNs),
-    dataModificationTimestamp: nsToDateTime(stats.mtimeNs),
-    statusChangeTimestamp: nsToDateTime(stats.ctimeNs),
-  };
-}
+};
 
-export function statAt(fd, { symlinkFollow }, path) {
-  const fullPath = _descriptors[fd].path + path;
-  let stats;
-  try {
-    stats = (symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
-  }
-  catch (e) {
-    _convertFsError(e);
-  }
-  const type = _lookupType(stats);
-  _setSubdescriptorType(fd, path, type);
-  return {
-    device: stats.dev,
-    inode: stats.ino,
-    type,
-    linkCount: stats.nlink,
-    size: stats.size,
-    dataAccessTimestamp: nsToDateTime(stats.atimeNs),
-    dataModificationTimestamp: nsToDateTime(stats.mtimeNs),
-    statusChangeTimestamp: nsToDateTime(stats.ctimeNs),
-  };
-}
-
-export function setTimesAt(fd) {
-  console.log(`[filesystem] SET TIMES AT`, fd);
-}
-
-export function linkAt(fd) {
-  console.log(`[filesystem] LINK AT`, fd);
-}
-
-export function openAt(fd, pathFlags, path, openFlags, descriptorFlags, modes) {
-  // TODO
-  // if (pathFlags.symlinkFollow) {
-  //   // resolve symlink
-  // }
-  const fullPath = _descriptors[fd].path + path;
-  let fsOpenFlags = 0x0;
-  if (openFlags.create)
-    fsOpenFlags |= constants.O_CREAT;
-  if (openFlags.directory)
-    fsOpenFlags |= constants.O_DIRECTORY;
-  if (openFlags.exclusive)
-    fsOpenFlags |= constants.O_EXCL;
-  if (openFlags.truncate)
-    fsOpenFlags |= constants.O_TRUNC;
-  if (descriptorFlags.read && descriptorFlags.write)
-    fsOpenFlags |= constants.O_RDWR;
-  else if (descriptorFlags.write)
-    fsOpenFlags |= constants.O_WRONLY;
-  // if (descriptorFlags.fileIntegritySync)
-  // if (descriptorFlags.dataIntegritySync)
-  // if (descriptorFlags.requestedWriteSync)
-  // if (descriptorFlags.mutateDirectory)
-  let fsMode = 0x0;
-  if (modes.readable)
-    fsMode |= 0o444;
-  if (modes.writeable)
-    fsMode |= 0o222;
-  if (modes.executable)
-    fsMode |= 0o111;
-  let localFd;
-  try {
-    localFd = openSync(fullPath, fsOpenFlags, fsMode);
-  }
-  catch (e) {
-    _convertFsError(e);
-  }
-  _addOpenedDescriptor(localFd, path, fd);
-  return localFd;
-}
-
-export function readlinkAt(fd) {
-  console.log(`[filesystem] READLINK AT`, fd);
-}
-
-export function removeDirectoryAt(fd) {
-  console.log(`[filesystem] REMOVE DIR AT`, fd);
-}
-
-export function renameAt(fd) {
-  console.log(`[filesystem] RENAME AT`, fd);
-}
-
-export function symlinkAt(fd) {
-  console.log(`[filesystem] SYMLINK AT`, fd);
-}
-
-export function unlinkFileAt(fd) {
-  console.log(`[filesystem] UNLINK FILE AT`, fd);
-}
-
-export function changeFilePermissionsAt(fd) {
-  console.log(`[filesystem] CHANGE FILE PERMISSIONS AT`, fd);
-}
-
-export function changeDirectoryPermissionsAt(fd) {
-  console.log(`[filesystem] CHANGE DIR PERMISSIONS AT`, fd);
-}
-
-export function lockShared(fd) {
-  console.log(`[filesystem] LOCK SHARED`, fd);
-}
-
-export function lockExclusive(fd) {
-  console.log(`[filesystem] LOCK EXCLUSIVE`, fd);
-}
-
-export function tryLockShared(fd) {
-  console.log(`[filesystem] TRY LOCK SHARED`, fd);
-}
-
-export function tryLockExclusive(fd) {
-  console.log(`[filesystem] TRY LOCK EXCLUSIVE`, fd);
-}
-
-export function unlock(fd) {
-  console.log(`[filesystem] UNLOCK`, fd);
-}
-
-export function dropDescriptor(fd) {
-  _removeOpenedDescriptor(fd);
-  closeSync(fd);
-}
-
-export function readDirectoryEntry(stream) {
-  const streamValue = _dirStreams[stream];
-  if (streamValue.cursor === streamValue.dirs.length)
-    return null;
-  const dir = streamValue.dirs[streamValue.cursor++];
-  const type = _lookupType(dir);
-  _setSubdescriptorType(streamValue.fd, '/' + dir.name, type);
-  return { inode: null, type, name: dir.name };
-}
-
-export function dropDirectoryEntryStream(stream) {
-  _dirStreams.splice(stream, 1);
-}
+export { filesystem as filesystemFilesystem }

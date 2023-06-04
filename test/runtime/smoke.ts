@@ -1,4 +1,4 @@
-// Flags: --tla-compat --map testwasi=../helpers.js --map imports=../smoke.js --base64-cutoff=2500
+// Flags: --tla-compat --map testwasi=../helpers.js --map test:smoke=../smoke.js --base64-cutoff=2500
 function assert(x: boolean, msg: string) {
   if (!x)
     throw new Error(msg);
@@ -6,9 +6,11 @@ function assert(x: boolean, msg: string) {
 
 let hit = false;
 
-export function thunk () {
-  hit = true;
-}
+export const smokeImports = {
+  thunk () {
+    hit = true;
+  }
+};
 
 async function run() {
   const wasm = await import('../output/smoke/smoke.js');

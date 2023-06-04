@@ -56,14 +56,46 @@ export function _setPreopens (preopens) {
   }
 }
 
-export function getStdio () {
-  return {
-    stdin: 0,
-    stdout: 1,
-    stderr: 2,
-  };
+let _env;
+export function _setEnv (envObj) {
+  _env = Object.entries(envObj);
 }
 
-export function getDirectories () {
-  return directories;
+export const cliBaseEnvironment = {
+  getEnvironment () {
+    if (!_env) _setEnv(process.env);
+    return _env;
+  }
+};
+
+export const cliBaseExit = {
+  exit (status) {
+    process.exit(status.tag === 'err' ? 1 : 0);
+  }
+};
+
+export const cliBasePreopens = {
+  getDirectories () {
+    return directories;
+  }
 }
+
+export const cliBaseStdin = {
+  getStdin () {
+    return 0;
+  }
+};
+
+export const cliBaseStdout = {
+  getStdout () {
+    return 1;
+  }
+};
+
+export const cliBaseStderr = {
+  getStderr () {
+    return 2;
+  }
+};
+
+export { cliBaseEnvironment as environment, cliBaseExit as exit, cliBasePreopens as preopens, cliBaseStdin as stdin, cliBaseStdout as stdout, cliBaseStderr as stderr }

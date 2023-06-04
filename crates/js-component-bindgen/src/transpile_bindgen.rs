@@ -1,12 +1,13 @@
 use crate::files::Files;
 use crate::function_bindgen::{ErrHandling, FunctionBindgen};
-use crate::identifier::is_js_identifier;
+use crate::identifier::{maybe_quote_id, maybe_quote_member};
 use crate::intrinsics::{render_intrinsics, Intrinsic};
 use crate::source;
 use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
 use heck::*;
 use indexmap::IndexMap;
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
@@ -43,7 +44,7 @@ pub struct TranspileOpts {
     pub valid_lifting_optimization: bool,
 }
 
-struct JsBindgen {
+struct JsBindgen<'a> {
     /// The source code for the "main" file that's going to be created for the
     /// component we're generating bindings for. This is incrementally added to
     /// over time and primarily contains the main `instantiate` function as well
@@ -51,13 +52,13 @@ struct JsBindgen {
     src: Source,
 
     /// JS output imports map from imported specifier, to a list of bindings
-    imports: HashMap<String, Vec<(String, String)>>,
+    imports: BTreeMap<String, BTreeMap<String, String>>,
 
     /// Core module count
     core_module_cnt: usize,
 
     /// Various options for code generation.
-    pub opts: TranspileOpts,
+    opts: &'a TranspileOpts,
 
     /// List of all intrinsics emitted to `src` so far.
     all_intrinsics: BTreeSet<Intrinsic>,
@@ -71,18 +72,43 @@ pub fn transpile_bindgen(
     id: WorldId,
     opts: TranspileOpts,
     files: &mut Files,
-) {
+) -> (Vec<String>, Vec<(String, Export)>) {
     let mut bindgen = JsBindgen {
         src: Source::default(),
-        imports: HashMap::new(),
+        imports: BTreeMap::new(),
         core_module_cnt: 0,
-        opts,
+        opts: &opts,
         all_intrinsics: BTreeSet::new(),
     };
     bindgen.core_module_cnt = modules.len();
 
     // bindings is the actual `instantiate` method itself, created by this
     // structure.
+
+    // populate reverse map from import names to world items
+    let mut imports = BTreeMap::new();
+    let mut exports = BTreeMap::new();
+    for (key, _) in &resolve.worlds[id].imports {
+        let name = match key {
+            WorldKey::Name(name) => name.to_string(),
+            WorldKey::Interface(iface) => match resolve.id_of(*iface) {
+                Some(name) => name.to_string(),
+                None => continue,
+            },
+        };
+        imports.insert(name, key.clone());
+    }
+    for (key, _) in &resolve.worlds[id].exports {
+        let name = match key {
+            WorldKey::Name(name) => name.to_string(),
+            WorldKey::Interface(iface) => match resolve.id_of(*iface) {
+                Some(name) => name.to_string(),
+                None => continue,
+            },
+        };
+        exports.insert(name, key.clone());
+    }
+
     let mut instantiator = Instantiator {
         src: Source::default(),
         sizes: SizeAlign::default(),
@@ -92,16 +118,32 @@ pub fn transpile_bindgen(
         resolve,
         world: id,
         component,
+        imports,
+        exports,
     };
     instantiator.sizes.fill(resolve);
-    instantiator.instantiate();
+    let exports = instantiator.instantiate();
+    let imports = instantiator
+        .imports
+        .keys()
+        .map(|key| match parse_world_key(key) {
+            Some((ns, package_name, _)) => {
+                map_import(&opts.map, &key[0..ns.len() + package_name.len() + 1]).unwrap_or_else(
+                    || key[ns.len() + 1..ns.len() + package_name.len() + 1].to_string(),
+                )
+            }
+            None => map_import(&opts.map, key).unwrap_or_else(|| key.to_string()),
+        })
+        .collect();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
 
     bindgen.finish_component(name, files);
+
+    (imports, exports)
 }
 
-impl JsBindgen {
+impl<'a> JsBindgen<'a> {
     fn finish_component(&mut self, name: &str, files: &mut Files) {
         let mut output = source::Source::default();
         let mut compilation_promises = source::Source::default();
@@ -229,29 +271,6 @@ impl JsBindgen {
         files.push(&format!("{name}.js"), bytes);
     }
 
-    fn map_import(&self, impt: &str) -> String {
-        if let Some(map) = self.opts.map.as_ref() {
-            for (key, mapping) in map {
-                if key == impt {
-                    return mapping.into();
-                }
-                if let Some(wildcard_idx) = key.find('*') {
-                    let lhs = &key[0..wildcard_idx];
-                    let rhs = &key[wildcard_idx + 1..];
-                    if impt.starts_with(lhs) && impt.ends_with(rhs) {
-                        let matched =
-                            &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
-                        return mapping.replace('*', matched);
-                    }
-                }
-            }
-            if let Some(mapping) = map.get(impt) {
-                return mapping.into();
-            }
-        }
-        impt.into()
-    }
-
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
         return intrinsic.name().to_string();
@@ -261,19 +280,21 @@ impl JsBindgen {
 /// Helper structure used to generate the `instantiate` method of a component.
 ///
 /// This is the main structure for parsing the output of Wasmtime.
-struct Instantiator<'a> {
+struct Instantiator<'a, 'b> {
     src: Source,
-    gen: &'a mut JsBindgen,
+    gen: &'a mut JsBindgen<'b>,
     modules: &'a PrimaryMap<StaticModuleIndex, ModuleTranslation<'a>>,
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
     resolve: &'a Resolve,
     world: WorldId,
     sizes: SizeAlign,
     component: &'a Component,
+    exports: BTreeMap<String, WorldKey>,
+    imports: BTreeMap<String, WorldKey>,
 }
 
-impl Instantiator<'_> {
-    fn instantiate(&mut self) {
+impl Instantiator<'_, '_> {
+    fn instantiate(&mut self) -> Vec<(String, Export)> {
         // To avoid uncaught promise rejection errors, we attach an intermediate
         // Promise.all with a rejection handler, if there are multiple promises.
         if self.modules.len() > 1 {
@@ -294,10 +315,11 @@ impl Instantiator<'_> {
         if self.gen.opts.instantiation {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
-            self.src.js("return ");
         }
 
-        self.exports(&self.component.exports);
+        let exports = self.exports(&self.component.exports);
+
+        exports
     }
 
     fn instantiation_global_initializer(&mut self, init: &GlobalInitializer) {
@@ -348,13 +370,13 @@ impl Instantiator<'_> {
             // for now since it can't be tested and additionally JS doesn't
             // support multi-memory which transcoders rely on anyway.
             GlobalInitializer::Transcoder(Transcoder {
-                index,
-                op,
-                from,
-                from64,
-                to,
-                to64,
-                signature,
+                index: _,
+                op: _,
+                from: _,
+                from64: _,
+                to: _,
+                to64: _,
+                signature: _,
             }) => unimplemented!(),
         }
     }
@@ -378,18 +400,10 @@ impl Instantiator<'_> {
         if !import_obj.is_empty() {
             imports.push_str(", {\n");
             for (module, names) in import_obj {
-                if is_js_identifier(module) {
-                    imports.push_str(module);
-                } else {
-                    uwrite!(imports, "'{module}'");
-                }
+                imports.push_str(&maybe_quote_id(module));
                 imports.push_str(": {\n");
                 for (name, val) in names {
-                    if is_js_identifier(name) {
-                        imports.push_str(name);
-                    } else {
-                        uwrite!(imports, "'{name}'");
-                    }
+                    imports.push_str(&maybe_quote_id(name));
                     uwriteln!(imports, ": {val},");
                 }
                 imports.push_str("},\n");
@@ -413,45 +427,114 @@ impl Instantiator<'_> {
         // time `wit-component` only supports root-level imports of instances
         // where instances export functions.
         let (import_index, path) = &self.component.imports[import.import];
-        let (import_name, _import_ty) = &self.component.import_types[*import_index];
-        let func = match &self.resolve.worlds[self.world].imports[import_name.as_str()] {
-            WorldItem::Function(f) => {
-                assert_eq!(path.len(), 0);
-                f
+        let (import_name, _) = &self.component.import_types[*import_index];
+
+        let world_item = &self.imports[import_name];
+
+        let (func, import_specifier, interface_name) = match parse_world_key(import_name) {
+            Some((ns, package_name, export)) => {
+                // namespaces must either be explicitly mapped to URLs
+                // or, if no map entry is provided by the user, a rewrite into "kebab name" is
+                // automatically performed with the default convention of using the package name as the import
+                // and the package name and interface name as the export kebab name itself
+                // if there is no other export using the interface name, the interface name is exported directly as
+                // an additional alias
+                let mapped_import_name = map_import(
+                    &self.gen.opts.map,
+                    &import_name[0..ns.len() + package_name.len() + 1],
+                );
+                match &self.resolve.worlds[self.world].imports[world_item] {
+                    WorldItem::Function(f) => {
+                        assert_eq!(path.len(), 0);
+                        (
+                            f,
+                            mapped_import_name.unwrap_or_else(|| package_name.to_string()),
+                            "".to_string(),
+                        )
+                    }
+                    WorldItem::Interface(i) => {
+                        assert_eq!(path.len(), 1);
+                        let func = &self.resolve.interfaces[*i].functions[&path[0]];
+                        (
+                            func,
+                            mapped_import_name.unwrap_or_else(|| package_name.to_string()),
+                            format!("{package_name}-{export}"),
+                        )
+                    }
+                    WorldItem::Type(_) => unreachable!(),
+                }
             }
-            WorldItem::Interface(i) => {
-                assert_eq!(path.len(), 1);
-                &self.resolve.interfaces[*i].functions[&path[0]]
+            None => {
+                let mapped_import_name = map_import(&self.gen.opts.map, import_name);
+                match &self.resolve.worlds[self.world].imports[world_item] {
+                    WorldItem::Function(f) => {
+                        assert_eq!(path.len(), 0);
+                        (
+                            f,
+                            mapped_import_name.unwrap_or_else(|| import_name.to_string()),
+                            "default".to_string(),
+                        )
+                    }
+                    WorldItem::Interface(i) => {
+                        assert_eq!(path.len(), 1);
+                        let func = &self.resolve.interfaces[*i].functions[&path[0]];
+                        (
+                            func,
+                            mapped_import_name.unwrap_or_else(|| import_name.to_string()),
+                            "*".to_string(),
+                        )
+                    }
+                    WorldItem::Type(_) => unreachable!(),
+                }
             }
-            WorldItem::Type(_) => unreachable!(),
         };
+
+        let func_or_interface_id = (if interface_name == "*" {
+            &func.name
+        } else {
+            interface_name.as_str()
+        })
+        .to_lower_camel_case();
 
         let index = import.index.as_u32();
         let callee = format!("lowering{index}Callee");
 
-        let import_specifier = self.gen.map_import(import_name);
+        let imports_map = self
+            .gen
+            .imports
+            .entry(import_specifier.to_string())
+            .or_insert(BTreeMap::new());
 
-        let id = func.name.to_lower_camel_case();
+        let local_name = if interface_name == "*" {
+            callee.to_string()
+        } else {
+            format!("interface{index}")
+        };
+
+        let entry = imports_map.entry(func_or_interface_id.to_string());
+        let vacant_interface = matches!(entry, Entry::Vacant(_));
+        let local_name = entry.or_insert(local_name);
 
         // instance imports are otherwise hoisted
         if self.gen.opts.instantiation {
-            uwriteln!(
+            if vacant_interface {
+                uwriteln!(
+                    self.src.js,
+                    "const {local_name} = imports{}{};",
+                    maybe_quote_member(&import_specifier),
+                    maybe_quote_member(&func_or_interface_id),
+                );
+            }
+        }
+
+        // in the interface case we must lower the interface function
+        if interface_name != "*" {
+            let fn_id = func.name.to_lower_camel_case();
+            uwrite!(
                 self.src.js,
-                "const {callee} = imports{}.{};",
-                if is_js_identifier(&import_specifier) {
-                    format!(".{}", import_specifier)
-                } else {
-                    format!("['{}']", import_specifier)
-                },
-                id
+                "const lowering{index}Callee = {local_name}{};",
+                maybe_quote_member(&fn_id)
             );
-        } else {
-            let imports_vec = self
-                .gen
-                .imports
-                .entry(import_specifier)
-                .or_insert(Vec::new());
-            imports_vec.push((id, callee.clone()));
         }
 
         uwrite!(self.src.js, "\nfunction lowering{index}");
@@ -577,29 +660,31 @@ impl Instantiator<'_> {
             ExportItem::Name(s) => s,
         };
         let i = export.instance.as_u32() as usize;
-        if is_js_identifier(name) {
-            format!("exports{i}.{name}")
-        } else {
-            format!("exports{i}['{name}']")
-        }
+        format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    fn exports(&mut self, exports: &IndexMap<String, Export>) {
+    fn exports(&mut self, exports: &IndexMap<String, Export>) -> Vec<(String, Export)> {
         if exports.is_empty() {
             if self.gen.opts.instantiation {
-                self.src.js("{}");
+                self.src.js("return {}");
             }
-            return;
+            return Vec::new();
         }
 
-        if self.gen.opts.instantiation {
-            uwriteln!(self.src.js, "{{");
-        }
-
-        let mut camel_exports = Vec::new();
-        for (name, export) in exports {
-            let item = &self.resolve.worlds[self.world].exports[name];
-            let camel = name.to_lower_camel_case();
+        let mut camel_exports = BTreeMap::new();
+        let mut camel_aliases = BTreeMap::new();
+        for (export_name, export) in exports.iter() {
+            let world_key = &self.exports[export_name];
+            let item = &self.resolve.worlds[self.world].exports[world_key];
+            let (camel_name, maybe_camel_alias) =
+                if let Some((_, package_name, export)) = parse_world_key(export_name) {
+                    (
+                        format!("{package_name}-{export}").to_lower_camel_case(),
+                        Some(export.to_lower_camel_case()),
+                    )
+                } else {
+                    (export_name.to_lower_camel_case(), None)
+                };
             match export {
                 Export::LiftedFunction {
                     ty: _,
@@ -607,7 +692,7 @@ impl Instantiator<'_> {
                     options,
                 } => {
                     self.export_bindgen(
-                        name,
+                        export_name,
                         None,
                         func,
                         options,
@@ -617,17 +702,13 @@ impl Instantiator<'_> {
                         },
                     );
                 }
-                Export::Instance(exports) => {
+                Export::Instance(iface) => {
                     let id = match item {
                         WorldItem::Interface(id) => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    if self.gen.opts.instantiation {
-                        uwriteln!(self.src.js, "{camel}: {{");
-                    } else {
-                        uwriteln!(self.src.js, "const {camel} = {{");
-                    }
-                    for (func_name, export) in exports {
+                    uwriteln!(self.src.js, "const {camel_name} = {{");
+                    for (func_name, export) in iface {
                         let (func, options) = match export {
                             Export::LiftedFunction { func, options, .. } => (func, options),
                             Export::Type(_) => continue, // ignored
@@ -635,18 +716,13 @@ impl Instantiator<'_> {
                         };
                         self.export_bindgen(
                             func_name,
-                            Some(name),
+                            Some(export_name),
                             func,
                             options,
                             &self.resolve.interfaces[id].functions[func_name],
                         );
                     }
-                    self.src.js("\n}");
-                    if self.gen.opts.instantiation {
-                        self.src.js(",\n");
-                    } else {
-                        self.src.js(";\n");
-                    }
+                    uwriteln!(self.src.js, "\n}};");
                 }
 
                 // ignore type exports for now
@@ -655,13 +731,50 @@ impl Instantiator<'_> {
                 // This can't be tested at this time so leave it unimplemented
                 Export::Module(_) => unimplemented!(),
             }
-            camel_exports.push(camel);
+            if let Some(camel_alias) = maybe_camel_alias {
+                camel_aliases.insert(camel_alias, camel_name.to_string());
+            }
+            camel_exports.insert(camel_name, export);
         }
-        if self.gen.opts.instantiation {
-            self.src.js("}");
-        } else {
-            uwriteln!(self.src.js, "\nexport {{ {} }}", camel_exports.join(", "));
+        // only promote aliases which aren't collisions against existing exports
+        for (alias, name) in &camel_aliases {
+            if !camel_exports.contains_key(alias) {
+                camel_exports.insert(alias.to_string(), camel_exports.get(name).unwrap().clone());
+            }
         }
+        uwrite!(
+            self.src.js,
+            "\n{} {{ ",
+            if self.gen.opts.instantiation {
+                "return"
+            } else {
+                "export"
+            }
+        );
+        uwriteln!(
+            self.src.js,
+            "{} }}",
+            camel_exports
+                .iter()
+                .map(|(name, _)| {
+                    let name = name.to_string();
+                    if let Some(original_name) = camel_aliases.get(&name) {
+                        if self.gen.opts.instantiation {
+                            format!("{name}: {original_name}")
+                        } else {
+                            format!("{original_name} as {name}")
+                        }
+                    } else {
+                        name
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
+        camel_exports
+            .iter()
+            .map(|(name, &import)| (name.clone(), import.clone()))
+            .collect()
     }
 
     fn export_bindgen(
@@ -673,7 +786,7 @@ impl Instantiator<'_> {
         func: &Function,
     ) {
         let name = name.to_lower_camel_case();
-        if self.gen.opts.instantiation || instance_name.is_some() {
+        if instance_name.is_some() {
             self.src.js.push_str(&name);
         } else {
             uwrite!(self.src.js, "\nfunction {name}");
@@ -686,7 +799,7 @@ impl Instantiator<'_> {
             func,
             AbiVariant::GuestExport,
         );
-        if self.gen.opts.instantiation || instance_name.is_some() {
+        if instance_name.is_some() {
             self.src.js(",\n");
         } else {
             self.src.js("\n");
@@ -706,6 +819,42 @@ impl Source {
     }
     pub fn js_init(&mut self, s: &str) {
         self.js_init.push_str(s);
+    }
+}
+
+fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> Option<String> {
+    if let Some(map) = map.as_ref() {
+        for (key, mapping) in map {
+            if key == impt {
+                return Some(mapping.into());
+            }
+            if let Some(wildcard_idx) = key.find('*') {
+                let lhs = &key[0..wildcard_idx];
+                let rhs = &key[wildcard_idx + 1..];
+                if impt.starts_with(lhs) && impt.ends_with(rhs) {
+                    let matched =
+                        &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
+                    return Some(mapping.replace('*', matched));
+                }
+            }
+        }
+        if let Some(mapping) = map.get(impt) {
+            return Some(mapping.into());
+        }
+    }
+    None
+}
+
+pub fn parse_world_key<'a>(name: &'a str) -> Option<(&'a str, &'a str, &'a str)> {
+    let registry_idx = match name.find(':') {
+        Some(idx) => idx,
+        None => return None,
+    };
+    let ns = &name[0..registry_idx];
+    match name.rfind('/') {
+        Some(sep_idx) => Some((ns, &name[registry_idx + 1..sep_idx], &name[sep_idx + 1..])),
+        // interface is a namespace, function is a default export
+        None => Some((ns, &name[registry_idx + 1..], "".as_ref())),
     }
 }
 

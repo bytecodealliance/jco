@@ -1,3 +1,5 @@
-default world test {
+package local:test
+
+world test {
   export hello: func() -> string
 }

@@ -1,4 +1,4 @@
-import { exports } from '../../obj/js-component-bindgen-component.js';
+import { generate } from '../../obj/js-component-bindgen-component.js';
 import { writeFile } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { dirname, extname, basename } from 'path';
@@ -8,9 +8,6 @@ import { optimizeComponent } from './opt.js';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
 import ora from 'ora';
-
-// pending default export support
-const { generate } = exports;
 
 export async function transpile (componentPath, opts, program) {
   const varIdx = program.parent.rawArgs.indexOf('--');
@@ -92,36 +89,7 @@ export async function transpileComponent (component, opts = {}) {
 
   if (opts.wasiShim !== false) {
     opts.map = Object.assign({
-      // Deprecated
-      'environment-preopens': '@bytecodealliance/preview2-shim/environment-preopens',
-      'console': '@bytecodealliance/preview2-shim/console',
-      'default-outgoing-HTTP': '@bytecodealliance/preview2-shim/default-outgoing-HTTP',
-      'environment': '@bytecodealliance/preview2-shim/environment',
-      // Deprecated
-      'environment-preopens': '@bytecodealliance/preview2-shim/environment-preopens',
-      'exit': '@bytecodealliance/preview2-shim/exit',
-      'filesystem': '@bytecodealliance/preview2-shim/filesystem',
-      // Deprecated
-      'instance-monotonic-clock': '@bytecodealliance/preview2-shim/instance-monotonic-clock',
-      // Deprecated
-      'instance-wall-clock': '@bytecodealliance/preview2-shim/instance-wall-clock',
-      'instance-network': '@bytecodealliance/preview2-shim/instance-network',
-      'ip-name-lookup': '@bytecodealliance/preview2-shim/ip-name-lookup',
-      'monotonic-clock': '@bytecodealliance/preview2-shim/monotonic-clock',
-      'network': '@bytecodealliance/preview2-shim/network',
-      'poll': '@bytecodealliance/preview2-shim/poll',
-      'preopens': '@bytecodealliance/preview2-shim/preopens',
-      'random': '@bytecodealliance/preview2-shim/random',
-      // Deprecated
-      'stderr': '@bytecodealliance/preview2-shim/stderr',
-      'streams': '@bytecodealliance/preview2-shim/streams',
-      'tcp-create-socket': '@bytecodealliance/preview2-shim/tcp-create-socket',
-      'tcp': '@bytecodealliance/preview2-shim/tcp',
-      'timezone': '@bytecodealliance/preview2-shim/timezone',
-      'types': '@bytecodealliance/preview2-shim/types',
-      'udp-create-socket': '@bytecodealliance/preview2-shim/udp-create-socket',
-      'udp': '@bytecodealliance/preview2-shim/udp',
-      'wall-clock': '@bytecodealliance/preview2-shim/wall-clock'
+      'wasi:*': '@bytecodealliance/preview2-shim/*'
     }, opts.map || {});
   }
 
@@ -181,10 +149,6 @@ export async function transpileComponent (component, opts = {}) {
         .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
         .replace(/var retasmFunc = [\s\S]*$/, '')
         .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
-        // "imports" as the name of the imports clashes with internal asm.js naming
-        // so we have to do a late patchup
-        .replace('var imports = imports.imports;', 'var imports_ = imports.imports;')
-        .replace(/([^$]) = imports\["/g, '$1 = imports_["')
         .replace('memory.grow = __wasm_memory_grow;', '')
         .trim()
       }`).join(',\n');

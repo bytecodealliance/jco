@@ -1,25 +1,144 @@
-export function read(s, len) {
-  switch (s) {
-    case 0:
-      return [process.stdin.read(len), true];
-    default:
-      throw new Error(`TODO: write ${s}`);
+import { readSync as fsReadSync } from 'node:fs';
+
+function _convertFsError (e) {
+  switch (e.code) {
+    case 'EACCES': throw 'access';
+    case 'EAGAIN':
+    case 'EWOULDBLOCK': throw 'would-block';
+    case 'EALREADY': throw 'already';
+    case 'EBADF': throw 'bad-descriptor';
+    case 'EBUSY': throw 'busy';
+    case 'EDEADLK': throw 'deadlock';
+    case 'EDQUOT': throw 'quota';
+    case 'EEXIST': throw 'exist';
+    case 'EFBIG': throw 'file-too-large';
+    case 'EILSEQ': throw 'illegal-byte-sequence';
+    case 'EINPROGRESS': throw 'in-progress';
+    case 'EINTR': throw 'interrupted';
+    case 'EINVAL': throw 'invalid';
+    case 'EIO': throw 'io';
+    case 'EISDIR': throw 'is-directory';
+    case 'ELOOP': throw 'loop';
+    case 'EMLINK': throw 'too-many-links';
+    case 'EMSGSIZE': throw 'message-size';
+    case 'ENAMETOOLONG': throw 'name-too-long'
+    case 'ENODEV': throw 'no-device';
+    case 'ENOENT': throw 'no-entry';
+    case 'ENOLCK': throw 'no-lock';
+    case 'ENOMEM': throw 'insufficient-memory';
+    case 'ENOSPC': throw 'insufficient-space';
+    case 'ENOTDIR': throw 'not-directory';
+    case 'ENOTEMPTY': throw 'not-empty';
+    case 'ENOTRECOVERABLE': throw 'not-recoverable';
+    case 'ENOTSUP': throw 'unsupported';
+    case 'ENOTTY': throw 'no-tty';
+    case 'ENXIO': throw 'no-such-device';
+    case 'EOVERFLOW': throw 'overflow';
+    case 'EPERM': throw 'not-permitted';
+    case 'EPIPE': throw 'pipe';
+    case 'EROFS': throw 'read-only';
+    case 'ESPIPE': throw 'invalid-seek';
+    case 'ETXTBSY': throw 'text-file-busy';
+    case 'EXDEV': throw 'cross-device';
+    default: throw e;
   }
 }
 
-export function write(s, buf) {
-  switch (s) {
-    case 0:
-      throw new Error(`TODO: write stdin`);
-    case 1: {
-      process.stdout.write(buf);
-      return BigInt(buf.byteLength);
-    }
-    case 2: {
-      process.stderr.write(buf);
-      return BigInt(buf.byteLength);
-    }
-    default:
-      throw new Error(`TODO: write ${s}`);
-  }
+export let _streams = {};
+let streamCnt = 0;
+export function _createFileStream(fd, offset) {
+  // note we only support offset 0
+  if (Number(offset) === 0)
+    _streams[streamCnt] = {
+      type: 'file',
+      fd: fd
+    };
+  return streamCnt++;
 }
+
+export const ioStreams = {
+  read(s, len) {
+    switch (s) {
+      case 0:
+        return [process.stdin.read(len), true];
+      default:
+        throw new Error(`TODO: write ${s}`);
+    }
+  },
+  blockingRead(s, len) {
+    len = Number(len);
+    const stream = _streams[s];
+    if (!stream) throw null;
+    switch (stream.type) {
+      case 'file': {
+        const buf = Buffer.alloc(Number(len));
+        try {
+          const readBytes = fsReadSync(stream.fd, buf, 0, Number(len));
+          if (readBytes < Number(len))
+            return [new Uint8Array(), true];
+          return [new Uint8Array(buf.buffer, 0, readBytes), false];
+        }
+        catch (e) {
+          _convertFsError(e);
+        }
+        break;
+      }
+      default: throw null;
+    }
+  },
+  skip(s, _len) {
+    console.log(`[streams] Skip ${s}`);
+  },
+  blockingSkip(s, _len) {
+    console.log(`[streams] Blocking skip ${s}`);
+  },
+  subscribeToInputStream(s) {
+    console.log(`[streams] Subscribe to input stream ${s}`);
+  },
+  dropInputStream(s) {
+    delete _streams[s];
+  
+  },
+  write(s, buf) {
+    switch (s) {
+      case 0:
+        throw new Error(`TODO: write stdin`);
+      case 1: {
+        process.stdout.write(buf);
+        return BigInt(buf.byteLength);
+      }
+      case 2: {
+        process.stderr.write(buf);
+        return BigInt(buf.byteLength);
+      }
+      default:
+        throw new Error(`TODO: write ${s}`);
+    }
+  },
+  blockingWrite(s, _buf) {
+    console.log(`[streams] Blocking write ${s}`);
+  },
+  writeZeroes(s, _len) {
+    console.log(`[streams] Write zeroes ${s}`);
+  },
+  blockingWriteZeroes(s, _len) {
+    console.log(`[streams] Blocking write zeroes ${s}`);
+  },
+  splice(s, _src, _len) {
+    console.log(`[streams] Splice ${s}`);
+  },
+  blockingSplice(s, _src, _len) {
+    console.log(`[streams] Blocking splice ${s}`);
+  },
+  forward(s, _src) {
+    console.log(`[streams] Forward ${s}`);
+  },
+  subscribeToOutputStream(s) {
+    console.log(`[streams] Subscribe to output stream ${s}`);
+  },
+  dropOutputStream(s) {
+    console.log(`[streams] Drop output stream ${s}`);
+  }
+};
+
+export { ioStreams as streams }

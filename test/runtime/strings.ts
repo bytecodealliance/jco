@@ -9,12 +9,14 @@ import * as assert from 'assert';
 async function run() {
   const wasm = await instantiate(helpers.loadWasm, {
     testwasi: helpers,
-    imports: {
-      takeBasic(s: string) {
-        assert.strictEqual(s, 'latin utf16');
-      },
-      returnUnicode() {
-        return '🚀🚀🚀 𠈄𓀀';
+    strings: {
+      stringsImports: {
+        takeBasic(s: string) {
+          assert.strictEqual(s, 'latin utf16');
+        },
+        returnUnicode() {
+          return '🚀🚀🚀 𠈄𓀀';
+        }
       }
     }
   });

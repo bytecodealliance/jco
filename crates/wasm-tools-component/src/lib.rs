@@ -2,16 +2,14 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use wasm_encoder::{Encode, Section};
 use wasm_metadata::Producers;
-use wit_component::{ComponentEncoder, DecodedWasm, DocumentPrinter, StringEncoding};
+use wit_component::{ComponentEncoder, DecodedWasm, WitPrinter};
 use wit_parser::{Resolve, UnresolvedPackage};
 
 wit_bindgen::generate!("wasm-tools");
 
 struct WasmToolsJs;
 
-export_wasm_tools_js!(WasmToolsJs);
-
-use crate::exports::*;
+export_wasm_tools!(WasmToolsJs);
 
 // fn init() {
 //     static INIT: Once = Once::new();
@@ -24,7 +22,7 @@ use crate::exports::*;
 //     });
 // }
 
-impl exports::Exports for WasmToolsJs {
+impl WasmTools for WasmToolsJs {
     fn parse(wat: String) -> Result<Vec<u8>, String> {
         // init();
 
@@ -63,27 +61,27 @@ impl exports::Exports for WasmToolsJs {
         Ok(bytes)
     }
 
-    fn component_wit(binary: Vec<u8>, name: Option<String>) -> Result<String, String> {
+    fn component_wit(binary: Vec<u8>) -> Result<String, String> {
         // init();
 
-        let decoded = wit_component::decode(&name.unwrap_or(String::from("component")), &binary)
+        let decoded = wit_component::decode(&binary)
             .map_err(|e| format!("Failed to decode wit component\n{:?}", e))?;
 
         // let world = decode_world("component", &binary);
 
         let doc = match &decoded {
             DecodedWasm::WitPackage(_resolve, _pkg) => panic!("Unexpected wit package"),
-            DecodedWasm::Component(resolve, world) => resolve.worlds[*world].document,
+            DecodedWasm::Component(resolve, world) => resolve.worlds[*world].package.unwrap(),
         };
 
-        let output = DocumentPrinter::default()
+        let output = WitPrinter::default()
             .print(decoded.resolve(), doc)
             .map_err(|e| format!("Unable to print wit\n${:?}", e))?;
 
         Ok(output)
     }
 
-    fn component_embed(embed_opts: exports::EmbedOpts) -> Result<Vec<u8>, String> {
+    fn component_embed(embed_opts: EmbedOpts) -> Result<Vec<u8>, String> {
         let binary = &embed_opts.binary;
 
         let mut resolve = Resolve::default();
@@ -96,9 +94,7 @@ impl exports::Exports for WasmToolsJs {
             UnresolvedPackage::parse_file(&PathBuf::from(wit_path)).map_err(|e| e.to_string())?
         };
 
-        let id = resolve
-            .push(pkg, &Default::default())
-            .map_err(|e| e.to_string())?;
+        let id = resolve.push(pkg).map_err(|e| e.to_string())?;
 
         let world_string = match &embed_opts.world {
             Some(world) => Some(world.to_string()),
@@ -109,14 +105,14 @@ impl exports::Exports for WasmToolsJs {
             .map_err(|e| e.to_string())?;
 
         let string_encoding = match &embed_opts.string_encoding {
-            None | Some(exports::StringEncoding::Utf8) => StringEncoding::UTF8,
-            Some(exports::StringEncoding::Utf16) => StringEncoding::UTF16,
-            Some(exports::StringEncoding::CompactUtf16) => StringEncoding::CompactUTF16,
+            None | Some(StringEncoding::Utf8) => wit_component::StringEncoding::UTF8,
+            Some(StringEncoding::Utf16) => wit_component::StringEncoding::UTF16,
+            Some(StringEncoding::CompactUtf16) => wit_component::StringEncoding::CompactUTF16,
         };
 
         let mut core_binary = if matches!(
             &embed_opts,
-            exports::EmbedOpts {
+            EmbedOpts {
                 dummy: Some(true),
                 ..
             }

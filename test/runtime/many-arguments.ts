@@ -1,6 +1,6 @@
 // Flags: --instantiation
 
-import { instantiate } from "../output/many_arguments/many_arguments.js";
+import { instantiate } from "../output/many-arguments/many-arguments.js";
 import * as helpers from "./helpers.js";
 
 function assertEq(x: any, y: any) {

@@ -10,10 +10,10 @@ pub mod source;
 mod ts_bindgen;
 
 mod transpile_bindgen;
+use transpile_bindgen::transpile_bindgen;
 pub use transpile_bindgen::TranspileOpts;
 
 use anyhow::{bail, Context};
-use heck::*;
 use wasmtime_environ::component::Export;
 use wasmtime_environ::component::{ComponentTypesBuilder, Translator};
 use wasmtime_environ::wasmparser::{Validator, WasmFeatures};
@@ -72,7 +72,7 @@ pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, 
     // package which has a single document and `world` within it which describes
     // the state of the component. This is then further used afterwards for
     // bindings generation as-if a `*.wit` file was input.
-    let decoded = wit_component::decode(&name, &component)
+    let decoded = wit_component::decode(&component)
         .context("failed to extract interface information from component")?;
 
     let (resolve, world_id) = match decoded {
@@ -116,36 +116,7 @@ pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, 
         ts_bindgen(&name, &resolve, world_id, &opts, &mut files);
     }
 
-    let world = &resolve.worlds[world_id];
-    let imports = world
-        .imports
-        .iter()
-        .map(|impt| impt.0.to_string())
-        .map(|impt| {
-            if let Some(map) = &opts.map {
-                match map.get(&impt) {
-                    Some(impt) => impt.to_string(),
-                    None => impt.to_string(),
-                }
-            } else {
-                impt.to_string()
-            }
-        })
-        .collect();
-
-    let exports = component
-        .exports
-        .iter()
-        .filter(|expt| {
-            matches!(
-                expt.1,
-                Export::Instance(_) | Export::Module(_) | Export::LiftedFunction { .. }
-            )
-        })
-        .map(|expt| (expt.0.to_lower_camel_case(), expt.1.clone()))
-        .collect();
-
-    transpile_bindgen::transpile_bindgen(
+    let (imports, exports) = transpile_bindgen(
         &name, &component, &modules, &resolve, world_id, opts, &mut files,
     );
 

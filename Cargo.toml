@@ -5,13 +5,17 @@ edition.workspace = true
 publish = false
 
 [[bin]]
-name = "jco"
-path = "bin/main.rs"
+name = "self-build"
+path = "bin/self_build.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+js-component-bindgen = { path = "./crates/js-component-bindgen" }
+wit-component = { workspace = true }
 
 [build-dependencies]
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 wit-component = { workspace = true }
-
 
 [workspace]
 members = ["crates/js-component-bindgen", "crates/js-component-bindgen-component", "crates/wasm-tools-component"]
@@ -22,21 +26,17 @@ edition = "2021"
 version = "0.1.0"
 
 [workspace.dependencies]
-anyhow = "1.0.69"
-base64 = "0.21.0"
-bitflags = "1.3.2"
-clap = { version = "4.1.8", features = ["derive"] }
-env_logger = "0.10.0"
+anyhow = "1.0.71"
+base64 = "0.21.2"
 heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "1.9"
-pulldown-cmark = { version = "0.8", default-features = false }
-wasm-encoder = "0.27.0"
-wasm-metadata = "0.6.0"
-wasmparser = "0.105.0"
-wasmprinter = "0.2.57"
-wasmtime = { version = "8.0.1", features = ["component-model"] }
-wasmtime-environ = "8.0.1"
-wat = "1.0.64"
-wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "c1eb6ba2ffe303574219a3787aa1187d70d877ec" }
-wit-component = { version = "0.9.0", features = ['dummy-module'] }
-wit-parser = "0.7.1"
+wasm-encoder = "0.29.0"
+wasm-metadata = "0.8.0"
+wasmparser = "0.107.0"
+wasmprinter = "0.2.59"
+wasmtime = { git = "https://github.com/bytecodealliance/wasmtime", features = ["component-model"], rev = "f7ae056a0a757492c0842ca3f2852f9a5f4bd19c" }
+wasmtime-environ = { git = "https://github.com/bytecodealliance/wasmtime", rev = "f7ae056a0a757492c0842ca3f2852f9a5f4bd19c" }
+wat = "1.0.66"
+wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "e69cf5db8754f829637e25491c560ec0d9728852" }
+wit-component = { version = "0.11.0", features = ['dummy-module'] }
+wit-parser = "0.8.0"
