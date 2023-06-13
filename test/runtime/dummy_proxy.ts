@@ -1,6 +1,7 @@
 // Flags: --instantiation
 
 import * as assert from "node:assert";
+// @ts-ignore
 import { importObject } from "@bytecodealliance/preview2-shim";
 
 // @ts-ignore

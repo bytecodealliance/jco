@@ -105,7 +105,7 @@ pub fn ts_bindgen(
                 let export_name = resolve.id_of(*interface).unwrap();
                 let (_, pkg, iface) = parse_world_key(&export_name).unwrap();
                 let out_name = format!("{}-{}", pkg, iface);
-                export_aliases.push((iface.to_string(), out_name.to_string()));
+                export_aliases.push((iface.to_lower_camel_case(), out_name.to_string()));
                 out_name
             }
         };
@@ -113,19 +113,28 @@ pub fn ts_bindgen(
         match export {
             WorldItem::Function(f) => funcs.push((name, f)),
             WorldItem::Interface(id) => {
-                bindgen.export_interface(resolve, &name, *id, files);
+                bindgen.export_interface(resolve, &name, *id, files, opts.instantiation);
             }
             WorldItem::Type(_) => unimplemented!("type exports"),
         }
     }
     for (alias, name) in export_aliases {
         if !seen_names.contains(&alias) {
-            uwriteln!(
-                bindgen.export_object,
-                "{}: typeof {}Exports",
-                alias,
-                name.to_upper_camel_case()
-            );
+            if opts.instantiation {
+                uwriteln!(
+                    bindgen.export_object,
+                    "{}: typeof {}Exports,",
+                    alias,
+                    name.to_upper_camel_case()
+                );
+            } else {
+                uwriteln!(
+                    bindgen.export_object,
+                    "export const {}: typeof {}Exports;",
+                    alias,
+                    name.to_upper_camel_case()
+                );
+            }
         }
     }
     if !funcs.is_empty() {
@@ -274,6 +283,7 @@ impl TsBindgen {
         name: &str,
         id: InterfaceId,
         files: &mut Files,
+        instantiation: bool,
     ) {
         self.generate_interface(
             name,
@@ -285,11 +295,19 @@ impl TsBindgen {
             AbiVariant::GuestExport,
         );
         let camel = name.to_upper_camel_case();
-        uwriteln!(
-            self.export_object,
-            "{}: typeof {camel}Exports,",
-            name.to_lower_camel_case()
-        );
+        if instantiation {
+            uwriteln!(
+                self.export_object,
+                "{}: typeof {camel}Exports,",
+                name.to_lower_camel_case()
+            );
+        } else {
+            uwriteln!(
+                self.export_object,
+                "export const {}: typeof {camel}Exports;",
+                name.to_lower_camel_case()
+            );
+        }
     }
 
     fn export_funcs(

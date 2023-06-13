@@ -38,6 +38,25 @@ world js-component-bindgen {
     valid-lifting-optimization: option<bool>,
   }
 
+  variant wit {
+    /// wit is provided as an inline WIT string
+    source(string),
+    /// wit is provided from a component binary
+    binary(list<u8>),
+    /// wit is provided from a filesystem path
+    path(string),
+  }
+
+  record type-generation-options {
+    /// wit to generate typing from
+    wit: wit,
+    /// world to generate typing for
+    %world: option<string>,
+    tla-compat: option<bool>,
+    instantiation: option<bool>,
+    map: option<maps>,
+  }
+
   enum export-type {
     function,
     instance,
@@ -49,8 +68,10 @@ world js-component-bindgen {
     exports: list<tuple<string, export-type>>
   }
 
-  /// Generate the file structure for the transpilation of a component
+  /// Generate the file structure for the transpiled of a component
   /// into a JS embedding, returns the file list and imports and exports of the
-  /// output JS transpiled component
+  /// output JS generation component
   export generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>
+
+  export generate-types: func(name: string, options: type-generation-options) -> result<files, string>
 }

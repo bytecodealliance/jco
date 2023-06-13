@@ -21,6 +21,7 @@ use wasmtime_environ::{ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
 use ts_bindgen::ts_bindgen;
+use wit_parser::{Resolve, WorldId};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -59,8 +60,25 @@ pub struct ComponentInfo {
     pub exports: Vec<(String, wasmtime_environ::component::Export)>,
 }
 
+pub fn generate_types(
+    name: String,
+    resolve: Resolve,
+    world_id: WorldId,
+    opts: TranspileOpts,
+) -> Result<Vec<(String, Vec<u8>)>, anyhow::Error> {
+    let mut files = files::Files::default();
+
+    ts_bindgen(&name, &resolve, world_id, &opts, &mut files);
+
+    let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
+    for (name, source) in files.iter() {
+        files_out.push((name.to_string(), source.to_vec()));
+    }
+    Ok(files_out)
+}
+
 /// Generate the JS transpilation bindgen for a given Wasm component binary
-/// Outputs the file map and import and export metadata for the generation
+/// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
 pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
     let name = opts.name.clone();
@@ -71,7 +89,7 @@ pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, 
     // component binary. This will synthesize a `Resolve` which has a top-level
     // package which has a single document and `world` within it which describes
     // the state of the component. This is then further used afterwards for
-    // bindings generation as-if a `*.wit` file was input.
+    // bindings Transpilation as-if a `*.wit` file was input.
     let decoded = wit_component::decode(&component)
         .context("failed to extract interface information from component")?;
 

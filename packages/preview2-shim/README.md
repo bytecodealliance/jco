@@ -16,6 +16,7 @@ Currently supports Node.js and browser versions, but alternative implementations
 | Poll            | :x:                          | :x:                          |
 | Random          | :heavy_check_mark:           | :heavy_check_mark:           |
 | Sockets         | :x:                          | :x:                          |
+| CLI Base        | :heavy_check_mark:           | :heavy_check_mark:           |
 
 # License
 
