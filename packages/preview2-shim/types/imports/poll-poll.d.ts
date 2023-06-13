@@ -1,10 +1,10 @@
 export namespace PollPoll {
-  export function /**
+  /**
    * Dispose of the specified `pollable`, after which it may no longer
    * be used.
    */
-  dropPollable(this: Pollable): void;
-  export function /**
+  export function dropPollable(this: Pollable): void;
+  /**
    * Poll for completion on a set of pollables.
    * 
    * The "oneoff" in the name refers to the fact that this function must do a
@@ -20,7 +20,7 @@ export namespace PollPoll {
    * for details.  For now, we use zero to mean "not ready" and non-zero to
    * mean "ready".
    */
-  pollOneoff(in: Uint32Array): Uint8Array | ArrayBuffer;
+  export function pollOneoff(in: Uint32Array): Uint8Array | ArrayBuffer;
 }
 /**
  * A "pollable" handle.

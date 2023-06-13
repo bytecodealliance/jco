@@ -1,10 +1,10 @@
 export namespace SocketsNetwork {
-  export function /**
+  /**
    * Dispose of the specified `network`, after which it may no longer be used.
    * 
    * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
    */
-  dropNetwork(this: Network): void;
+  export function dropNetwork(this: Network): void;
 }
 /**
  * An opaque resource that represents access to (a subset of) the network.

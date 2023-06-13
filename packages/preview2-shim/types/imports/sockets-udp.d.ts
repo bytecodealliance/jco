@@ -1,5 +1,5 @@
 export namespace SocketsUdp {
-  export function /**
+  /**
    * Bind the socket to a specific network on the provided IP address and port.
    * 
    * If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
@@ -28,9 +28,9 @@ export namespace SocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
    * - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
    */
-  startBind(this: UdpSocket, network: Network, localAddress: IpSocketAddress): void;
+  export function startBind(this: UdpSocket, network: Network, localAddress: IpSocketAddress): void;
   export function finishBind(this: UdpSocket): void;
-  export function /**
+  /**
    * Set the destination address.
    * 
    * The local-address is updated based on the best network path to `remote-address`.
@@ -61,9 +61,9 @@ export namespace SocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
    * - <https://man.freebsd.org/cgi/man.cgi?connect>
    */
-  startConnect(this: UdpSocket, network: Network, remoteAddress: IpSocketAddress): void;
+  export function startConnect(this: UdpSocket, network: Network, remoteAddress: IpSocketAddress): void;
   export function finishConnect(this: UdpSocket): void;
-  export function /**
+  /**
    * Receive a message.
    * 
    * Returns:
@@ -84,8 +84,8 @@ export namespace SocketsUdp {
    * - <https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms741687(v=vs.85)>
    * - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
    */
-  receive(this: UdpSocket): Datagram;
-  export function /**
+  export function receive(this: UdpSocket): Datagram;
+  /**
    * Send a message to a specific destination address.
    * 
    * The remote address option is required. To send a message to the "connected" peer,
@@ -110,8 +110,8 @@ export namespace SocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
    * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
    */
-  send(this: UdpSocket, datagram: Datagram): void;
-  export function /**
+  export function send(this: UdpSocket, datagram: Datagram): void;
+  /**
    * Get the current bound address.
    * 
    * # Typical errors
@@ -123,8 +123,8 @@ export namespace SocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
    * - <https://man.freebsd.org/cgi/man.cgi?getsockname>
    */
-  localAddress(this: UdpSocket): IpSocketAddress;
-  export function /**
+  export function localAddress(this: UdpSocket): IpSocketAddress;
+  /**
    * Get the address set with `connect`.
    * 
    * # Typical errors
@@ -136,14 +136,14 @@ export namespace SocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
    * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
    */
-  remoteAddress(this: UdpSocket): IpSocketAddress;
-  export function /**
+  export function remoteAddress(this: UdpSocket): IpSocketAddress;
+  /**
    * Whether this is a IPv4 or IPv6 socket.
    * 
    * Equivalent to the SO_DOMAIN socket option.
    */
-  addressFamily(this: UdpSocket): IpAddressFamily;
-  export function /**
+  export function addressFamily(this: UdpSocket): IpAddressFamily;
+  /**
    * Whether IPv4 compatibility (dual-stack) mode is disabled or not.
    * 
    * Equivalent to the IPV6_V6ONLY socket option.
@@ -154,17 +154,17 @@ export namespace SocketsUdp {
    * - `not-supported`:        (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  ipv6Only(this: UdpSocket): boolean;
+  export function ipv6Only(this: UdpSocket): boolean;
   export function setIpv6Only(this: UdpSocket, value: boolean): void;
-  export function /**
+  /**
    * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
    * 
    * # Typical errors
    * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  unicastHopLimit(this: UdpSocket): number;
+  export function unicastHopLimit(this: UdpSocket): number;
   export function setUnicastHopLimit(this: UdpSocket, value: number): void;
-  export function /**
+  /**
    * The kernel buffer space reserved for sends/receives on this socket.
    * 
    * Note #1: an implementation may choose to cap or round the buffer size when setting the value.
@@ -181,23 +181,23 @@ export namespace SocketsUdp {
    * # Typical errors
    * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  receiveBufferSize(this: UdpSocket): bigint;
+  export function receiveBufferSize(this: UdpSocket): bigint;
   export function setReceiveBufferSize(this: UdpSocket, value: bigint): void;
   export function sendBufferSize(this: UdpSocket): bigint;
   export function setSendBufferSize(this: UdpSocket, value: bigint): void;
-  export function /**
+  /**
    * Create a `pollable` which will resolve once the socket is ready for I/O.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
-  subscribe(this: UdpSocket): Pollable;
-  export function /**
+  export function subscribe(this: UdpSocket): Pollable;
+  /**
    * Dispose of the specified `udp-socket`, after which it may no longer be used.
    * 
    * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
    */
-  dropUdpSocket(this: UdpSocket): void;
+  export function dropUdpSocket(this: UdpSocket): void;
 }
 import type { Pollable } from '../imports/poll';
 export { Pollable };

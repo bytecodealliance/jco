@@ -1,17 +1,12 @@
 import * as clocks from "./clocks.js";
-import * as environment from "./environment.js";
-import * as exit from "./exit.js";
 import * as filesystem from "./filesystem.js";
-import * as monotonicClock from "./clocks.js";
+import * as http from "./http.js";
+import * as io from "./io.js";
+import * as logging from "./logging.js";
+import * as poll from "./poll.js";
 import * as random from "./random.js";
-import * as streams from "./io.js";
-import * as tcpCreateSocket from "./tcp-create-socket.js";
-import * as tcp from "./tcp.js";
-import * as timezone from "./timezone.js";
-import * as types from "./types.js";
-import * as udpCreateSocket from "./udp-create-socket.js";
-import * as udp from "./udp.js";
-import * as wallClock from "./wall-clock.js";
+import * as sockets from "./sockets.js";
+import * as cliBase from "./cli-base.js";
 
 export const importObject = {
   clocks,

@@ -1,5 +1,5 @@
 export namespace ClocksTimezone {
-  export function /**
+  /**
    * Return information needed to display the given `datetime`. This includes
    * the UTC offset, the time zone name, and a flag indicating whether
    * daylight saving time is active.
@@ -8,16 +8,16 @@ export namespace ClocksTimezone {
    * `timezone-display` for `UTC` with a `utc-offset` of 0 and no daylight
    * saving time.
    */
-  display(this: Timezone, when: Datetime): TimezoneDisplay;
-  export function /**
+  export function display(this: Timezone, when: Datetime): TimezoneDisplay;
+  /**
    * The same as `display`, but only return the UTC offset.
    */
-  utcOffset(this: Timezone, when: Datetime): number;
-  export function /**
+  export function utcOffset(this: Timezone, when: Datetime): number;
+  /**
    * Dispose of the specified input-stream, after which it may no longer
    * be used.
    */
-  dropTimezone(this: Timezone): void;
+  export function dropTimezone(this: Timezone): void;
 }
 import type { Datetime } from '../imports/wall-clock';
 export { Datetime };

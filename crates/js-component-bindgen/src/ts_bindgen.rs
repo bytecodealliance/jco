@@ -138,7 +138,7 @@ pub fn ts_bindgen(
         }
     }
     if !funcs.is_empty() {
-        let end_character = if opts.instantiation { "," } else { ";" };
+        let end_character = if opts.instantiation { ',' } else { ';' };
         bindgen.export_funcs(resolve, id, &funcs, files, end_character);
     }
 
@@ -272,7 +272,7 @@ impl TsBindgen {
     ) {
         let mut gen = self.js_interface(resolve);
         for func in funcs {
-            gen.ts_func(func, AbiVariant::GuestImport, true, ",");
+            gen.ts_func(func, AbiVariant::GuestImport, true, "", ',');
         }
         gen.gen.import_object.push_str(&gen.src);
     }
@@ -316,14 +316,16 @@ impl TsBindgen {
         _world: WorldId,
         funcs: &[(String, &Function)],
         _files: &mut Files,
-        end_character: &str,
+        end_character: char,
     ) {
         let mut gen = self.js_interface(resolve);
+        let prefix = if end_character == ';' {
+            "export function "
+        } else {
+            ""
+        };
         for (_, func) in funcs {
-            if end_character == ";" {
-                gen.src.push_str("export function ");
-            }
-            gen.ts_func(func, AbiVariant::GuestExport, false, end_character);
+            gen.ts_func(func, AbiVariant::GuestExport, false, prefix, end_character);
         }
 
         gen.gen.export_object.push_str(&gen.src);
@@ -348,9 +350,9 @@ impl TsBindgen {
         let mut gen = self.js_interface(resolve);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
+        let prefix = "export function ";
         for (_, func) in resolve.interfaces[id].functions.iter() {
-            gen.src.push_str("export function ");
-            gen.ts_func(func, abi, false, ";");
+            gen.ts_func(func, abi, false, prefix, ';');
         }
         uwriteln!(gen.src, "}}");
 
@@ -507,8 +509,17 @@ impl<'a> TsInterface<'a> {
         self.src.push_str("]");
     }
 
-    fn ts_func(&mut self, func: &Function, abi: AbiVariant, default: bool, end_character: &str) {
+    fn ts_func(
+        &mut self,
+        func: &Function,
+        abi: AbiVariant,
+        default: bool,
+        prefix: &str,
+        end_character: char,
+    ) {
         self.docs(&func.docs);
+
+        self.src.push_str(prefix);
 
         if default {
             self.src.push_str("default");

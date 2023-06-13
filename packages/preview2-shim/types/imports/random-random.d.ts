@@ -1,5 +1,5 @@
 export namespace RandomRandom {
-  export function /**
+  /**
    * Return `len` cryptographically-secure pseudo-random bytes.
    * 
    * This function must produce data from an adequately seeded
@@ -11,12 +11,12 @@ export namespace RandomRandom {
    * environments must omit this function, rather than implementing it with
    * deterministic data.
    */
-  getRandomBytes(len: bigint): Uint8Array | ArrayBuffer;
-  export function /**
+  export function getRandomBytes(len: bigint): Uint8Array | ArrayBuffer;
+  /**
    * Return a cryptographically-secure pseudo-random `u64` value.
    * 
    * This function returns the same type of pseudo-random data as
    * `get-random-bytes`, represented as a `u64`.
    */
-  getRandomU64(): bigint;
+  export function getRandomU64(): bigint;
 }

@@ -1,5 +1,5 @@
 export namespace ClocksWallClock {
-  export function /**
+  /**
    * Read the current value of the clock.
    * 
    * This clock is not monotonic, therefore calling this function repeatedly
@@ -14,13 +14,13 @@ export namespace ClocksWallClock {
    * [POSIX's Seconds Since the Epoch]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xbd_chap04.html#tag_21_04_16
    * [Unix Time]: https://en.wikipedia.org/wiki/Unix_time
    */
-  now(): Datetime;
-  export function /**
+  export function now(): Datetime;
+  /**
    * Query the resolution of the clock.
    * 
    * The nanoseconds field of the output is always less than 1000000000.
    */
-  resolution(): Datetime;
+  export function resolution(): Datetime;
 }
 /**
  * A time and date in seconds plus nanoseconds.

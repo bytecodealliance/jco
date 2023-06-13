@@ -1,8 +1,8 @@
 export namespace CliBasePreopens {
-  export function /**
+  /**
    * Return the set of of preopened directories, and their path.
    */
-  getDirectories(): [Descriptor, string][];
+  export function getDirectories(): [Descriptor, string][];
 }
 import type { Descriptor } from '../imports/filesystem';
 export { Descriptor };

@@ -1,5 +1,5 @@
 export namespace FilesystemFilesystem {
-  export function /**
+  /**
    * Return a stream for reading from a file.
    * 
    * Multiple read, write, and append streams may be active on the same open
@@ -7,28 +7,28 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This allows using `wasi:io/streams.read`, which is similar to `read` in POSIX.
    */
-  readViaStream(this: Descriptor, offset: Filesize): InputStream;
-  export function /**
+  export function readViaStream(this: Descriptor, offset: Filesize): InputStream;
+  /**
    * Return a stream for writing to a file.
    * 
    * Note: This allows using `wasi:io/streams.write`, which is similar to `write` in
    * POSIX.
    */
-  writeViaStream(this: Descriptor, offset: Filesize): OutputStream;
-  export function /**
+  export function writeViaStream(this: Descriptor, offset: Filesize): OutputStream;
+  /**
    * Return a stream for appending to a file.
    * 
    * Note: This allows using `wasi:io/streams.write`, which is similar to `write` with
    * `O_APPEND` in in POSIX.
    */
-  appendViaStream(this: Descriptor): OutputStream;
-  export function /**
+  export function appendViaStream(this: Descriptor): OutputStream;
+  /**
    * Provide file advisory information on a descriptor.
    * 
    * This is similar to `posix_fadvise` in POSIX.
    */
-  advise(this: Descriptor, offset: Filesize, length: Filesize, advice: Advice): void;
-  export function /**
+  export function advise(this: Descriptor, offset: Filesize, length: Filesize, advice: Advice): void;
+  /**
    * Synchronize the data of a file to disk.
    * 
    * This function succeeds with no effect if the file descriptor is not
@@ -36,8 +36,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `fdatasync` in POSIX.
    */
-  syncData(this: Descriptor): void;
-  export function /**
+  export function syncData(this: Descriptor): void;
+  /**
    * Get flags associated with a descriptor.
    * 
    * Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
@@ -45,8 +45,8 @@ export namespace FilesystemFilesystem {
    * Note: This returns the value that was the `fs_flags` value returned
    * from `fdstat_get` in earlier versions of WASI.
    */
-  getFlags(this: Descriptor): DescriptorFlags;
-  export function /**
+  export function getFlags(this: Descriptor): DescriptorFlags;
+  /**
    * Get the dynamic type of a descriptor.
    * 
    * Note: This returns the same value as the `type` field of the `fd-stat`
@@ -58,23 +58,23 @@ export namespace FilesystemFilesystem {
    * Note: This returns the value that was the `fs_filetype` value returned
    * from `fdstat_get` in earlier versions of WASI.
    */
-  getType(this: Descriptor): DescriptorType;
-  export function /**
+  export function getType(this: Descriptor): DescriptorType;
+  /**
    * Adjust the size of an open file. If this increases the file's size, the
    * extra bytes are filled with zeros.
    * 
    * Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
    */
-  setSize(this: Descriptor, size: Filesize): void;
-  export function /**
+  export function setSize(this: Descriptor, size: Filesize): void;
+  /**
    * Adjust the timestamps of an open file or directory.
    * 
    * Note: This is similar to `futimens` in POSIX.
    * 
    * Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
    */
-  setTimes(this: Descriptor, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
-  export function /**
+  export function setTimes(this: Descriptor, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
+  /**
    * Read from a descriptor, without using and updating the descriptor's offset.
    * 
    * This function returns a list of bytes containing the data that was
@@ -87,8 +87,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `pread` in POSIX.
    */
-  read(this: Descriptor, length: Filesize, offset: Filesize): [Uint8Array | ArrayBuffer, boolean];
-  export function /**
+  export function read(this: Descriptor, length: Filesize, offset: Filesize): [Uint8Array | ArrayBuffer, boolean];
+  /**
    * Write to a descriptor, without using and updating the descriptor's offset.
    * 
    * It is valid to write past the end of a file; the file is extended to the
@@ -99,8 +99,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `pwrite` in POSIX.
    */
-  write(this: Descriptor, buffer: Uint8Array, offset: Filesize): Filesize;
-  export function /**
+  export function write(this: Descriptor, buffer: Uint8Array, offset: Filesize): Filesize;
+  /**
    * Read directory entries from a directory.
    * 
    * On filesystems where directories contain entries referring to themselves
@@ -111,8 +111,8 @@ export namespace FilesystemFilesystem {
    * directory. Multiple streams may be active on the same directory, and they
    * do not interfere with each other.
    */
-  readDirectory(this: Descriptor): DirectoryEntryStream;
-  export function /**
+  export function readDirectory(this: Descriptor): DirectoryEntryStream;
+  /**
    * Synchronize the data and metadata of a file to disk.
    * 
    * This function succeeds with no effect if the file descriptor is not
@@ -120,30 +120,30 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `fsync` in POSIX.
    */
-  sync(this: Descriptor): void;
-  export function /**
+  export function sync(this: Descriptor): void;
+  /**
    * Create a directory.
    * 
    * Note: This is similar to `mkdirat` in POSIX.
    */
-  createDirectoryAt(this: Descriptor, path: string): void;
-  export function /**
+  export function createDirectoryAt(this: Descriptor, path: string): void;
+  /**
    * Return the attributes of an open file or directory.
    * 
    * Note: This is similar to `fstat` in POSIX.
    * 
    * Note: This was called `fd_filestat_get` in earlier versions of WASI.
    */
-  stat(this: Descriptor): DescriptorStat;
-  export function /**
+  export function stat(this: Descriptor): DescriptorStat;
+  /**
    * Return the attributes of a file or directory.
    * 
    * Note: This is similar to `fstatat` in POSIX.
    * 
    * Note: This was called `path_filestat_get` in earlier versions of WASI.
    */
-  statAt(this: Descriptor, pathFlags: PathFlags, path: string): DescriptorStat;
-  export function /**
+  export function statAt(this: Descriptor, pathFlags: PathFlags, path: string): DescriptorStat;
+  /**
    * Adjust the timestamps of a file or directory.
    * 
    * Note: This is similar to `utimensat` in POSIX.
@@ -151,14 +151,14 @@ export namespace FilesystemFilesystem {
    * Note: This was called `path_filestat_set_times` in earlier versions of
    * WASI.
    */
-  setTimesAt(this: Descriptor, pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
-  export function /**
+  export function setTimesAt(this: Descriptor, pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
+  /**
    * Create a hard link.
    * 
    * Note: This is similar to `linkat` in POSIX.
    */
-  linkAt(this: Descriptor, oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
-  export function /**
+  export function linkAt(this: Descriptor, oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
+  /**
    * Open a file or directory.
    * 
    * The returned descriptor is not guaranteed to be the lowest-numbered
@@ -178,8 +178,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `openat` in POSIX.
    */
-  openAt(this: Descriptor, pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags, modes: Modes): Descriptor;
-  export function /**
+  export function openAt(this: Descriptor, pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags, modes: Modes): Descriptor;
+  /**
    * Read the contents of a symbolic link.
    * 
    * If the contents contain an absolute or rooted path in the underlying
@@ -187,22 +187,22 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `readlinkat` in POSIX.
    */
-  readlinkAt(this: Descriptor, path: string): string;
-  export function /**
+  export function readlinkAt(this: Descriptor, path: string): string;
+  /**
    * Remove a directory.
    * 
    * Return `error-code::not-empty` if the directory is not empty.
    * 
    * Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
    */
-  removeDirectoryAt(this: Descriptor, path: string): void;
-  export function /**
+  export function removeDirectoryAt(this: Descriptor, path: string): void;
+  /**
    * Rename a filesystem object.
    * 
    * Note: This is similar to `renameat` in POSIX.
    */
-  renameAt(this: Descriptor, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
-  export function /**
+  export function renameAt(this: Descriptor, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
+  /**
    * Create a symbolic link (also known as a "symlink").
    * 
    * If `old-path` starts with `/`, the function fails with
@@ -210,8 +210,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `symlinkat` in POSIX.
    */
-  symlinkAt(this: Descriptor, oldPath: string, newPath: string): void;
-  export function /**
+  export function symlinkAt(this: Descriptor, oldPath: string, newPath: string): void;
+  /**
    * Check accessibility of a filesystem path.
    * 
    * Check whether the given filesystem path names an object which is
@@ -223,15 +223,15 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `faccessat` with the `AT_EACCESS` flag in POSIX.
    */
-  accessAt(this: Descriptor, pathFlags: PathFlags, path: string, type: AccessType): void;
-  export function /**
+  export function accessAt(this: Descriptor, pathFlags: PathFlags, path: string, type: AccessType): void;
+  /**
    * Unlink a filesystem object that is not a directory.
    * 
    * Return `error-code::is-directory` if the path refers to a directory.
    * Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
    */
-  unlinkFileAt(this: Descriptor, path: string): void;
-  export function /**
+  export function unlinkFileAt(this: Descriptor, path: string): void;
+  /**
    * Change the permissions of a filesystem object that is not a directory.
    * 
    * Note that the ultimate meanings of these permissions is
@@ -239,8 +239,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `fchmodat` in POSIX.
    */
-  changeFilePermissionsAt(this: Descriptor, pathFlags: PathFlags, path: string, modes: Modes): void;
-  export function /**
+  export function changeFilePermissionsAt(this: Descriptor, pathFlags: PathFlags, path: string, modes: Modes): void;
+  /**
    * Change the permissions of a directory.
    * 
    * Note that the ultimate meanings of these permissions is
@@ -252,8 +252,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `fchmodat` in POSIX.
    */
-  changeDirectoryPermissionsAt(this: Descriptor, pathFlags: PathFlags, path: string, modes: Modes): void;
-  export function /**
+  export function changeDirectoryPermissionsAt(this: Descriptor, pathFlags: PathFlags, path: string, modes: Modes): void;
+  /**
    * Request a shared advisory lock for an open file.
    * 
    * This requests a *shared* lock; more than one shared lock can be held for
@@ -275,8 +275,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `flock(fd, LOCK_SH)` in Unix.
    */
-  lockShared(this: Descriptor): void;
-  export function /**
+  export function lockShared(this: Descriptor): void;
+  /**
    * Request an exclusive advisory lock for an open file.
    * 
    * This requests an *exclusive* lock; no other locks may be held for the
@@ -300,8 +300,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `flock(fd, LOCK_EX)` in Unix.
    */
-  lockExclusive(this: Descriptor): void;
-  export function /**
+  export function lockExclusive(this: Descriptor): void;
+  /**
    * Request a shared advisory lock for an open file.
    * 
    * This requests a *shared* lock; more than one shared lock can be held for
@@ -324,8 +324,8 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `flock(fd, LOCK_SH | LOCK_NB)` in Unix.
    */
-  tryLockShared(this: Descriptor): void;
-  export function /**
+  export function tryLockShared(this: Descriptor): void;
+  /**
    * Request an exclusive advisory lock for an open file.
    * 
    * This requests an *exclusive* lock; no other locks may be held for the
@@ -350,27 +350,27 @@ export namespace FilesystemFilesystem {
    * 
    * Note: This is similar to `flock(fd, LOCK_EX | LOCK_NB)` in Unix.
    */
-  tryLockExclusive(this: Descriptor): void;
-  export function /**
+  export function tryLockExclusive(this: Descriptor): void;
+  /**
    * Release a shared or exclusive lock on an open file.
    * 
    * Note: This is similar to `flock(fd, LOCK_UN)` in Unix.
    */
-  unlock(this: Descriptor): void;
-  export function /**
+  export function unlock(this: Descriptor): void;
+  /**
    * Dispose of the specified `descriptor`, after which it may no longer
    * be used.
    */
-  dropDescriptor(this: Descriptor): void;
-  export function /**
+  export function dropDescriptor(this: Descriptor): void;
+  /**
    * Read a single directory entry from a `directory-entry-stream`.
    */
-  readDirectoryEntry(this: DirectoryEntryStream): DirectoryEntry | null;
-  export function /**
+  export function readDirectoryEntry(this: DirectoryEntryStream): DirectoryEntry | null;
+  /**
    * Dispose of the specified `directory-entry-stream`, after which it may no longer
    * be used.
    */
-  dropDirectoryEntryStream(this: DirectoryEntryStream): void;
+  export function dropDirectoryEntryStream(this: DirectoryEntryStream): void;
 }
 import type { InputStream } from '../imports/streams';
 export { InputStream };

@@ -1,5 +1,5 @@
 export namespace LoggingHandler {
-  export function /**
+  /**
    * Emit a log message.
    * 
    * A log message has a `level` describing what kind of message is being
@@ -7,7 +7,7 @@ export namespace LoggingHandler {
    * consumers group similar messages, and a string containing the message
    * text.
    */
-  log(level: Level, context: string, message: string): void;
+  export function log(level: Level, context: string, message: string): void;
 }
 /**
  * A log level, describing a kind of message.

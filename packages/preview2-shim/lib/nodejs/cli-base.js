@@ -98,4 +98,11 @@ export const cliBaseStderr = {
   }
 };
 
-export { cliBaseEnvironment as environment, cliBaseExit as exit, cliBasePreopens as preopens, cliBaseStdin as stdin, cliBaseStdout as stdout, cliBaseStderr as stderr }
+export {
+  cliBaseEnvironment as environment,
+  cliBaseExit as exit,
+  cliBasePreopens as preopens,
+  cliBaseStdin as stdin,
+  cliBaseStdout as stdout,
+  cliBaseStderr as stderr
+}

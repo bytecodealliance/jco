@@ -1,5 +1,5 @@
 export namespace RandomInsecureSeed {
-  export function /**
+  /**
    * Return a 128-bit value that may contain a pseudo-random value.
    * 
    * The returned value is not required to be computed from a CSPRNG, and may
@@ -18,5 +18,5 @@ export namespace RandomInsecureSeed {
    * called multiple times and potentially used for purposes other than DoS
    * protection.
    */
-  insecureSeed(): [bigint, bigint];
+  export function insecureSeed(): [bigint, bigint];
 }

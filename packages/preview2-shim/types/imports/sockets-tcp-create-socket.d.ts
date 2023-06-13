@@ -1,5 +1,5 @@
 export namespace SocketsTcpCreateSocket {
-  export function /**
+  /**
    * Create a new TCP socket.
    * 
    * Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)` in POSIX.
@@ -21,7 +21,7 @@ export namespace SocketsTcpCreateSocket {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
    * - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
    */
-  createTcpSocket(addressFamily: IpAddressFamily): TcpSocket;
+  export function createTcpSocket(addressFamily: IpAddressFamily): TcpSocket;
 }
 import type { Network } from '../imports/network';
 export { Network };

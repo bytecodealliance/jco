@@ -33,9 +33,9 @@ fn main() -> Result<()> {
                 let mut file = fs::File::create(outfile).unwrap();
                 file.write_all(contents).unwrap();
             }
-            // println!("cargo:rerun-if-changed={:?}", preview2_wit_path);
+            println!("cargo:rerun-if-changed={:?}", preview2_wit_path);
         }
     }
-    // println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=build.rs");
     Ok(())
 }

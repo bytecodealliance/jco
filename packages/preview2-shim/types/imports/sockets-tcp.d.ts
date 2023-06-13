@@ -1,5 +1,5 @@
 export namespace SocketsTcp {
-  export function /**
+  /**
    * Bind the socket to a specific network on the provided IP address and port.
    * 
    * If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
@@ -29,9 +29,9 @@ export namespace SocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
    * - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
    */
-  startBind(this: TcpSocket, network: Network, localAddress: IpSocketAddress): void;
+  export function startBind(this: TcpSocket, network: Network, localAddress: IpSocketAddress): void;
   export function finishBind(this: TcpSocket): void;
-  export function /**
+  /**
    * Connect to a remote endpoint.
    * 
    * On success:
@@ -62,9 +62,9 @@ export namespace SocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
    * - <https://man.freebsd.org/cgi/man.cgi?connect>
    */
-  startConnect(this: TcpSocket, network: Network, remoteAddress: IpSocketAddress): void;
+  export function startConnect(this: TcpSocket, network: Network, remoteAddress: IpSocketAddress): void;
   export function finishConnect(this: TcpSocket): [InputStream, OutputStream];
-  export function /**
+  /**
    * Start listening for new connections.
    * 
    * Transitions the socket into the Listener state.
@@ -88,9 +88,9 @@ export namespace SocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-listen>
    * - <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
    */
-  startListen(this: TcpSocket, network: Network): void;
+  export function startListen(this: TcpSocket, network: Network): void;
   export function finishListen(this: TcpSocket): void;
-  export function /**
+  /**
    * Accept a new client socket.
    * 
    * The returned socket is bound and in the Connection state.
@@ -110,8 +110,8 @@ export namespace SocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept>
    * - <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
    */
-  accept(this: TcpSocket): [TcpSocket, InputStream, OutputStream];
-  export function /**
+  export function accept(this: TcpSocket): [TcpSocket, InputStream, OutputStream];
+  /**
    * Get the bound local address.
    * 
    * # Typical errors
@@ -123,8 +123,8 @@ export namespace SocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
    * - <https://man.freebsd.org/cgi/man.cgi?getsockname>
    */
-  localAddress(this: TcpSocket): IpSocketAddress;
-  export function /**
+  export function localAddress(this: TcpSocket): IpSocketAddress;
+  /**
    * Get the bound remote address.
    * 
    * # Typical errors
@@ -136,14 +136,14 @@ export namespace SocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
    * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
    */
-  remoteAddress(this: TcpSocket): IpSocketAddress;
-  export function /**
+  export function remoteAddress(this: TcpSocket): IpSocketAddress;
+  /**
    * Whether this is a IPv4 or IPv6 socket.
    * 
    * Equivalent to the SO_DOMAIN socket option.
    */
-  addressFamily(this: TcpSocket): IpAddressFamily;
-  export function /**
+  export function addressFamily(this: TcpSocket): IpAddressFamily;
+  /**
    * Whether IPv4 compatibility (dual-stack) mode is disabled or not.
    * 
    * Equivalent to the IPV6_V6ONLY socket option.
@@ -154,33 +154,33 @@ export namespace SocketsTcp {
    * - `not-supported`:        (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  ipv6Only(this: TcpSocket): boolean;
+  export function ipv6Only(this: TcpSocket): boolean;
   export function setIpv6Only(this: TcpSocket, value: boolean): void;
-  export function /**
+  /**
    * Hints the desired listen queue size. Implementations are free to ignore this.
    * 
    * # Typical errors
    * - `already-connected`:    (set) The socket is already in the Connection state.
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  setListenBacklogSize(this: TcpSocket, value: bigint): void;
-  export function /**
+  export function setListenBacklogSize(this: TcpSocket, value: bigint): void;
+  /**
    * Equivalent to the SO_KEEPALIVE socket option.
    * 
    * # Typical errors
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  keepAlive(this: TcpSocket): boolean;
+  export function keepAlive(this: TcpSocket): boolean;
   export function setKeepAlive(this: TcpSocket, value: boolean): void;
-  export function /**
+  /**
    * Equivalent to the TCP_NODELAY socket option.
    * 
    * # Typical errors
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  noDelay(this: TcpSocket): boolean;
+  export function noDelay(this: TcpSocket): boolean;
   export function setNoDelay(this: TcpSocket, value: boolean): void;
-  export function /**
+  /**
    * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
    * 
    * # Typical errors
@@ -188,9 +188,9 @@ export namespace SocketsTcp {
    * - `already-listening`:    (set) The socket is already in the Listener state.
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  unicastHopLimit(this: TcpSocket): number;
+  export function unicastHopLimit(this: TcpSocket): number;
   export function setUnicastHopLimit(this: TcpSocket, value: number): void;
-  export function /**
+  /**
    * The kernel buffer space reserved for sends/receives on this socket.
    * 
    * Note #1: an implementation may choose to cap or round the buffer size when setting the value.
@@ -207,18 +207,18 @@ export namespace SocketsTcp {
    * - `already-listening`:    (set) The socket is already in the Listener state.
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  receiveBufferSize(this: TcpSocket): bigint;
+  export function receiveBufferSize(this: TcpSocket): bigint;
   export function setReceiveBufferSize(this: TcpSocket, value: bigint): void;
   export function sendBufferSize(this: TcpSocket): bigint;
   export function setSendBufferSize(this: TcpSocket, value: bigint): void;
-  export function /**
+  /**
    * Create a `pollable` which will resolve once the socket is ready for I/O.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
-  subscribe(this: TcpSocket): Pollable;
-  export function /**
+  export function subscribe(this: TcpSocket): Pollable;
+  /**
    * Initiate a graceful shutdown.
    * 
    * - receive: the socket is not expecting to receive any more data from the peer. All subsequent read
@@ -239,15 +239,15 @@ export namespace SocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-shutdown>
    * - <https://man.freebsd.org/cgi/man.cgi?query=shutdown&sektion=2>
    */
-  shutdown(this: TcpSocket, shutdownType: ShutdownType): void;
-  export function /**
+  export function shutdown(this: TcpSocket, shutdownType: ShutdownType): void;
+  /**
    * Dispose of the specified `tcp-socket`, after which it may no longer be used.
    * 
    * Similar to the POSIX `close` function.
    * 
    * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
    */
-  dropTcpSocket(this: TcpSocket): void;
+  export function dropTcpSocket(this: TcpSocket): void;
 }
 import type { InputStream } from '../imports/streams';
 export { InputStream };

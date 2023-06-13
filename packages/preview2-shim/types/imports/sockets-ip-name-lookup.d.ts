@@ -1,5 +1,5 @@
 export namespace SocketsIpNameLookup {
-  export function /**
+  /**
    * Resolve an internet host name to a list of IP addresses.
    * 
    * See the wasi-socket proposal README.md for a comparison with getaddrinfo.
@@ -31,8 +31,8 @@ export namespace SocketsIpNameLookup {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
    * - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
    */
-  resolveAddresses(network: Network, name: string, addressFamily: IpAddressFamily | null, includeUnavailable: boolean): ResolveAddressStream;
-  export function /**
+  export function resolveAddresses(network: Network, name: string, addressFamily: IpAddressFamily | null, includeUnavailable: boolean): ResolveAddressStream;
+  /**
    * Returns the next address from the resolver.
    * 
    * This function should be called multiple times. On each call, it will
@@ -48,20 +48,20 @@ export namespace SocketsIpNameLookup {
    * - `permanent-resolver-failure`: A permanent failure in name resolution occurred. (EAI_FAIL)
    * - `would-block`:                A result is not available yet. (EWOULDBLOCK, EAGAIN)
    */
-  resolveNextAddress(this: ResolveAddressStream): IpAddress | null;
-  export function /**
+  export function resolveNextAddress(this: ResolveAddressStream): IpAddress | null;
+  /**
    * Dispose of the specified `resolve-address-stream`, after which it may no longer be used.
    * 
    * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
    */
-  dropResolveAddressStream(this: ResolveAddressStream): void;
-  export function /**
+  export function dropResolveAddressStream(this: ResolveAddressStream): void;
+  /**
    * Create a `pollable` which will resolve once the stream is ready for I/O.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
-  subscribe(this: ResolveAddressStream): Pollable;
+  export function subscribe(this: ResolveAddressStream): Pollable;
 }
 import type { Pollable } from '../imports/poll';
 export { Pollable };

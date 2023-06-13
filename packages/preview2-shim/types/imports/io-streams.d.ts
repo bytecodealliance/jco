@@ -1,5 +1,5 @@
 export namespace IoStreams {
-  export function /**
+  /**
    * Read bytes from a stream.
    * 
    * This function returns a list of bytes containing the data that was
@@ -19,15 +19,15 @@ export namespace IoStreams {
    * a buffer as large as that would imply.
    * FIXME: describe what happens if allocation fails.
    */
-  read(this: InputStream, len: bigint): [Uint8Array | ArrayBuffer, boolean];
-  export function /**
+  export function read(this: InputStream, len: bigint): [Uint8Array | ArrayBuffer, boolean];
+  /**
    * Read bytes from a stream, with blocking.
    * 
    * This is similar to `read`, except that it blocks until at least one
    * byte can be read.
    */
-  blockingRead(this: InputStream, len: bigint): [Uint8Array | ArrayBuffer, boolean];
-  export function /**
+  export function blockingRead(this: InputStream, len: bigint): [Uint8Array | ArrayBuffer, boolean];
+  /**
    * Skip bytes from a stream.
    * 
    * This is similar to the `read` function, but avoids copying the
@@ -41,54 +41,54 @@ export namespace IoStreams {
    * indicating whether the end of the stream was reached. The returned
    * value will be at most `len`; it may be less.
    */
-  skip(this: InputStream, len: bigint): [bigint, boolean];
-  export function /**
+  export function skip(this: InputStream, len: bigint): [bigint, boolean];
+  /**
    * Skip bytes from a stream, with blocking.
    * 
    * This is similar to `skip`, except that it blocks until at least one
    * byte can be consumed.
    */
-  blockingSkip(this: InputStream, len: bigint): [bigint, boolean];
-  export function /**
+  export function blockingSkip(this: InputStream, len: bigint): [bigint, boolean];
+  /**
    * Create a `pollable` which will resolve once either the specified stream
    * has bytes available to read or the other end of the stream has been
    * closed.
    */
-  subscribeToInputStream(this: InputStream): Pollable;
-  export function /**
+  export function subscribeToInputStream(this: InputStream): Pollable;
+  /**
    * Dispose of the specified `input-stream`, after which it may no longer
    * be used.
    */
-  dropInputStream(this: InputStream): void;
-  export function /**
+  export function dropInputStream(this: InputStream): void;
+  /**
    * Write bytes to a stream.
    * 
    * This function returns a `u64` indicating the number of bytes from
    * `buf` that were written; it may be less than the full list.
    */
-  write(this: OutputStream, buf: Uint8Array): bigint;
-  export function /**
+  export function write(this: OutputStream, buf: Uint8Array): bigint;
+  /**
    * Write bytes to a stream, with blocking.
    * 
    * This is similar to `write`, except that it blocks until at least one
    * byte can be written.
    */
-  blockingWrite(this: OutputStream, buf: Uint8Array): bigint;
-  export function /**
+  export function blockingWrite(this: OutputStream, buf: Uint8Array): bigint;
+  /**
    * Write multiple zero bytes to a stream.
    * 
    * This function returns a `u64` indicating the number of zero bytes
    * that were written; it may be less than `len`.
    */
-  writeZeroes(this: OutputStream, len: bigint): bigint;
-  export function /**
+  export function writeZeroes(this: OutputStream, len: bigint): bigint;
+  /**
    * Write multiple zero bytes to a stream, with blocking.
    * 
    * This is similar to `write-zeroes`, except that it blocks until at least
    * one byte can be written.
    */
-  blockingWriteZeroes(this: OutputStream, len: bigint): bigint;
-  export function /**
+  export function blockingWriteZeroes(this: OutputStream, len: bigint): bigint;
+  /**
    * Read from one stream and write to another.
    * 
    * This function returns the number of bytes transferred; it may be less
@@ -97,15 +97,15 @@ export namespace IoStreams {
    * Unlike other I/O functions, this function blocks until all the data
    * read from the input stream has been written to the output stream.
    */
-  splice(this: OutputStream, src: InputStream, len: bigint): [bigint, boolean];
-  export function /**
+  export function splice(this: OutputStream, src: InputStream, len: bigint): [bigint, boolean];
+  /**
    * Read from one stream and write to another, with blocking.
    * 
    * This is similar to `splice`, except that it blocks until at least
    * one byte can be read.
    */
-  blockingSplice(this: OutputStream, src: InputStream, len: bigint): [bigint, boolean];
-  export function /**
+  export function blockingSplice(this: OutputStream, src: InputStream, len: bigint): [bigint, boolean];
+  /**
    * Forward the entire contents of an input stream to an output stream.
    * 
    * This function repeatedly reads from the input stream and writes
@@ -118,17 +118,17 @@ export namespace IoStreams {
    * 
    * This function returns the number of bytes transferred.
    */
-  forward(this: OutputStream, src: InputStream): bigint;
-  export function /**
+  export function forward(this: OutputStream, src: InputStream): bigint;
+  /**
    * Create a `pollable` which will resolve once either the specified stream
    * is ready to accept bytes or the other end of the stream has been closed.
    */
-  subscribeToOutputStream(this: OutputStream): Pollable;
-  export function /**
+  export function subscribeToOutputStream(this: OutputStream): Pollable;
+  /**
    * Dispose of the specified `output-stream`, after which it may no longer
    * be used.
    */
-  dropOutputStream(this: OutputStream): void;
+  export function dropOutputStream(this: OutputStream): void;
 }
 import type { Pollable } from '../imports/poll';
 export { Pollable };
