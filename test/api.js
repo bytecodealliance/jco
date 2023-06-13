@@ -10,8 +10,8 @@ export async function apiTest (fixtures) {
       const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
       const { files, imports, exports } = await transpile(component, { name });
       strictEqual(imports.length, 2);
-      strictEqual(exports.length, 2);
-      deepStrictEqual(exports[0], ['exports', 'instance']);
+      strictEqual(exports.length, 3);
+      deepStrictEqual(exports[0], ['flavorfulTest', 'instance']);
       ok(files[name + '.js']);
     });
 
@@ -27,8 +27,8 @@ export async function apiTest (fixtures) {
         base64Cutoff: 0,
       });
       strictEqual(imports.length, 2);
-      strictEqual(exports.length, 2);
-      deepStrictEqual(exports[0], ['exports', 'instance']);
+      strictEqual(exports.length, 3);
+      deepStrictEqual(exports[0], ['flavorfulTest', 'instance']);
       ok(files[name + '.js'].length < 11_000);
     });
 
@@ -46,9 +46,10 @@ export async function apiTest (fixtures) {
         js: true,
       });
       strictEqual(imports.length, 2);
-      strictEqual(exports.length, 2);
-      deepStrictEqual(exports[0], ['exports', 'instance']);
-      deepStrictEqual(exports[1], ['testImports', 'function']);
+      strictEqual(exports.length, 3);
+      deepStrictEqual(exports[0], ['flavorfulTest', 'instance']);
+      deepStrictEqual(exports[1], ['test', 'instance']);
+      deepStrictEqual(exports[2], ['testImports', 'function']);
       const source = Buffer.from(files[name + '.js']).toString();
       ok(source.includes('./wasi.js'));
       ok(source.includes('testwasi'));
@@ -73,10 +74,7 @@ export async function apiTest (fixtures) {
     });
 
     test('Wit & New', async () => {
-      const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
-      const wit = await componentWit(component);
-
-      strictEqual(wit.slice(0, 19), 'interface imports {');
+      const wit = await readFile(`test/fixtures/wit/flavorful.wit`, 'utf8');
 
       const generatedComponent = await componentEmbed({
         witSource: wit,
@@ -99,7 +97,7 @@ export async function apiTest (fixtures) {
         tag: 'component',
         val: 4
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.9.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.11.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
     });
 
     test('Multi-file WIT', async () => {
@@ -124,7 +122,7 @@ export async function apiTest (fixtures) {
         tag: 'component',
         val: 1
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.9.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.11.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
     });
 
     test('Component new adapt', async () => {

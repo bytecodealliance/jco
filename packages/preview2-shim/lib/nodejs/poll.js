@@ -1,7 +1,11 @@
-export function dropPollable(p) {
-  console.log(`[poll] Drop pollable ${p}`);
-}
+export const pollPoll = {
+  dropPollable (pollable) {
+    console.log(`[poll] Drop (${pollable})`);
+  },
+  pollOneoff (input) {
+    console.log(`[poll] Oneoff (${input})`);
+    return [];
+  }
+};
 
-export function pollOneoff(f) {
-  console.log(`[poll] Poll oneoff ${f}`);
-}
+export { pollPoll as poll }

@@ -1,11 +1,9 @@
-import { exports } from '../../obj/wasm-tools.js';
+import { metadataShow, print } from '../../obj/wasm-tools.js';
 import { writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import c from 'chalk-template';
 import { readFile, sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import ora from 'ora';
-
-const { metadataShow, print } = exports;
 
 let WASM_OPT;
 try {

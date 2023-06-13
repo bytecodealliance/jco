@@ -7,7 +7,7 @@ export async function componentize (jsSource, opts) {
   try {
     ({ componentize: componentizeFn } = await eval('import("@bytecodealliance/componentize-js")'));
   } catch (e) {
-    if (e?.code === 'ERR_MODULE_NOT_FOUND')
+    if (e?.code === 'ERR_MODULE_NOT_FOUND' && e?.message?.includes('\'@bytecodealliance/componentize-js\''))
       throw new Error(`componentize-js must first be installed separately via "npm install @bytecodealliance/componentize-js".`);
     throw e;
   }

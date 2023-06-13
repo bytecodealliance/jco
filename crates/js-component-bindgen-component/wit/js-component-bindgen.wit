@@ -1,56 +1,77 @@
-default world js-component-bindgen-component {
-  export exports: interface {
-    type files = list<tuple<string, list<u8>>>
-    type maps = list<tuple<string, string>>
+package local:js-component-bindgen
 
-    record generate-options {
-      /// Name to use for the generated component
-      name: string,
+world js-component-bindgen {
+  type files = list<tuple<string, list<u8>>>
+  type maps = list<tuple<string, string>>
 
-      /// Disables generation of `*.d.ts` files and instead only generates `*.js`
-      /// source files.
-      no-typescript: option<bool>,
+  record generate-options {
+    /// Name to use for the generated component
+    name: string,
 
-      /// Provide a custom JS instantiation API for the component instead
-      /// of the direct importable native ESM output.
-      instantiation: option<bool>,
- 
-      /// Mappings of component import specifiers to JS import specifiers.
-      map: option<maps>,
+    /// Disables generation of `*.d.ts` files and instead only generates `*.js`
+    /// source files.
+    no-typescript: option<bool>,
 
-      /// Enables all compat flags: --tla-compat.
-      compat: option<bool>,
+    /// Provide a custom JS instantiation API for the component instead
+    /// of the direct importable native ESM output.
+    instantiation: option<bool>,
 
-      /// Disables compatibility in Node.js without a fetch global.
-      no-nodejs-compat: option<bool>,
+    /// Mappings of component import specifiers to JS import specifiers.
+    map: option<maps>,
 
-      /// Set the cutoff byte size for base64 inlining core Wasm in instantiation mode
-      /// (set to 0 to disable all base64 inlining)
-      base64-cutoff: option<u32>,
+    /// Enables all compat flags: --tla-compat.
+    compat: option<bool>,
 
-      /// Enables compatibility for JS environments without top-level await support
-      /// via an async $init promise export to wait for instead.
-      tla-compat: option<bool>,
+    /// Disables compatibility in Node.js without a fetch global.
+    no-nodejs-compat: option<bool>,
 
-      /// Disable verification of component Wasm data structures when
-      /// lifting as a production optimization
-      valid-lifting-optimization: option<bool>,
-    }
+    /// Set the cutoff byte size for base64 inlining core Wasm in instantiation mode
+    /// (set to 0 to disable all base64 inlining)
+    base64-cutoff: option<u32>,
 
-    enum export-type {
-      function,
-      instance,
-    }
+    /// Enables compatibility for JS environments without top-level await support
+    /// via an async $init promise export to wait for instead.
+    tla-compat: option<bool>,
 
-    record transpiled {
-      files: files,
-      imports: list<string>,
-      exports: list<tuple<string, export-type>>
-    }
-
-    /// Generate the file structure for the transpilation of a component
-    /// into a JS embedding, returns the file list and imports and exports of the
-    /// output JS transpiled component
-    generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>
+    /// Disable verification of component Wasm data structures when
+    /// lifting as a production optimization
+    valid-lifting-optimization: option<bool>,
   }
+
+  variant wit {
+    /// wit is provided as an inline WIT string
+    source(string),
+    /// wit is provided from a component binary
+    binary(list<u8>),
+    /// wit is provided from a filesystem path
+    path(string),
+  }
+
+  record type-generation-options {
+    /// wit to generate typing from
+    wit: wit,
+    /// world to generate typing for
+    %world: option<string>,
+    tla-compat: option<bool>,
+    instantiation: option<bool>,
+    map: option<maps>,
+  }
+
+  enum export-type {
+    function,
+    instance,
+  }
+
+  record transpiled {
+    files: files,
+    imports: list<string>,
+    exports: list<tuple<string, export-type>>
+  }
+
+  /// Generate the file structure for the transpiled of a component
+  /// into a JS embedding, returns the file list and imports and exports of the
+  /// output JS generation component
+  export generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>
+
+  export generate-types: func(name: string, options: type-generation-options) -> result<files, string>
 }

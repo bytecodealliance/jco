@@ -1,7 +1,10 @@
 // Flags: --instantiation
 
 import * as assert from "node:assert";
+// @ts-ignore
 import { importObject } from "@bytecodealliance/preview2-shim";
+
+// @ts-ignore
 import { instantiate } from "../output/dummy_proxy/dummy_proxy.js";
 import * as helpers from "./helpers.js";
 

@@ -43,7 +43,7 @@ export async function codegenTest (fixtures) {
   });
 
   suite(`Typescript compilation`, () => {
-      // TypeScript tests _must_ run after codegen to complete successfully
+    // TypeScript tests _must_ run after codegen to complete successfully
     // This is due to type checking against generated bindings
     test('TypeScript Compilation', async () => {
       var { stderr } = await exec(tscPath, '-p', 'test/tsconfig.json');

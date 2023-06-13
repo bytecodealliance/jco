@@ -11,12 +11,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = { workspace = true }
-heck = { workspace = true }
-clap = { workspace = true, optional = true }
 js-component-bindgen = { path = "../js-component-bindgen" }
-wasmtime-environ = { workspace = true, features = ['component-model'] }
+wasmtime-environ = { workspace = true }
 wit-bindgen = { workspace = true }
-wit-component = { workspace = true }
-wit-parser = { workspace = true }
-indexmap = { workspace = true }
-base64 = { workspace = true }
