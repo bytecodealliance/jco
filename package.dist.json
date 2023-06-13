@@ -1,7 +1,7 @@
 {
   "name": "@bytecodealliance/jco",
   "description": "JavaScript tooling for working with WebAssembly Components",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "exports": "./api.mjs",
   "types": "api.d.ts",
   "author": "Guy Bedford",
@@ -9,7 +9,7 @@
     "jco": "cli.mjs"
   },
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "0.0.8"
+    "@bytecodealliance/preview2-shim": "0.0.9"
   },
   "repository": {
     "type": "git",
