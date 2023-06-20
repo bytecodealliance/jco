@@ -11,7 +11,7 @@ export async function apiTest (fixtures) {
       const { files, imports, exports } = await transpile(component, { name });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 3);
-      deepStrictEqual(exports[0], ['flavorfulTest', 'instance']);
+      deepStrictEqual(exports[0], ['test', 'instance']);
       ok(files[name + '.js']);
     });
 
@@ -28,7 +28,7 @@ export async function apiTest (fixtures) {
       });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 3);
-      deepStrictEqual(exports[0], ['flavorfulTest', 'instance']);
+      deepStrictEqual(exports[0], ['test', 'instance']);
       ok(files[name + '.js'].length < 11_000);
     });
 
@@ -47,8 +47,8 @@ export async function apiTest (fixtures) {
       });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 3);
-      deepStrictEqual(exports[0], ['flavorfulTest', 'instance']);
-      deepStrictEqual(exports[1], ['test', 'instance']);
+      deepStrictEqual(exports[0], ['test', 'instance']);
+      deepStrictEqual(exports[1], ['test:flavorful/test', 'instance']);
       deepStrictEqual(exports[2], ['testImports', 'function']);
       const source = Buffer.from(files[name + '.js']).toString();
       ok(source.includes('./wasi.js'));

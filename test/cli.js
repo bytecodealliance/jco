@@ -24,7 +24,7 @@ export async function cliTest (fixtures) {
         const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--no-wasi-shim', '--name', name, '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
-        ok(source.toString().includes('export { flavorfulTest'));
+        ok(source.toString().includes('export { test'));
       }
       finally {
         await cleanup();
@@ -37,7 +37,7 @@ export async function cliTest (fixtures) {
         const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--name', name, '--valid-lifting-optimization', '--tla-compat', '--optimize', '--minify', '--base64-cutoff=0', '-o', outDir);
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
-        ok(source.toString().includes('as flavorfulTest,'));
+        ok(source.toString().includes('as test,'));
       }
       finally {
         await cleanup();

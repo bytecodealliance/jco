@@ -8,37 +8,35 @@ import * as assert from 'assert';
 async function run() {
   const wasm = await instantiate(helpers.loadWasm, {
     testwasi: helpers,
-    variants: {
-      variantsTest: {
-        roundtripOption(x) { return x; },
-        roundtripResult(x) {
-          if (x.tag == 'ok') {
-            return x.val;
-          } else {
-            throw Object.assign(new Error(''), { payload: Math.round(x.val) });
-          }
-        },
-        roundtripEnum(x) { return x; },
-        invertBool(x) { return !x; },
-        variantCasts(x) { return x; },
-        variantZeros(x) { return x; },
-        variantTypedefs(x, y, z) {},
-        variantEnums(a, b, c) {
-          assert.deepStrictEqual(a, true);
-          assert.deepStrictEqual(b, { tag: 'ok', val: undefined });
-          assert.deepStrictEqual(c, "success");
-          return [
-            false,
-            { tag: 'err', val: undefined },
-            "a",
-          ];
+    'test:variants/test': {
+      roundtripOption(x) { return x; },
+      roundtripResult(x) {
+        if (x.tag == 'ok') {
+          return x.val;
+        } else {
+          throw Object.assign(new Error(''), { payload: Math.round(x.val) });
         }
+      },
+      roundtripEnum(x) { return x; },
+      invertBool(x) { return !x; },
+      variantCasts(x) { return x; },
+      variantZeros(x) { return x; },
+      variantTypedefs(x, y, z) {},
+      variantEnums(a, b, c) {
+        assert.deepStrictEqual(a, true);
+        assert.deepStrictEqual(b, { tag: 'ok', val: undefined });
+        assert.deepStrictEqual(c, "success");
+        return [
+          false,
+          { tag: 'err', val: undefined },
+          "a",
+        ];
       }
     }
   });
 
   wasm.testImports();
-  assert.strictEqual(wasm.test, wasm.variantsTest);
+  assert.strictEqual(wasm.test, wasm['test:variants/test']);
   assert.deepStrictEqual(wasm.test.roundtripOption(1), 1);
   assert.deepStrictEqual(wasm.test.roundtripOption(null), null);
   // @ts-ignore
