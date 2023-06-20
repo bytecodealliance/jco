@@ -1,6 +1,6 @@
 use anyhow::Result;
 mod files;
-mod identifier;
+mod names;
 mod ns;
 
 pub mod function_bindgen;
@@ -9,6 +9,7 @@ pub mod source;
 
 mod ts_bindgen;
 
+mod esm_bindgen;
 mod transpile_bindgen;
 use transpile_bindgen::transpile_bindgen;
 pub use transpile_bindgen::TranspileOpts;

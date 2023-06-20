@@ -1,13 +1,13 @@
+use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{ErrHandling, FunctionBindgen};
-use crate::identifier::{is_js_identifier, maybe_quote_id, maybe_quote_member};
 use crate::intrinsics::{render_intrinsics, Intrinsic};
+use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source;
 use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
 use heck::*;
 use indexmap::IndexMap;
-use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
@@ -44,59 +44,16 @@ pub struct TranspileOpts {
     pub valid_lifting_optimization: bool,
 }
 
-pub enum Binding {
-    Interface(BTreeMap<String, Binding>),
-    Function(String),
-}
-
-#[derive(Default)]
-struct LocalNames {
-    // map from exact name to generated local name
-    local_names: HashMap<String, String>,
-}
-
-impl<'a> LocalNames {
-    fn get_or_create(&'a mut self, unique_id: &str, goal_name: &str) -> &'a str {
-        if !self.local_names.contains_key(unique_id) {
-            let goal_name = if let Some(last_char) = goal_name.rfind('/') {
-                &goal_name[last_char + 1..]
-            } else {
-                &goal_name
-            };
-            let mut goal = if is_js_identifier(goal_name) {
-                goal_name.to_string()
-            } else {
-                goal_name.to_lower_camel_case().replace(':', "$")
-            };
-            if self.local_names.values().any(|v| v == &goal) {
-                let mut idx = 1;
-                loop {
-                    let valid_name_suffixed = format!("{goal}${}", idx.to_string());
-                    if !self.local_names.values().any(|v| v == &valid_name_suffixed) {
-                        goal = valid_name_suffixed;
-                        break;
-                    }
-                    idx += 1;
-                }
-            }
-            self.local_names
-                .insert(unique_id.to_string(), goal.to_string());
-        }
-        self.local_names.get(unique_id).unwrap()
-    }
-}
-
 struct JsBindgen<'a> {
     local_names: LocalNames,
+
+    esm_bindgen: EsmBindgen,
 
     /// The source code for the "main" file that's going to be created for the
     /// component we're generating bindings for. This is incrementally added to
     /// over time and primarily contains the main `instantiate` function as well
     /// as a type-description of the input/output interfaces.
     src: Source,
-
-    /// JS output imports map from imported specifier, to a list of bindings
-    imports: BTreeMap<String, Binding>,
 
     /// Core module count
     core_module_cnt: usize,
@@ -120,11 +77,14 @@ pub fn transpile_bindgen(
     let mut bindgen = JsBindgen {
         local_names: LocalNames::default(),
         src: Source::default(),
-        imports: BTreeMap::new(),
+        esm_bindgen: EsmBindgen::default(),
         core_module_cnt: 0,
         opts: &opts,
         all_intrinsics: BTreeSet::new(),
     };
+    bindgen
+        .local_names
+        .exclude_intrinsics(Intrinsic::get_all_names());
     bindgen.core_module_cnt = modules.len();
 
     // bindings is the actual `instantiate` method itself, created by this
@@ -167,18 +127,28 @@ pub fn transpile_bindgen(
         exports,
     };
     instantiator.sizes.fill(resolve);
-    let exports = instantiator.instantiate();
-    let imports = instantiator
-        .imports
-        .keys()
-        .map(|key| map_import(&instantiator.gen.opts.map, key).0)
-        .collect();
+    instantiator.instantiate();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
 
-    bindgen.finish_component(name, files);
+    instantiator.gen.finish_component(name, files);
 
-    (imports, exports)
+    let exports = instantiator
+        .gen
+        .esm_bindgen
+        .exports()
+        .iter()
+        .map(|(export_name, canon_export_name)| {
+            let export = if canon_export_name.contains(':') {
+                &instantiator.component.exports[*canon_export_name]
+            } else {
+                &instantiator.component.exports[&canon_export_name.to_kebab_case()]
+            };
+            (export_name.to_string(), export.clone())
+        })
+        .collect();
+
+    (bindgen.esm_bindgen.import_specifiers(), exports)
 }
 
 impl<'a> JsBindgen<'a> {
@@ -230,8 +200,6 @@ impl<'a> JsBindgen<'a> {
             self.opts.instantiation,
         );
 
-        let mut iface_imports = Vec::new();
-
         if self.opts.instantiation {
             uwrite!(
                 output,
@@ -245,102 +213,20 @@ impl<'a> JsBindgen<'a> {
             );
         }
 
-        for (specifier, binding) in &self.imports {
-            if self.opts.instantiation {
-                uwrite!(output, "const ");
-            } else {
-                uwrite!(output, "import ");
-            }
-            match binding {
-                Binding::Interface(bindings) => {
-                    if !self.opts.instantiation && bindings.len() == 1 {
-                        let (import_name, import) = bindings.iter().next().unwrap();
-                        if import_name == "default" {
-                            let local_name = match import {
-                                Binding::Interface(iface) => {
-                                    let iface_local_name =
-                                        self.local_names.get_or_create(specifier, specifier);
-                                    iface_imports.push((iface_local_name.to_string(), iface));
-                                    iface_local_name
-                                }
-                                Binding::Function(local_name) => local_name,
-                            };
-                            uwriteln!(output, "{local_name} from '{specifier}';");
-                            continue;
-                        }
-                    }
-                    uwrite!(output, "{{");
-                    let mut first = true;
-                    for (external_name, import) in bindings {
-                        if first {
-                            output.push_str(" ");
-                            first = false;
-                        } else {
-                            output.push_str(", ");
-                        }
-                        let local_name = match import {
-                            Binding::Interface(iface) => {
-                                let iface_local_name = self.local_names.get_or_create(
-                                    &format!("{specifier}#{external_name}"),
-                                    external_name,
-                                );
-                                iface_imports.push((iface_local_name.to_string(), iface));
-                                iface_local_name
-                            }
-                            Binding::Function(local_name) => local_name,
-                        };
-                        if external_name == local_name {
-                            uwrite!(output, "{external_name}");
-                        } else {
-                            if self.opts.instantiation {
-                                uwrite!(output, "{external_name}: {local_name}");
-                            } else {
-                                uwrite!(output, "{external_name} as {local_name}");
-                            }
-                        }
-                    }
-                    if !first {
-                        output.push_str(" ");
-                    }
-                    if self.opts.instantiation {
-                        uwriteln!(output, "}} = imports{};", maybe_quote_member(specifier));
-                    } else {
-                        uwriteln!(output, "}} from '{specifier}';");
-                    }
-                }
-                Binding::Function(local_name) => {
-                    uwriteln!(output, "import {local_name} from '{specifier}';");
-                }
-            }
-        }
-
-        // render interface import member getters
-        for (iface_local_name, iface_imports) in iface_imports {
-            uwrite!(output, "const {{");
-            let mut first = true;
-            for (member_name, binding) in iface_imports {
-                let Binding::Function(local_name) = binding else {
-                    continue;
-                };
-                if first {
-                    output.push_str(" ");
-                    first = false;
-                } else {
-                    output.push_str(",\n");
-                }
-                if member_name == local_name {
-                    output.push_str(local_name);
-                } else {
-                    uwrite!(output, "{member_name}: {local_name}");
-                }
-            }
-            if !first {
-                output.push_str(" ");
-            }
-            uwriteln!(output, "}} = {iface_local_name};");
-        }
+        let imports_object = if self.opts.instantiation {
+            Some("imports")
+        } else {
+            None
+        };
+        self.esm_bindgen
+            .render_imports(&mut output, imports_object, &mut self.local_names);
 
         if self.opts.instantiation {
+            self.esm_bindgen.render_exports(
+                &mut self.src.js,
+                self.opts.instantiation,
+                &mut self.local_names,
+            );
             uwrite!(
                 output,
                 "\
@@ -385,6 +271,12 @@ impl<'a> JsBindgen<'a> {
                 &compilation_promises as &str,
                 &self.src.js_init as &str,
             );
+
+            self.esm_bindgen.render_exports(
+                &mut output,
+                self.opts.instantiation,
+                &mut self.local_names,
+            );
         }
 
         let mut bytes = output.as_bytes();
@@ -418,7 +310,7 @@ struct Instantiator<'a, 'b> {
 }
 
 impl Instantiator<'_, '_> {
-    fn instantiate(&mut self) -> Vec<(String, Export)> {
+    fn instantiate(&mut self) {
         // To avoid uncaught promise rejection errors, we attach an intermediate
         // Promise.all with a rejection handler, if there are multiple promises.
         if self.modules.len() > 1 {
@@ -441,9 +333,7 @@ impl Instantiator<'_, '_> {
             self.src.js.push_str(&js_init);
         }
 
-        let exports = self.exports(&self.component.exports);
-
-        exports
+        self.exports(&self.component.exports)
     }
 
     fn instantiation_global_initializer(&mut self, init: &GlobalInitializer) {
@@ -574,69 +464,10 @@ impl Instantiator<'_, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        let callee_name = self
-            .gen
-            .local_names
-            .get_or_create(&format!("import:{func_name}"), func_name)
-            .to_string();
-
-        if let Some(_iface_name) = iface_name {
-            // iface_name unused, could be used for generation
-
-            let iface = match self.gen.imports.entry(import_specifier.to_string()) {
-                Entry::Vacant(entry) => entry.insert(Binding::Interface(BTreeMap::new())),
-                Entry::Occupied(_) => self.gen.imports.get_mut(&import_specifier).unwrap(),
-            };
-            let Binding::Interface(ref mut iface_map) = iface else {
-                panic!("Import {} cannot be both a function and interface", import_specifier)
-            };
-
-            // mapping can be used to construct virtual nested namespaces
-            // which is used eg to support WASI interface groupings
-            if let Some(iface_member) = maybe_iface_member.take() {
-                let (import_name, member_name, local_binding) = (
-                    iface_member.to_string(),
-                    func_name.to_lower_camel_case(),
-                    callee_name.to_string(),
-                );
-
-                match iface_map.entry(import_name) {
-                    Entry::Vacant(entry) => {
-                        entry.insert(Binding::Interface(BTreeMap::from([(
-                            member_name,
-                            Binding::Function(local_binding),
-                        )])));
-                    }
-                    Entry::Occupied(mut entry) => {
-                        let entry = entry.get_mut();
-                        match entry {
-                            Binding::Interface(iface) => {
-                                iface.insert(member_name, Binding::Function(local_binding))
-                            }
-                            Binding::Function(_) => {
-                                panic!("Import is both a function and an interface")
-                            }
-                        };
-                    }
-                };
-            } else {
-                match iface_map.entry(func_name.to_lower_camel_case()) {
-                    Entry::Vacant(entry) => {
-                        entry.insert(Binding::Function(callee_name.to_string()));
-                    }
-                    Entry::Occupied(_) => {
-                        panic!("Duplicate binding entry for {}", callee_name.to_string());
-                    }
-                };
-            }
-        } else {
-            self.gen.imports.insert(
-                import_specifier.to_string(),
-                Binding::Function(callee_name.to_string()),
-            );
-        }
-
         let index = import.index.as_u32();
+
+        let callee_name = self.gen.local_names.get_once(func_name).to_string();
+
         uwrite!(self.src.js, "\nfunction lowering{index}");
         let nparams = self
             .resolve
@@ -651,6 +482,31 @@ impl Instantiator<'_, '_> {
             AbiVariant::GuestImport,
         );
         uwriteln!(self.src.js, "");
+
+        // add the function import to the ESM bindgen
+        if let Some(_iface_name) = iface_name {
+            // mapping can be used to construct virtual nested namespaces
+            // which is used eg to support WASI interface groupings
+            if let Some(iface_member) = maybe_iface_member.take() {
+                self.gen.esm_bindgen.add_import_func(
+                    &[
+                        import_specifier,
+                        iface_member,
+                        func_name.to_lower_camel_case(),
+                    ],
+                    callee_name,
+                );
+            } else {
+                self.gen.esm_bindgen.add_import_func(
+                    &[import_specifier, func_name.to_lower_camel_case()],
+                    callee_name,
+                );
+            }
+        } else {
+            self.gen
+                .esm_bindgen
+                .add_import_func(&[import_specifier], callee_name);
+        }
     }
 
     fn bindgen(
@@ -763,48 +619,19 @@ impl Instantiator<'_, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    fn exports(&mut self, exports: &IndexMap<String, Export>) -> Vec<(String, Export)> {
-        if exports.is_empty() {
-            if self.gen.opts.instantiation {
-                self.src.js("return {}");
-            }
-            return Vec::new();
-        }
-
-        let mut canon_exports = BTreeMap::new();
-        let mut camel_aliases = BTreeMap::new();
+    fn exports(&mut self, exports: &IndexMap<String, Export>) {
         for (export_name, export) in exports.iter() {
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
-            let (canon_name, maybe_camel_alias, local_name) =
-                if let Some((_, _, export)) = parse_world_key(export_name) {
-                    let local_name = ns_to_local_name(export_name);
-                    let local_name = self
-                        .gen
-                        .local_names
-                        .get_or_create(&format!("export:{export_name}"), &local_name);
-                    (
-                        export_name.to_string(),
-                        Some(export.to_lower_camel_case()),
-                        local_name.to_string(),
-                    )
-                } else {
-                    let export_name_camel = export_name.to_lower_camel_case();
-                    let local_name = self
-                        .gen
-                        .local_names
-                        .get_or_create(&format!("export:{export_name}"), &export_name_camel);
-                    (export_name_camel, None, local_name.to_string())
-                };
             match export {
                 Export::LiftedFunction {
                     ty: _,
                     func,
                     options,
                 } => {
+                    let local_name = self.gen.local_names.get_once(export_name).to_string();
                     self.export_bindgen(
                         &local_name,
-                        false,
                         func,
                         options,
                         match item {
@@ -812,28 +639,36 @@ impl Instantiator<'_, '_> {
                             WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
                         },
                     );
+                    self.gen.esm_bindgen.add_export_func(
+                        None,
+                        local_name,
+                        export_name.to_lower_camel_case(),
+                    );
                 }
                 Export::Instance(iface) => {
                     let id = match item {
                         WorldItem::Interface(id) => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    uwriteln!(self.src.js, "const {local_name} = {{");
                     for (func_name, export) in iface {
                         let (func, options) = match export {
                             Export::LiftedFunction { func, options, .. } => (func, options),
                             Export::Type(_) => continue, // ignored
                             _ => unreachable!(),
                         };
+                        let local_func_name = self.gen.local_names.get_once(func_name).to_string();
                         self.export_bindgen(
-                            &func_name.to_lower_camel_case(),
-                            true,
+                            &local_func_name,
                             func,
                             options,
                             &self.resolve.interfaces[id].functions[func_name],
                         );
+                        self.gen.esm_bindgen.add_export_func(
+                            Some(export_name),
+                            local_func_name,
+                            func_name.to_lower_camel_case(),
+                        );
                     }
-                    uwriteln!(self.src.js, "\n}};");
                 }
 
                 // ignore type exports for now
@@ -842,63 +677,18 @@ impl Instantiator<'_, '_> {
                 // This can't be tested at this time so leave it unimplemented
                 Export::Module(_) => unimplemented!(),
             }
-            if let Some(camel_alias) = maybe_camel_alias {
-                camel_aliases.insert(camel_alias, canon_name.to_string());
-            }
-            canon_exports.insert(canon_name, (local_name, export));
         }
-        // only promote aliases which aren't collisions against existing exports
-        for (alias, name) in &camel_aliases {
-            if !canon_exports.contains_key(alias) {
-                canon_exports.insert(alias.to_string(), canon_exports.get(name).unwrap().clone());
-            }
-        }
-        uwrite!(
-            self.src.js,
-            "\n{} {{ ",
-            if self.gen.opts.instantiation {
-                "return"
-            } else {
-                "export"
-            }
-        );
-        uwrite!(
-            self.src.js,
-            "{} }}",
-            canon_exports
-                .iter()
-                .map(|(name, (local_name, _))| {
-                    let export_name_maybe_quoted = maybe_quote_id(name);
-                    if local_name == &export_name_maybe_quoted {
-                        local_name.to_string()
-                    } else if self.gen.opts.instantiation {
-                        format!("{}: {local_name}", export_name_maybe_quoted)
-                    } else {
-                        format!("{local_name} as {}", export_name_maybe_quoted)
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
-        canon_exports
-            .iter()
-            .map(|(name, &(_, import))| (name.clone(), import.clone()))
-            .collect()
+        self.gen.esm_bindgen.populate_export_aliases();
     }
 
     fn export_bindgen(
         &mut self,
         name: &str,
-        on_interface: bool,
         def: &CoreDef,
         options: &CanonicalOptions,
         func: &Function,
     ) {
-        if on_interface {
-            self.src.js.push_str(&name);
-        } else {
-            uwrite!(self.src.js, "\nfunction {name}");
-        }
+        uwrite!(self.src.js, "\nfunction {name}");
         let callee = self.core_def(def);
         self.bindgen(
             func.params.len(),
@@ -907,11 +697,7 @@ impl Instantiator<'_, '_> {
             func,
             AbiVariant::GuestExport,
         );
-        if on_interface {
-            self.src.js(",\n");
-        } else {
-            self.src.js("\n");
-        }
+        self.src.js("\n");
     }
 }
 
@@ -928,10 +714,6 @@ impl Source {
     pub fn js_init(&mut self, s: &str) {
         self.js_init.push_str(s);
     }
-}
-
-fn ns_to_local_name(ns_name: &str) -> String {
-    ns_name.to_lower_camel_case().replace(':', "$")
 }
 
 fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Option<String>) {

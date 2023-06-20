@@ -1,6 +1,6 @@
 use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
-use crate::identifier::maybe_quote_id;
+use crate::names::maybe_quote_id;
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, TranspileOpts};
 use crate::uwriteln;
