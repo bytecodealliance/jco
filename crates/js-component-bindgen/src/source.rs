@@ -1,7 +1,6 @@
 use std::fmt::{self, Write};
 use std::ops::Deref;
 
-pub use crate::ns::Ns;
 pub use wit_parser;
 
 #[derive(Default)]

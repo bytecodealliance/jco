@@ -8,22 +8,20 @@ import * as assert from 'node:assert';
 async function run() {
   const wasm = await instantiate(helpers.loadWasm, {
     testwasi: helpers,
-    records: {
-      recordsTest: {
-        multipleResults() { return [4, 5]; },
-        swapTuple([a, b]) { return [b, a]; },
-        roundtripFlags1(x) { return x; },
-        roundtripFlags2(x) { return x; },
-        roundtripFlags3(r0, r1, r2, r3) { return [r0, r1, r2, r3]; },
-        roundtripRecord1(x) { return x; },
-        tuple0([]) { return []; },
-        tuple1([x]) { return [x]; },
-      }
+    'test:records/test': {
+      multipleResults() { return [4, 5]; },
+      swapTuple([a, b]) { return [b, a]; },
+      roundtripFlags1(x) { return x; },
+      roundtripFlags2(x) { return x; },
+      roundtripFlags3(r0, r1, r2, r3) { return [r0, r1, r2, r3]; },
+      roundtripRecord1(x) { return x; },
+      tuple0([]) { return []; },
+      tuple1([x]) { return [x]; },
     }
   });
 
   wasm.testImports();
-  assert.deepStrictEqual(wasm.test, wasm.recordsTest);
+  assert.deepStrictEqual(wasm.test, wasm['test:records/test']);
   assert.deepEqual(wasm.test.multipleResults(), [100, 200]);
   assert.deepStrictEqual(wasm.test.swapTuple([1, 2]), [2, 1]);
   assert.deepEqual(wasm.test.roundtripFlags1({ a: true }), { a: true, b: false });

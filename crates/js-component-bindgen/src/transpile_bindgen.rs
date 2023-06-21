@@ -1,13 +1,13 @@
+use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{ErrHandling, FunctionBindgen};
-use crate::identifier::{maybe_quote_id, maybe_quote_member};
 use crate::intrinsics::{render_intrinsics, Intrinsic};
+use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source;
 use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
 use heck::*;
 use indexmap::IndexMap;
-use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
@@ -45,14 +45,15 @@ pub struct TranspileOpts {
 }
 
 struct JsBindgen<'a> {
+    local_names: LocalNames,
+
+    esm_bindgen: EsmBindgen,
+
     /// The source code for the "main" file that's going to be created for the
     /// component we're generating bindings for. This is incrementally added to
     /// over time and primarily contains the main `instantiate` function as well
     /// as a type-description of the input/output interfaces.
     src: Source,
-
-    /// JS output imports map from imported specifier, to a list of bindings
-    imports: BTreeMap<String, BTreeMap<String, String>>,
 
     /// Core module count
     core_module_cnt: usize,
@@ -74,12 +75,16 @@ pub fn transpile_bindgen(
     files: &mut Files,
 ) -> (Vec<String>, Vec<(String, Export)>) {
     let mut bindgen = JsBindgen {
+        local_names: LocalNames::default(),
         src: Source::default(),
-        imports: BTreeMap::new(),
+        esm_bindgen: EsmBindgen::default(),
         core_module_cnt: 0,
         opts: &opts,
         all_intrinsics: BTreeSet::new(),
     };
+    bindgen
+        .local_names
+        .exclude_intrinsics(Intrinsic::get_all_names());
     bindgen.core_module_cnt = modules.len();
 
     // bindings is the actual `instantiate` method itself, created by this
@@ -122,25 +127,28 @@ pub fn transpile_bindgen(
         exports,
     };
     instantiator.sizes.fill(resolve);
-    let exports = instantiator.instantiate();
-    let imports = instantiator
-        .imports
-        .keys()
-        .map(|key| match parse_world_key(key) {
-            Some((ns, package_name, _)) => {
-                map_import(&opts.map, &key[0..ns.len() + package_name.len() + 1]).unwrap_or_else(
-                    || key[ns.len() + 1..ns.len() + package_name.len() + 1].to_string(),
-                )
-            }
-            None => map_import(&opts.map, key).unwrap_or_else(|| key.to_string()),
-        })
-        .collect();
+    instantiator.instantiate();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
 
-    bindgen.finish_component(name, files);
+    instantiator.gen.finish_component(name, files);
 
-    (imports, exports)
+    let exports = instantiator
+        .gen
+        .esm_bindgen
+        .exports()
+        .iter()
+        .map(|(export_name, canon_export_name)| {
+            let export = if canon_export_name.contains(':') {
+                &instantiator.component.exports[*canon_export_name]
+            } else {
+                &instantiator.component.exports[&canon_export_name.to_kebab_case()]
+            };
+            (export_name.to_string(), export.clone())
+        })
+        .collect();
+
+    (bindgen.esm_bindgen.import_specifiers(), exports)
 }
 
 impl<'a> JsBindgen<'a> {
@@ -199,35 +207,37 @@ impl<'a> JsBindgen<'a> {
                     {}
                     export async function instantiate(compileCore, imports, instantiateCore = WebAssembly.instantiate) {{
                         {}
+                ",
+                &js_intrinsics as &str,
+                &compilation_promises as &str,
+            );
+        }
+
+        let imports_object = if self.opts.instantiation {
+            Some("imports")
+        } else {
+            None
+        };
+        self.esm_bindgen
+            .render_imports(&mut output, imports_object, &mut self.local_names);
+
+        if self.opts.instantiation {
+            self.esm_bindgen.render_exports(
+                &mut self.src.js,
+                self.opts.instantiation,
+                &mut self.local_names,
+            );
+            uwrite!(
+                output,
+                "\
                         {}\
                         {};
                     }}
                 ",
-                &js_intrinsics as &str,
-                &compilation_promises as &str,
                 &self.src.js_init as &str,
                 &self.src.js as &str,
             );
         } else {
-            // Import statements render first in JS instance mode
-            for (specifier, bindings) in &self.imports {
-                uwrite!(output, "import {{");
-                let mut first = true;
-                for (external, local) in bindings {
-                    if first {
-                        output.push_str(" ");
-                    } else {
-                        output.push_str(", ");
-                    }
-                    uwrite!(output, "{} as {}", external, local);
-                    first = false;
-                }
-                if !first {
-                    output.push_str(" ");
-                }
-                uwrite!(output, "}} from '{}';\n", specifier);
-            }
-
             let (maybe_init_export, maybe_init) = if self.opts.tla_compat {
                 uwriteln!(self.src.js_init, "_initialized = true;");
                 (
@@ -260,6 +270,12 @@ impl<'a> JsBindgen<'a> {
                 &self.src.js as &str,
                 &compilation_promises as &str,
                 &self.src.js_init as &str,
+            );
+
+            self.esm_bindgen.render_exports(
+                &mut output,
+                self.opts.instantiation,
+                &mut self.local_names,
             );
         }
 
@@ -294,7 +310,7 @@ struct Instantiator<'a, 'b> {
 }
 
 impl Instantiator<'_, '_> {
-    fn instantiate(&mut self) -> Vec<(String, Export)> {
+    fn instantiate(&mut self) {
         // To avoid uncaught promise rejection errors, we attach an intermediate
         // Promise.all with a rejection handler, if there are multiple promises.
         if self.modules.len() > 1 {
@@ -317,9 +333,7 @@ impl Instantiator<'_, '_> {
             self.src.js.push_str(&js_init);
         }
 
-        let exports = self.exports(&self.component.exports);
-
-        exports
+        self.exports(&self.component.exports)
     }
 
     fn instantiation_global_initializer(&mut self, init: &GlobalInitializer) {
@@ -423,119 +437,36 @@ impl Instantiator<'_, '_> {
     }
 
     fn lower_import(&mut self, import: &LowerImport) {
-        // Determine the `Interface` that this import corresponds to. At this
-        // time `wit-component` only supports root-level imports of instances
-        // where instances export functions.
         let (import_index, path) = &self.component.imports[import.import];
         let (import_name, _) = &self.component.import_types[*import_index];
+        let world_key = &self.imports[import_name];
 
-        let world_item = &self.imports[import_name];
+        // nested interfaces only currently possible through mapping
+        let (import_specifier, mut maybe_iface_member) =
+            map_import(&self.gen.opts.map, &import_name);
 
-        let (func, import_specifier, interface_name) = match parse_world_key(import_name) {
-            Some((ns, package_name, export)) => {
-                // namespaces must either be explicitly mapped to URLs
-                // or, if no map entry is provided by the user, a rewrite into "kebab name" is
-                // automatically performed with the default convention of using the package name as the import
-                // and the package name and interface name as the export kebab name itself
-                // if there is no other export using the interface name, the interface name is exported directly as
-                // an additional alias
-                let mapped_import_name = map_import(
-                    &self.gen.opts.map,
-                    &import_name[0..ns.len() + package_name.len() + 1],
-                );
-                match &self.resolve.worlds[self.world].imports[world_item] {
-                    WorldItem::Function(f) => {
-                        assert_eq!(path.len(), 0);
-                        (
-                            f,
-                            mapped_import_name.unwrap_or_else(|| package_name.to_string()),
-                            "".to_string(),
-                        )
-                    }
-                    WorldItem::Interface(i) => {
-                        assert_eq!(path.len(), 1);
-                        let func = &self.resolve.interfaces[*i].functions[&path[0]];
-                        (
-                            func,
-                            mapped_import_name.unwrap_or_else(|| package_name.to_string()),
-                            format!("{package_name}-{export}"),
-                        )
-                    }
-                    WorldItem::Type(_) => unreachable!(),
+        let (func, func_name, iface_name) =
+            match &self.resolve.worlds[self.world].imports[world_key] {
+                WorldItem::Function(func) => {
+                    assert_eq!(path.len(), 0);
+                    (func, import_name, None)
                 }
-            }
-            None => {
-                let mapped_import_name = map_import(&self.gen.opts.map, import_name);
-                match &self.resolve.worlds[self.world].imports[world_item] {
-                    WorldItem::Function(f) => {
-                        assert_eq!(path.len(), 0);
-                        (
-                            f,
-                            mapped_import_name.unwrap_or_else(|| import_name.to_string()),
-                            "default".to_string(),
-                        )
-                    }
-                    WorldItem::Interface(i) => {
-                        assert_eq!(path.len(), 1);
-                        let func = &self.resolve.interfaces[*i].functions[&path[0]];
-                        (
-                            func,
-                            mapped_import_name.unwrap_or_else(|| import_name.to_string()),
-                            "*".to_string(),
-                        )
-                    }
-                    WorldItem::Type(_) => unreachable!(),
+                WorldItem::Interface(i) => {
+                    assert_eq!(path.len(), 1);
+                    let iface = &self.resolve.interfaces[*i];
+                    let func = &iface.functions[&path[0]];
+                    (
+                        func,
+                        &path[0],
+                        Some(iface.name.as_ref().unwrap_or_else(|| import_name)),
+                    )
                 }
-            }
-        };
-
-        let func_or_interface_id = (if interface_name == "*" {
-            &func.name
-        } else {
-            interface_name.as_str()
-        })
-        .to_lower_camel_case();
+                WorldItem::Type(_) => unreachable!(),
+            };
 
         let index = import.index.as_u32();
-        let callee = format!("lowering{index}Callee");
 
-        let imports_map = self
-            .gen
-            .imports
-            .entry(import_specifier.to_string())
-            .or_insert(BTreeMap::new());
-
-        let local_name = if interface_name == "*" {
-            callee.to_string()
-        } else {
-            format!("interface{index}")
-        };
-
-        let entry = imports_map.entry(func_or_interface_id.to_string());
-        let vacant_interface = matches!(entry, Entry::Vacant(_));
-        let local_name = entry.or_insert(local_name);
-
-        // instance imports are otherwise hoisted
-        if self.gen.opts.instantiation {
-            if vacant_interface {
-                uwriteln!(
-                    self.src.js,
-                    "const {local_name} = imports{}{};",
-                    maybe_quote_member(&import_specifier),
-                    maybe_quote_member(&func_or_interface_id),
-                );
-            }
-        }
-
-        // in the interface case we must lower the interface function
-        if interface_name != "*" {
-            let fn_id = func.name.to_lower_camel_case();
-            uwrite!(
-                self.src.js,
-                "const lowering{index}Callee = {local_name}{};",
-                maybe_quote_member(&fn_id)
-            );
-        }
+        let callee_name = self.gen.local_names.get_once(func_name).to_string();
 
         uwrite!(self.src.js, "\nfunction lowering{index}");
         let nparams = self
@@ -545,12 +476,37 @@ impl Instantiator<'_, '_> {
             .len();
         self.bindgen(
             nparams,
-            &callee,
+            &callee_name,
             &import.options,
             func,
             AbiVariant::GuestImport,
         );
         uwriteln!(self.src.js, "");
+
+        // add the function import to the ESM bindgen
+        if let Some(_iface_name) = iface_name {
+            // mapping can be used to construct virtual nested namespaces
+            // which is used eg to support WASI interface groupings
+            if let Some(iface_member) = maybe_iface_member.take() {
+                self.gen.esm_bindgen.add_import_func(
+                    &[
+                        import_specifier,
+                        iface_member,
+                        func_name.to_lower_camel_case(),
+                    ],
+                    callee_name,
+                );
+            } else {
+                self.gen.esm_bindgen.add_import_func(
+                    &[import_specifier, func_name.to_lower_camel_case()],
+                    callee_name,
+                );
+            }
+        } else {
+            self.gen
+                .esm_bindgen
+                .add_import_func(&[import_specifier], callee_name);
+        }
     }
 
     fn bindgen(
@@ -663,37 +619,19 @@ impl Instantiator<'_, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    fn exports(&mut self, exports: &IndexMap<String, Export>) -> Vec<(String, Export)> {
-        if exports.is_empty() {
-            if self.gen.opts.instantiation {
-                self.src.js("return {}");
-            }
-            return Vec::new();
-        }
-
-        let mut camel_exports = BTreeMap::new();
-        let mut camel_aliases = BTreeMap::new();
+    fn exports(&mut self, exports: &IndexMap<String, Export>) {
         for (export_name, export) in exports.iter() {
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
-            let (camel_name, maybe_camel_alias) =
-                if let Some((_, package_name, export)) = parse_world_key(export_name) {
-                    (
-                        format!("{package_name}-{export}").to_lower_camel_case(),
-                        Some(export.to_lower_camel_case()),
-                    )
-                } else {
-                    (export_name.to_lower_camel_case(), None)
-                };
             match export {
                 Export::LiftedFunction {
                     ty: _,
                     func,
                     options,
                 } => {
+                    let local_name = self.gen.local_names.get_once(export_name).to_string();
                     self.export_bindgen(
-                        export_name,
-                        None,
+                        &local_name,
                         func,
                         options,
                         match item {
@@ -701,28 +639,36 @@ impl Instantiator<'_, '_> {
                             WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
                         },
                     );
+                    self.gen.esm_bindgen.add_export_func(
+                        None,
+                        local_name,
+                        export_name.to_lower_camel_case(),
+                    );
                 }
                 Export::Instance(iface) => {
                     let id = match item {
                         WorldItem::Interface(id) => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    uwriteln!(self.src.js, "const {camel_name} = {{");
                     for (func_name, export) in iface {
                         let (func, options) = match export {
                             Export::LiftedFunction { func, options, .. } => (func, options),
                             Export::Type(_) => continue, // ignored
                             _ => unreachable!(),
                         };
+                        let local_func_name = self.gen.local_names.get_once(func_name).to_string();
                         self.export_bindgen(
-                            func_name,
-                            Some(export_name),
+                            &local_func_name,
                             func,
                             options,
                             &self.resolve.interfaces[id].functions[func_name],
                         );
+                        self.gen.esm_bindgen.add_export_func(
+                            Some(export_name),
+                            local_func_name,
+                            func_name.to_lower_camel_case(),
+                        );
                     }
-                    uwriteln!(self.src.js, "\n}};");
                 }
 
                 // ignore type exports for now
@@ -731,66 +677,18 @@ impl Instantiator<'_, '_> {
                 // This can't be tested at this time so leave it unimplemented
                 Export::Module(_) => unimplemented!(),
             }
-            if let Some(camel_alias) = maybe_camel_alias {
-                camel_aliases.insert(camel_alias, camel_name.to_string());
-            }
-            camel_exports.insert(camel_name, export);
         }
-        // only promote aliases which aren't collisions against existing exports
-        for (alias, name) in &camel_aliases {
-            if !camel_exports.contains_key(alias) {
-                camel_exports.insert(alias.to_string(), camel_exports.get(name).unwrap().clone());
-            }
-        }
-        uwrite!(
-            self.src.js,
-            "\n{} {{ ",
-            if self.gen.opts.instantiation {
-                "return"
-            } else {
-                "export"
-            }
-        );
-        uwriteln!(
-            self.src.js,
-            "{} }}",
-            camel_exports
-                .iter()
-                .map(|(name, _)| {
-                    let name = name.to_string();
-                    if let Some(original_name) = camel_aliases.get(&name) {
-                        if self.gen.opts.instantiation {
-                            format!("{name}: {original_name}")
-                        } else {
-                            format!("{original_name} as {name}")
-                        }
-                    } else {
-                        name
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
-        camel_exports
-            .iter()
-            .map(|(name, &import)| (name.clone(), import.clone()))
-            .collect()
+        self.gen.esm_bindgen.populate_export_aliases();
     }
 
     fn export_bindgen(
         &mut self,
         name: &str,
-        instance_name: Option<&str>,
         def: &CoreDef,
         options: &CanonicalOptions,
         func: &Function,
     ) {
-        let name = name.to_lower_camel_case();
-        if instance_name.is_some() {
-            self.src.js.push_str(&name);
-        } else {
-            uwrite!(self.src.js, "\nfunction {name}");
-        }
+        uwrite!(self.src.js, "\nfunction {name}");
         let callee = self.core_def(def);
         self.bindgen(
             func.params.len(),
@@ -799,11 +697,7 @@ impl Instantiator<'_, '_> {
             func,
             AbiVariant::GuestExport,
         );
-        if instance_name.is_some() {
-            self.src.js(",\n");
-        } else {
-            self.src.js("\n");
-        }
+        self.src.js("\n");
     }
 }
 
@@ -822,27 +716,39 @@ impl Source {
     }
 }
 
-fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> Option<String> {
+fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Option<String>) {
     if let Some(map) = map.as_ref() {
+        if let Some(mapping) = map.get(impt) {
+            return if let Some(hash_idx) = mapping.find('#') {
+                (
+                    mapping[0..hash_idx].to_string(),
+                    Some(mapping[hash_idx + 1..].into()),
+                )
+            } else {
+                (mapping.into(), None)
+            };
+        }
         for (key, mapping) in map {
-            if key == impt {
-                return Some(mapping.into());
-            }
             if let Some(wildcard_idx) = key.find('*') {
                 let lhs = &key[0..wildcard_idx];
                 let rhs = &key[wildcard_idx + 1..];
                 if impt.starts_with(lhs) && impt.ends_with(rhs) {
                     let matched =
                         &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
-                    return Some(mapping.replace('*', matched));
+                    let mapping = mapping.replace('*', matched);
+                    return if let Some(hash_idx) = mapping.find('#') {
+                        (
+                            mapping[0..hash_idx].to_string(),
+                            Some(mapping[hash_idx + 1..].into()),
+                        )
+                    } else {
+                        (mapping.into(), None)
+                    };
                 }
             }
         }
-        if let Some(mapping) = map.get(impt) {
-            return Some(mapping.into());
-        }
     }
-    None
+    (impt.to_string(), None)
 }
 
 pub fn parse_world_key<'a>(name: &'a str) -> Option<(&'a str, &'a str, &'a str)> {

@@ -1,9 +1,9 @@
 use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
-use crate::identifier::maybe_quote_id;
+use crate::names::{maybe_quote_id, LocalNames};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, TranspileOpts};
-use crate::uwriteln;
+use crate::{uwrite, uwriteln};
 use heck::*;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
@@ -18,6 +18,8 @@ struct TsBindgen {
     /// over time and primarily contains the main `instantiate` function as well
     /// as a type-description of the input/output interfaces.
     src: Source,
+
+    local_names: LocalNames,
 
     /// Type script definitions which will become the import object
     import_object: Source,
@@ -47,6 +49,7 @@ pub fn ts_bindgen(
 ) {
     let mut bindgen = TsBindgen {
         src: Source::default(),
+        local_names: LocalNames::default(),
         import_object: Source::default(),
         export_object: Source::default(),
     };
@@ -56,7 +59,7 @@ pub fn ts_bindgen(
 
     {
         let mut funcs = Vec::new();
-        let mut imports = BTreeMap::new();
+        let mut interface_imports = BTreeMap::new();
         for (name, import) in world.imports.iter() {
             match import {
                 WorldItem::Function(f) => funcs.push(f),
@@ -67,16 +70,17 @@ pub fn ts_bindgen(
                     }
                     // namespaced ns:pkg/iface
                     // -> group by pkg import by convention
+                    // TODO: map support
                     WorldKey::Interface(id) => {
-                        let import_name = resolve.id_of(*id).unwrap();
-                        let (_, pkg, iface) = parse_world_key(&import_name).unwrap();
-                        let specifier_id = pkg.to_string();
-                        match imports.entry(specifier_id) {
-                            Entry::Vacant(gap) => {
-                                gap.insert(vec![(format!("{}-{}", pkg, iface), id)]);
+                        let import_specifier = resolve.id_of(*id).unwrap();
+                        let (_, _, iface) = parse_world_key(&import_specifier).unwrap();
+                        let iface = iface.to_string();
+                        match interface_imports.entry(import_specifier) {
+                            Entry::Vacant(entry) => {
+                                entry.insert(vec![("*".into(), id)]);
                             }
                             Entry::Occupied(ref mut entry) => {
-                                entry.get_mut().push((format!("{}-{}", pkg, iface), id));
+                                entry.get_mut().push((iface, id));
                             }
                         }
                     }
@@ -90,7 +94,7 @@ pub fn ts_bindgen(
         }
         // namespace imports are grouped by namespace / kebab name
         // kebab name imports are direct
-        for (name, import_interfaces) in imports {
+        for (name, import_interfaces) in interface_imports {
             bindgen.import_interfaces(resolve, name.as_ref(), import_interfaces, files);
         }
     }
@@ -103,10 +107,9 @@ pub fn ts_bindgen(
             WorldKey::Name(name) => name.to_string(),
             WorldKey::Interface(interface) => {
                 let export_name = resolve.id_of(*interface).unwrap();
-                let (_, pkg, iface) = parse_world_key(&export_name).unwrap();
-                let out_name = format!("{}-{}", pkg, iface);
-                export_aliases.push((iface.to_lower_camel_case(), out_name.to_string()));
-                out_name
+                let (_, _, iface) = parse_world_key(&export_name).unwrap();
+                export_aliases.push((iface.to_string(), export_name.to_string()));
+                export_name
             }
         };
         seen_names.insert(name.to_string());
@@ -120,19 +123,24 @@ pub fn ts_bindgen(
     }
     for (alias, name) in export_aliases {
         if !seen_names.contains(&alias) {
+            let local_name = bindgen
+                .local_names
+                .get(&format!("export:{name}"))
+                .to_string();
+
             if opts.instantiation {
                 uwriteln!(
                     bindgen.export_object,
                     "{}: typeof {}Exports,",
                     alias,
-                    name.to_upper_camel_case()
+                    local_name.to_upper_camel_case()
                 );
             } else {
                 uwriteln!(
                     bindgen.export_object,
                     "export const {}: typeof {}Exports;",
                     alias,
-                    name.to_upper_camel_case()
+                    local_name.to_upper_camel_case()
                 );
             }
         }
@@ -242,8 +250,28 @@ impl TsBindgen {
         ifaces: Vec<(String, &InterfaceId)>,
         files: &mut Files,
     ) {
-        uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name),);
-        for (name, &id) in ifaces {
+        if ifaces.len() == 1 {
+            let (iface_name, &id) = ifaces.iter().next().unwrap();
+            if iface_name == "*" {
+                uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
+                let name = resolve.interfaces[id].name.as_ref().unwrap();
+                self.generate_interface(
+                    &name,
+                    resolve,
+                    id,
+                    "imports",
+                    "Imports",
+                    files,
+                    AbiVariant::GuestImport,
+                );
+                let camel = name.to_upper_camel_case();
+                uwriteln!(self.import_object, "typeof {camel}Imports,",);
+                return;
+            }
+        }
+        uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
+        for (iface_name, &id) in ifaces {
+            let name = resolve.interfaces[id].name.as_ref().unwrap();
             self.generate_interface(
                 &name,
                 resolve,
@@ -257,7 +285,7 @@ impl TsBindgen {
             uwriteln!(
                 self.import_object,
                 "{}: typeof {camel}Imports,",
-                name.to_lower_camel_case()
+                iface_name.to_lower_camel_case()
             );
         }
         uwriteln!(self.import_object, "}},");
@@ -280,13 +308,17 @@ impl TsBindgen {
     fn export_interface(
         &mut self,
         resolve: &Resolve,
-        name: &str,
+        export_name: &str,
         id: InterfaceId,
         files: &mut Files,
         instantiation: bool,
     ) {
+        let local_name = self
+            .local_names
+            .get_or_create(&format!("export:{export_name}"), export_name)
+            .to_string();
         self.generate_interface(
-            name,
+            &local_name,
             resolve,
             id,
             "exports",
@@ -294,18 +326,18 @@ impl TsBindgen {
             files,
             AbiVariant::GuestExport,
         );
-        let camel = name.to_upper_camel_case();
+        let upper_camel = local_name.to_upper_camel_case();
         if instantiation {
             uwriteln!(
                 self.export_object,
-                "{}: typeof {camel}Exports,",
-                name.to_lower_camel_case()
+                "{}: typeof {upper_camel}Exports,",
+                maybe_quote_id(export_name)
             );
         } else {
             uwriteln!(
                 self.export_object,
-                "export const {}: typeof {camel}Exports;",
-                name.to_lower_camel_case()
+                "export const {}: typeof {upper_camel}Exports;",
+                maybe_quote_id(export_name)
             );
         }
     }

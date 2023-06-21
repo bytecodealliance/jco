@@ -1,17 +1,16 @@
-use anyhow::Result;
 mod files;
-mod identifier;
-mod ns;
-
-pub mod function_bindgen;
-pub mod intrinsics;
-pub mod source;
-
+mod transpile_bindgen;
 mod ts_bindgen;
 
-mod transpile_bindgen;
-use transpile_bindgen::transpile_bindgen;
+pub mod esm_bindgen;
+pub mod function_bindgen;
+pub mod intrinsics;
+pub mod names;
+pub mod source;
 pub use transpile_bindgen::TranspileOpts;
+
+use anyhow::Result;
+use transpile_bindgen::transpile_bindgen;
 
 use anyhow::{bail, Context};
 use wasmtime_environ::component::Export;

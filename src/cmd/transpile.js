@@ -89,7 +89,10 @@ export async function transpileComponent (component, opts = {}) {
 
   if (opts.wasiShim !== false) {
     opts.map = Object.assign({
-      'wasi:*': '@bytecodealliance/preview2-shim/*'
+      'wasi:cli-base/*': '@bytecodealliance/preview2-shim/cli-base#*',
+      'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
+      'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
+      'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
     }, opts.map || {});
   }
 
@@ -159,18 +162,18 @@ ${source.replace('export async function instantiate', 'async function instantiat
 
 let ${exports.filter(([, ty]) => ty === 'function').map(([name]) => '_' + name).join(', ')};
 
-${exports.map(([name, ty]) => ty === 'function' ? `\nexport function ${name} () {
+${exports.map(([name, ty]) => ty === 'function' ? `\nfunction ${asmMangle(name)} () {
   return _${name}.apply(this, arguments);
-}` : `\nexport let ${name};`).join('\n')}
+}` : `\nlet ${asmMangle(name)};`).join('\n')}
 
 const asmInit = [${asms}];
 
 ${opts.tlaCompat ? 'export ' : ''}const $init = (async () => {
   let idx = 0;
-  ({ ${exports.map(([name, ty]) => ty === 'function' ? `${name}: _${name}` : `${name}`).join(',\n')} } = await instantiate(n => idx++, {
+  ({ ${exports.map(([name, ty]) => asmMangle(name) === name ? name : `'${name}': ${asmMangle(name)}`).join(',\n')} } = await instantiate(n => idx++, {
 ${imports.map((impt, i) => `    '${impt}': import${i},`).join('\n')}
   }, (i, imports) => ({ exports: asmInit[i](imports) })));
-})();
+})();${exports.length > 0 ? `\nexport { ${exports.map(([name]) => name === asmMangle(name) ? `${name}` : `${asmMangle(name)} as "${name}"`).join(', ')} }` : ''}
 ${opts.tlaCompat ? '' : '\nawait $init;\n'}`;
 
       jsFile[1] = Buffer.from(outSource);

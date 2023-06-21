@@ -333,6 +333,42 @@ pub fn render_intrinsics(
 }
 
 impl Intrinsic {
+    pub fn get_all_names() -> &'static [&'static str] {
+        &[
+            "base64Compile",
+            "clampGuest",
+            "ComponentError",
+            "dataView",
+            "f32ToI32",
+            "f64ToI64",
+            "getErrorPayload",
+            "hasOwnProperty",
+            "i32ToF32",
+            "i64ToF64",
+            "instantiateCore",
+            "isLE",
+            "fetchCompile",
+            "throwInvalidBool",
+            "throwUninitialized",
+            "toInt64",
+            "toUint64",
+            "toInt16",
+            "toInt32",
+            "toInt8",
+            "toString",
+            "toUint16",
+            "toUint32",
+            "toUint8",
+            "utf16Decoder",
+            "utf16Encode",
+            "utf8Decoder",
+            "utf8Encode",
+            "utf8EncodedLen",
+            "validateGuestChar",
+            "validateHostChar",
+        ]
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Intrinsic::Base64Compile => "base64Compile",

@@ -20,10 +20,24 @@ fn main() -> Result<()> {
 
         let adapted_component = encoder.encode()?;
 
-        let import_map = HashMap::from([(
-            "wasi:*".to_string(),
-            "@bytecodealliance/preview2-shim/*".to_string(),
-        )]);
+        let import_map = HashMap::from([
+            (
+                "wasi:cli-base/*".into(),
+                "@bytecodealliance/preview2-shim/cli-base#*".into(),
+            ),
+            (
+                "wasi:filesystem/*".into(),
+                "@bytecodealliance/preview2-shim/filesystem#*".into(),
+            ),
+            (
+                "wasi:io/*".into(),
+                "@bytecodealliance/preview2-shim/io#*".into(),
+            ),
+            (
+                "wasi:random/*".into(),
+                "@bytecodealliance/preview2-shim/random#*".into(),
+            ),
+        ]);
         let opts = js_component_bindgen::TranspileOpts {
             name,
             no_typescript: false,

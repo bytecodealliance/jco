@@ -8,32 +8,49 @@ function assert(x: boolean) {
     throw new Error("assert failed");
 }
 
+/*
+
+WIT (for reference):
+
+package root:component
+
+world root {
+  import test:numbers/test
+  import testwasi: interface {
+    log: func(bytes: list<u8>)
+
+    log-err: func(bytes: list<u8>)
+  }
+  export test:numbers/test
+  export test-imports: func()
+}
+
+*/
+
 async function run() {
   let scalar = 0;
   const wasm = await instantiate(helpers.loadWasm, {
     testwasi: helpers,
-    numbers: {
-      numbersTest: {
-        roundtripU8(x) { return x; },
-        roundtripS8(x) { return x; },
-        roundtripU16(x) { return x; },
-        roundtripS16(x) { return x; },
-        roundtripU32(x) { return x; },
-        roundtripS32(x) { return x; },
-        roundtripU64(x) { return x; },
-        roundtripS64(x) { return x; },
-        roundtripFloat32(x) { return x; },
-        roundtripFloat64(x) { return x; },
-        roundtripChar(x) { return x; },
-        setScalar(x) { scalar = x; },
-        getScalar() { return scalar; },
-      }
+    'test:numbers/test': {
+      roundtripU8(x) { return x; },
+      roundtripS8(x) { return x; },
+      roundtripU16(x) { return x; },
+      roundtripS16(x) { return x; },
+      roundtripU32(x) { return x; },
+      roundtripS32(x) { return x; },
+      roundtripU64(x) { return x; },
+      roundtripS64(x) { return x; },
+      roundtripFloat32(x) { return x; },
+      roundtripFloat64(x) { return x; },
+      roundtripChar(x) { return x; },
+      setScalar(x) { scalar = x; },
+      getScalar() { return scalar; },
     }
   });
 
   wasm.testImports();
 
-  strictEqual(wasm.numbersTest, wasm.test);
+  strictEqual(wasm['test:numbers/test'], wasm.test);
 
   strictEqual(wasm.test.roundtripU8(1), 1);
   strictEqual(wasm.test.roundtripU8((1 << 8) - 1), (1 << 8) - 1);
