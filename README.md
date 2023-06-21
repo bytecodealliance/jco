@@ -65,6 +65,44 @@ Commands:
   help [command]                        display help for command
 ```
 
+For help with individual command options, use `jco <cmd> --help`.
+
+### Transpile
+
+To transpile a component into JS:
+
+```
+jco transpile component.wasm -o out-dir
+```
+
+The resultant file can be imported providing the bindings of the component as if it were imported directly:
+
+app.js
+```
+import { fn } from './out-dir/component.js';
+
+fn();
+```
+
+Imports can be remapped using the `--map` flag, or to provide imports as an argument use the `--instantiation` option.
+
+Components relying on WASI bindings will contain external WASI imports, which are automatically updated
+to the `@bytecodealliance/preview-shim` package. This package can be installed from npm separately for
+runtime usage. This shim layer supports both Node.js and browsers.
+
+Options include:
+* `--name`: Give a custom name for the component JS file in `out-dir/[name].js`
+* `--minify`: Minify the component JS
+* `--optimize`: Runs the internal core Wasm files through Binaryen for optimization. Optimization options can be passed with a `-- <binaryen options>` flag separator.
+* `--tla-compat`: Instead of relying on top-level-await, requires an `$init` promise to be imported and awaited first.
+* `--js`: Converts core Wasm files to JavaScript for environments that don't even support core Wasm.
+* `--base64-cutoff=<number>`: Sets the maximum number of bytes for inlining Wasm files into the JS using base64 encoding. Set to zero to disable base64 inlining entirely.
+* `--no-wasi-shim`: Disable the WASI shim mapping to `@bytecodealliance/preview2-shim`.
+* `--map`: Provide custom mappings for world imports. Supports both wildcard mappings (`*` similarly as in the package.json "exports" field) as well as `#` mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like `--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*` to map `import as * filesystem from 'wasi:filesystem/filesystem'` to `import { filesystem } from '@bytecodealliance/preview2-shim/filesystem`.
+* `--no-nodejs-compat`: Disables Node.js compat in the output to load core Wasm with FS methods.
+* `--instantiation`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports.
+* `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
+
 ### Componentize
 
 To componentize a JS file run:
@@ -86,20 +124,6 @@ See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for mo
 #### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
 
 Transpile a Component to JS.
-
-**Transpilation options:**
-
-* `name?: string` - name for the generated JS file.
-* `instantiation?: bool` - instead of a direct ES module, output the raw instantiation function for custom virtualization.
-* `map?: Record<string, string>` - remap component imports
-* `validLiftingOptimization?: bool` - optimization to reduce code size
-* `noNodejsCompat?: bool` - disables Node.js compatible output
-* `tlaCompat?: bool` - enable compat in JS runtimes without TLA support
-* `base64Cutoff?: number` - size in bytes, under which Wasm modules get inlined as base64.
-* `js?: bool` - convert Wasm into JS instead for execution compatibility in JS environments without Wasm support.
-* `minify?: bool` - minify the output JS.
-* `optimize?: bool` - optimize the component with Binaryen wasm-opt first.
-* `optArgs?: string[]` - if using optimize, custom optimization options (defaults to best optimization, but this is very slow)
 
 #### `opt(component: Uint8Array, opts?): Promise<{ component: Uint8Array }>`
 

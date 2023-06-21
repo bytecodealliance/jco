@@ -1,10 +1,10 @@
 {
   "name": "@bytecodealliance/jco",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "author": "Guy Bedford",
   "bin": {
-    "jco": "src/cli.mjs"
+    "jco": "src/jco.js"
   },
   "exports": "./src/api.js",
   "type": "module",
@@ -47,6 +47,11 @@
     "lint": "eslint -c eslintrc.cjs lib/**/*.js packages/*/lib/**/*.js",
     "test": "mocha -u tdd test/test.js --timeout 120000"
   },
+  "files": [
+    "lib",
+    "src",
+    "obj"
+  ],
   "workspaces": [
     "packages/preview2-shim"
   ]
