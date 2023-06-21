@@ -1,16 +1,18 @@
 import { writeFile } from "node:fs/promises";
 import { readFile } from '../common.js';
-import { print as printFn, parse as parseFn, componentWit as componentWitFn, componentNew as componentNewFn, componentEmbed as componentEmbedFn, metadataAdd as metadataAddFn, metadataShow as metadataShowFn } from "../../obj/wasm-tools.js";
+import { $init, print as printFn, parse as parseFn, componentWit as componentWitFn, componentNew as componentNewFn, componentEmbed as componentEmbedFn, metadataAdd as metadataAddFn, metadataShow as metadataShowFn } from "../../obj/wasm-tools.js";
 import { resolve, basename, extname } from 'node:path';
 import c from 'chalk-template';
 
 export async function parse(file, opts) {
+  await $init;
   const source = (await readFile(file)).toString();
   const output = parseFn(source);
   await writeFile(opts.output, output);
 }
 
 export async function print(file, opts) {
+  await $init;
   const source = await readFile(file);
   const output = printFn(source);
   if (opts.output) {
@@ -21,6 +23,7 @@ export async function print(file, opts) {
 }
 
 export async function componentWit(file, opts) {
+  await $init;
   const source = await readFile(file);
   const output = componentWitFn(source, opts.document);
   if (opts.output) {
@@ -31,6 +34,7 @@ export async function componentWit(file, opts) {
 }
 
 export async function componentNew(file, opts) {
+  await $init;
   const source = file ? await readFile(file) : null;
   let adapters = null;
   if (opts.adapt)
@@ -48,6 +52,7 @@ export async function componentNew(file, opts) {
 }
 
 export async function componentEmbed(file, opts) {
+  await $init;
   if (opts.metadata)
     opts.metadata = opts.metadata.map(meta => {
       const [field, data = ''] = meta.split('=');
@@ -62,6 +67,7 @@ export async function componentEmbed(file, opts) {
 }
 
 export async function metadataAdd(file, opts) {
+  await $init;
   const metadata = opts.metadata.map(meta => {
     const [field, data = ''] = meta.split('=');
     const [name, version = ''] = data.split('@');
@@ -73,6 +79,7 @@ export async function metadataAdd(file, opts) {
 }
 
 export async function metadataShow(file, opts) {
+  await $init;
   const source = await readFile(file);
   let output = '', stack = [1];
   const meta = metadataShowFn(source);

@@ -1,4 +1,4 @@
-import { metadataShow, print } from '../../obj/wasm-tools.js';
+import { $init, metadataShow, print } from '../../obj/wasm-tools.js';
 import { writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import c from 'chalk-template';
@@ -13,6 +13,7 @@ try {
 }
 
 export async function opt (componentPath, opts, program) {
+  await $init;
   const varIdx = program.parent.rawArgs.indexOf('--');
   if (varIdx !== -1)
     opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
@@ -56,6 +57,7 @@ ${table([...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
  * @returns {Promise<{ component: Uint8Array, compressionInfo: { beforeBytes: number, afterBytes: number }[] >}
  */
 export async function optimizeComponent (componentBytes, opts) {
+  await $init;
   const showSpinner = getShowSpinner();
   let spinner;
   try {

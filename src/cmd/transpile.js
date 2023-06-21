@@ -1,4 +1,4 @@
-import { generate } from '../../obj/js-component-bindgen-component.js';
+import { $init, generate } from '../../obj/js-component-bindgen-component.js';
 import { writeFile } from 'fs/promises';
 import { mkdir } from 'fs/promises';
 import { dirname, extname, basename } from 'path';
@@ -78,6 +78,7 @@ async function wasm2Js (source) {
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
 export async function transpileComponent (component, opts = {}) {
+  await $init;
   if (opts.noWasiShim) opts.wasiShim = false;
 
   let spinner;

@@ -45,7 +45,7 @@ fn main() -> Result<()> {
             map: Some(import_map),
             no_nodejs_compat: false,
             base64_cutoff: 5000_usize,
-            tla_compat: false,
+            tla_compat: true,
             valid_lifting_optimization: false,
         };
 

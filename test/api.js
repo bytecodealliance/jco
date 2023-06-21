@@ -92,7 +92,7 @@ export async function apiTest (fixtures) {
         strictEqual(output.slice(0, 10), '(component');
       }
 
-      const meta = metadataShow(newComponent);
+      const meta = await metadataShow(newComponent);
       deepStrictEqual(meta[0].metaType, {
         tag: 'component',
         val: 4
@@ -117,7 +117,7 @@ export async function apiTest (fixtures) {
         strictEqual(output.slice(0, 10), '(component');
       }
 
-      const meta = metadataShow(newComponent);
+      const meta = await metadataShow(newComponent);
       deepStrictEqual(meta[0].metaType, {
         tag: 'component',
         val: 1
@@ -136,7 +136,7 @@ export async function apiTest (fixtures) {
     test('Extract metadata', async () => {
       const component = await readFile(`test/fixtures/modules/exitcode.wasm`);
 
-      const meta = metadataShow(component);
+      const meta = await metadataShow(component);
 
       deepStrictEqual(meta, [{
         metaType: { tag: 'module' },
