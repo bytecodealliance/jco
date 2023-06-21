@@ -1,35 +1,51 @@
 {
   "name": "@bytecodealliance/jco",
-  "exports": {
-    "test": "./src/api.js",
-    "default": "./dist/api.mjs"
+  "version": "0.8.0",
+  "description": "JavaScript tooling for working with WebAssembly Components",
+  "author": "Guy Bedford",
+  "bin": {
+    "jco": "src/cli.mjs"
   },
+  "exports": "./src/api.js",
   "type": "module",
-  "private": true,
-  "devDependencies": {
-    "@bytecodealliance/componentize-js": "0.0.7",
-    "@bytecodealliance/jco": "0.8.0",
-    "@types/node": "^18.11.17",
-    "@typescript-eslint/eslint-plugin": "^5.41.0",
-    "@typescript-eslint/parser": "^5.41.0",
-    "@vercel/ncc": "^0.36.0",
+  "dependencies": {
+    "@bytecodealliance/preview2-shim": "0.0.9",
     "binaryen": "^111.0.0",
     "chalk-template": "^0.4.0",
     "commander": "^9.4.1",
-    "eslint": "^8.30.0",
     "mkdirp": "^1.0.4",
-    "mocha": "^10.2.0",
     "ora": "^6.1.2",
+    "terser": "^5.16.1"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "0.0.7",
+    "@types/node": "^18.11.17",
+    "@typescript-eslint/eslint-plugin": "^5.41.0",
+    "@typescript-eslint/parser": "^5.41.0",
+    "eslint": "^8.30.0",
+    "mocha": "^10.2.0",
     "terser": "^5.16.1",
     "typescript": "^4.3.2"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytecodealliance/jco.git"
+  },
+  "keywords": [
+    "Wasm",
+    "WebAssembly",
+    "Component"
+  ],
+  "license": "(Apache-2.0 WITH LLVM-exception)",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/jco/issues"
+  },
+  "homepage": "https://github.com/bytecodealliance/jco#readme",
   "scripts": {
-    "build": "npm run build:dev && ./build-dist.sh",
-    "build:dev": "cargo build --workspace --target wasm32-wasi --release && cargo run",
+    "build": "cargo build --workspace --target wasm32-wasi --release && cargo run",
     "build:types:preview2-shim": "PREVIEW2_SHIM_TYPES=* cargo build -p jco",
     "lint": "eslint -c eslintrc.cjs lib/**/*.js packages/*/lib/**/*.js",
-    "test": "mocha -u tdd test/test.js --timeout 120000",
-    "test:dev": "mocha -u tdd test/test.js --timeout 120000 -n conditions=test"
+    "test": "mocha -u tdd test/test.js --timeout 120000"
   },
   "workspaces": [
     "packages/preview2-shim"
