@@ -91,9 +91,14 @@ export async function transpileComponent (component, opts = {}) {
   if (opts.wasiShim !== false) {
     opts.map = Object.assign({
       'wasi:cli-base/*': '@bytecodealliance/preview2-shim/cli-base#*',
+      'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
       'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
+      'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
       'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
+      'wasi:logging/*': '@bytecodealliance/preview2-shim/logging#*',
+      'wasi:poll/*': '@bytecodealliance/preview2-shim/poll#*',
       'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
+      'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
     }, opts.map || {});
   }
 

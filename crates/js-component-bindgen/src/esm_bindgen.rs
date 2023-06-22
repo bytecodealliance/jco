@@ -6,9 +6,9 @@ use std::fmt::Write;
 
 type LocalName = String;
 
-pub enum Binding {
+enum Binding {
     Interface(BTreeMap<String, Binding>),
-    Function(LocalName),
+    Local(LocalName),
 }
 
 #[derive(Default)]
@@ -31,16 +31,13 @@ impl EsmBindgen {
             }
             iface = match iface.get_mut(&path[i]).unwrap() {
                 Binding::Interface(iface) => iface,
-                Binding::Function(_) => panic!(
+                Binding::Local(_) => panic!(
                     "Imported interface {} cannot be both a function and an interface",
                     &path[0..i].join(".")
                 ),
             };
         }
-        iface.insert(
-            path[path.len() - 1].to_string(),
-            Binding::Function(func_name),
-        );
+        iface.insert(path[path.len() - 1].to_string(), Binding::Local(func_name));
     }
 
     /// add an exported function binding, optionally on an interface id or kebab name
@@ -60,13 +57,13 @@ impl EsmBindgen {
             }
             iface = match iface.get_mut(iface_id_or_kebab).unwrap() {
                 Binding::Interface(iface) => iface,
-                Binding::Function(_) => panic!(
+                Binding::Local(_) => panic!(
                     "Exported interface {} cannot be both a function and an interface",
                     iface_id_or_kebab
                 ),
             };
         }
-        iface.insert(func_name, Binding::Function(local_name));
+        iface.insert(func_name, Binding::Local(local_name));
     }
 
     /// once all exports have been created, aliases can be populated for interface
@@ -122,7 +119,7 @@ impl EsmBindgen {
                 local_names.get_or_create(&format!("export:{}", export_name), &export_name);
             uwriteln!(output, "const {local_name} = {{");
             for (func_name, export) in iface {
-                let Binding::Function(local_name) = export else {
+                let Binding::Local(local_name) = export else {
                     panic!("Unsupported nested export interface");
                 };
                 uwriteln!(output, "{}: {local_name},", maybe_quote_id(func_name));
@@ -142,7 +139,7 @@ impl EsmBindgen {
                 uwrite!(output, ", ");
             }
             let local_name = match &self.exports[export_name] {
-                Binding::Function(local_name) => local_name,
+                Binding::Local(local_name) => local_name,
                 Binding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
             };
             let alias_maybe_quoted = maybe_quote_id(alias);
@@ -161,7 +158,7 @@ impl EsmBindgen {
                 uwrite!(output, ", ");
             }
             let local_name = match export {
-                Binding::Function(local_name) => local_name,
+                Binding::Local(local_name) => local_name,
                 Binding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
             };
             let export_name_maybe_quoted = maybe_quote_id(export_name);
@@ -200,7 +197,7 @@ impl EsmBindgen {
                                     iface_imports.push((iface_local_name.to_string(), iface));
                                     iface_local_name
                                 }
-                                Binding::Function(local_name) => local_name,
+                                Binding::Local(local_name) => local_name,
                             };
                             uwriteln!(output, "{local_name} from '{specifier}';");
                             continue;
@@ -224,7 +221,7 @@ impl EsmBindgen {
                                 iface_imports.push((iface_local_name.to_string(), iface));
                                 iface_local_name
                             }
-                            Binding::Function(local_name) => local_name,
+                            Binding::Local(local_name) => local_name,
                         };
                         if external_name == local_name {
                             uwrite!(output, "{external_name}");
@@ -249,7 +246,7 @@ impl EsmBindgen {
                         uwriteln!(output, "}} from '{specifier}';");
                     }
                 }
-                Binding::Function(local_name) => {
+                Binding::Local(local_name) => {
                     uwriteln!(output, "import {local_name} from '{specifier}';");
                 }
             }
@@ -259,7 +256,7 @@ impl EsmBindgen {
             uwrite!(output, "const {{");
             let mut first = true;
             for (member_name, binding) in iface_imports {
-                let Binding::Function(local_name) = binding else {
+                let Binding::Local(local_name) = binding else {
                     continue;
                 };
                 if first {

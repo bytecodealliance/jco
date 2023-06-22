@@ -491,7 +491,7 @@ impl Instantiator<'_, '_> {
                 self.gen.esm_bindgen.add_import_func(
                     &[
                         import_specifier,
-                        iface_member,
+                        iface_member.to_lower_camel_case(),
                         func_name.to_lower_camel_case(),
                     ],
                     callee_name,
