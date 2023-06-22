@@ -1,6 +1,6 @@
 {
   "name": "@bytecodealliance/jco",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "author": "Guy Bedford",
   "bin": {
