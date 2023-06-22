@@ -28,7 +28,7 @@ export async function componentEmbed (embedOpts) {
   return componentEmbedFn(embedOpts);
 }
 /** @type {import('../obj/wasm-tools.js').metadataAdd} */
-export async function metadataAdd () {
+export async function metadataAdd (binary, metadata) {
   await $init;
   return metadataAddFn(binary, metadata);
 }

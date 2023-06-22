@@ -466,7 +466,7 @@ impl Instantiator<'_, '_> {
 
         let index = import.index.as_u32();
 
-        let callee_name = self.gen.local_names.get_once(func_name).to_string();
+        let callee_name = self.gen.local_names.create_once(func_name).to_string();
 
         uwrite!(self.src.js, "\nfunction lowering{index}");
         let nparams = self
@@ -629,7 +629,7 @@ impl Instantiator<'_, '_> {
                     func,
                     options,
                 } => {
-                    let local_name = self.gen.local_names.get_once(export_name).to_string();
+                    let local_name = self.gen.local_names.create_once(export_name).to_string();
                     self.export_bindgen(
                         &local_name,
                         func,
@@ -656,7 +656,8 @@ impl Instantiator<'_, '_> {
                             Export::Type(_) => continue, // ignored
                             _ => unreachable!(),
                         };
-                        let local_func_name = self.gen.local_names.get_once(func_name).to_string();
+                        let local_func_name =
+                            self.gen.local_names.create_once(func_name).to_string();
                         self.export_bindgen(
                             &local_func_name,
                             func,

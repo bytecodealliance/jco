@@ -103,42 +103,37 @@ pub fn ts_bindgen(
     let mut seen_names = HashSet::new();
     let mut export_aliases: Vec<(String, String)> = Vec::new();
     for (name, export) in world.exports.iter() {
-        let name = match name {
-            WorldKey::Name(name) => name.to_string(),
-            WorldKey::Interface(interface) => {
-                let export_name = resolve.id_of(*interface).unwrap();
-                let (_, _, iface) = parse_world_key(&export_name).unwrap();
-                export_aliases.push((iface.to_string(), export_name.to_string()));
-                export_name
-            }
-        };
-        seen_names.insert(name.to_string());
         match export {
-            WorldItem::Function(f) => funcs.push((name, f)),
+            WorldItem::Function(f) => {
+                let WorldKey::Name(export_name) = name else { unreachable!() };
+                seen_names.insert(export_name.to_string());
+                funcs.push((export_name.to_string(), f));
+            }
             WorldItem::Interface(id) => {
-                bindgen.export_interface(resolve, &name, *id, files, opts.instantiation);
+                let WorldKey::Interface(interface) = name else { unreachable!() };
+                let export_name = resolve.id_of(*interface).unwrap();
+                seen_names.insert(export_name.to_string());
+                let (_, _, iface) = parse_world_key(&export_name).unwrap();
+                let local_name =
+                    bindgen.export_interface(resolve, &export_name, *id, files, opts.instantiation);
+                export_aliases.push((iface.to_string(), local_name));
             }
             WorldItem::Type(_) => unimplemented!("type exports"),
         }
     }
-    for (alias, name) in export_aliases {
+    for (alias, local_name) in export_aliases {
         if !seen_names.contains(&alias) {
-            let local_name = bindgen
-                .local_names
-                .get(&format!("export:{name}"))
-                .to_string();
-
             if opts.instantiation {
                 uwriteln!(
                     bindgen.export_object,
-                    "{}: typeof {}Exports,",
+                    "{}: typeof {},",
                     alias,
                     local_name.to_upper_camel_case()
                 );
             } else {
                 uwriteln!(
                     bindgen.export_object,
-                    "export const {}: typeof {}Exports;",
+                    "export const {}: typeof {};",
                     alias,
                     local_name.to_upper_camel_case()
                 );
@@ -226,22 +221,15 @@ impl TsBindgen {
         name: &str,
         id: InterfaceId,
         files: &mut Files,
-    ) {
-        self.generate_interface(
-            name,
-            resolve,
-            id,
-            "imports",
-            "Imports",
-            files,
-            AbiVariant::GuestImport,
-        );
-        let camel = name.to_upper_camel_case();
+    ) -> String {
+        let local_name =
+            self.generate_interface(name, resolve, id, "imports", files, AbiVariant::GuestImport);
         uwriteln!(
             self.import_object,
-            "{}: typeof {camel}Imports,",
+            "{}: typeof {local_name},",
             maybe_quote_id(name)
         );
+        local_name
     }
     fn import_interfaces(
         &mut self,
@@ -255,36 +243,32 @@ impl TsBindgen {
             if iface_name == "*" {
                 uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
                 let name = resolve.interfaces[id].name.as_ref().unwrap();
-                self.generate_interface(
+                let local_name = self.generate_interface(
                     &name,
                     resolve,
                     id,
                     "imports",
-                    "Imports",
                     files,
                     AbiVariant::GuestImport,
                 );
-                let camel = name.to_upper_camel_case();
-                uwriteln!(self.import_object, "typeof {camel}Imports,",);
+                uwriteln!(self.import_object, "typeof {local_name},",);
                 return;
             }
         }
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         for (iface_name, &id) in ifaces {
             let name = resolve.interfaces[id].name.as_ref().unwrap();
-            self.generate_interface(
+            let local_name = self.generate_interface(
                 &name,
                 resolve,
                 id,
                 "imports",
-                "Imports",
                 files,
                 AbiVariant::GuestImport,
             );
-            let camel = name.to_upper_camel_case();
             uwriteln!(
                 self.import_object,
-                "{}: typeof {camel}Imports,",
+                "{}: typeof {local_name},",
                 iface_name.to_lower_camel_case()
             );
         }
@@ -312,34 +296,29 @@ impl TsBindgen {
         id: InterfaceId,
         files: &mut Files,
         instantiation: bool,
-    ) {
-        let local_name = self
-            .local_names
-            .get_or_create(&format!("export:{export_name}"), export_name)
-            .to_string();
-        self.generate_interface(
-            &local_name,
+    ) -> String {
+        let local_name = self.generate_interface(
+            export_name,
             resolve,
             id,
             "exports",
-            "Exports",
             files,
             AbiVariant::GuestExport,
         );
-        let upper_camel = local_name.to_upper_camel_case();
         if instantiation {
             uwriteln!(
                 self.export_object,
-                "{}: typeof {upper_camel}Exports,",
+                "{}: typeof {local_name},",
                 maybe_quote_id(export_name)
             );
         } else {
             uwriteln!(
                 self.export_object,
-                "export const {}: typeof {upper_camel}Exports;",
+                "export const {}: typeof {local_name};",
                 maybe_quote_id(export_name)
             );
         }
+        local_name
     }
 
     fn export_funcs(
@@ -374,11 +353,20 @@ impl TsBindgen {
         resolve: &Resolve,
         id: InterfaceId,
         dir: &str,
-        extra: &str,
         files: &mut Files,
         abi: AbiVariant,
-    ) {
-        let camel = name.to_upper_camel_case();
+    ) -> String {
+        let local_name = self
+            .local_names
+            .create_once(&format!(
+                "{dir}-{}",
+                name.to_lower_camel_case()
+                    .replace('/', "-")
+                    .replace(':', "-")
+            ))
+            .to_upper_camel_case();
+        let local_name_kebab = local_name[dir.len()..].to_kebab_case();
+        let camel = local_name.to_upper_camel_case();
         let mut gen = self.js_interface(resolve);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
@@ -390,12 +378,16 @@ impl TsBindgen {
 
         gen.types(id);
         gen.post_types();
-        files.push(&format!("{dir}/{name}.d.ts"), gen.src.as_bytes());
+        files.push(
+            &format!("{dir}/{}.d.ts", local_name_kebab),
+            gen.src.as_bytes(),
+        );
 
         uwriteln!(
             self.src,
-            "import {{ {camel} as {camel}{extra} }} from './{dir}/{name}';",
+            "import {{ {camel} }} from './{dir}/{local_name_kebab}';",
         );
+        camel
     }
 
     fn js_interface<'b>(&'b mut self, resolve: &'b Resolve) -> TsInterface<'b> {

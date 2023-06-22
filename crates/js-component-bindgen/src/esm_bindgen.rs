@@ -196,7 +196,7 @@ impl EsmBindgen {
                         if import_name == "default" {
                             let local_name = match import {
                                 Binding::Interface(iface) => {
-                                    let iface_local_name = local_names.get_once(specifier);
+                                    let iface_local_name = local_names.create_once(specifier);
                                     iface_imports.push((iface_local_name.to_string(), iface));
                                     iface_local_name
                                 }

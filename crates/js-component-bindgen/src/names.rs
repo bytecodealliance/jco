@@ -17,7 +17,7 @@ impl<'a> LocalNames {
     }
 
     /// get a unique identifier name for a string once (can't be looked up again)
-    pub fn get_once(&'a mut self, goal_name: &str) -> &'a str {
+    pub fn create_once(&'a mut self, goal_name: &str) -> &'a str {
         let goal_name = if let Some(last_char) = goal_name.rfind('/') {
             &goal_name[last_char + 1..]
         } else {
@@ -51,13 +51,16 @@ impl<'a> LocalNames {
     }
 
     pub fn get(&'a self, unique_id: &str) -> &'a str {
+        if !self.local_name_ids.contains_key(unique_id) {
+            panic!("Internal error, no name defined for {}", unique_id);
+        }
         &self.local_name_ids[unique_id]
     }
 
     /// get or create a unique identifier for a string while storing the lookup by unique id
     pub fn get_or_create(&'a mut self, unique_id: &str, goal_name: &str) -> &'a str {
         if !self.local_name_ids.contains_key(unique_id) {
-            let goal = self.get_once(goal_name).to_string();
+            let goal = self.create_once(goal_name).to_string();
             self.local_name_ids.insert(unique_id.to_string(), goal);
         }
         self.local_name_ids.get(unique_id).unwrap()
