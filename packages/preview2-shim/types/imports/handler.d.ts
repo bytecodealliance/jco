@@ -1,4 +1,4 @@
-export namespace LoggingHandler {
+export namespace ImportsHandler {
   /**
    * Emit a log message.
    * 

@@ -1,4 +1,4 @@
-export namespace SocketsNetwork {
+export namespace ImportsNetwork {
   /**
    * Dispose of the specified `network`, after which it may no longer be used.
    * 

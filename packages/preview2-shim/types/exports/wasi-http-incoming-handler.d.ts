@@ -1,4 +1,4 @@
-export namespace HttpIncomingHandler {
+export namespace ExportsWasiHttpIncomingHandler {
   export function handle(request: IncomingRequest, responseOut: ResponseOutparam): void;
 }
 import type { IncomingRequest } from '../imports/types';

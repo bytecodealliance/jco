@@ -1,4 +1,4 @@
-export namespace SocketsTcp {
+export namespace ImportsTcp {
   /**
    * Bind the socket to a specific network on the provided IP address and port.
    * 

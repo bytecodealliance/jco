@@ -1,4 +1,4 @@
-export namespace HttpTypes {
+export namespace ImportsTypes {
   export function dropFields(fields: Fields): void;
   export function newFields(entries: [string, string][]): Fields;
   export function fieldsGet(fields: Fields, name: string): string[];

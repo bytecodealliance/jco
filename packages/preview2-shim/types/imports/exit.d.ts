@@ -1,4 +1,4 @@
-export namespace CliBaseExit {
+export namespace ImportsExit {
   /**
    * Exit the curerent instance and any linked instances.
    */

@@ -2,37 +2,60 @@ export { optimizeComponent as opt } from './cmd/opt.js';
 export { transpileComponent as transpile } from './cmd/transpile.js';
 import { $init, print as printFn, parse as parseFn, componentWit as componentWitFn, componentNew as componentNewFn, componentEmbed as componentEmbedFn, metadataAdd as metadataAddFn, metadataShow as metadataShowFn } from "../obj/wasm-tools.js";
 
-/** @type {import('../obj/wasm-tools.js').print} */
+/**
+ * @param {Parameters<import('../obj/wasm-tools.js').print>[0]} binary
+ * @return {Promise<ReturnType<import('../obj/wasm-tools.js').print>>}
+ */
 export async function print (binary) {
   await $init;
   return printFn(binary);
 }
-/** @type {import('../obj/wasm-tools.js').parse} */
+/**
+ * @param {Parameters<import('../obj/wasm-tools.js').parse>[0]} wat
+ * @return {Promise<ReturnType<import('../obj/wasm-tools.js').parse>>}
+ */
 export async function parse (wat) {
   await $init;
   return parseFn(wat);
 }
-/** @type {import('../obj/wasm-tools.js').componentWit} */
+/**
+ * @param {Parameters<import('../obj/wasm-tools.js').componentWit>[0]} binary
+ * @return {Promise<ReturnType<import('../obj/wasm-tools.js').componentWit>>}
+ */
 export async function componentWit (binary) {
   await $init;
   return componentWitFn(binary);
 }
-/** @type {import('../obj/wasm-tools.js').componentNew} */
+/**
+ * @param {Parameters<import('../obj/wasm-tools.js').componentNew>[0]} binary
+ * @param {Parameters<import('../obj/wasm-tools.js').componentNew>[1]} adapters
+ * @return {Promise<ReturnType<import('../obj/wasm-tools.js').componentNew>>}
+ */
 export async function componentNew (binary, adapters) {
   await $init;
   return componentNewFn(binary, adapters);
 }
-/** @type {import('../obj/wasm-tools.js').componentEmbed} */
+/**
+ * @param {Parameters<import('../obj/wasm-tools.js').componentEmbed>[0]} embedOpts
+ * @return {Promise<ReturnType<import('../obj/wasm-tools.js').componentEmbed>>}
+ */
 export async function componentEmbed (embedOpts) {
   await $init;
   return componentEmbedFn(embedOpts);
 }
-/** @type {import('../obj/wasm-tools.js').metadataAdd} */
-export async function metadataAdd () {
+/**
+ * @param {Parameters<import('../obj/wasm-tools.js').metadataAdd>[0]} binary
+ * @param {Parameters<import('../obj/wasm-tools.js').metadataAdd>[1]} metadata
+ * @return {Promise<ReturnType<import('../obj/wasm-tools.js').metadataAdd>>}
+ */
+export async function metadataAdd (binary, metadata) {
   await $init;
   return metadataAddFn(binary, metadata);
 }
-/** @type {import('../obj/wasm-tools.js').metadataShow} */
+/**
+ * @param {Parameters<import('../obj/wasm-tools.js').metadataShow>[0]} binary
+ * @return {Promise<ReturnType<import('../obj/wasm-tools.js').metadataShow>>}
+ */
 export async function metadataShow (binary) {
   await $init;
   return metadataShowFn(binary);

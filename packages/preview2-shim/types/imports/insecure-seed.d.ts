@@ -1,4 +1,4 @@
-export namespace RandomInsecureSeed {
+export namespace ImportsInsecureSeed {
   /**
    * Return a 128-bit value that may contain a pseudo-random value.
    * 

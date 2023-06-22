@@ -1,4 +1,4 @@
-export namespace ClocksTimezone {
+export namespace ImportsTimezone {
   /**
    * Return information needed to display the given `datetime`. This includes
    * the UTC offset, the time zone name, and a flag indicating whether

@@ -1,4 +1,4 @@
-export namespace SocketsInstanceNetwork {
+export namespace ImportsInstanceNetwork {
   /**
    * Get a handle to the default network.
    */

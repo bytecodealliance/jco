@@ -1,4 +1,4 @@
-export namespace CliBaseEnvironment {
+export namespace ImportsEnvironment {
   /**
    * Get the POSIX-style environment variables.
    * 
