@@ -133,18 +133,27 @@ pub fn ts_bindgen(
     for (name, export) in world.exports.iter() {
         match export {
             WorldItem::Function(f) => {
-                let WorldKey::Name(export_name) = name else { unreachable!() };
+                let export_name = match name {
+                    WorldKey::Name(export_name) => export_name,
+                    WorldKey::Interface(_) => unreachable!(),
+                };
                 seen_names.insert(export_name.to_string());
                 funcs.push((export_name.to_lower_camel_case(), f));
             }
             WorldItem::Interface(id) => {
-                let WorldKey::Interface(interface) = name else { unreachable!() };
-                let export_name = resolve.id_of(*interface).unwrap();
+                let iface_id: String;
+                let (export_name, iface_name): (&str, &str) = match name {
+                    WorldKey::Name(export_name) => (export_name, export_name),
+                    WorldKey::Interface(interface) => {
+                        iface_id = resolve.id_of(*interface).unwrap();
+                        let (_, _, iface) = parse_world_key(&iface_id).unwrap();
+                        (iface_id.as_ref(), iface)
+                    }
+                };
                 seen_names.insert(export_name.to_string());
-                let (_, _, iface) = parse_world_key(&export_name).unwrap();
                 let local_name =
                     bindgen.export_interface(resolve, &export_name, *id, files, opts.instantiation);
-                export_aliases.push((iface.to_lower_camel_case(), local_name));
+                export_aliases.push((iface_name.to_lower_camel_case(), local_name));
             }
             WorldItem::Type(_) => unimplemented!("type exports"),
         }
