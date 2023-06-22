@@ -1,4 +1,4 @@
-export namespace RandomInsecure {
+export namespace ImportsInsecure {
   /**
    * Return `len` insecure pseudo-random bytes.
    * 

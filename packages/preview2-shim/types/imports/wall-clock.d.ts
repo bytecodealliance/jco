@@ -1,4 +1,4 @@
-export namespace ClocksWallClock {
+export namespace ImportsWallClock {
   /**
    * Read the current value of the clock.
    * 

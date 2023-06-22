@@ -1,4 +1,4 @@
-export namespace HttpOutgoingHandler {
+export namespace ImportsOutgoingHandler {
   export function handle(request: OutgoingRequest, options: RequestOptions | null): FutureIncomingResponse;
 }
 import type { OutgoingRequest } from '../imports/types';

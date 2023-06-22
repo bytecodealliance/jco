@@ -1,4 +1,4 @@
-export namespace IoStreams {
+export namespace ImportsStreams {
   /**
    * Read bytes from a stream.
    * 

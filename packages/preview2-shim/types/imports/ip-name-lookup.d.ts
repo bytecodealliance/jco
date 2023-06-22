@@ -1,4 +1,4 @@
-export namespace SocketsIpNameLookup {
+export namespace ImportsIpNameLookup {
   /**
    * Resolve an internet host name to a list of IP addresses.
    * 

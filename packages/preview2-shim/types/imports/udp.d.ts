@@ -1,4 +1,4 @@
-export namespace SocketsUdp {
+export namespace ImportsUdp {
   /**
    * Bind the socket to a specific network on the provided IP address and port.
    * 

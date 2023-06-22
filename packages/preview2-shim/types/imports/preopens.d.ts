@@ -1,4 +1,4 @@
-export namespace CliBasePreopens {
+export namespace ImportsPreopens {
   /**
    * Return the set of of preopened directories, and their path.
    */

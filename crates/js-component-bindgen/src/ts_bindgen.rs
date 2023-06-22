@@ -85,7 +85,35 @@ pub fn ts_bindgen(
                         }
                     }
                 },
-                WorldItem::Type(_) => {}
+                WorldItem::Type(tid) => {
+                    let ty = &resolve.types[*tid];
+
+                    let name = ty.name.as_ref().unwrap();
+
+                    let mut gen = bindgen.ts_interface(resolve);
+                    gen.docs(&ty.docs);
+                    match &ty.kind {
+                        TypeDefKind::Record(record) => {
+                            gen.type_record(*tid, name, record, &ty.docs)
+                        }
+                        TypeDefKind::Flags(flags) => gen.type_flags(*tid, name, flags, &ty.docs),
+                        TypeDefKind::Tuple(tuple) => gen.type_tuple(*tid, name, tuple, &ty.docs),
+                        TypeDefKind::Enum(enum_) => gen.type_enum(*tid, name, enum_, &ty.docs),
+                        TypeDefKind::Variant(variant) => {
+                            gen.type_variant(*tid, name, variant, &ty.docs)
+                        }
+                        TypeDefKind::Option(t) => gen.type_option(*tid, name, t, &ty.docs),
+                        TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
+                        TypeDefKind::Union(u) => gen.type_union(*tid, name, u, &ty.docs),
+                        TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
+                        TypeDefKind::Type(_) => todo!("type alias"),
+                        TypeDefKind::Future(_) => todo!("generate for future"),
+                        TypeDefKind::Stream(_) => todo!("generate for stream"),
+                        TypeDefKind::Unknown => unreachable!(),
+                    }
+                    let output = gen.src.to_string();
+                    bindgen.src.push_str(&output);
+                }
             }
         }
         // kebab import funcs (always default imports)
@@ -107,7 +135,7 @@ pub fn ts_bindgen(
             WorldItem::Function(f) => {
                 let WorldKey::Name(export_name) = name else { unreachable!() };
                 seen_names.insert(export_name.to_string());
-                funcs.push((export_name.to_string(), f));
+                funcs.push((export_name.to_lower_camel_case(), f));
             }
             WorldItem::Interface(id) => {
                 let WorldKey::Interface(interface) = name else { unreachable!() };
@@ -116,7 +144,7 @@ pub fn ts_bindgen(
                 let (_, _, iface) = parse_world_key(&export_name).unwrap();
                 let local_name =
                     bindgen.export_interface(resolve, &export_name, *id, files, opts.instantiation);
-                export_aliases.push((iface.to_string(), local_name));
+                export_aliases.push((iface.to_lower_camel_case(), local_name));
             }
             WorldItem::Type(_) => unimplemented!("type exports"),
         }
@@ -282,7 +310,7 @@ impl TsBindgen {
         funcs: &[&Function],
         _files: &mut Files,
     ) {
-        let mut gen = self.js_interface(resolve);
+        let mut gen = self.ts_interface(resolve);
         for func in funcs {
             gen.ts_func(func, AbiVariant::GuestImport, true, "", ',');
         }
@@ -312,11 +340,17 @@ impl TsBindgen {
                 maybe_quote_id(export_name)
             );
         } else {
-            uwriteln!(
-                self.export_object,
-                "export const {}: typeof {local_name};",
-                maybe_quote_id(export_name)
-            );
+            if export_name != maybe_quote_id(export_name) {
+                // TODO: TypeScript doesn't currently support
+                // non-identifier exports
+                // tracking in https://github.com/microsoft/TypeScript/issues/40594
+            } else {
+                uwriteln!(
+                    self.export_object,
+                    "export const {}: typeof {local_name};",
+                    maybe_quote_id(export_name)
+                );
+            }
         }
         local_name
     }
@@ -329,7 +363,7 @@ impl TsBindgen {
         _files: &mut Files,
         end_character: char,
     ) {
-        let mut gen = self.js_interface(resolve);
+        let mut gen = self.ts_interface(resolve);
         let prefix = if end_character == ';' {
             "export function "
         } else {
@@ -367,7 +401,7 @@ impl TsBindgen {
             .to_upper_camel_case();
         let local_name_kebab = local_name[dir.len()..].to_kebab_case();
         let camel = local_name.to_upper_camel_case();
-        let mut gen = self.js_interface(resolve);
+        let mut gen = self.ts_interface(resolve);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
         let prefix = "export function ";
@@ -390,7 +424,7 @@ impl TsBindgen {
         camel
     }
 
-    fn js_interface<'b>(&'b mut self, resolve: &'b Resolve) -> TsInterface<'b> {
+    fn ts_interface<'b>(&'b mut self, resolve: &'b Resolve) -> TsInterface<'b> {
         TsInterface {
             src: Source::default(),
             gen: self,

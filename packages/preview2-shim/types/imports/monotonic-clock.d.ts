@@ -1,4 +1,4 @@
-export namespace ClocksMonotonicClock {
+export namespace ImportsMonotonicClock {
   /**
    * Read the current value of the clock.
    * 

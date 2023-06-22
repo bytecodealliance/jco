@@ -1,4 +1,4 @@
-export namespace PollPoll {
+export namespace ImportsPoll {
   /**
    * Dispose of the specified `pollable`, after which it may no longer
    * be used.

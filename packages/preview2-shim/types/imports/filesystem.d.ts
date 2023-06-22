@@ -1,4 +1,4 @@
-export namespace FilesystemFilesystem {
+export namespace ImportsFilesystem {
   /**
    * Return a stream for reading from a file.
    * 
