@@ -1,4 +1,4 @@
-export const ioStreams = {
+export const streams = {
   read(s, len) {
     console.log(`[streams] Read ${s} ${len}`);
   },
@@ -60,5 +60,3 @@ export const ioStreams = {
     console.log(`[streams] Drop output stream ${s}`);
   }
 };
-
-export { ioStreams as streams }

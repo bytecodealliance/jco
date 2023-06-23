@@ -69,7 +69,7 @@ export function _dropFsStream(stream) {
   delete _streams[stream];
 }
 
-export const ioStreams = {
+export const streams = {
   read(s, len) {
     switch (s) {
       case 0:
@@ -152,5 +152,3 @@ export const ioStreams = {
     console.log(`[streams] Drop output stream ${s}`);
   }
 };
-
-export { ioStreams as streams }

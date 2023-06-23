@@ -309,5 +309,3 @@ export const filesystem = {
     _dropFsStream(stream);
   }
 };
-
-export { filesystem as filesystemFilesystem }

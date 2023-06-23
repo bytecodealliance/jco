@@ -3,7 +3,7 @@ export function _setEnv (envObj) {
   _env = Object.entries(envObj);
 }
 
-export const cliBaseEnvironment = {
+export const environment = {
   getEnvironment () {
     if (!_env) _env = [];
     return _env;
@@ -17,41 +17,32 @@ class ComponentExit extends Error {
   }
 }
 
-export const cliBaseExit = {
+export const exit = {
   exit (status) {
     throw new ComponentExit(status.tag === 'err' ? 1 : 0);
   }
 };
 
-export const cliBasePreopens = {
+export const preopens = {
   getDirectories () {
     return [];
   }
 }
 
-export const cliBaseStdin = {
+export const stdin = {
   getStdin () {
     return 0;
   }
 };
 
-export const cliBaseStdout = {
+export const stdout = {
   getStdout () {
     return 1;
   }
 };
 
-export const cliBaseStderr = {
+export const stderr = {
   getStderr () {
     return 2;
   }
 };
-
-export {
-  cliBaseEnvironment as environment,
-  cliBaseExit as exit,
-  cliBasePreopens as preopens,
-  cliBaseStdin as stdin,
-  cliBaseStdout as stdout,
-  cliBaseStderr as stderr
-}
