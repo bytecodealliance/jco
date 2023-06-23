@@ -3,7 +3,7 @@ import { writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import c from 'chalk-template';
 import { readFile, sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
-import ora from 'ora';
+import ora from '#ora';
 
 let WASM_OPT;
 try {

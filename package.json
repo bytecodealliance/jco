@@ -7,6 +7,12 @@
     "jco": "src/jco.js"
   },
   "exports": "./src/api.js",
+  "imports": {
+    "#ora": {
+      "browser": "./src/ora-shim.js",
+      "default": "ora"
+    }
+  },
   "type": "module",
   "dependencies": {
     "@bytecodealliance/preview2-shim": "0.0.10",

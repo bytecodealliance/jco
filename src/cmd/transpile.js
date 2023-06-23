@@ -7,7 +7,7 @@ import { readFile, sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } 
 import { optimizeComponent } from './opt.js';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
-import ora from 'ora';
+import ora from '#ora';
 
 export async function transpile (componentPath, opts, program) {
   const varIdx = program.parent.rawArgs.indexOf('--');
