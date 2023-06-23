@@ -1,8 +1,6 @@
 import { openSync, constants, statSync, lstatSync, fstatSync, closeSync, readdirSync } from 'node:fs';
 import { _descriptors, _addOpenedDescriptor, _removeOpenedDescriptor, _getDescriptorType, _setSubdescriptorType, _setDescriptorType, _getFullPath } from './cli-base.js';
-import { _createFileStream } from './io.js';
-
-let _dirStreams = [];
+import { _createFsStream, _dropFsStream, _getFsStreamContext } from './io.js';
 
 const nsMagnitude = 1_000_000_000_000n;
 function nsToDateTime (ns) {
@@ -75,7 +73,10 @@ function _lookupType (obj) {
 
 export const filesystem = {
   readViaStream(fd, offset) {
-    return _createFileStream(fd, offset);
+    if (Number(offset) !== 0)
+      throw new Error('Read streams with non-zero offset not currently supported');
+    const stream = _createFsStream(fd, 'file', { offset: 0 });
+    return stream;
   },
 
   writeViaStream(fd, offset) {
@@ -136,8 +137,7 @@ export const filesystem = {
     catch (e) {
       _convertFsError(e);
     }
-    _dirStreams.push({ fd, dirs, cursor: 0 });
-    return _dirStreams.length - 1;
+    return _createFsStream(fd, 'dir', { dirs, cursor: 0, fd });
   },
 
   sync(fd) {
@@ -296,7 +296,7 @@ export const filesystem = {
   },
 
   readDirectoryEntry(stream) {
-    const streamValue = _dirStreams[stream];
+    const streamValue = _getFsStreamContext(stream, 'dir');
     if (streamValue.cursor === streamValue.dirs.length)
       return null;
     const dir = streamValue.dirs[streamValue.cursor++];
@@ -306,7 +306,7 @@ export const filesystem = {
   },
 
   dropDirectoryEntryStream(stream) {
-    _dirStreams.splice(stream, 1);
+    _dropFsStream(stream);
   }
 };
 
