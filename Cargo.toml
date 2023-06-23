@@ -35,8 +35,7 @@ wasm-encoder = "0.29.0"
 wasm-metadata = "0.8.0"
 wasmparser = "0.107.0"
 wasmprinter = "0.2.59"
-wasmtime = { git = "https://github.com/bytecodealliance/wasmtime", features = ["component-model"], rev = "f7ae056a0a757492c0842ca3f2852f9a5f4bd19c" }
-wasmtime-environ = { git = "https://github.com/bytecodealliance/wasmtime", rev = "f7ae056a0a757492c0842ca3f2852f9a5f4bd19c" }
+wasmtime-environ = { version = "10.0.1", features = ["component-model"] }
 wat = "1.0.66"
 wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "e69cf5db8754f829637e25491c560ec0d9728852" }
 wit-component = { version = "0.11.0", features = ['dummy-module'] }
