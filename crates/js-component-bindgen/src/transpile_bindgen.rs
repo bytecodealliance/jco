@@ -454,7 +454,12 @@ impl Instantiator<'_, '_> {
 
         let index = import.index.as_u32();
 
-        let callee_name = self.gen.local_names.create_once(func_name).to_string();
+        // note, the same function can be lowered into multiple sub-components
+        let callee_name = self
+            .gen
+            .local_names
+            .get_or_create(&format!("import:{}-{}", import_name, func_name), func_name)
+            .to_string();
 
         uwrite!(self.src.js, "\nfunction lowering{index}");
         let nparams = self
