@@ -94,23 +94,11 @@ pub fn transpile_bindgen(
     let mut imports = BTreeMap::new();
     let mut exports = BTreeMap::new();
     for (key, _) in &resolve.worlds[id].imports {
-        let name = match key {
-            WorldKey::Name(name) => name.to_string(),
-            WorldKey::Interface(iface) => match resolve.id_of(*iface) {
-                Some(name) => name.to_string(),
-                None => continue,
-            },
-        };
+        let name = resolve.name_world_key(key);
         imports.insert(name, key.clone());
     }
     for (key, _) in &resolve.worlds[id].exports {
-        let name = match key {
-            WorldKey::Name(name) => name.to_string(),
-            WorldKey::Interface(iface) => match resolve.id_of(*iface) {
-                Some(name) => name.to_string(),
-                None => continue,
-            },
-        };
+        let name = resolve.name_world_key(key);
         exports.insert(name, key.clone());
     }
 
@@ -466,7 +454,12 @@ impl Instantiator<'_, '_> {
 
         let index = import.index.as_u32();
 
-        let callee_name = self.gen.local_names.create_once(func_name).to_string();
+        // note, the same function can be lowered into multiple sub-components
+        let callee_name = self
+            .gen
+            .local_names
+            .get_or_create(&format!("import:{}-{}", import_name, func_name), func_name)
+            .to_string();
 
         uwrite!(self.src.js, "\nfunction lowering{index}");
         let nparams = self
@@ -488,7 +481,7 @@ impl Instantiator<'_, '_> {
             // mapping can be used to construct virtual nested namespaces
             // which is used eg to support WASI interface groupings
             if let Some(iface_member) = maybe_iface_member.take() {
-                self.gen.esm_bindgen.add_import_func(
+                self.gen.esm_bindgen.add_import_binding(
                     &[
                         import_specifier,
                         iface_member.to_lower_camel_case(),
@@ -497,7 +490,7 @@ impl Instantiator<'_, '_> {
                     callee_name,
                 );
             } else {
-                self.gen.esm_bindgen.add_import_func(
+                self.gen.esm_bindgen.add_import_binding(
                     &[import_specifier, func_name.to_lower_camel_case()],
                     callee_name,
                 );
@@ -505,7 +498,7 @@ impl Instantiator<'_, '_> {
         } else {
             self.gen
                 .esm_bindgen
-                .add_import_func(&[import_specifier], callee_name);
+                .add_import_binding(&[import_specifier], callee_name);
         }
     }
 
@@ -639,7 +632,7 @@ impl Instantiator<'_, '_> {
                             WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
                         },
                     );
-                    self.gen.esm_bindgen.add_export_func(
+                    self.gen.esm_bindgen.add_export_binding(
                         None,
                         local_name,
                         export_name.to_lower_camel_case(),
@@ -664,7 +657,7 @@ impl Instantiator<'_, '_> {
                             options,
                             &self.resolve.interfaces[id].functions[func_name],
                         );
-                        self.gen.esm_bindgen.add_export_func(
+                        self.gen.esm_bindgen.add_export_binding(
                             Some(export_name),
                             local_func_name,
                             func_name.to_lower_camel_case(),

@@ -1,4 +1,4 @@
-export const pollPoll = {
+export const poll = {
   dropPollable (pollable) {
     console.log(`[poll] Drop (${pollable})`);
   },
@@ -7,5 +7,3 @@ export const pollPoll = {
     return [];
   }
 };
-
-export { pollPoll as poll }

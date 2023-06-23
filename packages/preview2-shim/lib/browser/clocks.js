@@ -4,7 +4,7 @@ function _hrtimeBigint () {
 
 let _hrStart = _hrtimeBigint();
 
-export const clocksMonotonicClock = {
+export const monotonicClock = {
   resolution() {
     return 1n;
   },
@@ -16,7 +16,7 @@ export const clocksMonotonicClock = {
   }
 };
 
-export const clocksTimezone = {
+export const timezone = {
   display (timezone, when) {
     console.log(`[timezone] DISPLAY ${timezone} ${when}`);
   },
@@ -31,7 +31,7 @@ export const clocksTimezone = {
   }
 };
 
-export const clocksWallClock = {
+export const wallClock = {
   now() {
     const seconds = BigInt(Math.floor(Date.now() / 1e3));
     const nanoseconds = (Date.now() % 1e3) * 1e6;
@@ -42,9 +42,3 @@ export const clocksWallClock = {
     console.log(`[wall-clock] Wall clock resolution`);
   }
 };
-
-export {
-  clocksMonotonicClock as monotonicClock,
-  clocksTimezone as timezone,
-  clocksWallClock as wallClock
-}

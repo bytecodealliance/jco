@@ -46,17 +46,30 @@ function _convertFsError (e) {
 
 export let _streams = {};
 let streamCnt = 0;
-export function _createFileStream(fd, offset) {
-  // note we only support offset 0
-  if (Number(offset) === 0)
-    _streams[streamCnt] = {
-      type: 'file',
-      fd: fd
-    };
+export function _createFsStream(fd, type, context) {
+  _streams[streamCnt] = {
+    type,
+    fd,
+    context
+  };
   return streamCnt++;
 }
 
-export const ioStreams = {
+export function _getFsStreamContext(stream, type) {
+  const entry = _streams[stream];
+  if (!entry)
+    throw new Error(`No '${type}' stream found at stream ${stream}`);
+  if (entry.type !== type)
+    throw new Error(`Unexpected '${entry.type}' stream found at stream ${stream}, expected '${type}'`);
+  return entry.context;
+}
+
+export function _dropFsStream(stream) {
+  // TODO: recycling?
+  delete _streams[stream];
+}
+
+export const streams = {
   read(s, len) {
     switch (s) {
       case 0:
@@ -97,7 +110,6 @@ export const ioStreams = {
   },
   dropInputStream(s) {
     delete _streams[s];
-  
   },
   write(s, buf) {
     switch (s) {
@@ -140,5 +152,3 @@ export const ioStreams = {
     console.log(`[streams] Drop output stream ${s}`);
   }
 };
-
-export { ioStreams as streams }

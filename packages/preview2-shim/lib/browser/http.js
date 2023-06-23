@@ -34,19 +34,19 @@ export function send(req) {
   }
 }
 
-export const httpIncomingHandler = {
+export const incomingHandler = {
   handle () {
 
   }
 };
 
-export const httpOutgoingHandler = {
+export const outgoingHandler = {
   handle () {
 
   }
 };
 
-export const httpTypes = {
+export const types = {
   dropFields(_fields) {
     console.log("[types] Drop fields");
   },
@@ -147,9 +147,3 @@ export const httpTypes = {
     console.log("[types] Listen to future incoming response");
   }
 };
-
-export {
-  httpIncomingHandler as incomingHandler,
-  httpOutgoingHandler as outgoingHandler,
-  httpTypes as types
-}

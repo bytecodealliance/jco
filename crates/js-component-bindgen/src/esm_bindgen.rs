@@ -1,3 +1,5 @@
+use heck::ToLowerCamelCase;
+
 use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source::Source;
 use crate::{uwrite, uwriteln};
@@ -23,7 +25,7 @@ impl EsmBindgen {
     /// first segment
     /// arbitrary nesting of interfaces is supported in order to support virtual WASI interfaces
     /// only two-level nesting supports serialization into imports currently
-    pub fn add_import_func(&mut self, path: &[String], func_name: String) {
+    pub fn add_import_binding(&mut self, path: &[String], func_name: String) {
         let mut iface = &mut self.imports;
         for i in 0..path.len() - 1 {
             if !iface.contains_key(&path[i]) {
@@ -41,7 +43,7 @@ impl EsmBindgen {
     }
 
     /// add an exported function binding, optionally on an interface id or kebab name
-    pub fn add_export_func(
+    pub fn add_export_binding(
         &mut self,
         iface_id_or_kebab: Option<&str>,
         local_name: String,
@@ -49,13 +51,19 @@ impl EsmBindgen {
     ) {
         let mut iface = &mut self.exports;
         if let Some(iface_id_or_kebab) = iface_id_or_kebab {
-            if !iface.contains_key(iface_id_or_kebab) {
+            // convert kebab names to camel case, leave ids as-is
+            let iface_id_or_kebab = if iface_id_or_kebab.contains(':') {
+                iface_id_or_kebab.to_string()
+            } else {
+                iface_id_or_kebab.to_lower_camel_case()
+            };
+            if !iface.contains_key(&iface_id_or_kebab) {
                 iface.insert(
                     iface_id_or_kebab.to_string(),
                     Binding::Interface(BTreeMap::new()),
                 );
             }
-            iface = match iface.get_mut(iface_id_or_kebab).unwrap() {
+            iface = match iface.get_mut(&iface_id_or_kebab).unwrap() {
                 Binding::Interface(iface) => iface,
                 Binding::Local(_) => panic!(
                     "Exported interface {} cannot be both a function and an interface",
@@ -71,7 +79,7 @@ impl EsmBindgen {
     pub fn populate_export_aliases(&mut self) {
         for expt_name in self.exports.keys() {
             if let Some(path_idx) = expt_name.rfind('/') {
-                let alias = &expt_name[path_idx + 1..];
+                let alias = &expt_name[path_idx + 1..].to_lower_camel_case();
                 if !self.exports.contains_key(alias) && !self.export_aliases.contains_key(alias) {
                     self.export_aliases
                         .insert(alias.to_string(), expt_name.to_string());
@@ -247,7 +255,11 @@ impl EsmBindgen {
                     }
                 }
                 Binding::Local(local_name) => {
-                    uwriteln!(output, "import {local_name} from '{specifier}';");
+                    if let Some(imports_object) = imports_object {
+                        uwriteln!(output, "const {local_name} = {imports_object}.default;");
+                    } else {
+                        uwriteln!(output, "import {local_name} from '{specifier}';");
+                    }
                 }
             }
         }

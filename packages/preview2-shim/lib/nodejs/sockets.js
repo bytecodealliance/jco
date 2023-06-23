@@ -1,10 +1,10 @@
-export const socketsInstanceNetwork = {
+export const instanceNetwork = {
   instanceNetwork () {
     console.log(`[sockets] instance network`);
   }
 };
 
-export const socketsIpNameLookup = {
+export const ipNameLookup = {
   dropResolveAddressStream () {
 
   },
@@ -25,19 +25,19 @@ export const socketsIpNameLookup = {
   },
 };
 
-export const socketsNetwork = {
+export const network = {
   dropNetwork () {
 
   }
 };
 
-export const socketsTcpCreateSocket = {
+export const tcpCreateSocket = {
   createTcpSocket () {
 
   }
 };
 
-export const socketsTcp = {
+export const tcp = {
   subscribe () {
 
   },
@@ -115,7 +115,7 @@ export const socketsTcp = {
   }
 };
 
-export const socketsUdp = {
+export const udp = {
   subscribe () {
 
   },
@@ -193,11 +193,8 @@ export const socketsUdp = {
   }
 };
 
-export {
-  socketsInstanceNetwork as instanceNetwork,
-  socketsIpNameLookup as ipNameLookup,
-  socketsNetwork as network,
-  socketsTcpCreateSocket as tcpCreateSocket,
-  socketsTcp as tcp,
-  socketsUdp as udp
-}
+export const udpCreateSocket = {
+  createTcpSocket () {
+
+  }
+};
