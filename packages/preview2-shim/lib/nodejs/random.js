@@ -14,8 +14,8 @@ let insecureSeedValue1, insecureSeedValue2;
 export const insecureSeed = {
   insecureSeed () {
     if (insecureSeedValue1 === undefined) {
-      insecureSeedValue1 = randomRandom.getRandomU64();
-      insecureSeedValue2 = randomRandom.getRandomU64();
+      insecureSeedValue1 = random.getRandomU64();
+      insecureSeedValue2 = random.getRandomU64();
     }
     return [insecureSeedValue1, insecureSeedValue2];
   }
