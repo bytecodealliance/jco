@@ -62,7 +62,10 @@ pub fn ts_bindgen(
         let mut interface_imports = BTreeMap::new();
         for (name, import) in world.imports.iter() {
             match import {
-                WorldItem::Function(f) => funcs.push(f),
+                WorldItem::Function(f) => match name {
+                    WorldKey::Name(name) => funcs.push((name.to_string(), f)),
+                    WorldKey::Interface(id) => funcs.push((resolve.id_of(*id).unwrap(), f)),
+                },
                 WorldItem::Interface(id) => match name {
                     WorldKey::Name(name) => {
                         // kebab name -> direct ns namespace import
@@ -117,8 +120,8 @@ pub fn ts_bindgen(
             }
         }
         // kebab import funcs (always default imports)
-        if !funcs.is_empty() {
-            bindgen.import_funcs(resolve, id, &funcs, files);
+        for (name, func) in funcs {
+            bindgen.import_funcs(resolve, &name, &func, files);
         }
         // namespace imports are grouped by namespace / kebab name
         // kebab name imports are direct
@@ -315,15 +318,15 @@ impl TsBindgen {
     fn import_funcs(
         &mut self,
         resolve: &Resolve,
-        _world: WorldId,
-        funcs: &[&Function],
+        import_name: &str,
+        func: &Function,
         _files: &mut Files,
     ) {
+        uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         let mut gen = self.ts_interface(resolve);
-        for func in funcs {
-            gen.ts_func(func, AbiVariant::GuestImport, true, "", ',');
-        }
+        gen.ts_func(func, AbiVariant::GuestImport, true, "", ',');
         gen.gen.import_object.push_str(&gen.src);
+        uwriteln!(self.import_object, "}},");
     }
 
     fn export_interface(

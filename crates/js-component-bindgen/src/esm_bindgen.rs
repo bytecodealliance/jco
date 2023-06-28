@@ -256,9 +256,9 @@ impl EsmBindgen {
                 }
                 Binding::Local(local_name) => {
                     if let Some(imports_object) = imports_object {
-                        uwriteln!(output, "const {local_name} = {imports_object}.default;");
+                        uwriteln!(output, "{local_name} = {imports_object}.default;");
                     } else {
-                        uwriteln!(output, "import {local_name} from '{specifier}';");
+                        uwriteln!(output, "{local_name} from '{specifier}';");
                     }
                 }
             }
