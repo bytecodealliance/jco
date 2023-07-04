@@ -14,3 +14,5 @@ done
 
 # copy flavorful wit case
 cp tests/runtime/flavorful/world.wit ../test/fixtures/wit/flavorful.wit
+
+./src/jco.js componentize test/fixtures/component-gen/import-fn.js --wit test/fixtures/component-gen/import-fn.wit -o test/fixtures/components/import-fn.component.wasm
