@@ -256,7 +256,11 @@ impl EsmBindgen {
                 }
                 Binding::Local(local_name) => {
                     if let Some(imports_object) = imports_object {
-                        uwriteln!(output, "{local_name} = {imports_object}.default;");
+                        uwriteln!(
+                            output,
+                            "{local_name} = {imports_object}{}.default;",
+                            maybe_quote_member(specifier)
+                        );
                     } else {
                         uwriteln!(output, "{local_name} from '{specifier}';");
                     }
