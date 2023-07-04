@@ -431,7 +431,7 @@ impl TsBindgen {
 
         uwriteln!(
             self.src,
-            "import {{ {camel} }} from './{dir}/{local_name_kebab}';",
+            "import {{ {camel} }} from './{dir}/{local_name_kebab}.d.ts';",
         );
         camel
     }
