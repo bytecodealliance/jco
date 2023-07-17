@@ -44,7 +44,7 @@ export async function preview2Test () {
         strictEqual(stderr, 'writing to stderr: hello, world\n');
       }
       finally {
-        await rm(tmpdir, { recursive: true });
+        // await rm(tmpdir, { recursive: true });
       }
     });
   });

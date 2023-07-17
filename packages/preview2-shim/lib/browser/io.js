@@ -18,25 +18,23 @@ export const streams = {
     console.log(`[streams] Drop input stream ${s}`);
   },
   write(s, buf) {
+    streams.blockingWrite(s, buf);
+  },
+  blockingWrite(s, buf) {
     switch (s) {
       case 0:
         throw new Error(`TODO: write stdin`);
       case 1: {
-        const decoder = new TextDecoder();
-        console.log(decoder.decode(buf));
-        return BigInt(buf.byteLength);
+        process.stdout.write(buf);
+        return [BigInt(buf.byteLength), 'ended'];
       }
       case 2: {
-        const decoder = new TextDecoder();
-        console.error(decoder.decode(buf));
-        return BigInt(buf.byteLength);
+        process.stderr.write(buf);
+        return [BigInt(buf.byteLength), 'ended'];
       }
       default:
         throw new Error(`TODO: write ${s}`);
     }
-  },
-  blockingWrite(s, _buf) {
-    console.log(`[streams] Blocking write ${s}`);
   },
   writeZeroes(s, _len) {
     console.log(`[streams] Write zeroes ${s}`);

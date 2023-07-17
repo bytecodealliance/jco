@@ -113,6 +113,8 @@ pub fn ts_bindgen(
                         TypeDefKind::Future(_) => todo!("generate for future"),
                         TypeDefKind::Stream(_) => todo!("generate for stream"),
                         TypeDefKind::Unknown => unreachable!(),
+                        TypeDefKind::Resource => todo!(),
+                        TypeDefKind::Handle(_) => todo!(),
                     }
                     let output = gen.src.to_string();
                     bindgen.src.push_str(&output);
@@ -486,6 +488,8 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
+                TypeDefKind::Resource => todo!(),
+                TypeDefKind::Handle(_) => todo!(),
             }
         }
     }
@@ -540,6 +544,8 @@ impl<'a> TsInterface<'a> {
                     TypeDefKind::Future(_) => todo!("anonymous future"),
                     TypeDefKind::Stream(_) => todo!("anonymous stream"),
                     TypeDefKind::Unknown => unreachable!(),
+                    TypeDefKind::Resource => todo!(),
+                    TypeDefKind::Handle(_) => todo!(),
                 }
             }
         }
@@ -598,6 +604,9 @@ impl<'a> TsInterface<'a> {
 
         let param_start = match &func.kind {
             FunctionKind::Freestanding => 0,
+            FunctionKind::Method(_) => todo!(),
+            FunctionKind::Static(_) => todo!(),
+            FunctionKind::Constructor(_) => todo!(),
         };
 
         for (i, (name, ty)) in func.params[param_start..].iter().enumerate() {

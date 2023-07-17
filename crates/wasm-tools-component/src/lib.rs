@@ -5,33 +5,21 @@ use wasm_metadata::Producers;
 use wit_component::{ComponentEncoder, DecodedWasm, WitPrinter};
 use wit_parser::{Resolve, UnresolvedPackage};
 
-wit_bindgen::generate!("wasm-tools");
+wit_bindgen::generate!({
+    world: "wasm-tools",
+    exports: {
+        world: WasmToolsJs
+    }
+});
 
 struct WasmToolsJs;
 
-export_wasm_tools!(WasmToolsJs);
-
-// fn init() {
-//     static INIT: Once = Once::new();
-//     INIT.call_once(|| {
-//         let prev_hook = std::panic::take_hook();
-//         std::panic::set_hook(Box::new(move |info| {
-//             console::error(&info.to_string());
-//             prev_hook(info);
-//         }));
-//     });
-// }
-
 impl WasmTools for WasmToolsJs {
     fn parse(wat: String) -> Result<Vec<u8>, String> {
-        // init();
-
         wat::parse_str(wat).map_err(|e| format!("{:?}", e))
     }
 
     fn print(component: Vec<u8>) -> Result<String, String> {
-        // init();
-
         wasmprinter::print_bytes(component).map_err(|e| format!("{:?}", e))
     }
 
@@ -39,8 +27,6 @@ impl WasmTools for WasmToolsJs {
         binary: Vec<u8>,
         adapters: Option<Vec<(String, Vec<u8>)>>,
     ) -> Result<Vec<u8>, String> {
-        // init();
-
         let mut encoder = ComponentEncoder::default()
             .validate(true)
             .module(&binary)
@@ -62,8 +48,6 @@ impl WasmTools for WasmToolsJs {
     }
 
     fn component_wit(binary: Vec<u8>) -> Result<String, String> {
-        // init();
-
         let decoded = wit_component::decode(&binary)
             .map_err(|e| format!("Failed to decode wit component\n{:?}", e))?;
 
@@ -191,6 +175,7 @@ impl WasmTools for WasmToolsJs {
                     producers,
                     children,
                     range,
+                    registry_metadata: _,
                 } => {
                     let children_len = children.len();
                     for child in children {
@@ -207,6 +192,7 @@ impl WasmTools for WasmToolsJs {
                     name,
                     producers,
                     range,
+                    registry_metadata: _,
                 } => (name, producers, ModuleMetaType::Module, range),
             };
 
