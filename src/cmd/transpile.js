@@ -79,7 +79,7 @@ async function wasm2Js (source) {
  */
 export async function transpileComponent (component, opts = {}) {
   await $init;
-  if (opts.noWasiShim) opts.wasiShim = false;
+  if (opts.noWasiShim || opts.instantiation) opts.wasiShim = false;
 
   let spinner;
   const showSpinner = getShowSpinner();
