@@ -263,7 +263,7 @@ impl TsBindgen {
         files: &mut Files,
     ) -> String {
         let local_name =
-            self.generate_interface(name, resolve, id, "imports", files, AbiVariant::GuestImport);
+            self.generate_interface(name, resolve, id, "interfaces", files, AbiVariant::GuestImport);
         uwriteln!(
             self.import_object,
             "{}: typeof {local_name},",
@@ -287,7 +287,7 @@ impl TsBindgen {
                     &name,
                     resolve,
                     id,
-                    "imports",
+                    "interfaces",
                     files,
                     AbiVariant::GuestImport,
                 );
@@ -302,7 +302,7 @@ impl TsBindgen {
                 &name,
                 resolve,
                 id,
-                "imports",
+                "interfaces",
                 files,
                 AbiVariant::GuestImport,
             );
@@ -341,7 +341,7 @@ impl TsBindgen {
             export_name,
             resolve,
             id,
-            "exports",
+            "interfaces",
             files,
             AbiVariant::GuestExport,
         );
@@ -836,7 +836,7 @@ impl<'a> TsInterface<'a> {
             Some(interface_name) if owner != *interface => {
                 uwriteln!(
                     self.src,
-                    "import type {{ {type_name} }} from '../imports/{interface_name}';",
+                    "import type {{ {type_name} }} from '../interfaces/{interface_name}';",
                 );
                 self.src.push_str(&format!("export {{ {} }};\n", type_name));
             }
