@@ -262,8 +262,14 @@ impl TsBindgen {
         id: InterfaceId,
         files: &mut Files,
     ) -> String {
-        let local_name =
-            self.generate_interface(name, resolve, id, "interfaces", files, AbiVariant::GuestImport);
+        let local_name = self.generate_interface(
+            name,
+            resolve,
+            id,
+            "interfaces",
+            files,
+            AbiVariant::GuestImport,
+        );
         uwriteln!(
             self.import_object,
             "{}: typeof {local_name},",
@@ -399,16 +405,11 @@ impl TsBindgen {
         files: &mut Files,
         abi: AbiVariant,
     ) -> String {
+        let goal_name = interface_goal_name(name);
         let local_name = self
             .local_names
-            .create_once(&format!(
-                "{dir}-{}",
-                name.to_lower_camel_case()
-                    .replace('/', "-")
-                    .replace(':', "-")
-            ))
-            .to_upper_camel_case();
-        let local_name_kebab = local_name[dir.len()..].to_kebab_case();
+            .create_once(&format!("./{dir}/{goal_name}"));
+        let goal_name_kebab = goal_name.to_kebab_case();
         let camel = local_name.to_upper_camel_case();
         let mut gen = self.ts_interface(resolve);
 
@@ -422,13 +423,13 @@ impl TsBindgen {
         gen.types(id);
         gen.post_types();
         files.push(
-            &format!("{dir}/{}.d.ts", local_name_kebab),
+            &format!("{dir}/{}.d.ts", goal_name_kebab),
             gen.src.as_bytes(),
         );
 
         uwriteln!(
             self.src,
-            "import {{ {camel} }} from './{dir}/{local_name_kebab}';",
+            "import {{ {camel} }} from './{dir}/{goal_name_kebab}';",
         );
         camel
     }
@@ -466,8 +467,8 @@ impl<'a> TsInterface<'a> {
         }
     }
 
-    fn types(&mut self, iface: InterfaceId) {
-        let iface = &self.resolve().interfaces[iface];
+    fn types(&mut self, iface_id: InterfaceId) {
+        let iface = &self.resolve().interfaces[iface_id];
         for (name, id) in iface.types.iter() {
             let id = *id;
             let ty = &self.resolve().types[id];
@@ -481,7 +482,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
                 TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => self.type_alias(id, name, t, &iface.name, &ty.docs),
+                TypeDefKind::Type(t) => self.type_alias(id, name, t, iface_id, &ty.docs),
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
@@ -818,25 +819,31 @@ impl<'a> TsInterface<'a> {
         _id: TypeId,
         name: &str,
         ty: &Type,
-        interface: &Option<String>,
+        parent_id: InterfaceId,
         docs: &Docs,
     ) {
-        let owner = match ty {
+        let owner_not_parent = match ty {
             Type::Id(type_def_id) => {
                 let ty = &self.resolve.types[*type_def_id];
                 match ty.owner {
-                    TypeOwner::Interface(i) => self.resolve.interfaces[i].name.clone(),
+                    TypeOwner::Interface(i) => {
+                        if i == parent_id {
+                            None
+                        } else {
+                            Some(interface_goal_name(&self.resolve.id_of(i).unwrap()))
+                        }
+                    }
                     _ => None,
                 }
             }
             _ => None,
         };
         let type_name = name.to_upper_camel_case();
-        match owner {
-            Some(interface_name) if owner != *interface => {
+        match owner_not_parent {
+            Some(owned_interface_name) => {
                 uwriteln!(
                     self.src,
-                    "import type {{ {type_name} }} from '../interfaces/{interface_name}';",
+                    "import type {{ {type_name} }} from '../interfaces/{owned_interface_name}';",
                 );
                 self.src.push_str(&format!("export {{ {} }};\n", type_name));
             }
@@ -856,4 +863,11 @@ impl<'a> TsInterface<'a> {
         self.print_list(ty, Mode::Lift);
         self.src.push_str(";\n");
     }
+}
+
+fn interface_goal_name(iface_name: &str) -> String {
+    iface_name
+        .replace('/', "-")
+        .replace(':', "-")
+        .to_kebab_case()
 }

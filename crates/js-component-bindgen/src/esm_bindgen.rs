@@ -122,7 +122,9 @@ impl EsmBindgen {
         // we currently only support first-level nesting so there is no ordering to figure out
         // in the process we also populate the alias info
         for (export_name, export) in self.exports.iter() {
-            let Binding::Interface(iface) = export else { continue };
+            let Binding::Interface(iface) = export else {
+                continue;
+            };
             let local_name =
                 local_names.get_or_create(&format!("export:{}", export_name), &export_name);
             uwriteln!(output, "const {local_name} = {{");
