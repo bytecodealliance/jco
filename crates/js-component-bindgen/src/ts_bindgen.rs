@@ -388,10 +388,7 @@ impl TsBindgen {
         gen.gen.export_object.push_str(&gen.src);
     }
 
-    fn preprocess(&mut self, resolve: &Resolve, name: &str) {
-        drop(resolve);
-        drop(name);
-    }
+    fn preprocess(&mut self, _resolve: &Resolve, _name: &str) {}
 
     fn generate_interface(
         &mut self,
