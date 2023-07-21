@@ -1,9 +1,13 @@
 [package]
 name = "js-component-bindgen"
 authors = ["Alex Crichton <alex@alexcrichton.com>", "Guy Bedford <gbedford@fastly.com>"]
-publish = false
+description = "JS component bindgen for transpiling WebAssembly components into JavaScript"
+version = "0.9.5"
+license = "Apache-2.0 WITH LLVM-exception"
+categories = ["wasm"]
+keywords = ["webassembly", "wasm"]
+homepage = "https://github.com/bytecodealliance/jco/crates/js-component-bindgen"
 
-version.workspace = true
 edition.workspace = true
 
 [lib]

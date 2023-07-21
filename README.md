@@ -103,6 +103,10 @@ Options include:
 * `--instantiation`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports.
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
 
+#### Bindgen Crate
+
+To directly call into the transpilation in Rust, the bindgen used in jco is also available on crates.io as [js-component-bindgen](https://crates.io/crates/js-component-bindgen).
+
 ### Componentize
 
 To componentize a JS file run:
