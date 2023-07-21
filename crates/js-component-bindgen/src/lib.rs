@@ -79,7 +79,7 @@ pub fn generate_types(
 /// Generate the JS transpilation bindgen for a given Wasm component binary
 /// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
-pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
+pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
     let name = opts.name.clone();
     let mut files = files::Files::default();
 
@@ -89,7 +89,7 @@ pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, 
     // package which has a single document and `world` within it which describes
     // the state of the component. This is then further used afterwards for
     // bindings Transpilation as-if a `*.wit` file was input.
-    let decoded = wit_component::decode(&component)
+    let decoded = wit_component::decode(component)
         .context("failed to extract interface information from component")?;
 
     let (resolve, world_id) = match decoded {
@@ -120,7 +120,7 @@ pub fn transpile(component: Vec<u8>, opts: TranspileOpts) -> Result<Transpiled, 
     });
 
     let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)
-        .translate(&component)
+        .translate(component)
         .context("failed to parse the input component")?;
 
     // Insert all core wasm modules into the generated `Files` which will

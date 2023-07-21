@@ -49,7 +49,7 @@ fn main() -> Result<()> {
             valid_lifting_optimization: false,
         };
 
-        let transpiled = js_component_bindgen::transpile(adapted_component, opts)?;
+        let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;
 
         for (filename, contents) in transpiled.files.iter() {
             let outfile = PathBuf::from("./obj").join(filename);
