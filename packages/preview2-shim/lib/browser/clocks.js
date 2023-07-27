@@ -1,5 +1,6 @@
 function _hrtimeBigint () {
-  return BigInt(Math.floor(performance.now() * 1e9));
+  // performance.now() is in milliseconds, but we want nanoseconds
+  return BigInt(Math.floor(performance.now() * 1e6));
 }
 
 let _hrStart = _hrtimeBigint();
@@ -33,8 +34,9 @@ export const timezone = {
 
 export const wallClock = {
   now() {
-    const seconds = BigInt(Math.floor(Date.now() / 1e3));
-    const nanoseconds = (Date.now() % 1e3) * 1e6;
+    let now = Date.now(); // in milliseconds
+    const seconds = BigInt(Math.floor(now / 1e3));
+    const nanoseconds = (now % 1e3) * 1e6;
     return { seconds, nanoseconds };
   },
 
