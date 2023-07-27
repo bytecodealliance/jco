@@ -1,5 +1,6 @@
 function _hrtimeBigint () {
-  return BigInt(Math.floor(performance.now() * 1e9));
+  // performance.now() is in milliseconds, but we want nanoseconds
+  return BigInt(Math.floor(performance.now() * 1e6));
 }
 
 let _hrStart = _hrtimeBigint();
