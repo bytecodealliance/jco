@@ -44,6 +44,7 @@ struct JsComponentBindgenComponent;
 
 impl JsComponentBindgen for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
+        let component = wat::parse_bytes(&component).map_err(|e| format!("{e}"))?;
         let opts = js_component_bindgen::TranspileOpts {
             name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),

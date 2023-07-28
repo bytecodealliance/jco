@@ -25,3 +25,4 @@ wit-component = { workspace = true }
 wit-parser = { workspace = true }
 indexmap = { workspace = true }
 base64 = { workspace = true }
+wasm-encoder = { workspace = true }

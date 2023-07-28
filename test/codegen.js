@@ -25,7 +25,7 @@ export async function codegenTest (fixtures) {
   suite(`Transpiler codegen`, () => {
 
     for (const fixture of fixtures) {
-      const name = fixture.replace('.component.wasm', '');
+      const name = fixture.replace('.component.wasm', '').replace('.wat', '');
       test(`${fixture} transpile`, async () => {
         const flags = await readFlags(`test/runtime/${name}.ts`);
         var { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);

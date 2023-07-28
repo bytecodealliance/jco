@@ -1,3 +1,4 @@
+use crate::core;
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{ErrHandling, FunctionBindgen};
@@ -19,7 +20,7 @@ use wasmtime_environ::{
         RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
     },
 };
-use wasmtime_environ::{EntityIndex, ModuleTranslation, PrimaryMap};
+use wasmtime_environ::{EntityIndex, PrimaryMap};
 use wit_component::StringEncoding;
 use wit_parser::abi::{AbiVariant, LiftLower};
 use wit_parser::*;
@@ -73,7 +74,7 @@ struct JsBindgen<'a> {
 pub fn transpile_bindgen(
     name: &str,
     component: &ComponentTranslation,
-    modules: &PrimaryMap<StaticModuleIndex, ModuleTranslation<'_>>,
+    modules: &PrimaryMap<StaticModuleIndex, core::Translation<'_>>,
     resolve: &Resolve,
     id: WorldId,
     opts: TranspileOpts,
@@ -294,7 +295,7 @@ impl<'a> JsBindgen<'a> {
 struct Instantiator<'a, 'b> {
     src: Source,
     gen: &'a mut JsBindgen<'b>,
-    modules: &'a PrimaryMap<StaticModuleIndex, ModuleTranslation<'a>>,
+    modules: &'a PrimaryMap<StaticModuleIndex, core::Translation<'a>>,
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
     resolve: &'a Resolve,
     world: WorldId,
@@ -416,19 +417,19 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn instantiate_static_module(&mut self, idx: StaticModuleIndex, args: &[CoreDef]) {
-        let module = &self.modules[idx].module;
-
         // Build a JS "import object" which represents `args`. The `args` is a
         // flat representation which needs to be zip'd with the list of names to
         // correspond to the JS wasm embedding API. This is one of the major
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
-        assert_eq!(module.imports().len(), args.len());
-        for ((module, name, _), arg) in module.imports().zip(args) {
-            let def = self.core_def(arg);
+        for (module, name, arg) in self.modules[idx].imports(args) {
+            let def = self.augmented_import_def(arg);
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
-            assert!(prev.is_none());
+            assert!(
+                prev.is_none(),
+                "unsupported duplicate import of `{module}::{name}`"
+            );
         }
         let mut imports = String::new();
         if !import_obj.is_empty() {
@@ -617,12 +618,106 @@ impl<'a> Instantiator<'a, '_> {
         self.src.js("}");
     }
 
+    fn augmented_import_def(&self, def: core::AugmentedImport<'_>) -> String {
+        match def {
+            core::AugmentedImport::CoreDef(def) => self.core_def(def),
+            core::AugmentedImport::Memory { mem, op } => {
+                let mem = self.core_def(mem);
+                match op {
+                    core::AugmentedOp::I32Load => {
+                        format!(
+                            "(ptr, off) => new DataView({mem}.buffer).getInt32(ptr + off, true)"
+                        )
+                    }
+                    core::AugmentedOp::I32Load8U => {
+                        format!(
+                            "(ptr, off) => new DataView({mem}.buffer).getUint8(ptr + off, true)"
+                        )
+                    }
+                    core::AugmentedOp::I32Load8S => {
+                        format!("(ptr, off) => new DataView({mem}.buffer).getInt8(ptr + off, true)")
+                    }
+                    core::AugmentedOp::I32Load16U => {
+                        format!(
+                            "(ptr, off) => new DataView({mem}.buffer).getUint16(ptr + off, true)"
+                        )
+                    }
+                    core::AugmentedOp::I32Load16S => {
+                        format!(
+                            "(ptr, off) => new DataView({mem}.buffer).getInt16(ptr + off, true)"
+                        )
+                    }
+                    core::AugmentedOp::I64Load => {
+                        format!(
+                            "(ptr, off) => new DataView({mem}.buffer).getBigInt64(ptr + off, true)"
+                        )
+                    }
+                    core::AugmentedOp::F32Load => {
+                        format!(
+                            "(ptr, off) => new DataView({mem}.buffer).getFloat32(ptr + off, true)"
+                        )
+                    }
+                    core::AugmentedOp::F64Load => {
+                        format!(
+                            "(ptr, off) => new DataView({mem}.buffer).getFloat64(ptr + off, true)"
+                        )
+                    }
+                    core::AugmentedOp::I32Store8 => {
+                        format!(
+                            "(ptr, val, offset) => {{
+                                new DataView({mem}.buffer).setInt8(ptr + offset, val, true);
+                            }}"
+                        )
+                    }
+                    core::AugmentedOp::I32Store16 => {
+                        format!(
+                            "(ptr, val, offset) => {{
+                                new DataView({mem}.buffer).setInt16(ptr + offset, val, true);
+                            }}"
+                        )
+                    }
+                    core::AugmentedOp::I32Store => {
+                        format!(
+                            "(ptr, val, offset) => {{
+                                new DataView({mem}.buffer).setInt32(ptr + offset, val, true);
+                            }}"
+                        )
+                    }
+                    core::AugmentedOp::I64Store => {
+                        format!(
+                            "(ptr, val, offset) => {{
+                                new DataView({mem}.buffer).setBigInt64(ptr + offset, val, true);
+                            }}"
+                        )
+                    }
+                    core::AugmentedOp::F32Store => {
+                        format!(
+                            "(ptr, val, offset) => {{
+                                new DataView({mem}.buffer).setFloat32(ptr + offset, val, true);
+                            }}"
+                        )
+                    }
+                    core::AugmentedOp::F64Store => {
+                        format!(
+                            "(ptr, val, offset) => {{
+                                new DataView({mem}.buffer).setFloat64(ptr + offset, val, true);
+                            }}"
+                        )
+                    }
+                    core::AugmentedOp::MemorySize => {
+                        format!("ptr => {mem}.buffer.byteLength / 65536")
+                    }
+                }
+            }
+        }
+    }
+
     fn core_def(&self, def: &CoreDef) -> String {
         match def {
             CoreDef::Export(e) => self.core_export(e),
             CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
             CoreDef::InstanceFlags(i) => {
-                format!("instance_flags{}", i.as_u32())
+                format!("instanceFlags{}", i.as_u32())
             }
         }
     }
@@ -633,10 +728,10 @@ impl<'a> Instantiator<'a, '_> {
     {
         let name = match &export.item {
             ExportItem::Index(idx) => {
-                let module = &self.modules[self.instances[export.instance]].module;
+                let module = &self.modules[self.instances[export.instance]];
                 let idx = (*idx).into();
                 module
-                    .exports
+                    .exports()
                     .iter()
                     .filter_map(|(name, i)| if *i == idx { Some(name) } else { None })
                     .next()

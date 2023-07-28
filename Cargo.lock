@@ -188,6 +188,7 @@ dependencies = [
  "base64",
  "heck",
  "indexmap 2.0.0",
+ "wasm-encoder",
  "wasmtime-environ",
  "wit-component",
  "wit-parser",
@@ -200,6 +201,7 @@ dependencies = [
  "anyhow",
  "js-component-bindgen",
  "wasmtime-environ",
+ "wat",
  "wit-bindgen",
 ]
 
