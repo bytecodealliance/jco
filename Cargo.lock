@@ -175,7 +175,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "jco"
-version = "0.1.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
@@ -184,7 +184,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen"
-version = "0.9.5"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen-component"
-version = "0.1.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
