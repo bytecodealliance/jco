@@ -1,7 +1,5 @@
-git submodule init
-git submodule update
+git clone https://github.com/bytecodealliance/wit-bindgen
 cd wit-bindgen
-git pull origin main
 cargo test -p wit-bindgen-cli --no-default-features -F c
 
 for t in target/runtime-tests/*/c-*/*.component.wasm
@@ -15,4 +13,8 @@ done
 # copy flavorful wit case
 cp tests/runtime/flavorful/world.wit ../test/fixtures/wit/flavorful.wit
 
+cd ..
+
 ./src/jco.js componentize test/fixtures/component-gen/import-fn.js --wit test/fixtures/component-gen/import-fn.wit -o test/fixtures/components/import-fn.component.wasm
+
+rm -rf wit-bindgen

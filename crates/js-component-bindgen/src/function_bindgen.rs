@@ -1134,6 +1134,16 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(ptr);
             }
 
+            Instruction::HandleLift { handle, name, ty } => {
+                uwriteln!(self.src, "\"LIFT {:?} {:?} {:?}\"", handle, name, ty);
+                results.push("lifted".into());
+            }
+
+            Instruction::HandleLower { handle, name, ty } => {
+                uwriteln!(self.src, "\"LOWER {:?} {:?} {:?}\"", handle, name, ty);
+                results.push("lowered".into());
+            }
+
             i => unimplemented!("{:?}", i),
         }
     }
