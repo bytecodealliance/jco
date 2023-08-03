@@ -5,7 +5,7 @@ use heck::*;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::StringEncoding;
+use wit_component::StringEncoding;
 use wit_parser::abi::{Bindgen, Bitcast, Instruction, WasmType};
 use wit_parser::*;
 
@@ -950,9 +950,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Only Utf8 and Utf16 supported for now
                 assert!(matches!(
                     self.encoding,
-                    StringEncoding::Utf8 | StringEncoding::Utf16
+                    StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
-                let intrinsic = if self.encoding == StringEncoding::Utf16 {
+                let intrinsic = if self.encoding == StringEncoding::UTF16 {
                     Intrinsic::Utf16Encode
                 } else {
                     Intrinsic::Utf8Encode
@@ -967,7 +967,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     "const ptr{tmp} = {encode}({}, {realloc}, {memory});",
                     operands[0],
                 );
-                if self.encoding == StringEncoding::Utf8 {
+                if self.encoding == StringEncoding::UTF8 {
                     let encoded_len = self.intrinsic(Intrinsic::Utf8EncodedLen);
                     uwriteln!(self.src, "const len{tmp} = {encoded_len};");
                 } else {
@@ -980,9 +980,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Only Utf8 and Utf16 supported for now
                 assert!(matches!(
                     self.encoding,
-                    StringEncoding::Utf8 | StringEncoding::Utf16
+                    StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
-                let intrinsic = if self.encoding == StringEncoding::Utf16 {
+                let intrinsic = if self.encoding == StringEncoding::UTF16 {
                     Intrinsic::Utf16Decoder
                 } else {
                     Intrinsic::Utf8Decoder
@@ -995,7 +995,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "const result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
-                    if self.encoding == StringEncoding::Utf16 { "16" } else { "8" }
+                    if self.encoding == StringEncoding::UTF16 { "16" } else { "8" }
                 );
                 results.push(format!("result{tmp}"));
             }
