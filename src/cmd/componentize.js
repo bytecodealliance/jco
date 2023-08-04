@@ -14,7 +14,8 @@ export async function componentize (jsSource, opts) {
   const source = await readFile(jsSource, 'utf8');
   const { component, imports } = await componentizeFn(source, {
     witPath: resolve(opts.wit),
-    worldName: opts.worldName
+    worldName: opts.worldName,
+    enableStdout: opts.enableStdout,
   });
   await writeFile(opts.out, component);
   console.log(c`{green OK} Successfully written {bold ${opts.out}} with imports (${imports.join(', ')}).`);
