@@ -306,7 +306,7 @@ impl Instantiator<'_, '_> {
         // To avoid uncaught promise rejection errors, we attach an intermediate
         // Promise.all with a rejection handler, if there are multiple promises.
         for i in 0..self.component.num_runtime_component_instances {
-            uwriteln!(self.src.js_init, "const instance_flags{i} = new WebAssembly.Global({{value: \"i32\", mutable: true}}, {})", wasmtime_environ::component::FLAG_MAY_LEAVE | wasmtime_environ::component::FLAG_MAY_ENTER);
+            uwriteln!(self.src.js_init, "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, {});", wasmtime_environ::component::FLAG_MAY_LEAVE | wasmtime_environ::component::FLAG_MAY_ENTER);
         }
         if self.modules.len() > 1 {
             self.src.js_init.push_str("Promise.all([");
