@@ -30,13 +30,16 @@ version = "0.10.1"
 anyhow = "1.0.71"
 base64 = "0.21.2"
 heck =  { version = "0.4", features = ["unicode"] }
-indexmap = "1.9"
-wasm-encoder = { git = "https://github.com/bytecodealliance/wasm-tools", rev = "5605721e5373015e70401962a5d381f6968e3fbd" }
-wasm-metadata = { git = "https://github.com/bytecodealliance/wasm-tools", rev = "5605721e5373015e70401962a5d381f6968e3fbd" }
-wasmparser = { git = "https://github.com/bytecodealliance/wasm-tools", rev = "5605721e5373015e70401962a5d381f6968e3fbd" }
-wasmprinter = { git = "https://github.com/bytecodealliance/wasm-tools", rev = "5605721e5373015e70401962a5d381f6968e3fbd" }
-wasmtime-environ = { version = "10.0.1", features = ["component-model"] }
-wat = { git = "https://github.com/bytecodealliance/wasm-tools", rev = "5605721e5373015e70401962a5d381f6968e3fbd" }
+indexmap = "2.0"
+wasm-encoder = "0.31.1"
+wasm-metadata = "0.10.1"
+wasmparser = "0.110.0"
+wasmprinter = "0.2.62"
+wasmtime-environ = { version = "12.0.0", features = ["component-model"] }
+wat = "1.0.69"
 wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen" }
-wit-component = { git = "https://github.com/bytecodealliance/wasm-tools", features = ["dummy-module"], rev = "5605721e5373015e70401962a5d381f6968e3fbd" }
-wit-parser = { git = "https://github.com/bytecodealliance/wasm-tools", rev = "5605721e5373015e70401962a5d381f6968e3fbd" }
+wit-component = { version = "0.13.1", features = ["dummy-module"] }
+wit-parser = "0.9.2"
+
+[patch.crates-io]
+wasmtime-environ = { git = 'https://github.com/bytecodealliance/wasmtime', branch = 'release-12.0.0' }

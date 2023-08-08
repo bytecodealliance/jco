@@ -14,8 +14,9 @@ use std::mem;
 use wasmtime_environ::{
     component,
     component::{
-        CanonicalOptions, Component, CoreDef, CoreExport, Export, ExportItem, GlobalInitializer,
-        InstantiateModule, LowerImport, RuntimeInstanceIndex, StaticModuleIndex, Transcoder,
+        CanonicalOptions, Component, ComponentTranslation, CoreDef, CoreExport, Export, ExportItem,
+        GlobalInitializer, InstantiateModule, LoweredIndex, RuntimeImportIndex,
+        RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
     },
 };
 use wasmtime_environ::{EntityIndex, ModuleTranslation, PrimaryMap};
@@ -71,7 +72,7 @@ struct JsBindgen<'a> {
 
 pub fn transpile_bindgen(
     name: &str,
-    component: &Component,
+    component: &ComponentTranslation,
     modules: &PrimaryMap<StaticModuleIndex, ModuleTranslation<'_>>,
     resolve: &Resolve,
     id: WorldId,
@@ -114,9 +115,11 @@ pub fn transpile_bindgen(
         instances: Default::default(),
         resolve,
         world: id,
-        component,
+        translation: component,
+        component: &component.component,
         imports,
         exports,
+        lowering_options: Default::default(),
     };
     instantiator.sizes.fill(resolve);
     instantiator.instantiate();
@@ -297,17 +300,24 @@ struct Instantiator<'a, 'b> {
     world: WorldId,
     sizes: SizeAlign,
     component: &'a Component,
+    translation: &'a ComponentTranslation,
     exports: BTreeMap<String, WorldKey>,
     imports: BTreeMap<String, WorldKey>,
+    lowering_options: PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex)>,
 }
 
-impl Instantiator<'_, '_> {
+impl<'a> Instantiator<'a, '_> {
     fn instantiate(&mut self) {
-        // To avoid uncaught promise rejection errors, we attach an intermediate
-        // Promise.all with a rejection handler, if there are multiple promises.
         for i in 0..self.component.num_runtime_component_instances {
             uwriteln!(self.src.js_init, "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, {});", wasmtime_environ::component::FLAG_MAY_LEAVE | wasmtime_environ::component::FLAG_MAY_ENTER);
         }
+
+        for (i, trampoline) in self.translation.trampolines.iter() {
+            self.trampoline(i, trampoline);
+        }
+
+        // To avoid uncaught promise rejection errors, we attach an intermediate
+        // Promise.all with a rejection handler, if there are multiple promises.
         if self.modules.len() > 1 {
             self.src.js_init.push_str("Promise.all([");
             for i in 0..self.modules.len() {
@@ -331,6 +341,45 @@ impl Instantiator<'_, '_> {
         self.exports(&self.component.exports)
     }
 
+    fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
+        match trampoline {
+            // This is only used for a "degenerate component" which internally
+            // has a function that always traps. While this should be trivial to
+            // implement (generate a JS function that always throws) there's no
+            // way to test this at this time so leave this unimplemented.
+            Trampoline::AlwaysTrap => unimplemented!(),
+
+            // This is required when strings pass between components within a
+            // component and may change encodings. This is left unimplemented
+            // for now since it can't be tested and additionally JS doesn't
+            // support multi-memory which transcoders rely on anyway.
+            Trampoline::Transcoder {
+                op: _,
+                from: _,
+                from64: _,
+                to: _,
+                to64: _,
+            } => unimplemented!(),
+
+            Trampoline::LowerImport {
+                index,
+                lower_ty: _,
+                options,
+            } => {
+                let i = self.lowering_options.push((options, i));
+                assert_eq!(i, *index);
+            }
+
+            Trampoline::ResourceNew(_) => unimplemented!(),
+            Trampoline::ResourceRep(_) => unimplemented!(),
+            Trampoline::ResourceDrop(_) => unimplemented!(),
+            Trampoline::ResourceTransferOwn => unimplemented!(),
+            Trampoline::ResourceTransferBorrow => unimplemented!(),
+            Trampoline::ResourceEnterCall => unimplemented!(),
+            Trampoline::ResourceExitCall => unimplemented!(),
+        }
+    }
+
     fn instantiation_global_initializer(&mut self, init: &GlobalInitializer) {
         match init {
             GlobalInitializer::InstantiateModule(m) => match m {
@@ -340,8 +389,8 @@ impl Instantiator<'_, '_> {
                 // test at this time so it's left unimplemented.
                 InstantiateModule::Import(..) => unimplemented!(),
             },
-            GlobalInitializer::LowerImport(i) => {
-                self.lower_import(i);
+            GlobalInitializer::LowerImport { index, import } => {
+                self.lower_import(*index, *import);
             }
             GlobalInitializer::ExtractMemory(m) => {
                 let def = self.core_export(&m.export);
@@ -362,31 +411,7 @@ impl Instantiator<'_, '_> {
                 uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
             }
 
-            // This is only used for a "degenerate component" which internally
-            // has a function that always traps. While this should be trivial to
-            // implement (generate a JS function that always throws) there's no
-            // way to test this at this time so leave this unimplemented.
-            GlobalInitializer::AlwaysTrap(_) => unimplemented!(),
-
-            // This is only used when the component exports core wasm modules,
-            // but that's not possible to test right now so leave these as
-            // unimplemented.
-            GlobalInitializer::SaveStaticModule(_) => unimplemented!(),
-            GlobalInitializer::SaveModuleImport(_) => unimplemented!(),
-
-            // This is required when strings pass between components within a
-            // component and may change encodings. This is left unimplemented
-            // for now since it can't be tested and additionally JS doesn't
-            // support multi-memory which transcoders rely on anyway.
-            GlobalInitializer::Transcoder(Transcoder {
-                index: _,
-                op: _,
-                from: _,
-                from64: _,
-                to: _,
-                to64: _,
-                signature: _,
-            }) => unimplemented!(),
+            GlobalInitializer::Resource(_) => unimplemented!(),
         }
     }
 
@@ -431,8 +456,8 @@ impl Instantiator<'_, '_> {
         );
     }
 
-    fn lower_import(&mut self, import: &LowerImport) {
-        let (import_index, path) = &self.component.imports[import.import];
+    fn lower_import(&mut self, index: LoweredIndex, import: RuntimeImportIndex) {
+        let (import_index, path) = &self.component.imports[import];
         let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
 
@@ -453,13 +478,13 @@ impl Instantiator<'_, '_> {
                     (
                         func,
                         &path[0],
-                        Some(iface.name.as_ref().unwrap_or_else(|| import_name)),
+                        Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
                     )
                 }
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        let index = import.index.as_u32();
+        let (options, trampoline) = self.lowering_options[index];
 
         // note, the same function can be lowered into multiple sub-components
         let callee_name = self
@@ -468,7 +493,7 @@ impl Instantiator<'_, '_> {
             .get_or_create(&format!("import:{}-{}", import_name, func_name), func_name)
             .to_string();
 
-        uwrite!(self.src.js, "\nfunction lowering{index}");
+        uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
         let nparams = self
             .resolve
             .wasm_signature(AbiVariant::GuestImport, func)
@@ -477,7 +502,7 @@ impl Instantiator<'_, '_> {
         self.bindgen(
             nparams,
             &callee_name,
-            &import.options,
+            options,
             func,
             AbiVariant::GuestImport,
         );
@@ -595,12 +620,10 @@ impl Instantiator<'_, '_> {
     fn core_def(&self, def: &CoreDef) -> String {
         match def {
             CoreDef::Export(e) => self.core_export(e),
-            CoreDef::Lowered(i) => format!("lowering{}", i.as_u32()),
-            CoreDef::AlwaysTrap(_) => unimplemented!(),
+            CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
             CoreDef::InstanceFlags(i) => {
                 format!("instance_flags{}", i.as_u32())
             }
-            CoreDef::Transcoder(_) => unimplemented!(),
         }
     }
 
@@ -682,7 +705,8 @@ impl Instantiator<'_, '_> {
                 Export::Type(_) => {}
 
                 // This can't be tested at this time so leave it unimplemented
-                Export::Module(_) => unimplemented!(),
+                Export::ModuleStatic(_) => unimplemented!(),
+                Export::ModuleImport(_) => unimplemented!(),
             }
         }
         self.gen.esm_bindgen.populate_export_aliases();
