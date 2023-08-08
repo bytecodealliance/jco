@@ -610,8 +610,12 @@ struct Translator<'a, 'b> {
     augmenter: &'a Augmenter<'b>,
 }
 
-// TODO
+// Helper macro to create a wasmparser visitor which will translate each
+// individual instruction from wasmparser to wasm-encoder.
 macro_rules! define_translate {
+    // This is the base case where all methods are defined and the body of each
+    // method delegates to a recursive invocation of this macro to hit one of
+    // the cases below.
     ($(@$p:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident)*) => {
         $(
             #[allow(clippy::drop_copy)]
@@ -624,6 +628,9 @@ macro_rules! define_translate {
         )*
     };
 
+    // Memory-related operations are translated to augmentations which are a
+    // `Call` of an imported function (or are passed through natively as the
+    // same instruction if they use memory 0).
     (translate $self:ident I32Load $memarg:ident) => {{
         $self.augment(AugmentedOp::I32Load, I32Load, $memarg)
     }};
@@ -676,6 +683,9 @@ macro_rules! define_translate {
         }
     }};
 
+    // All other instructions not listed above are caught here and fall through
+    // to below cases to translate arguments/types from wasmparser to
+    // wasm-encoder and then create the new instruction.
     (translate $self:ident $op:ident $($arg:ident)*) => {{
         $(
             let $arg = define_translate!(map $self $arg $arg);
