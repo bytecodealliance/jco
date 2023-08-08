@@ -1,3 +1,4 @@
+mod core;
 mod files;
 mod transpile_bindgen;
 mod ts_bindgen;
@@ -14,9 +15,9 @@ use transpile_bindgen::transpile_bindgen;
 
 use anyhow::{bail, Context};
 use wasmtime_environ::component::Export;
-use wasmtime_environ::component::{ComponentTypesBuilder, Translator};
+use wasmtime_environ::component::{ComponentTypesBuilder, StaticModuleIndex, Translator};
 use wasmtime_environ::wasmparser::{Validator, WasmFeatures};
-use wasmtime_environ::{ScopeVec, Tunables};
+use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
 use ts_bindgen::ts_bindgen;
@@ -123,10 +124,15 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .translate(component)
         .context("failed to parse the input component")?;
 
+    let modules: PrimaryMap<StaticModuleIndex, core::Translation<'_>> = modules
+        .into_iter()
+        .map(|(_i, module)| core::Translation::new(module))
+        .collect::<Result<_>>()?;
+
     // Insert all core wasm modules into the generated `Files` which will
     // end up getting used in the `generate_instantiate` method.
     for (i, module) in modules.iter() {
-        files.push(&core_file_name(&name, i.as_u32()), module.wasm);
+        files.push(&core_file_name(&name, i.as_u32()), module.wasm());
     }
 
     if !opts.no_typescript {

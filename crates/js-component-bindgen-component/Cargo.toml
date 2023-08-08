@@ -14,3 +14,4 @@ anyhow = { workspace = true }
 js-component-bindgen = { path = "../js-component-bindgen" }
 wasmtime-environ = { workspace = true }
 wit-bindgen = { workspace = true }
+wat = { workspace = true }
