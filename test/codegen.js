@@ -21,12 +21,16 @@ export async function readFlags (fixture) {
   return [];
 }
 
+let codegenResolve;
+export const codegenPromise = new Promise(resolve => codegenResolve = resolve);
+export let codegenRunning = false;
+
 export async function codegenTest (fixtures) {
   suite(`Transpiler codegen`, () => {
-
     for (const fixture of fixtures) {
-      const name = fixture.replace('.component.wasm', '').replace('.wat', '');
+      const name = fixture.replace(/(\.component)?\.(wasm|wat)$/, '');
       test(`${fixture} transpile`, async () => {
+        codegenRunning = true;
         const flags = await readFlags(`test/runtime/${name}.ts`);
         var { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);
         strictEqual(stderr, '');
@@ -48,6 +52,7 @@ export async function codegenTest (fixtures) {
     test('TypeScript Compilation', async () => {
       var { stderr } = await exec(tscPath, '-p', 'test/tsconfig.json');
       strictEqual(stderr, '');
+      codegenResolve();
     });
   });
 }

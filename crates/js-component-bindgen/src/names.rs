@@ -23,18 +23,7 @@ impl<'a> LocalNames {
         } else {
             &goal_name
         };
-        let mut goal = if is_js_identifier(goal_name) {
-            goal_name.to_string()
-        } else {
-            let mut goal = goal_name.to_lower_camel_case().replace(':', "$");
-            if !is_js_identifier(&goal) {
-                goal = format!("_{goal}");
-                if !is_js_identifier(&goal) {
-                    panic!("Unable to generate valid identifier {goal} for '{goal_name}'");
-                }
-            }
-            goal
-        };
+        let mut goal = to_js_identifier(goal_name);
         if self.local_names.contains(&goal) {
             let mut idx = 1;
             loop {
@@ -64,6 +53,38 @@ impl<'a> LocalNames {
             self.local_name_ids.insert(unique_id.to_string(), goal);
         }
         self.local_name_ids.get(unique_id).unwrap()
+    }
+}
+
+// Convert an arbitrary string to a similar close js identifier
+pub fn to_js_identifier(goal_name: &str) -> String {
+    if is_js_identifier(goal_name) {
+        goal_name.to_string()
+    } else {
+        let goal = goal_name.to_lower_camel_case();
+        let mut identifier = String::new();
+        for char in goal.chars() {
+            let valid_char = if identifier.len() == 0 {
+                is_js_identifier_start(char)
+            } else {
+                is_js_identifier_char(char)
+            };
+            if valid_char {
+                identifier.push(char);
+            } else {
+                identifier.push(match char {
+                    '.' => '_',
+                    _ => '$',
+                });
+            }
+        }
+        if !is_js_identifier(&identifier) {
+            identifier = format!("_{identifier}");
+            if !is_js_identifier(&identifier) {
+                panic!("Unable to generate valid identifier {identifier} for '{goal_name}'");
+            }
+        }
+        identifier
     }
 }
 
