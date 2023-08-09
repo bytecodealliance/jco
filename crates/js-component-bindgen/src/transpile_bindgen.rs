@@ -492,6 +492,7 @@ impl<'a> Instantiator<'a, '_> {
             .gen
             .local_names
             .get_or_create(&format!("import:{}-{}", import_name, func_name), func_name)
+            .0
             .to_string();
 
         uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());

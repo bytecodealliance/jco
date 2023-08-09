@@ -72,7 +72,6 @@ pub fn ts_bindgen(
                         bindgen.import_interface(resolve, name, *id, files);
                     }
                     // namespaced ns:pkg/iface
-                    // -> group by pkg import by convention
                     // TODO: map support
                     WorldKey::Interface(id) => {
                         let import_specifier = resolve.id_of(*id).unwrap();
@@ -109,7 +108,7 @@ pub fn ts_bindgen(
                         TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
                         TypeDefKind::Union(u) => gen.type_union(*tid, name, u, &ty.docs),
                         TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
-                        TypeDefKind::Type(_) => todo!("type alias"),
+                        TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("generate for future"),
                         TypeDefKind::Stream(_) => todo!("generate for stream"),
                         TypeDefKind::Unknown => unreachable!(),
@@ -407,12 +406,16 @@ impl TsBindgen {
         files: &mut Files,
         abi: AbiVariant,
     ) -> String {
-        let goal_name = interface_goal_name(name);
-        let local_name = self
+        let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
+        let goal_name = interface_goal_name(&id_name);
+        let (local_name, seen) = self
             .local_names
-            .create_once(&format!("./{dir}/{goal_name}"));
+            .get_or_create(&id_name, &format!("./{dir}/{goal_name}"));
         let goal_name_kebab = goal_name.to_kebab_case();
         let camel = local_name.to_upper_camel_case();
+        if seen {
+            return camel;
+        }
         let mut gen = self.ts_interface(resolve);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
@@ -484,7 +487,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
                 TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => self.type_alias(id, name, t, iface_id, &ty.docs),
+                TypeDefKind::Type(t) => self.type_alias(id, name, t, Some(iface_id), &ty.docs),
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
@@ -562,7 +565,7 @@ impl<'a> TsInterface<'a> {
         match array_ty(self.resolve, ty) {
             Some("Uint8Array") => match mode {
                 Mode::Lift => self.src.push_str("Uint8Array"),
-                Mode::Lower => self.src.push_str("Uint8Array | ArrayBuffer"),
+                Mode::Lower => self.src.push_str("Uint8Array"),
             },
             Some(ty) => self.src.push_str(ty),
             None => {
@@ -828,7 +831,7 @@ impl<'a> TsInterface<'a> {
         _id: TypeId,
         name: &str,
         ty: &Type,
-        parent_id: InterfaceId,
+        parent_id: Option<InterfaceId>,
         docs: &Docs,
     ) {
         let owner_not_parent = match ty {
@@ -836,8 +839,12 @@ impl<'a> TsInterface<'a> {
                 let ty = &self.resolve.types[*type_def_id];
                 match ty.owner {
                     TypeOwner::Interface(i) => {
-                        if i == parent_id {
-                            None
+                        if let Some(parent_id) = parent_id {
+                            if parent_id == i {
+                                None
+                            } else {
+                                Some(interface_goal_name(&self.resolve.id_of(i).unwrap()))
+                            }
                         } else {
                             Some(interface_goal_name(&self.resolve.id_of(i).unwrap()))
                         }
