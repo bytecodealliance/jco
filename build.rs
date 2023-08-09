@@ -7,12 +7,22 @@ fn main() -> Result<()> {
     if env::var("PREVIEW2_SHIM_TYPES").is_ok() {
         for world in ["proxy", "command", "reactor"] {
             let name = format!("wasi-{}", world);
-            let preview2_wit_path = "./test/fixtures/wit/wasi";
+            let preview2_wit_path = "./test/fixtures/wit";
 
             let mut resolve = Resolve::default();
-            let (id, _) = resolve.push_dir(&PathBuf::from(preview2_wit_path))?;
+            let (_, _) = resolve.push_dir(&PathBuf::from(preview2_wit_path))?;
 
-            let world = resolve.select_world(id, Some(world))?;
+            let preview2 = *resolve
+                .package_names
+                .iter()
+                .find(|(name, _)| {
+                    eprintln!("{:?}", name);
+                    name.name == "preview"
+                })
+                .unwrap()
+                .1;
+
+            let world = resolve.select_world(preview2, Some(world))?;
 
             let opts = js_component_bindgen::TranspileOpts {
                 name: "component".to_string(),

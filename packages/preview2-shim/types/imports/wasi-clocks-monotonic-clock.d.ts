@@ -1,4 +1,4 @@
-export namespace ImportsMonotonicClock {
+export namespace WasiClocksMonotonicClock {
   /**
    * Read the current value of the clock.
    * 
@@ -16,7 +16,7 @@ export namespace ImportsMonotonicClock {
    */
   export function subscribe(when: Instant, absolute: boolean): Pollable;
 }
-import type { Pollable } from '../imports/poll';
+import type { Pollable } from '../imports/wasi-poll-poll';
 export { Pollable };
 /**
  * A timestamp in nanoseconds.

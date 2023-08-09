@@ -1,4 +1,4 @@
-export namespace ImportsExit {
+export namespace WasiCliBaseExit {
   /**
    * Exit the curerent instance and any linked instances.
    */

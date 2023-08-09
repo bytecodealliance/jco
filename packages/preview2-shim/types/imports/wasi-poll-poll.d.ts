@@ -1,4 +1,4 @@
-export namespace ImportsPoll {
+export namespace WasiPollPoll {
   /**
    * Dispose of the specified `pollable`, after which it may no longer
    * be used.
@@ -14,13 +14,11 @@ export namespace ImportsPoll {
    * component model async proposal, which will include a scalable waiting
    * facility.
    * 
-   * Note that the return type would ideally be `list<bool>`, but that would
-   * be more difficult to polyfill given the current state of `wit-bindgen`.
-   * See <https://github.com/bytecodealliance/preview2-prototyping/pull/11#issuecomment-1329873061>
-   * for details.  For now, we use zero to mean "not ready" and non-zero to
-   * mean "ready".
+   * The result list<bool> is the same length as the argument
+   * list<pollable>, and indicates the readiness of each corresponding
+   * element in that / list, with true indicating ready.
    */
-  export function pollOneoff(in: Uint32Array): Uint8Array | ArrayBuffer;
+  export function pollOneoff(in: Uint32Array): boolean[];
 }
 /**
  * A "pollable" handle.

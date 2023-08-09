@@ -1,11 +1,11 @@
-export namespace ImportsStreams {
+export namespace WasiIoStreams {
   /**
-   * Read bytes from a stream.
+   * Perform a non-blocking read from the stream.
    * 
    * This function returns a list of bytes containing the data that was
-   * read, along with a bool which, when true, indicates that the end of the
-   * stream was reached. The returned list will contain up to `len` bytes; it
-   * may return fewer than requested, but not more.
+   * read, along with a `stream-status` which, indicates whether further
+   * reads are expected to produce data. The returned list will contain up to
+   * `len` bytes; it may return fewer than requested, but not more.
    * 
    * Once a stream has reached the end, subsequent calls to read or
    * `skip` will always report end-of-stream rather than producing more
@@ -18,15 +18,21 @@ export namespace ImportsStreams {
    * The len here is a `u64`, but some callees may not be able to allocate
    * a buffer as large as that would imply.
    * FIXME: describe what happens if allocation fails.
+   * 
+   * When the returned `stream-status` is `open`, the length of the returned
+   * value may be less than `len`. When an empty list is returned, this
+   * indicates that no more bytes were available from the stream at that
+   * time. In that case the subscribe-to-input-stream pollable will indicate
+   * when additional bytes are available for reading.
    */
-  export function read(this: InputStream, len: bigint): [Uint8Array | ArrayBuffer, boolean];
+  export function read(this: InputStream, len: bigint): [Uint8Array | ArrayBuffer, StreamStatus];
   /**
    * Read bytes from a stream, with blocking.
    * 
    * This is similar to `read`, except that it blocks until at least one
    * byte can be read.
    */
-  export function blockingRead(this: InputStream, len: bigint): [Uint8Array | ArrayBuffer, boolean];
+  export function blockingRead(this: InputStream, len: bigint): [Uint8Array | ArrayBuffer, StreamStatus];
   /**
    * Skip bytes from a stream.
    * 
@@ -41,14 +47,14 @@ export namespace ImportsStreams {
    * indicating whether the end of the stream was reached. The returned
    * value will be at most `len`; it may be less.
    */
-  export function skip(this: InputStream, len: bigint): [bigint, boolean];
+  export function skip(this: InputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Skip bytes from a stream, with blocking.
    * 
    * This is similar to `skip`, except that it blocks until at least one
    * byte can be consumed.
    */
-  export function blockingSkip(this: InputStream, len: bigint): [bigint, boolean];
+  export function blockingSkip(this: InputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Create a `pollable` which will resolve once either the specified stream
    * has bytes available to read or the other end of the stream has been
@@ -61,33 +67,43 @@ export namespace ImportsStreams {
    */
   export function dropInputStream(this: InputStream): void;
   /**
-   * Write bytes to a stream.
+   * Perform a non-blocking write of bytes to a stream.
    * 
-   * This function returns a `u64` indicating the number of bytes from
-   * `buf` that were written; it may be less than the full list.
+   * This function returns a `u64` and a `stream-status`. The `u64` indicates
+   * the number of bytes from `buf` that were written, which may be less than
+   * the length of `buf`. The `stream-status` indicates if further writes to
+   * the stream are expected to be read.
+   * 
+   * When the returned `stream-status` is `open`, the `u64` return value may
+   * be less than the length of `buf`. This indicates that no more bytes may
+   * be written to the stream promptly. In that case the
+   * subscribe-to-output-stream pollable will indicate when additional bytes
+   * may be promptly written.
+   * 
+   * TODO: document what happens when an empty list is written
    */
-  export function write(this: OutputStream, buf: Uint8Array): bigint;
+  export function write(this: OutputStream, buf: Uint8Array): [bigint, StreamStatus];
   /**
    * Write bytes to a stream, with blocking.
    * 
    * This is similar to `write`, except that it blocks until at least one
    * byte can be written.
    */
-  export function blockingWrite(this: OutputStream, buf: Uint8Array): bigint;
+  export function blockingWrite(this: OutputStream, buf: Uint8Array): [bigint, StreamStatus];
   /**
    * Write multiple zero bytes to a stream.
    * 
    * This function returns a `u64` indicating the number of zero bytes
    * that were written; it may be less than `len`.
    */
-  export function writeZeroes(this: OutputStream, len: bigint): bigint;
+  export function writeZeroes(this: OutputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Write multiple zero bytes to a stream, with blocking.
    * 
    * This is similar to `write-zeroes`, except that it blocks until at least
    * one byte can be written.
    */
-  export function blockingWriteZeroes(this: OutputStream, len: bigint): bigint;
+  export function blockingWriteZeroes(this: OutputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Read from one stream and write to another.
    * 
@@ -97,14 +113,14 @@ export namespace ImportsStreams {
    * Unlike other I/O functions, this function blocks until all the data
    * read from the input stream has been written to the output stream.
    */
-  export function splice(this: OutputStream, src: InputStream, len: bigint): [bigint, boolean];
+  export function splice(this: OutputStream, src: InputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Read from one stream and write to another, with blocking.
    * 
    * This is similar to `splice`, except that it blocks until at least
    * one byte can be read.
    */
-  export function blockingSplice(this: OutputStream, src: InputStream, len: bigint): [bigint, boolean];
+  export function blockingSplice(this: OutputStream, src: InputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Forward the entire contents of an input stream to an output stream.
    * 
@@ -116,9 +132,10 @@ export namespace ImportsStreams {
    * of the input stream is seen and all the data has been written to
    * the output stream.
    * 
-   * This function returns the number of bytes transferred.
+   * This function returns the number of bytes transferred, and the status of
+   * the output stream.
    */
-  export function forward(this: OutputStream, src: InputStream): bigint;
+  export function forward(this: OutputStream, src: InputStream): [bigint, StreamStatus];
   /**
    * Create a `pollable` which will resolve once either the specified stream
    * is ready to accept bytes or the other end of the stream has been closed.
@@ -130,34 +147,41 @@ export namespace ImportsStreams {
    */
   export function dropOutputStream(this: OutputStream): void;
 }
-import type { Pollable } from '../imports/poll';
+import type { Pollable } from '../imports/wasi-poll-poll';
 export { Pollable };
 /**
- * An error type returned from a stream operation. Currently this
- * doesn't provide any additional information.
+ * An error type returned from a stream operation.
+ * 
+ * TODO: need to figure out the actual contents of this error. Used to be
+ * an empty record but that's no longer allowed. The `dummy` field is
+ * only here to have this be a valid in the component model by being
+ * non-empty.
  */
 export interface StreamError {
+  dummy: number,
 }
 /**
- * An output bytestream. In the future, this will be replaced by handle
- * types.
+ * Streams provide a sequence of data and then end; once they end, they
+ * no longer provide any further data.
  * 
- * This conceptually represents a `stream<u8, _>`. It's temporary
- * scaffolding until component-model's async features are ready.
+ * For example, a stream reading from a file ends when the stream reaches
+ * the end of the file. For another example, a stream reading from a
+ * socket ends when the socket is closed.
  * 
- * `output-stream`s are *non-blocking* to the extent practical on
- * underlying platforms. Except where specified otherwise, I/O operations also
- * always return promptly, after the number of bytes that can be written
- * promptly, which could even be zero. To wait for the stream to be ready to
- * accept data, the `subscribe-to-output-stream` function to obtain a
- * `pollable` which can be polled for using `wasi_poll`.
+ * # Variants
  * 
- * And at present, it is a `u32` instead of being an actual handle, until
- * the wit-bindgen implementation of handles and resources is ready.
+ * ## `"open"`
  * 
- * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
+ * The stream is open and may produce further data.
+ * 
+ * ## `"ended"`
+ * 
+ * When reading, this indicates that the stream will not produce
+ * further data.
+ * When writing, this indicates that the stream will no longer be read.
+ * Further writes are still permitted.
  */
-export type OutputStream = number;
+export type StreamStatus = 'open' | 'ended';
 /**
  * An input bytestream. In the future, this will be replaced by handle
  * types.
@@ -178,3 +202,23 @@ export type OutputStream = number;
  * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
  */
 export type InputStream = number;
+/**
+ * An output bytestream. In the future, this will be replaced by handle
+ * types.
+ * 
+ * This conceptually represents a `stream<u8, _>`. It's temporary
+ * scaffolding until component-model's async features are ready.
+ * 
+ * `output-stream`s are *non-blocking* to the extent practical on
+ * underlying platforms. Except where specified otherwise, I/O operations also
+ * always return promptly, after the number of bytes that can be written
+ * promptly, which could even be zero. To wait for the stream to be ready to
+ * accept data, the `subscribe-to-output-stream` function to obtain a
+ * `pollable` which can be polled for using `wasi:poll`.
+ * 
+ * And at present, it is a `u32` instead of being an actual handle, until
+ * the wit-bindgen implementation of handles and resources is ready.
+ * 
+ * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
+ */
+export type OutputStream = number;

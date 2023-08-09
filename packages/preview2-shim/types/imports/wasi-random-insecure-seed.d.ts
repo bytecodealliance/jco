@@ -1,4 +1,4 @@
-export namespace ImportsInsecureSeed {
+export namespace WasiRandomInsecureSeed {
   /**
    * Return a 128-bit value that may contain a pseudo-random value.
    * 

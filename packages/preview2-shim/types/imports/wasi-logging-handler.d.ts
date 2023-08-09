@@ -1,4 +1,4 @@
-export namespace ImportsHandler {
+export namespace WasiLoggingHandler {
   /**
    * Emit a log message.
    * 
