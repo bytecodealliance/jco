@@ -1,4 +1,4 @@
-export namespace ImportsTypes {
+export namespace WasiHttpTypes {
   export function dropFields(fields: Fields): void;
   export function newFields(entries: [string, string][]): Fields;
   export function fieldsGet(fields: Fields, name: string): string[];
@@ -33,33 +33,12 @@ export namespace ImportsTypes {
   export function futureIncomingResponseGet(f: FutureIncomingResponse): Result<IncomingResponse, Error> | null;
   export function listenToFutureIncomingResponse(f: FutureIncomingResponse): Pollable;
 }
-import type { InputStream } from '../imports/streams';
+import type { InputStream } from '../imports/wasi-io-streams';
 export { InputStream };
-import type { OutputStream } from '../imports/streams';
+import type { OutputStream } from '../imports/wasi-io-streams';
 export { OutputStream };
-import type { Pollable } from '../imports/poll';
+import type { Pollable } from '../imports/wasi-poll-poll';
 export { Pollable };
-export type StatusCode = number;
-export type Scheme = SchemeHttp | SchemeHttps | SchemeOther;
-export interface SchemeHttp {
-  tag: 'HTTP',
-}
-export interface SchemeHttps {
-  tag: 'HTTPS',
-}
-export interface SchemeOther {
-  tag: 'other',
-  val: string,
-}
-export type ResponseOutparam = number;
-export interface RequestOptions {
-  connectTimeoutMs?: number,
-  firstByteTimeoutMs?: number,
-  betweenBytesTimeoutMs?: number,
-}
-export type OutgoingStream = OutputStream;
-export type OutgoingResponse = number;
-export type OutgoingRequest = number;
 export type Method = MethodGet | MethodHead | MethodPost | MethodPut | MethodDelete | MethodConnect | MethodOptions | MethodTrace | MethodPatch | MethodOther;
 export interface MethodGet {
   tag: 'get',
@@ -92,13 +71,17 @@ export interface MethodOther {
   tag: 'other',
   val: string,
 }
-export type IncomingStream = InputStream;
-export type IncomingResponse = number;
-export type IncomingRequest = number;
-export type FutureIncomingResponse = number;
-export type Fields = number;
-export type Trailers = Fields;
-export type Headers = Fields;
+export type Scheme = SchemeHttp | SchemeHttps | SchemeOther;
+export interface SchemeHttp {
+  tag: 'HTTP',
+}
+export interface SchemeHttps {
+  tag: 'HTTPS',
+}
+export interface SchemeOther {
+  tag: 'other',
+  val: string,
+}
 export type Error = ErrorInvalidUrl | ErrorTimeoutError | ErrorProtocolError | ErrorUnexpectedError;
 export interface ErrorInvalidUrl {
   tag: 'invalid-url',
@@ -116,4 +99,21 @@ export interface ErrorUnexpectedError {
   tag: 'unexpected-error',
   val: string,
 }
+export type Fields = number;
+export type Headers = Fields;
+export type Trailers = Fields;
+export type IncomingStream = InputStream;
+export type OutgoingStream = OutputStream;
+export type IncomingRequest = number;
+export type OutgoingRequest = number;
+export interface RequestOptions {
+  connectTimeoutMs?: number,
+  firstByteTimeoutMs?: number,
+  betweenBytesTimeoutMs?: number,
+}
+export type ResponseOutparam = number;
+export type StatusCode = number;
+export type IncomingResponse = number;
+export type OutgoingResponse = number;
+export type FutureIncomingResponse = number;
 export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };

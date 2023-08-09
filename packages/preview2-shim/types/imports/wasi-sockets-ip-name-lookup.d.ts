@@ -1,4 +1,4 @@
-export namespace ImportsIpNameLookup {
+export namespace WasiSocketsIpNameLookup {
   /**
    * Resolve an internet host name to a list of IP addresses.
    * 
@@ -63,14 +63,14 @@ export namespace ImportsIpNameLookup {
    */
   export function subscribe(this: ResolveAddressStream): Pollable;
 }
-import type { Pollable } from '../imports/poll';
+import type { Pollable } from '../imports/wasi-poll-poll';
 export { Pollable };
-import type { Network } from '../imports/network';
+import type { Network } from '../imports/wasi-sockets-network';
 export { Network };
-import type { ErrorCode } from '../imports/network';
+import type { ErrorCode } from '../imports/wasi-sockets-network';
 export { ErrorCode };
-import type { IpAddress } from '../imports/network';
+import type { IpAddress } from '../imports/wasi-sockets-network';
 export { IpAddress };
-import type { IpAddressFamily } from '../imports/network';
+import type { IpAddressFamily } from '../imports/wasi-sockets-network';
 export { IpAddressFamily };
 export type ResolveAddressStream = number;

@@ -1,4 +1,4 @@
-export namespace ImportsTcp {
+export namespace WasiSocketsTcp {
   /**
    * Bind the socket to a specific network on the provided IP address and port.
    * 
@@ -249,19 +249,19 @@ export namespace ImportsTcp {
    */
   export function dropTcpSocket(this: TcpSocket): void;
 }
-import type { InputStream } from '../imports/streams';
+import type { InputStream } from '../imports/wasi-io-streams';
 export { InputStream };
-import type { OutputStream } from '../imports/streams';
+import type { OutputStream } from '../imports/wasi-io-streams';
 export { OutputStream };
-import type { Pollable } from '../imports/poll';
+import type { Pollable } from '../imports/wasi-poll-poll';
 export { Pollable };
-import type { Network } from '../imports/network';
+import type { Network } from '../imports/wasi-sockets-network';
 export { Network };
-import type { ErrorCode } from '../imports/network';
+import type { ErrorCode } from '../imports/wasi-sockets-network';
 export { ErrorCode };
-import type { IpSocketAddress } from '../imports/network';
+import type { IpSocketAddress } from '../imports/wasi-sockets-network';
 export { IpSocketAddress };
-import type { IpAddressFamily } from '../imports/network';
+import type { IpAddressFamily } from '../imports/wasi-sockets-network';
 export { IpAddressFamily };
 /**
  * A TCP socket handle.

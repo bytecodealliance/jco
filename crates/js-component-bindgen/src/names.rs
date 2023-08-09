@@ -47,12 +47,14 @@ impl<'a> LocalNames {
     }
 
     /// get or create a unique identifier for a string while storing the lookup by unique id
-    pub fn get_or_create(&'a mut self, unique_id: &str, goal_name: &str) -> &'a str {
+    pub fn get_or_create(&'a mut self, unique_id: &str, goal_name: &str) -> (&'a str, bool) {
+        let mut seen = true;
         if !self.local_name_ids.contains_key(unique_id) {
             let goal = self.create_once(goal_name).to_string();
             self.local_name_ids.insert(unique_id.to_string(), goal);
+            seen = false;
         }
-        self.local_name_ids.get(unique_id).unwrap()
+        (self.local_name_ids.get(unique_id).unwrap(), seen)
     }
 }
 

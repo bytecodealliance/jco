@@ -1,4 +1,4 @@
-export namespace ImportsEnvironment {
+export namespace WasiCliBaseEnvironment {
   /**
    * Get the POSIX-style environment variables.
    * 

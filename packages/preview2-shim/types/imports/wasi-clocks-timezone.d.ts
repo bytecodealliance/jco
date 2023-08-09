@@ -1,4 +1,4 @@
-export namespace ImportsTimezone {
+export namespace WasiClocksTimezone {
   /**
    * Return information needed to display the given `datetime`. This includes
    * the UTC offset, the time zone name, and a flag indicating whether
@@ -19,8 +19,18 @@ export namespace ImportsTimezone {
    */
   export function dropTimezone(this: Timezone): void;
 }
-import type { Datetime } from '../imports/wall-clock';
+import type { Datetime } from '../imports/wasi-clocks-wall-clock';
 export { Datetime };
+/**
+ * A timezone.
+ * 
+ * In timezones that recognize daylight saving time, also known as daylight
+ * time and summer time, the information returned from the functions varies
+ * over time to reflect these adjustments.
+ * 
+ * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
+ */
+export type Timezone = number;
 /**
  * Information useful for displaying the timezone of a specific `datetime`.
  * 
@@ -59,13 +69,3 @@ export interface TimezoneDisplay {
    */
   inDaylightSavingTime: boolean,
 }
-/**
- * A timezone.
- * 
- * In timezones that recognize daylight saving time, also known as daylight
- * time and summer time, the information returned from the functions varies
- * over time to reflect these adjustments.
- * 
- * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
- */
-export type Timezone = number;

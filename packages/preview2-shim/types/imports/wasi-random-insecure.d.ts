@@ -1,4 +1,4 @@
-export namespace ImportsInsecure {
+export namespace WasiRandomInsecure {
   /**
    * Return `len` insecure pseudo-random bytes.
    * 

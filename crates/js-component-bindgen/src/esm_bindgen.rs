@@ -125,7 +125,7 @@ impl EsmBindgen {
             let Binding::Interface(iface) = export else {
                 continue;
             };
-            let local_name =
+            let (local_name, _) =
                 local_names.get_or_create(&format!("export:{}", export_name), &export_name);
             uwriteln!(output, "const {local_name} = {{");
             for (func_name, export) in iface {
@@ -224,7 +224,7 @@ impl EsmBindgen {
                         }
                         let local_name = match import {
                             Binding::Interface(iface) => {
-                                let iface_local_name = local_names.get_or_create(
+                                let (iface_local_name, _) = local_names.get_or_create(
                                     &format!("import:{specifier}#{external_name}"),
                                     external_name,
                                 );

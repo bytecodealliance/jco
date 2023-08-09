@@ -72,7 +72,6 @@ pub fn ts_bindgen(
                         bindgen.import_interface(resolve, name, *id, files);
                     }
                     // namespaced ns:pkg/iface
-                    // -> group by pkg import by convention
                     // TODO: map support
                     WorldKey::Interface(id) => {
                         let import_specifier = resolve.id_of(*id).unwrap();
@@ -109,7 +108,9 @@ pub fn ts_bindgen(
                         TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
                         TypeDefKind::Union(u) => gen.type_union(*tid, name, u, &ty.docs),
                         TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
-                        TypeDefKind::Type(_) => todo!("type alias"),
+                        TypeDefKind::Type(t) => {
+                            gen.type_alias(*tid, name, t, None, AbiVariant::GuestImport, &ty.docs)
+                        }
                         TypeDefKind::Future(_) => todo!("generate for future"),
                         TypeDefKind::Stream(_) => todo!("generate for stream"),
                         TypeDefKind::Unknown => unreachable!(),
@@ -264,14 +265,7 @@ impl TsBindgen {
         id: InterfaceId,
         files: &mut Files,
     ) -> String {
-        let local_name = self.generate_interface(
-            name,
-            resolve,
-            id,
-            "interfaces",
-            files,
-            AbiVariant::GuestImport,
-        );
+        let local_name = self.generate_interface(name, resolve, id, files, AbiVariant::GuestImport);
         uwriteln!(
             self.import_object,
             "{}: typeof {local_name},",
@@ -291,14 +285,8 @@ impl TsBindgen {
             if iface_name == "*" {
                 uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
                 let name = resolve.interfaces[id].name.as_ref().unwrap();
-                let local_name = self.generate_interface(
-                    &name,
-                    resolve,
-                    id,
-                    "interfaces",
-                    files,
-                    AbiVariant::GuestImport,
-                );
+                let local_name =
+                    self.generate_interface(&name, resolve, id, files, AbiVariant::GuestImport);
                 uwriteln!(self.import_object, "typeof {local_name},",);
                 return;
             }
@@ -306,14 +294,8 @@ impl TsBindgen {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         for (iface_name, &id) in ifaces {
             let name = resolve.interfaces[id].name.as_ref().unwrap();
-            let local_name = self.generate_interface(
-                &name,
-                resolve,
-                id,
-                "interfaces",
-                files,
-                AbiVariant::GuestImport,
-            );
+            let local_name =
+                self.generate_interface(&name, resolve, id, files, AbiVariant::GuestImport);
             uwriteln!(
                 self.import_object,
                 "{}: typeof {local_name},",
@@ -345,14 +327,8 @@ impl TsBindgen {
         files: &mut Files,
         instantiation: bool,
     ) -> String {
-        let local_name = self.generate_interface(
-            export_name,
-            resolve,
-            id,
-            "interfaces",
-            files,
-            AbiVariant::GuestExport,
-        );
+        let local_name =
+            self.generate_interface(export_name, resolve, id, files, AbiVariant::GuestExport);
         if instantiation {
             uwriteln!(
                 self.export_object,
@@ -403,11 +379,15 @@ impl TsBindgen {
         name: &str,
         resolve: &Resolve,
         id: InterfaceId,
-        dir: &str,
         files: &mut Files,
         abi: AbiVariant,
     ) -> String {
-        let goal_name = interface_goal_name(name);
+        let dir = match abi {
+            AbiVariant::GuestImport => "imports",
+            AbiVariant::GuestExport => "exports",
+        };
+        let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
+        let goal_name = interface_goal_name(&id_name);
         let local_name = self
             .local_names
             .create_once(&format!("./{dir}/{goal_name}"));
@@ -422,7 +402,7 @@ impl TsBindgen {
         }
         uwriteln!(gen.src, "}}");
 
-        gen.types(id);
+        gen.types(id, abi);
         gen.post_types();
         files.push(
             &format!("{dir}/{}.d.ts", goal_name_kebab),
@@ -469,7 +449,7 @@ impl<'a> TsInterface<'a> {
         }
     }
 
-    fn types(&mut self, iface_id: InterfaceId) {
+    fn types(&mut self, iface_id: InterfaceId, abi: AbiVariant) {
         let iface = &self.resolve().interfaces[iface_id];
         for (name, id) in iface.types.iter() {
             let id = *id;
@@ -484,7 +464,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
                 TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => self.type_alias(id, name, t, iface_id, &ty.docs),
+                TypeDefKind::Type(t) => self.type_alias(id, name, t, Some(iface_id), abi, &ty.docs),
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
@@ -828,7 +808,8 @@ impl<'a> TsInterface<'a> {
         _id: TypeId,
         name: &str,
         ty: &Type,
-        parent_id: InterfaceId,
+        parent_id: Option<InterfaceId>,
+        abi: AbiVariant,
         docs: &Docs,
     ) {
         let owner_not_parent = match ty {
@@ -836,8 +817,12 @@ impl<'a> TsInterface<'a> {
                 let ty = &self.resolve.types[*type_def_id];
                 match ty.owner {
                     TypeOwner::Interface(i) => {
-                        if i == parent_id {
-                            None
+                        if let Some(parent_id) = parent_id {
+                            if parent_id == i {
+                                None
+                            } else {
+                                Some(interface_goal_name(&self.resolve.id_of(i).unwrap()))
+                            }
                         } else {
                             Some(interface_goal_name(&self.resolve.id_of(i).unwrap()))
                         }
@@ -850,9 +835,13 @@ impl<'a> TsInterface<'a> {
         let type_name = name.to_upper_camel_case();
         match owner_not_parent {
             Some(owned_interface_name) => {
+                let dir = match abi {
+                    AbiVariant::GuestImport => "imports",
+                    AbiVariant::GuestExport => "exports",
+                };
                 uwriteln!(
                     self.src,
-                    "import type {{ {type_name} }} from '../interfaces/{owned_interface_name}';",
+                    "import type {{ {type_name} }} from '../{dir}/{owned_interface_name}';",
                 );
                 self.src.push_str(&format!("export {{ {} }};\n", type_name));
             }

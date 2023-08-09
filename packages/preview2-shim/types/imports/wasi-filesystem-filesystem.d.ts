@@ -1,4 +1,4 @@
-export namespace ImportsFilesystem {
+export namespace WasiFilesystemFilesystem {
   /**
    * Return a stream for reading from a file.
    * 
@@ -372,12 +372,113 @@ export namespace ImportsFilesystem {
    */
   export function dropDirectoryEntryStream(this: DirectoryEntryStream): void;
 }
-import type { InputStream } from '../imports/streams';
+import type { InputStream } from '../imports/wasi-io-streams';
 export { InputStream };
-import type { OutputStream } from '../imports/streams';
+import type { OutputStream } from '../imports/wasi-io-streams';
 export { OutputStream };
-import type { Datetime } from '../imports/wall-clock';
+import type { Datetime } from '../imports/wasi-clocks-wall-clock';
 export { Datetime };
+/**
+ * File size or length of a region within a file.
+ */
+export type Filesize = bigint;
+/**
+ * The type of a filesystem object referenced by a descriptor.
+ * 
+ * Note: This was called `filetype` in earlier versions of WASI.
+ * 
+ * # Variants
+ * 
+ * ## `"unknown"`
+ * 
+ * The type of the descriptor or file is unknown or is different from
+ * any of the other types specified.
+ * 
+ * ## `"block-device"`
+ * 
+ * The descriptor refers to a block device inode.
+ * 
+ * ## `"character-device"`
+ * 
+ * The descriptor refers to a character device inode.
+ * 
+ * ## `"directory"`
+ * 
+ * The descriptor refers to a directory inode.
+ * 
+ * ## `"fifo"`
+ * 
+ * The descriptor refers to a named pipe.
+ * 
+ * ## `"symbolic-link"`
+ * 
+ * The file refers to a symbolic link inode.
+ * 
+ * ## `"regular-file"`
+ * 
+ * The descriptor refers to a regular file inode.
+ * 
+ * ## `"socket"`
+ * 
+ * The descriptor refers to a socket.
+ */
+export type DescriptorType = 'unknown' | 'block-device' | 'character-device' | 'directory' | 'fifo' | 'symbolic-link' | 'regular-file' | 'socket';
+/**
+ * Descriptor flags.
+ * 
+ * Note: This was called `fdflags` in earlier versions of WASI.
+ */
+export interface DescriptorFlags {
+  /**
+   * Read mode: Data can be read.
+   */
+  read?: boolean,
+  /**
+   * Write mode: Data can be written to.
+   */
+  write?: boolean,
+  /**
+   * Request that writes be performed according to synchronized I/O file
+   * integrity completion. The data stored in the file and the file's
+   * metadata are synchronized. This is similar to `O_SYNC` in POSIX.
+   * 
+   * The precise semantics of this operation have not yet been defined for
+   * WASI. At this time, it should be interpreted as a request, and not a
+   * requirement.
+   */
+  fileIntegritySync?: boolean,
+  /**
+   * Request that writes be performed according to synchronized I/O data
+   * integrity completion. Only the data stored in the file is
+   * synchronized. This is similar to `O_DSYNC` in POSIX.
+   * 
+   * The precise semantics of this operation have not yet been defined for
+   * WASI. At this time, it should be interpreted as a request, and not a
+   * requirement.
+   */
+  dataIntegritySync?: boolean,
+  /**
+   * Requests that reads be performed at the same level of integrety
+   * requested for writes. This is similar to `O_RSYNC` in POSIX.
+   * 
+   * The precise semantics of this operation have not yet been defined for
+   * WASI. At this time, it should be interpreted as a request, and not a
+   * requirement.
+   */
+  requestedWriteSync?: boolean,
+  /**
+   * Mutating directories mode: Directory contents may be mutated.
+   * 
+   * When this flag is unset on a descriptor, operations using the
+   * descriptor which would create, rename, delete, modify the data or
+   * metadata of filesystem objects, or obtain another handle which
+   * would permit any of those, shall fail with `error-code::read-only` if
+   * they would otherwise succeed.
+   * 
+   * This may only be set on directories.
+   */
+  mutateDirectory?: boolean,
+}
 /**
  * Flags determining the method of how paths are resolved.
  */
@@ -431,17 +532,122 @@ export interface Modes {
   executable?: boolean,
 }
 /**
+ * Access type used by `access-at`.
+ */
+export type AccessType = AccessTypeAccess | AccessTypeExists;
+/**
+ * Test for readability, writeability, or executability.
+ */
+export interface AccessTypeAccess {
+  tag: 'access',
+  val: Modes,
+}
+/**
+ * Test whether the path exists.
+ */
+export interface AccessTypeExists {
+  tag: 'exists',
+}
+/**
  * Number of hard links to an inode.
  */
 export type LinkCount = bigint;
+/**
+ * Identifier for a device containing a file system. Can be used in
+ * combination with `inode` to uniquely identify a file or directory in
+ * the filesystem.
+ */
+export type Device = bigint;
 /**
  * Filesystem object serial number that is unique within its file system.
  */
 export type Inode = bigint;
 /**
- * File size or length of a region within a file.
+ * File attributes.
+ * 
+ * Note: This was called `filestat` in earlier versions of WASI.
  */
-export type Filesize = bigint;
+export interface DescriptorStat {
+  /**
+   * Device ID of device containing the file.
+   */
+  device: Device,
+  /**
+   * File serial number.
+   */
+  inode: Inode,
+  /**
+   * File type.
+   */
+  type: DescriptorType,
+  /**
+   * Number of hard links to the file.
+   */
+  linkCount: LinkCount,
+  /**
+   * For regular files, the file size in bytes. For symbolic links, the
+   * length in bytes of the pathname contained in the symbolic link.
+   */
+  size: Filesize,
+  /**
+   * Last data access timestamp.
+   */
+  dataAccessTimestamp: Datetime,
+  /**
+   * Last data modification timestamp.
+   */
+  dataModificationTimestamp: Datetime,
+  /**
+   * Last file status change timestamp.
+   */
+  statusChangeTimestamp: Datetime,
+}
+/**
+ * When setting a timestamp, this gives the value to set it to.
+ */
+export type NewTimestamp = NewTimestampNoChange | NewTimestampNow | NewTimestampTimestamp;
+/**
+ * Leave the timestamp set to its previous value.
+ */
+export interface NewTimestampNoChange {
+  tag: 'no-change',
+}
+/**
+ * Set the timestamp to the current time of the system clock associated
+ * with the filesystem.
+ */
+export interface NewTimestampNow {
+  tag: 'now',
+}
+/**
+ * Set the timestamp to the given value.
+ */
+export interface NewTimestampTimestamp {
+  tag: 'timestamp',
+  val: Datetime,
+}
+/**
+ * A directory entry.
+ */
+export interface DirectoryEntry {
+  /**
+   * The serial number of the object referred to by this directory entry.
+   * May be none if the inode value is not known.
+   * 
+   * When this is none, libc implementations might do an extra `stat-at`
+   * call to retrieve the inode number to fill their `d_ino` fields, so
+   * implementations which can set this to a non-none value should do so.
+   */
+  inode?: Inode,
+  /**
+   * The type of the file referred to by this directory entry.
+   */
+  type: DescriptorType,
+  /**
+   * The name of the object.
+   */
+  name: string,
+}
 /**
  * Error codes returned by functions, similar to `errno` in POSIX.
  * Not all of these error codes are returned by the functions provided by this
@@ -600,209 +806,6 @@ export type Filesize = bigint;
  */
 export type ErrorCode = 'access' | 'would-block' | 'already' | 'bad-descriptor' | 'busy' | 'deadlock' | 'quota' | 'exist' | 'file-too-large' | 'illegal-byte-sequence' | 'in-progress' | 'interrupted' | 'invalid' | 'io' | 'is-directory' | 'loop' | 'too-many-links' | 'message-size' | 'name-too-long' | 'no-device' | 'no-entry' | 'no-lock' | 'insufficient-memory' | 'insufficient-space' | 'not-directory' | 'not-empty' | 'not-recoverable' | 'unsupported' | 'no-tty' | 'no-such-device' | 'overflow' | 'not-permitted' | 'pipe' | 'read-only' | 'invalid-seek' | 'text-file-busy' | 'cross-device';
 /**
- * A stream of directory entries.
- * 
- * This [represents a stream of `dir-entry`](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Streams).
- */
-export type DirectoryEntryStream = number;
-/**
- * Identifier for a device containing a file system. Can be used in
- * combination with `inode` to uniquely identify a file or directory in
- * the filesystem.
- */
-export type Device = bigint;
-/**
- * The type of a filesystem object referenced by a descriptor.
- * 
- * Note: This was called `filetype` in earlier versions of WASI.
- * 
- * # Variants
- * 
- * ## `"unknown"`
- * 
- * The type of the descriptor or file is unknown or is different from
- * any of the other types specified.
- * 
- * ## `"block-device"`
- * 
- * The descriptor refers to a block device inode.
- * 
- * ## `"character-device"`
- * 
- * The descriptor refers to a character device inode.
- * 
- * ## `"directory"`
- * 
- * The descriptor refers to a directory inode.
- * 
- * ## `"fifo"`
- * 
- * The descriptor refers to a named pipe.
- * 
- * ## `"symbolic-link"`
- * 
- * The file refers to a symbolic link inode.
- * 
- * ## `"regular-file"`
- * 
- * The descriptor refers to a regular file inode.
- * 
- * ## `"socket"`
- * 
- * The descriptor refers to a socket.
- */
-export type DescriptorType = 'unknown' | 'block-device' | 'character-device' | 'directory' | 'fifo' | 'symbolic-link' | 'regular-file' | 'socket';
-/**
- * A directory entry.
- */
-export interface DirectoryEntry {
-  /**
-   * The serial number of the object referred to by this directory entry.
-   * May be none if the inode value is not known.
-   * 
-   * When this is none, libc implementations might do an extra `stat-at`
-   * call to retrieve the inode number to fill their `d_ino` fields, so
-   * implementations which can set this to a non-none value should do so.
-   */
-  inode?: Inode,
-  /**
-   * The type of the file referred to by this directory entry.
-   */
-  type: DescriptorType,
-  /**
-   * The name of the object.
-   */
-  name: string,
-}
-/**
- * Descriptor flags.
- * 
- * Note: This was called `fdflags` in earlier versions of WASI.
- */
-export interface DescriptorFlags {
-  /**
-   * Read mode: Data can be read.
-   */
-  read?: boolean,
-  /**
-   * Write mode: Data can be written to.
-   */
-  write?: boolean,
-  /**
-   * Request that writes be performed according to synchronized I/O file
-   * integrity completion. The data stored in the file and the file's
-   * metadata are synchronized. This is similar to `O_SYNC` in POSIX.
-   * 
-   * The precise semantics of this operation have not yet been defined for
-   * WASI. At this time, it should be interpreted as a request, and not a
-   * requirement.
-   */
-  fileIntegritySync?: boolean,
-  /**
-   * Request that writes be performed according to synchronized I/O data
-   * integrity completion. Only the data stored in the file is
-   * synchronized. This is similar to `O_DSYNC` in POSIX.
-   * 
-   * The precise semantics of this operation have not yet been defined for
-   * WASI. At this time, it should be interpreted as a request, and not a
-   * requirement.
-   */
-  dataIntegritySync?: boolean,
-  /**
-   * Requests that reads be performed at the same level of integrety
-   * requested for writes. This is similar to `O_RSYNC` in POSIX.
-   * 
-   * The precise semantics of this operation have not yet been defined for
-   * WASI. At this time, it should be interpreted as a request, and not a
-   * requirement.
-   */
-  requestedWriteSync?: boolean,
-  /**
-   * Mutating directories mode: Directory contents may be mutated.
-   * 
-   * When this flag is unset on a descriptor, operations using the
-   * descriptor which would create, rename, delete, modify the data or
-   * metadata of filesystem objects, or obtain another handle which
-   * would permit any of those, shall fail with `error-code::read-only` if
-   * they would otherwise succeed.
-   * 
-   * This may only be set on directories.
-   */
-  mutateDirectory?: boolean,
-}
-/**
- * A descriptor is a reference to a filesystem object, which may be a file,
- * directory, named pipe, special file, or other object on which filesystem
- * calls may be made.
- * 
- * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
- */
-export type Descriptor = number;
-/**
- * When setting a timestamp, this gives the value to set it to.
- */
-export type NewTimestamp = NewTimestampNoChange | NewTimestampNow | NewTimestampTimestamp;
-/**
- * Leave the timestamp set to its previous value.
- */
-export interface NewTimestampNoChange {
-  tag: 'no-change',
-}
-/**
- * Set the timestamp to the current time of the system clock associated
- * with the filesystem.
- */
-export interface NewTimestampNow {
-  tag: 'now',
-}
-/**
- * Set the timestamp to the given value.
- */
-export interface NewTimestampTimestamp {
-  tag: 'timestamp',
-  val: Datetime,
-}
-/**
- * File attributes.
- * 
- * Note: This was called `filestat` in earlier versions of WASI.
- */
-export interface DescriptorStat {
-  /**
-   * Device ID of device containing the file.
-   */
-  device: Device,
-  /**
-   * File serial number.
-   */
-  inode: Inode,
-  /**
-   * File type.
-   */
-  type: DescriptorType,
-  /**
-   * Number of hard links to the file.
-   */
-  linkCount: LinkCount,
-  /**
-   * For regular files, the file size in bytes. For symbolic links, the
-   * length in bytes of the pathname contained in the symbolic link.
-   */
-  size: Filesize,
-  /**
-   * Last data access timestamp.
-   */
-  dataAccessTimestamp: Datetime,
-  /**
-   * Last data modification timestamp.
-   */
-  dataModificationTimestamp: Datetime,
-  /**
-   * Last file status change timestamp.
-   */
-  statusChangeTimestamp: Datetime,
-}
-/**
  * File or memory access pattern advisory information.
  * 
  * # Variants
@@ -839,19 +842,16 @@ export interface DescriptorStat {
  */
 export type Advice = 'normal' | 'sequential' | 'random' | 'will-need' | 'dont-need' | 'no-reuse';
 /**
- * Access type used by `access-at`.
+ * A descriptor is a reference to a filesystem object, which may be a file,
+ * directory, named pipe, special file, or other object on which filesystem
+ * calls may be made.
+ * 
+ * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
  */
-export type AccessType = AccessTypeAccess | AccessTypeExists;
+export type Descriptor = number;
 /**
- * Test for readability, writeability, or executability.
+ * A stream of directory entries.
+ * 
+ * This [represents a stream of `dir-entry`](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Streams).
  */
-export interface AccessTypeAccess {
-  tag: 'access',
-  val: Modes,
-}
-/**
- * Test whether the path exists.
- */
-export interface AccessTypeExists {
-  tag: 'exists',
-}
+export type DirectoryEntryStream = number;
