@@ -15,10 +15,7 @@ fn main() -> Result<()> {
             let preview2 = *resolve
                 .package_names
                 .iter()
-                .find(|(name, _)| {
-                    eprintln!("{:?}", name);
-                    name.name == "preview"
-                })
+                .find(|(name, _)| name.name == "preview")
                 .unwrap()
                 .1;
 
