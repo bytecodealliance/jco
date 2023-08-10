@@ -1134,14 +1134,42 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(ptr);
             }
 
-            Instruction::HandleLift { handle, name, ty } => {
-                uwriteln!(self.src, "\"LIFT {:?} {:?} {:?}\"", handle, name, ty);
-                results.push("lifted".into());
+            Instruction::HandleLift { handle, name, .. } => {
+                let tmp = self.tmp();
+                let var = format!("rsc{tmp}");
+                // TODO: create the class (class MyResource extends Resource)
+                //       then do a class name lookup here
+                let class_name = name.to_upper_camel_case();
+                let is_own = match handle {
+                    Handle::Own(_) => true,
+                    Handle::Borrow(_) => false,
+                };
+                let resource_lift = self.intrinsic(Intrinsic::ResourceFromHandle);
+                uwriteln!(
+                    self.src,
+                    "const {var} = {resource_lift}({}, {class_name}, {is_own});",
+                    operands[0]
+                );
+                results.push(var);
             }
 
-            Instruction::HandleLower { handle, name, ty } => {
-                uwriteln!(self.src, "\"LOWER {:?} {:?} {:?}\"", handle, name, ty);
-                results.push("lowered".into());
+            Instruction::HandleLower { handle, name, .. } => {
+                let tmp = self.tmp();
+                let var = format!("rsc{tmp}");
+                // TODO: create the class (class MyResource extends Resource)
+                //       then do a class name lookup here
+                let class_name = name.to_upper_camel_case();
+                let is_own = match handle {
+                    Handle::Own(_) => true,
+                    Handle::Borrow(_) => false,
+                };
+                let resource_lower = self.intrinsic(Intrinsic::ResourceToHandle);
+                uwriteln!(
+                    self.src,
+                    "const {var} = {resource_lower}({}, {class_name}, {is_own});",
+                    operands[0]
+                );
+                results.push(var);
             }
 
             i => unimplemented!("{:?}", i),

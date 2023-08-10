@@ -717,9 +717,7 @@ impl<'a> Instantiator<'a, '_> {
         match def {
             CoreDef::Export(e) => self.core_export(e),
             CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
-            CoreDef::InstanceFlags(i) => {
-                format!("instanceFlags{}", i.as_u32())
-            }
+            CoreDef::InstanceFlags(i) => format!("instanceFlags{}", i.as_u32()),
         }
     }
 
