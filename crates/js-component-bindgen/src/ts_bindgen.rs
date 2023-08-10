@@ -329,23 +329,30 @@ impl TsBindgen {
     ) -> String {
         let local_name =
             self.generate_interface(export_name, resolve, id, files, AbiVariant::GuestExport);
-        if instantiation {
-            uwriteln!(
-                self.export_object,
-                "{}: typeof {local_name},",
-                maybe_quote_id(export_name)
-            );
-        } else {
-            if export_name != maybe_quote_id(export_name) {
-                // TODO: TypeScript doesn't currently support
-                // non-identifier exports
-                // tracking in https://github.com/microsoft/TypeScript/issues/40594
-            } else {
+
+        // Only export the original interface name if it comes from an external interface,
+        // BUT export "inline" interface if the original and aliased names are the same,
+        // because it would be skipped later
+        // See https://github.com/bytecodealliance/jco/pull/111
+        if export_name.contains(":") || export_name == local_name {
+            if instantiation {
                 uwriteln!(
                     self.export_object,
-                    "export const {}: typeof {local_name};",
+                    "{}: typeof {local_name},",
                     maybe_quote_id(export_name)
                 );
+            } else {
+                if export_name != maybe_quote_id(export_name) {
+                    // TODO: TypeScript doesn't currently support
+                    // non-identifier exports
+                    // tracking in https://github.com/microsoft/TypeScript/issues/40594
+                } else {
+                    uwriteln!(
+                        self.export_object,
+                        "export const {}: typeof {local_name};",
+                        maybe_quote_id(export_name)
+                    );
+                }
             }
         }
         local_name
