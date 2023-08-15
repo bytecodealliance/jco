@@ -21,6 +21,7 @@ transpile-bindgen = []
 anyhow = { workspace = true }
 heck = { workspace = true }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
+wit-bindgen-core = { workspace = true }
 wit-component = { workspace = true }
 wit-parser = { workspace = true }
 indexmap = { workspace = true }

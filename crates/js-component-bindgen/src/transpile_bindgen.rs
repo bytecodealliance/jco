@@ -24,9 +24,10 @@ use wasmtime_environ::{
     },
 };
 use wasmtime_environ::{EntityIndex, PrimaryMap};
+use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
-use wit_parser::abi::{AbiVariant, LiftLower};
-use wit_parser::*;
+use wit_parser::abi::AbiVariant;
+use wit_parser::{Function, Resolve, SizeAlign, WorldId, WorldItem, WorldKey};
 
 #[derive(Default, Clone)]
 pub struct TranspileOpts {
@@ -895,7 +896,8 @@ impl<'a> Instantiator<'a, '_> {
             },
             src: source::Source::default(),
         };
-        self.resolve.call(
+        abi::call(
+            self.resolve,
             abi,
             match abi {
                 AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,

@@ -5,8 +5,9 @@ use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
+use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
-use wit_parser::abi::{Bindgen, Bitcast, Instruction, WasmType};
+use wit_parser::abi::WasmType;
 use wit_parser::*;
 
 #[derive(PartialEq)]
