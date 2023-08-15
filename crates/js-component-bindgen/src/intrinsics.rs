@@ -18,11 +18,8 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
-    ResourceConstructor,
-    ResourceFromHandle,
-    ResourceHandleSymbol,
     ResourceOwnSymbol,
-    ResourceToHandle,
+    ResourceHandleSymbol,
     ThrowInvalidBool,
     ThrowUninitialized,
     /// Implementation of https://tc39.es/ecma262/#sec-tobigint64.
@@ -67,11 +64,6 @@ pub fn render_intrinsics(
     }
     if intrinsics.contains(&Intrinsic::Utf16Encode) {
         intrinsics.insert(Intrinsic::IsLE);
-    }
-    if intrinsics.contains(&Intrinsic::ResourceFromHandle) {
-        intrinsics.insert(Intrinsic::ResourceHandleSymbol);
-        intrinsics.insert(Intrinsic::ResourceOwnSymbol);
-        intrinsics.insert(Intrinsic::ResourceConstructor);
     }
 
     if intrinsics.contains(&Intrinsic::F32ToI32) || intrinsics.contains(&Intrinsic::I32ToF32) {
@@ -187,90 +179,12 @@ pub fn render_intrinsics(
                 }
             "),
 
-            Intrinsic::ResourceConstructor => output.push_str("
-                const resourceRegistry = new FinalizationRegistry(deconstructor => deconstructor());
-
-                // NOTE: The resources implementation in JCO **does not work**!
-                //       This code is all a purely experimental work in progress, and is likely entirely wrong.
-                //       If you are seeing this, feel free to hack it up to your heart's content and contribute a PR!
-                class Resource {
-                    #live = true;
-                    constructor () {
-                        if (this.$deconstructor) {
-                            resourceRegistry.register(this, this.$deconstructor);
-                        }
-                        Object.defineProperty(instance, resourceHandleSymbol, {
-                            enumerable: false,
-                            writable: false,
-                            configurable: false,
-                            value: null
-                        });
-                        Object.defineProperty(instance, resourceOwnSymbol, {
-                            enumerable: false,
-                            writable: false,
-                            configurable: false,
-                            value: true
-                        });
-                    }
-                    // drop may be called, but doesn't have to be
-                    // if not called explicitly, finalization registry will pick it up
-                    $drop () {
-                      if (!this.#live)
-                        throw new ReferenceError(`Resource has already been dropped`);
-                      if (this.#deconstructor)
-                        this.#deconstructor();
-                      this.#live = false;
-                    }
-                    static $is (x) {
-                      try {
-                        if (!x.#live) {
-                          throw new ReferenceError(`Resource has already been disposed`);
-                        }
-                        return true;
-                      } catch {
-                        return false;
-                      }
-                    }
-                }
-            "),
-
             Intrinsic::ResourceHandleSymbol => output.push_str("
                 const resourceHandleSymbol = Symbol();
             "),
 
             Intrinsic::ResourceOwnSymbol => output.push_str("
                 const resourceOwnSymbol = Symbol();
-            "),
-
-            Intrinsic::ResourceFromHandle => output.push_str("
-                function resourceFromHandle (handle, resourceClass, isOwn) {
-                    const instance = Object.create(resourceClass.prototype);
-                    Object.defineProperty(instance, resourceHandleSymbol, {
-                        enumerable: false,
-                        writable: false,
-                        configurable: false,
-                        value: handle
-                    });
-                    Object.defineProperty(instance, resourceOwnSymbol, {
-                        enumerable: false,
-                        writable: false,
-                        configurable: false,
-                        value: isOwn
-                    });
-                    return instance;
-                }
-            "),
-
-            Intrinsic::ResourceToHandle => output.push_str("
-                function resourceToHandle (resource, resourceClass, isOwn) {
-                    if (!(resource instanceof resourceClass)) {
-                        throw new Error(`Resource must be an instance of {resourceClass.name}`);
-                    }
-                    if (isOwn && !resource[ownSymbol]) {
-                        throw new Error('Expected an own resource');
-                    }
-                    return resource[handleSymbol];
-                }
             "),
 
 
@@ -480,11 +394,8 @@ impl Intrinsic {
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
             Intrinsic::FetchCompile => "fetchCompile",
-            Intrinsic::ResourceConstructor => "Resource",
-            Intrinsic::ResourceFromHandle => "resourceFromHandle",
-            Intrinsic::ResourceHandleSymbol => "handleSymbol",
-            Intrinsic::ResourceOwnSymbol => "handleSymbol",
-            Intrinsic::ResourceToHandle => "resourceToHandle",
+            Intrinsic::ResourceOwnSymbol => "resourceOwnSymbol",
+            Intrinsic::ResourceHandleSymbol => "resourceHandleSymbol",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
             Intrinsic::ThrowUninitialized => "throwUninitialized",
             Intrinsic::ToBigInt64 => "toInt64",

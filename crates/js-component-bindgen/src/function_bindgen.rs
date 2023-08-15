@@ -17,6 +17,7 @@ pub enum ErrHandling {
 }
 
 pub struct FunctionBindgen<'a> {
+    pub world: WorldId,
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
     pub valid_lifting_optimization: bool,
     pub sizes: &'a SizeAlign,
@@ -26,6 +27,7 @@ pub struct FunctionBindgen<'a> {
     pub block_storage: Vec<source::Source>,
     pub blocks: Vec<(String, Vec<String>)>,
     pub params: Vec<String>,
+    pub instance_idx: Option<u32>,
     pub memory: Option<&'a String>,
     pub realloc: Option<&'a String>,
     pub post_return: Option<&'a String>,
@@ -1135,38 +1137,43 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::HandleLift { handle, name, .. } => {
-                let tmp = self.tmp();
-                let var = format!("rsc{tmp}");
-                // TODO: create the class (class MyResource extends Resource)
-                //       then do a class name lookup here
-                let class_name = name.to_upper_camel_case();
                 let is_own = match handle {
                     Handle::Own(_) => true,
                     Handle::Borrow(_) => false,
                 };
-                let resource_lift = self.intrinsic(Intrinsic::ResourceFromHandle);
-                uwriteln!(
+                let tmp = self.tmp();
+                let rsc_var = format!("rsc{tmp}");
+                // TODO: unique class name assignment management
+                let class_name = name.to_upper_camel_case();
+
+                let resource_handle = self.intrinsic(Intrinsic::ResourceHandleSymbol);
+                let resource_own = self.intrinsic(Intrinsic::ResourceOwnSymbol);
+
+                uwrite!(
                     self.src,
-                    "const {var} = {resource_lift}({}, {class_name}, {is_own});",
-                    operands[0]
+                    "const {rsc_var} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
+                    Object.defineProperty({rsc_var}, {resource_handle}, {{
+                        value: {}
+                    }});
+                    Object.defineProperty({rsc_var}, {resource_own}, {{
+                        value: {}
+                    }});
+                    ",
+                    operands[0],
+                    if is_own { "true" } else { "false" }
                 );
-                results.push(var);
+                results.push(rsc_var);
             }
 
-            Instruction::HandleLower { handle, name, .. } => {
+            Instruction::HandleLower { .. } => {
                 let tmp = self.tmp();
                 let var = format!("rsc{tmp}");
-                // TODO: create the class (class MyResource extends Resource)
-                //       then do a class name lookup here
-                let class_name = name.to_upper_camel_case();
-                let is_own = match handle {
-                    Handle::Own(_) => true,
-                    Handle::Borrow(_) => false,
-                };
-                let resource_lower = self.intrinsic(Intrinsic::ResourceToHandle);
-                uwriteln!(
+                let resource_handle = self.intrinsic(Intrinsic::ResourceHandleSymbol);
+                uwrite!(
                     self.src,
-                    "const {var} = {resource_lower}({}, {class_name}, {is_own});",
+                    "const {var} = {}[{resource_handle}];
+                    if (!{var}) throw new Error('Expected a resource');
+                    ",
                     operands[0]
                 );
                 results.push(var);

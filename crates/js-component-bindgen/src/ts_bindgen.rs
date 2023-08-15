@@ -468,7 +468,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
-                TypeDefKind::Resource => todo!(),
+                TypeDefKind::Resource => {}
                 TypeDefKind::Handle(_) => todo!(),
             }
         }
@@ -525,7 +525,17 @@ impl<'a> TsInterface<'a> {
                     TypeDefKind::Stream(_) => todo!("anonymous stream"),
                     TypeDefKind::Unknown => unreachable!(),
                     TypeDefKind::Resource => todo!(),
-                    TypeDefKind::Handle(_) => todo!(),
+                    TypeDefKind::Handle(h) => {
+                        let ty = match h {
+                            Handle::Own(r) => r,
+                            Handle::Borrow(r) => r,
+                        };
+                        let ty = &self.resolve.types[*ty];
+                        if let Some(name) = &ty.name {
+                            return self.src.push_str(&name.to_upper_camel_case());
+                        }
+                        panic!("anonymous resource handle");
+                    }
                 }
             }
         }
@@ -584,9 +594,9 @@ impl<'a> TsInterface<'a> {
 
         let param_start = match &func.kind {
             FunctionKind::Freestanding => 0,
-            FunctionKind::Method(_) => todo!(),
-            FunctionKind::Static(_) => todo!(),
-            FunctionKind::Constructor(_) => todo!(),
+            FunctionKind::Method(_) => 1,
+            FunctionKind::Static(_) => 0,
+            FunctionKind::Constructor(_) => 0,
         };
 
         for (i, (name, ty)) in func.params[param_start..].iter().enumerate() {

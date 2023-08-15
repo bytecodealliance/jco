@@ -12,6 +12,7 @@ use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
+use wasmtime_environ::component::Resource;
 use wasmtime_environ::{
     component,
     component::{
@@ -109,6 +110,7 @@ pub fn transpile_bindgen(
     }
 
     let mut instantiator = Instantiator {
+        resource_idx: 0,
         src: Source::default(),
         sizes: SizeAlign::default(),
         gen: &mut bindgen,
@@ -293,6 +295,7 @@ impl<'a> JsBindgen<'a> {
 ///
 /// This is the main structure for parsing the output of Wasmtime.
 struct Instantiator<'a, 'b> {
+    resource_idx: u32,
     src: Source,
     gen: &'a mut JsBindgen<'b>,
     modules: &'a PrimaryMap<StaticModuleIndex, core::Translation<'a>>,
@@ -371,9 +374,50 @@ impl<'a> Instantiator<'a, '_> {
                 assert_eq!(i, *index);
             }
 
-            Trampoline::ResourceNew(_) => unimplemented!(),
-            Trampoline::ResourceRep(_) => unimplemented!(),
-            Trampoline::ResourceDrop(_) => unimplemented!(),
+            Trampoline::ResourceNew(idx) => {
+                let i = i.as_u32();
+                let idx = idx.as_u32();
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}(rep) {{
+                        resourceTable{idx}.set(rep, {{ handleCnt: 1 }});
+                        const handle = handleCount{idx}++;
+                        handleTable{idx}.set(handle, rep);
+                        return handle;
+                    }}
+                "
+                );
+            }
+            Trampoline::ResourceRep(idx) => {
+                let i = i.as_u32();
+                let idx = idx.as_u32();
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}(idx) {{
+                        const handle = handleTable{idx}.get(idx);
+                        if (!handle || !handle.table === idx) {{
+                            throw new Error('Internal error: resource.rep can only be called for internal handles.');
+                        }}
+                        return handle.rep;
+                    }}
+                ");
+            }
+            Trampoline::ResourceDrop(idx) => {
+                let i = i.as_u32();
+                let idx = idx.as_u32();
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}(idx) {{
+                        const handle = handleTable{idx}.get(idx);
+                        handleTable{idx}.delete(idx);
+                        const resourceEntry = resourceTable{idx}.get(handle.rep);
+                        if (--resourceEntry.handleCnt === 0) {{
+                            resourceTable{idx}.delete(handle.rep);
+                        }}
+                    }}
+                "
+                );
+            }
             Trampoline::ResourceTransferOwn => unimplemented!(),
             Trampoline::ResourceTransferBorrow => unimplemented!(),
             Trampoline::ResourceEnterCall => unimplemented!(),
@@ -412,7 +456,22 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
             }
 
-            GlobalInitializer::Resource(_) => unimplemented!(),
+            GlobalInitializer::Resource(Resource {
+                dtor: _dtor,
+                index: _index,
+                instance: _instance,
+                ..
+            }) => {
+                let idx = self.resource_idx;
+                self.resource_idx += 1;
+                uwrite!(
+                    self.src.js,
+                    "   
+                        let resourceTable{idx} = new Map(), handleTable{idx} = new Map();
+                        let handleCount{idx} = 0;
+                    ",
+                );
+            }
         }
     }
 
@@ -503,6 +562,7 @@ impl<'a> Instantiator<'a, '_> {
             .len();
         self.bindgen(
             nparams,
+            false,
             &callee_name,
             options,
             func,
@@ -539,6 +599,7 @@ impl<'a> Instantiator<'a, '_> {
     fn bindgen(
         &mut self,
         nparams: usize,
+        this_ref: bool,
         callee: &str,
         opts: &CanonicalOptions,
         func: &Function,
@@ -559,9 +620,16 @@ impl<'a> Instantiator<'a, '_> {
 
         self.src.js("(");
         let mut params = Vec::new();
+        let mut first = true;
         for i in 0..nparams {
-            if i > 0 {
+            if i == 0 && this_ref {
+                params.push("this".into());
+                continue;
+            }
+            if !first {
                 self.src.js(", ");
+            } else {
+                first = false;
             }
             let param = format!("arg{i}");
             self.src.js(&param);
@@ -580,6 +648,7 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let mut f = FunctionBindgen {
+            world: self.world.clone(),
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
             sizes: &self.sizes,
@@ -596,6 +665,7 @@ impl<'a> Instantiator<'a, '_> {
             callee,
             memory: memory.as_ref(),
             realloc: realloc.as_ref(),
+            instance_idx: Some(opts.instance.as_u32()),
             tmp: 0,
             params,
             post_return: post_return.as_ref(),
@@ -752,9 +822,22 @@ impl<'a> Instantiator<'a, '_> {
                     func,
                     options,
                 } => {
-                    let local_name = self.gen.local_names.create_once(export_name).to_string();
+                    let fn_name = FnName::parse(export_name);
+                    let local_name = if let Some(resource) = fn_name.resource() {
+                        self.gen
+                            .local_names
+                            .get_or_create(
+                                &format!("resource:{resource}"),
+                                &resource.to_upper_camel_case(),
+                            )
+                            .0
+                    } else {
+                        self.gen.local_names.create_once(export_name)
+                    }
+                    .to_string();
                     self.export_bindgen(
                         &local_name,
+                        fn_name,
                         func,
                         options,
                         match item {
@@ -762,11 +845,19 @@ impl<'a> Instantiator<'a, '_> {
                             WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
                         },
                     );
-                    self.gen.esm_bindgen.add_export_binding(
-                        None,
-                        local_name,
-                        export_name.to_lower_camel_case(),
-                    );
+                    if let Some(resource) = fn_name.resource() {
+                        self.gen.esm_bindgen.add_export_binding(
+                            None,
+                            local_name,
+                            resource.to_upper_camel_case(),
+                        );
+                    } else {
+                        self.gen.esm_bindgen.add_export_binding(
+                            None,
+                            local_name,
+                            export_name.to_lower_camel_case(),
+                        );
+                    }
                 }
                 Export::Instance(iface) => {
                     let id = match item {
@@ -779,19 +870,41 @@ impl<'a> Instantiator<'a, '_> {
                             Export::Type(_) => continue, // ignored
                             _ => unreachable!(),
                         };
-                        let local_func_name =
-                            self.gen.local_names.create_once(func_name).to_string();
+                        let fn_name = FnName::parse(func_name);
+                        let local_name = if let Some(resource) = fn_name.resource() {
+                            self.gen
+                                .local_names
+                                .get_or_create(
+                                    &format!("resource:{export_name}:{resource}"),
+                                    &resource.to_upper_camel_case(),
+                                )
+                                .0
+                        } else {
+                            self.gen.local_names.create_once(func_name)
+                        }
+                        .to_string();
+
                         self.export_bindgen(
-                            &local_func_name,
+                            &local_name,
+                            fn_name,
                             func,
                             options,
                             &self.resolve.interfaces[id].functions[func_name],
                         );
-                        self.gen.esm_bindgen.add_export_binding(
-                            Some(export_name),
-                            local_func_name,
-                            func_name.to_lower_camel_case(),
-                        );
+
+                        if let Some(resource) = fn_name.resource() {
+                            self.gen.esm_bindgen.add_export_binding(
+                                Some(export_name),
+                                local_name,
+                                resource.to_upper_camel_case(),
+                            );
+                        } else {
+                            self.gen.esm_bindgen.add_export_binding(
+                                Some(export_name),
+                                local_name,
+                                func_name.to_lower_camel_case(),
+                            );
+                        }
                     }
                 }
 
@@ -808,21 +921,95 @@ impl<'a> Instantiator<'a, '_> {
 
     fn export_bindgen(
         &mut self,
-        name: &str,
+        local_name: &str,
+        fn_name: FnName,
         def: &CoreDef,
         options: &CanonicalOptions,
         func: &Function,
     ) {
-        uwrite!(self.src.js, "\nfunction {name}");
+        match fn_name {
+            FnName::Default(_) => uwrite!(self.src.js, "\nfunction {local_name}"),
+            FnName::Method(_, method) => {
+                let method_name = method.to_lower_camel_case();
+                uwrite!(
+                    self.src.js,
+                    "\n{local_name}.prototype.{method_name} = function {method_name}",
+                );
+            }
+            FnName::Static(_, method) => {
+                let method_name = method.to_lower_camel_case();
+                uwriteln!(
+                    self.src.js,
+                    "\n{local_name}.prototype.{method_name} = function {method_name}",
+                );
+            }
+            FnName::Constructor(name) => {
+                if name.to_upper_camel_case() == local_name {
+                    uwrite!(
+                        self.src.js,
+                        "
+                        class {local_name} {{
+                            constructor"
+                    );
+                } else {
+                    uwrite!(
+                        self.src.js,
+                        "
+                        const {local_name} = class {} {{
+                            constructor",
+                        name.to_upper_camel_case()
+                    );
+                }
+            }
+        }
         let callee = self.core_def(def);
         self.bindgen(
             func.params.len(),
+            matches!(fn_name, FnName::Method(..)),
             &callee,
             options,
             func,
             AbiVariant::GuestExport,
         );
-        self.src.js("\n");
+        match fn_name {
+            FnName::Default(_) => self.src.js("\n"),
+            FnName::Method(..) | FnName::Static(..) => self.src.js(";\n"),
+            FnName::Constructor(_) => self.src.js("\n}\n"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FnName<'a> {
+    Default(&'a str),
+    Method(&'a str, &'a str),
+    Static(&'a str, &'a str),
+    Constructor(&'a str),
+}
+
+impl<'a> FnName<'a> {
+    fn parse(name: &'a str) -> FnName<'a> {
+        if name.starts_with("[method]") || name.starts_with("[static]") {
+            let method_name = &name[name.find('.').unwrap() + 1..];
+            let class_name = &name[8..name.len() - method_name.len() - 1];
+            if name.starts_with("[method]") {
+                FnName::Method(class_name, method_name)
+            } else {
+                FnName::Static(class_name, method_name)
+            }
+        } else if name.starts_with("[constructor]") {
+            FnName::Constructor(&name[13..])
+        } else {
+            FnName::Default(name)
+        }
+    }
+    fn resource(&'a self) -> Option<&'a str> {
+        match self {
+            FnName::Default(_) => None,
+            FnName::Method(base, _) => Some(base),
+            FnName::Static(base, _) => Some(base),
+            FnName::Constructor(base) => Some(base),
+        }
     }
 }
 
