@@ -1171,18 +1171,15 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let class_name = name.to_upper_camel_case();
 
-                let resource_handle = self.intrinsic(Intrinsic::ResourceHandleSymbol);
-                let resource_own = self.intrinsic(Intrinsic::ResourceOwnSymbol);
+                let resource_weak_map = self.intrinsic(Intrinsic::ResourceWeakMap);
 
                 if !is_imported {
                     uwrite!(
                         self.src,
                         "const {rsc_var} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
-                        Object.defineProperty({rsc_var}, {resource_handle}, {{ value: {} }});
-                        Object.defineProperty({rsc_var}, {resource_own}, {{ value: {} }});
+                        {resource_weak_map}.set({rsc_var}, {});
                         ",
                         operands[0],
-                        if is_own { "true" } else { "false" }
                     );
                     // when we share an own handle with JS, we need to add a finalizer
                     // note: should this also apply to borrow given we can't control borrows?
@@ -1197,7 +1194,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     // imported handles need to come out of the instance capture
                     uwriteln!(
                         self.src,
-                        "const {rsc_var} = resourceTable{rid}.get({});",
+                        "const {rsc_var} = resourceImports{rid}.get({});",
                         operands[0]
                     );
                 }
@@ -1211,8 +1208,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 let (rid, is_imported) = self.resource_map[&resource_idx];
                 let tmp = self.tmp();
                 let var = format!("rsc{tmp}");
-                let resource_handle = self.intrinsic(Intrinsic::ResourceHandleSymbol);
-                uwriteln!(self.src, "let {var} = {}[{resource_handle}];", operands[0]);
+                let resource_weak_map = self.intrinsic(Intrinsic::ResourceWeakMap);
+                uwriteln!(
+                    self.src,
+                    "let {var} = {resource_weak_map}.get({});",
+                    operands[0]
+                );
                 if !is_imported {
                     uwriteln!(
                         self.src,
@@ -1224,11 +1225,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(
                         self.src,
                         "if ({var} === undefined) {{
-                            const rep = resourceCnt{rid}++;
-                            resourceTable{rid}.set(rep, {});
+                            const rep = resourceImportCnt{rid}++;
+                            resourceImports{rid}.set(rep, {});
                             {var} = handleCnt{rid}++;
-                            Object.defineProperty({}, {resource_handle}, {{ value: {var} }});
-                            handleTable{rid}.set({var}, {{ table: resourceTable{rid}, rep, own: {} }});
+                            {resource_weak_map}.set({}, {var});
+                            handleTable{rid}.set({var}, {{ table: {rid}, rep, own: {} }});
                         }}",
                         operands[0],
                         operands[0],

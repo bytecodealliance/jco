@@ -347,39 +347,12 @@ impl<'a> Instantiator<'a, '_> {
 
         // populate imported resource maps
         for (idx, _import) in self.component.imported_resources.iter() {
-            // let (import_index, path) = &self.component.imports[*import];
-            // let (import_name, _) = &self.component.import_types[*import_index];
-            // let world_key = &self.imports[import_name];
-
-            // // nested interfaces only currently possible through mapping
-            // let (import_specifier, mut maybe_iface_member) =
-            //     map_import(&self.gen.opts.map, &import_name);
-
-            // let (func, func_name, iface_name) =
-            //     match &self.resolve.worlds[self.world].imports[world_key] {
-            //         WorldItem::Function(func) => {
-            //             assert_eq!(path.len(), 0);
-            //             (func, import_name, None)
-            //         }
-            //         WorldItem::Interface(i) => {
-            //             assert_eq!(path.len(), 1);
-            //             let iface = &self.resolve.interfaces[*i];
-            //             let func = &iface.functions[&path[0]];
-            //             (
-            //                 func,
-            //                 &path[0],
-            //                 Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
-            //             )
-            //         }
-            //         WorldItem::Type(_) => unreachable!(),
-            //     };
-
-            // imported resources need a resource cnt as we must assign the rep
             let rid = self.resource_map.len() as u32;
             uwriteln!(
                 self.src.js,
-                "const resourceTable{rid} = new Map(), handleTable{rid} = new Map();
-                let resourceCnt{rid} = 0, handleCnt{rid} = 0;"
+                "const handleTable{rid} = new Map();
+                const resourceImports{rid} = new Map();
+                let handleCnt{rid} = 0, resourceImportCnt{rid} = 0;"
             );
             self.resource_map.insert(idx, (rid, true));
         }
@@ -434,8 +407,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "function trampoline{i}(rep) {{
                         const handle = handleCount{rid}++;
-                        resourceTable{rid}.set(rep, handle);
-                        handleTable{rid}.set(handle, {{ table: resourceTable{rid}, rep, own: true }});
+                        handleTable{rid}.set(handle, {{ table: {rid}, rep, own: true }});
                         return handle;
                     }}
                 "
@@ -450,7 +422,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "function trampoline{i}(handle) {{
                         const handleEntry = handleTable{rid}.get(handle);
-                        if (!handleEntry || handleEntry.table !== resourceTable{rid}) {{
+                        if (!handleEntry || handleEntry.table !== {rid}) {{
                             throw new Error('Resource error: resource.rep can only be called for internal component handles.');
                         }}
                         return handleEntry.rep;
@@ -476,7 +448,14 @@ impl<'a> Instantiator<'a, '_> {
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
-                        Some(format!("\n{}(rep);", self.core_def(&dtor)))
+                        Some(format!(
+                            "if (handleEntry.own) {{
+                                const {{ rep }} = handleEntry;
+                                {}(rep);
+                            }}
+                            ",
+                            self.core_def(&dtor)
+                        ))
                     } else {
                         None
                     }
@@ -492,11 +471,7 @@ impl<'a> Instantiator<'a, '_> {
                         if (!handleEntry) {{
                             throw new Error(`Resource error: resource.drop called on a handle ${{handle}} that has already been dropped or does not exist.`);
                         }}
-                        handleTable{rid}.delete(handle);
-                        if (handleEntry.own) {{
-                            const {{ table, rep }} = handleEntry;
-                            table.delete(rep);{}
-                        }}
+                        handleTable{rid}.delete(handle);{}
                     }}
                     ",
                     dtor.as_deref().unwrap_or("")
@@ -556,13 +531,12 @@ impl<'a> Instantiator<'a, '_> {
                 uwrite!(
                     self.src.js,
                     "   
-                        const resourceTable{rid} = new Map(), handleTable{rid} = new Map();
+                        const handleTable{rid} = new Map();
                         const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
                             const handleEntry = handleTable{rid}.get(handle);
                             if (handleEntry) {{
                                 const {{ rep }} = handleEntry;
-                                handleTable{rid}.delete(handle);
-                                resourceTable{rid}.delete(rep);{}
+                                handleTable{rid}.delete(handle);{}
                             }}
                         }});
                         let handleCount{rid} = 0;

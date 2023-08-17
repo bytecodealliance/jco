@@ -18,8 +18,7 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
-    ResourceOwnSymbol,
-    ResourceHandleSymbol,
+    ResourceWeakMap,
     ThrowInvalidBool,
     ThrowUninitialized,
     /// Implementation of https://tc39.es/ecma262/#sec-tobigint64.
@@ -179,12 +178,8 @@ pub fn render_intrinsics(
                 }
             "),
 
-            Intrinsic::ResourceHandleSymbol => output.push_str("
-                const resourceHandleSymbol = Symbol();
-            "),
-
-            Intrinsic::ResourceOwnSymbol => output.push_str("
-                const resourceOwnSymbol = Symbol();
+            Intrinsic::ResourceWeakMap => output.push_str("
+                const resourceWeakMap = new WeakMap();
             "),
 
             Intrinsic::ToInt32 => output.push_str("
@@ -393,8 +388,7 @@ impl Intrinsic {
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
             Intrinsic::FetchCompile => "fetchCompile",
-            Intrinsic::ResourceOwnSymbol => "resourceOwnSymbol",
-            Intrinsic::ResourceHandleSymbol => "resourceHandleSymbol",
+            Intrinsic::ResourceWeakMap => "resourceWeakMap",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
             Intrinsic::ThrowUninitialized => "throwUninitialized",
             Intrinsic::ToBigInt64 => "toInt64",
