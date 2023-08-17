@@ -79,7 +79,12 @@ impl EsmBindgen {
     pub fn populate_export_aliases(&mut self) {
         for expt_name in self.exports.keys() {
             if let Some(path_idx) = expt_name.rfind('/') {
-                let alias = &expt_name[path_idx + 1..].to_lower_camel_case();
+                let end = if let Some(version_idx) = expt_name.rfind('@') {
+                    version_idx
+                } else {
+                    expt_name.len()
+                };
+                let alias = &expt_name[path_idx + 1..end].to_lower_camel_case();
                 if !self.exports.contains_key(alias) && !self.export_aliases.contains_key(alias) {
                     self.export_aliases
                         .insert(alias.to_string(), expt_name.to_string());

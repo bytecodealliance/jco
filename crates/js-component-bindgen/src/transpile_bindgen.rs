@@ -435,7 +435,7 @@ impl<'a> Instantiator<'a, '_> {
                     "function trampoline{i}(rep) {{
                         const handle = handleCount{rid}++;
                         resourceTable{rid}.set(rep, handle);
-                        handleTable{rid}.set(handle, {{ table: {rid}, rep, own: true }});
+                        handleTable{rid}.set(handle, {{ table: resourceTable{rid}, rep, own: true }});
                         return handle;
                     }}
                 "
@@ -450,7 +450,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "function trampoline{i}(handle) {{
                         const handleEntry = handleTable{rid}.get(handle);
-                        if (!handleEntry || handleEntry.table !== {rid}) {{
+                        if (!handleEntry || handleEntry.table !== resourceTable{rid}) {{
                             throw new Error('Resource error: resource.rep can only be called for internal component handles.');
                         }}
                         return handleEntry.rep;
@@ -484,7 +484,6 @@ impl<'a> Instantiator<'a, '_> {
                     None
                 };
                 let (rid, _) = self.resource_map[&resource.ty];
-                let resource_tables = self.gen.intrinsic(Intrinsic::ResourceTables);
 
                 uwrite!(
                     self.src.js,
@@ -496,8 +495,7 @@ impl<'a> Instantiator<'a, '_> {
                         handleTable{rid}.delete(handle);
                         if (handleEntry.own) {{
                             const {{ table, rep }} = handleEntry;
-                            const resourceTable = {resource_tables}[table];
-                            resourceTable.delete(rep);{}
+                            table.delete(rep);{}
                         }}
                     }}
                     ",
@@ -549,7 +547,6 @@ impl<'a> Instantiator<'a, '_> {
                 ..
             }) => {
                 let rid = self.resource_map.len() as u32;
-                let resource_tables = self.gen.intrinsic(Intrinsic::ResourceTables);
                 let dtor = if let Some(dtor) = dtor {
                     format!("\n{}(rep);", self.core_def(dtor))
                 } else {
@@ -560,7 +557,6 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "   
                         const resourceTable{rid} = new Map(), handleTable{rid} = new Map();
-                        {resource_tables}[{rid}] = resourceTable{rid};
                         const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
                             const handleEntry = handleTable{rid}.get(handle);
                             if (handleEntry) {{
@@ -1166,7 +1162,18 @@ pub fn parse_world_key<'a>(name: &'a str) -> Option<(&'a str, &'a str, &'a str)>
     };
     let ns = &name[0..registry_idx];
     match name.rfind('/') {
-        Some(sep_idx) => Some((ns, &name[registry_idx + 1..sep_idx], &name[sep_idx + 1..])),
+        Some(sep_idx) => {
+            let end = if let Some(version_idx) = name.rfind('@') {
+                version_idx
+            } else {
+                name.len()
+            };
+            Some((
+                ns,
+                &name[registry_idx + 1..sep_idx],
+                &name[sep_idx + 1..end],
+            ))
+        }
         // interface is a namespace, function is a default export
         None => Some((ns, &name[registry_idx + 1..], "".as_ref())),
     }

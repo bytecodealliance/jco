@@ -22,7 +22,6 @@ pub enum ErrHandling {
 /// to the unique global resource id used to key the resource tables for this resource
 /// i.e. so these identifiers are accessible at:
 /// - resourceTable{x}, handleTable{x}, finalizationRegistry{x} handleCnt{x}
-/// - resourceTables[] keyed by x being resourceTableX
 /// - imported tables also have resourceCnt for rep assignment
 /// for the return u32 value x
 /// The second bool is true if it is an imported resource
@@ -1217,19 +1216,19 @@ impl Bindgen for FunctionBindgen<'_> {
                 if !is_imported {
                     uwriteln!(
                         self.src,
-                        "if (!{var}) throw new Error('Expected a resource');"
+                        "if ({var} === undefined) throw new Error('Expected a resource');"
                     );
                 } else {
                     // imported resources wont have a handle symbol so we need
                     // to support initial "capture" when that is the case
                     uwriteln!(
                         self.src,
-                        "if (!{var}) {{
+                        "if ({var} === undefined) {{
                             const rep = resourceCnt{rid}++;
                             resourceTable{rid}.set(rep, {});
                             {var} = handleCnt{rid}++;
                             Object.defineProperty({}, {resource_handle}, {{ value: {var} }});
-                            handleTable{rid}.set({var}, {{ table: {rid}, rep, own: {} }});
+                            handleTable{rid}.set({var}, {{ table: resourceTable{rid}, rep, own: {} }});
                         }}",
                         operands[0],
                         operands[0],
