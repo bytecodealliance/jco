@@ -2,9 +2,10 @@ use crate::intrinsics::Intrinsic;
 use crate::source;
 use crate::{uwrite, uwriteln};
 use heck::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
+use wasmtime_environ::component::ResourceIndex;
 use wit_component::StringEncoding;
 use wit_parser::abi::{Bindgen, Bitcast, Instruction, WasmType};
 use wit_parser::*;
@@ -16,8 +17,19 @@ pub enum ErrHandling {
     ResultCatchHandler,
 }
 
+/// Map used for function bindgen within a given component
+/// Mapping from the resource index in that component (internal or external)
+/// to the unique global resource id used to key the resource tables for this resource
+/// i.e. so these identifiers are accessible at:
+/// - resourceTable{x}, handleTable{x}, finalizationRegistry{x} handleCnt{x}
+/// - resourceTables[] keyed by x being resourceTableX
+/// - imported tables also have resourceCnt for rep assignment
+/// for the return u32 value x
+/// The second bool is true if it is an imported resource
+pub type ResourceMap = BTreeMap<ResourceIndex, (u32, bool)>;
+
 pub struct FunctionBindgen<'a> {
-    pub world: WorldId,
+    pub resource_map: &'a ResourceMap,
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
     pub valid_lifting_optimization: bool,
     pub sizes: &'a SizeAlign,
@@ -27,7 +39,6 @@ pub struct FunctionBindgen<'a> {
     pub block_storage: Vec<source::Source>,
     pub blocks: Vec<(String, Vec<String>)>,
     pub params: Vec<String>,
-    pub instance_idx: Option<u32>,
     pub memory: Option<&'a String>,
     pub realloc: Option<&'a String>,
     pub post_return: Option<&'a String>,
@@ -41,6 +52,21 @@ impl FunctionBindgen<'_> {
         self.tmp += 1;
         ret
     }
+
+    // assumption: ty.index() is the resource index
+    // so we can use it in the resource map
+    // if this is wrong we will need to figure out another method here...
+    fn get_resource_index(&self, resolve: &Resolve, ty: TypeId) -> ResourceIndex {
+        match &resolve.types[ty].kind {
+            TypeDefKind::Resource => ResourceIndex::from_u32(ty.index() as u32),
+            TypeDefKind::Type(ty) => match ty {
+                Type::Id(ty) => self.get_resource_index(resolve, *ty),
+                _ => panic!("Unexpected resource type"),
+            },
+            _ => panic!("Unexpected resource type"),
+        }
+    }
+
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
         return intrinsic.name().to_string();
@@ -1137,45 +1163,79 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::HandleLift { handle, name, .. } => {
-                let is_own = match handle {
-                    Handle::Own(_) => true,
-                    Handle::Borrow(_) => false,
-                };
+                let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
+                let resource_idx = self.get_resource_index(resolve, *ty);
+                let (rid, is_imported) = self.resource_map[&resource_idx];
+                let is_own = matches!(handle, Handle::Own(_));
                 let tmp = self.tmp();
                 let rsc_var = format!("rsc{tmp}");
-                // TODO: unique class name assignment management
+
                 let class_name = name.to_upper_camel_case();
 
                 let resource_handle = self.intrinsic(Intrinsic::ResourceHandleSymbol);
                 let resource_own = self.intrinsic(Intrinsic::ResourceOwnSymbol);
 
-                uwrite!(
-                    self.src,
-                    "const {rsc_var} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
-                    Object.defineProperty({rsc_var}, {resource_handle}, {{
-                        value: {}
-                    }});
-                    Object.defineProperty({rsc_var}, {resource_own}, {{
-                        value: {}
-                    }});
-                    ",
-                    operands[0],
-                    if is_own { "true" } else { "false" }
-                );
+                if !is_imported {
+                    uwrite!(
+                        self.src,
+                        "const {rsc_var} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
+                        Object.defineProperty({rsc_var}, {resource_handle}, {{ value: {} }});
+                        Object.defineProperty({rsc_var}, {resource_own}, {{ value: {} }});
+                        ",
+                        operands[0],
+                        if is_own { "true" } else { "false" }
+                    );
+                    // when we share an own handle with JS, we need to add a finalizer
+                    // note: should this also apply to borrow given we can't control borrows?
+                    if is_own {
+                        uwriteln!(
+                            self.src,
+                            "finalizationRegistry{rid}.register({rsc_var}, {});",
+                            operands[0]
+                        );
+                    }
+                } else {
+                    // imported handles need to come out of the instance capture
+                    uwriteln!(
+                        self.src,
+                        "const {rsc_var} = resourceTable{rid}.get({});",
+                        operands[0]
+                    );
+                }
                 results.push(rsc_var);
             }
 
-            Instruction::HandleLower { .. } => {
+            Instruction::HandleLower { handle, .. } => {
+                let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
+                let is_own = matches!(handle, Handle::Own(_));
+                let resource_idx = self.get_resource_index(resolve, *ty);
+                let (rid, is_imported) = self.resource_map[&resource_idx];
                 let tmp = self.tmp();
                 let var = format!("rsc{tmp}");
                 let resource_handle = self.intrinsic(Intrinsic::ResourceHandleSymbol);
-                uwrite!(
-                    self.src,
-                    "const {var} = {}[{resource_handle}];
-                    if (!{var}) throw new Error('Expected a resource');
-                    ",
-                    operands[0]
-                );
+                uwriteln!(self.src, "let {var} = {}[{resource_handle}];", operands[0]);
+                if !is_imported {
+                    uwriteln!(
+                        self.src,
+                        "if (!{var}) throw new Error('Expected a resource');"
+                    );
+                } else {
+                    // imported resources wont have a handle symbol so we need
+                    // to support initial "capture" when that is the case
+                    uwriteln!(
+                        self.src,
+                        "if (!{var}) {{
+                            const rep = resourceCnt{rid}++;
+                            resourceTable{rid}.set(rep, {});
+                            {var} = handleCnt{rid}++;
+                            Object.defineProperty({}, {resource_handle}, {{ value: {var} }});
+                            handleTable{rid}.set({var}, {{ table: {rid}, rep, own: {} }});
+                        }}",
+                        operands[0],
+                        operands[0],
+                        if is_own { "true" } else { "false" }
+                    );
+                }
                 results.push(var);
             }
 

@@ -1,6 +1,40 @@
 use heck::ToLowerCamelCase;
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FnName<'a> {
+    Default(&'a str),
+    Method(&'a str, &'a str),
+    Static(&'a str, &'a str),
+    Constructor(&'a str),
+}
+
+impl<'a> FnName<'a> {
+    pub(crate) fn parse(name: &'a str) -> FnName<'a> {
+        if name.starts_with("[method]") || name.starts_with("[static]") {
+            let method_name = &name[name.find('.').unwrap() + 1..];
+            let class_name = &name[8..name.len() - method_name.len() - 1];
+            if name.starts_with("[method]") {
+                FnName::Method(class_name, method_name)
+            } else {
+                FnName::Static(class_name, method_name)
+            }
+        } else if name.starts_with("[constructor]") {
+            FnName::Constructor(&name[13..])
+        } else {
+            FnName::Default(name)
+        }
+    }
+    pub(crate) fn resource(&'a self) -> Option<&'a str> {
+        match self {
+            FnName::Default(_) => None,
+            FnName::Method(base, _) => Some(base),
+            FnName::Static(base, _) => Some(base),
+            FnName::Constructor(base) => Some(base),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct LocalNames {
     // map from exact name to generated local name

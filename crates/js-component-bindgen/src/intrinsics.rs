@@ -20,6 +20,7 @@ pub enum Intrinsic {
     IsLE,
     ResourceOwnSymbol,
     ResourceHandleSymbol,
+    ResourceTables,
     ThrowInvalidBool,
     ThrowUninitialized,
     /// Implementation of https://tc39.es/ecma262/#sec-tobigint64.
@@ -187,6 +188,9 @@ pub fn render_intrinsics(
                 const resourceOwnSymbol = Symbol();
             "),
 
+            Intrinsic::ResourceTables => output.push_str("
+                const resourceTables = [];
+            "),
 
             Intrinsic::ToInt32 => output.push_str("
                 function toInt32(val) {
@@ -396,6 +400,7 @@ impl Intrinsic {
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::ResourceOwnSymbol => "resourceOwnSymbol",
             Intrinsic::ResourceHandleSymbol => "resourceHandleSymbol",
+            Intrinsic::ResourceTables => "resourceTables",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
             Intrinsic::ThrowUninitialized => "throwUninitialized",
             Intrinsic::ToBigInt64 => "toInt64",

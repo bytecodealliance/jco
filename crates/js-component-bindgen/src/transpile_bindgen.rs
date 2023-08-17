@@ -1,9 +1,9 @@
 use crate::core;
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
-use crate::function_bindgen::{ErrHandling, FunctionBindgen};
+use crate::function_bindgen::{ErrHandling, FunctionBindgen, ResourceMap};
 use crate::intrinsics::{render_intrinsics, Intrinsic};
-use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
+use crate::names::{maybe_quote_id, maybe_quote_member, FnName, LocalNames};
 use crate::source;
 use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
@@ -12,7 +12,7 @@ use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::Resource;
+use wasmtime_environ::component::{ComponentTypes, Resource};
 use wasmtime_environ::{
     component,
     component::{
@@ -76,6 +76,7 @@ pub fn transpile_bindgen(
     name: &str,
     component: &ComponentTranslation,
     modules: &PrimaryMap<StaticModuleIndex, core::Translation<'_>>,
+    types: &ComponentTypes,
     resolve: &Resolve,
     id: WorldId,
     opts: TranspileOpts,
@@ -110,7 +111,7 @@ pub fn transpile_bindgen(
     }
 
     let mut instantiator = Instantiator {
-        resource_idx: 0,
+        resource_map: BTreeMap::new(),
         src: Source::default(),
         sizes: SizeAlign::default(),
         gen: &mut bindgen,
@@ -120,6 +121,7 @@ pub fn transpile_bindgen(
         world: id,
         translation: component,
         component: &component.component,
+        types,
         imports,
         exports,
         lowering_options: Default::default(),
@@ -295,12 +297,13 @@ impl<'a> JsBindgen<'a> {
 ///
 /// This is the main structure for parsing the output of Wasmtime.
 struct Instantiator<'a, 'b> {
-    resource_idx: u32,
     src: Source,
     gen: &'a mut JsBindgen<'b>,
     modules: &'a PrimaryMap<StaticModuleIndex, core::Translation<'a>>,
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
+    types: &'a ComponentTypes,
     resolve: &'a Resolve,
+    resource_map: ResourceMap,
     world: WorldId,
     sizes: SizeAlign,
     component: &'a Component,
@@ -317,7 +320,16 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         for (i, trampoline) in self.translation.trampolines.iter() {
-            self.trampoline(i, trampoline);
+            let Trampoline::LowerImport {
+                index,
+                lower_ty: _,
+                options,
+            } = trampoline
+            else {
+                continue;
+            };
+            let i = self.lowering_options.push((options, i));
+            assert_eq!(i, *index);
         }
 
         // To avoid uncaught promise rejection errors, we attach an intermediate
@@ -333,8 +345,52 @@ impl<'a> Instantiator<'a, '_> {
             uwriteln!(self.src.js_init, "]).catch(() => {{}});");
         }
 
+        // populate imported resource maps
+        for (idx, _import) in self.component.imported_resources.iter() {
+            // let (import_index, path) = &self.component.imports[*import];
+            // let (import_name, _) = &self.component.import_types[*import_index];
+            // let world_key = &self.imports[import_name];
+
+            // // nested interfaces only currently possible through mapping
+            // let (import_specifier, mut maybe_iface_member) =
+            //     map_import(&self.gen.opts.map, &import_name);
+
+            // let (func, func_name, iface_name) =
+            //     match &self.resolve.worlds[self.world].imports[world_key] {
+            //         WorldItem::Function(func) => {
+            //             assert_eq!(path.len(), 0);
+            //             (func, import_name, None)
+            //         }
+            //         WorldItem::Interface(i) => {
+            //             assert_eq!(path.len(), 1);
+            //             let iface = &self.resolve.interfaces[*i];
+            //             let func = &iface.functions[&path[0]];
+            //             (
+            //                 func,
+            //                 &path[0],
+            //                 Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
+            //             )
+            //         }
+            //         WorldItem::Type(_) => unreachable!(),
+            //     };
+
+            // imported resources need a resource cnt as we must assign the rep
+            let rid = self.resource_map.len() as u32;
+            uwriteln!(
+                self.src.js,
+                "const resourceTable{rid} = new Map(), handleTable{rid} = new Map();
+                let resourceCnt{rid} = 0, handleCnt{rid} = 0;"
+            );
+            self.resource_map.insert(idx, (rid, true));
+        }
+
         for init in self.component.initializers.iter() {
             self.instantiation_global_initializer(init);
+        }
+
+        // Trampolines after initializers so we have static module indices
+        for (i, trampoline) in self.translation.trampolines.iter() {
+            self.trampoline(i, trampoline);
         }
 
         if self.gen.opts.instantiation {
@@ -347,6 +403,9 @@ impl<'a> Instantiator<'a, '_> {
 
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
         match trampoline {
+            // these are hoisted before initialization
+            Trampoline::LowerImport { .. } => {}
+
             // This is only used for a "degenerate component" which internally
             // has a function that always traps. While this should be trivial to
             // implement (generate a JS function that always throws) there's no
@@ -365,57 +424,84 @@ impl<'a> Instantiator<'a, '_> {
                 to64: _,
             } => unimplemented!(),
 
-            Trampoline::LowerImport {
-                index,
-                lower_ty: _,
-                options,
-            } => {
-                let i = self.lowering_options.push((options, i));
-                assert_eq!(i, *index);
-            }
-
-            Trampoline::ResourceNew(idx) => {
+            Trampoline::ResourceNew(resource) => {
                 let i = i.as_u32();
-                let idx = idx.as_u32();
+                let resource = &self.types[*resource];
+                // let instance_idx = resource.instance;
+                let (rid, _) = self.resource_map[&resource.ty];
+
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(rep) {{
-                        resourceTable{idx}.set(rep, {{ handleCnt: 1 }});
-                        const handle = handleCount{idx}++;
-                        handleTable{idx}.set(handle, rep);
+                        const handle = handleCount{rid}++;
+                        resourceTable{rid}.set(rep, handle);
+                        handleTable{rid}.set(handle, {{ table: {rid}, rep, own: true }});
                         return handle;
                     }}
                 "
                 );
             }
-            Trampoline::ResourceRep(idx) => {
+            Trampoline::ResourceRep(resource) => {
                 let i = i.as_u32();
-                let idx = idx.as_u32();
+                let resource = &self.types[*resource];
+                // let instance_idx = resource.instance;
+                let (rid, _) = self.resource_map[&resource.ty];
                 uwrite!(
                     self.src.js,
-                    "function trampoline{i}(idx) {{
-                        const handle = handleTable{idx}.get(idx);
-                        if (!handle || !handle.table === idx) {{
-                            throw new Error('Internal error: resource.rep can only be called for internal handles.');
+                    "function trampoline{i}(handle) {{
+                        const handleEntry = handleTable{rid}.get(handle);
+                        if (!handleEntry || handleEntry.table !== {rid}) {{
+                            throw new Error('Resource error: resource.rep can only be called for internal component handles.');
                         }}
-                        return handle.rep;
+                        return handleEntry.rep;
                     }}
                 ");
             }
-            Trampoline::ResourceDrop(idx) => {
+            Trampoline::ResourceDrop(resource) => {
                 let i = i.as_u32();
-                let idx = idx.as_u32();
+                let resource = &self.types[*resource];
+                // let instance_idx = resource.instance;
+                let dtor = if let Some(resource_idx) =
+                    self.component.defined_resource_index(resource.ty)
+                {
+                    let resource_def = self
+                        .component
+                        .initializers
+                        .iter()
+                        .filter_map(|i| match i {
+                            GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
+                            _ => None,
+                        })
+                        .next()
+                        .unwrap();
+
+                    if let Some(dtor) = &resource_def.dtor {
+                        Some(format!("\n{}(rep);", self.core_def(&dtor)))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                let (rid, _) = self.resource_map[&resource.ty];
+                let resource_tables = self.gen.intrinsic(Intrinsic::ResourceTables);
+
                 uwrite!(
                     self.src.js,
-                    "function trampoline{i}(idx) {{
-                        const handle = handleTable{idx}.get(idx);
-                        handleTable{idx}.delete(idx);
-                        const resourceEntry = resourceTable{idx}.get(handle.rep);
-                        if (--resourceEntry.handleCnt === 0) {{
-                            resourceTable{idx}.delete(handle.rep);
+                    "function trampoline{i}(handle) {{
+                        const handleEntry = handleTable{rid}.get(handle);
+                        if (!handleEntry) {{
+                            throw new Error(`Resource error: resource.drop called on a handle ${{handle}} that has already been dropped or does not exist.`);
+                        }}
+                        handleTable{rid}.delete(handle);
+                        if (handleEntry.own) {{
+                            const {{ table, rep }} = handleEntry;
+                            const resourceTable = {resource_tables}[table];
+                            resourceTable.delete(rep);{}
                         }}
                     }}
-                "
+                    ",
+                    dtor.as_deref().unwrap_or("")
                 );
             }
             Trampoline::ResourceTransferOwn => unimplemented!(),
@@ -457,20 +543,38 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             GlobalInitializer::Resource(Resource {
-                dtor: _dtor,
-                index: _index,
-                instance: _instance,
+                index,
+                instance: _,
+                dtor,
                 ..
             }) => {
-                let idx = self.resource_idx;
-                self.resource_idx += 1;
+                let rid = self.resource_map.len() as u32;
+                let resource_tables = self.gen.intrinsic(Intrinsic::ResourceTables);
+                let dtor = if let Some(dtor) = dtor {
+                    format!("\n{}(rep);", self.core_def(dtor))
+                } else {
+                    "".into()
+                };
+
                 uwrite!(
                     self.src.js,
                     "   
-                        let resourceTable{idx} = new Map(), handleTable{idx} = new Map();
-                        let handleCount{idx} = 0;
+                        const resourceTable{rid} = new Map(), handleTable{rid} = new Map();
+                        {resource_tables}[{rid}] = resourceTable{rid};
+                        const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
+                            const handleEntry = handleTable{rid}.get(handle);
+                            if (handleEntry) {{
+                                const {{ rep }} = handleEntry;
+                                handleTable{rid}.delete(handle);
+                                resourceTable{rid}.delete(rep);{}
+                            }}
+                        }});
+                        let handleCount{rid} = 0;
                     ",
+                    dtor
                 );
+                self.resource_map
+                    .insert(self.component.resource_index(*index), (rid, false));
             }
         }
     }
@@ -517,6 +621,9 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn lower_import(&mut self, index: LoweredIndex, import: RuntimeImportIndex) {
+        let (options, trampoline) = self.lowering_options[index];
+        uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
+
         let (import_index, path) = &self.component.imports[import];
         let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
@@ -544,22 +651,37 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        let (options, trampoline) = self.lowering_options[index];
+        let fn_name = FnName::parse(func_name);
 
-        // note, the same function can be lowered into multiple sub-components
-        let callee_name = self
-            .gen
-            .local_names
-            .get_or_create(&format!("import:{}-{}", import_name, func_name), func_name)
-            .0
-            .to_string();
+        let callee_name = match fn_name {
+            FnName::Default(name) => {
+                let callee_name = self
+                    .gen
+                    .local_names
+                    .get_or_create(&format!("import:{}-{}", import_name, name), name)
+                    .0
+                    .to_string();
+                callee_name
+            }
+            FnName::Method(resource, method) => format!(
+                "{}.prototype.{}.call",
+                resource.to_upper_camel_case(),
+                method.to_lower_camel_case()
+            ),
+            FnName::Static(resource, method) => format!(
+                "{}.{}",
+                resource.to_upper_camel_case(),
+                method.to_lower_camel_case()
+            ),
+            FnName::Constructor(resource) => format!("new {}", resource.to_upper_camel_case()),
+        };
 
-        uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
         let nparams = self
             .resolve
             .wasm_signature(AbiVariant::GuestImport, func)
             .params
             .len();
+
         self.bindgen(
             nparams,
             false,
@@ -570,6 +692,16 @@ impl<'a> Instantiator<'a, '_> {
         );
         uwriteln!(self.src.js, "");
 
+        let (import_name, binding_name) = match fn_name {
+            FnName::Default(_) => (func_name.to_lower_camel_case(), callee_name),
+            FnName::Method(resource, _)
+            | FnName::Static(resource, _)
+            | FnName::Constructor(resource) => (
+                resource.to_upper_camel_case(),
+                resource.to_upper_camel_case(),
+            ),
+        };
+
         // add the function import to the ESM bindgen
         if let Some(_iface_name) = iface_name {
             // mapping can be used to construct virtual nested namespaces
@@ -579,20 +711,19 @@ impl<'a> Instantiator<'a, '_> {
                     &[
                         import_specifier,
                         iface_member.to_lower_camel_case(),
-                        func_name.to_lower_camel_case(),
+                        import_name,
                     ],
-                    callee_name,
+                    binding_name,
                 );
             } else {
-                self.gen.esm_bindgen.add_import_binding(
-                    &[import_specifier, func_name.to_lower_camel_case()],
-                    callee_name,
-                );
+                self.gen
+                    .esm_bindgen
+                    .add_import_binding(&[import_specifier, import_name], binding_name);
             }
         } else {
             self.gen
                 .esm_bindgen
-                .add_import_binding(&[import_specifier], callee_name);
+                .add_import_binding(&[import_specifier], binding_name);
         }
     }
 
@@ -648,7 +779,7 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let mut f = FunctionBindgen {
-            world: self.world.clone(),
+            resource_map: &self.resource_map,
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
             sizes: &self.sizes,
@@ -665,7 +796,6 @@ impl<'a> Instantiator<'a, '_> {
             callee,
             memory: memory.as_ref(),
             realloc: realloc.as_ref(),
-            instance_idx: Some(opts.instance.as_u32()),
             tmp: 0,
             params,
             post_return: post_return.as_ref(),
@@ -938,9 +1068,9 @@ impl<'a> Instantiator<'a, '_> {
             }
             FnName::Static(_, method) => {
                 let method_name = method.to_lower_camel_case();
-                uwriteln!(
+                uwrite!(
                     self.src.js,
-                    "\n{local_name}.prototype.{method_name} = function {method_name}",
+                    "\n{local_name}.{method_name} = function {method_name}",
                 );
             }
             FnName::Constructor(name) => {
@@ -975,40 +1105,6 @@ impl<'a> Instantiator<'a, '_> {
             FnName::Default(_) => self.src.js("\n"),
             FnName::Method(..) | FnName::Static(..) => self.src.js(";\n"),
             FnName::Constructor(_) => self.src.js("\n}\n"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum FnName<'a> {
-    Default(&'a str),
-    Method(&'a str, &'a str),
-    Static(&'a str, &'a str),
-    Constructor(&'a str),
-}
-
-impl<'a> FnName<'a> {
-    fn parse(name: &'a str) -> FnName<'a> {
-        if name.starts_with("[method]") || name.starts_with("[static]") {
-            let method_name = &name[name.find('.').unwrap() + 1..];
-            let class_name = &name[8..name.len() - method_name.len() - 1];
-            if name.starts_with("[method]") {
-                FnName::Method(class_name, method_name)
-            } else {
-                FnName::Static(class_name, method_name)
-            }
-        } else if name.starts_with("[constructor]") {
-            FnName::Constructor(&name[13..])
-        } else {
-            FnName::Default(name)
-        }
-    }
-    fn resource(&'a self) -> Option<&'a str> {
-        match self {
-            FnName::Default(_) => None,
-            FnName::Method(base, _) => Some(base),
-            FnName::Static(base, _) => Some(base),
-            FnName::Constructor(base) => Some(base),
         }
     }
 }
