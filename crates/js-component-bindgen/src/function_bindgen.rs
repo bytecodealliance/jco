@@ -5,7 +5,7 @@ use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::{ResourceIndex, RuntimeComponentInstanceIndex};
+use wasmtime_environ::component::ResourceIndex;
 use wit_component::StringEncoding;
 use wit_parser::abi::{Bindgen, Bitcast, Instruction, WasmType};
 use wit_parser::*;
@@ -28,7 +28,7 @@ pub enum ErrHandling {
 /// Note that the unique value uniquely identifies the resource table
 /// so that if a resource is used by n components, there should be n different
 /// indices and spaces in use
-pub type ResourceMap = BTreeMap<(ResourceIndex, RuntimeComponentInstanceIndex), (u32, bool)>;
+pub type ResourceMap = BTreeMap<ResourceIndex, (u32, bool)>;
 
 pub struct FunctionBindgen<'a> {
     pub resource_map: &'a ResourceMap,
@@ -58,16 +58,9 @@ impl FunctionBindgen<'_> {
     // assumption: ty.index() is the resource index
     // so we can use it in the resource map
     // if this is wrong we will need to figure out another method here...
-    fn get_resource_index(
-        &self,
-        resolve: &Resolve,
-        ty: TypeId,
-    ) -> (ResourceIndex, RuntimeComponentInstanceIndex) {
+    fn get_resource_index(&self, resolve: &Resolve, ty: TypeId) -> ResourceIndex {
         match &resolve.types[ty].kind {
-            TypeDefKind::Resource => (
-                ResourceIndex::from_u32(ty.index() as u32),
-                RuntimeComponentInstanceIndex::from_u32(0),
-            ),
+            TypeDefKind::Resource => ResourceIndex::from_u32(ty.index() as u32),
             TypeDefKind::Type(ty) => match ty {
                 Type::Id(ty) => self.get_resource_index(resolve, *ty),
                 _ => panic!("Unexpected resource type"),
@@ -1208,6 +1201,16 @@ impl Bindgen for FunctionBindgen<'_> {
                         "const {rsc_var} = resourceImportInstances{rid}.get({});",
                         operands[0]
                     );
+                    // own lifting means we no longer have ownership and can release the capture
+                    // TODO: we still need the hook for invalidating borrows
+                    //       for this case as well
+                    if is_own {
+                        uwriteln!(
+                            self.src,
+                            "resourceImportInstances{rid}.delete({});",
+                            operands[0]
+                        );
+                    }
                 }
                 results.push(rsc_var);
             }

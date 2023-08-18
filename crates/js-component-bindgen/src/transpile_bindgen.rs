@@ -111,7 +111,8 @@ pub fn transpile_bindgen(
     }
 
     let mut instantiator = Instantiator {
-        resource_map: BTreeMap::new(),
+        resource_maps: Vec::new(),
+        resource_map_cnt: 0,
         src: Source::default(),
         sizes: SizeAlign::default(),
         gen: &mut bindgen,
@@ -303,7 +304,8 @@ struct Instantiator<'a, 'b> {
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
     types: &'a ComponentTypes,
     resolve: &'a Resolve,
-    resource_map: ResourceMap,
+    resource_maps: Vec<ResourceMap>,
+    resource_map_cnt: u32,
     world: WorldId,
     sizes: SizeAlign,
     component: &'a Component,
@@ -345,17 +347,23 @@ impl<'a> Instantiator<'a, '_> {
             uwriteln!(self.src.js_init, "]).catch(() => {{}});");
         }
 
-        // populate imported resource maps
+        // populate imported resource maps, one per runtime component instance index
+        self.resource_maps = (0..self.component.num_runtime_component_instances as usize)
+            .into_iter()
+            .map(|_| ResourceMap::new())
+            .collect();
         for (idx, import) in self.component.imported_resources.iter() {
             let instance_idx = RuntimeComponentInstanceIndex::from_u32(import.as_u32());
-            let rid = self.resource_map.len() as u32;
+            let rid = self.resource_map_cnt;
             uwriteln!(
                 self.src.js,
                 "const handleTable{rid} = new Map();
                 const resourceImportInstances{rid} = new Map();
                 let handleCnt{rid} = 0, resourceImportInstanceCnt{rid} = 0;"
             );
-            self.resource_map.insert((idx, instance_idx), (rid, true));
+            let resource_map = &mut self.resource_maps[instance_idx.as_u32() as usize];
+            resource_map.insert(idx, (rid, true));
+            self.resource_map_cnt += 1;
         }
 
         for init in self.component.initializers.iter() {
@@ -402,7 +410,7 @@ impl<'a> Instantiator<'a, '_> {
                 let i = i.as_u32();
                 let resource = &self.types[*resource];
                 let instance_idx = resource.instance;
-                let (rid, _) = self.resource_map[&(resource.ty, instance_idx)];
+                let (rid, _) = self.resource_maps[instance_idx.as_u32() as usize][&resource.ty];
 
                 uwrite!(
                     self.src.js,
@@ -418,7 +426,7 @@ impl<'a> Instantiator<'a, '_> {
                 let i = i.as_u32();
                 let resource = &self.types[*resource];
                 let instance_idx = resource.instance;
-                let (rid, _) = self.resource_map[&(resource.ty, instance_idx)];
+                let (rid, _) = self.resource_maps[instance_idx.as_u32() as usize][&resource.ty];
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
@@ -463,7 +471,7 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     None
                 };
-                let (rid, _) = self.resource_map[&(resource.ty, instance_idx)];
+                let (rid, _) = self.resource_maps[instance_idx.as_u32() as usize][&resource.ty];
 
                 uwrite!(
                     self.src.js,
@@ -522,7 +530,7 @@ impl<'a> Instantiator<'a, '_> {
                 dtor,
                 ..
             }) => {
-                let rid = self.resource_map.len() as u32;
+                let rid = self.resource_map_cnt;
                 let dtor = if let Some(dtor) = dtor {
                     format!("\n{}(rep);", self.core_def(dtor))
                 } else {
@@ -544,10 +552,9 @@ impl<'a> Instantiator<'a, '_> {
                     ",
                     dtor
                 );
-                self.resource_map.insert(
-                    (self.component.resource_index(*index), *instance),
-                    (rid, false),
-                );
+                self.resource_maps[instance.as_u32() as usize]
+                    .insert(self.component.resource_index(*index), (rid, false));
+                self.resource_map_cnt += 1;
             }
         }
     }
@@ -752,7 +759,7 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let mut f = FunctionBindgen {
-            resource_map: &self.resource_map,
+            resource_map: &self.resource_maps[opts.instance.as_u32() as usize],
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
             sizes: &self.sizes,
