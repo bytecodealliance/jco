@@ -5,7 +5,6 @@ use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::ResourceIndex;
 use wit_component::StringEncoding;
 use wit_parser::abi::{Bindgen, Bitcast, Instruction, WasmType};
 use wit_parser::*;
@@ -17,18 +16,35 @@ pub enum ErrHandling {
     ResultCatchHandler,
 }
 
-/// Map used for function bindgen within a given component
+///
+/// Map used for resource function bindgen within a given component
+///
 /// Mapping from the instance + resource index in that component (internal or external)
-/// to the unique global resource id used to key the resource tables for this resource
-/// i.e. so these identifiers are accessible at:
-/// - handleTable{x}, handleCnt{x}, finalizationRegistry{x}, unregisterWeakMap
-/// - imported tables also have resourceImportInstances{x} and resourceImportCnt{x} for capturing
-///   instances into an imported instance table
-/// The second bool is true if it is an imported resource
-/// Note that the unique value uniquely identifies the resource table
-/// so that if a resource is used by n components, there should be n different
-/// indices and spaces in use
-pub type ResourceMap = BTreeMap<ResourceIndex, (u32, bool)>;
+/// to the unique global resource id used to key the resource tables for this resource.
+///
+/// The id value uniquely identifies the resource table so that if a resource is used
+/// by n components, there should be n different indices and spaces in use. The map is
+/// therefore entirely unique and fully distinct for each instance's function bindgen.
+///
+/// The second bool is true if it is an imported resource.
+///
+/// For a given resource id {x}, the local variables are assumed:
+/// - handleTable{x}
+/// - handleCnt{x}
+///
+/// For component-defined resources:
+/// - finalizationRegistry{x}
+///
+/// handleTable internally will be allocated with { rep: i32, own: bool } entries
+///
+/// In the case of an imported resource tables, in place of "rep" we just store
+/// the direct JS object being referenced, since in JS the object is its own handle.
+///
+pub struct ResourceTable {
+    pub id: u32,
+    pub imported: bool,
+}
+pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
 pub struct FunctionBindgen<'a> {
     pub resource_map: &'a ResourceMap,
@@ -53,20 +69,6 @@ impl FunctionBindgen<'_> {
         let ret = self.tmp;
         self.tmp += 1;
         ret
-    }
-
-    // assumption: ty.index() is the resource index
-    // so we can use it in the resource map
-    // if this is wrong we will need to figure out another method here...
-    fn get_resource_index(&self, resolve: &Resolve, ty: TypeId) -> ResourceIndex {
-        match &resolve.types[ty].kind {
-            TypeDefKind::Resource => ResourceIndex::from_u32(ty.index() as u32),
-            TypeDefKind::Type(ty) => match ty {
-                Type::Id(ty) => self.get_resource_index(resolve, *ty),
-                _ => panic!("Unexpected resource type"),
-            },
-            _ => panic!("Unexpected resource type"),
-        }
     }
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
@@ -1166,113 +1168,102 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::HandleLift { handle, name, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
-                let resource_idx = self.get_resource_index(resolve, *ty);
-                let (rid, is_imported) = self.resource_map[&resource_idx];
+                let ResourceTable { id, imported } = self.resource_map[ty];
                 let is_own = matches!(handle, Handle::Own(_));
-                let tmp = self.tmp();
-                let rsc_var = format!("rsc{tmp}");
+                let rsc = format!("rsc{}", self.tmp());
 
                 let class_name = name.to_upper_camel_case();
 
-                let resource_weak_map = self.intrinsic(Intrinsic::ResourceWeakMap);
-
-                if !is_imported {
+                if !imported {
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
                     uwrite!(
                         self.src,
-                        "const {rsc_var} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
-                        {resource_weak_map}.set({rsc_var}, {});
+                        "const {rsc} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
+                        Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: handleTable{id}.get({}).rep }});
                         ",
                         operands[0],
                     );
-                    // when we share an own handle with JS, we need to add a finalizer
-                    // TODO: We need a hook for "invalidating" borrows after the call
-                    //       basically they should be added to the released set
+                    // when we share an own handle with JS, we need to remove the original handle
+                    // and add a finalizer to the JS handle created
                     if is_own {
                         uwriteln!(
                             self.src,
-                            "finalizationRegistry{rid}.register({rsc_var}, {}, {rsc_var});",
+                            "handleTable{id}.delete({});
+                            finalizationRegistry{id}.register({rsc}, {}, {rsc});",
+                            operands[0],
                             operands[0]
                         );
+                    } else {
+                        // TODO: invalidate borrows after the call
                     }
                 } else {
                     // imported handles need to come out of the instance capture
                     uwriteln!(
                         self.src,
-                        "const {rsc_var} = resourceImportInstances{rid}.get({});",
+                        "const {rsc} = handleTable{id}.get({}).rep;",
                         operands[0]
                     );
-                    // own lifting means we no longer have ownership and can release the capture
-                    // TODO: we still need the hook for invalidating borrows
-                    //       for this case as well
+                    // own lifting means we no longer have ownership and can release the handle
+                    // TODO: Borrow release must also release capture
                     if is_own {
-                        uwriteln!(
-                            self.src,
-                            "resourceImportInstances{rid}.delete({});",
-                            operands[0]
-                        );
+                        uwriteln!(self.src, "handleTable{id}.delete({});", operands[0]);
                     }
                 }
-                results.push(rsc_var);
+                results.push(rsc);
             }
 
             Instruction::HandleLower { handle, name, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
                 let is_own = matches!(handle, Handle::Own(_));
-                let resource_idx = self.get_resource_index(resolve, *ty);
-                let (rid, is_imported) = self.resource_map[&resource_idx];
-                let tmp = self.tmp();
-                let var = format!("rsc{tmp}");
-                let resource_weak_map = self.intrinsic(Intrinsic::ResourceWeakMap);
+                let ResourceTable { id, imported } = self.resource_map[ty];
                 let class_name = name.to_upper_camel_case();
-                uwriteln!(
-                    self.src,
-                    "let {var} = {resource_weak_map}.get({});",
-                    operands[0]
-                );
-                if !is_imported {
-                    let released_weak_set = self.intrinsic(Intrinsic::ResourceReleasedWeakSet);
+                let handle = format!("handle{}", self.tmp());
+                if !imported {
+                    let rep = format!("rep{}", self.tmp());
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
                     uwriteln!(
                         self.src,
-                        "if ({var} === undefined) {{
-                            if ({released_weak_set}.has({})) {{
-                                throw new Error('Resource handle was already released.');
-                            }} else {{
-                                throw new Error('Not a valid \"{}\" resource.');
-                            }}
-                        }}",
+                        "let {rep} = {}[{resource_symbol}];
+                        if ({rep} === null) {{
+                            throw new Error('\"{}\" resource lifetime already expired or transferred.');
+                        }}
+                        if ({rep} === undefined) {{
+                            throw new Error('Not a valid \"{}\" resource.');
+                        }}
+                        const {handle} = handleCnt{id}++;
+                        handleTable{id}.set({handle}, {{ rep: {rep}, own: {} }});
+                        ",
                         operands[0],
-                        class_name
+                        class_name,
+                        class_name,
+                        is_own
                     );
 
                     // lowered own handles have their finalizers deregistered
-                    // since the proxy lifecycle has now ended for this borrow handle
+                    // since the proxy lifecycle has now ended for this own handle
                     if is_own {
-                        let released_weak_set = self.intrinsic(Intrinsic::ResourceReleasedWeakSet);
+                        let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
                         uwriteln!(
                             self.src,
-                            "finalizationRegistry{rid}.unregister({});
-                            {released_weak_set}.add({});",
+                            "
+                            finalizationRegistry{id}.unregister({});
+                            Object.defineProperty({}, {resource_symbol}, {{ value: null }});",
                             operands[0],
                             operands[0],
                         );
                     }
                 } else {
-                    // imported resources wont have a handle symbol so we need
-                    // to support initial "capture" when that is the case
+                    // imported resources are always given a unique handle
+                    // their assigned rep is deduped across usage though
                     uwriteln!(
                         self.src,
-                        "if ({var} === undefined) {{
-                            const rep = resourceImportInstanceCnt{rid}++;
-                            resourceImportInstances{rid}.set(rep, {});
-                            {var} = handleCnt{rid}++;
-                            {resource_weak_map}.set({}, {var});
-                            handleTable{rid}.set({var}, {{ table: {rid}, rep }});
-                        }}",
+                        "const {handle} = handleCnt{id}++;
+                        handleTable{id}.set({handle}, {{ rep: {}, own: {} }});",
                         operands[0],
-                        operands[0],
+                        is_own,
                     );
                 }
-                results.push(var);
+                results.push(handle);
             }
 
             i => unimplemented!("{:?}", i),
