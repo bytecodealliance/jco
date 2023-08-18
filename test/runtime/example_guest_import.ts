@@ -14,13 +14,17 @@ export class Scalars {
   }
 }
 
+export function fetch (scalar) {
+  return new Scalars();
+}
+
 async function run() {
   const wasm = await import('../output/example_guest_import/example_guest_import.js');
 
   const x = new Scalars();
   const y = new Scalars();
-  strictEqual(wasm.front.handle(x), 0);
-  strictEqual(wasm.front.handle(y), 1);
+  strictEqual(wasm.front.handle(x), 2);
+  strictEqual(wasm.front.handle(y), 4);
 }
 
 // Async cycle handling
