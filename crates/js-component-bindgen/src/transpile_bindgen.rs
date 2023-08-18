@@ -3,7 +3,7 @@ use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{ErrHandling, FunctionBindgen, ResourceMap};
 use crate::intrinsics::{render_intrinsics, Intrinsic};
-use crate::names::{maybe_quote_id, maybe_quote_member, FnName, LocalNames};
+use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source;
 use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
@@ -631,29 +631,39 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        let fn_name = FnName::parse(func_name);
-
-        let callee_name = match fn_name {
-            FnName::Default(name) => {
+        let callee_name = match func.kind {
+            FunctionKind::Freestanding => {
                 let callee_name = self
                     .gen
                     .local_names
-                    .get_or_create(&format!("import:{}-{}", import_name, name), name)
+                    .get_or_create(
+                        &format!("import:{}-{}", import_name, &func.name),
+                        &func.name,
+                    )
                     .0
                     .to_string();
                 callee_name
             }
-            FnName::Method(resource, method) => format!(
-                "{}.prototype.{}.call",
-                resource.to_upper_camel_case(),
-                method.to_lower_camel_case()
-            ),
-            FnName::Static(resource, method) => format!(
-                "{}.{}",
-                resource.to_upper_camel_case(),
-                method.to_lower_camel_case()
-            ),
-            FnName::Constructor(resource) => format!("new {}", resource.to_upper_camel_case()),
+            FunctionKind::Method(ty) => {
+                let ty = &self.resolve.types[ty];
+                format!(
+                    "{}.prototype.{}.call",
+                    ty.name.as_ref().unwrap().to_upper_camel_case(),
+                    func.item_name().to_lower_camel_case()
+                )
+            }
+            FunctionKind::Static(ty) => {
+                let ty = &self.resolve.types[ty];
+                format!(
+                    "{}.{}",
+                    ty.name.as_ref().unwrap().to_upper_camel_case(),
+                    func.item_name().to_lower_camel_case()
+                )
+            }
+            FunctionKind::Constructor(ty) => {
+                let ty = &self.resolve.types[ty];
+                format!("new {}", ty.name.as_ref().unwrap().to_upper_camel_case())
+            }
         };
 
         let nparams = self
@@ -672,14 +682,15 @@ impl<'a> Instantiator<'a, '_> {
         );
         uwriteln!(self.src.js, "");
 
-        let (import_name, binding_name) = match fn_name {
-            FnName::Default(_) => (func_name.to_lower_camel_case(), callee_name),
-            FnName::Method(resource, _)
-            | FnName::Static(resource, _)
-            | FnName::Constructor(resource) => (
-                resource.to_upper_camel_case(),
-                resource.to_upper_camel_case(),
-            ),
+        let (import_name, binding_name) = match func.kind {
+            FunctionKind::Freestanding => (func_name.to_lower_camel_case(), callee_name),
+            FunctionKind::Method(ty) | FunctionKind::Static(ty) | FunctionKind::Constructor(ty) => {
+                let ty = &self.resolve.types[ty];
+                (
+                    ty.name.as_ref().unwrap().to_upper_camel_case(),
+                    ty.name.as_ref().unwrap().to_upper_camel_case(),
+                )
+            }
         };
 
         // add the function import to the ESM bindgen
@@ -929,11 +940,19 @@ impl<'a> Instantiator<'a, '_> {
             match export {
                 Export::LiftedFunction {
                     ty: _,
-                    func,
+                    func: def,
                     options,
                 } => {
-                    let fn_name = FnName::parse(export_name);
-                    let local_name = if let Some(resource) = fn_name.resource() {
+                    let func = match item {
+                        WorldItem::Function(f) => f,
+                        WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
+                    };
+                    let local_name = if let FunctionKind::Constructor(ty)
+                    | FunctionKind::Method(ty)
+                    | FunctionKind::Static(ty) = func.kind
+                    {
+                        let ty = &self.resolve.types[ty];
+                        let resource = ty.name.as_ref().unwrap();
                         self.gen
                             .local_names
                             .get_or_create(
@@ -945,21 +964,16 @@ impl<'a> Instantiator<'a, '_> {
                         self.gen.local_names.create_once(export_name)
                     }
                     .to_string();
-                    self.export_bindgen(
-                        &local_name,
-                        fn_name,
-                        func,
-                        options,
-                        match item {
-                            WorldItem::Function(f) => f,
-                            WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
-                        },
-                    );
-                    if let Some(resource) = fn_name.resource() {
+                    self.export_bindgen(&local_name, def, options, func);
+                    if let FunctionKind::Constructor(ty)
+                    | FunctionKind::Method(ty)
+                    | FunctionKind::Static(ty) = func.kind
+                    {
+                        let ty = &self.resolve.types[ty];
                         self.gen.esm_bindgen.add_export_binding(
                             None,
                             local_name,
-                            resource.to_upper_camel_case(),
+                            ty.name.as_ref().unwrap().to_upper_camel_case(),
                         );
                     } else {
                         self.gen.esm_bindgen.add_export_binding(
@@ -975,13 +989,20 @@ impl<'a> Instantiator<'a, '_> {
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
                     for (func_name, export) in iface {
-                        let (func, options) = match export {
+                        let (def, options) = match export {
                             Export::LiftedFunction { func, options, .. } => (func, options),
                             Export::Type(_) => continue, // ignored
                             _ => unreachable!(),
                         };
-                        let fn_name = FnName::parse(func_name);
-                        let local_name = if let Some(resource) = fn_name.resource() {
+
+                        let func = &self.resolve.interfaces[id].functions[func_name];
+
+                        let local_name = if let FunctionKind::Constructor(ty)
+                        | FunctionKind::Method(ty)
+                        | FunctionKind::Static(ty) = func.kind
+                        {
+                            let ty = &self.resolve.types[ty];
+                            let resource = ty.name.as_ref().unwrap();
                             self.gen
                                 .local_names
                                 .get_or_create(
@@ -994,15 +1015,14 @@ impl<'a> Instantiator<'a, '_> {
                         }
                         .to_string();
 
-                        self.export_bindgen(
-                            &local_name,
-                            fn_name,
-                            func,
-                            options,
-                            &self.resolve.interfaces[id].functions[func_name],
-                        );
+                        self.export_bindgen(&local_name, def, options, func);
 
-                        if let Some(resource) = fn_name.resource() {
+                        if let FunctionKind::Constructor(ty)
+                        | FunctionKind::Method(ty)
+                        | FunctionKind::Static(ty) = func.kind
+                        {
+                            let ty = &self.resolve.types[ty];
+                            let resource = ty.name.as_ref().unwrap();
                             self.gen.esm_bindgen.add_export_binding(
                                 Some(export_name),
                                 local_name,
@@ -1032,28 +1052,29 @@ impl<'a> Instantiator<'a, '_> {
     fn export_bindgen(
         &mut self,
         local_name: &str,
-        fn_name: FnName,
         def: &CoreDef,
         options: &CanonicalOptions,
         func: &Function,
     ) {
-        match fn_name {
-            FnName::Default(_) => uwrite!(self.src.js, "\nfunction {local_name}"),
-            FnName::Method(_, method) => {
-                let method_name = method.to_lower_camel_case();
+        match func.kind {
+            FunctionKind::Freestanding => uwrite!(self.src.js, "\nfunction {local_name}"),
+            FunctionKind::Method(_) => {
+                let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
                     "\n{local_name}.prototype.{method_name} = function {method_name}",
                 );
             }
-            FnName::Static(_, method) => {
-                let method_name = method.to_lower_camel_case();
+            FunctionKind::Static(_) => {
+                let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
                     "\n{local_name}.{method_name} = function {method_name}",
                 );
             }
-            FnName::Constructor(name) => {
+            FunctionKind::Constructor(ty) => {
+                let ty = &self.resolve.types[ty];
+                let name = ty.name.as_ref().unwrap();
                 if name.to_upper_camel_case() == local_name {
                     uwrite!(
                         self.src.js,
@@ -1075,16 +1096,16 @@ impl<'a> Instantiator<'a, '_> {
         let callee = self.core_def(def);
         self.bindgen(
             func.params.len(),
-            matches!(fn_name, FnName::Method(..)),
+            matches!(func.kind, FunctionKind::Method(_)),
             &callee,
             options,
             func,
             AbiVariant::GuestExport,
         );
-        match fn_name {
-            FnName::Default(_) => self.src.js("\n"),
-            FnName::Method(..) | FnName::Static(..) => self.src.js(";\n"),
-            FnName::Constructor(_) => self.src.js("\n}\n"),
+        match func.kind {
+            FunctionKind::Freestanding => self.src.js("\n"),
+            FunctionKind::Method(_) | FunctionKind::Static(_) => self.src.js(";\n"),
+            FunctionKind::Constructor(_) => self.src.js("\n}\n"),
         }
     }
 }

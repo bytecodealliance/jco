@@ -1266,11 +1266,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             resourceImportInstances{rid}.set(rep, {});
                             {var} = handleCnt{rid}++;
                             {resource_weak_map}.set({}, {var});
-                            handleTable{rid}.set({var}, {{ table: {rid}, rep, own: {} }});
+                            handleTable{rid}.set({var}, {{ table: {rid}, rep }});
                         }}",
                         operands[0],
                         operands[0],
-                        if is_own { "true" } else { "false" }
                     );
                 }
                 results.push(var);

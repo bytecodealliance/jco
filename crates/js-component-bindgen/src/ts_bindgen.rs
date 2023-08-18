@@ -6,7 +6,7 @@ use crate::transpile_bindgen::{parse_world_key, TranspileOpts};
 use crate::{uwrite, uwriteln};
 use heck::*;
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
 use wit_parser::abi::AbiVariant;
@@ -21,9 +21,9 @@ struct TsBindgen {
 
     local_names: LocalNames,
 
-    /// Type script definitions which will become the import object
+    /// TypeScript definitions which will become the import object
     import_object: Source,
-    /// Type script definitions which will become the export object
+    /// TypeScript definitions which will become the export object
     export_object: Source,
 }
 
@@ -34,10 +34,10 @@ struct TsBindgen {
 /// typescript definitions.
 struct TsInterface<'a> {
     src: Source,
-    gen: &'a mut TsBindgen,
     resolve: &'a Resolve,
     needs_ty_option: bool,
     needs_ty_result: bool,
+    resources: HashMap<String, TsInterface<'a>>,
 }
 
 pub fn ts_bindgen(
@@ -55,7 +55,6 @@ pub fn ts_bindgen(
     };
 
     let world = &resolve.worlds[id];
-    bindgen.preprocess(resolve, &world.name);
 
     {
         let mut funcs = Vec::new();
@@ -117,7 +116,7 @@ pub fn ts_bindgen(
                         TypeDefKind::Resource => todo!(),
                         TypeDefKind::Handle(_) => todo!(),
                     }
-                    let output = gen.src.to_string();
+                    let output = gen.finish();
                     bindgen.src.push_str(&output);
                 }
             }
@@ -184,8 +183,7 @@ pub fn ts_bindgen(
         }
     }
     if !funcs.is_empty() {
-        let end_character = if opts.instantiation { ',' } else { ';' };
-        bindgen.export_funcs(resolve, id, &funcs, files, end_character);
+        bindgen.export_funcs(resolve, id, &funcs, files, !opts.instantiation);
     }
 
     let camel = world.name.to_upper_camel_case();
@@ -314,8 +312,9 @@ impl TsBindgen {
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         let mut gen = self.ts_interface(resolve);
-        gen.ts_func(func, AbiVariant::GuestImport, true, "", ',');
-        gen.gen.import_object.push_str(&gen.src);
+        gen.ts_func(func, AbiVariant::GuestImport, true, false);
+        let src = gen.finish();
+        self.import_object.push_str(&src);
         uwriteln!(self.import_object, "}},");
     }
 
@@ -357,22 +356,15 @@ impl TsBindgen {
         _world: WorldId,
         funcs: &[(String, &Function)],
         _files: &mut Files,
-        end_character: char,
+        declaration: bool,
     ) {
         let mut gen = self.ts_interface(resolve);
-        let prefix = if end_character == ';' {
-            "export function "
-        } else {
-            ""
-        };
         for (_, func) in funcs {
-            gen.ts_func(func, AbiVariant::GuestExport, false, prefix, end_character);
+            gen.ts_func(func, AbiVariant::GuestExport, false, declaration);
         }
-
-        gen.gen.export_object.push_str(&gen.src);
+        let src = gen.finish();
+        self.export_object.push_str(&src);
     }
-
-    fn preprocess(&mut self, _resolve: &Resolve, _name: &str) {}
 
     fn generate_interface(
         &mut self,
@@ -396,18 +388,17 @@ impl TsBindgen {
         let mut gen = self.ts_interface(resolve);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
-        let prefix = "export function ";
         for (_, func) in resolve.interfaces[id].functions.iter() {
-            gen.ts_func(func, abi, false, prefix, ';');
+            gen.ts_func(func, abi, false, true);
         }
         uwriteln!(gen.src, "}}");
 
         gen.types(id, abi);
         gen.post_types();
-        files.push(
-            &format!("{dir}/{}.d.ts", goal_name_kebab),
-            gen.src.as_bytes(),
-        );
+
+        let src = gen.finish();
+
+        files.push(&format!("{dir}/{}.d.ts", goal_name_kebab), src.as_bytes());
 
         uwriteln!(
             self.src,
@@ -419,7 +410,7 @@ impl TsBindgen {
     fn ts_interface<'b>(&'b mut self, resolve: &'b Resolve) -> TsInterface<'b> {
         TsInterface {
             src: Source::default(),
-            gen: self,
+            resources: HashMap::new(),
             resolve,
             needs_ty_option: false,
             needs_ty_result: false,
@@ -434,6 +425,29 @@ enum Mode {
 }
 
 impl<'a> TsInterface<'a> {
+    fn new(resolve: &'a Resolve) -> Self {
+        TsInterface {
+            src: Source::default(),
+            resources: HashMap::new(),
+            resolve,
+            needs_ty_option: false,
+            needs_ty_result: false,
+        }
+    }
+
+    fn finish(mut self) -> Source {
+        for (resource, source) in self.resources {
+            uwriteln!(
+                self.src,
+                "\nexport class {} {{",
+                resource.to_upper_camel_case()
+            );
+            self.src.push_str(&source.src);
+            uwriteln!(self.src, "}}")
+        }
+        self.src
+    }
+
     fn docs_raw(&mut self, docs: &str) {
         self.src.push_str("/**\n");
         for line in docs.lines() {
@@ -573,24 +587,45 @@ impl<'a> TsInterface<'a> {
         self.src.push_str("]");
     }
 
-    fn ts_func(
-        &mut self,
-        func: &Function,
-        abi: AbiVariant,
-        default: bool,
-        prefix: &str,
-        end_character: char,
-    ) {
+    fn ts_func(&mut self, func: &Function, abi: AbiVariant, default: bool, declaration: bool) {
         self.docs(&func.docs);
 
-        self.src.push_str(prefix);
+        let iface = if let FunctionKind::Method(ty)
+        | FunctionKind::Static(ty)
+        | FunctionKind::Constructor(ty) = func.kind
+        {
+            let ty = &self.resolve.types[ty];
+            let resource = ty.name.as_ref().unwrap();
+            if !self.resources.contains_key(resource) {
+                self.resources
+                    .insert(resource.to_string(), TsInterface::new(self.resolve));
+            }
+            self.resources.get_mut(resource).unwrap()
+        } else {
+            self
+        };
+
+        let is_resource = !matches!(func.kind, FunctionKind::Freestanding);
+        if is_resource {}
+
+        let end_character = if declaration {
+            iface.src.push_str(match func.kind {
+                FunctionKind::Freestanding => "export function ",
+                FunctionKind::Method(_) => "",
+                FunctionKind::Static(_) => "static ",
+                FunctionKind::Constructor(_) => "",
+            });
+            ';'
+        } else {
+            ','
+        };
 
         if default {
-            self.src.push_str("default");
+            iface.src.push_str("default");
         } else {
-            self.src.push_str(&func.item_name().to_lower_camel_case());
+            iface.src.push_str(&func.item_name().to_lower_camel_case());
         }
-        self.src.push_str("(");
+        iface.src.push_str("(");
 
         let param_start = match &func.kind {
             FunctionKind::Freestanding => 0,
@@ -601,11 +636,11 @@ impl<'a> TsInterface<'a> {
 
         for (i, (name, ty)) in func.params[param_start..].iter().enumerate() {
             if i > 0 {
-                self.src.push_str(", ");
+                iface.src.push_str(", ");
             }
-            self.src.push_str(&name.to_lower_camel_case());
-            self.src.push_str(": ");
-            self.print_ty(
+            iface.src.push_str(&name.to_lower_camel_case());
+            iface.src.push_str(": ");
+            iface.print_ty(
                 ty,
                 match abi {
                     AbiVariant::GuestExport => Mode::Lower,
@@ -613,30 +648,37 @@ impl<'a> TsInterface<'a> {
                 },
             );
         }
-        self.src.push_str("): ");
+
+        iface.src.push_str(")");
+        if matches!(func.kind, FunctionKind::Constructor(_)) {
+            iface.src.push_str("\n");
+            return;
+        }
+        iface.src.push_str(": ");
+
         let result_mode = match abi {
             AbiVariant::GuestExport => Mode::Lift,
             AbiVariant::GuestImport => Mode::Lower,
         };
-        if let Some((ok_ty, _)) = func.results.throws(self.resolve) {
-            self.print_optional_ty(ok_ty, result_mode);
+        if let Some((ok_ty, _)) = func.results.throws(iface.resolve) {
+            iface.print_optional_ty(ok_ty, result_mode);
         } else {
             match func.results.len() {
-                0 => self.src.push_str("void"),
-                1 => self.print_ty(func.results.iter_types().next().unwrap(), result_mode),
+                0 => iface.src.push_str("void"),
+                1 => iface.print_ty(func.results.iter_types().next().unwrap(), result_mode),
                 _ => {
-                    self.src.push_str("[");
+                    iface.src.push_str("[");
                     for (i, ty) in func.results.iter_types().enumerate() {
                         if i != 0 {
-                            self.src.push_str(", ");
+                            iface.src.push_str(", ");
                         }
-                        self.print_ty(ty, result_mode);
+                        iface.print_ty(ty, result_mode);
                     }
-                    self.src.push_str("]");
+                    iface.src.push_str("]");
                 }
             }
         }
-        self.src.push_str(format!("{}\n", end_character).as_str());
+        iface.src.push_str(format!("{}\n", end_character).as_str());
     }
 
     fn post_types(&mut self) {
