@@ -1120,7 +1120,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 if self.cur_resource_borrows.len() > 0 {
                     let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
                     for resource in &self.cur_resource_borrows {
-                        uwriteln!(self.src, 
+                        uwriteln!(self.src,
                             "Object.defineProperty({resource}, {resource_symbol}, {{ value: null }});"
                         );
                     }
