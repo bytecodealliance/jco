@@ -744,21 +744,19 @@ impl<'a> Instantiator<'a, '_> {
 
     fn connect_resources(&mut self, ty: &Type, iface_ty: &InterfaceType, map: &mut ResourceMap) {
         let Type::Id(id) = ty else { return };
-        match &self.resolve.types[*id].kind {
-            TypeDefKind::Record(t1) => {
-                let InterfaceType::Record(t2) = iface_ty else {
-                    unreachable!()
-                };
+        match (&self.resolve.types[*id].kind, iface_ty) {
+            (TypeDefKind::Flags(_), InterfaceType::Flags(_))
+            | (TypeDefKind::Enum(_), InterfaceType::Enum(_)) => {}
+            (TypeDefKind::Record(t1), InterfaceType::Record(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.fields.iter().zip(t2.fields.iter()) {
                     self.connect_resources(&f1.ty, &f2.ty, map);
                 }
             }
-            TypeDefKind::Resource => unreachable!(),
-            TypeDefKind::Handle(Handle::Own(t1) | Handle::Borrow(t1)) => {
-                let (InterfaceType::Own(t2) | InterfaceType::Borrow(t2)) = iface_ty else {
-                    unreachable!()
-                };
+            (
+                TypeDefKind::Handle(Handle::Own(t1) | Handle::Borrow(t1)),
+                InterfaceType::Own(t2) | InterfaceType::Borrow(t2),
+            ) => {
                 let imported = self
                     .component
                     .defined_resource_index(self.types[*t2].ty)
@@ -772,20 +770,13 @@ impl<'a> Instantiator<'a, '_> {
                     },
                 );
             }
-            TypeDefKind::Flags(_) | TypeDefKind::Enum(_) => {}
-            TypeDefKind::Tuple(t1) => {
-                let InterfaceType::Tuple(t2) = iface_ty else {
-                    unreachable!()
-                };
+            (TypeDefKind::Tuple(t1), InterfaceType::Tuple(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.types.iter().zip(t2.types.iter()) {
                     self.connect_resources(f1, f2, map);
                 }
             }
-            TypeDefKind::Variant(t1) => {
-                let InterfaceType::Variant(t2) = iface_ty else {
-                    unreachable!()
-                };
+            (TypeDefKind::Variant(t1), InterfaceType::Variant(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.cases.iter().zip(t2.cases.iter()) {
                     if let Some(t1) = &f1.ty {
@@ -793,17 +784,11 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
             }
-            TypeDefKind::Option(t1) => {
-                let InterfaceType::Option(t2) = iface_ty else {
-                    unreachable!()
-                };
+            (TypeDefKind::Option(t1), InterfaceType::Option(t2)) => {
                 let t2 = &self.types[*t2];
                 self.connect_resources(t1, &t2.ty, map);
             }
-            TypeDefKind::Result(t1) => {
-                let InterfaceType::Result(t2) = iface_ty else {
-                    unreachable!()
-                };
+            (TypeDefKind::Result(t1), InterfaceType::Result(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Some(t1) = &t1.ok {
                     self.connect_resources(t1, &t2.ok.unwrap(), map);
@@ -812,28 +797,20 @@ impl<'a> Instantiator<'a, '_> {
                     self.connect_resources(t1, &t2.err.unwrap(), map);
                 }
             }
-            TypeDefKind::Union(t1) => {
-                let InterfaceType::Union(t2) = iface_ty else {
-                    unreachable!()
-                };
+            (TypeDefKind::Union(t1), InterfaceType::Union(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.cases.iter().zip(t2.types.iter()) {
                     self.connect_resources(&f1.ty, f2, map);
                 }
             }
-            TypeDefKind::List(t1) => {
-                let InterfaceType::List(t2) = iface_ty else {
-                    unreachable!()
-                };
+            (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
                 let t2 = &self.types[*t2];
                 self.connect_resources(t1, &t2.element, map);
             }
-            TypeDefKind::Future(_) => todo!(),
-            TypeDefKind::Stream(_) => todo!(),
-            TypeDefKind::Type(ty) => {
+            (TypeDefKind::Type(ty), _) => {
                 self.connect_resources(ty, iface_ty, map);
             }
-            TypeDefKind::Unknown => unreachable!(),
+            (_, _) => unreachable!(),
         }
     }
 
@@ -891,6 +868,7 @@ impl<'a> Instantiator<'a, '_> {
 
         let mut f = FunctionBindgen {
             resource_map: &resource_map,
+            cur_resource_borrows: Vec::new(),
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
             sizes: &self.sizes,

@@ -48,6 +48,7 @@ pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
 pub struct FunctionBindgen<'a> {
     pub resource_map: &'a ResourceMap,
+    pub cur_resource_borrows: Vec<String>,
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
     pub valid_lifting_optimization: bool,
     pub sizes: &'a SizeAlign,
@@ -1115,6 +1116,16 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.bind_results(func.results.len(), results);
                     uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
                 }
+                // after a high level call, we need to drop the component resource borrows
+                if self.cur_resource_borrows.len() > 0 {
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                    for resource in &self.cur_resource_borrows {
+                        uwriteln!(self.src, 
+                            "Object.defineProperty({resource}, {resource_symbol}, {{ value: null }});"
+                        );
+                    }
+                    self.cur_resource_borrows = Vec::new();
+                }
             }
 
             Instruction::Return { amt, .. } => {
@@ -1194,7 +1205,8 @@ impl Bindgen for FunctionBindgen<'_> {
                             operands[0]
                         );
                     } else {
-                        // TODO: invalidate borrows after the call
+                        // borrow handles are tracked to release after the call
+                        self.cur_resource_borrows.push(rsc.to_string());
                     }
                 } else {
                     // imported handles need to come out of the instance capture
@@ -1204,7 +1216,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         operands[0]
                     );
                     // own lifting means we no longer have ownership and can release the handle
-                    // TODO: Borrow release must also release capture
                     if is_own {
                         uwriteln!(self.src, "handleTable{id}.delete({});", operands[0]);
                     }
@@ -1225,7 +1236,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         self.src,
                         "let {rep} = {}[{resource_symbol}];
                         if ({rep} === null) {{
-                            throw new Error('\"{}\" resource lifetime already expired or transferred.');
+                            throw new Error('\"{}\" resource handle lifetime expired / transferred.');
                         }}
                         if ({rep} === undefined) {{
                             throw new Error('Not a valid \"{}\" resource.');
