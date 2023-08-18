@@ -18,6 +18,7 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
+    ResourceReleasedWeakSet,
     ResourceWeakMap,
     ThrowInvalidBool,
     ThrowUninitialized,
@@ -176,6 +177,10 @@ pub fn render_intrinsics(
                         throw new TypeError(`must be a string`);
                     return s.codePointAt(0);
                 }
+            "),
+
+            Intrinsic::ResourceReleasedWeakSet => output.push_str("
+                const resourceReleasedWeakSet = new WeakSet();
             "),
 
             Intrinsic::ResourceWeakMap => output.push_str("
@@ -389,6 +394,7 @@ impl Intrinsic {
             Intrinsic::IsLE => "isLE",
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::ResourceWeakMap => "resourceWeakMap",
+            Intrinsic::ResourceReleasedWeakSet => "resourceReleasedWeakSet",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
             Intrinsic::ThrowUninitialized => "throwUninitialized",
             Intrinsic::ToBigInt64 => "toInt64",

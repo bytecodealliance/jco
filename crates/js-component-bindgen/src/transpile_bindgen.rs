@@ -352,8 +352,8 @@ impl<'a> Instantiator<'a, '_> {
             uwriteln!(
                 self.src.js,
                 "const handleTable{rid} = new Map();
-                const resourceImports{rid} = new Map();
-                let handleCnt{rid} = 0, resourceImportCnt{rid} = 0;"
+                const resourceImportInstances{rid} = new Map();
+                let handleCnt{rid} = 0, resourceImportInstanceCnt{rid} = 0;"
             );
             self.resource_map.insert((idx, instance_idx), (rid, true));
         }

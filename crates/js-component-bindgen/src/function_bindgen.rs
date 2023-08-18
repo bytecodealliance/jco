@@ -22,7 +22,7 @@ pub enum ErrHandling {
 /// to the unique global resource id used to key the resource tables for this resource
 /// i.e. so these identifiers are accessible at:
 /// - handleTable{x}, handleCnt{x}, finalizationRegistry{x}, unregisterWeakMap
-/// - imported tables also have resourceImports{x} and resourceImportCnt{x} for capturing
+/// - imported tables also have resourceImportInstances{x} and resourceImportCnt{x} for capturing
 ///   instances into an imported instance table
 /// The second bool is true if it is an imported resource
 /// Note that the unique value uniquely identifies the resource table
@@ -1192,7 +1192,8 @@ impl Bindgen for FunctionBindgen<'_> {
                         operands[0],
                     );
                     // when we share an own handle with JS, we need to add a finalizer
-                    // note: should this also apply to borrow given we can't control borrows?
+                    // TODO: We need a hook for "invalidating" borrows after the call
+                    //       basically they should be added to the released set
                     if is_own {
                         uwriteln!(
                             self.src,
@@ -1204,14 +1205,14 @@ impl Bindgen for FunctionBindgen<'_> {
                     // imported handles need to come out of the instance capture
                     uwriteln!(
                         self.src,
-                        "const {rsc_var} = resourceImports{rid}.get({});",
+                        "const {rsc_var} = resourceImportInstances{rid}.get({});",
                         operands[0]
                     );
                 }
                 results.push(rsc_var);
             }
 
-            Instruction::HandleLower { handle, .. } => {
+            Instruction::HandleLower { handle, name, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
                 let is_own = matches!(handle, Handle::Own(_));
                 let resource_idx = self.get_resource_index(resolve, *ty);
@@ -1219,24 +1220,37 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let var = format!("rsc{tmp}");
                 let resource_weak_map = self.intrinsic(Intrinsic::ResourceWeakMap);
+                let class_name = name.to_upper_camel_case();
                 uwriteln!(
                     self.src,
                     "let {var} = {resource_weak_map}.get({});",
                     operands[0]
                 );
                 if !is_imported {
+                    let released_weak_set = self.intrinsic(Intrinsic::ResourceReleasedWeakSet);
                     uwriteln!(
                         self.src,
-                        "if ({var} === undefined) throw new Error('Expected a resource');"
+                        "if ({var} === undefined) {{
+                            if ({released_weak_set}.has({})) {{
+                                throw new Error('Resource handle was already released.');
+                            }} else {{
+                                throw new Error('Not a valid \"{}\" resource.');
+                            }}
+                        }}",
+                        operands[0],
+                        class_name
                     );
 
                     // lowered own handles have their finalizers deregistered
-                    // since the proxy lifecycle has ended for this handle
+                    // since the proxy lifecycle has now ended for this borrow handle
                     if is_own {
+                        let released_weak_set = self.intrinsic(Intrinsic::ResourceReleasedWeakSet);
                         uwriteln!(
                             self.src,
-                            "finalizationRegistry{rid}.unregister({});",
-                            operands[0]
+                            "finalizationRegistry{rid}.unregister({});
+                            {released_weak_set}.add({});",
+                            operands[0],
+                            operands[0],
                         );
                     }
                 } else {
@@ -1245,8 +1259,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(
                         self.src,
                         "if ({var} === undefined) {{
-                            const rep = resourceImportCnt{rid}++;
-                            resourceImports{rid}.set(rep, {});
+                            const rep = resourceImportInstanceCnt{rid}++;
+                            resourceImportInstances{rid}.set(rep, {});
                             {var} = handleCnt{rid}++;
                             {resource_weak_map}.set({}, {var});
                             handleTable{rid}.set({var}, {{ table: {rid}, rep, own: {} }});
