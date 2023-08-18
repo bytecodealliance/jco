@@ -12,7 +12,7 @@ use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::{ComponentTypes, Resource};
+use wasmtime_environ::component::{ComponentTypes, Resource, RuntimeComponentInstanceIndex};
 use wasmtime_environ::{
     component,
     component::{
@@ -346,7 +346,8 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         // populate imported resource maps
-        for (idx, _import) in self.component.imported_resources.iter() {
+        for (idx, import) in self.component.imported_resources.iter() {
+            let instance_idx = RuntimeComponentInstanceIndex::from_u32(import.as_u32());
             let rid = self.resource_map.len() as u32;
             uwriteln!(
                 self.src.js,
@@ -354,7 +355,7 @@ impl<'a> Instantiator<'a, '_> {
                 const resourceImports{rid} = new Map();
                 let handleCnt{rid} = 0, resourceImportCnt{rid} = 0;"
             );
-            self.resource_map.insert(idx, (rid, true));
+            self.resource_map.insert((idx, instance_idx), (rid, true));
         }
 
         for init in self.component.initializers.iter() {
@@ -400,13 +401,13 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceNew(resource) => {
                 let i = i.as_u32();
                 let resource = &self.types[*resource];
-                // let instance_idx = resource.instance;
-                let (rid, _) = self.resource_map[&resource.ty];
+                let instance_idx = resource.instance;
+                let (rid, _) = self.resource_map[&(resource.ty, instance_idx)];
 
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(rep) {{
-                        const handle = handleCount{rid}++;
+                        const handle = handleCnt{rid}++;
                         handleTable{rid}.set(handle, {{ table: {rid}, rep, own: true }});
                         return handle;
                     }}
@@ -416,8 +417,8 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceRep(resource) => {
                 let i = i.as_u32();
                 let resource = &self.types[*resource];
-                // let instance_idx = resource.instance;
-                let (rid, _) = self.resource_map[&resource.ty];
+                let instance_idx = resource.instance;
+                let (rid, _) = self.resource_map[&(resource.ty, instance_idx)];
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
@@ -432,7 +433,7 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceDrop(resource) => {
                 let i = i.as_u32();
                 let resource = &self.types[*resource];
-                // let instance_idx = resource.instance;
+                let instance_idx = resource.instance;
                 let dtor = if let Some(resource_idx) =
                     self.component.defined_resource_index(resource.ty)
                 {
@@ -462,7 +463,7 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     None
                 };
-                let (rid, _) = self.resource_map[&resource.ty];
+                let (rid, _) = self.resource_map[&(resource.ty, instance_idx)];
 
                 uwrite!(
                     self.src.js,
@@ -517,7 +518,7 @@ impl<'a> Instantiator<'a, '_> {
 
             GlobalInitializer::Resource(Resource {
                 index,
-                instance: _,
+                instance,
                 dtor,
                 ..
             }) => {
@@ -539,12 +540,14 @@ impl<'a> Instantiator<'a, '_> {
                                 handleTable{rid}.delete(handle);{}
                             }}
                         }});
-                        let handleCount{rid} = 0;
+                        let handleCnt{rid} = 0;
                     ",
                     dtor
                 );
-                self.resource_map
-                    .insert(self.component.resource_index(*index), (rid, false));
+                self.resource_map.insert(
+                    (self.component.resource_index(*index), *instance),
+                    (rid, false),
+                );
             }
         }
     }

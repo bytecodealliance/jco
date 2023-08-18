@@ -5,7 +5,7 @@ use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::ResourceIndex;
+use wasmtime_environ::component::{ResourceIndex, RuntimeComponentInstanceIndex};
 use wit_component::StringEncoding;
 use wit_parser::abi::{Bindgen, Bitcast, Instruction, WasmType};
 use wit_parser::*;
@@ -18,14 +18,17 @@ pub enum ErrHandling {
 }
 
 /// Map used for function bindgen within a given component
-/// Mapping from the resource index in that component (internal or external)
+/// Mapping from the instance + resource index in that component (internal or external)
 /// to the unique global resource id used to key the resource tables for this resource
 /// i.e. so these identifiers are accessible at:
-/// - resourceTable{x}, handleTable{x}, finalizationRegistry{x} handleCnt{x}
-/// - imported tables also have resourceCnt for rep assignment
-/// for the return u32 value x
+/// - handleTable{x}, handleCnt{x}, finalizationRegistry{x}, unregisterWeakMap
+/// - imported tables also have resourceImports{x} and resourceImportCnt{x} for capturing
+///   instances into an imported instance table
 /// The second bool is true if it is an imported resource
-pub type ResourceMap = BTreeMap<ResourceIndex, (u32, bool)>;
+/// Note that the unique value uniquely identifies the resource table
+/// so that if a resource is used by n components, there should be n different
+/// indices and spaces in use
+pub type ResourceMap = BTreeMap<(ResourceIndex, RuntimeComponentInstanceIndex), (u32, bool)>;
 
 pub struct FunctionBindgen<'a> {
     pub resource_map: &'a ResourceMap,
@@ -55,9 +58,16 @@ impl FunctionBindgen<'_> {
     // assumption: ty.index() is the resource index
     // so we can use it in the resource map
     // if this is wrong we will need to figure out another method here...
-    fn get_resource_index(&self, resolve: &Resolve, ty: TypeId) -> ResourceIndex {
+    fn get_resource_index(
+        &self,
+        resolve: &Resolve,
+        ty: TypeId,
+    ) -> (ResourceIndex, RuntimeComponentInstanceIndex) {
         match &resolve.types[ty].kind {
-            TypeDefKind::Resource => ResourceIndex::from_u32(ty.index() as u32),
+            TypeDefKind::Resource => (
+                ResourceIndex::from_u32(ty.index() as u32),
+                RuntimeComponentInstanceIndex::from_u32(0),
+            ),
             TypeDefKind::Type(ty) => match ty {
                 Type::Id(ty) => self.get_resource_index(resolve, *ty),
                 _ => panic!("Unexpected resource type"),
@@ -1186,7 +1196,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     if is_own {
                         uwriteln!(
                             self.src,
-                            "finalizationRegistry{rid}.register({rsc_var}, {});",
+                            "finalizationRegistry{rid}.register({rsc_var}, {}, {rsc_var});",
                             operands[0]
                         );
                     }
@@ -1219,6 +1229,16 @@ impl Bindgen for FunctionBindgen<'_> {
                         self.src,
                         "if ({var} === undefined) throw new Error('Expected a resource');"
                     );
+
+                    // lowered own handles have their finalizers deregistered
+                    // since the proxy lifecycle has ended for this handle
+                    if is_own {
+                        uwriteln!(
+                            self.src,
+                            "finalizationRegistry{rid}.unregister({});",
+                            operands[0]
+                        );
+                    }
                 } else {
                     // imported resources wont have a handle symbol so we need
                     // to support initial "capture" when that is the case
