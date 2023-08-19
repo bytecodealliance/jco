@@ -385,7 +385,7 @@ export const types = {
     return { upper: BigInt(stats.size), lower: stats.mtimeNs };
   },
 
-  metadataHashAt(fd, pathFlags, path) {
+  metadataHashAt(fd, { symlinkFollow }, path) {
     const fullPath = _descriptors[fd].path + path;
     let stats;
     try {

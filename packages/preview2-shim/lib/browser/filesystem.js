@@ -145,10 +145,6 @@ export const types = {
     console.log(`[filesystem] DROP DIRECTORY ENTRY`, stream);
   },
 
-  statAt(fd, pathFlags, path) {
-    console.log(`[filesystem] STAT`, fd, pathFlags, path);
-  },
-
   metadataHash(fd) {
     console.log(`[filesystem] METADATA HASH`, fd);
   },
