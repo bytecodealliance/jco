@@ -263,7 +263,10 @@ impl TsBindgen {
         id: InterfaceId,
         files: &mut Files,
     ) -> String {
-        let local_name = self.generate_interface(name, resolve, id, files, AbiVariant::GuestImport);
+        // in case an imported type is used as an exported type
+        self.generate_interface(name, resolve, id, files, AbiVariant::GuestExport, false);
+        let local_name =
+            self.generate_interface(name, resolve, id, files, AbiVariant::GuestImport, true);
         uwriteln!(
             self.import_object,
             "{}: typeof {local_name},",
@@ -283,8 +286,16 @@ impl TsBindgen {
             if iface_name == "*" {
                 uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
                 let name = resolve.interfaces[id].name.as_ref().unwrap();
-                let local_name =
-                    self.generate_interface(&name, resolve, id, files, AbiVariant::GuestImport);
+                // in case an imported type is used as an exported type
+                self.generate_interface(&name, resolve, id, files, AbiVariant::GuestExport, false);
+                let local_name = self.generate_interface(
+                    &name,
+                    resolve,
+                    id,
+                    files,
+                    AbiVariant::GuestImport,
+                    true,
+                );
                 uwriteln!(self.import_object, "typeof {local_name},",);
                 return;
             }
@@ -292,8 +303,10 @@ impl TsBindgen {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         for (iface_name, &id) in ifaces {
             let name = resolve.interfaces[id].name.as_ref().unwrap();
+            // in case an imported type is used as an exported type
+            self.generate_interface(&name, resolve, id, files, AbiVariant::GuestExport, false);
             let local_name =
-                self.generate_interface(&name, resolve, id, files, AbiVariant::GuestImport);
+                self.generate_interface(&name, resolve, id, files, AbiVariant::GuestImport, true);
             uwriteln!(
                 self.import_object,
                 "{}: typeof {local_name},",
@@ -326,8 +339,14 @@ impl TsBindgen {
         files: &mut Files,
         instantiation: bool,
     ) -> String {
-        let local_name =
-            self.generate_interface(export_name, resolve, id, files, AbiVariant::GuestExport);
+        let local_name = self.generate_interface(
+            export_name,
+            resolve,
+            id,
+            files,
+            AbiVariant::GuestExport,
+            true,
+        );
         if instantiation {
             uwriteln!(
                 self.export_object,
@@ -373,6 +392,7 @@ impl TsBindgen {
         id: InterfaceId,
         files: &mut Files,
         abi: AbiVariant,
+        used: bool,
     ) -> String {
         let dir = match abi {
             AbiVariant::GuestImport => "imports",
@@ -380,11 +400,24 @@ impl TsBindgen {
         };
         let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
         let goal_name = interface_goal_name(&id_name);
-        let local_name = self
-            .local_names
-            .create_once(&format!("./{dir}/{goal_name}"));
         let goal_name_kebab = goal_name.to_kebab_case();
+        let file_name = &format!("{dir}/{}.d.ts", goal_name_kebab);
+        let (local_name, exists) = self.local_names.get_or_create(&file_name, &goal_name);
+
         let camel = local_name.to_upper_camel_case();
+
+        if used {
+            uwriteln!(
+                self.src,
+                "import {{ {camel} }} from './{}';",
+                &file_name[0..file_name.len() - 5]
+            );
+        }
+
+        if exists {
+            return camel;
+        }
+
         let mut gen = self.ts_interface(resolve);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
@@ -398,12 +431,8 @@ impl TsBindgen {
 
         let src = gen.finish();
 
-        files.push(&format!("{dir}/{}.d.ts", goal_name_kebab), src.as_bytes());
+        files.push(file_name, src.as_bytes());
 
-        uwriteln!(
-            self.src,
-            "import {{ {camel} }} from './{dir}/{goal_name_kebab}';",
-        );
         camel
     }
 
@@ -597,6 +626,7 @@ impl<'a> TsInterface<'a> {
             let ty = &self.resolve.types[ty];
             let resource = ty.name.as_ref().unwrap();
             if !self.resources.contains_key(resource) {
+                uwriteln!(self.src, "export {{ {} }};", resource.to_upper_camel_case());
                 self.resources
                     .insert(resource.to_string(), TsInterface::new(self.resolve));
             }

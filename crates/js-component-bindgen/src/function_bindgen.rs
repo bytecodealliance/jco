@@ -1116,7 +1116,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.bind_results(func.results.len(), results);
                     uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
                 }
-                // after a high level call, we need to drop the component resource borrows
+
+                // after a high level call, we need to deactivate the component resource borrows
                 if self.cur_resource_borrows.len() > 0 {
                     let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
                     for resource in &self.cur_resource_borrows {
@@ -1206,6 +1207,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         );
                     } else {
                         // borrow handles are tracked to release after the call
+                        // these are handled by CallInterface
+                        // note that it will definitely be called because it is not possible
+                        // for core Wasm to return a borrow that would be lifted
                         self.cur_resource_borrows.push(rsc.to_string());
                     }
                 } else {
