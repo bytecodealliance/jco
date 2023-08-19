@@ -1,7 +1,15 @@
 git clone https://github.com/bytecodealliance/wit-bindgen
 cd wit-bindgen
-cargo test -p wit-bindgen-cli --no-default-features -F c
+cargo test -p wit-bindgen-cli --no-default-features -F rust -F c
 
+for t in target/runtime-tests/*/rust.wasm
+do
+  name="$(basename $(dirname $t))"
+  echo "cp $t ../test/fixtures/components/${name}.component.wasm"
+  cp $t ../test/fixtures/components/${name}.component.wasm
+done
+
+# c versions override rust versions
 for t in target/runtime-tests/*/c-*/*.component.wasm
 do
   name="$(basename $(dirname $t))"

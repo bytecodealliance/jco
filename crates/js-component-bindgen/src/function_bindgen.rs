@@ -2,7 +2,7 @@ use crate::intrinsics::Intrinsic;
 use crate::source;
 use crate::{uwrite, uwriteln};
 use heck::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
 use wit_component::StringEncoding;
@@ -16,7 +16,39 @@ pub enum ErrHandling {
     ResultCatchHandler,
 }
 
+///
+/// Map used for resource function bindgen within a given component
+///
+/// Mapping from the instance + resource index in that component (internal or external)
+/// to the unique global resource id used to key the resource tables for this resource.
+///
+/// The id value uniquely identifies the resource table so that if a resource is used
+/// by n components, there should be n different indices and spaces in use. The map is
+/// therefore entirely unique and fully distinct for each instance's function bindgen.
+///
+/// The second bool is true if it is an imported resource.
+///
+/// For a given resource id {x}, the local variables are assumed:
+/// - handleTable{x}
+/// - handleCnt{x}
+///
+/// For component-defined resources:
+/// - finalizationRegistry{x}
+///
+/// handleTable internally will be allocated with { rep: i32, own: bool } entries
+///
+/// In the case of an imported resource tables, in place of "rep" we just store
+/// the direct JS object being referenced, since in JS the object is its own handle.
+///
+pub struct ResourceTable {
+    pub id: u32,
+    pub imported: bool,
+}
+pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
+
 pub struct FunctionBindgen<'a> {
+    pub resource_map: &'a ResourceMap,
+    pub cur_resource_borrows: Vec<String>,
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
     pub valid_lifting_optimization: bool,
     pub sizes: &'a SizeAlign,
@@ -39,6 +71,7 @@ impl FunctionBindgen<'_> {
         self.tmp += 1;
         ret
     }
+
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
         return intrinsic.name().to_string();
@@ -1083,6 +1116,17 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.bind_results(func.results.len(), results);
                     uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
                 }
+
+                // after a high level call, we need to deactivate the component resource borrows
+                if self.cur_resource_borrows.len() > 0 {
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                    for resource in &self.cur_resource_borrows {
+                        uwriteln!(self.src,
+                            "Object.defineProperty({resource}, {resource_symbol}, {{ value: null }});"
+                        );
+                    }
+                    self.cur_resource_borrows = Vec::new();
+                }
             }
 
             Instruction::Return { amt, .. } => {
@@ -1134,14 +1178,107 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(ptr);
             }
 
-            Instruction::HandleLift { handle, name, ty } => {
-                uwriteln!(self.src, "\"LIFT {:?} {:?} {:?}\"", handle, name, ty);
-                results.push("lifted".into());
+            Instruction::HandleLift { handle, name, .. } => {
+                let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
+                let ResourceTable { id, imported } = self.resource_map[ty];
+                let is_own = matches!(handle, Handle::Own(_));
+                let rsc = format!("rsc{}", self.tmp());
+
+                let class_name = name.to_upper_camel_case();
+
+                if !imported {
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                    uwrite!(
+                        self.src,
+                        "const {rsc} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
+                        Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: handleTable{id}.get({}).rep }});
+                        ",
+                        operands[0],
+                    );
+                    // when we share an own handle with JS, we need to remove the original handle
+                    // and add a finalizer to the JS handle created
+                    if is_own {
+                        uwriteln!(
+                            self.src,
+                            "handleTable{id}.delete({});
+                            finalizationRegistry{id}.register({rsc}, {}, {rsc});",
+                            operands[0],
+                            operands[0]
+                        );
+                    } else {
+                        // borrow handles are tracked to release after the call
+                        // these are handled by CallInterface
+                        // note that it will definitely be called because it is not possible
+                        // for core Wasm to return a borrow that would be lifted
+                        self.cur_resource_borrows.push(rsc.to_string());
+                    }
+                } else {
+                    // imported handles need to come out of the instance capture
+                    uwriteln!(
+                        self.src,
+                        "const {rsc} = handleTable{id}.get({}).rep;",
+                        operands[0]
+                    );
+                    // own lifting means we no longer have ownership and can release the handle
+                    if is_own {
+                        uwriteln!(self.src, "handleTable{id}.delete({});", operands[0]);
+                    }
+                }
+                results.push(rsc);
             }
 
-            Instruction::HandleLower { handle, name, ty } => {
-                uwriteln!(self.src, "\"LOWER {:?} {:?} {:?}\"", handle, name, ty);
-                results.push("lowered".into());
+            Instruction::HandleLower { handle, name, .. } => {
+                let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
+                let is_own = matches!(handle, Handle::Own(_));
+                let ResourceTable { id, imported } = self.resource_map[ty];
+                let class_name = name.to_upper_camel_case();
+                let handle = format!("handle{}", self.tmp());
+                if !imported {
+                    let rep = format!("rep{}", self.tmp());
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                    uwriteln!(
+                        self.src,
+                        "let {rep} = {}[{resource_symbol}];
+                        if ({rep} === null) {{
+                            throw new Error('\"{}\" resource handle lifetime expired / transferred.');
+                        }}
+                        if ({rep} === undefined) {{
+                            throw new Error('Not a valid \"{}\" resource.');
+                        }}
+                        const {handle} = handleCnt{id}++;
+                        handleTable{id}.set({handle}, {{ rep: {rep}, own: {} }});
+                        ",
+                        operands[0],
+                        class_name,
+                        class_name,
+                        is_own
+                    );
+
+                    // lowered own handles have their finalizers deregistered
+                    // since the proxy lifecycle has now ended for this own handle
+                    if is_own {
+                        let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                        uwriteln!(
+                            self.src,
+                            "
+                            finalizationRegistry{id}.unregister({});
+                            Object.defineProperty({}, {resource_symbol}, {{ value: null }});",
+                            operands[0],
+                            operands[0],
+                        );
+                    }
+                } else {
+                    // imported resources are always given a unique handle
+                    // their assigned rep is deduped across usage though
+                    uwriteln!(
+                        self.src,
+                        "const {handle} = handleCnt{id}++;
+                        handleTable{id}.set({handle}, {{ rep: {}, own: {} }});",
+                        operands[0],
+                        is_own,
+                    );
+                }
+                results.push(handle);
             }
 
             i => unimplemented!("{:?}", i),
