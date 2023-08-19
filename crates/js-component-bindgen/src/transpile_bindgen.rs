@@ -27,7 +27,10 @@ use wasmtime_environ::{EntityIndex, PrimaryMap};
 use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
 use wit_parser::abi::AbiVariant;
-use wit_parser::{Function, Resolve, SizeAlign, WorldId, WorldItem, WorldKey};
+use wit_parser::{
+    Function, FunctionKind, Handle, Resolve, SizeAlign, Type, TypeDefKind, WorldId, WorldItem,
+    WorldKey,
+};
 
 #[derive(Default, Clone)]
 pub struct TranspileOpts {
