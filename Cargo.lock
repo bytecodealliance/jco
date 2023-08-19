@@ -52,7 +52,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "cranelift-entity"
 version = "0.100.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#a34427a3d20d11bb82fc3d4daadf954592ce2352"
+source = "git+https://github.com/bytecodealliance/wasmtime#367bdc8c66df62d6854966a90564b42692a3f023"
 dependencies = [
  "serde",
 ]
@@ -173,7 +173,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "jco"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen-component"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
@@ -479,7 +479,7 @@ dependencies = [
  "serde_json",
  "spdx",
  "wasm-encoder",
- "wasmparser 0.111.0",
+ "wasmparser",
 ]
 
 [[package]]
@@ -489,22 +489,12 @@ dependencies = [
  "anyhow",
  "wasm-encoder",
  "wasm-metadata",
- "wasmparser 0.111.0",
+ "wasmparser",
  "wasmprinter",
  "wat",
  "wit-bindgen",
  "wit-component",
  "wit-parser",
-]
-
-[[package]]
-name = "wasmparser"
-version = "0.110.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dfcdb72d96f01e6c85b6bf20102e7423bdbaad5c337301bab2bbf253d26413c"
-dependencies = [
- "indexmap 2.0.0",
- "semver",
 ]
 
 [[package]]
@@ -524,18 +514,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eeb8cc41d341939dce08ee902b50e36cd35add940f6044c94b144e8f73fe07a6"
 dependencies = [
  "anyhow",
- "wasmparser 0.111.0",
+ "wasmparser",
 ]
 
 [[package]]
 name = "wasmtime-component-util"
 version = "13.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#a34427a3d20d11bb82fc3d4daadf954592ce2352"
+source = "git+https://github.com/bytecodealliance/wasmtime#367bdc8c66df62d6854966a90564b42692a3f023"
 
 [[package]]
 name = "wasmtime-environ"
 version = "13.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#a34427a3d20d11bb82fc3d4daadf954592ce2352"
+source = "git+https://github.com/bytecodealliance/wasmtime#367bdc8c66df62d6854966a90564b42692a3f023"
 dependencies = [
  "anyhow",
  "cranelift-entity",
@@ -547,7 +537,7 @@ dependencies = [
  "target-lexicon",
  "thiserror",
  "wasm-encoder",
- "wasmparser 0.110.0",
+ "wasmparser",
  "wasmprinter",
  "wasmtime-component-util",
  "wasmtime-types",
@@ -556,12 +546,12 @@ dependencies = [
 [[package]]
 name = "wasmtime-types"
 version = "13.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#a34427a3d20d11bb82fc3d4daadf954592ce2352"
+source = "git+https://github.com/bytecodealliance/wasmtime#367bdc8c66df62d6854966a90564b42692a3f023"
 dependencies = [
  "cranelift-entity",
  "serde",
  "thiserror",
- "wasmparser 0.110.0",
+ "wasmparser",
 ]
 
 [[package]]
@@ -657,7 +647,7 @@ dependencies = [
  "log",
  "wasm-encoder",
  "wasm-metadata",
- "wasmparser 0.111.0",
+ "wasmparser",
  "wat",
  "wit-parser",
 ]
