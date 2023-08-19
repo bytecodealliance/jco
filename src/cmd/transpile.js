@@ -90,7 +90,7 @@ export async function transpileComponent (component, opts = {}) {
 
   if (opts.wasiShim !== false) {
     opts.map = Object.assign({
-      'wasi:cli-base/*': '@bytecodealliance/preview2-shim/cli-base#*',
+      'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
       'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
       'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
       'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',

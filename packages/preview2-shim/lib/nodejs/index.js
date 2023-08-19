@@ -6,7 +6,7 @@ import * as logging from "./logging.js";
 import * as poll from "./poll.js";
 import * as random from "./random.js";
 import * as sockets from "./sockets.js";
-import * as cliBase from "./cli-base.js";
+import * as cli from "./cli.js";
 
 export const importObject = {
   clocks,
@@ -17,7 +17,7 @@ export const importObject = {
   poll,
   random,
   sockets,
-  cliBase,
+  cli,
 };
 
 export { WasiHttp } from "../http/wasi-http.js";

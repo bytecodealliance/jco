@@ -34,7 +34,7 @@ export async function preview2Test () {
         const runPath = resolve(tmpdir, 'run.js');
         await writeFile(runPath, `
           import { run } from './hello_stdout.js';
-          run();
+          run.run();
         `);
 
         await chmod(runPath, 0o777);
@@ -44,7 +44,7 @@ export async function preview2Test () {
         strictEqual(stderr, 'writing to stderr: hello, world\n');
       }
       finally {
-        // await rm(tmpdir, { recursive: true });
+        await rm(tmpdir, { recursive: true });
       }
     });
   });
