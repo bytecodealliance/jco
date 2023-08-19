@@ -22,8 +22,8 @@ fn main() -> Result<()> {
 
         let import_map = HashMap::from([
             (
-                "wasi:cli-base/*".into(),
-                "@bytecodealliance/preview2-shim/cli-base#*".into(),
+                "wasi:cli/*".into(),
+                "@bytecodealliance/preview2-shim/cli#*".into(),
             ),
             (
                 "wasi:filesystem/*".into(),

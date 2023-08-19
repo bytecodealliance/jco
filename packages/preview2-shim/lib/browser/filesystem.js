@@ -1,4 +1,10 @@
-export const filesystem = {
+export const preopens = {
+  getDirectories () {
+    return [];
+  }
+}
+
+export const types = {
   readViaStream(fd, offset) {
     console.log(`[filesystem] READ STREAM ${fd} ${offset}`);
   },
@@ -137,7 +143,19 @@ export const filesystem = {
 
   dropDirectoryEntryStream(stream) {
     console.log(`[filesystem] DROP DIRECTORY ENTRY`, stream);
+  },
+
+  statAt(fd, pathFlags, path) {
+    console.log(`[filesystem] STAT`, fd, pathFlags, path);
+  },
+
+  metadataHash(fd) {
+    console.log(`[filesystem] METADATA HASH`, fd);
+  },
+
+  metadataHashAt(fd, pathFlags, path) {
+    console.log(`[filesystem] METADATA HASH AT `, fd, pathFlags, path);
   }
 };
 
-export { filesystem as filesystemFilesystem }
+export { types as filesystemTypes }

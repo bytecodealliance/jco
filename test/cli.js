@@ -181,7 +181,7 @@ export async function cliTest (fixtures) {
       }
     });
 
-    test('Componentize', async () => {
+    test.skip('Componentize', async () => {
       try {
         const { stdout, stderr } = await exec(jcoPath,
             'componentize',

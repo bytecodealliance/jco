@@ -1,6 +1,69 @@
 import { openSync, constants, statSync, lstatSync, fstatSync, closeSync, readdirSync } from 'node:fs';
-import { _descriptors, _addOpenedDescriptor, _removeOpenedDescriptor, _getDescriptorType, _setSubdescriptorType, _setDescriptorType, _getFullPath } from './cli-base.js';
 import { _createFsStream, _dropFsStream, _getFsStreamContext } from './io.js';
+
+// default is full permissions
+let preopenCnt = 4;
+export let _descriptors = {
+  3: { type: 'directory', path: '/', parent: null, subpathTypes: {} }
+};
+let directories = [[3, '/']];
+
+export function _setPreopens (preopens) {
+  _descriptors = {};
+  directories = [,,];
+  for (const [virtualPath, path] of Object.entries(preopens)) {
+    _descriptors[preopenCnt] = { type: 'directory', path, parent: null, subpathTypes: {} };
+    directories.push([preopenCnt++, virtualPath]);
+  }
+}
+
+export function _getFullPath (fd) {
+  let path = '';
+  while (fd) {
+    path = _descriptors[fd].path + path;
+    fd = _descriptors[fd].parent;
+  }
+  return path;
+}
+
+export function _getDescriptorType (fd) {
+  return _descriptors[fd].type;
+}
+
+export function _setDescriptorType (fd, type) {
+  _descriptors[fd].type = type;
+}
+
+export function _setSubdescriptorType (fd, path, type) {
+  while (_descriptors[fd].parent) {
+    path = _descriptors[fd].path + path;
+    fd = _descriptors[fd].parent;
+  }
+  _descriptors[fd].subpathTypes[path] = type;
+}
+
+export function _addOpenedDescriptor (fd, path, parentFd) {
+  if (fd < preopenCnt || _descriptors[fd])
+    throw 'bad-descriptor';
+  let type = null;
+  for (const [_path, _type] of Object.entries(_descriptors[parentFd].subpathTypes)) {
+    if (_path === path)
+      type = _type;
+  }
+  _descriptors[fd] = { path, type, parent: parentFd, subpathTypes: {} };
+}
+
+export function _removeOpenedDescriptor (fd) {
+  if (fd < preopenCnt)
+    throw 'eperm';
+  delete _descriptors[fd];
+}
+
+export const preopens = {
+  getDirectories () {
+    return directories;
+  }
+}
 
 const nsMagnitude = 1_000_000_000_000n;
 function nsToDateTime (ns) {
@@ -71,7 +134,7 @@ function _lookupType (obj) {
   return 'unknown';
 }
 
-export const filesystem = {
+export const types = {
   readViaStream(fd, offset) {
     if (Number(offset) !== 0)
       throw new Error('Read streams with non-zero offset not currently supported');
@@ -102,7 +165,7 @@ export const filesystem = {
   getType(fd) {
     let type = _getDescriptorType(fd);
     if (type === null) {
-      filesystem.stat(fd);
+      types.stat(fd);
       type = _getDescriptorType(fd);
     }
     return type;
@@ -307,5 +370,32 @@ export const filesystem = {
 
   dropDirectoryEntryStream(stream) {
     _dropFsStream(stream);
+  },
+
+  metadataHash(fd) {
+    let stats;
+    try {
+      stats = fstatSync(fd, { bigint: true });
+    }
+    catch (e) {
+      _convertFsError(e);
+    }
+    const type = _lookupType(stats);
+    _setDescriptorType(fd, type);
+    return { upper: BigInt(stats.size), lower: stats.mtimeNs };
+  },
+
+  metadataHashAt(fd, pathFlags, path) {
+    const fullPath = _descriptors[fd].path + path;
+    let stats;
+    try {
+      stats = (symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
+    }
+    catch (e) {
+      _convertFsError(e);
+    }
+    const type = _lookupType(stats);
+    _setSubdescriptorType(fd, path, type);
+    return { upper: BigInt(stats.size), lower: stats.mtimeNs };
   }
 };
