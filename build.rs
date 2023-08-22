@@ -5,7 +5,7 @@ use js_component_bindgen::{generate_types, source::wit_parser::Resolve};
 
 fn main() -> Result<()> {
     if env::var("PREVIEW2_SHIM_TYPES").is_ok() {
-        for world in ["proxy", "command", "reactor"] {
+        for world in ["command"] {
             let name = format!("wasi-{}", world);
             let preview2_wit_path = "./test/fixtures/wit";
 
@@ -40,9 +40,7 @@ fn main() -> Result<()> {
                 let mut file = fs::File::create(outfile).unwrap();
                 file.write_all(contents).unwrap();
             }
-            println!("cargo:rerun-if-changed={:?}", preview2_wit_path);
         }
     }
-    println!("cargo:rerun-if-changed=build.rs");
     Ok(())
 }

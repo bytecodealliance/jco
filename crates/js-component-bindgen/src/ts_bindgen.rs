@@ -19,6 +19,8 @@ struct TsBindgen {
     /// as a type-description of the input/output interfaces.
     src: Source,
 
+    export_names: LocalNames,
+    import_names: LocalNames,
     local_names: LocalNames,
 
     /// TypeScript definitions which will become the import object
@@ -49,6 +51,8 @@ pub fn ts_bindgen(
 ) {
     let mut bindgen = TsBindgen {
         src: Source::default(),
+        export_names: LocalNames::default(),
+        import_names: LocalNames::default(),
         local_names: LocalNames::default(),
         import_object: Source::default(),
         export_object: Source::default(),
@@ -402,20 +406,38 @@ impl TsBindgen {
         let goal_name = interface_goal_name(&id_name);
         let goal_name_kebab = goal_name.to_kebab_case();
         let file_name = &format!("{dir}/{}.d.ts", goal_name_kebab);
-        let (local_name, exists) = self.local_names.get_or_create(&file_name, &goal_name);
+        let (name, exists) = match abi {
+            AbiVariant::GuestImport => &mut self.import_names,
+            AbiVariant::GuestExport => &mut self.export_names,
+        }
+        .get_or_create(&file_name, &goal_name);
 
-        let camel = local_name.to_upper_camel_case();
+        let camel = name.to_upper_camel_case();
+
+        let local_name = if used {
+            self.local_names
+                .get_or_create(&file_name, &goal_name)
+                .0
+                .to_upper_camel_case()
+        } else {
+            camel.to_string()
+        };
 
         if used {
             uwriteln!(
                 self.src,
-                "import {{ {camel} }} from './{}';",
+                "import {{ {} }} from './{}';",
+                if camel == local_name {
+                    camel.to_string()
+                } else {
+                    format!("{camel} as {local_name}")
+                },
                 &file_name[0..file_name.len() - 5]
             );
         }
 
         if exists {
-            return camel;
+            return local_name;
         }
 
         let mut gen = self.ts_interface(resolve);
@@ -433,7 +455,7 @@ impl TsBindgen {
 
         files.push(file_name, src.as_bytes());
 
-        camel
+        local_name
     }
 
     fn ts_interface<'b>(&'b mut self, resolve: &'b Resolve) -> TsInterface<'b> {
