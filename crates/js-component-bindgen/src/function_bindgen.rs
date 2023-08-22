@@ -1132,7 +1132,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::Return { amt, .. } => {
                 if let Some(f) = &self.post_return {
-                    uwriteln!(self.src, "{f}(ret);");
+                    uwriteln!(self.src, "{f}({});", if *amt > 0 { "ret" } else { "" });
                 }
 
                 if self.err == ErrHandling::ThrowResultErr {
