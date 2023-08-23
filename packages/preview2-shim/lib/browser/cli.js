@@ -1,12 +1,26 @@
-let _env;
+let _env, _args = [], _cwd = null;
 export function _setEnv (envObj) {
   _env = Object.entries(envObj);
 }
 
+export function _setArgs (args) {
+  _args = args;
+}
+
+export function _setCwd (cwd) {
+  _cwd = cwd;
+}
+
 export const environment = {
   getEnvironment () {
-    if (!_env) _env = [];
+    if (!_env) _setEnv(process.env);
     return _env;
+  },
+  getArguments () {
+    return _args;
+  },
+  initialCwd () {
+    return _cwd;
   }
 };
 
