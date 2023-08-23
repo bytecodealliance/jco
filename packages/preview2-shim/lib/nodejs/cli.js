@@ -17,7 +17,7 @@ export const environment = {
     return _env;
   },
   getArguments () {
-    return args;
+    return _args;
   },
   initialCwd () {
     return _cwd;
