@@ -154,8 +154,7 @@ export async function cliTest (fixtures) {
         const { stderr } = await exec(jcoPath,
             'new',
             'test/fixtures/modules/exitcode.wasm',
-            '--adapt',
-            'wasi_snapshot_preview1=lib/wasi_snapshot_preview1.reactor.wasm',
+            '--wasi-reactor',
             '-o', outFile);
         strictEqual(stderr, '');
         {
