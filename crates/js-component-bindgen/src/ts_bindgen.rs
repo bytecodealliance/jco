@@ -109,7 +109,6 @@ pub fn ts_bindgen(
                         }
                         TypeDefKind::Option(t) => gen.type_option(*tid, name, t, &ty.docs),
                         TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
-                        TypeDefKind::Union(u) => gen.type_union(*tid, name, u, &ty.docs),
                         TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
                         TypeDefKind::Type(t) => {
                             gen.type_alias(*tid, name, t, None, AbiVariant::GuestImport, &ty.docs)
@@ -527,7 +526,6 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Variant(variant) => self.type_variant(id, name, variant, &ty.docs),
                 TypeDefKind::Option(t) => self.type_option(id, name, t, &ty.docs),
                 TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
-                TypeDefKind::Union(u) => self.type_union(id, name, u, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
                 TypeDefKind::Type(t) => self.type_alias(id, name, t, Some(iface_id), abi, &ty.docs),
                 TypeDefKind::Future(_) => todo!("generate for future"),
@@ -564,7 +562,6 @@ impl<'a> TsInterface<'a> {
                     TypeDefKind::Record(_) => panic!("anonymous record"),
                     TypeDefKind::Flags(_) => panic!("anonymous flags"),
                     TypeDefKind::Enum(_) => panic!("anonymous enum"),
-                    TypeDefKind::Union(_) => panic!("anonymous union"),
                     TypeDefKind::Option(t) => {
                         if maybe_null(self.resolve, t) {
                             self.needs_ty_option = true;
@@ -818,29 +815,6 @@ impl<'a> TsInterface<'a> {
                 self.print_ty(&ty, Mode::Lift);
                 self.src.push_str(",\n");
             }
-            self.src.push_str("}\n");
-        }
-    }
-
-    fn type_union(&mut self, _id: TypeId, name: &str, union: &Union, docs: &Docs) {
-        self.docs(docs);
-        let name = name.to_upper_camel_case();
-        self.src.push_str(&format!("export type {name} = "));
-        for i in 0..union.cases.len() {
-            if i > 0 {
-                self.src.push_str(" | ");
-            }
-            self.src.push_str(&format!("{name}{i}"));
-        }
-        self.src.push_str(";\n");
-        for (i, case) in union.cases.iter().enumerate() {
-            self.docs(&case.docs);
-            self.src
-                .push_str(&format!("export interface {name}{i} {{\n"));
-            self.src.push_str(&format!("tag: {i},\n"));
-            self.src.push_str("val: ");
-            self.print_ty(&case.ty, Mode::Lift);
-            self.src.push_str(",\n");
             self.src.push_str("}\n");
         }
     }

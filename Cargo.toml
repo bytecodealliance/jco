@@ -31,13 +31,13 @@ anyhow = "1.0.71"
 base64 = "0.21.2"
 heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "2.0"
-wasm-encoder = "0.31.1"
-wasm-metadata = "0.10.2"
+wasm-encoder = "0.32.0"
+wasm-metadata = "0.10.3"
 wasmparser = "0.111.0"
-wasmprinter = "0.2.63"
+wasmprinter = "0.2.64"
 wasmtime-environ = { git = "https://github.com/bytecodealliance/wasmtime", features = ["component-model"] }
-wat = "1.0.70"
-wit-bindgen = { version = "0.10.0" }
-wit-bindgen-core = { version = "0.10.0" }
-wit-component = { version = "0.13.2", features = ["dummy-module"] }
-wit-parser = "0.10.0"
+wat = "1.0.71"
+wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen" }
+wit-bindgen-core = { git = "https://github.com/bytecodealliance/wit-bindgen" }
+wit-component = { version = "0.14.0", features = ["dummy-module"] }
+wit-parser = "0.11.0"
