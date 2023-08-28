@@ -618,10 +618,7 @@ impl<'a> Instantiator<'a, '_> {
                 prev.is_none(),
                 "unsupported duplicate import of `{module}::{name}`"
             );
-            if !prev.is_none() {
-                println!("{:?}", prev);
-            }
-            // assert!(prev.is_none());
+            assert!(prev.is_none());
         }
         let mut imports = String::new();
         if !import_obj.is_empty() {
