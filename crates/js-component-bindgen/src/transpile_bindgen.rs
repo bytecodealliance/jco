@@ -801,12 +801,6 @@ impl<'a> Instantiator<'a, '_> {
                     self.connect_resources(t1, &t2.err.unwrap(), map);
                 }
             }
-            (TypeDefKind::Union(t1), InterfaceType::Union(t2)) => {
-                let t2 = &self.types[*t2];
-                for (f1, f2) in t1.cases.iter().zip(t2.types.iter()) {
-                    self.connect_resources(&f1.ty, f2, map);
-                }
-            }
             (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
                 let t2 = &self.types[*t2];
                 self.connect_resources(t1, &t2.element, map);

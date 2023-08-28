@@ -36,7 +36,7 @@ export function fListInRecord4(x: any) {
 export function fListInVariant1(a: any, b: any, c: any) {
   assert.strictEqual(a, 'foo');
   assert.deepStrictEqual(b, { tag: 'err', val: 'bar' });
-  assert.deepStrictEqual(c, { tag: 0, val: 'baz' });
+  assert.deepStrictEqual(c, undefined);
 }
 export function fListInVariant2() { return 'list_in_variant2'; }
 export function fListInVariant3(x: any) {
