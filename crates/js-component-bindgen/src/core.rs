@@ -218,8 +218,15 @@ impl Augmenter<'_> {
                 Payload::End(_) => {}
 
                 Payload::TypeSection(s) => {
-                    for ty in s {
-                        self.types.push(ty?);
+                    for grp in s {
+                        match grp? {
+                            RecGroup::Many(tys) => {
+                                for ty in tys {
+                                    self.types.push(ty);
+                                }
+                            }
+                            RecGroup::Single(ty) => self.types.push(ty),
+                        }
                     }
                 }
                 Payload::ImportSection(s) => {
