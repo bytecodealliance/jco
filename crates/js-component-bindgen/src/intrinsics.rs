@@ -8,7 +8,6 @@ pub enum Intrinsic {
     Base64Compile,
     ClampGuest,
     ComponentError,
-    CreateUtf8Copier,
     DataView,
     F32ToI32,
     F64ToI64,
@@ -116,14 +115,6 @@ pub fn render_intrinsics(
                     }
                 }
             "),
-
-          Intrinsic::CreateUtf8Copier => output.push_str("
-              function createUtf8Copier (fromMem, toMem) {
-                return function () {
-                    console.log(arguments);
-                };
-              }
-          "),
 
           Intrinsic::DataView => output.push_str("
               let dv = new DataView(new ArrayBuffer());
@@ -387,7 +378,6 @@ impl Intrinsic {
             Intrinsic::Base64Compile => "base64Compile",
             Intrinsic::ClampGuest => "clampGuest",
             Intrinsic::ComponentError => "ComponentError",
-            Intrinsic::CreateUtf8Copier => "createUtf8Copier",
             Intrinsic::DataView => "dataView",
             Intrinsic::F32ToI32 => "f32ToI32",
             Intrinsic::F64ToI64 => "f64ToI64",
