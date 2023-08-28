@@ -94,6 +94,8 @@ program.command('new')
   .requiredOption('-o, --output <output-file>', 'Wasm component output filepath')
   .option('--name <name>', 'custom output name')
   .option('--adapt <[NAME=]adapter...>', 'component adapters to apply')
+  .option('--wasi-reactor', 'build with the WASI Reactor adapter')
+  .option('--wasi-command', 'build with the WASI Command adapter')
   .action(asyncAction(componentNew));
 
 program.command('embed')
