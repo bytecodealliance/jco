@@ -116,10 +116,10 @@ pub fn render_intrinsics(
                 }
             "),
 
-            Intrinsic::DataView => output.push_str("
-                let dv = new DataView(new ArrayBuffer());
-                const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
-            "),
+          Intrinsic::DataView => output.push_str("
+              let dv = new DataView(new ArrayBuffer());
+              const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
+          "),
 
             Intrinsic::FetchCompile => if !no_nodejs_compat {
                 output.push_str("

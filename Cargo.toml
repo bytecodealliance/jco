@@ -14,7 +14,7 @@ js-component-bindgen = { path = "./crates/js-component-bindgen" }
 wit-component = { workspace = true }
 
 [build-dependencies]
-anyhow = "1.0.71"
+anyhow = { workspace = true }
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 wit-component = { workspace = true }
 
