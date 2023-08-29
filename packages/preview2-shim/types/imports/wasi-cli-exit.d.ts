@@ -1,6 +1,6 @@
-export namespace WasiCliBaseExit {
+export namespace WasiCliExit {
   /**
-   * Exit the curerent instance and any linked instances.
+   * Exit the current instance and any linked instances.
    */
   export function exit(status: Result<void, void>): void;
 }

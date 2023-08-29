@@ -69,10 +69,12 @@ export namespace WasiSocketsTcp {
    * 
    * Transitions the socket into the Listener state.
    * 
-   * Unlike in POSIX, this function is async. This enables interactive WASI hosts to inject permission prompts.
+   * Unlike POSIX:
+   * - this function is async. This enables interactive WASI hosts to inject permission prompts.
+   * - the socket must already be explicitly bound.
    * 
    * # Typical `start` errors
-   * - `already-attached`:          The socket is already attached to a different network. The `network` passed to `listen` must be identical to the one passed to `bind`.
+   * - `not-bound`:                 The socket is not bound to any local address. (EDESTADDRREQ)
    * - `already-connected`:         The socket is already in the Connection state. (EISCONN, EINVAL on BSD)
    * - `already-listening`:         The socket is already in the Listener state.
    * - `concurrency-conflict`:      Another `bind`, `connect` or `listen` operation is already in progress. (EINVAL on BSD)
@@ -88,7 +90,7 @@ export namespace WasiSocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-listen>
    * - <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
    */
-  export function startListen(this: TcpSocket, network: Network): void;
+  export function startListen(this: TcpSocket): void;
   export function finishListen(this: TcpSocket): void;
   /**
    * Accept a new client socket.
@@ -273,11 +275,9 @@ export type TcpSocket = number;
  * ## `"receive"`
  * 
  * Similar to `SHUT_RD` in POSIX.
- * 
  * ## `"send"`
  * 
  * Similar to `SHUT_WR` in POSIX.
- * 
  * ## `"both"`
  * 
  * Similar to `SHUT_RDWR` in POSIX.

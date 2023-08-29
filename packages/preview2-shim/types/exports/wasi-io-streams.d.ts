@@ -171,13 +171,11 @@ export { Pollable };
  * For example, a stream reading from a file ends when the stream reaches
  * the end of the file. For another example, a stream reading from a
  * socket ends when the socket is closed.
- * 
  * # Variants
  * 
  * ## `"open"`
  * 
  * The stream is open and may produce further data.
- * 
  * ## `"ended"`
  * 
  * When reading, this indicates that the stream will not produce
