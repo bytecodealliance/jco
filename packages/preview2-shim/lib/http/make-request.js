@@ -1,7 +1,7 @@
 import { runAsWorker } from "./synckit/index.js";
 
 /**
- * @param {import("../types/imports/types").Request} req
+ * @param {import("../../types/imports/wasi-http-types").Request} req
  * @returns {Promise<string>}
  */
 async function makeRequest(req) {
@@ -11,6 +11,7 @@ async function makeRequest(req) {
       method: req.method.toString(),
       headers,
       body: req.body && req.body.length > 0 ? req.body : undefined,
+      redirect: "manual",
     });
     let arrayBuffer = await resp.arrayBuffer();
     return JSON.stringify({
@@ -22,7 +23,7 @@ async function makeRequest(req) {
           : undefined,
     });
   } catch (err) {
-    return err.message;
+    return JSON.stringify({ message: err.toString() });
   }
 }
 

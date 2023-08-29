@@ -26,39 +26,32 @@ export type Network = number;
  * - `out-of-memory`
  * 
  * See each individual API for what the POSIX equivalents are. They sometimes differ per API.
- * 
  * # Variants
  * 
  * ## `"unknown"`
  * 
  * Unknown error
- * 
  * ## `"access-denied"`
  * 
  * Access denied.
  * 
  * POSIX equivalent: EACCES, EPERM
- * 
  * ## `"not-supported"`
  * 
  * The operation is not supported.
  * 
  * POSIX equivalent: EOPNOTSUPP
- * 
  * ## `"out-of-memory"`
  * 
  * Not enough memory to complete the operation.
  * 
  * POSIX equivalent: ENOMEM, ENOBUFS, EAI_MEMORY
- * 
  * ## `"timeout"`
  * 
  * The operation timed out before it could finish completely.
- * 
  * ## `"concurrency-conflict"`
  * 
  * This operation is incompatible with another asynchronous operation that is already in progress.
- * 
  * ## `"not-in-progress"`
  * 
  * Trying to finish an asynchronous operation that:
@@ -66,103 +59,79 @@ export type Network = number;
  * - was already finished by a previous `finish-*` call.
  * 
  * Note: this is scheduled to be removed when `future`s are natively supported.
- * 
  * ## `"would-block"`
  * 
  * The operation has been aborted because it could not be completed immediately.
  * 
  * Note: this is scheduled to be removed when `future`s are natively supported.
- * 
  * ## `"address-family-not-supported"`
  * 
  * The specified address-family is not supported.
- * 
  * ## `"address-family-mismatch"`
  * 
  * An IPv4 address was passed to an IPv6 resource, or vice versa.
- * 
  * ## `"invalid-remote-address"`
  * 
  * The socket address is not a valid remote address. E.g. the IP address is set to INADDR_ANY, or the port is set to 0.
- * 
  * ## `"ipv4-only-operation"`
  * 
  * The operation is only supported on IPv4 resources.
- * 
  * ## `"ipv6-only-operation"`
  * 
  * The operation is only supported on IPv6 resources.
- * 
  * ## `"new-socket-limit"`
  * 
  * A new socket resource could not be created because of a system limit.
- * 
  * ## `"already-attached"`
  * 
  * The socket is already attached to another network.
- * 
  * ## `"already-bound"`
  * 
  * The socket is already bound.
- * 
  * ## `"already-connected"`
  * 
  * The socket is already in the Connection state.
- * 
  * ## `"not-bound"`
  * 
  * The socket is not bound to any local address.
- * 
  * ## `"not-connected"`
  * 
  * The socket is not in the Connection state.
- * 
  * ## `"address-not-bindable"`
  * 
  * A bind operation failed because the provided address is not an address that the `network` can bind to.
- * 
  * ## `"address-in-use"`
  * 
  * A bind operation failed because the provided address is already in use.
- * 
  * ## `"ephemeral-ports-exhausted"`
  * 
  * A bind operation failed because there are no ephemeral ports available.
- * 
  * ## `"remote-unreachable"`
  * 
  * The remote address is not reachable
- * 
  * ## `"already-listening"`
  * 
  * The socket is already in the Listener state.
- * 
  * ## `"not-listening"`
  * 
  * The socket is already in the Listener state.
- * 
  * ## `"connection-refused"`
  * 
  * The connection was forcefully rejected
- * 
  * ## `"connection-reset"`
  * 
  * The connection was reset.
- * 
  * ## `"datagram-too-large"`
  * 
  * ## `"invalid-name"`
  * 
  * The provided name is a syntactically invalid domain name.
- * 
  * ## `"name-unresolvable"`
  * 
  * Name does not exist or has no suitable associated IP addresses.
- * 
  * ## `"temporary-resolver-failure"`
  * 
  * A temporary failure in name resolution occurred.
- * 
  * ## `"permanent-resolver-failure"`
  * 
  * A permanent failure in name resolution occurred.
@@ -174,7 +143,6 @@ export type ErrorCode = 'unknown' | 'access-denied' | 'not-supported' | 'out-of-
  * ## `"ipv4"`
  * 
  * Similar to `AF_INET` in POSIX.
- * 
  * ## `"ipv6"`
  * 
  * Similar to `AF_INET6` in POSIX.

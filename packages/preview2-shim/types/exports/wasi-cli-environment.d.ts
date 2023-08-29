@@ -1,4 +1,4 @@
-export namespace WasiCliBaseEnvironment {
+export namespace WasiCliEnvironment {
   /**
    * Get the POSIX-style environment variables.
    * 
@@ -14,4 +14,9 @@ export namespace WasiCliBaseEnvironment {
    * Get the POSIX-style arguments to the program.
    */
   export function getArguments(): string[];
+  /**
+   * Return a path that programs should use as their initial current working
+   * directory, interpreting `.` as shorthand for this.
+   */
+  export function initialCwd(): string | null;
 }

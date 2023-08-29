@@ -10,13 +10,13 @@ Currently supports Node.js and browser versions, but alternative implementations
 | --------------- | ----------------------------:|-----------------------------:|
 | Clocks          | Pending timezone, poll       | Pending timezone, poll       |
 | Filesystem      | Basic read support           | :x:                          |
-| HTTP            | :x:                          | :x:                          |
+| HTTP            | Experimental support         | Experimental support         |
 | IO              | Basic FS Streams             | :x:                          |
 | Logging         | :heavy_check_mark:           | :heavy_check_mark:           |
 | Poll            | :x:                          | :x:                          |
 | Random          | :heavy_check_mark:           | :heavy_check_mark:           |
 | Sockets         | :x:                          | :x:                          |
-| CLI Base        | :heavy_check_mark:           | :heavy_check_mark:           |
+| CLI             | :heavy_check_mark:           | :heavy_check_mark:           |
 
 # License
 

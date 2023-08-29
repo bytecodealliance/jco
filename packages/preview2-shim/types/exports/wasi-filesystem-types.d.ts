@@ -1,24 +1,30 @@
-export namespace WasiFilesystemFilesystem {
+export namespace WasiFilesystemTypes {
   /**
-   * Return a stream for reading from a file.
+   * Return a stream for reading from a file, if available.
+   * 
+   * May fail with an error-code describing why the file cannot be read.
    * 
    * Multiple read, write, and append streams may be active on the same open
    * file and they do not interfere with each other.
    * 
-   * Note: This allows using `wasi:io/streams.read`, which is similar to `read` in POSIX.
+   * Note: This allows using `read-stream`, which is similar to `read` in POSIX.
    */
   export function readViaStream(this: Descriptor, offset: Filesize): InputStream;
   /**
-   * Return a stream for writing to a file.
+   * Return a stream for writing to a file, if available.
    * 
-   * Note: This allows using `wasi:io/streams.write`, which is similar to `write` in
+   * May fail with an error-code describing why the file cannot be written.
+   * 
+   * Note: This allows using `write-stream`, which is similar to `write` in
    * POSIX.
    */
   export function writeViaStream(this: Descriptor, offset: Filesize): OutputStream;
   /**
-   * Return a stream for appending to a file.
+   * Return a stream for appending to a file, if available.
    * 
-   * Note: This allows using `wasi:io/streams.write`, which is similar to `write` with
+   * May fail with an error-code describing why the file cannot be appended.
+   * 
+   * Note: This allows using `write-stream`, which is similar to `write` with
    * `O_APPEND` in in POSIX.
    */
   export function appendViaStream(this: Descriptor): OutputStream;
@@ -130,7 +136,11 @@ export namespace WasiFilesystemFilesystem {
   /**
    * Return the attributes of an open file or directory.
    * 
-   * Note: This is similar to `fstat` in POSIX.
+   * Note: This is similar to `fstat` in POSIX, except that it does not return
+   * device and inode information. For testing whether two descriptors refer to
+   * the same underlying filesystem object, use `is-same-object`. To obtain
+   * additional data that can be used do determine whether a file has been
+   * modified, use `metadata-hash`.
    * 
    * Note: This was called `fd_filestat_get` in earlier versions of WASI.
    */
@@ -138,7 +148,9 @@ export namespace WasiFilesystemFilesystem {
   /**
    * Return the attributes of a file or directory.
    * 
-   * Note: This is similar to `fstatat` in POSIX.
+   * Note: This is similar to `fstatat` in POSIX, except that it does not
+   * return device and inode information. See the `stat` description for a
+   * discussion of alternatives.
    * 
    * Note: This was called `path_filestat_get` in earlier versions of WASI.
    */
@@ -371,6 +383,44 @@ export namespace WasiFilesystemFilesystem {
    * be used.
    */
   export function dropDirectoryEntryStream(this: DirectoryEntryStream): void;
+  /**
+   * Test whether two descriptors refer to the same filesystem object.
+   * 
+   * In POSIX, this corresponds to testing whether the two descriptors have the
+   * same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
+   * wasi-filesystem does not expose device and inode numbers, so this function
+   * may be used instead.
+   */
+  export function isSameObject(this: Descriptor, other: Descriptor): boolean;
+  /**
+   * Return a hash of the metadata associated with a filesystem object referred
+   * to by a descriptor.
+   * 
+   * This returns a hash of the last-modification timestamp and file size, and
+   * may also include the inode number, device number, birth timestamp, and
+   * other metadata fields that may change when the file is modified or
+   * replaced. It may also include a secret value chosen by the
+   * implementation and not otherwise exposed.
+   * 
+   * Implementations are encourated to provide the following properties:
+   * 
+   * - If the file is not modified or replaced, the computed hash value should
+   * usually not change.
+   * - If the object is modified or replaced, the computed hash value should
+   * usually change.
+   * - The inputs to the hash should not be easily computable from the
+   * computed hash.
+   * 
+   * However, none of these is required.
+   */
+  export function metadataHash(this: Descriptor): MetadataHashValue;
+  /**
+   * Return a hash of the metadata associated with a filesystem object referred
+   * to by a directory descriptor and a relative path.
+   * 
+   * This performs the same hash computation as `metadata-hash`.
+   */
+  export function metadataHashAt(this: Descriptor, pathFlags: PathFlags, path: string): MetadataHashValue;
 }
 import type { InputStream } from '../exports/wasi-io-streams';
 export { InputStream };
@@ -386,38 +436,30 @@ export type Filesize = bigint;
  * The type of a filesystem object referenced by a descriptor.
  * 
  * Note: This was called `filetype` in earlier versions of WASI.
- * 
  * # Variants
  * 
  * ## `"unknown"`
  * 
  * The type of the descriptor or file is unknown or is different from
  * any of the other types specified.
- * 
  * ## `"block-device"`
  * 
  * The descriptor refers to a block device inode.
- * 
  * ## `"character-device"`
  * 
  * The descriptor refers to a character device inode.
- * 
  * ## `"directory"`
  * 
  * The descriptor refers to a directory inode.
- * 
  * ## `"fifo"`
  * 
  * The descriptor refers to a named pipe.
- * 
  * ## `"symbolic-link"`
  * 
  * The file refers to a symbolic link inode.
- * 
  * ## `"regular-file"`
  * 
  * The descriptor refers to a regular file inode.
- * 
  * ## `"socket"`
  * 
  * The descriptor refers to a socket.
@@ -553,29 +595,11 @@ export interface AccessTypeExists {
  */
 export type LinkCount = bigint;
 /**
- * Identifier for a device containing a file system. Can be used in
- * combination with `inode` to uniquely identify a file or directory in
- * the filesystem.
- */
-export type Device = bigint;
-/**
- * Filesystem object serial number that is unique within its file system.
- */
-export type Inode = bigint;
-/**
  * File attributes.
  * 
  * Note: This was called `filestat` in earlier versions of WASI.
  */
 export interface DescriptorStat {
-  /**
-   * Device ID of device containing the file.
-   */
-  device: Device,
-  /**
-   * File serial number.
-   */
-  inode: Inode,
   /**
    * File type.
    */
@@ -631,15 +655,6 @@ export interface NewTimestampTimestamp {
  */
 export interface DirectoryEntry {
   /**
-   * The serial number of the object referred to by this directory entry.
-   * May be none if the inode value is not known.
-   * 
-   * When this is none, libc implementations might do an extra `stat-at`
-   * call to retrieve the inode number to fill their `d_ino` fields, so
-   * implementations which can set this to a non-none value should do so.
-   */
-  inode?: Inode,
-  /**
    * The type of the file referred to by this directory entry.
    */
   type: DescriptorType,
@@ -653,153 +668,116 @@ export interface DirectoryEntry {
  * Not all of these error codes are returned by the functions provided by this
  * API; some are used in higher-level library layers, and others are provided
  * merely for alignment with POSIX.
- * 
  * # Variants
  * 
  * ## `"access"`
  * 
  * Permission denied, similar to `EACCES` in POSIX.
- * 
  * ## `"would-block"`
  * 
  * Resource unavailable, or operation would block, similar to `EAGAIN` and `EWOULDBLOCK` in POSIX.
- * 
  * ## `"already"`
  * 
  * Connection already in progress, similar to `EALREADY` in POSIX.
- * 
  * ## `"bad-descriptor"`
  * 
  * Bad descriptor, similar to `EBADF` in POSIX.
- * 
  * ## `"busy"`
  * 
  * Device or resource busy, similar to `EBUSY` in POSIX.
- * 
  * ## `"deadlock"`
  * 
  * Resource deadlock would occur, similar to `EDEADLK` in POSIX.
- * 
  * ## `"quota"`
  * 
  * Storage quota exceeded, similar to `EDQUOT` in POSIX.
- * 
  * ## `"exist"`
  * 
  * File exists, similar to `EEXIST` in POSIX.
- * 
  * ## `"file-too-large"`
  * 
  * File too large, similar to `EFBIG` in POSIX.
- * 
  * ## `"illegal-byte-sequence"`
  * 
  * Illegal byte sequence, similar to `EILSEQ` in POSIX.
- * 
  * ## `"in-progress"`
  * 
  * Operation in progress, similar to `EINPROGRESS` in POSIX.
- * 
  * ## `"interrupted"`
  * 
  * Interrupted function, similar to `EINTR` in POSIX.
- * 
  * ## `"invalid"`
  * 
  * Invalid argument, similar to `EINVAL` in POSIX.
- * 
  * ## `"io"`
  * 
  * I/O error, similar to `EIO` in POSIX.
- * 
  * ## `"is-directory"`
  * 
  * Is a directory, similar to `EISDIR` in POSIX.
- * 
  * ## `"loop"`
  * 
  * Too many levels of symbolic links, similar to `ELOOP` in POSIX.
- * 
  * ## `"too-many-links"`
  * 
  * Too many links, similar to `EMLINK` in POSIX.
- * 
  * ## `"message-size"`
  * 
  * Message too large, similar to `EMSGSIZE` in POSIX.
- * 
  * ## `"name-too-long"`
  * 
  * Filename too long, similar to `ENAMETOOLONG` in POSIX.
- * 
  * ## `"no-device"`
  * 
  * No such device, similar to `ENODEV` in POSIX.
- * 
  * ## `"no-entry"`
  * 
  * No such file or directory, similar to `ENOENT` in POSIX.
- * 
  * ## `"no-lock"`
  * 
  * No locks available, similar to `ENOLCK` in POSIX.
- * 
  * ## `"insufficient-memory"`
  * 
  * Not enough space, similar to `ENOMEM` in POSIX.
- * 
  * ## `"insufficient-space"`
  * 
  * No space left on device, similar to `ENOSPC` in POSIX.
- * 
  * ## `"not-directory"`
  * 
  * Not a directory or a symbolic link to a directory, similar to `ENOTDIR` in POSIX.
- * 
  * ## `"not-empty"`
  * 
  * Directory not empty, similar to `ENOTEMPTY` in POSIX.
- * 
  * ## `"not-recoverable"`
  * 
  * State not recoverable, similar to `ENOTRECOVERABLE` in POSIX.
- * 
  * ## `"unsupported"`
  * 
  * Not supported, similar to `ENOTSUP` and `ENOSYS` in POSIX.
- * 
  * ## `"no-tty"`
  * 
  * Inappropriate I/O control operation, similar to `ENOTTY` in POSIX.
- * 
  * ## `"no-such-device"`
  * 
  * No such device or address, similar to `ENXIO` in POSIX.
- * 
  * ## `"overflow"`
  * 
  * Value too large to be stored in data type, similar to `EOVERFLOW` in POSIX.
- * 
  * ## `"not-permitted"`
  * 
  * Operation not permitted, similar to `EPERM` in POSIX.
- * 
  * ## `"pipe"`
  * 
  * Broken pipe, similar to `EPIPE` in POSIX.
- * 
  * ## `"read-only"`
  * 
  * Read-only file system, similar to `EROFS` in POSIX.
- * 
  * ## `"invalid-seek"`
  * 
  * Invalid seek, similar to `ESPIPE` in POSIX.
- * 
  * ## `"text-file-busy"`
  * 
  * Text file busy, similar to `ETXTBSY` in POSIX.
- * 
  * ## `"cross-device"`
  * 
  * Cross-device link, similar to `EXDEV` in POSIX.
@@ -807,34 +785,28 @@ export interface DirectoryEntry {
 export type ErrorCode = 'access' | 'would-block' | 'already' | 'bad-descriptor' | 'busy' | 'deadlock' | 'quota' | 'exist' | 'file-too-large' | 'illegal-byte-sequence' | 'in-progress' | 'interrupted' | 'invalid' | 'io' | 'is-directory' | 'loop' | 'too-many-links' | 'message-size' | 'name-too-long' | 'no-device' | 'no-entry' | 'no-lock' | 'insufficient-memory' | 'insufficient-space' | 'not-directory' | 'not-empty' | 'not-recoverable' | 'unsupported' | 'no-tty' | 'no-such-device' | 'overflow' | 'not-permitted' | 'pipe' | 'read-only' | 'invalid-seek' | 'text-file-busy' | 'cross-device';
 /**
  * File or memory access pattern advisory information.
- * 
  * # Variants
  * 
  * ## `"normal"`
  * 
  * The application has no advice to give on its behavior with respect
  * to the specified data.
- * 
  * ## `"sequential"`
  * 
  * The application expects to access the specified data sequentially
  * from lower offsets to higher offsets.
- * 
  * ## `"random"`
  * 
  * The application expects to access the specified data in a random
  * order.
- * 
  * ## `"will-need"`
  * 
  * The application expects to access the specified data in the near
  * future.
- * 
  * ## `"dont-need"`
  * 
  * The application expects that it will not access the specified data
  * in the near future.
- * 
  * ## `"no-reuse"`
  * 
  * The application expects to access the specified data once and then
@@ -849,6 +821,20 @@ export type Advice = 'normal' | 'sequential' | 'random' | 'will-need' | 'dont-ne
  * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
  */
 export type Descriptor = number;
+/**
+ * A 128-bit hash value, split into parts because wasm doesn't have a
+ * 128-bit integer type.
+ */
+export interface MetadataHashValue {
+  /**
+   * 64 bits of a 128-bit hash value.
+   */
+  lower: bigint,
+  /**
+   * Another 64 bits of a 128-bit hash value.
+   */
+  upper: bigint,
+}
 /**
  * A stream of directory entries.
  * 

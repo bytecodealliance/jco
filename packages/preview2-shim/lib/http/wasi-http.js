@@ -1,18 +1,19 @@
 // Based on:
-// https://github.com/bytecodealliance/wasmtime/blob/76eb40e0756d90cc9c16b26a8d8b1e0ebf75f44d/crates/wasi-http/src/http_impl.rs
+// https://github.com/bytecodealliance/wasmtime/blob/8efcb9851602287fd07a1a1e91501f51f2653d7e/crates/wasi-http/
 
 /**
- * @typedef {import("../../types/imports/types").Fields} Fields
- * @typedef {import("../../types/imports/types").FutureIncomingResponse} FutureIncomingResponse
- * @typedef {import("../../types/imports/types").Headers} Headers
- * @typedef {import("../../types/imports/types").IncomingResponse} IncomingResponse
- * @typedef {import("../../types/imports/types").IncomingStream} IncomingStream
- * @typedef {import("../../types/imports/types").Method} Method
- * @typedef {import("../../types/imports/types").OutgoingRequest} OutgoingRequest
- * @typedef {import("../../types/imports/types").RequestOptions} RequestOptions
- * @typedef {import("../../types/imports/types").Result} Result
- * @typedef {import("../../types/imports/types").Scheme} Scheme
- * @typedef {import("../../types/imports/types").StatusCode} StatusCode
+ * @typedef {import("../../types/imports/wasi-http-types").Fields} Fields
+ * @typedef {import("../../types/imports/wasi-http-types").FutureIncomingResponse} FutureIncomingResponse
+ * @typedef {import("../../types/imports/wasi-http-types").Headers} Headers
+ * @typedef {import("../../types/imports/wasi-http-types").IncomingResponse} IncomingResponse
+ * @typedef {import("../../types/imports/wasi-http-types").IncomingStream} IncomingStream
+ * @typedef {import("../../types/imports/wasi-http-types").Method} Method
+ * @typedef {import("../../types/imports/wasi-http-types").OutgoingRequest} OutgoingRequest
+ * @typedef {import("../../types/imports/wasi-http-types").RequestOptions} RequestOptions
+ * @typedef {import("../../types/imports/wasi-http-types").Result} Result
+ * @typedef {import("../../types/imports/wasi-http-types").Scheme} Scheme
+ * @typedef {import("../../types/imports/wasi-http-types").StatusCode} StatusCode
+ * @typedef {import("../../types/imports/wasi-io-streams").StreamStatus} StreamStatus
 */
 
 import * as io from '@bytecodealliance/preview2-shim/io';
@@ -48,12 +49,14 @@ export class WasiHttp {
 
     const scheme = request.scheme.tag === "HTTP" ? "http://" : "https://";
 
-    const url = scheme + request.authority + request.path + request.query;
+    const url = scheme + request.authority + request.pathWithQuery;
     const headers = {
       "host": request.authority,
     };
-    for (const [key, value] of request.headers.entries()) {
-      headers[key] = Array.isArray(value) ? value.join(",") : value;
+    if (request.headers && request.headers.size > 0) {
+      for (const [key, value] of request.headers.entries()) {
+        headers[key] = Array.isArray(value) ? value.join(",") : value;
+      }
     }
     const body =  this.streams.get(request.body);
 
@@ -66,8 +69,10 @@ export class WasiHttp {
     });
 
     response.status = res.status;
-    for (const [key, value] of res.headers) {
-      response.responseHeaders.set(key, [value]);
+    if (res.headers && res.headers.size > 0) {
+      for (const [key, value] of res.headers) {
+        response.responseHeaders.set(key, [value]);
+      }
     }
     const buf = res.body;
     response.body = this.streamIdBase;
@@ -82,25 +87,29 @@ export class WasiHttp {
     return futureId;
   }
 
+  read = (stream, len) => {
+    return this.blockingRead(stream, len);
+  }
+
   /**
    * @param {InputStream} stream 
    * @param {bigint} len 
-   * @returns {[Uint8Array | ArrayBuffer, boolean]}
+   * @returns {[Uint8Array | ArrayBuffer, StreamStatus]}
    */
-  read = (stream, len) => {
+  blockingRead = (stream, len) => {
     if (stream < 3) {
-      return io.read(stream);
+      return io.streams.blockingRead(stream);
     }
     const s = this.streams.get(stream);
     if (!s) throw Error(`stream not found: ${stream}`);
     const position = Number(len);
     if (position === 0) {
-      return [new Uint8Array(), s.byteLength > 0];
+      return [new Uint8Array(), s.byteLength > 0 ? 'open' : 'ended'];
     } else if (s.byteLength > position) {
       this.streams.set(stream, s.slice(position, s.byteLength));
-      return [s.slice(0, position), false];
+      return [s.slice(0, position), 'open'];
     } else {
-      return [s.slice(0, position), true];
+      return [s.slice(0, position), 'ended'];
     }
   }
 
@@ -108,8 +117,9 @@ export class WasiHttp {
    * @param {InputStream} stream 
    * @returns {Pollable}
    */
-  subscribeToInputStream = (_stream) => {
-    throw Error("unimplemented: subscribeToInputStream");
+  subscribeToInputStream = (stream) => {
+    // TODO: not implemented yet
+    console.log(`[streams] Subscribe to input stream ${stream}`);
   }
 
   /**
@@ -121,25 +131,30 @@ export class WasiHttp {
     s.set([]);
   }
 
+  write = (stream, buf) => {
+    return this.blockingWrite(stream, buf);
+  }
+
   /**
    * @param {OutputStream} stream 
    * @param {Uint8Array} buf 
-   * @returns {bigint}
+   * @returns {[bigint, StreamStatus]}
    */
-  write = (stream, buf) => {
+  blockingWrite = (stream, buf) => {
     if (stream < 3) {
-      return io.write(stream, buf);
+      return io.streams.blockingWrite(stream, buf);
     }
     this.streams.set(stream, buf);
-    return BigInt(buf.byteLength);
+    return [BigInt(buf.byteLength), 'ended'];
   }
 
   /**
    * @param {OutputStream} stream 
    * @returns {Pollable}
    */
-  subscribeToOutputStream = (_stream) => {
-    throw Error("unimplemented: subscribeToOutputStream");
+  subscribeToOutputStream = (stream) => {
+    // TODO: not implemented yet
+    console.log(`[streams] Subscribe to output stream ${stream}`);
   }
 
   /**
@@ -189,20 +204,18 @@ export class WasiHttp {
 
   /**
    * @param {Method} method
-   * @param {string} path
-   * @param {string} query
+   * @param {string | null} pathWithQuery
    * @param {Scheme | null} scheme
-   * @param {string} authority
+   * @param {string | null} authority
    * @param {Headers} headers
    * @returns {number}
    */
-  newOutgoingRequest = (method, path, query, scheme, authority, headers) => {
+  newOutgoingRequest = (method, pathWithQuery, scheme, authority, headers) => {
     const id = this.requestIdBase;
     this.requestIdBase += 1;
 
     const req = new ActiveRequest(id);
-    req.path = path;
-    req.query = query;
+    req.pathWithQuery = pathWithQuery;
     req.authority = authority;
     req.method = method;
     req.headers = this.fields.get(headers);
@@ -301,9 +314,8 @@ class ActiveRequest {
   activeRequest = false;
   /** @type {Method} */ method = { tag: 'get' };
   /** @type {Scheme | null} */ scheme = { tag: 'HTTP' };
-  path = "";
-  query = "";
-  authority = "";
+  pathWithQuery = null;
+  authority = null;
   /** @type {Map<string,string[]>} */ headers = new Map();
   body = 3;
 

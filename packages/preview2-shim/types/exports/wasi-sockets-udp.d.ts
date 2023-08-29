@@ -64,11 +64,11 @@ export namespace WasiSocketsUdp {
   export function startConnect(this: UdpSocket, network: Network, remoteAddress: IpSocketAddress): void;
   export function finishConnect(this: UdpSocket): void;
   /**
-   * Receive a message.
+   * Receive messages on the socket.
    * 
-   * Returns:
-   * - The sender address of the datagram
-   * - The number of bytes read.
+   * This function attempts to receive up to `max-results` datagrams on the socket without blocking.
+   * The returned list may contain fewer elements than requested, but never more.
+   * If `max-results` is 0, this function returns successfully with an empty list.
    * 
    * # Typical errors
    * - `not-bound`:          The socket is not bound to any local address. (EINVAL)
@@ -79,14 +79,24 @@ export namespace WasiSocketsUdp {
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
    * - <https://man7.org/linux/man-pages/man2/recv.2.html>
+   * - <https://man7.org/linux/man-pages/man2/recvmmsg.2.html>
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
    * - <https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms741687(v=vs.85)>
    * - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
    */
-  export function receive(this: UdpSocket): Datagram;
+  export function receive(this: UdpSocket, maxResults: bigint): Datagram[];
   /**
-   * Send a message to a specific destination address.
+   * Send messages on the socket.
+   * 
+   * This function attempts to send all provided `datagrams` on the socket without blocking and
+   * returns how many messages were actually sent (or queued for sending).
+   * 
+   * This function semantically behaves the same as iterating the `datagrams` list and sequentially
+   * sending each individual datagram until either the end of the list has been reached or the first error occurred.
+   * If at least one datagram has been sent successfully, this function never returns an error.
+   * 
+   * If the input list is empty, the function returns `ok(0)`.
    * 
    * The remote address option is required. To send a message to the "connected" peer,
    * call `remote-address` to get their address.
@@ -105,12 +115,13 @@ export namespace WasiSocketsUdp {
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
    * - <https://man7.org/linux/man-pages/man2/send.2.html>
+   * - <https://man7.org/linux/man-pages/man2/sendmmsg.2.html>
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
    * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
    */
-  export function send(this: UdpSocket, datagram: Datagram): void;
+  export function send(this: UdpSocket, datagrams: Datagram[]): bigint;
   /**
    * Get the current bound address.
    * 
@@ -173,8 +184,6 @@ export namespace WasiSocketsUdp {
    * Note #2: there is not necessarily a direct relationship between the kernel buffer size and the bytes of
    * actual data to be sent/received by the application, because the kernel might also use the buffer space
    * for internal metadata structures.
-   * 
-   * Fails when this socket is in the Listening state.
    * 
    * Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
    * 
