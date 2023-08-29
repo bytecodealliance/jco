@@ -98,7 +98,7 @@ Options include:
 * `--js`: Converts core Wasm files to JavaScript for environments that don't even support core Wasm.
 * `--base64-cutoff=<number>`: Sets the maximum number of bytes for inlining Wasm files into the JS using base64 encoding. Set to zero to disable base64 inlining entirely.
 * `--no-wasi-shim`: Disable the WASI shim mapping to `@bytecodealliance/preview2-shim`.
-* `--map`: Provide custom mappings for world imports. Supports both wildcard mappings (`*` similarly as in the package.json "exports" field) as well as `#` mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like `--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*` to map `import as * filesystem from 'wasi:filesystem/filesystem'` to `import { filesystem } from '@bytecodealliance/preview2-shim/filesystem`.
+* `--map`: Provide custom mappings for world imports. Supports both wildcard mappings (`*` similarly as in the package.json "exports" field) as well as `#` mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like `--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*` to map `import as * filesystem from 'wasi:filesystem/types'` to `import { types } from '@bytecodealliance/preview2-shim/filesystem`.
 * `--no-nodejs-compat`: Disables Node.js compat in the output to load core Wasm with FS methods.
 * `--instantiation`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports.
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.

@@ -1,8 +1,8 @@
-const levels = ["trace", "debug", "info", "warn", "error"];
+const levels = ["trace", "debug", "info", "warn", "error", "critical"];
 
 let logLevel = levels.indexOf("warn");
 
-export const handler = {
+export const logging = {
   log(level, context, msg) {
     if (logLevel > levels.indexOf(level)) return;
     console[level](`(${context}) ${msg}\n`);

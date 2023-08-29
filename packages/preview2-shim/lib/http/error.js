@@ -1,5 +1,5 @@
 export class UnexpectedError extends Error {
-  /** @type { import("../types/http").HttpErrorUnexpectedError } */
+  /** @type { import("../../types/imports/wasi-http-types").ErrorUnexpectedError } */
   payload;
   constructor(message = "unexpected-error") {
     super(message);

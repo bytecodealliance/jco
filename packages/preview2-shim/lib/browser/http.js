@@ -1,7 +1,7 @@
 import { UnexpectedError } from "../http/error.js";
 
 /**
- * @param {import("../types/imports/types").Request} req
+ * @param {import("../../types/imports/wasi-http-types").Request} req
  * @returns {string}
  */
 export function send(req) {
@@ -86,11 +86,8 @@ export const types = {
   incomingRequestMethod(_req) {
     console.log("[types] Incoming request method");
   },
-  incomingRequestPath(_req) {
-    console.log("[types] Incoming request path");
-  },
-  incomingRequestQuery(_req) {
-    console.log("[types] Incoming request query");
+  incomingRequestPathWithQuery(_req) {
+    console.log("[types] Incoming request path with query");
   },
   incomingRequestScheme(_req) {
     console.log("[types] Incoming request scheme");
@@ -104,7 +101,7 @@ export const types = {
   incomingRequestConsume(_req) {
     console.log("[types] Incoming request consume");
   },
-  newOutgoingRequest(_method, _path, _query, _scheme, _authority, _headers) {
+  newOutgoingRequest(_method, _pathWithQuery, _scheme, _authority, _headers) {
     console.log("[types] New outgoing request");
   },
   outgoingRequestWrite(_req) {
