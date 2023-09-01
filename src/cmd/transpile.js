@@ -10,8 +10,8 @@ import { fileURLToPath } from 'url';
 import ora from '#ora';
 
 export async function transpile (componentPath, opts, program) {
-  const varIdx = program.parent.rawArgs.indexOf('--');
-  if (varIdx !== -1)
+  const varIdx = program?.parent.rawArgs.indexOf('--');
+  if (varIdx !== undefined && varIdx !== -1)
     opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
   const component = await readFile(componentPath);
 
@@ -108,6 +108,7 @@ export async function transpileComponent (component, opts = {}) {
     instantiation: opts.instantiation || opts.js,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     noNodejsCompat: !(opts.nodejsCompat ?? true),
+    noTypescript: opts.noTypescript || false,
     tlaCompat: opts.tlaCompat ?? false,
     base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000
   });

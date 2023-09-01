@@ -2,6 +2,7 @@
 import { program } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile } from './cmd/transpile.js';
+import { run } from './cmd/run.js';
 import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
 import { componentize } from './cmd/componentize.js';
 import c from 'chalk-template';
@@ -46,6 +47,13 @@ program.command('transpile')
   .option('-q, --quiet', 'disable logging')
   .option('--', 'for --optimize, custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(transpile));
+
+  program.command('run')
+  .description('Run a WebAssembly Command component')
+  .usage('<command.wasm> <args...>')
+  .argument('<command>', 'Wasm command binary to run')
+  .argument('[args...]', 'Any CLI arguments to provide to the command')
+  .action(asyncAction(run));
 
 program.command('opt')
   .description('optimizes a Wasm component, including running wasm-opt Binaryen optimizations')
