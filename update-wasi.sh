@@ -1,5 +1,6 @@
 git clone https://github.com/bytecodealliance/wasmtime --depth 1
 cd wasmtime
+git checkout 134dddc
 git submodule init
 git submodule update
 cargo build -p wasi-preview1-component-adapter --target wasm32-unknown-unknown --release --no-default-features --features reactor
