@@ -6,7 +6,10 @@
   "bin": {
     "jco": "src/jco.js"
   },
-  "exports": "./src/api.js",
+  "exports": {
+    "browser": "./src/browser.js",
+    "default": "./src/api.js"
+  },
   "imports": {
     "#ora": {
       "browser": "./src/ora-shim.js",
