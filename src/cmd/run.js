@@ -56,7 +56,7 @@ export async function run (componentPath, args) {
     await writeFile(runPath, `
       import { _setEnv, _setArgs, _setCwd } from '@bytecodealliance/preview2-shim/cli';
       _setArgs(process.argv.slice(1));
-      _setEnv(Object.entries(process.env));
+      _setEnv(process.env);
       _setCwd(process.cwd());
       function logInvalidCommand () {
         console.error('Not a valid command component to execute, make sure it was built to a command adapter and with the same version.');
@@ -87,7 +87,7 @@ export async function run (componentPath, args) {
   finally {
     if (!cp) {
       try {
-        await rm(outDir, { recursive: true });
+        // await rm(outDir, { recursive: true });
       } catch {}
     }
   }
@@ -97,7 +97,7 @@ export async function run (componentPath, args) {
     cp.on('exit', resolve);
   });
   try {
-    await rm(outDir, { recursive: true });
+    // await rm(outDir, { recursive: true });
   } catch {}
   exit(exitCode);
 }

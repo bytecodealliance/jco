@@ -1,4 +1,5 @@
-import { $init, metadataShow, print } from '../../obj/wasm-tools.js';
+import { $init, tools } from '../../obj/wasm-tools.js';
+const { metadataShow, print } = tools;
 import { writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import c from 'chalk-template';
