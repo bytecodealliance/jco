@@ -10,8 +10,8 @@ import { fileURLToPath } from 'url';
 import ora from '#ora';
 
 export async function transpile (componentPath, opts, program) {
-  const varIdx = program.parent.rawArgs.indexOf('--');
-  if (varIdx !== -1)
+  const varIdx = program?.parent.rawArgs.indexOf('--');
+  if (varIdx !== undefined && varIdx !== -1)
     opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
   const component = await readFile(componentPath);
 
@@ -90,7 +90,7 @@ export async function transpileComponent (component, opts = {}) {
 
   if (opts.wasiShim !== false) {
     opts.map = Object.assign({
-      'wasi:cli-base/*': '@bytecodealliance/preview2-shim/cli-base#*',
+      'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
       'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
       'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
       'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
@@ -108,6 +108,7 @@ export async function transpileComponent (component, opts = {}) {
     instantiation: opts.instantiation || opts.js,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     noNodejsCompat: !(opts.nodejsCompat ?? true),
+    noTypescript: opts.noTypescript || false,
     tlaCompat: opts.tlaCompat ?? false,
     base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000
   });

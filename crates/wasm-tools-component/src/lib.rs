@@ -14,7 +14,7 @@ wit_bindgen::generate!({
 
 struct WasmToolsJs;
 
-impl WasmTools for WasmToolsJs {
+impl Guest for WasmToolsJs {
     fn parse(wat: String) -> Result<Vec<u8>, String> {
         wat::parse_str(wat).map_err(|e| format!("{:?}", e))
     }

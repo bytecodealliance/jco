@@ -2,6 +2,7 @@
 import { program } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile } from './cmd/transpile.js';
+import { run } from './cmd/run.js';
 import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
 import { componentize } from './cmd/componentize.js';
 import c from 'chalk-template';
@@ -10,7 +11,7 @@ program
   .name('jco')
   .description(c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`)
   .usage('<command> [options]')
-  .version('0.10.2');
+  .version('0.11.0');
 
 function myParseInt(value) {
   return parseInt(value, 10);
@@ -46,6 +47,13 @@ program.command('transpile')
   .option('-q, --quiet', 'disable logging')
   .option('--', 'for --optimize, custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(transpile));
+
+  program.command('run')
+  .description('Run a WebAssembly Command component')
+  .usage('<command.wasm> <args...>')
+  .argument('<command>', 'Wasm command binary to run')
+  .argument('[args...]', 'Any CLI arguments to provide to the command')
+  .action(asyncAction(run));
 
 program.command('opt')
   .description('optimizes a Wasm component, including running wasm-opt Binaryen optimizations')
@@ -94,6 +102,8 @@ program.command('new')
   .requiredOption('-o, --output <output-file>', 'Wasm component output filepath')
   .option('--name <name>', 'custom output name')
   .option('--adapt <[NAME=]adapter...>', 'component adapters to apply')
+  .option('--wasi-reactor', 'build with the WASI Reactor adapter')
+  .option('--wasi-command', 'build with the WASI Command adapter')
   .action(asyncAction(componentNew));
 
 program.command('embed')

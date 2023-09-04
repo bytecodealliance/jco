@@ -1,0 +1,47 @@
+<!doctype html>
+<script type="importmap">
+{
+  "imports": {
+    "@bytecodealliance/preview2-shim/cli": "../packages/preview2-shim/lib/browser/cli.js",
+    "@bytecodealliance/preview2-shim/clocks": "../packages/preview2-shim/lib/browser/clocks.js",
+    "@bytecodealliance/preview2-shim/filesystem": "../packages/preview2-shim/lib/browser/filesystem.js",
+    "@bytecodealliance/preview2-shim/http": "../packages/preview2-shim/lib/browser/http.js",
+    "@bytecodealliance/preview2-shim/io": "../packages/preview2-shim/lib/browser/io.js",
+    "@bytecodealliance/preview2-shim/logging": "../packages/preview2-shim/lib/browser/logging.js",
+    "@bytecodealliance/preview2-shim/poll": "../packages/preview2-shim/lib/browser/poll.js",
+    "@bytecodealliance/preview2-shim/random": "../packages/preview2-shim/lib/browser/random.js",
+    "@bytecodealliance/preview2-shim/sockets": "../packages/preview2-shim/lib/browser/sockets.js",
+    "jco": "../src/browser.js"
+  }
+}
+</script>
+<script type="module">
+  import { transpile } from 'jco';
+  const componentUrl = new URL('./fixtures/components/lists.component.wasm', import.meta.url);
+  document.body.innerHTML = '<h1>Generating...</h1>';
+  const component = await (await fetch(componentUrl)).arrayBuffer();
+  const output = transpile(component, {
+    name: 'test',
+    noTypescript: true,
+    noNodejsCompat: true,
+    instantiation: true,
+    // force baseurls
+    // todo: support a hook for inline blob url construction
+    base64Cutoff: 1000000,
+    map: [
+      ['wasi:cli/*', '@bytecodealliance/preview2-shim/cli#*'],
+      ['wasi:clocks/*', '@bytecodealliance/preview2-shim/clocks#*'],
+      ['wasi:filesystem/*', '@bytecodealliance/preview2-shim/filesystem#*'],
+      ['wasi:http/*', '@bytecodealliance/preview2-shim/http#*'],
+      ['wasi:io/*', '@bytecodealliance/preview2-shim/io#*'],
+      ['wasi:logging/*', '@bytecodealliance/preview2-shim/logging#*'],
+      ['wasi:poll/*', '@bytecodealliance/preview2-shim/poll#*'],
+      ['wasi:random/*', '@bytecodealliance/preview2-shim/random#*'],
+      ['wasi:sockets/*', '@bytecodealliance/preview2-shim/sockets#*']
+    ]
+  });
+  const source = output.files[4][1];
+  const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+  const mod = await import(url);
+  document.body.innerHTML = '<h1>OK</h1>';
+</script>

@@ -37,8 +37,14 @@ export async function componentNew(file, opts) {
   await $init;
   const source = file ? await readFile(file) : null;
   let adapters = null;
+  if (opts.wasiReactor && opts.wasiCommand)
+    throw new Error('Must select one of --wasi-command or --wasi-reactor');
+  if (opts.wasiReactor)
+    adapters = [['wasi_snapshot_preview1', (await readFile(new URL('../../lib/wasi_snapshot_preview1.reactor.wasm', import.meta.url))).buffer]];
+  else if (opts.wasiCommand)
+    adapters = [['wasi_snapshot_preview1', (await readFile(new URL('../../lib/wasi_snapshot_preview1.command.wasm', import.meta.url))).buffer]];
   if (opts.adapt)
-    adapters = await Promise.all(opts.adapt.map(async adapt => {
+    adapters = adapters.concat(await Promise.all(opts.adapt.map(async adapt => {
       let adapter;
       if (adapt.includes('='))
         adapter = adapt.split('=');
@@ -46,7 +52,7 @@ export async function componentNew(file, opts) {
         adapter = [basename(adapt).slice(0, -extname(adapt).length), adapt];
       adapter[1] = await readFile(adapter[1]);
       return adapter;
-    }));
+    })));
   const output = componentNewFn(source, adapters);
   await writeFile(opts.output, output);
 }

@@ -1,51 +1,18 @@
 import { strictEqual } from 'node:assert';
-import { readFile, rm, mkdir, writeFile, symlink, chmod } from 'node:fs/promises';
-import { resolve, dirname } from 'node:path';
-import { tmpdir } from 'node:os';
-import * as crypto from 'node:crypto';
-import { transpile, componentNew, preview1AdapterCommandPath } from '../src/api.js';
-import { exec } from './helpers.js';
-
-function getTmpDir (name) {
-  return resolve(tmpdir(), crypto.createHash('sha256').update(name).update(Math.random().toString()).digest('hex'));
-}
+import { readFile, writeFile } from 'node:fs/promises';
+import { componentNew, preview1AdapterCommandPath } from '../src/api.js';
+import { exec, jcoPath } from './helpers.js';
 
 export async function preview2Test () {
   suite('Preview 2', () => {
     test('hello_stdout', async () => {
       const component = await readFile(`test/fixtures/modules/hello_stdout.wasm`);
-
       const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile(preview1AdapterCommandPath())]]);
+      await writeFile('test/output/hello_stdout.component.wasm', generatedComponent);
 
-      const { files } = await transpile(generatedComponent, { name: 'hello_stdout' });
-
-      const tmpdir = getTmpDir('hello_stdout');
-      try {
-        await mkdir(resolve(tmpdir, 'node_modules', '@bytecodealliance'), { recursive: true });
-        await writeFile(resolve(tmpdir, 'package.json'), JSON.stringify({ type: 'module' }));
-        await symlink(resolve('packages/preview2-shim'), resolve(tmpdir, 'node_modules/@bytecodealliance/preview2-shim'), 'dir');
-
-        for (const [name, source] of Object.entries(files)) {
-          const path = resolve(tmpdir, name);
-          await mkdir(dirname(path), { recursive: true });
-          await writeFile(path, source);
-        }
-
-        const runPath = resolve(tmpdir, 'run.js');
-        await writeFile(runPath, `
-          import { run } from './hello_stdout.js';
-          run();
-        `);
-
-        await chmod(runPath, 0o777);
-
-        const { stdout, stderr } = await exec(process.argv0, [runPath]);
-        strictEqual(stdout, 'writing to stdout: hello, world\n');
-        strictEqual(stderr, 'writing to stderr: hello, world\n');
-      }
-      finally {
-        // await rm(tmpdir, { recursive: true });
-      }
+      const { stdout, stderr } = await exec(jcoPath, 'run', 'test/output/hello_stdout.component.wasm');
+      strictEqual(stdout, 'writing to stdout: hello, world\n');
+      strictEqual(stderr, 'writing to stderr: hello, world\n');
     });
   });
 }

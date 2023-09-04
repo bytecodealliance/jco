@@ -1,12 +1,15 @@
 {
   "name": "@bytecodealliance/jco",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "author": "Guy Bedford",
   "bin": {
     "jco": "src/jco.js"
   },
-  "exports": "./src/api.js",
+  "exports": {
+    "browser": "./src/browser.js",
+    "default": "./src/api.js"
+  },
   "imports": {
     "#ora": {
       "browser": "./src/ora-shim.js",
@@ -15,7 +18,7 @@
   },
   "type": "module",
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "0.0.12",
+    "@bytecodealliance/preview2-shim": "0.0.13",
     "binaryen": "^111.0.0",
     "chalk-template": "^0.4.0",
     "commander": "^9.4.1",
@@ -24,7 +27,7 @@
     "terser": "^5.16.1"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.1.1",
+    "@bytecodealliance/componentize-js": "^0.2.0",
     "@types/node": "^18.11.17",
     "@typescript-eslint/eslint-plugin": "^5.41.0",
     "@typescript-eslint/parser": "^5.41.0",
