@@ -1,11 +1,11 @@
 package local:wasm-tools
 
-world wasm-tools {
+interface tools {
   /// Translate the WebAssembly text format to binary
-  export parse: func(wat: string) -> result<list<u8>, string>
+  parse: func(wat: string) -> result<list<u8>, string>
 
   /// Translate the WebAssembly binary format to text
-  export print: func(binary: list<u8>) -> result<string, string>
+  print: func(binary: list<u8>) -> result<string, string>
 
   enum string-encoding {
     utf8,
@@ -14,10 +14,10 @@ world wasm-tools {
   }
 
   /// Create a component from a core wasm binary that implements and embeds a component type
-  export component-new: func(binary: list<u8>, adapters: option<list<tuple<string, list<u8>>>>) -> result<list<u8>, string>
+  component-new: func(binary: list<u8>, adapters: option<list<tuple<string, list<u8>>>>) -> result<list<u8>, string>
 
   /// Extract a *.wit interface from a component, optionally providing a document name to extract
-  export component-wit: func(binary: list<u8>) -> result<string, string>
+  component-wit: func(binary: list<u8>) -> result<string, string>
 
   type producers-fields = list<tuple<string, list<tuple<string, string>>>>
 
@@ -35,7 +35,7 @@ world wasm-tools {
     metadata: option<producers-fields>
   }
 
-  export component-embed: func(embed-opts: embed-opts) -> result<list<u8>, string>
+  component-embed: func(embed-opts: embed-opts) -> result<list<u8>, string>
 
   variant module-meta-type {
     module,
@@ -51,8 +51,12 @@ world wasm-tools {
   }
 
   /// Extract the metadata for a component
-  export metadata-show: func(binary: list<u8>) -> result<list<module-metadata>, string>
+  metadata-show: func(binary: list<u8>) -> result<list<module-metadata>, string>
 
   /// Append producer metadata to a component
-  export metadata-add: func(binary: list<u8>, metadata: producers-fields) -> result<list<u8>, string>
+  metadata-add: func(binary: list<u8>, metadata: producers-fields) -> result<list<u8>, string>
+}
+
+world wasm-tools {
+  export tools
 }

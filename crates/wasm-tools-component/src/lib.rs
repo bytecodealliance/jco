@@ -5,10 +5,14 @@ use wasm_metadata::Producers;
 use wit_component::{ComponentEncoder, DecodedWasm, WitPrinter};
 use wit_parser::{Resolve, UnresolvedPackage};
 
+use exports::local::wasm_tools::tools::{
+    EmbedOpts, Guest, ModuleMetaType, ModuleMetadata, ProducersFields, StringEncoding,
+};
+
 wit_bindgen::generate!({
     world: "wasm-tools",
     exports: {
-        world: WasmToolsJs
+        "local:wasm-tools/tools": WasmToolsJs
     }
 });
 

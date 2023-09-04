@@ -1,19 +1,19 @@
-let _env, _args = [], _cwd = null;
+import { _setCwd as fsSetCwd } from './filesystem.js';
+
+let _env = [], _args = [], _cwd = null;
 export function _setEnv (envObj) {
   _env = Object.entries(envObj);
 }
-
 export function _setArgs (args) {
   _args = args;
 }
 
 export function _setCwd (cwd) {
-  _cwd = cwd;
+  fsSetCwd(_cwd = cwd);
 }
 
 export const environment = {
   getEnvironment () {
-    if (!_env) _setEnv(process.env);
     return _env;
   },
   getArguments () {
@@ -25,15 +25,16 @@ export const environment = {
 };
 
 class ComponentExit extends Error {
-  constructor(code) {
-    super(`Component exited ${code === 0 ? 'successfully' : 'with error'}`);
-    this.code = code;
+  constructor(ok) {
+    super(`Component exited ${ok ? 'successfully' : 'with error'}`);
+    this.exitError = true;
+    this.ok = ok;
   }
 }
 
 export const exit = {
   exit (status) {
-    throw new ComponentExit(status.tag === 'err' ? 1 : 0);
+    throw new ComponentExit(status.tag === 'err' ? true : false);
   }
 };
 

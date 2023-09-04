@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { readFile } from '../common.js';
-import { $init, print as printFn, parse as parseFn, componentWit as componentWitFn, componentNew as componentNewFn, componentEmbed as componentEmbedFn, metadataAdd as metadataAddFn, metadataShow as metadataShowFn } from "../../obj/wasm-tools.js";
+import { $init, tools } from "../../obj/wasm-tools.js";
+const { print: printFn, parse: parseFn, componentWit: componentWitFn, componentNew: componentNewFn, componentEmbed: componentEmbedFn, metadataAdd: metadataAddFn, metadataShow: metadataShowFn } = tools;
 import { resolve, basename, extname } from 'node:path';
 import c from 'chalk-template';
 
