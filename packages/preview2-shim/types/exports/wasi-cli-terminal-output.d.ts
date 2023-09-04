@@ -3,7 +3,7 @@ export namespace WasiCliTerminalOutput {
    * Dispose of the specified terminal-output, after which it may no longer
    * be used.
    */
-  export function dropTerminalOutput(this: TerminalOutput): void;
+  export function dropTerminalOutput(this_: TerminalOutput): void;
 }
 /**
  * The output side of a terminal.
