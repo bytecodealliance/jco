@@ -1,23 +1,11 @@
 export namespace WasiPollPoll {
-  export { Pollable };
+  /**
+   * Dispose of the specified `pollable`, after which it may no longer
+   * be used.
+   */
+  export function dropPollable(this_: Pollable): void;
   /**
    * Poll for completion on a set of pollables.
-   * 
-   * This function takes a list of pollables, which identify I/O sources of
-   * interest, and waits until one or more of the events is ready for I/O.
-   * 
-   * The result `list<bool>` is the same length as the argument
-   * `list<pollable>`, and indicates the readiness of each corresponding
-   * element in that list, with true indicating ready. A single call can
-   * return multiple true elements.
-   * 
-   * A timeout can be implemented by adding a pollable from the
-   * wasi-clocks API to the list.
-   * 
-   * This function does not return a `result`; polling in itself does not
-   * do any I/O so it doesn't fail. If any of the I/O sources identified by
-   * the pollables has an error, it is indicated by marking the source as
-   * ready in the `list<bool>`.
    * 
    * The "oneoff" in the name refers to the fact that this function must do a
    * linear scan through the entire list of subscriptions, which may be
@@ -25,13 +13,27 @@ export namespace WasiPollPoll {
    * many times. In the future, this is expected to be obsoleted by the
    * component model async proposal, which will include a scalable waiting
    * facility.
+   * 
+   * The result list<bool> is the same length as the argument
+   * list<pollable>, and indicates the readiness of each corresponding
+   * element in that / list, with true indicating ready.
    */
-  export function pollOneoff(in_: Pollable[]): boolean[];
+  export function pollOneoff(in_: Uint32Array): boolean[];
 }
-
-export class Pollable {
-  constructor(init: Uint8Array | ArrayBuffer)
-  write(bytes: Uint8Array | ArrayBuffer): void;
-  read(n: number): Uint8Array;
-  static merge(lhs: Pollable, rhs: Pollable): Pollable;
-}
+/**
+ * A "pollable" handle.
+ * 
+ * This is conceptually represents a `stream<_, _>`, or in other words,
+ * a stream that one can wait on, repeatedly, but which does not itself
+ * produce any data. It's temporary scaffolding until component-model's
+ * async features are ready.
+ * 
+ * And at present, it is a `u32` instead of being an actual handle, until
+ * the wit-bindgen implementation of handles and resources is ready.
+ * 
+ * `pollable` lifetimes are not automatically managed. Users must ensure
+ * that they do not outlive the resource they reference.
+ * 
+ * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
+ */
+export type Pollable = number;
