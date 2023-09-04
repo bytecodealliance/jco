@@ -8,16 +8,16 @@ export namespace WasiClocksTimezone {
    * `timezone-display` for `UTC` with a `utc-offset` of 0 and no daylight
    * saving time.
    */
-  export function display(this: Timezone, when: Datetime): TimezoneDisplay;
+  export function display(this_: Timezone, when: Datetime): TimezoneDisplay;
   /**
    * The same as `display`, but only return the UTC offset.
    */
-  export function utcOffset(this: Timezone, when: Datetime): number;
+  export function utcOffset(this_: Timezone, when: Datetime): number;
   /**
    * Dispose of the specified input-stream, after which it may no longer
    * be used.
    */
-  export function dropTimezone(this: Timezone): void;
+  export function dropTimezone(this_: Timezone): void;
 }
 import type { Datetime } from '../exports/wasi-clocks-wall-clock';
 export { Datetime };

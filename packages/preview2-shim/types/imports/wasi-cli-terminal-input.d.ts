@@ -3,7 +3,7 @@ export namespace WasiCliTerminalInput {
    * Dispose of the specified terminal-input after which it may no longer
    * be used.
    */
-  export function dropTerminalInput(this: TerminalInput): void;
+  export function dropTerminalInput(this_: TerminalInput): void;
 }
 /**
  * The input side of a terminal.

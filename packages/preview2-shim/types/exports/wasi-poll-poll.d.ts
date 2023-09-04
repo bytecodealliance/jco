@@ -3,7 +3,7 @@ export namespace WasiPollPoll {
    * Dispose of the specified `pollable`, after which it may no longer
    * be used.
    */
-  export function dropPollable(this: Pollable): void;
+  export function dropPollable(this_: Pollable): void;
   /**
    * Poll for completion on a set of pollables.
    * 
@@ -18,7 +18,7 @@ export namespace WasiPollPoll {
    * list<pollable>, and indicates the readiness of each corresponding
    * element in that / list, with true indicating ready.
    */
-  export function pollOneoff(in: Uint32Array): boolean[];
+  export function pollOneoff(in_: Uint32Array): boolean[];
 }
 /**
  * A "pollable" handle.

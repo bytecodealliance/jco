@@ -28,8 +28,8 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
    * - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
    */
-  export function startBind(this: UdpSocket, network: Network, localAddress: IpSocketAddress): void;
-  export function finishBind(this: UdpSocket): void;
+  export function startBind(this_: UdpSocket, network: Network, localAddress: IpSocketAddress): void;
+  export function finishBind(this_: UdpSocket): void;
   /**
    * Set the destination address.
    * 
@@ -61,8 +61,8 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
    * - <https://man.freebsd.org/cgi/man.cgi?connect>
    */
-  export function startConnect(this: UdpSocket, network: Network, remoteAddress: IpSocketAddress): void;
-  export function finishConnect(this: UdpSocket): void;
+  export function startConnect(this_: UdpSocket, network: Network, remoteAddress: IpSocketAddress): void;
+  export function finishConnect(this_: UdpSocket): void;
   /**
    * Receive messages on the socket.
    * 
@@ -85,7 +85,7 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms741687(v=vs.85)>
    * - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
    */
-  export function receive(this: UdpSocket, maxResults: bigint): Datagram[];
+  export function receive(this_: UdpSocket, maxResults: bigint): Datagram[];
   /**
    * Send messages on the socket.
    * 
@@ -121,7 +121,7 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
    * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
    */
-  export function send(this: UdpSocket, datagrams: Datagram[]): bigint;
+  export function send(this_: UdpSocket, datagrams: Datagram[]): bigint;
   /**
    * Get the current bound address.
    * 
@@ -134,7 +134,7 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
    * - <https://man.freebsd.org/cgi/man.cgi?getsockname>
    */
-  export function localAddress(this: UdpSocket): IpSocketAddress;
+  export function localAddress(this_: UdpSocket): IpSocketAddress;
   /**
    * Get the address set with `connect`.
    * 
@@ -147,13 +147,13 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
    * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
    */
-  export function remoteAddress(this: UdpSocket): IpSocketAddress;
+  export function remoteAddress(this_: UdpSocket): IpSocketAddress;
   /**
    * Whether this is a IPv4 or IPv6 socket.
    * 
    * Equivalent to the SO_DOMAIN socket option.
    */
-  export function addressFamily(this: UdpSocket): IpAddressFamily;
+  export function addressFamily(this_: UdpSocket): IpAddressFamily;
   /**
    * Whether IPv4 compatibility (dual-stack) mode is disabled or not.
    * 
@@ -165,16 +165,16 @@ export namespace WasiSocketsUdp {
    * - `not-supported`:        (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  export function ipv6Only(this: UdpSocket): boolean;
-  export function setIpv6Only(this: UdpSocket, value: boolean): void;
+  export function ipv6Only(this_: UdpSocket): boolean;
+  export function setIpv6Only(this_: UdpSocket, value: boolean): void;
   /**
    * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
    * 
    * # Typical errors
    * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  export function unicastHopLimit(this: UdpSocket): number;
-  export function setUnicastHopLimit(this: UdpSocket, value: number): void;
+  export function unicastHopLimit(this_: UdpSocket): number;
+  export function setUnicastHopLimit(this_: UdpSocket, value: number): void;
   /**
    * The kernel buffer space reserved for sends/receives on this socket.
    * 
@@ -190,23 +190,23 @@ export namespace WasiSocketsUdp {
    * # Typical errors
    * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  export function receiveBufferSize(this: UdpSocket): bigint;
-  export function setReceiveBufferSize(this: UdpSocket, value: bigint): void;
-  export function sendBufferSize(this: UdpSocket): bigint;
-  export function setSendBufferSize(this: UdpSocket, value: bigint): void;
+  export function receiveBufferSize(this_: UdpSocket): bigint;
+  export function setReceiveBufferSize(this_: UdpSocket, value: bigint): void;
+  export function sendBufferSize(this_: UdpSocket): bigint;
+  export function setSendBufferSize(this_: UdpSocket, value: bigint): void;
   /**
    * Create a `pollable` which will resolve once the socket is ready for I/O.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
-  export function subscribe(this: UdpSocket): Pollable;
+  export function subscribe(this_: UdpSocket): Pollable;
   /**
    * Dispose of the specified `udp-socket`, after which it may no longer be used.
    * 
    * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
    */
-  export function dropUdpSocket(this: UdpSocket): void;
+  export function dropUdpSocket(this_: UdpSocket): void;
 }
 import type { Pollable } from '../exports/wasi-poll-poll';
 export { Pollable };

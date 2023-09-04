@@ -4,7 +4,7 @@ export namespace WasiSocketsNetwork {
    * 
    * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
    */
-  export function dropNetwork(this: Network): void;
+  export function dropNetwork(this_: Network): void;
 }
 /**
  * An opaque resource that represents access to (a subset of) the network.

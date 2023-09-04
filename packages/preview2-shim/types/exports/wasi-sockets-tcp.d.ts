@@ -29,8 +29,8 @@ export namespace WasiSocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
    * - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
    */
-  export function startBind(this: TcpSocket, network: Network, localAddress: IpSocketAddress): void;
-  export function finishBind(this: TcpSocket): void;
+  export function startBind(this_: TcpSocket, network: Network, localAddress: IpSocketAddress): void;
+  export function finishBind(this_: TcpSocket): void;
   /**
    * Connect to a remote endpoint.
    * 
@@ -62,8 +62,8 @@ export namespace WasiSocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
    * - <https://man.freebsd.org/cgi/man.cgi?connect>
    */
-  export function startConnect(this: TcpSocket, network: Network, remoteAddress: IpSocketAddress): void;
-  export function finishConnect(this: TcpSocket): [InputStream, OutputStream];
+  export function startConnect(this_: TcpSocket, network: Network, remoteAddress: IpSocketAddress): void;
+  export function finishConnect(this_: TcpSocket): [InputStream, OutputStream];
   /**
    * Start listening for new connections.
    * 
@@ -90,8 +90,8 @@ export namespace WasiSocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-listen>
    * - <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
    */
-  export function startListen(this: TcpSocket): void;
-  export function finishListen(this: TcpSocket): void;
+  export function startListen(this_: TcpSocket): void;
+  export function finishListen(this_: TcpSocket): void;
   /**
    * Accept a new client socket.
    * 
@@ -112,7 +112,7 @@ export namespace WasiSocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept>
    * - <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
    */
-  export function accept(this: TcpSocket): [TcpSocket, InputStream, OutputStream];
+  export function accept(this_: TcpSocket): [TcpSocket, InputStream, OutputStream];
   /**
    * Get the bound local address.
    * 
@@ -125,7 +125,7 @@ export namespace WasiSocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
    * - <https://man.freebsd.org/cgi/man.cgi?getsockname>
    */
-  export function localAddress(this: TcpSocket): IpSocketAddress;
+  export function localAddress(this_: TcpSocket): IpSocketAddress;
   /**
    * Get the bound remote address.
    * 
@@ -138,13 +138,13 @@ export namespace WasiSocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
    * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
    */
-  export function remoteAddress(this: TcpSocket): IpSocketAddress;
+  export function remoteAddress(this_: TcpSocket): IpSocketAddress;
   /**
    * Whether this is a IPv4 or IPv6 socket.
    * 
    * Equivalent to the SO_DOMAIN socket option.
    */
-  export function addressFamily(this: TcpSocket): IpAddressFamily;
+  export function addressFamily(this_: TcpSocket): IpAddressFamily;
   /**
    * Whether IPv4 compatibility (dual-stack) mode is disabled or not.
    * 
@@ -156,8 +156,8 @@ export namespace WasiSocketsTcp {
    * - `not-supported`:        (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  export function ipv6Only(this: TcpSocket): boolean;
-  export function setIpv6Only(this: TcpSocket, value: boolean): void;
+  export function ipv6Only(this_: TcpSocket): boolean;
+  export function setIpv6Only(this_: TcpSocket, value: boolean): void;
   /**
    * Hints the desired listen queue size. Implementations are free to ignore this.
    * 
@@ -165,23 +165,23 @@ export namespace WasiSocketsTcp {
    * - `already-connected`:    (set) The socket is already in the Connection state.
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  export function setListenBacklogSize(this: TcpSocket, value: bigint): void;
+  export function setListenBacklogSize(this_: TcpSocket, value: bigint): void;
   /**
    * Equivalent to the SO_KEEPALIVE socket option.
    * 
    * # Typical errors
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  export function keepAlive(this: TcpSocket): boolean;
-  export function setKeepAlive(this: TcpSocket, value: boolean): void;
+  export function keepAlive(this_: TcpSocket): boolean;
+  export function setKeepAlive(this_: TcpSocket, value: boolean): void;
   /**
    * Equivalent to the TCP_NODELAY socket option.
    * 
    * # Typical errors
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  export function noDelay(this: TcpSocket): boolean;
-  export function setNoDelay(this: TcpSocket, value: boolean): void;
+  export function noDelay(this_: TcpSocket): boolean;
+  export function setNoDelay(this_: TcpSocket, value: boolean): void;
   /**
    * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
    * 
@@ -190,8 +190,8 @@ export namespace WasiSocketsTcp {
    * - `already-listening`:    (set) The socket is already in the Listener state.
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  export function unicastHopLimit(this: TcpSocket): number;
-  export function setUnicastHopLimit(this: TcpSocket, value: number): void;
+  export function unicastHopLimit(this_: TcpSocket): number;
+  export function setUnicastHopLimit(this_: TcpSocket, value: number): void;
   /**
    * The kernel buffer space reserved for sends/receives on this socket.
    * 
@@ -209,17 +209,17 @@ export namespace WasiSocketsTcp {
    * - `already-listening`:    (set) The socket is already in the Listener state.
    * - `concurrency-conflict`: (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
-  export function receiveBufferSize(this: TcpSocket): bigint;
-  export function setReceiveBufferSize(this: TcpSocket, value: bigint): void;
-  export function sendBufferSize(this: TcpSocket): bigint;
-  export function setSendBufferSize(this: TcpSocket, value: bigint): void;
+  export function receiveBufferSize(this_: TcpSocket): bigint;
+  export function setReceiveBufferSize(this_: TcpSocket, value: bigint): void;
+  export function sendBufferSize(this_: TcpSocket): bigint;
+  export function setSendBufferSize(this_: TcpSocket, value: bigint): void;
   /**
    * Create a `pollable` which will resolve once the socket is ready for I/O.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
-  export function subscribe(this: TcpSocket): Pollable;
+  export function subscribe(this_: TcpSocket): Pollable;
   /**
    * Initiate a graceful shutdown.
    * 
@@ -241,7 +241,7 @@ export namespace WasiSocketsTcp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-shutdown>
    * - <https://man.freebsd.org/cgi/man.cgi?query=shutdown&sektion=2>
    */
-  export function shutdown(this: TcpSocket, shutdownType: ShutdownType): void;
+  export function shutdown(this_: TcpSocket, shutdownType: ShutdownType): void;
   /**
    * Dispose of the specified `tcp-socket`, after which it may no longer be used.
    * 
@@ -249,7 +249,7 @@ export namespace WasiSocketsTcp {
    * 
    * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
    */
-  export function dropTcpSocket(this: TcpSocket): void;
+  export function dropTcpSocket(this_: TcpSocket): void;
 }
 import type { InputStream } from '../exports/wasi-io-streams';
 export { InputStream };

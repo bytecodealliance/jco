@@ -104,7 +104,7 @@ pub fn is_js_identifier(s: &str) -> bool {
             return false;
         }
     }
-    NOT_IDENTIFIERS.binary_search(&s).is_err()
+    RESERVED_KEYWORDS.binary_search(&s).is_err()
 }
 
 // https://tc39.es/ecma262/#prod-IdentifierStartChar
@@ -145,7 +145,7 @@ pub fn maybe_quote_member(name: &str) -> String {
     }
 }
 
-const NOT_IDENTIFIERS: &'static [&'static str] = &[
+pub(crate) const RESERVED_KEYWORDS: &'static [&'static str] = &[
     "await",
     "break",
     "case",

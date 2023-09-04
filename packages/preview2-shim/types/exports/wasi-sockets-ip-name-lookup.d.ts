@@ -48,20 +48,20 @@ export namespace WasiSocketsIpNameLookup {
    * - `permanent-resolver-failure`: A permanent failure in name resolution occurred. (EAI_FAIL)
    * - `would-block`:                A result is not available yet. (EWOULDBLOCK, EAGAIN)
    */
-  export function resolveNextAddress(this: ResolveAddressStream): IpAddress | null;
+  export function resolveNextAddress(this_: ResolveAddressStream): IpAddress | null;
   /**
    * Dispose of the specified `resolve-address-stream`, after which it may no longer be used.
    * 
    * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
    */
-  export function dropResolveAddressStream(this: ResolveAddressStream): void;
+  export function dropResolveAddressStream(this_: ResolveAddressStream): void;
   /**
    * Create a `pollable` which will resolve once the stream is ready for I/O.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
-  export function subscribe(this: ResolveAddressStream): Pollable;
+  export function subscribe(this_: ResolveAddressStream): Pollable;
 }
 import type { Pollable } from '../exports/wasi-poll-poll';
 export { Pollable };
