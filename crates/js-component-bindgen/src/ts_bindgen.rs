@@ -1,6 +1,6 @@
 use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
-use crate::names::{maybe_quote_id, LocalNames};
+use crate::names::{maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, TranspileOpts};
 use crate::{uwrite, uwriteln};
@@ -687,7 +687,14 @@ impl<'a> TsInterface<'a> {
             if i > 0 {
                 iface.src.push_str(", ");
             }
-            iface.src.push_str(&name.to_lower_camel_case());
+            let mut param_name = name.to_lower_camel_case();
+            if RESERVED_KEYWORDS
+                .binary_search(&param_name.as_str())
+                .is_ok()
+            {
+                param_name = format!("{}_", param_name);
+            }
+            iface.src.push_str(&param_name);
             iface.src.push_str(": ");
             iface.print_ty(
                 ty,
