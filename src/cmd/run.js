@@ -87,7 +87,7 @@ export async function run (componentPath, args) {
   finally {
     if (!cp) {
       try {
-        // await rm(outDir, { recursive: true });
+        await rm(outDir, { recursive: true });
       } catch {}
     }
   }
@@ -97,7 +97,7 @@ export async function run (componentPath, args) {
     cp.on('exit', resolve);
   });
   try {
-    // await rm(outDir, { recursive: true });
+    await rm(outDir, { recursive: true });
   } catch {}
   exit(exitCode);
 }
