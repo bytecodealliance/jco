@@ -4,6 +4,8 @@ use std::{env, fs, io::Write, path::PathBuf};
 use js_component_bindgen::{generate_types, source::wit_parser::Resolve};
 
 fn main() -> Result<()> {
+    // This will ensure that the build script will always run
+    println!("cargo:rerun-if-changed=NULL");
     if env::var("PREVIEW2_SHIM_TYPES").is_ok() {
         for world in ["wasi:http/proxy", "wasi:cli/command"] {
             let name = world.replace([':', '/'], "-");

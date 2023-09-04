@@ -23,12 +23,12 @@ export namespace WasiIoStreams {
    * as a return value by the callee. The callee may return a list of bytes
    * less than `len` in size while more bytes are available for reading.
    */
-  export function read(this: InputStream, len: bigint): [Uint8Array, StreamStatus];
+  export function read(this_: InputStream, len: bigint): [Uint8Array, StreamStatus];
   /**
    * Read bytes from a stream, after blocking until at least one byte can
    * be read. Except for blocking, identical to `read`.
    */
-  export function blockingRead(this: InputStream, len: bigint): [Uint8Array, StreamStatus];
+  export function blockingRead(this_: InputStream, len: bigint): [Uint8Array, StreamStatus];
   /**
    * Skip bytes from a stream.
    * 
@@ -43,12 +43,12 @@ export namespace WasiIoStreams {
    * `stream-status` indicating whether the end of the stream was
    * reached. The returned value will be at most `len`; it may be less.
    */
-  export function skip(this: InputStream, len: bigint): [bigint, StreamStatus];
+  export function skip(this_: InputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Skip bytes from a stream, after blocking until at least one byte
    * can be skipped. Except for blocking behavior, identical to `skip`.
    */
-  export function blockingSkip(this: InputStream, len: bigint): [bigint, StreamStatus];
+  export function blockingSkip(this_: InputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Create a `pollable` which will resolve once either the specified stream
    * has bytes available to read or the other end of the stream has been
@@ -57,7 +57,7 @@ export namespace WasiIoStreams {
    * Implementations may trap if the `input-stream` is dropped before
    * all derived `pollable`s created with this function are dropped.
    */
-  export function subscribeToInputStream(this: InputStream): Pollable;
+  export function subscribeToInputStream(this_: InputStream): Pollable;
   /**
    * Dispose of the specified `input-stream`, after which it may no longer
    * be used.
@@ -66,7 +66,7 @@ export namespace WasiIoStreams {
    * After this `input-stream` is dropped, implementations may report any
    * corresponding `output-stream` has `stream-state.closed`.
    */
-  export function dropInputStream(this: InputStream): void;
+  export function dropInputStream(this_: InputStream): void;
   /**
    * Perform a non-blocking write of bytes to a stream.
    * 
@@ -84,14 +84,14 @@ export namespace WasiIoStreams {
    * Writing an empty list must return a non-error result with `0` for the
    * `u64` return value, and the current `stream-status`.
    */
-  export function write(this: OutputStream, buf: Uint8Array | ArrayBuffer): [bigint, StreamStatus];
+  export function write(this_: OutputStream, buf: Uint8Array | ArrayBuffer): [bigint, StreamStatus];
   /**
    * Blocking write of bytes to a stream.
    * 
    * This is similar to `write`, except that it blocks until at least one
    * byte can be written.
    */
-  export function blockingWrite(this: OutputStream, buf: Uint8Array | ArrayBuffer): [bigint, StreamStatus];
+  export function blockingWrite(this_: OutputStream, buf: Uint8Array | ArrayBuffer): [bigint, StreamStatus];
   /**
    * Write multiple zero-bytes to a stream.
    * 
@@ -99,7 +99,7 @@ export namespace WasiIoStreams {
    * that were written; it may be less than `len`. Equivelant to a call to
    * `write` with a list of zeroes of the given length.
    */
-  export function writeZeroes(this: OutputStream, len: bigint): [bigint, StreamStatus];
+  export function writeZeroes(this_: OutputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Write multiple zero bytes to a stream, with blocking.
    * 
@@ -107,7 +107,7 @@ export namespace WasiIoStreams {
    * one byte can be written. Equivelant to a call to `blocking-write` with
    * a list of zeroes of the given length.
    */
-  export function blockingWriteZeroes(this: OutputStream, len: bigint): [bigint, StreamStatus];
+  export function blockingWriteZeroes(this_: OutputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Read from one stream and write to another.
    * 
@@ -117,14 +117,14 @@ export namespace WasiIoStreams {
    * Unlike other I/O functions, this function blocks until all the data
    * read from the input stream has been written to the output stream.
    */
-  export function splice(this: OutputStream, src: InputStream, len: bigint): [bigint, StreamStatus];
+  export function splice(this_: OutputStream, src: InputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Read from one stream and write to another, with blocking.
    * 
    * This is similar to `splice`, except that it blocks until at least
    * one byte can be read.
    */
-  export function blockingSplice(this: OutputStream, src: InputStream, len: bigint): [bigint, StreamStatus];
+  export function blockingSplice(this_: OutputStream, src: InputStream, len: bigint): [bigint, StreamStatus];
   /**
    * Forward the entire contents of an input stream to an output stream.
    * 
@@ -139,7 +139,7 @@ export namespace WasiIoStreams {
    * This function returns the number of bytes transferred, and the status of
    * the output stream.
    */
-  export function forward(this: OutputStream, src: InputStream): [bigint, StreamStatus];
+  export function forward(this_: OutputStream, src: InputStream): [bigint, StreamStatus];
   /**
    * Create a `pollable` which will resolve once either the specified stream
    * is ready to accept bytes or the `stream-state` has become closed.
@@ -151,7 +151,7 @@ export namespace WasiIoStreams {
    * Implementations may trap if the `output-stream` is dropped before
    * all derived `pollable`s created with this function are dropped.
    */
-  export function subscribeToOutputStream(this: OutputStream): Pollable;
+  export function subscribeToOutputStream(this_: OutputStream): Pollable;
   /**
    * Dispose of the specified `output-stream`, after which it may no longer
    * be used.
@@ -160,7 +160,7 @@ export namespace WasiIoStreams {
    * After this `output-stream` is dropped, implementations may report any
    * corresponding `input-stream` has `stream-state.closed`.
    */
-  export function dropOutputStream(this: OutputStream): void;
+  export function dropOutputStream(this_: OutputStream): void;
 }
 import type { Pollable } from '../exports/wasi-poll-poll';
 export { Pollable };
