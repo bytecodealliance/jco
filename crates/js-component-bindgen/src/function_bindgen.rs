@@ -1148,15 +1148,13 @@ impl Bindgen for FunctionBindgen<'_> {
                         self.src,
                         "let {handle} = {}[{resource_symbol}];
                         if ({handle} === null) {{
-                            throw new Error('\"{}\" resource handle lifetime expired / transferred.');
+                            throw new Error('\"{class_name}\" resource handle lifetime expired / transferred.');
                         }}
                         if ({handle} === undefined) {{
-                            throw new Error('Not a valid \"{}\" resource.');
+                            throw new Error('Not a valid \"{class_name}\" resource.');
                         }}
                         ",
                         operands[0],
-                        class_name,
-                        class_name,
                     );
 
                     // lowered own handles have their finalizers deregistered
@@ -1177,8 +1175,12 @@ impl Bindgen for FunctionBindgen<'_> {
                     // their assigned rep is deduped across usage though
                     uwriteln!(
                         self.src,
-                        "const {handle} = handleCnt{id}++;
+                        "if (!({} instanceof {class_name})) {{
+                            throw new Error('Not a valid \"{class_name}\" resource.');
+                        }}
+                        const {handle} = handleCnt{id}++;
                         handleTable{id}.set({handle}, {{ rep: {}, own: {} }});",
+                        operands[0],
                         operands[0],
                         is_own,
                     );
