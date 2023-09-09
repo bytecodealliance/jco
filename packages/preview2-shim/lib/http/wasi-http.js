@@ -1,5 +1,5 @@
 // Based on:
-// https://github.com/bytecodealliance/wasmtime/blob/8efcb9851602287fd07a1a1e91501f51f2653d7e/crates/wasi-http/
+// https://github.com/bytecodealliance/wasmtime/blob/8eefa7c3af9ed35839892f847c8bb4c57495c520/crates/wasi-http/
 
 /**
  * @typedef {import("../../types/imports/wasi-http-types").Fields} Fields
@@ -14,10 +14,12 @@
  * @typedef {import("../../types/imports/wasi-http-types").Scheme} Scheme
  * @typedef {import("../../types/imports/wasi-http-types").StatusCode} StatusCode
  * @typedef {import("../../types/imports/wasi-io-streams").StreamStatus} StreamStatus
+ * @typedef {import("../../types/imports/wasi-poll-poll").Pollable} Pollable
 */
 
 import * as io from '@bytecodealliance/preview2-shim/io';
 import * as http from '@bytecodealliance/preview2-shim/http';
+import * as poll from '@bytecodealliance/preview2-shim/poll';
 import { UnexpectedError } from './error.js';
 
 export class WasiHttp {
@@ -39,7 +41,16 @@ export class WasiHttp {
    * @param {RequestOptions | null} options
    * @returns {FutureIncomingResponse}
    */
-  handle = (requestId, _options) => {
+  handle = (requestId, options) => {
+    const futureId = this.futureIdBase;
+    this.futureIdBase += 1;
+    const future = new ActiveFuture(futureId, requestId, options, null, null);
+    this.futures.set(futureId, future);
+    return futureId;
+  };
+
+  #handle_async = async (future) => {
+    const { requestId, _options } = future;
     const request = this.requests.get(requestId);
     if (!request) throw Error("not found!");
 
@@ -58,9 +69,9 @@ export class WasiHttp {
         headers[key] = Array.isArray(value) ? value.join(",") : value;
       }
     }
-    const body =  this.streams.get(request.body);
+    const body = this.streams.get(request.body);
 
-    const res = http.send({
+    const res = await makeRequest({
       method: request.method.tag,
       uri: url,
       headers: headers,
@@ -80,11 +91,9 @@ export class WasiHttp {
     this.streams.set(response.body, buf);
     this.responses.set(responseId, response);
 
-    const futureId = this.futureIdBase;
-    this.futureIdBase += 1;
-    const future = new ActiveFuture(futureId, responseId);
-    this.futures.set(futureId, future);
-    return futureId;
+    future.responseId = responseId;
+    this.futures.set(future.id, future);
+    return responseId;
   }
 
   read = (stream, len) => {
@@ -289,23 +298,54 @@ export class WasiHttp {
     if (!f) {
       return {
         tag: "err",
-        val: UnexpectedError(`no such future ${f}`),
+        val: new UnexpectedError(`no such future ${f}`),
       };
+    }
+    if (!f.pollableId) {
+      return null;
     }
     // For now this will assume the future will return
     // the response immediately
     const response = f.responseId;
     const r = this.responses.get(response);
     if (!r) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+      const r = this.responses.get(f.responseId);
+      if (r) {
+        return r;
+      }
       return {
         tag: "err",
-        val: UnexpectedError(`no such response ${response}`),
+        val: new UnexpectedError(`no such response ${response}`),
       };
     }
     return {
       tag: "ok",
       val: response,
     };
+  }
+
+  /**
+   * @param {FutureIncomingResponse} future
+   * @returns {Pollable}
+   */
+  listenToFutureIncomingResponse(future) {
+    const f = this.futures.get(future);
+    if (!f) {
+      return {
+        tag: "err",
+        val: new UnexpectedError(`no such future ${f}`),
+      };
+    }
+    if (f.pollableId) {
+      return f.pollableId;
+    }
+
+    const pollableId = poll._createPollable(this.#handle_async(f));
+    f.pollableId = pollableId;
+    this.futures.set(future, f);
+
+    return pollableId;
   }
 }
 
@@ -338,10 +378,36 @@ class ActiveResponse {
 
 class ActiveFuture {
   /** @type {number} */ id;
-  /** @type {number} */ responseId;
+  /** @type {number} */ requestId;
+  /** @type {RequestOptions | null} */ options;
+  /** @type {number | null} */ responseId;
+  /** @type {number | null} */ pollableId;
 
-  constructor(id, responseId) {
+  constructor(id, requestId, options, responseId, pollableId) {
     this.id = id;
+    this.requestId = requestId;
+    this.options = options;
     this.responseId = responseId;
+    this.pollableId = pollableId;
   }
 }
+
+/**
+ * @param req
+ * @returns {Promise<{ status: number, headers: [string, string][], body: ArrayBuffer | undefined }>}
+ */
+const makeRequest = async (req) => {
+  let headers = new Headers(req.headers);
+  const resp = await fetch(req.uri, {
+    method: req.method.toString(),
+    headers,
+    body: req.body && req.body.length > 0 ? req.body : undefined,
+    redirect: "manual",
+  });
+  let arrayBuffer = await resp.arrayBuffer();
+  return {
+    status: resp.status,
+    headers: Array.from(resp.headers.entries()),
+    body: arrayBuffer.byteLength > 0 ? new Uint8Array(arrayBuffer) : undefined,
+  };
+};
