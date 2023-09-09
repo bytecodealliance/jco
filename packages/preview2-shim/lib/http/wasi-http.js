@@ -49,51 +49,63 @@ export class WasiHttp {
     return futureId;
   };
 
-  #handle_async = async (future) => {
-    const { requestId, _options } = future;
-    const request = this.requests.get(requestId);
-    if (!request) throw Error("not found!");
-
-    const responseId = this.responseIdBase;
-    this.responseIdBase += 1;
-    const response = new ActiveResponse(responseId);
-
-    const scheme = request.scheme.tag === "HTTP" ? "http://" : "https://";
-
-    const url = scheme + request.authority + request.pathWithQuery;
-    const headers = {
-      "host": request.authority,
-    };
-    if (request.headers && request.headers.size > 0) {
-      for (const [key, value] of request.headers.entries()) {
-        headers[key] = Array.isArray(value) ? value.join(",") : value;
+  #handleAsync = (future) => {
+    console.warn("TEST_53");
+    return (resolve, reject) => {
+      const { id, requestId, _options } = future;
+      const request = this.requests.get(requestId);
+      if (!request) reject(Error("not found!"));
+  
+      const responseId = this.responseIdBase;
+      this.responseIdBase += 1;
+      const response = new ActiveResponse(responseId);
+      this.responses.set(responseId, response);
+      future.responseId = responseId;
+  
+      const scheme = request.scheme.tag === "HTTP" ? "http://" : "https://";
+  
+      const url = scheme + request.authority + request.pathWithQuery;
+      const headers = new Headers({
+        "host": request.authority,
+      });
+      if (request.headers && request.headers.size > 0) {
+        for (const [key, value] of request.headers.entries()) {
+          headers.set(key, Array.isArray(value) ? value.join(",") : value)
+        }
       }
-    }
-    const body = this.streams.get(request.body);
+      const body = this.streams.get(request.body);
+  
+      console.warn("TEST_74");
+      // response.status = 500;
+      // resolve(responseId);
 
-    const res = await makeRequest({
+    fetch(url, {
       method: request.method.tag,
-      uri: url,
-      headers: headers,
-      params: [],
+      headers,
       body: body && body.length > 0 ? body : undefined,
-    });
+      redirect: "manual",
+    }).then(res => {
+      console.warn(JSON.stringify(res));
 
-    response.status = res.status;
-    if (res.headers && res.headers.size > 0) {
-      for (const [key, value] of res.headers) {
-        response.responseHeaders.set(key, [value]);
+      // const arrayBuffer = await resp.arrayBuffer();
+
+      console.warn("TEST_83");
+      response.status = res.status;
+      const headers = Array.from(resp.headers.entries());
+      if (headers && headers.size > 0) {
+        for (const [key, value] of headers) {
+          response.responseHeaders.set(key, [value]);
+        }
       }
-    }
-    const buf = res.body;
-    response.body = this.streamIdBase;
-    this.streamIdBase += 1;
-    this.streams.set(response.body, buf);
-    this.responses.set(responseId, response);
-
-    future.responseId = responseId;
-    this.futures.set(future.id, future);
-    return responseId;
+      // const buf = res.body;
+      // if (buf) {
+      //   response.body = this.streamIdBase;
+      //   this.streamIdBase += 1;
+      //   this.streams.set(response.body, buf);
+      // }
+        resolve(responseId);
+      }).catch(reject);
+    };
   }
 
   read = (stream, len) => {
@@ -309,7 +321,9 @@ export class WasiHttp {
     const response = f.responseId;
     const r = this.responses.get(response);
     if (!r) {
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+      // Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000);
+      // const f = this.futures.get(future);
+      console.warn(f);
       const r = this.responses.get(f.responseId);
       if (r) {
         return r;
@@ -329,7 +343,7 @@ export class WasiHttp {
    * @param {FutureIncomingResponse} future
    * @returns {Pollable}
    */
-  listenToFutureIncomingResponse(future) {
+  listenToFutureIncomingResponse = (future) => {
     const f = this.futures.get(future);
     if (!f) {
       return {
@@ -341,12 +355,22 @@ export class WasiHttp {
       return f.pollableId;
     }
 
-    const pollableId = poll._createPollable(this.#handle_async(f));
-    f.pollableId = pollableId;
+    console.warn("TEST_351");
     this.futures.set(future, f);
-
+    const promise = this.#handleAsync(f);
+    const pollableId = poll._createPollable(promise);
+    //   (resolve, reject) => {
+    //   console.warn("TEST_356");
+    //   resolve(promise(f).then(responseId => {
+    //     console.warn("TEST_360");
+    //     f.responseId = responseId;
+    //     return Promise.resolve(responseId);
+    //   }).catch(reject));
+    // });
+    console.warn("TEST_353");
+    f.pollableId = pollableId;
     return pollableId;
-  }
+  };
 }
 
 class ActiveRequest {
@@ -397,17 +421,27 @@ class ActiveFuture {
  * @returns {Promise<{ status: number, headers: [string, string][], body: ArrayBuffer | undefined }>}
  */
 const makeRequest = async (req) => {
-  let headers = new Headers(req.headers);
-  const resp = await fetch(req.uri, {
-    method: req.method.toString(),
-    headers,
-    body: req.body && req.body.length > 0 ? req.body : undefined,
-    redirect: "manual",
-  });
-  let arrayBuffer = await resp.arrayBuffer();
+  console.warn("TEST_406");
   return {
-    status: resp.status,
-    headers: Array.from(resp.headers.entries()),
-    body: arrayBuffer.byteLength > 0 ? new Uint8Array(arrayBuffer) : undefined,
+    status: 500,
+    headers: [],
   };
+  try {
+    let headers = new Headers(req.headers);
+    const resp = await fetch(req.uri, {
+      method: req.method.toString(),
+      headers,
+      body: req.body && req.body.length > 0 ? req.body : undefined,
+      redirect: "manual",
+    });
+    let arrayBuffer = await resp.arrayBuffer();
+    console.warn(JSON.stringify(res));
+    return {
+      status: resp.status,
+      headers: Array.from(resp.headers.entries()),
+      body: arrayBuffer.byteLength > 0 ? new Uint8Array(arrayBuffer) : undefined,
+    };
+  } catch (err) {
+    console.error(err);
+  }
 };
