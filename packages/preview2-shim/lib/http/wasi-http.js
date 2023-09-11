@@ -19,7 +19,7 @@
 
 import * as io from '@bytecodealliance/preview2-shim/io';
 import * as http from '@bytecodealliance/preview2-shim/http';
-import * as poll from '@bytecodealliance/preview2-shim/poll';
+import { _createPollable, _getResult } from "../poll/wasi-poll.js";
 import { UnexpectedError } from './error.js';
 
 export class WasiHttp {
@@ -76,35 +76,28 @@ export class WasiHttp {
       const body = this.streams.get(request.body);
   
       console.warn("TEST_74");
-      // response.status = 500;
-      // resolve(responseId);
 
-    fetch(url, {
-      method: request.method.tag,
-      headers,
-      body: body && body.length > 0 ? body : undefined,
-      redirect: "manual",
-    }).then(res => {
-      console.warn(JSON.stringify(res));
+      const res = http.send({
+        method: request.method.tag,
+        uri: url,
+        headers: headers,
+        params: [],
+        body: body && body.length > 0 ? body : undefined,
+      });
 
-      // const arrayBuffer = await resp.arrayBuffer();
-
-      console.warn("TEST_83");
       response.status = res.status;
-      const headers = Array.from(resp.headers.entries());
-      if (headers && headers.size > 0) {
-        for (const [key, value] of headers) {
+      if (res.headers && res.headers.size > 0) {
+        for (const [key, value] of res.headers) {
           response.responseHeaders.set(key, [value]);
         }
       }
-      // const buf = res.body;
-      // if (buf) {
-      //   response.body = this.streamIdBase;
-      //   this.streamIdBase += 1;
-      //   this.streams.set(response.body, buf);
-      // }
-        resolve(responseId);
-      }).catch(reject);
+      const buf = res.body;
+      if (buf) {
+        response.body = this.streamIdBase;
+        this.streamIdBase += 1;
+        this.streams.set(response.body, buf);
+      }
+      return resolve(responseId);
     };
   }
 
@@ -316,18 +309,15 @@ export class WasiHttp {
     if (!f.pollableId) {
       return null;
     }
-    // For now this will assume the future will return
-    // the response immediately
-    const response = f.responseId;
+    const response = _getResult(f.pollableId);
+    if (response instanceof Error) {
+      return {
+        tag: "err",
+        val: new UnexpectedError(response.message),
+      };
+    }
     const r = this.responses.get(response);
     if (!r) {
-      // Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000);
-      // const f = this.futures.get(future);
-      console.warn(f);
-      const r = this.responses.get(f.responseId);
-      if (r) {
-        return r;
-      }
       return {
         tag: "err",
         val: new UnexpectedError(`no such response ${response}`),
@@ -358,7 +348,7 @@ export class WasiHttp {
     console.warn("TEST_351");
     this.futures.set(future, f);
     const promise = this.#handleAsync(f);
-    const pollableId = poll._createPollable(promise);
+    const pollableId = _createPollable(promise);
     //   (resolve, reject) => {
     //   console.warn("TEST_356");
     //   resolve(promise(f).then(responseId => {
