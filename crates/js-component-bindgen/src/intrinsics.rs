@@ -99,7 +99,14 @@ pub fn render_intrinsics(
 
             Intrinsic::ToResultString => output.push_str("
                 function toResultString(obj) {
-                    return JSON.stringify(obj, (_, v) => typeof v === 'bigint' ? v.toString() : v);
+                    return JSON.stringify(obj, (_, v) => {
+                        if (v instanceof Uint8Array) {
+                            return `[Uint8Array (${v.byteLength})]`;
+                        } else if (typeof v === 'bigint') {
+                            return v.toString();
+                        }
+                        return v;
+                    });
                 }
             "),
 
