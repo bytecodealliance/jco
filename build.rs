@@ -35,6 +35,7 @@ fn main() -> Result<()> {
                 tla_compat: false,
                 valid_lifting_optimization: false,
                 base64_cutoff: 0,
+                tracing: false,
             };
 
             let files = generate_types(name, resolve, world, opts)?;

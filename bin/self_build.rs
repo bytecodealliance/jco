@@ -51,6 +51,7 @@ fn main() -> Result<()> {
             base64_cutoff: 5000_usize,
             tla_compat: true,
             valid_lifting_optimization: false,
+            tracing: false,
         };
 
         let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;
