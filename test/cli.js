@@ -54,6 +54,21 @@ export async function cliTest (fixtures) {
       }
     });
 
+    test('Transpile with tracing', async () => {
+      try {
+        const name = 'flavorful';
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--name', name, '--map', 'testwasi=./wasi.js', '--tracing', '--base64-cutoff=0', '-o', outDir);
+        strictEqual(stderr, '');
+        const source = await readFile(`${outDir}/${name}.js`, 'utf8');
+        ok(source.includes('function toResultString('));
+        ok(source.includes('console.trace(`[module="test:flavorful/test", function="f-list-in-record1"] call a'));
+        ok(source.includes('console.trace(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);'));
+      }
+      finally {
+        await cleanup();
+      }
+    });
+
     test('Transpile to JS', async () => {
       try {
         const name = 'flavorful';

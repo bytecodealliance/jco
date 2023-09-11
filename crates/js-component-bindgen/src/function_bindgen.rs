@@ -62,6 +62,7 @@ pub struct FunctionBindgen<'a> {
     pub memory: Option<&'a String>,
     pub realloc: Option<&'a String>,
     pub post_return: Option<&'a String>,
+    pub tracing_prefix: Option<&'a String>,
     pub encoding: StringEncoding,
     pub callee: &'a str,
 }
@@ -1001,11 +1002,26 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::IterBasePointer => results.push("base".to_string()),
 
             Instruction::CallWasm { sig, .. } => {
-                self.bind_results(sig.results.len(), results);
+                let sig_results_length = sig.results.len();
+                self.bind_results(sig_results_length, results);
                 uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+
+                if let Some(prefix) = self.tracing_prefix {
+                    let to_result_string = self.intrinsic(Intrinsic::ToResultString);
+                    uwriteln!(
+                        self.src,
+                        "console.trace(`{prefix} return {}`);",
+                        if sig_results_length > 0 || !results.is_empty() {
+                            format!("result=${{{to_result_string}(ret)}}")
+                        } else {
+                            "".to_string()
+                        }
+                    );
+                }
             }
 
             Instruction::CallInterface { func } => {
+                let results_length = func.results.len();
                 if self.err == ErrHandling::ResultCatchHandler {
                     let err_payload = self.intrinsic(Intrinsic::GetErrorPayload);
                     uwriteln!(
@@ -1022,8 +1038,21 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                     results.push("ret".to_string());
                 } else {
-                    self.bind_results(func.results.len(), results);
+                    self.bind_results(results_length, results);
                     uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+                }
+
+                if let Some(prefix) = self.tracing_prefix {
+                    let to_result_string = self.intrinsic(Intrinsic::ToResultString);
+                    uwriteln!(
+                        self.src,
+                        "console.trace(`{prefix} return {}`);",
+                        if results_length > 0 || !results.is_empty() {
+                            format!("result=${{{to_result_string}(ret)}}")
+                        } else {
+                            "".to_string()
+                        }
+                    );
                 }
 
                 // after a high level call, we need to deactivate the component resource borrows
