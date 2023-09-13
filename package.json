@@ -3,6 +3,9 @@
   "version": "0.11.2",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "author": "Guy Bedford",
+  "engines" : { 
+    "node" : ">=18"
+  },
   "bin": {
     "jco": "src/jco.js"
   },
