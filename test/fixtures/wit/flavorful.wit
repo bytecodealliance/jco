@@ -1,4 +1,4 @@
-package test:flavorful
+package test:jco
 
 interface test {
   record list-in-record1 { a: string }
