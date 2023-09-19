@@ -4,23 +4,30 @@ import { PollablePromise } from "./pollable-promise.js";
 let polls = [];
 let pollCnt = 1;
 
-let timerInterval = 10, watching = new Set();
+let timer = null, timerInterval = 10, watching = new Set();
+function intervalCheck () {
+  for (const entry of watching) {
+    if (entry.settled) {
+      watching.delete(entry);
+    }
+  }
+  if (watching.size === 0) {
+    clearInterval(timer);
+    timer = null;
+  }
+}
 
 export function _createPollable (executor) {
-  console.warn("TEST_23");
   const promise = new PollablePromise(executor);
   polls[pollCnt] = promise;
-  console.warn("TEST_35");
   return pollCnt++;
 }
 
 export function _pollablePromise (pollable, maxInterval) {
-  console.warn("TEST_28");
   const entry = polls[pollable];
   if (entry.settled) return Promise.resolve();
   watching.add(entry);
   entry.execute();
-  watching.add(entry);
   if (maxInterval) {
     if (timerInterval > maxInterval) {
       clearInterval(timer);
@@ -34,7 +41,6 @@ export function _pollablePromise (pollable, maxInterval) {
 }
 
 export function _getResult (pollable) {
-  console.warn("TEST_54");
   const entry = polls[pollable];
   return entry.value ?? entry.error;
 }
@@ -52,12 +58,6 @@ export function _pollOneoff (from) {
   }));
   for (const id of from) {
     const pollable = polls[id];
-    // let counter = 0;
-    // console.warn("TEST_73")
-    // while (!pollable.settled && counter < 5) { //pollable.state === PollablePromiseStateEnum.PENDING) {
-    //   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
-    //   counter++;
-    // }
     result.push(pollable.settled);
   }
   return result;

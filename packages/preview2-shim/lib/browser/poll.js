@@ -5,6 +5,6 @@ export const poll = {
     _dropPollable(pollable);
   },
   pollOneoff (from) {
-    return _pollOneoff(from);
+    return _pollOneoff(Array.from(from));
   },
 };

@@ -50,15 +50,15 @@ export class WasiHttp {
   };
 
   #handleAsync = (future) => {
-    console.warn("TEST_53");
     return (resolve, reject) => {
-      const { id, requestId, _options } = future;
+      const { requestId } = future;
       const request = this.requests.get(requestId);
-      if (!request) reject(Error("not found!"));
+      if (!request) return reject(Error("not found!"));
   
       const responseId = this.responseIdBase;
       this.responseIdBase += 1;
       const response = new ActiveResponse(responseId);
+      this.responses.set(responseId, response);
 
       const scheme = request.scheme.tag === "HTTP" ? "http://" : "https://";
 
@@ -74,8 +74,6 @@ export class WasiHttp {
         }
       }
       const body = this.streams.get(request.body);
-
-      console.warn("TEST_74");
 
       const res = http.send({
         method: request.method.tag,
@@ -339,19 +337,9 @@ export class WasiHttp {
       return f.pollableId;
     }
 
-    console.warn("TEST_351");
     this.futures.set(future, f);
     const promise = this.#handleAsync(f);
     const pollableId = _createPollable(promise);
-    //   (resolve, reject) => {
-    //   console.warn("TEST_356");
-    //   resolve(promise(f).then(responseId => {
-    //     console.warn("TEST_360");
-    //     f.responseId = responseId;
-    //     return Promise.resolve(responseId);
-    //   }).catch(reject));
-    // });
-    console.warn("TEST_353");
     f.pollableId = pollableId;
     return pollableId;
   };
@@ -410,33 +398,3 @@ class ActiveFields {
     this.fields = new Map(fields.map(([k, v]) => [k, encoder.encode(v)]));
   }
 }
-
-/**
- * @param req
- * @returns {Promise<{ status: number, headers: [string, string][], body: ArrayBuffer | undefined }>}
- */
-const makeRequest = async (req) => {
-  console.warn("TEST_406");
-  return {
-    status: 500,
-    headers: [],
-  };
-  try {
-    let headers = new Headers(req.headers);
-    const resp = await fetch(req.uri, {
-      method: req.method.toString(),
-      headers,
-      body: req.body && req.body.length > 0 ? req.body : undefined,
-      redirect: "manual",
-    });
-    let arrayBuffer = await resp.arrayBuffer();
-    console.warn(JSON.stringify(res));
-    return {
-      status: resp.status,
-      headers: Array.from(resp.headers.entries()),
-      body: arrayBuffer.byteLength > 0 ? new Uint8Array(arrayBuffer) : undefined,
-    };
-  } catch (err) {
-    console.error(err);
-  }
-};
