@@ -9,7 +9,6 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
-use wit_parser::abi::AbiVariant;
 use wit_parser::*;
 
 struct TsBindgen {
@@ -19,8 +18,7 @@ struct TsBindgen {
     /// as a type-description of the input/output interfaces.
     src: Source,
 
-    export_names: LocalNames,
-    import_names: LocalNames,
+    interface_names: LocalNames,
     local_names: LocalNames,
 
     /// TypeScript definitions which will become the import object
@@ -51,8 +49,7 @@ pub fn ts_bindgen(
 ) {
     let mut bindgen = TsBindgen {
         src: Source::default(),
-        export_names: LocalNames::default(),
-        import_names: LocalNames::default(),
+        interface_names: LocalNames::default(),
         local_names: LocalNames::default(),
         import_object: Source::default(),
         export_object: Source::default(),
@@ -110,9 +107,7 @@ pub fn ts_bindgen(
                         TypeDefKind::Option(t) => gen.type_option(*tid, name, t, &ty.docs),
                         TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
                         TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
-                        TypeDefKind::Type(t) => {
-                            gen.type_alias(*tid, name, t, None, AbiVariant::GuestImport, &ty.docs)
-                        }
+                        TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("generate for future"),
                         TypeDefKind::Stream(_) => todo!("generate for stream"),
                         TypeDefKind::Unknown => unreachable!(),
@@ -267,9 +262,7 @@ impl TsBindgen {
         files: &mut Files,
     ) -> String {
         // in case an imported type is used as an exported type
-        self.generate_interface(name, resolve, id, files, AbiVariant::GuestExport, false);
-        let local_name =
-            self.generate_interface(name, resolve, id, files, AbiVariant::GuestImport, true);
+        let local_name = self.generate_interface(name, resolve, id, files);
         uwriteln!(
             self.import_object,
             "{}: typeof {local_name},",
@@ -289,16 +282,7 @@ impl TsBindgen {
             if iface_name == "*" {
                 uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
                 let name = resolve.interfaces[id].name.as_ref().unwrap();
-                // in case an imported type is used as an exported type
-                self.generate_interface(&name, resolve, id, files, AbiVariant::GuestExport, false);
-                let local_name = self.generate_interface(
-                    &name,
-                    resolve,
-                    id,
-                    files,
-                    AbiVariant::GuestImport,
-                    true,
-                );
+                let local_name = self.generate_interface(&name, resolve, id, files);
                 uwriteln!(self.import_object, "typeof {local_name},",);
                 return;
             }
@@ -306,10 +290,7 @@ impl TsBindgen {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         for (iface_name, &id) in ifaces {
             let name = resolve.interfaces[id].name.as_ref().unwrap();
-            // in case an imported type is used as an exported type
-            self.generate_interface(&name, resolve, id, files, AbiVariant::GuestExport, false);
-            let local_name =
-                self.generate_interface(&name, resolve, id, files, AbiVariant::GuestImport, true);
+            let local_name = self.generate_interface(&name, resolve, id, files);
             uwriteln!(
                 self.import_object,
                 "{}: typeof {local_name},",
@@ -328,7 +309,7 @@ impl TsBindgen {
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         let mut gen = self.ts_interface(resolve);
-        gen.ts_func(func, AbiVariant::GuestImport, true, false);
+        gen.ts_func(func, true, false);
         let src = gen.finish();
         self.import_object.push_str(&src);
         uwriteln!(self.import_object, "}},");
@@ -342,14 +323,7 @@ impl TsBindgen {
         files: &mut Files,
         instantiation: bool,
     ) -> String {
-        let local_name = self.generate_interface(
-            export_name,
-            resolve,
-            id,
-            files,
-            AbiVariant::GuestExport,
-            true,
-        );
+        let local_name = self.generate_interface(export_name, resolve, id, files);
         if instantiation {
             uwriteln!(
                 self.export_object,
@@ -382,7 +356,7 @@ impl TsBindgen {
     ) {
         let mut gen = self.ts_interface(resolve);
         for (_, func) in funcs {
-            gen.ts_func(func, AbiVariant::GuestExport, false, declaration);
+            gen.ts_func(func, false, declaration);
         }
         let src = gen.finish();
         self.export_object.push_str(&src);
@@ -394,35 +368,19 @@ impl TsBindgen {
         resolve: &Resolve,
         id: InterfaceId,
         files: &mut Files,
-        abi: AbiVariant,
-        used: bool,
     ) -> String {
-        let dir = match abi {
-            AbiVariant::GuestImport => "imports",
-            AbiVariant::GuestExport => "exports",
-        };
         let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
         let goal_name = interface_goal_name(&id_name);
         let goal_name_kebab = goal_name.to_kebab_case();
-        let file_name = &format!("{dir}/{}.d.ts", goal_name_kebab);
-        let (name, exists) = match abi {
-            AbiVariant::GuestImport => &mut self.import_names,
-            AbiVariant::GuestExport => &mut self.export_names,
-        }
-        .get_or_create(&file_name, &goal_name);
+        let file_name = &format!("interfaces/{}.d.ts", goal_name_kebab);
+        let (name, iface_exists) = self.interface_names.get_or_create(&file_name, &goal_name);
 
         let camel = name.to_upper_camel_case();
 
-        let local_name = if used {
-            self.local_names
-                .get_or_create(&file_name, &goal_name)
-                .0
-                .to_upper_camel_case()
-        } else {
-            camel.to_string()
-        };
+        let (local_name, local_exists) = self.local_names.get_or_create(&file_name, &goal_name);
+        let local_name = local_name.to_upper_camel_case();
 
-        if used {
+        if !local_exists {
             uwriteln!(
                 self.src,
                 "import {{ {} }} from './{}';",
@@ -435,7 +393,7 @@ impl TsBindgen {
             );
         }
 
-        if exists {
+        if iface_exists {
             return local_name;
         }
 
@@ -443,11 +401,11 @@ impl TsBindgen {
 
         uwriteln!(gen.src, "export namespace {camel} {{");
         for (_, func) in resolve.interfaces[id].functions.iter() {
-            gen.ts_func(func, abi, false, true);
+            gen.ts_func(func, false, true);
         }
         uwriteln!(gen.src, "}}");
 
-        gen.types(id, abi);
+        gen.types(id);
         gen.post_types();
 
         let src = gen.finish();
@@ -466,12 +424,6 @@ impl TsBindgen {
             needs_ty_result: false,
         }
     }
-}
-
-#[derive(Copy, Clone)]
-enum Mode {
-    Lift,
-    Lower,
 }
 
 impl<'a> TsInterface<'a> {
@@ -513,7 +465,7 @@ impl<'a> TsInterface<'a> {
         }
     }
 
-    fn types(&mut self, iface_id: InterfaceId, abi: AbiVariant) {
+    fn types(&mut self, iface_id: InterfaceId) {
         let iface = &self.resolve().interfaces[iface_id];
         for (name, id) in iface.types.iter() {
             let id = *id;
@@ -527,7 +479,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Option(t) => self.type_option(id, name, t, &ty.docs),
                 TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => self.type_alias(id, name, t, Some(iface_id), abi, &ty.docs),
+                TypeDefKind::Type(t) => self.type_alias(id, name, t, Some(iface_id), &ty.docs),
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
@@ -537,7 +489,7 @@ impl<'a> TsInterface<'a> {
         }
     }
 
-    fn print_ty(&mut self, ty: &Type, mode: Mode) {
+    fn print_ty(&mut self, ty: &Type) {
         match ty {
             Type::Bool => self.src.push_str("boolean"),
             Type::U8
@@ -557,8 +509,8 @@ impl<'a> TsInterface<'a> {
                     return self.src.push_str(&name.to_upper_camel_case());
                 }
                 match &ty.kind {
-                    TypeDefKind::Type(t) => self.print_ty(t, mode),
-                    TypeDefKind::Tuple(t) => self.print_tuple(t, mode),
+                    TypeDefKind::Type(t) => self.print_ty(t),
+                    TypeDefKind::Tuple(t) => self.print_tuple(t),
                     TypeDefKind::Record(_) => panic!("anonymous record"),
                     TypeDefKind::Flags(_) => panic!("anonymous flags"),
                     TypeDefKind::Enum(_) => panic!("anonymous enum"),
@@ -566,23 +518,23 @@ impl<'a> TsInterface<'a> {
                         if maybe_null(self.resolve, t) {
                             self.needs_ty_option = true;
                             self.src.push_str("Option<");
-                            self.print_ty(t, mode);
+                            self.print_ty(t);
                             self.src.push_str(">");
                         } else {
-                            self.print_ty(t, mode);
-                            self.src.push_str(" | null");
+                            self.print_ty(t);
+                            self.src.push_str(" | undefined");
                         }
                     }
                     TypeDefKind::Result(r) => {
                         self.needs_ty_result = true;
                         self.src.push_str("Result<");
-                        self.print_optional_ty(r.ok.as_ref(), mode);
+                        self.print_optional_ty(r.ok.as_ref());
                         self.src.push_str(", ");
-                        self.print_optional_ty(r.err.as_ref(), mode);
+                        self.print_optional_ty(r.err.as_ref());
                         self.src.push_str(">");
                     }
                     TypeDefKind::Variant(_) => panic!("anonymous variant"),
-                    TypeDefKind::List(v) => self.print_list(v, mode),
+                    TypeDefKind::List(v) => self.print_list(v),
                     TypeDefKind::Future(_) => todo!("anonymous future"),
                     TypeDefKind::Stream(_) => todo!("anonymous stream"),
                     TypeDefKind::Unknown => unreachable!(),
@@ -603,39 +555,36 @@ impl<'a> TsInterface<'a> {
         }
     }
 
-    fn print_optional_ty(&mut self, ty: Option<&Type>, mode: Mode) {
+    fn print_optional_ty(&mut self, ty: Option<&Type>) {
         match ty {
-            Some(ty) => self.print_ty(ty, mode),
+            Some(ty) => self.print_ty(ty),
             None => self.src.push_str("void"),
         }
     }
 
-    fn print_list(&mut self, ty: &Type, mode: Mode) {
+    fn print_list(&mut self, ty: &Type) {
         match array_ty(self.resolve, ty) {
-            Some("Uint8Array") => match mode {
-                Mode::Lift => self.src.push_str("Uint8Array"),
-                Mode::Lower => self.src.push_str("Uint8Array | ArrayBuffer"),
-            },
+            Some("Uint8Array") => self.src.push_str("Uint8Array"),
             Some(ty) => self.src.push_str(ty),
             None => {
-                self.print_ty(ty, mode);
+                self.print_ty(ty);
                 self.src.push_str("[]");
             }
         }
     }
 
-    fn print_tuple(&mut self, tuple: &Tuple, mode: Mode) {
+    fn print_tuple(&mut self, tuple: &Tuple) {
         self.src.push_str("[");
         for (i, ty) in tuple.types.iter().enumerate() {
             if i > 0 {
                 self.src.push_str(", ");
             }
-            self.print_ty(ty, mode);
+            self.print_ty(ty);
         }
         self.src.push_str("]");
     }
 
-    fn ts_func(&mut self, func: &Function, abi: AbiVariant, default: bool, declaration: bool) {
+    fn ts_func(&mut self, func: &Function, default: bool, declaration: bool) {
         self.docs(&func.docs);
 
         let iface = if let FunctionKind::Method(ty)
@@ -696,13 +645,7 @@ impl<'a> TsInterface<'a> {
             }
             iface.src.push_str(&param_name);
             iface.src.push_str(": ");
-            iface.print_ty(
-                ty,
-                match abi {
-                    AbiVariant::GuestExport => Mode::Lower,
-                    AbiVariant::GuestImport => Mode::Lift,
-                },
-            );
+            iface.print_ty(ty);
         }
 
         iface.src.push_str(")");
@@ -712,23 +655,19 @@ impl<'a> TsInterface<'a> {
         }
         iface.src.push_str(": ");
 
-        let result_mode = match abi {
-            AbiVariant::GuestExport => Mode::Lift,
-            AbiVariant::GuestImport => Mode::Lower,
-        };
         if let Some((ok_ty, _)) = func.results.throws(iface.resolve) {
-            iface.print_optional_ty(ok_ty, result_mode);
+            iface.print_optional_ty(ok_ty);
         } else {
             match func.results.len() {
                 0 => iface.src.push_str("void"),
-                1 => iface.print_ty(func.results.iter_types().next().unwrap(), result_mode),
+                1 => iface.print_ty(func.results.iter_types().next().unwrap()),
                 _ => {
                     iface.src.push_str("[");
                     for (i, ty) in func.results.iter_types().enumerate() {
                         if i != 0 {
                             iface.src.push_str(", ");
                         }
-                        iface.print_ty(ty, result_mode);
+                        iface.print_ty(ty);
                     }
                     iface.src.push_str("]");
                 }
@@ -768,7 +707,7 @@ impl<'a> TsInterface<'a> {
                 maybe_quote_id(&field.name.to_lower_camel_case()),
                 option_str
             ));
-            self.print_ty(ty, Mode::Lift);
+            self.print_ty(ty);
             self.src.push_str(",\n");
         }
         self.src.push_str("}\n");
@@ -778,7 +717,7 @@ impl<'a> TsInterface<'a> {
         self.docs(docs);
         self.src
             .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
-        self.print_tuple(tuple, Mode::Lift);
+        self.print_tuple(tuple);
         self.src.push_str(";\n");
     }
 
@@ -819,7 +758,7 @@ impl<'a> TsInterface<'a> {
             self.src.push_str("',\n");
             if let Some(ty) = case.ty {
                 self.src.push_str("val: ");
-                self.print_ty(&ty, Mode::Lift);
+                self.print_ty(&ty);
                 self.src.push_str(",\n");
             }
             self.src.push_str("}\n");
@@ -833,11 +772,11 @@ impl<'a> TsInterface<'a> {
         if maybe_null(self.resolve, payload) {
             self.needs_ty_option = true;
             self.src.push_str("Option<");
-            self.print_ty(payload, Mode::Lift);
+            self.print_ty(payload);
             self.src.push_str(">");
         } else {
-            self.print_ty(payload, Mode::Lift);
-            self.src.push_str(" | null");
+            self.print_ty(payload);
+            self.src.push_str(" | undefined");
         }
         self.src.push_str(";\n");
     }
@@ -847,9 +786,9 @@ impl<'a> TsInterface<'a> {
         let name = name.to_upper_camel_case();
         self.needs_ty_result = true;
         self.src.push_str(&format!("export type {name} = Result<"));
-        self.print_optional_ty(result.ok.as_ref(), Mode::Lift);
+        self.print_optional_ty(result.ok.as_ref());
         self.src.push_str(", ");
-        self.print_optional_ty(result.err.as_ref(), Mode::Lift);
+        self.print_optional_ty(result.err.as_ref());
         self.src.push_str(">;\n");
     }
 
@@ -894,7 +833,6 @@ impl<'a> TsInterface<'a> {
         name: &str,
         ty: &Type,
         parent_id: Option<InterfaceId>,
-        abi: AbiVariant,
         docs: &Docs,
     ) {
         let owner_not_parent = match ty {
@@ -920,20 +858,16 @@ impl<'a> TsInterface<'a> {
         let type_name = name.to_upper_camel_case();
         match owner_not_parent {
             Some(owned_interface_name) => {
-                let dir = match abi {
-                    AbiVariant::GuestImport => "imports",
-                    AbiVariant::GuestExport => "exports",
-                };
                 uwriteln!(
                     self.src,
-                    "import type {{ {type_name} }} from '../{dir}/{owned_interface_name}';",
+                    "import type {{ {type_name} }} from '../interfaces/{owned_interface_name}';",
                 );
                 self.src.push_str(&format!("export {{ {} }};\n", type_name));
             }
             _ => {
                 self.docs(docs);
                 self.src.push_str(&format!("export type {} = ", type_name));
-                self.print_ty(ty, Mode::Lift);
+                self.print_ty(ty);
                 self.src.push_str(";\n");
             }
         }
@@ -943,7 +877,7 @@ impl<'a> TsInterface<'a> {
         self.docs(docs);
         self.src
             .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
-        self.print_list(ty, Mode::Lift);
+        self.print_list(ty);
         self.src.push_str(";\n");
     }
 }
