@@ -30,7 +30,7 @@ export class WasiHttp {
   futureIdBase = 1;
   /** @type {Map<number,ActiveRequest>} */ requests = new Map();
   /** @type {Map<number,ActiveResponse>} */ responses = new Map();
-  /** @type {Map<number,Map<string,string[]>>} */ fields = new Map();
+  /** @type {Map<number,ActiveFields>} */ fields = new Map();
   /** @type {Map<number,Uint8Array>} */ streams = new Map();
   /** @type {Map<number,ActiveFuture>} */ futures = new Map();
 
@@ -59,22 +59,22 @@ export class WasiHttp {
       const responseId = this.responseIdBase;
       this.responseIdBase += 1;
       const response = new ActiveResponse(responseId);
-      this.responses.set(responseId, response);
-      future.responseId = responseId;
-  
+
       const scheme = request.scheme.tag === "HTTP" ? "http://" : "https://";
-  
+
       const url = scheme + request.authority + request.pathWithQuery;
-      const headers = new Headers({
+      const headers = {
         "host": request.authority,
-      });
-      if (request.headers && request.headers.size > 0) {
-        for (const [key, value] of request.headers.entries()) {
-          headers.set(key, Array.isArray(value) ? value.join(",") : value)
+      };
+      if (request.headers) {
+        const requestHeaders = this.fields.get(request.headers);
+        const decoder = new TextDecoder();
+        for (const [key, value] of requestHeaders.fields.entries()) {
+          headers[key] = decoder.decode(value);
         }
       }
       const body = this.streams.get(request.body);
-  
+
       console.warn("TEST_74");
 
       const res = http.send({
@@ -86,11 +86,10 @@ export class WasiHttp {
       });
 
       response.status = res.status;
-      if (res.headers && res.headers.size > 0) {
-        for (const [key, value] of res.headers) {
-          response.responseHeaders.set(key, [value]);
-        }
+      if (res.headers && res.headers.length > 0) {
+        response.headers = this.newFields(res.headers);
       }
+
       const buf = res.body;
       if (buf) {
         response.body = this.streamIdBase;
@@ -192,21 +191,20 @@ export class WasiHttp {
    * @returns {Fields}
    */
   newFields = (entries) => {
-    const map = new Map(entries);
-
     const id = this.fieldsIdBase;
     this.fieldsIdBase += 1;
-    this.fields.set(id, map);
+    this.fields.set(id, new ActiveFields(id, entries));
 
     return id;
   }
 
   /**
    * @param {Fields} fields
-   * @returns {[string, string][]}
+   * @returns {[string, Uint8Array][]}
    */
   fieldsEntries = (fields) => {
-    return this.fields.get(fields) ?? [];
+    const activeFields = this.fields.get(fields);
+    return activeFields ? Array.from(activeFields.fields) : [];
   }
 
   /**
@@ -232,7 +230,7 @@ export class WasiHttp {
     req.pathWithQuery = pathWithQuery;
     req.authority = authority;
     req.method = method;
-    req.headers = this.fields.get(headers);
+    req.headers = headers;
     req.scheme = scheme;
     this.requests.set(id, req);
     return id;
@@ -271,11 +269,7 @@ export class WasiHttp {
    */
   incomingResponseHeaders = (response) => {
     const r = this.responses.get(response);
-    const id = this.fieldsIdBase;
-    this.fieldsIdBase += 1;
-
-    this.fields.set(id, r.responseHeaders);
-    return id;
+    return r.headers ?? 0;
   }
 
   /**
@@ -370,7 +364,7 @@ class ActiveRequest {
   /** @type {Scheme | null} */ scheme = { tag: 'HTTP' };
   pathWithQuery = null;
   authority = null;
-  /** @type {Map<string,string[]>} */ headers = new Map();
+  /** @type {number | null} */ headers = null;
   body = 3;
 
   constructor(id) {
@@ -383,7 +377,7 @@ class ActiveResponse {
   activeResponse = false;
   status = 0;
   body = 3;
-  /** @type {Map<string,string[]>} */ responseHeaders = new Map();
+  /** @type {number | null} */ headers = null;
 
   constructor(id) {
     this.id = id;
@@ -403,6 +397,17 @@ class ActiveFuture {
     this.options = options;
     this.responseId = responseId;
     this.pollableId = pollableId;
+  }
+}
+
+class ActiveFields {
+  /** @type {number} */ id;
+  /** @type {Map<string, Uint8Array[]>} */ fields;
+
+  constructor(id, fields) {
+    this.id = id;
+    const encoder = new TextEncoder();
+    this.fields = new Map(fields.map(([k, v]) => [k, encoder.encode(v)]));
   }
 }
 

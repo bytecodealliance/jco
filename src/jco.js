@@ -11,7 +11,7 @@ program
   .name('jco')
   .description(c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`)
   .usage('<command> [options]')
-  .version('0.11.0');
+  .version('0.11.2');
 
 function myParseInt(value) {
   return parseInt(value, 10);
@@ -37,6 +37,7 @@ program.command('transpile')
   .option('-O, --optimize', 'optimize the component first')
   .option('--no-typescript', 'do not output TypeScript .d.ts types')
   .option('--valid-lifting-optimization', 'optimize component binary validations assuming all lifted values are valid')
+  .option('--tracing', 'emit `tracing` calls on function entry/exit')
   .option('-b, --base64-cutoff <bytes>', 'set the byte size under which core Wasm binaries will be inlined as base64', myParseInt)
   .option('--tla-compat', 'enables compatibility for JS environments without top-level await support via an async $init promise export')
   .option('--no-nodejs-compat', 'disables compatibility in Node.js without a fetch global')

@@ -56,6 +56,8 @@ pub struct TranspileOpts {
     /// Disable verification of component Wasm data structures when
     /// lifting as a production optimization
     pub valid_lifting_optimization: bool,
+    /// Whether or not to emit `tracing` calls on function entry/exit.
+    pub tracing: bool,
 }
 
 struct JsBindgen<'a> {
@@ -736,6 +738,11 @@ impl<'a> Instantiator<'a, '_> {
         self.bindgen(
             nparams,
             false,
+            if import_name.is_empty() {
+                None
+            } else {
+                Some(import_name)
+            },
             &callee_name,
             options,
             func,
@@ -850,6 +857,7 @@ impl<'a> Instantiator<'a, '_> {
         &mut self,
         nparams: usize,
         this_ref: bool,
+        module_name: Option<&str>,
         callee: &str,
         opts: &CanonicalOptions,
         func: &Function,
@@ -888,6 +896,26 @@ impl<'a> Instantiator<'a, '_> {
         }
         uwriteln!(self.src.js, ") {{");
 
+        let tracing_prefix = format!(
+            "[module=\"{}\", function=\"{}\"]",
+            module_name.unwrap_or("<no module>"),
+            func.name
+        );
+
+        if self.gen.opts.tracing {
+            let event_fields = func
+                .params
+                .iter()
+                .enumerate()
+                .map(|(i, (name, _ty))| format!("{name}=${{arguments[{i}]}}"))
+                .collect::<Vec<String>>();
+            uwriteln!(
+                self.src.js,
+                "console.trace(`{tracing_prefix} call {}`);",
+                event_fields.join(", ")
+            );
+        }
+
         if self.gen.opts.tla_compat && matches!(abi, AbiVariant::GuestExport) {
             let throw_uninitialized = self.gen.intrinsic(Intrinsic::ThrowUninitialized);
             uwrite!(
@@ -920,6 +948,11 @@ impl<'a> Instantiator<'a, '_> {
             tmp: 0,
             params,
             post_return: post_return.as_ref(),
+            tracing_prefix: if self.gen.opts.tracing {
+                Some(&tracing_prefix)
+            } else {
+                None
+            },
             encoding: match opts.string_encoding {
                 component::StringEncoding::Utf8 => StringEncoding::UTF8,
                 component::StringEncoding::Utf16 => StringEncoding::UTF16,
@@ -1100,6 +1133,7 @@ impl<'a> Instantiator<'a, '_> {
                         func,
                         existing_resource_def,
                         *ty,
+                        export_name,
                     );
                     if let FunctionKind::Constructor(ty)
                     | FunctionKind::Method(ty)
@@ -1156,6 +1190,7 @@ impl<'a> Instantiator<'a, '_> {
                             func,
                             existing_resource_def,
                             *ty,
+                            export_name,
                         );
 
                         if let FunctionKind::Constructor(ty)
@@ -1198,6 +1233,7 @@ impl<'a> Instantiator<'a, '_> {
         func: &Function,
         existing_resource_def: bool,
         ty_func_idx: TypeFuncIndex,
+        export_name: &String,
     ) {
         let resource_map = self.create_resource_map(func, ty_func_idx);
         match func.kind {
@@ -1247,6 +1283,11 @@ impl<'a> Instantiator<'a, '_> {
         self.bindgen(
             func.params.len(),
             matches!(func.kind, FunctionKind::Method(_)),
+            if export_name.is_empty() {
+                None
+            } else {
+                Some(export_name)
+            },
             &callee,
             options,
             func,

@@ -16,7 +16,7 @@ async function makeRequest(req) {
     let arrayBuffer = await resp.arrayBuffer();
     return JSON.stringify({
       status: resp.status,
-      headers: Array.from(resp.headers.entries()),
+      headers: Array.from(resp.headers),
       body:
         arrayBuffer.byteLength > 0
           ? Buffer.from(arrayBuffer).toString("base64")

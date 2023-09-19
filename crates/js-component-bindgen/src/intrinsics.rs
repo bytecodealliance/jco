@@ -31,6 +31,7 @@ pub enum Intrinsic {
     ToInt32,
     /// Implementation of https://tc39.es/ecma262/#sec-toint8.
     ToInt8,
+    ToResultString,
     /// Implementation of https://tc39.es/ecma262/#sec-tostring.
     ToString,
     /// Implementation of https://tc39.es/ecma262/#sec-touint16.
@@ -96,6 +97,19 @@ pub fn render_intrinsics(
                 const hasOwnProperty = Object.prototype.hasOwnProperty;
             "),
 
+            Intrinsic::ToResultString => output.push_str("
+                function toResultString(obj) {
+                    return JSON.stringify(obj, (_, v) => {
+                        if (v && Object.getPrototypeOf(v) === Uint8Array.prototype) {
+                            return `[${v[Symbol.toStringTag]} (${v.byteLength})]`;
+                        } else if (typeof v === 'bigint') {
+                            return v.toString();
+                        }
+                        return v;
+                    });
+                }
+            "),
+
             Intrinsic::GetErrorPayload => {
                 let hop = Intrinsic::HasOwnProperty.name();
                 uwrite!(output, "
@@ -116,10 +130,10 @@ pub fn render_intrinsics(
                 }
             "),
 
-          Intrinsic::DataView => output.push_str("
-              let dv = new DataView(new ArrayBuffer());
-              const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
-          "),
+            Intrinsic::DataView => output.push_str("
+                let dv = new DataView(new ArrayBuffer());
+                const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
+            "),
 
             Intrinsic::FetchCompile => if !no_nodejs_compat {
                 output.push_str("
@@ -396,6 +410,7 @@ impl Intrinsic {
             Intrinsic::ToInt16 => "toInt16",
             Intrinsic::ToInt32 => "toInt32",
             Intrinsic::ToInt8 => "toInt8",
+            Intrinsic::ToResultString => "toResultString",
             Intrinsic::ToString => "toString",
             Intrinsic::ToUint16 => "toUint16",
             Intrinsic::ToUint32 => "toUint32",

@@ -36,6 +36,9 @@ world js-component-bindgen {
     /// Disable verification of component Wasm data structures when
     /// lifting as a production optimization
     valid-lifting-optimization: option<bool>,
+
+    /// Whether or not to emit `tracing` calls on function entry/exit.
+    tracing: option<bool>,
   }
 
   variant wit {

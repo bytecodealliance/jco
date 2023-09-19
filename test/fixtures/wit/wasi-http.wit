@@ -1,0 +1,15 @@
+package test:jco
+interface commands {
+
+  variant error {
+    generic(string)
+  }
+
+  get-example: func() -> result<string, error>
+}
+
+world command-extended {
+  include wasi:http/proxy
+  
+  export commands
+}

@@ -62,6 +62,7 @@ pub struct FunctionBindgen<'a> {
     pub memory: Option<&'a String>,
     pub realloc: Option<&'a String>,
     pub post_return: Option<&'a String>,
+    pub tracing_prefix: Option<&'a String>,
     pub encoding: StringEncoding,
     pub callee: &'a str,
 }
@@ -1001,11 +1002,26 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::IterBasePointer => results.push("base".to_string()),
 
             Instruction::CallWasm { sig, .. } => {
-                self.bind_results(sig.results.len(), results);
+                let sig_results_length = sig.results.len();
+                self.bind_results(sig_results_length, results);
                 uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+
+                if let Some(prefix) = self.tracing_prefix {
+                    let to_result_string = self.intrinsic(Intrinsic::ToResultString);
+                    uwriteln!(
+                        self.src,
+                        "console.trace(`{prefix} return {}`);",
+                        if sig_results_length > 0 || !results.is_empty() {
+                            format!("result=${{{to_result_string}(ret)}}")
+                        } else {
+                            "".to_string()
+                        }
+                    );
+                }
             }
 
             Instruction::CallInterface { func } => {
+                let results_length = func.results.len();
                 if self.err == ErrHandling::ResultCatchHandler {
                     let err_payload = self.intrinsic(Intrinsic::GetErrorPayload);
                     uwriteln!(
@@ -1022,8 +1038,21 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                     results.push("ret".to_string());
                 } else {
-                    self.bind_results(func.results.len(), results);
+                    self.bind_results(results_length, results);
                     uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+                }
+
+                if let Some(prefix) = self.tracing_prefix {
+                    let to_result_string = self.intrinsic(Intrinsic::ToResultString);
+                    uwriteln!(
+                        self.src,
+                        "console.trace(`{prefix} return {}`);",
+                        if results_length > 0 || !results.is_empty() {
+                            format!("result=${{{to_result_string}(ret)}}")
+                        } else {
+                            "".to_string()
+                        }
+                    );
                 }
 
                 // after a high level call, we need to deactivate the component resource borrows
@@ -1143,24 +1172,18 @@ impl Bindgen for FunctionBindgen<'_> {
                 let class_name = name.to_upper_camel_case();
                 let handle = format!("handle{}", self.tmp());
                 if !imported {
-                    let rep = format!("rep{}", self.tmp());
                     let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
                     uwriteln!(
                         self.src,
-                        "let {rep} = {}[{resource_symbol}];
-                        if ({rep} === null) {{
-                            throw new Error('\"{}\" resource handle lifetime expired / transferred.');
+                        "let {handle} = {}[{resource_symbol}];
+                        if ({handle} === null) {{
+                            throw new Error('\"{class_name}\" resource handle lifetime expired / transferred.');
                         }}
-                        if ({rep} === undefined) {{
-                            throw new Error('Not a valid \"{}\" resource.');
+                        if ({handle} === undefined) {{
+                            throw new Error('Not a valid \"{class_name}\" resource.');
                         }}
-                        const {handle} = handleCnt{id}++;
-                        handleTable{id}.set({handle}, {{ rep: {rep}, own: {} }});
                         ",
                         operands[0],
-                        class_name,
-                        class_name,
-                        is_own
                     );
 
                     // lowered own handles have their finalizers deregistered
@@ -1181,8 +1204,12 @@ impl Bindgen for FunctionBindgen<'_> {
                     // their assigned rep is deduped across usage though
                     uwriteln!(
                         self.src,
-                        "const {handle} = handleCnt{id}++;
+                        "if (!({} instanceof {class_name})) {{
+                            throw new Error('Not a valid \"{class_name}\" resource.');
+                        }}
+                        const {handle} = handleCnt{id}++;
                         handleTable{id}.set({handle}, {{ rep: {}, own: {} }});",
+                        operands[0],
                         operands[0],
                         is_own,
                     );
