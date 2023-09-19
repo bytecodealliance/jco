@@ -1,15 +1,9 @@
-// Based on:
-// 
 /**
- * Extended native promise with timeout capability.
+ * Extended native promise with pollable capability.
  * <p>Executor function can be provided and executed in constructor
  * or later with {@link PollablePromise#execute execute()}.</p>
  * <p>It can be fulfilled with {@link PollablePromise#resolve resolve()} or
  * rejected with {@link PollablePromise#reject reject()} outside of executor.</p>
- * <p>You can specify timeout and promise will be rejected after specified
- * period of time if it has not been resolved or rejected.
- * Note that provided timeout is not exact and real execution time
- * depends on list of events in event loop.</p>
  *
  * @extends Promise
  */
@@ -23,19 +17,13 @@ export class PollablePromise extends Promise {
   #reject;
   /** @type {PollablePromiseStateEnum} */
   #state;
-  /** @type {number} */
-  #timeout;
   // here will be stored either resolve value or reject reason
   /** @type {*} */
   #result;
-  // handler for timeout
-  #timeoutHandler;
 
   /**
    * Creates new extended promise.
    * Executor function that will be executed when requested.
-   * If timeout is set then starts timer which will reject this promise
-   * when time runs out.
    *
    * @param {Function} executor - function executed by constructor
    */
@@ -56,49 +44,10 @@ export class PollablePromise extends Promise {
     });
     this.#resolve = res;
     this.#reject = rej;
-    this.#state = PollablePromiseStateEnum.READY;
-
-    this.#timeout = 0;
+    this.#state = PollablePromiseStateEnum.Ready;
 
     this.#executor = executor;
   }
-
-  /**
-   * Set promise timeout.
-   * @type {number} 
-   * @param {number} value number of milliseconds to wait before rejecting promise.
-   *    0 - wait indefinitely for promise resolution
-   */
-  set timeout(value) {
-    if (
-      typeof value !== "number" ||
-      value < 0
-    ) {
-      throw new TypeError("timeout must be non-negative number");
-    }
-    if (value > 0) {
-      this.#timeoutHandler = setTimeout(
-        () => {
-          this.#timeoutHandler = undefined;
-          if (!this.settled) {
-            this.reject(new Error("Promise timeout expired"));
-          }
-        },
-        value,
-      );
-    }
-    this.#timeout = value;
-  }
-
-  /**
-   * Timeout of promise.
-   *
-   * @readonly
-   * @type {number}
-   */
-    get timeout() {
-      return this.#timeout;
-    }
 
   /**
    * State of promise.
@@ -112,15 +61,15 @@ export class PollablePromise extends Promise {
 
   /**
    * Returns true if promise is settled:
-   * either {@link PollablePromiseStateEnum.FULFILLED FULFILLED} or
-   * {@link PollablePromiseStateEnum.REJECTED REJECTED}
+   * either {@link PollablePromiseStateEnum.Fulfilled FULFILLED} or
+   * {@link PollablePromiseStateEnum.Rejected REJECTED}
    *
    * @readonly
    * @type {boolean}
    */
   get settled() {
-    return this.#state === PollablePromiseStateEnum.FULFILLED ||
-      this.#state === PollablePromiseStateEnum.REJECTED;
+    return this.#state === PollablePromiseStateEnum.Fulfilled ||
+      this.#state === PollablePromiseStateEnum.Rejected;
   }
 
   /**
@@ -130,7 +79,7 @@ export class PollablePromise extends Promise {
    * @type {*}
    */
   get value() {
-    if (this.#state === PollablePromiseStateEnum.FULFILLED) {
+    if (this.#state === PollablePromiseStateEnum.Fulfilled) {
       return this.#result;
     }
     return undefined;
@@ -143,7 +92,7 @@ export class PollablePromise extends Promise {
    * @type {*}
    */
   get error() {
-    if (this.#state === PollablePromiseStateEnum.REJECTED) {
+    if (this.#state === PollablePromiseStateEnum.Rejected) {
       return this.#result;
     }
     return undefined;
@@ -151,15 +100,15 @@ export class PollablePromise extends Promise {
 
   /**
    * Executes provided function to decide promise outcome and changes
-   * this promise {@link PollablePromise#state state} to {@link PollablePromiseStateEnum.PENDING PENDING}.
+   * this promise {@link PollablePromise#state state} to {@link PollablePromiseStateEnum.Pending PENDING}.
    * Provided function is executed only if this promise {@link PollablePromise#state state}
-   * is {@link PollablePromiseStateEnum.READY READY}.
+   * is {@link PollablePromiseStateEnum.Ready READY}.
    *
    * @returns {Promise} reference to this promise for chaining
    */
   execute() {
-    if (this.#state === PollablePromiseStateEnum.READY) {
-      this.#state = PollablePromiseStateEnum.PENDING;
+    if (this.#state === PollablePromiseStateEnum.Ready) {
+      this.#state = PollablePromiseStateEnum.Pending;
       try {
         this.#executor(this.resolve.bind(this), this.reject.bind(this));
       } catch (err) {
@@ -171,53 +120,49 @@ export class PollablePromise extends Promise {
 
   /**
    * Resolves this promise only if it's {@link PollablePromise#state state} is
-   * {@link PollablePromiseStateEnum.READY READY} or
-   * {@link PollablePromiseStateEnum.PENDING PENDING}.
+   * {@link PollablePromiseStateEnum.Ready READY} or
+   * {@link PollablePromiseStateEnum.Pending PENDING}.
    * If resolve value is instance of Promise - locks-in on that promise outcome
    * This promise {@link PollablePromise#state state} is set
-   * {@link PollablePromiseStateEnum.LOCKED LOCKED}.
+   * {@link PollablePromiseStateEnum.Locked LOCKED}.
    *
    * @param {*} [value] - value to fulfill this promise
    */
   resolve(value) {
     if (
-      this.#state === PollablePromiseStateEnum.READY ||
-      this.#state === PollablePromiseStateEnum.PENDING
+      this.#state === PollablePromiseStateEnum.Ready ||
+      this.#state === PollablePromiseStateEnum.Pending
     ) {
       if (value && typeof value.then === "function") {
         // if resolving to thenable - lock in on provided thenable
-        this.#state = PollablePromiseStateEnum.LOCKED;
+        this.#state = PollablePromiseStateEnum.Locked;
         try {
           value.then(
             (value) => {
-              this.#clearTimeout();
               if (!this.settled) {
                 this.#result = value;
-                this.#state = PollablePromiseStateEnum.FULFILLED;
+                this.#state = PollablePromiseStateEnum.Fulfilled;
                 this.#resolve(value);
               }
             },
             (err) => {
-              this.#clearTimeout();
               if (!this.settled) {
                 this.#result = err;
-                this.#state = PollablePromiseStateEnum.REJECTED;
+                this.#state = PollablePromiseStateEnum.Rejected;
                 this.#reject(err);
               }
             },
           );
         } catch (err) {
           // error thrown in then function is treated as rejection
-          this.#clearTimeout();
           this.#result = err;
-          this.#state = PollablePromiseStateEnum.REJECTED;
+          this.#state = PollablePromiseStateEnum.Rejected;
           this.#reject(err);
         }
       } else {
         // value is other than thenable - resolve promise with it
-        this.#clearTimeout();
         this.#result = value;
-        this.#state = PollablePromiseStateEnum.FULFILLED;
+        this.#state = PollablePromiseStateEnum.Fulfilled;
         this.#resolve(value);
       }
     }
@@ -225,26 +170,17 @@ export class PollablePromise extends Promise {
 
   /**
    * Rejects this promise only if it's {@link PollablePromise#state state} is either
-   * {@link PollablePromiseStateEnum.READY READY} or
-   * {@link PollablePromiseStateEnum.PENDING PENDING} or
-   * {@link PollablePromiseStateEnum.LOCKED LOCKED}.
+   * {@link PollablePromiseStateEnum.Ready READY} or
+   * {@link PollablePromiseStateEnum.Pending PENDING} or
+   * {@link PollablePromiseStateEnum.Locked LOCKED}.
    *
    * @param {*} [err] - error to reject this promise
    */
   reject(err) {
-    this.#clearTimeout();
     if (!this.settled) {
       this.#result = err;
-      this.#state = PollablePromiseStateEnum.REJECTED;
+      this.#state = PollablePromiseStateEnum.Rejected;
       this.#reject(err);
-    }
-  }
-
-  // clears timeout if it is running
-  #clearTimeout() {
-    if (this.#timeoutHandler) {
-      clearTimeout(this.#timeoutHandler);
-      this.#timeoutHandler = undefined;
     }
   }
 
@@ -282,7 +218,7 @@ export const PollablePromiseStateEnum = Object.freeze({
    * Ready state: executor function has not been executed yet.
    * @memberof PollablePromiseStateEnum
    */
-  READY: "READY",
+  Ready: "READY",
 
   /**
    * Pending state: executor function has already been executed but
@@ -290,7 +226,7 @@ export const PollablePromiseStateEnum = Object.freeze({
    * has been called yet.
    * @memberof PollablePromiseStateEnum
    */
-  PENDING: "PENDING",
+  Pending: "PENDING",
 
   /**
    * Locked-in state: {@link PollablePromise#resolve resolve()} has been called with thenable
@@ -298,17 +234,17 @@ export const PollablePromiseStateEnum = Object.freeze({
    *
    * @memberof PollablePromiseStateEnum
    */
-  LOCKED: "LOCKED",
+  Locked: "LOCKED",
 
   /**
    * Fulfilled state: promise has been resolved.
    * @memberof PollablePromiseStateEnum
    */
-  FULFILLED: "FULFILLED",
+  Fulfilled: "FULFILLED",
 
   /**
    * Rejected state: promise has been rejected.
    * @memberof PollablePromiseStateEnum
    */
-  REJECTED: "REJECTED",
+  Rejected: "REJECTED",
 });
