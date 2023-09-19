@@ -9,11 +9,12 @@ import {
   incomingResponseConsume,
   incomingResponseHeaders,
   incomingResponseStatus,
+  listenToFutureIncomingResponse,
   newFields,
   newOutgoingRequest,
   outgoingRequestWrite,
 } from 'wasi:http/types';
-import { dropPollable } from 'wasi:poll/poll';
+import { dropPollable, pollOneoff } from 'wasi:poll/poll';
 import {
   dropInputStream,
   read as readStream,
@@ -52,17 +53,29 @@ export const commands = {
           'localhost:8080',
           headers
         );
-        console.warn('request id', request);
 
         const body = outgoingRequestWrite(request);
-        console.warn('request body id', body);
 
         const futureResponse = handle(request, undefined);
-        incomingResponse = futureIncomingResponseGet(futureResponse).val;
-        console.warn('incoming response id', incomingResponse);
+        incomingResponse = futureIncomingResponseGet(futureResponse);
+        if (incomingResponse) {
+          incomingResponse = incomingResponse.val;
+        } else {
+          const pollable = listenToFutureIncomingResponse(futureResponse);
+          pollOneoff(new Uint32Array([pollable]));
+          incomingResponse = futureIncomingResponseGet(futureResponse).val;
+          dropPollable(pollable);
+        }
 
         dropOutgoingRequest(request);
         dropFutureIncomingResponse(futureResponse);
+      }
+
+      if (!incomingResponse) {
+        throw Error("unable to resolve incoming response");
+      }
+      if (typeof incomingResponse === 'object') {
+        throw Error(incomingResponse.val);
       }
 
       const status = incomingResponseStatus(incomingResponse);
