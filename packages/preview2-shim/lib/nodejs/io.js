@@ -106,24 +106,35 @@ export const streams = {
   dropInputStream(s) {
     delete _streams[s];
   },
-  write(s, buf) {
-    return streams.blockingWrite(s, buf);
+  checkWrite(_s) {
+    // TODO: implement
+    return 1000000n;
   },
-  blockingWrite(s, buf) {
+  write(s, buf) {
     switch (s) {
       case 0:
         throw new Error(`TODO: write stdin`);
       case 1: {
         process.stdout.write(buf);
-        return [BigInt(buf.byteLength), 'ended'];
+        break;
       }
       case 2: {
         process.stderr.write(buf);
-        return [BigInt(buf.byteLength), 'ended'];
+        break;
       }
       default:
         throw new Error(`TODO: write ${s}`);
     }
+  },
+  blockingWriteAndFlush(s, buf) {
+    // TODO: implement
+    return streams.write(s, buf);
+  },
+  flush(s) {
+    return streams.blockingFlush(s);
+  },
+  blockingFlush(_s) {
+    // TODO: implement
   },
   writeZeroes(s, _len) {
     console.log(`[streams] Write zeroes ${s}`);

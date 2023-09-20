@@ -89,11 +89,22 @@ export const streams = {
   dropInputStream(s) {
     console.log(`[streams] Drop input stream ${s}`);
   },
-  write(s, buf) {
-    return [BigInt(getStream(s).write(buf)), 'ended'];
+  checkWrite(_s) {
+    // TODO: implement
+    return 1000000n;
   },
-  blockingWrite(s, buf) {
-    return [BigInt(getStream(s).write(buf)), 'ended'];
+  write(s, buf) {
+    getStream(s).write(buf);
+  },
+  blockingWriteAndFlush(s, buf) {
+    // TODO: implement
+    return streams.write(s, buf);
+  },
+  flush(s) {
+    return streams.blockingFlush(s);
+  },
+  blockingFlush(_s) {
+    // TODO: implement
   },
   writeZeroes(s, _len) {
     console.log(`[streams] Write zeroes ${s}`);
