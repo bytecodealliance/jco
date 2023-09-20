@@ -25,7 +25,7 @@ export function _createPollable (executor) {
 
 export function _pollablePromise (pollable, maxInterval) {
   const entry = polls[pollable];
-  if (entry.settled) return Promise.resolve();
+  if (!entry || entry.settled) return Promise.resolve();
   watching.add(entry);
   entry.execute();
   if (maxInterval) {
@@ -58,7 +58,7 @@ export function _pollOneoff (from) {
   }));
   for (const id of from) {
     const pollable = polls[id];
-    result.push(pollable.settled);
+    result.push(pollable ? pollable.settled : false);
   }
   return result;
 }
