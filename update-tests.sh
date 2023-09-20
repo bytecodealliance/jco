@@ -32,3 +32,5 @@ git clone https://github.com/bytecodealliance/wasi-virt
 cd wasi-virt
 cargo test
 cp tests/generated/env-allow.composed.wasm ../test/fixtures/
+cd ..
+rm -rf wasi-virt

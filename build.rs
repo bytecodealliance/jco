@@ -1,3 +1,5 @@
+#![feature(fs_try_exists)]
+
 use anyhow::Result;
 use std::{env, fs, io::Write, path::PathBuf};
 
@@ -40,6 +42,9 @@ fn main() -> Result<()> {
 
             let files = generate_types(name, resolve, world, opts)?;
 
+            if fs::try_exists("./packages/preview2-shim/types")? {
+                fs::remove_dir_all("./packages/preview2-shim/types")?;
+            }
             for (filename, contents) in files.iter() {
                 let outfile = PathBuf::from("./packages/preview2-shim/types").join(filename);
                 fs::create_dir_all(outfile.parent().unwrap()).unwrap();

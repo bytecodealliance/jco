@@ -347,7 +347,7 @@ impl Augmenter<'_> {
         // before.
         let mut types = TypeSection::new();
         for ty in self.types.iter() {
-            assert!(!ty.is_final);
+            // assert!(!ty.is_final);
             assert!(ty.supertype_idx.is_none());
             match &ty.structural_type {
                 wasmparser::StructuralType::Func(f) => {

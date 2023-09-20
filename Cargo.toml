@@ -27,17 +27,17 @@ edition = "2021"
 version = "0.11.0"
 
 [workspace.dependencies]
-anyhow = "1.0.71"
-base64 = "0.21.2"
+anyhow = "1.0.75"
+base64 = "0.21.4"
 heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "2.0"
-wasm-encoder = "0.32.0"
-wasm-metadata = "0.10.3"
-wasmparser = "0.111.0"
-wasmprinter = "0.2.64"
+wasm-encoder = "0.33.1"
+wasm-metadata = "0.10.5"
+wasmparser = "0.113.1"
+wasmprinter = "0.2.66"
 wasmtime-environ = { git = "https://github.com/bytecodealliance/wasmtime", features = ["component-model"] }
-wat = "1.0.71"
-wit-bindgen = "0.11.0"
-wit-bindgen-core = "0.11.0"
-wit-component = { version = "0.14.0", features = ["dummy-module"] }
-wit-parser = "0.11.0"
+wat = "1.0.73"
+wit-bindgen = "0.12.0"
+wit-bindgen-core = "0.12.0"
+wit-component = { version = "0.14.2", features = ["dummy-module"] }
+wit-parser = "0.11.1"
