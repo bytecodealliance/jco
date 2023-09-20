@@ -131,21 +131,38 @@ export class WasiHttp {
     s.set([]);
   }
 
-  write = (stream, buf) => {
-    return this.blockingWrite(stream, buf);
+  checkWrite = (stream) => {
+    // TODO: implement
+    return io.streams.checkWrite(stream);
   }
 
   /**
    * @param {OutputStream} stream 
    * @param {Uint8Array} buf 
-   * @returns {[bigint, StreamStatus]}
    */
-  blockingWrite = (stream, buf) => {
+  write = (stream, buf) => {
     if (stream < 3) {
-      return io.streams.blockingWrite(stream, buf);
+      return io.streams.write(stream, buf);
     }
     this.streams.set(stream, buf);
-    return [BigInt(buf.byteLength), 'ended'];
+  }
+
+  blockingWriteAndFlush = (stream, buf) => {
+    if (stream < 3) {
+      return io.streams.blockingWriteAndFlush(stream, buf);
+    }
+    // TODO: implement
+  }
+
+  flush = (stream) => {
+    return this.blockingFlush(stream);
+  }
+
+  blockingFlush = (stream) => {
+    if (stream < 3) {
+      return io.streams.blockingFlush(stream);
+    }
+    // TODO: implement
   }
 
   /**
