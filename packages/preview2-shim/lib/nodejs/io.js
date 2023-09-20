@@ -71,33 +71,28 @@ export function _dropFsStream(stream) {
 
 export const streams = {
   read(s, len) {
-    switch (s) {
-      case 0:
-        return [process.stdin.read(len), true];
-      default:
-        throw new Error(`TODO: write ${s}`);
-    }
+    return streams.blockingRead(s, len);
   },
   blockingRead(s, len) {
     len = Number(len);
     const stream = _streams[s];
-    if (!stream) throw null;
-    switch (stream.type) {
+    switch (stream?.type) {
       case 'file': {
         const buf = Buffer.alloc(Number(len));
         try {
           const readBytes = fsReadSync(stream.fd, buf, 0, Number(len));
-          if (readBytes < Number(len))
-            return [new Uint8Array(), true];
-          return [new Uint8Array(buf.buffer, 0, readBytes), false];
+          if (readBytes < Number(len)) {
+            return [new Uint8Array(buf.buffer, 0, readBytes), 'ended'];
+          }
+          return [new Uint8Array(buf.buffer, 0, readBytes), 'open'];
         }
         catch (e) {
           _convertFsError(e);
         }
         break;
       }
-      default: throw null;
     }
+    throw null;
   },
   skip(s, _len) {
     console.log(`[streams] Skip ${s}`);
@@ -111,24 +106,35 @@ export const streams = {
   dropInputStream(s) {
     delete _streams[s];
   },
+  checkWrite(_s) {
+    // TODO: implement
+    return 1000000n;
+  },
   write(s, buf) {
     switch (s) {
       case 0:
         throw new Error(`TODO: write stdin`);
       case 1: {
         process.stdout.write(buf);
-        return BigInt(buf.byteLength);
+        break;
       }
       case 2: {
         process.stderr.write(buf);
-        return BigInt(buf.byteLength);
+        break;
       }
       default:
         throw new Error(`TODO: write ${s}`);
     }
   },
-  blockingWrite(s, _buf) {
-    console.log(`[streams] Blocking write ${s}`);
+  blockingWriteAndFlush(s, buf) {
+    // TODO: implement
+    return streams.write(s, buf);
+  },
+  flush(s) {
+    return streams.blockingFlush(s);
+  },
+  blockingFlush(_s) {
+    // TODO: implement
   },
   writeZeroes(s, _len) {
     console.log(`[streams] Write zeroes ${s}`);

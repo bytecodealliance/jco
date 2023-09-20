@@ -23,18 +23,7 @@ impl<'a> LocalNames {
         } else {
             &goal_name
         };
-        let mut goal = if is_js_identifier(goal_name) {
-            goal_name.to_string()
-        } else {
-            let mut goal = goal_name.to_lower_camel_case().replace(':', "$");
-            if !is_js_identifier(&goal) {
-                goal = format!("_{goal}");
-                if !is_js_identifier(&goal) {
-                    panic!("Unable to generate valid identifier {goal} for '{goal_name}'");
-                }
-            }
-            goal
-        };
+        let mut goal = to_js_identifier(goal_name);
         if self.local_names.contains(&goal) {
             let mut idx = 1;
             loop {
@@ -58,12 +47,46 @@ impl<'a> LocalNames {
     }
 
     /// get or create a unique identifier for a string while storing the lookup by unique id
-    pub fn get_or_create(&'a mut self, unique_id: &str, goal_name: &str) -> &'a str {
+    pub fn get_or_create(&'a mut self, unique_id: &str, goal_name: &str) -> (&'a str, bool) {
+        let mut seen = true;
         if !self.local_name_ids.contains_key(unique_id) {
             let goal = self.create_once(goal_name).to_string();
             self.local_name_ids.insert(unique_id.to_string(), goal);
+            seen = false;
         }
-        self.local_name_ids.get(unique_id).unwrap()
+        (self.local_name_ids.get(unique_id).unwrap(), seen)
+    }
+}
+
+// Convert an arbitrary string to a similar close js identifier
+pub fn to_js_identifier(goal_name: &str) -> String {
+    if is_js_identifier(goal_name) {
+        goal_name.to_string()
+    } else {
+        let goal = goal_name.to_lower_camel_case();
+        let mut identifier = String::new();
+        for char in goal.chars() {
+            let valid_char = if identifier.len() == 0 {
+                is_js_identifier_start(char)
+            } else {
+                is_js_identifier_char(char)
+            };
+            if valid_char {
+                identifier.push(char);
+            } else {
+                identifier.push(match char {
+                    '.' => '_',
+                    _ => '$',
+                });
+            }
+        }
+        if !is_js_identifier(&identifier) {
+            identifier = format!("_{identifier}");
+            if !is_js_identifier(&identifier) {
+                panic!("Unable to generate valid identifier {identifier} for '{goal_name}'");
+            }
+        }
+        identifier
     }
 }
 
@@ -81,7 +104,7 @@ pub fn is_js_identifier(s: &str) -> bool {
             return false;
         }
     }
-    NOT_IDENTIFIERS.binary_search(&s).is_err()
+    RESERVED_KEYWORDS.binary_search(&s).is_err()
 }
 
 // https://tc39.es/ecma262/#prod-IdentifierStartChar
@@ -122,7 +145,7 @@ pub fn maybe_quote_member(name: &str) -> String {
     }
 }
 
-const NOT_IDENTIFIERS: &'static [&'static str] = &[
+pub(crate) const RESERVED_KEYWORDS: &'static [&'static str] = &[
     "await",
     "break",
     "case",

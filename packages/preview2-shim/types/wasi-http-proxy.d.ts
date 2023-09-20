@@ -1,0 +1,13 @@
+import { WasiCliStderr } from './interfaces/wasi-cli-stderr';
+import { WasiCliStdin } from './interfaces/wasi-cli-stdin';
+import { WasiCliStdout } from './interfaces/wasi-cli-stdout';
+import { WasiClocksMonotonicClock } from './interfaces/wasi-clocks-monotonic-clock';
+import { WasiClocksTimezone } from './interfaces/wasi-clocks-timezone';
+import { WasiClocksWallClock } from './interfaces/wasi-clocks-wall-clock';
+import { WasiHttpOutgoingHandler } from './interfaces/wasi-http-outgoing-handler';
+import { WasiHttpTypes } from './interfaces/wasi-http-types';
+import { WasiIoStreams } from './interfaces/wasi-io-streams';
+import { WasiPollPoll } from './interfaces/wasi-poll-poll';
+import { WasiRandomRandom } from './interfaces/wasi-random-random';
+import { WasiHttpIncomingHandler } from './interfaces/wasi-http-incoming-handler';
+export const incomingHandler: typeof WasiHttpIncomingHandler;

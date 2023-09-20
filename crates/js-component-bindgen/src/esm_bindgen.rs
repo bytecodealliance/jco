@@ -79,7 +79,12 @@ impl EsmBindgen {
     pub fn populate_export_aliases(&mut self) {
         for expt_name in self.exports.keys() {
             if let Some(path_idx) = expt_name.rfind('/') {
-                let alias = &expt_name[path_idx + 1..].to_lower_camel_case();
+                let end = if let Some(version_idx) = expt_name.rfind('@') {
+                    version_idx
+                } else {
+                    expt_name.len()
+                };
+                let alias = &expt_name[path_idx + 1..end].to_lower_camel_case();
                 if !self.exports.contains_key(alias) && !self.export_aliases.contains_key(alias) {
                     self.export_aliases
                         .insert(alias.to_string(), expt_name.to_string());
@@ -122,8 +127,10 @@ impl EsmBindgen {
         // we currently only support first-level nesting so there is no ordering to figure out
         // in the process we also populate the alias info
         for (export_name, export) in self.exports.iter() {
-            let Binding::Interface(iface) = export else { continue };
-            let local_name =
+            let Binding::Interface(iface) = export else {
+                continue;
+            };
+            let (local_name, _) =
                 local_names.get_or_create(&format!("export:{}", export_name), &export_name);
             uwriteln!(output, "const {local_name} = {{");
             for (func_name, export) in iface {
@@ -222,7 +229,7 @@ impl EsmBindgen {
                         }
                         let local_name = match import {
                             Binding::Interface(iface) => {
-                                let iface_local_name = local_names.get_or_create(
+                                let (iface_local_name, _) = local_names.get_or_create(
                                     &format!("import:{specifier}#{external_name}"),
                                     external_name,
                                 );

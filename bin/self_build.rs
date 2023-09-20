@@ -19,11 +19,15 @@ fn main() -> Result<()> {
         encoder = encoder.adapter("wasi_snapshot_preview1", &adapter)?;
 
         let adapted_component = encoder.encode()?;
+        fs::create_dir_all(PathBuf::from("./obj"))?;
+        let mut component_path = PathBuf::from("./obj").join(&name);
+        component_path.set_extension("component.wasm");
+        fs::write(component_path, &adapted_component)?;
 
         let import_map = HashMap::from([
             (
-                "wasi:cli-base/*".into(),
-                "@bytecodealliance/preview2-shim/cli-base#*".into(),
+                "wasi:cli/*".into(),
+                "@bytecodealliance/preview2-shim/cli#*".into(),
             ),
             (
                 "wasi:filesystem/*".into(),
@@ -47,9 +51,10 @@ fn main() -> Result<()> {
             base64_cutoff: 5000_usize,
             tla_compat: true,
             valid_lifting_optimization: false,
+            tracing: false,
         };
 
-        let transpiled = js_component_bindgen::transpile(adapted_component, opts)?;
+        let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;
 
         for (filename, contents) in transpiled.files.iter() {
             let outfile = PathBuf::from("./obj").join(filename);

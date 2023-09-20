@@ -1,6 +1,7 @@
 export { optimizeComponent as opt } from './cmd/opt.js';
 export { transpileComponent as transpile } from './cmd/transpile.js';
-import { $init, print as printFn, parse as parseFn, componentWit as componentWitFn, componentNew as componentNewFn, componentEmbed as componentEmbedFn, metadataAdd as metadataAddFn, metadataShow as metadataShowFn } from "../obj/wasm-tools.js";
+import { $init, tools } from "../obj/wasm-tools.js";
+const { print: printFn, parse: parseFn, componentWit: componentWitFn, componentNew: componentNewFn, componentEmbed: componentEmbedFn, metadataAdd: metadataAddFn, metadataShow: metadataShowFn } = tools;
 
 /**
  * @param {Parameters<import('../obj/wasm-tools.js').print>[0]} binary

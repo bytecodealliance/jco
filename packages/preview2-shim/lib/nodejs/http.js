@@ -15,7 +15,7 @@ export function send(req) {
       body: response.body ? Buffer.from(response.body, "base64") : undefined,
     };
   }
-  throw new UnexpectedError(response);
+  throw new UnexpectedError(response.message);
 }
 
 export const incomingHandler = {
@@ -70,11 +70,8 @@ export const types = {
   incomingRequestMethod(_req) {
     console.log("[types] Incoming request method");
   },
-  incomingRequestPath(_req) {
-    console.log("[types] Incoming request path");
-  },
-  incomingRequestQuery(_req) {
-    console.log("[types] Incoming request query");
+  incomingRequestPathWithQuery(_req) {
+    console.log("[types] Incoming request path with query");
   },
   incomingRequestScheme(_req) {
     console.log("[types] Incoming request scheme");
@@ -88,7 +85,7 @@ export const types = {
   incomingRequestConsume(_req) {
     console.log("[types] Incoming request consume");
   },
-  newOutgoingRequest(_method, _path, _query, _scheme, _authority, _headers) {
+  newOutgoingRequest(_method, _pathWithQuery, _scheme, _authority, _headers) {
     console.log("[types] New outgoing request");
   },
   outgoingRequestWrite(_req) {

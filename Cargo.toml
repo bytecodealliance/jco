@@ -14,7 +14,7 @@ js-component-bindgen = { path = "./crates/js-component-bindgen" }
 wit-component = { workspace = true }
 
 [build-dependencies]
-anyhow = "1.0.71"
+anyhow = { workspace = true }
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 wit-component = { workspace = true }
 
@@ -24,19 +24,20 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "0.1.0"
+version = "0.11.0"
 
 [workspace.dependencies]
 anyhow = "1.0.71"
 base64 = "0.21.2"
 heck =  { version = "0.4", features = ["unicode"] }
-indexmap = "1.9"
-wasm-encoder = "0.29.0"
-wasm-metadata = "0.8.0"
-wasmparser = "0.107.0"
-wasmprinter = "0.2.59"
-wasmtime-environ = { version = "10.0.1", features = ["component-model"] }
-wat = "1.0.66"
-wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "e69cf5db8754f829637e25491c560ec0d9728852" }
-wit-component = { version = "0.11.0", features = ['dummy-module'] }
-wit-parser = "0.8.0"
+indexmap = "2.0"
+wasm-encoder = "0.32.0"
+wasm-metadata = "0.10.3"
+wasmparser = "0.111.0"
+wasmprinter = "0.2.64"
+wasmtime-environ = { git = "https://github.com/bytecodealliance/wasmtime", features = ["component-model"] }
+wat = "1.0.71"
+wit-bindgen = "0.11.0"
+wit-bindgen-core = "0.11.0"
+wit-component = { version = "0.14.0", features = ["dummy-module"] }
+wit-parser = "0.11.0"

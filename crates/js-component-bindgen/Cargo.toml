@@ -1,9 +1,13 @@
 [package]
 name = "js-component-bindgen"
 authors = ["Alex Crichton <alex@alexcrichton.com>", "Guy Bedford <gbedford@fastly.com>"]
-publish = false
-
+description = "JS component bindgen for transpiling WebAssembly components into JavaScript"
 version.workspace = true
+license = "Apache-2.0 WITH LLVM-exception"
+categories = ["wasm"]
+keywords = ["webassembly", "wasm"]
+homepage = "https://github.com/bytecodealliance/jco/crates/js-component-bindgen"
+
 edition.workspace = true
 
 [lib]
@@ -17,7 +21,9 @@ transpile-bindgen = []
 anyhow = { workspace = true }
 heck = { workspace = true }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
+wit-bindgen-core = { workspace = true }
 wit-component = { workspace = true }
 wit-parser = { workspace = true }
 indexmap = { workspace = true }
 base64 = { workspace = true }
+wasm-encoder = { workspace = true }

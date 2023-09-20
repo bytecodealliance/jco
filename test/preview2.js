@@ -1,50 +1,93 @@
 import { strictEqual } from 'node:assert';
-import { readFile, rm, mkdir, writeFile, symlink, chmod } from 'node:fs/promises';
-import { resolve, dirname } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
+import { createServer} from 'node:http';
 import { tmpdir } from 'node:os';
-import * as crypto from 'node:crypto';
-import { transpile, componentNew, preview1AdapterCommandPath } from '../src/api.js';
-import { exec } from './helpers.js';
-
-function getTmpDir (name) {
-  return resolve(tmpdir(), crypto.createHash('sha256').update(name).update(Math.random().toString()).digest('hex'));
-}
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'url';
+import { componentNew, preview1AdapterCommandPath } from '../src/api.js';
+import { tsGenerationPromise } from './codegen.js';
+import { exec, jcoPath } from './helpers.js';
 
 export async function preview2Test () {
   suite('Preview 2', () => {
+    const outFile = resolve(tmpdir(), 'out-component-file');
+
+    async function cleanup() {
+      try {
+        await rm(outFile);
+      }
+      catch {}
+    }
+
     test('hello_stdout', async () => {
       const component = await readFile(`test/fixtures/modules/hello_stdout.wasm`);
-
       const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile(preview1AdapterCommandPath())]]);
+      await writeFile('test/output/hello_stdout.component.wasm', generatedComponent);
 
-      const { files } = await transpile(generatedComponent, { name: 'hello_stdout' });
+      const { stdout, stderr } = await exec(jcoPath, 'run', 'test/output/hello_stdout.component.wasm');
+      strictEqual(stdout, 'writing to stdout: hello, world\n');
+      strictEqual(stderr, 'writing to stderr: hello, world\n');
+    });
 
-      const tmpdir = getTmpDir('hello_stdout');
+    test('wasi-http-proxy', async () => {
+
+      const server = createServer(async (req, res) => {
+        if (req.url == '/api/examples') { 
+          res.writeHead(200, {
+            'Content-Type': 'text/plain',
+            'X-Wasi': 'mock-server',
+            'Date': null,
+          });
+          if (req.method === 'GET') {
+            res.write('hello world');
+          } else {
+            req.pipe(res);
+            return;
+          }
+        } else {
+          res.statusCode(500);
+        }
+        res.end();
+      }).listen(8080);
+
+      const runtimeName = 'wasi-http-proxy';
       try {
-        await mkdir(resolve(tmpdir, 'node_modules', '@bytecodealliance'), { recursive: true });
-        await writeFile(resolve(tmpdir, 'package.json'), JSON.stringify({ type: 'module' }));
-        await symlink(resolve('packages/preview2-shim'), resolve(tmpdir, 'node_modules/@bytecodealliance/preview2-shim'), 'dir');
-
-        for (const [name, source] of Object.entries(files)) {
-          const path = resolve(tmpdir, name);
-          await mkdir(dirname(path), { recursive: true });
-          await writeFile(path, source);
+        const { stderr } = await exec(jcoPath,
+            'componentize',
+            'test/fixtures/componentize/wasi-http-proxy/source.js',
+            '-w',
+            'test/fixtures/wit',
+            '--world-name',
+            'test:jco/command-extended',
+            '--enable-stdout',
+            '-o',
+            outFile);
+        strictEqual(stderr, '');
+        const outDir = fileURLToPath(new URL(`./output/${runtimeName}`, import.meta.url));
+        {
+          const wasiMap = {
+            'wasi:cli/*': 'cli#*',
+            'wasi:clocks/*': 'clocks#*',
+            'wasi:filesystem/*': 'filesystem#*',
+            'wasi:http/*': 'http#*',
+            'wasi:io/*': 'io#*',
+            'wasi:logging/*': 'logging#*',
+            'wasi:poll/*': 'poll#*',
+            'wasi:random/*': 'random#*',
+            'wasi:sockets/*': 'sockets#*',
+          };
+          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '--tracing', '--instantiation', ...Object.entries(wasiMap).flatMap(([k, v]) => ['--map', `${k}=${v}`]), '-o', outDir);
+          strictEqual(stderr, '');
+        }
+        {
+          await tsGenerationPromise().catch((_) => {});
         }
 
-        const runPath = resolve(tmpdir, 'run.js');
-        await writeFile(runPath, `
-          import { run } from './hello_stdout.js';
-          run();
-        `);
-
-        await chmod(runPath, 0o777);
-
-        const { stdout, stderr } = await exec(process.argv0, [runPath]);
-        strictEqual(stdout, 'writing to stdout: hello, world\n');
-        strictEqual(stderr, 'writing to stderr: hello, world\n');
+        await exec(process.argv[0], `test/output/${runtimeName}.js`);
       }
       finally {
-        await rm(tmpdir, { recursive: true });
+        server.close();
+        await cleanup();
       }
     });
   });

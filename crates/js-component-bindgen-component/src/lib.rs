@@ -33,14 +33,18 @@ macro_rules! uwriteln {
     };
 }
 
-wit_bindgen::generate!("js-component-bindgen");
+wit_bindgen::generate!({
+    world: "js-component-bindgen",
+    exports: {
+        world: JsComponentBindgenComponent
+    }
+});
 
 struct JsComponentBindgenComponent;
 
-export_js_component_bindgen!(JsComponentBindgenComponent);
-
-impl JsComponentBindgen for JsComponentBindgenComponent {
+impl Guest for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
+        let component = wat::parse_bytes(&component).map_err(|e| format!("{e}"))?;
         let opts = js_component_bindgen::TranspileOpts {
             name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),
@@ -55,13 +59,14 @@ impl JsComponentBindgen for JsComponentBindgenComponent {
                 .tla_compat
                 .unwrap_or(options.compat.unwrap_or(false)),
             valid_lifting_optimization: options.valid_lifting_optimization.unwrap_or(false),
+            tracing: options.tracing.unwrap_or(false),
         };
 
         let js_component_bindgen::Transpiled {
             files,
             imports,
             mut exports,
-        } = transpile(component, opts)
+        } = transpile(&component, opts)
             .map_err(|e| format!("{:?}", e))
             .map_err(|e| e.to_string())?;
 
@@ -125,6 +130,7 @@ impl JsComponentBindgen for JsComponentBindgenComponent {
             tla_compat: opts.tla_compat.unwrap_or(false),
             valid_lifting_optimization: false,
             base64_cutoff: 0,
+            tracing: false,
         };
 
         let files = generate_types(name, resolve, world, opts).map_err(|e| e.to_string())?;

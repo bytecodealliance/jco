@@ -1,17 +1,20 @@
 import { strictEqual } from 'node:assert';
 import { existsSync } from 'node:fs';
 import { exec } from './helpers.js';
+import { tsGenerationPromise } from './codegen.js';
 
 export async function runtimeTest (fixtures) {
-  suite('Runtime', () => {
-    
+  suite('Runtime', async () => {
     for (const fixture of fixtures) {
-      if (fixture.startsWith('dummy_')) continue;
-      const runtimeJs = fixture.replace('.component.wasm', '.js');
-      if (!existsSync(`test/output/${runtimeJs}`))
+      if (fixture.startsWith('dummy_') || fixture.startsWith('wasi-http-proxy')) continue;
+      const runtimeName = fixture.replace(/(\.component)?\.(wat|wasm)$/, '');
+      if (!existsSync(`test/runtime/${runtimeName}.ts`))
         continue;
-      test(runtimeJs, async () => {
-        const { stderr } = await exec(process.argv[0], `test/output/${runtimeJs}`);
+      test(runtimeName, async () => {
+        try {
+          await tsGenerationPromise();
+        } catch {}
+        const { stderr } = await exec(process.argv[0], `test/output/${runtimeName}.js`);
         strictEqual(stderr, '');
       });
     }

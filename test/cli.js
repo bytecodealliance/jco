@@ -1,5 +1,5 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'url';
 import { exec, jcoPath } from './helpers.js';
 import { tmpdir } from 'node:os';
@@ -17,6 +17,16 @@ export async function cliTest (fixtures) {
       }
       catch {}
     }
+
+    test('Transcoding', async () => {
+      const outDir = fileURLToPath(new URL(`./output/env-allow`, import.meta.url));
+      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/env-allow.composed.wasm`, '-o', outDir);
+      strictEqual(stderr, '');
+      await writeFile(`${outDir}/package.json`, JSON.stringify({ type: 'module' }));
+      const source = await readFile(`${outDir}/env-allow.composed.js`);
+      const m = await import(`${outDir}/env-allow.composed.js`);
+      deepStrictEqual(m.testGetEnv(), [['CUSTOM', 'VAL']]);
+    });
 
     test('Transpile', async () => {
       try {
@@ -38,6 +48,21 @@ export async function cliTest (fixtures) {
         strictEqual(stderr, '');
         const source = await readFile(`${outDir}/${name}.js`);
         ok(source.toString().includes('as test,'));
+      }
+      finally {
+        await cleanup();
+      }
+    });
+
+    test('Transpile with tracing', async () => {
+      try {
+        const name = 'flavorful';
+        const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--name', name, '--map', 'testwasi=./wasi.js', '--tracing', '--base64-cutoff=0', '-o', outDir);
+        strictEqual(stderr, '');
+        const source = await readFile(`${outDir}/${name}.js`, 'utf8');
+        ok(source.includes('function toResultString('));
+        ok(source.includes('console.trace(`[module="test:flavorful/test", function="f-list-in-record1"] call a'));
+        ok(source.includes('console.trace(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);'));
       }
       finally {
         await cleanup();
@@ -129,7 +154,7 @@ export async function cliTest (fixtures) {
           const meta = JSON.parse(stdout);
           deepStrictEqual(meta[0].metaType, { tag: 'component', val: 4 });
           deepStrictEqual(meta[1].producers, [
-            ['processed-by', [['wit-component', '0.11.0'], ['dummy-gen', 'test']]],
+            ['processed-by', [['wit-component', '0.14.0'], ['dummy-gen', 'test']]],
             ['language', [['javascript', '']]],
           ]);
         }
@@ -144,8 +169,7 @@ export async function cliTest (fixtures) {
         const { stderr } = await exec(jcoPath,
             'new',
             'test/fixtures/modules/exitcode.wasm',
-            '--adapt',
-            'wasi_snapshot_preview1=lib/wasi_snapshot_preview1.reactor.wasm',
+            '--wasi-reactor',
             '-o', outFile);
         strictEqual(stderr, '');
         {
@@ -169,7 +193,6 @@ export async function cliTest (fixtures) {
         deepStrictEqual(JSON.parse(stdout), [{
           metaType: { tag: 'module' },
           producers: [],
-          name: null,
           range: [
             0,
             262

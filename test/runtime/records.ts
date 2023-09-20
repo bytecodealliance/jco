@@ -15,7 +15,6 @@ async function run() {
       roundtripFlags2(x) { return x; },
       roundtripFlags3(r0, r1, r2, r3) { return [r0, r1, r2, r3]; },
       roundtripRecord1(x) { return x; },
-      tuple0([]) { return []; },
       tuple1([x]) { return [x]; },
     }
   });
@@ -45,7 +44,6 @@ async function run() {
     assert.deepEqual(b, { a: true, b: true });
   }
 
-  assert.deepStrictEqual(wasm.test.tuple0([]), []);
   assert.deepStrictEqual(wasm.test.tuple1([1]), [1]);
 }
 

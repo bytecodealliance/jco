@@ -2,11 +2,12 @@ use crate::intrinsics::Intrinsic;
 use crate::source;
 use crate::{uwrite, uwriteln};
 use heck::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::StringEncoding;
-use wit_parser::abi::{Bindgen, Bitcast, Instruction, WasmType};
+use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
+use wit_component::StringEncoding;
+use wit_parser::abi::WasmType;
 use wit_parser::*;
 
 #[derive(PartialEq)]
@@ -16,7 +17,39 @@ pub enum ErrHandling {
     ResultCatchHandler,
 }
 
+///
+/// Map used for resource function bindgen within a given component
+///
+/// Mapping from the instance + resource index in that component (internal or external)
+/// to the unique global resource id used to key the resource tables for this resource.
+///
+/// The id value uniquely identifies the resource table so that if a resource is used
+/// by n components, there should be n different indices and spaces in use. The map is
+/// therefore entirely unique and fully distinct for each instance's function bindgen.
+///
+/// The second bool is true if it is an imported resource.
+///
+/// For a given resource id {x}, the local variables are assumed:
+/// - handleTable{x}
+/// - handleCnt{x}
+///
+/// For component-defined resources:
+/// - finalizationRegistry{x}
+///
+/// handleTable internally will be allocated with { rep: i32, own: bool } entries
+///
+/// In the case of an imported resource tables, in place of "rep" we just store
+/// the direct JS object being referenced, since in JS the object is its own handle.
+///
+pub struct ResourceTable {
+    pub id: u32,
+    pub imported: bool,
+}
+pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
+
 pub struct FunctionBindgen<'a> {
+    pub resource_map: &'a ResourceMap,
+    pub cur_resource_borrows: Vec<String>,
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
     pub valid_lifting_optimization: bool,
     pub sizes: &'a SizeAlign,
@@ -29,6 +62,7 @@ pub struct FunctionBindgen<'a> {
     pub memory: Option<&'a String>,
     pub realloc: Option<&'a String>,
     pub post_return: Option<&'a String>,
+    pub tracing_prefix: Option<&'a String>,
     pub encoding: StringEncoding,
     pub callee: &'a str,
 }
@@ -39,6 +73,7 @@ impl FunctionBindgen<'_> {
         self.tmp += 1;
         ret
     }
+
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
         return intrinsic.name().to_string();
@@ -505,98 +540,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(format!("variant{}", tmp));
             }
 
-            Instruction::UnionLower {
-                union,
-                results: result_types,
-                name,
-                ..
-            } => {
-                let blocks = self
-                    .blocks
-                    .drain(self.blocks.len() - union.cases.len()..)
-                    .collect::<Vec<_>>();
-                let tmp = self.tmp();
-                let op0 = &operands[0];
-                uwriteln!(self.src, "const union{tmp} = {op0};");
-
-                for i in 0..result_types.len() {
-                    uwriteln!(self.src, "let union{tmp}_{i};");
-                    results.push(format!("union{tmp}_{i}"));
-                }
-
-                uwriteln!(self.src, "switch (union{tmp}.tag) {{");
-                for (i, (_case, (block, block_results))) in
-                    union.cases.iter().zip(blocks).enumerate()
-                {
-                    uwriteln!(
-                        self.src,
-                        "case {i}: {{
-                            const e = union{tmp}.val;
-                            {block}"
-                    );
-                    for (i, result) in block_results.iter().enumerate() {
-                        uwriteln!(self.src, "union{tmp}_{i} = {result};");
-                    }
-                    uwriteln!(
-                        self.src,
-                        "break;
-                        }}"
-                    );
-                }
-                let name = name.to_upper_camel_case();
-                uwriteln!(
-                    self.src,
-                    "default: {{
-                        throw new TypeError('invalid union specified for {name}');
-                    }}"
-                );
-                uwriteln!(self.src, "}}");
-            }
-
-            Instruction::UnionLift { union, name, .. } => {
-                let blocks = self
-                    .blocks
-                    .drain(self.blocks.len() - union.cases.len()..)
-                    .collect::<Vec<_>>();
-
-                let tmp = self.tmp();
-                let operand = &operands[0];
-
-                uwriteln!(
-                    self.src,
-                    "let union{tmp};
-                    switch ({operand}) {{"
-                );
-                for (i, (_case, (block, block_results))) in
-                    union.cases.iter().zip(blocks).enumerate()
-                {
-                    assert!(block_results.len() == 1);
-                    let block_result = &block_results[0];
-                    uwriteln!(
-                        self.src,
-                        "case {i}: {{
-                            {block}\
-                            union{tmp} = {{
-                                tag: {i},
-                                val: {block_result},
-                            }};
-                            break;
-                        }}"
-                    );
-                }
-                let name = name.to_upper_camel_case();
-                if !self.valid_lifting_optimization {
-                    uwriteln!(
-                        self.src,
-                        "default: {{
-                            throw new TypeError('invalid union discriminant for {name}');
-                        }}"
-                    );
-                }
-                uwriteln!(self.src, "}}");
-                results.push(format!("union{tmp}"));
-            }
-
             Instruction::OptionLower {
                 payload,
                 results: result_types,
@@ -671,7 +614,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         ),
                     )
                 } else {
-                    ("null", some_result.into())
+                    ("undefined", some_result.into())
                 };
 
                 if !self.valid_lifting_optimization {
@@ -950,9 +893,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Only Utf8 and Utf16 supported for now
                 assert!(matches!(
                     self.encoding,
-                    StringEncoding::Utf8 | StringEncoding::Utf16
+                    StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
-                let intrinsic = if self.encoding == StringEncoding::Utf16 {
+                let intrinsic = if self.encoding == StringEncoding::UTF16 {
                     Intrinsic::Utf16Encode
                 } else {
                     Intrinsic::Utf8Encode
@@ -967,7 +910,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     "const ptr{tmp} = {encode}({}, {realloc}, {memory});",
                     operands[0],
                 );
-                if self.encoding == StringEncoding::Utf8 {
+                if self.encoding == StringEncoding::UTF8 {
                     let encoded_len = self.intrinsic(Intrinsic::Utf8EncodedLen);
                     uwriteln!(self.src, "const len{tmp} = {encoded_len};");
                 } else {
@@ -980,9 +923,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Only Utf8 and Utf16 supported for now
                 assert!(matches!(
                     self.encoding,
-                    StringEncoding::Utf8 | StringEncoding::Utf16
+                    StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
-                let intrinsic = if self.encoding == StringEncoding::Utf16 {
+                let intrinsic = if self.encoding == StringEncoding::UTF16 {
                     Intrinsic::Utf16Decoder
                 } else {
                     Intrinsic::Utf8Decoder
@@ -995,7 +938,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "const result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
-                    if self.encoding == StringEncoding::Utf16 { "16" } else { "8" }
+                    if self.encoding == StringEncoding::UTF16 { "16" } else { "8" }
                 );
                 results.push(format!("result{tmp}"));
             }
@@ -1059,11 +1002,26 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::IterBasePointer => results.push("base".to_string()),
 
             Instruction::CallWasm { sig, .. } => {
-                self.bind_results(sig.results.len(), results);
+                let sig_results_length = sig.results.len();
+                self.bind_results(sig_results_length, results);
                 uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+
+                if let Some(prefix) = self.tracing_prefix {
+                    let to_result_string = self.intrinsic(Intrinsic::ToResultString);
+                    uwriteln!(
+                        self.src,
+                        "console.trace(`{prefix} return {}`);",
+                        if sig_results_length > 0 || !results.is_empty() {
+                            format!("result=${{{to_result_string}(ret)}}")
+                        } else {
+                            "".to_string()
+                        }
+                    );
+                }
             }
 
             Instruction::CallInterface { func } => {
+                let results_length = func.results.len();
                 if self.err == ErrHandling::ResultCatchHandler {
                     let err_payload = self.intrinsic(Intrinsic::GetErrorPayload);
                     uwriteln!(
@@ -1080,14 +1038,38 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                     results.push("ret".to_string());
                 } else {
-                    self.bind_results(func.results.len(), results);
+                    self.bind_results(results_length, results);
                     uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+                }
+
+                if let Some(prefix) = self.tracing_prefix {
+                    let to_result_string = self.intrinsic(Intrinsic::ToResultString);
+                    uwriteln!(
+                        self.src,
+                        "console.trace(`{prefix} return {}`);",
+                        if results_length > 0 || !results.is_empty() {
+                            format!("result=${{{to_result_string}(ret)}}")
+                        } else {
+                            "".to_string()
+                        }
+                    );
+                }
+
+                // after a high level call, we need to deactivate the component resource borrows
+                if self.cur_resource_borrows.len() > 0 {
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                    for resource in &self.cur_resource_borrows {
+                        uwriteln!(self.src,
+                            "Object.defineProperty({resource}, {resource_symbol}, {{ value: null }});"
+                        );
+                    }
+                    self.cur_resource_borrows = Vec::new();
                 }
             }
 
             Instruction::Return { amt, .. } => {
                 if let Some(f) = &self.post_return {
-                    uwriteln!(self.src, "{f}(ret);");
+                    uwriteln!(self.src, "{f}({});", if *amt > 0 { "ret" } else { "" });
                 }
 
                 if self.err == ErrHandling::ThrowResultErr {
@@ -1132,6 +1114,107 @@ impl Bindgen for FunctionBindgen<'_> {
                 let ptr = format!("ptr{tmp}");
                 uwriteln!(self.src, "const {ptr} = {realloc}(0, 0, {align}, {size});",);
                 results.push(ptr);
+            }
+
+            Instruction::HandleLift { handle, name, .. } => {
+                let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
+                let ResourceTable { id, imported } = self.resource_map[ty];
+                let is_own = matches!(handle, Handle::Own(_));
+                let rsc = format!("rsc{}", self.tmp());
+
+                let class_name = name.to_upper_camel_case();
+
+                if !imported {
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                    uwrite!(
+                        self.src,
+                        "const {rsc} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
+                        Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: handleTable{id}.get({}).rep }});
+                        ",
+                        operands[0],
+                    );
+                    // when we share an own handle with JS, we need to remove the original handle
+                    // and add a finalizer to the JS handle created
+                    if is_own {
+                        uwriteln!(
+                            self.src,
+                            "handleTable{id}.delete({});
+                            finalizationRegistry{id}.register({rsc}, {}, {rsc});",
+                            operands[0],
+                            operands[0]
+                        );
+                    } else {
+                        // borrow handles are tracked to release after the call
+                        // these are handled by CallInterface
+                        // note that it will definitely be called because it is not possible
+                        // for core Wasm to return a borrow that would be lifted
+                        self.cur_resource_borrows.push(rsc.to_string());
+                    }
+                } else {
+                    // imported handles need to come out of the instance capture
+                    uwriteln!(
+                        self.src,
+                        "const {rsc} = handleTable{id}.get({}).rep;",
+                        operands[0]
+                    );
+                    // own lifting means we no longer have ownership and can release the handle
+                    if is_own {
+                        uwriteln!(self.src, "handleTable{id}.delete({});", operands[0]);
+                    }
+                }
+                results.push(rsc);
+            }
+
+            Instruction::HandleLower { handle, name, .. } => {
+                let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
+                let is_own = matches!(handle, Handle::Own(_));
+                let ResourceTable { id, imported } = self.resource_map[ty];
+                let class_name = name.to_upper_camel_case();
+                let handle = format!("handle{}", self.tmp());
+                if !imported {
+                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                    uwriteln!(
+                        self.src,
+                        "let {handle} = {}[{resource_symbol}];
+                        if ({handle} === null) {{
+                            throw new Error('\"{class_name}\" resource handle lifetime expired / transferred.');
+                        }}
+                        if ({handle} === undefined) {{
+                            throw new Error('Not a valid \"{class_name}\" resource.');
+                        }}
+                        ",
+                        operands[0],
+                    );
+
+                    // lowered own handles have their finalizers deregistered
+                    // since the proxy lifecycle has now ended for this own handle
+                    if is_own {
+                        let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                        uwriteln!(
+                            self.src,
+                            "
+                            finalizationRegistry{id}.unregister({});
+                            Object.defineProperty({}, {resource_symbol}, {{ value: null }});",
+                            operands[0],
+                            operands[0],
+                        );
+                    }
+                } else {
+                    // imported resources are always given a unique handle
+                    // their assigned rep is deduped across usage though
+                    uwriteln!(
+                        self.src,
+                        "if (!({} instanceof {class_name})) {{
+                            throw new Error('Not a valid \"{class_name}\" resource.');
+                        }}
+                        const {handle} = handleCnt{id}++;
+                        handleTable{id}.set({handle}, {{ rep: {}, own: {} }});",
+                        operands[0],
+                        operands[0],
+                        is_own,
+                    );
+                }
+                results.push(handle);
             }
 
             i => unimplemented!("{:?}", i),

@@ -1,8 +1,11 @@
 {
   "name": "@bytecodealliance/preview2-shim",
-  "version": "0.0.10",
+  "version": "0.0.14",
   "description": "WASI Preview2 shim for JS environments",
   "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
+  "engines" : { 
+    "node" : ">=18"
+  },
   "type": "module",
   "types": "./types/index.d.ts",
   "exports": {
