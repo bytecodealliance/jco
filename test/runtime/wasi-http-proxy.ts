@@ -29,19 +29,29 @@ async function run() {
   const commands = m['test:jco/commands'];
   const incomingHandler = m['wasi:http/incoming-handler'];
 
+  const defaultHeaders = [
+    ['connection', 'keep-alive'],
+    ['content-type', 'text/plain'],
+    ['date', 'null'],
+    ['keep-alive', 'timeout=5'],
+    ['transfer-encoding', 'chunked'],
+    ['x-wasi', 'mock-server'],
+  ];
+
   assert.equal(
     commands.getExample(),
     JSON.stringify({
       status: 200,
-      headers: [
-        ['connection', 'keep-alive'],
-        ['content-type', 'text/plain'],
-        ['date', 'null'],
-        ['keep-alive', 'timeout=5'],
-        ['transfer-encoding', 'chunked'],
-        ['x-wasi', 'mock-server'],
-      ],
+      headers: defaultHeaders,
       body: 'hello world',
+    })
+  );
+  assert.equal(
+    commands.postExample(),
+    JSON.stringify({
+      status: 200,
+      headers: defaultHeaders,
+      body: '{"key":"value"}',
     })
   );
 
