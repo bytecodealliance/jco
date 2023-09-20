@@ -24,9 +24,11 @@ import { runtimeTest } from './runtime.js';
 import { apiTest } from './api.js';
 import { cliTest } from './cli.js';
 import { preview2Test } from './preview2.js';
+import { tsTest } from './typescript.js';
 
 await preview2Test();
 await codegenTest(componentFixtures);
+await tsTest();
 await runtimeTest(componentFixtures);
 await apiTest(componentFixtures);
 await cliTest(componentFixtures);

@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'url';
 import { componentNew, preview1AdapterCommandPath } from '../src/api.js';
-import { tsGenerationPromise } from './codegen.js';
 import { exec, jcoPath } from './helpers.js';
 
 export async function preview2Test () {
@@ -77,9 +76,6 @@ export async function preview2Test () {
           };
           const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '--tracing', '--instantiation', ...Object.entries(wasiMap).flatMap(([k, v]) => ['--map', `${k}=${v}`]), '-o', outDir);
           strictEqual(stderr, '');
-        }
-        {
-          await tsGenerationPromise().catch((_) => {});
         }
 
         await exec(process.argv[0], `test/output/${runtimeName}.js`);
