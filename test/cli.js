@@ -128,7 +128,7 @@ export async function cliTest (fixtures) {
         ok(stdout.includes('world root {'));
 
         {
-          const { stderr, stdout } = await exec(jcoPath, 'embed', '--dummy', '--wit', 'test/fixtures/wit/flavorful.wit', '-m', 'language=javascript', '-m', 'processed-by=dummy-gen@test', '-o', outFile);
+          const { stderr, stdout } = await exec(jcoPath, 'embed', '--dummy', '--wit', 'test/fixtures/wit/deps/flavorful/flavorful.wit', '-m', 'language=javascript', '-m', 'processed-by=dummy-gen@test', '-o', outFile);
           strictEqual(stderr, '');
           strictEqual(stdout, '');
         }
@@ -154,7 +154,7 @@ export async function cliTest (fixtures) {
           const meta = JSON.parse(stdout);
           deepStrictEqual(meta[0].metaType, { tag: 'component', val: 4 });
           deepStrictEqual(meta[1].producers, [
-            ['processed-by', [['wit-component', '0.14.0'], ['dummy-gen', 'test']]],
+            ['processed-by', [['wit-component', '0.14.2'], ['dummy-gen', 'test']]],
             ['language', [['javascript', '']]],
           ]);
         }
