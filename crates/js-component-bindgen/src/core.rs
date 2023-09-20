@@ -198,7 +198,7 @@ pub struct Augmenter<'a> {
     imports_added: Vec<(String, String, MemoryIndex, AugmentedOp)>,
     augments: HashMap<(MemoryIndex, AugmentedOp), u32>,
 
-    types: Vec<wasmparser::SubType>,
+    types: Vec<wasmparser::FuncType>,
     imports: Vec<Import<'a>>,
     imported_funcs: u32,
     imported_memories: u32,
@@ -218,15 +218,8 @@ impl Augmenter<'_> {
                 Payload::End(_) => {}
 
                 Payload::TypeSection(s) => {
-                    for grp in s {
-                        match grp? {
-                            RecGroup::Many(tys) => {
-                                for ty in tys {
-                                    self.types.push(ty);
-                                }
-                            }
-                            RecGroup::Single(ty) => self.types.push(ty),
-                        }
+                    for grp in s.into_iter_err_on_gc_types() {
+                        self.types.push(grp?);
                     }
                 }
                 Payload::ImportSection(s) => {
@@ -346,20 +339,11 @@ impl Augmenter<'_> {
         // Types are all passed through as-is to retain the same type section as
         // before.
         let mut types = TypeSection::new();
-        for ty in self.types.iter() {
-            // assert!(!ty.is_final);
-            assert!(ty.supertype_idx.is_none());
-            match &ty.structural_type {
-                wasmparser::StructuralType::Func(f) => {
-                    types.function(
-                        f.params().iter().map(|v| valtype(*v)),
-                        f.results().iter().map(|v| valtype(*v)),
-                    );
-                }
-                wasmparser::StructuralType::Array(_) | wasmparser::StructuralType::Struct(_) => {
-                    unimplemented!()
-                }
-            }
+        for ty in &self.types {
+            types.function(
+                ty.params().iter().map(|v| valtype(*v)),
+                ty.results().iter().map(|v| valtype(*v)),
+            );
         }
 
         // Pass through all of `self.imports` into the import section. This will
