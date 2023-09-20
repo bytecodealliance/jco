@@ -63,6 +63,11 @@ export namespace WasiSocketsTcp {
    * - <https://man.freebsd.org/cgi/man.cgi?connect>
    */
   export function startConnect(this_: TcpSocket, network: Network, remoteAddress: IpSocketAddress): void;
+  /**
+   * Note: the returned `input-stream` and `output-stream` are child
+   * resources of the `tcp-socket`. Implementations may trap if the
+   * `tcp-socket` is dropped before both of these streams are dropped.
+   */
   export function finishConnect(this_: TcpSocket): [InputStream, OutputStream];
   /**
    * Start listening for new connections.
@@ -99,6 +104,10 @@ export namespace WasiSocketsTcp {
    * 
    * On success, this function returns the newly accepted client socket along with
    * a pair of streams that can be used to read & write to the connection.
+   * 
+   * Note: the returned `input-stream` and `output-stream` are child
+   * resources of the returned `tcp-socket`. Implementations may trap if the
+   * `tcp-socket` is dropped before its child streams are dropped.
    * 
    * # Typical errors
    * - `not-listening`: Socket is not in the Listener state. (EINVAL)
@@ -215,6 +224,10 @@ export namespace WasiSocketsTcp {
   export function setSendBufferSize(this_: TcpSocket, value: bigint): void;
   /**
    * Create a `pollable` which will resolve once the socket is ready for I/O.
+   * 
+   * The created `pollable` is a child resource of the `tcp-socket`.
+   * Implementations may trap if the `tcp-socket` is dropped before all
+   * derived `pollable`s created with this function are dropped.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.

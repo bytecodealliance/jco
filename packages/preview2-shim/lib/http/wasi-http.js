@@ -2,18 +2,18 @@
 // https://github.com/bytecodealliance/wasmtime/blob/8efcb9851602287fd07a1a1e91501f51f2653d7e/crates/wasi-http/
 
 /**
- * @typedef {import("../../types/imports/wasi-http-types").Fields} Fields
- * @typedef {import("../../types/imports/wasi-http-types").FutureIncomingResponse} FutureIncomingResponse
- * @typedef {import("../../types/imports/wasi-http-types").Headers} Headers
- * @typedef {import("../../types/imports/wasi-http-types").IncomingResponse} IncomingResponse
- * @typedef {import("../../types/imports/wasi-http-types").IncomingStream} IncomingStream
- * @typedef {import("../../types/imports/wasi-http-types").Method} Method
- * @typedef {import("../../types/imports/wasi-http-types").OutgoingRequest} OutgoingRequest
- * @typedef {import("../../types/imports/wasi-http-types").RequestOptions} RequestOptions
- * @typedef {import("../../types/imports/wasi-http-types").Result} Result
- * @typedef {import("../../types/imports/wasi-http-types").Scheme} Scheme
- * @typedef {import("../../types/imports/wasi-http-types").StatusCode} StatusCode
- * @typedef {import("../../types/imports/wasi-io-streams").StreamStatus} StreamStatus
+ * @typedef {import("../../types/interfaces/wasi-http-types").Fields} Fields
+ * @typedef {import("../../types/interfaces/wasi-http-types").FutureIncomingResponse} FutureIncomingResponse
+ * @typedef {import("../../types/interfaces/wasi-http-types").Headers} Headers
+ * @typedef {import("../../types/interfaces/wasi-http-types").IncomingResponse} IncomingResponse
+ * @typedef {import("../../types/interfaces/wasi-http-types").IncomingStream} IncomingStream
+ * @typedef {import("../../types/interfaces/wasi-http-types").Method} Method
+ * @typedef {import("../../types/interfaces/wasi-http-types").OutgoingRequest} OutgoingRequest
+ * @typedef {import("../../types/interfaces/wasi-http-types").RequestOptions} RequestOptions
+ * @typedef {import("../../types/interfaces/wasi-http-types").Result} Result
+ * @typedef {import("../../types/interfaces/wasi-http-types").Scheme} Scheme
+ * @typedef {import("../../types/interfaces/wasi-http-types").StatusCode} StatusCode
+ * @typedef {import("../../types/interfaces/wasi-io-streams").StreamStatus} StreamStatus
 */
 
 import * as io from '@bytecodealliance/preview2-shim/io';
@@ -131,21 +131,38 @@ export class WasiHttp {
     s.set([]);
   }
 
-  write = (stream, buf) => {
-    return this.blockingWrite(stream, buf);
+  checkWrite = (stream) => {
+    // TODO: implement
+    return io.streams.checkWrite(stream);
   }
 
   /**
    * @param {OutputStream} stream 
    * @param {Uint8Array} buf 
-   * @returns {[bigint, StreamStatus]}
    */
-  blockingWrite = (stream, buf) => {
+  write = (stream, buf) => {
     if (stream < 3) {
-      return io.streams.blockingWrite(stream, buf);
+      return io.streams.write(stream, buf);
     }
     this.streams.set(stream, buf);
-    return [BigInt(buf.byteLength), 'ended'];
+  }
+
+  blockingWriteAndFlush = (stream, buf) => {
+    if (stream < 3) {
+      return io.streams.blockingWriteAndFlush(stream, buf);
+    }
+    // TODO: implement
+  }
+
+  flush = (stream) => {
+    return this.blockingFlush(stream);
+  }
+
+  blockingFlush = (stream) => {
+    if (stream < 3) {
+      return io.streams.blockingFlush(stream);
+    }
+    // TODO: implement
   }
 
   /**

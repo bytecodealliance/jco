@@ -1,7 +1,7 @@
 import { UnexpectedError } from "../http/error.js";
 
 /**
- * @param {import("../../types/imports/wasi-http-types").Request} req
+ * @param {import("../../types/interfaces/wasi-http-types").Request} req
  * @returns {string}
  */
 export function send(req) {

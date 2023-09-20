@@ -32,13 +32,18 @@ export async function preview2Test () {
     test('wasi-http-proxy', async () => {
 
       const server = createServer(async (req, res) => {
-        if (req.url == '/api/example-get') { 
+        if (req.url == '/api/examples') { 
           res.writeHead(200, {
             'Content-Type': 'text/plain',
             'X-Wasi': 'mock-server',
             'Date': null,
           });
-          res.write('hello world');
+          if (req.method === 'GET') {
+            res.write('hello world');
+          } else {
+            req.pipe(res);
+            return;
+          }
         } else {
           res.statusCode(500);
         }
@@ -71,7 +76,7 @@ export async function preview2Test () {
             'wasi:random/*': 'random#*',
             'wasi:sockets/*': 'sockets#*',
           };
-          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '--instantiation', ...Object.entries(wasiMap).flatMap(([k, v]) => ['--map', `${k}=${v}`]), '-o', outDir);
+          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '--tracing', '--instantiation', ...Object.entries(wasiMap).flatMap(([k, v]) => ['--map', `${k}=${v}`]), '-o', outDir);
           strictEqual(stderr, '');
         }
         {
