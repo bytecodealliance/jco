@@ -49,16 +49,16 @@ export function _dropPollable (pollable) {
   const entry = polls[pollable];
   watching.delete(entry);
   delete polls[pollable];
-};
+}
 
 export function _pollOneoff (from) {
   const result = [];
   Promise.all(from.map(id => {
-    const _ = _pollablePromise(id, 1000);
+    _pollablePromise(id, 1000);
   }));
   for (const id of from) {
     const pollable = polls[id];
     result.push(pollable.settled);
   }
   return result;
-};
+}
