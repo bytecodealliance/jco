@@ -89,7 +89,7 @@ export const streams = {
   dropInputStream(s) {
     console.log(`[streams] Drop input stream ${s}`);
   },
-  checkWrite(s) {
+  checkWrite(_s) {
     // TODO: implement
     return 1000000n;
   },
@@ -103,7 +103,7 @@ export const streams = {
   flush(s) {
     return streams.blockingFlush(s);
   },
-  blockingFlush(s) {
+  blockingFlush(_s) {
     // TODO: implement
   },
   writeZeroes(s, _len) {
