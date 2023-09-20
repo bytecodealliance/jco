@@ -614,7 +614,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         ),
                     )
                 } else {
-                    ("null", some_result.into())
+                    ("undefined", some_result.into())
                 };
 
                 if !self.valid_lifting_optimization {

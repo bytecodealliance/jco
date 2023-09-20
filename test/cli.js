@@ -193,7 +193,6 @@ export async function cliTest (fixtures) {
         deepStrictEqual(JSON.parse(stdout), [{
           metaType: { tag: 'module' },
           producers: [],
-          name: null,
           range: [
             0,
             262

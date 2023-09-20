@@ -37,7 +37,7 @@ export async function componentWit(file, opts) {
 export async function componentNew(file, opts) {
   await $init;
   const source = file ? await readFile(file) : null;
-  let adapters = null;
+  let adapters = [];
   if (opts.wasiReactor && opts.wasiCommand)
     throw new Error('Must select one of --wasi-command or --wasi-reactor');
   if (opts.wasiReactor)
