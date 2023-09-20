@@ -26,9 +26,9 @@ import { cliTest } from './cli.js';
 import { preview2Test } from './preview2.js';
 import { tsTest } from './typescript.js';
 
-await preview2Test();
 await codegenTest(componentFixtures);
 await tsTest();
+await preview2Test();
 await runtimeTest(componentFixtures);
 await apiTest(componentFixtures);
 await cliTest(componentFixtures);
