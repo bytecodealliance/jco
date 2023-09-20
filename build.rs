@@ -1,5 +1,3 @@
-#![feature(fs_try_exists)]
-
 use anyhow::Result;
 use std::{env, fs, io::Write, path::PathBuf};
 
@@ -42,7 +40,7 @@ fn main() -> Result<()> {
 
             let files = generate_types(name, resolve, world, opts)?;
 
-            if fs::try_exists("./packages/preview2-shim/types")? {
+            if !fs::metadata("./packages/preview2-shim/types").is_err() {
                 fs::remove_dir_all("./packages/preview2-shim/types")?;
             }
             for (filename, contents) in files.iter() {
