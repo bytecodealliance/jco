@@ -3,17 +3,6 @@ import { exec, jcoPath } from './helpers.js';
 import { strictEqual } from 'node:assert';
 
 const eslintPath = 'node_modules/.bin/eslint';
-const tscPath = 'node_modules/.bin/tsc';
-
-// always do TS generation
-let promise;
-export function tsGenerationPromise() {
-  if (promise) return promise;
-  return promise = (async () => {
-    var { stderr } = await exec(tscPath, '-p', 'test/tsconfig.json');
-    strictEqual(stderr, '');
-  })();
-}
 
 export async function readFlags (fixture) {
   try {
@@ -49,13 +38,5 @@ export async function codegenTest (fixtures) {
         strictEqual(stderr, '');
       });
     }
-  });
-
-  suite(`Typescript compilation`, () => {
-    // TypeScript tests _must_ run after codegen to complete successfully
-    // This is due to type checking against generated bindings
-    test('TypeScript Compilation', async () => {
-      await tsGenerationPromise();
-    });
   });
 }

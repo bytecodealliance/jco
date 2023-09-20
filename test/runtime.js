@@ -1,7 +1,7 @@
 import { strictEqual } from 'node:assert';
 import { existsSync } from 'node:fs';
 import { exec } from './helpers.js';
-import { tsGenerationPromise } from './codegen.js';
+import { tsGenerationPromise } from './typescript.js';
 
 export async function runtimeTest (fixtures) {
   suite('Runtime', async () => {
