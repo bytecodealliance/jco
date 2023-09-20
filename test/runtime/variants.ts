@@ -38,11 +38,11 @@ async function run() {
   wasm.testImports();
   assert.strictEqual(wasm.test, wasm['test:variants/test']);
   assert.deepStrictEqual(wasm.test.roundtripOption(1), 1);
-  assert.deepStrictEqual(wasm.test.roundtripOption(null), null);
+  assert.deepStrictEqual(wasm.test.roundtripOption(undefined), undefined);
   // @ts-ignore
-  assert.deepStrictEqual(wasm.test.roundtripOption(undefined), null);
+  assert.deepStrictEqual(wasm.test.roundtripOption(undefined), undefined);
   // @ts-ignore
-  assert.deepStrictEqual(wasm.test.roundtripOption(), null);
+  assert.deepStrictEqual(wasm.test.roundtripOption(), undefined);
   assert.deepStrictEqual(wasm.test.roundtripOption(2), 2);
   assert.deepStrictEqual(wasm.test.roundtripResult({ tag: 'ok', val: 2 }), 2);
   assert.deepStrictEqual(wasm.test.roundtripResult({ tag: 'ok', val: 4 }), 4);
@@ -109,7 +109,7 @@ async function run() {
     assert.deepStrictEqual(a4, { tag: 'a', val: 4 });
   }
 
-  wasm.test.variantTypedefs(null, false, { tag: 'err', val: undefined });
+  wasm.test.variantTypedefs(undefined, false, { tag: 'err', val: undefined });
 }
 
 await run()
