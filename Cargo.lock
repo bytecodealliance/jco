@@ -46,7 +46,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "cranelift-entity"
 version = "0.101.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#a4d036ca8e9ea56c23521ade7c847000d624a368"
+source = "git+https://github.com/bytecodealliance/wasmtime#04b09c80ee3909fedc8a1b038ea4e8b85c6219b8"
 dependencies = [
  "serde",
  "serde_derive",
@@ -295,9 +295,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
+checksum = "942b4a808e05215192e39f4ab80813e599068285906cc91aa64f923db842bd5a"
 
 [[package]]
 name = "spdx"
@@ -493,12 +493,12 @@ dependencies = [
 [[package]]
 name = "wasmtime-component-util"
 version = "14.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#a4d036ca8e9ea56c23521ade7c847000d624a368"
+source = "git+https://github.com/bytecodealliance/wasmtime#04b09c80ee3909fedc8a1b038ea4e8b85c6219b8"
 
 [[package]]
 name = "wasmtime-environ"
 version = "14.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#a4d036ca8e9ea56c23521ade7c847000d624a368"
+source = "git+https://github.com/bytecodealliance/wasmtime#04b09c80ee3909fedc8a1b038ea4e8b85c6219b8"
 dependencies = [
  "anyhow",
  "cranelift-entity",
@@ -520,7 +520,7 @@ dependencies = [
 [[package]]
 name = "wasmtime-types"
 version = "14.0.0"
-source = "git+https://github.com/bytecodealliance/wasmtime#a4d036ca8e9ea56c23521ade7c847000d624a368"
+source = "git+https://github.com/bytecodealliance/wasmtime#04b09c80ee3909fedc8a1b038ea4e8b85c6219b8"
 dependencies = [
  "cranelift-entity",
  "serde",
