@@ -24,6 +24,7 @@ program.command('componentize')
   .requiredOption('-w, --wit <path>', 'WIT path to build with')
   .option('-n, --world-name <name>', 'WIT world to build')
   .option('--enable-stdout', 'Allow console.log to output to stdout')
+  .option('--preview2-adapter <adapter>', 'provide a custom preview2 adapter path')
   .requiredOption('-o, --out <out>', 'output component file')
   .action(asyncAction(componentize));
 

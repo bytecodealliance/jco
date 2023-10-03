@@ -16,6 +16,7 @@ export async function componentize (jsSource, opts) {
     witPath: resolve(opts.wit),
     worldName: opts.worldName,
     enableStdout: opts.enableStdout,
+    preview2Adapter: opts.preview2Adapter,
   });
   await writeFile(opts.out, component);
   console.log(c`{green OK} Successfully written {bold ${opts.out}} with imports (${imports.join(', ')}).`);
