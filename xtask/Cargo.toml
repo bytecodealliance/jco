@@ -13,4 +13,5 @@ xshell = "0.1.17"
 
 [build-dependencies]
 anyhow = { workspace = true }
+js-component-bindgen = { path = "../crates/js-component-bindgen" }
 wit-component = { workspace = true }
