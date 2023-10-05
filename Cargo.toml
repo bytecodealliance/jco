@@ -19,7 +19,12 @@ js-component-bindgen = { path = "./crates/js-component-bindgen" }
 wit-component = { workspace = true }
 
 [workspace]
-members = ["crates/js-component-bindgen", "crates/js-component-bindgen-component", "crates/wasm-tools-component"]
+members = [
+    "crates/js-component-bindgen",
+    "crates/js-component-bindgen-component",
+    "crates/wasm-tools-component",
+    "xtask",
+]
 resolver = "2"
 
 [workspace.package]
