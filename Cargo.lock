@@ -198,15 +198,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
-name = "jco"
-version = "0.11.0"
-dependencies = [
- "anyhow",
- "js-component-bindgen",
- "wit-component",
-]
-
-[[package]]
 name = "js-component-bindgen"
 version = "0.11.0"
 dependencies = [
@@ -833,6 +824,9 @@ checksum = "4916a4a3cad759e499a3620523bf9545cc162d7a06163727dde97ce9aaa4cf39"
 name = "xtask"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
+ "js-component-bindgen",
  "structopt",
+ "wit-component",
  "xshell",
 ]

@@ -5,5 +5,12 @@ publish = false
 edition = "2021"
 
 [dependencies]
-xshell = "0.1.17"
+anyhow = { workspace = true }
+js-component-bindgen = { path = "../crates/js-component-bindgen" }
 structopt = "0.3.25"
+wit-component = { workspace = true }
+xshell = "0.1.17"
+
+[build-dependencies]
+anyhow = { workspace = true }
+wit-component = { workspace = true }
