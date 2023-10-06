@@ -1,13 +1,13 @@
 use structopt::StructOpt;
 
 mod build;
+mod build_self;
 mod build_shims;
-mod self_build;
 
 #[derive(StructOpt)]
 enum Opts {
     /// Build the `jco` tools
-    SelfBuild,
+    BuildSelf,
     /// Build
     Build,
     /// Build the shims
@@ -16,10 +16,10 @@ enum Opts {
 
 fn main() -> anyhow::Result<()> {
     match Opts::from_args() {
-        Opts::SelfBuild => self_build::run(),
+        Opts::BuildSelf => build_self::run(),
         Opts::Build => {
             build::run()?;
-            self_build::run()?;
+            build_self::run()?;
             Ok(())
         }
         Opts::BuildShims => build_shims::run(),
