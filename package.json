@@ -51,8 +51,8 @@
   },
   "homepage": "https://github.com/bytecodealliance/jco#readme",
   "scripts": {
-    "build": "cargo build --workspace --target wasm32-wasi --release && cargo run",
-    "build:types:preview2-shim": "PREVIEW2_SHIM_TYPES=* cargo build -p jco",
+    "build": "cargo xtask build",
+    "build:types:preview2-shim": "cargo xtask build-shims",
     "lint": "eslint -c eslintrc.cjs lib/**/*.js packages/*/lib/**/*.js",
     "test": "rm -rf $(pwd)/node_modules/@bytecodealliance/jco/lib && ln -s $(pwd)/lib $(pwd)/node_modules/@bytecodealliance/jco/ && mocha -u tdd test/test.js --timeout 120000"
   },

@@ -5,21 +5,16 @@ edition.workspace = true
 publish = false
 
 [[bin]]
-name = "self-build"
-path = "bin/self_build.rs"
-
-[dependencies]
-anyhow = { workspace = true }
-js-component-bindgen = { path = "./crates/js-component-bindgen" }
-wit-component = { workspace = true }
-
-[build-dependencies]
-anyhow = { workspace = true }
-js-component-bindgen = { path = "./crates/js-component-bindgen" }
-wit-component = { workspace = true }
+name = "dummy"
+path = "bin/dummy.rs"
 
 [workspace]
-members = ["crates/js-component-bindgen", "crates/js-component-bindgen-component", "crates/wasm-tools-component"]
+members = [
+    "crates/js-component-bindgen",
+    "crates/js-component-bindgen-component",
+    "crates/wasm-tools-component",
+    "xtask",
+]
 resolver = "2"
 
 [workspace.package]
@@ -31,6 +26,8 @@ anyhow = "1.0.75"
 base64 = "0.21.4"
 heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "2.0"
+js-component-bindgen = { path = "./crates/js-component-bindgen" }
+structopt = "0.3.25"
 wasm-encoder = "0.33.1"
 wasm-metadata = "0.10.5"
 wasmparser = "0.113.1"

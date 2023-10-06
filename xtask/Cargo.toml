@@ -1,0 +1,17 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+js-component-bindgen = { workspace = true }
+structopt = { workspace = true }
+wit-component = { workspace = true }
+xshell = "0.2"
+
+[build-dependencies]
+anyhow = { workspace = true }
+js-component-bindgen = { workspace = true }
+wit-component = { workspace = true }
