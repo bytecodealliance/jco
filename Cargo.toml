@@ -5,8 +5,8 @@ edition.workspace = true
 publish = false
 
 [[bin]]
-name = "self_build"
-path = "bin/self_build.rs"
+name = "dummy"
+path = "bin/dummy.rs"
 
 [build-dependencies]
 anyhow = { workspace = true }
