@@ -1,5 +1,7 @@
-import { createStream, getStream, dropStream } from './io.js';
+import { _io } from './io.js';
 import { environment } from './cli.js';
+
+const { createStream, getStream, dropStream } = _io;
 
 let _preopens = [[3, '/']], _rootPreopen = _preopens[0];
 

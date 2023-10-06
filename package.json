@@ -31,6 +31,7 @@
     "@types/node": "^18.11.17",
     "@typescript-eslint/eslint-plugin": "^5.41.0",
     "@typescript-eslint/parser": "^5.41.0",
+    "cross-env": "^7.0.3",
     "eslint": "^8.30.0",
     "mocha": "^10.2.0",
     "terser": "^5.16.1",
@@ -54,7 +55,7 @@
     "build": "cargo xtask build",
     "build:types:preview2-shim": "cargo xtask build-shims",
     "lint": "eslint -c eslintrc.cjs lib/**/*.js packages/*/lib/**/*.js",
-    "test": "rm -rf $(pwd)/node_modules/@bytecodealliance/jco/lib && ln -s $(pwd)/lib $(pwd)/node_modules/@bytecodealliance/jco/ && mocha -u tdd test/test.js --timeout 120000"
+    "test": "cp lib/* node_modules/@bytecodealliance/jco/lib/ ; mocha -u tdd test/test.js --timeout 120000"
   },
   "files": [
     "lib",

@@ -1,5 +1,7 @@
+import { Io } from '../common/io.js';
+
 // buffer until the next newline
-class NewlineBufferStream {
+export class NewlineBufferStream {
   constructor (handler) {
     this.bufferLen = 0;
     this.bufferCapacity = 1024;
@@ -29,102 +31,9 @@ class NewlineBufferStream {
   }
 }
 
-class IgnoreStream {
-  read () {
-    return [new Uint8Array([]), 'ended'];
-  }
-  write () {}
-}
+export const _io = new Io(
+  new NewlineBufferStream(console.log.bind(console)),
+  new NewlineBufferStream(console.error.bind(console))
+);
 
-export function createStream (stream) {
-  streamEntries[streamCnt] = stream;
-  return streamCnt++;
-}
-
-export function getStream (sid) {
-  const stream = streamEntries[sid];
-  if (!stream) throw new Error();
-  return stream;
-}
-
-export function dropStream (sid) {
-  delete streamEntries[sid];
-}
-
-let streamCnt = 3;
-const streamEntries = {
-  0: new IgnoreStream(),
-  1: new NewlineBufferStream(console.log.bind(console)),
-  2: new NewlineBufferStream(console.error.bind(console)),
-};
-
-export function _setStdout (stdout) {
-  streamEntries[1] = stdout;
-}
-
-export function _setStderr (stderr) {
-  streamEntries[2] = stderr;
-}
-
-export function _setStdin (stdin) {
-  streamEntries[0] = stdin;
-}
-
-export const streams = {
-  read(s, len) {
-    return getStream(s).read(len);
-  },
-  blockingRead(s, len) {
-    return getStream(s).read(len);
-  },
-  skip(s, _len) {
-    console.log(`[streams] Skip ${s}`);
-  },
-  blockingSkip(s, _len) {
-    console.log(`[streams] Blocking skip ${s}`);
-  },
-  subscribeToInputStream(s) {
-    console.log(`[streams] Subscribe to input stream ${s}`);
-  },
-  dropInputStream(s) {
-    console.log(`[streams] Drop input stream ${s}`);
-  },
-  checkWrite(_s) {
-    // TODO: implement
-    return 1000000n;
-  },
-  write(s, buf) {
-    getStream(s).write(buf);
-  },
-  blockingWriteAndFlush(s, buf) {
-    // TODO: implement
-    return streams.write(s, buf);
-  },
-  flush(s) {
-    return streams.blockingFlush(s);
-  },
-  blockingFlush(_s) {
-    // TODO: implement
-  },
-  writeZeroes(s, _len) {
-    console.log(`[streams] Write zeroes ${s}`);
-  },
-  blockingWriteZeroes(s, _len) {
-    console.log(`[streams] Blocking write zeroes ${s}`);
-  },
-  splice(s, _src, _len) {
-    console.log(`[streams] Splice ${s}`);
-  },
-  blockingSplice(s, _src, _len) {
-    console.log(`[streams] Blocking splice ${s}`);
-  },
-  forward(s, _src) {
-    console.log(`[streams] Forward ${s}`);
-  },
-  subscribeToOutputStream(s) {
-    console.log(`[streams] Subscribe to output stream ${s}`);
-  },
-  dropOutputStream(s) {
-    console.log(`[streams] Drop output stream ${s}`);
-  }
-};
+export const streams = _io.streams;

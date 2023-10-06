@@ -1,19 +1,9 @@
-let _env, _args = [], _cwd = null;
-export function _setEnv (envObj) {
-  _env = Object.entries(envObj);
-}
+import { argv, env, cwd } from 'node:process';
 
-export function _setArgs (args) {
-  _args = args;
-}
-
-export function _setCwd (cwd) {
-  _cwd = cwd;
-}
+let _env = Object.entries(env), _args = argv, _cwd = cwd();
 
 export const environment = {
   getEnvironment () {
-    if (!_env) _setEnv(process.env);
     return _env;
   },
   getArguments () {

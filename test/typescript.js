@@ -1,7 +1,7 @@
 import { exec } from './helpers.js';
 import { strictEqual } from 'node:assert';
 
-const tscPath = 'node_modules/.bin/tsc';
+const tscPath = 'node_modules/typescript/bin/tsc';
 
 // always do TS generation
 let promise;

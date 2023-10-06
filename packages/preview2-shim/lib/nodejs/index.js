@@ -8,7 +8,7 @@ import * as random from "./random.js";
 import * as sockets from "./sockets.js";
 import * as cli from "./cli.js";
 
-export const importObject = {
+export {
   clocks,
   filesystem,
   http,
@@ -17,9 +17,8 @@ export const importObject = {
   poll,
   random,
   sockets,
-  cli,
-};
+  cli
+}
 
 export { WasiHttp } from "../http/wasi-http.js";
 
-export default importObject;

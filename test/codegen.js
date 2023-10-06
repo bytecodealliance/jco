@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { exec, jcoPath } from './helpers.js';
 import { strictEqual } from 'node:assert';
 
-const eslintPath = 'node_modules/.bin/eslint';
+const eslintPath = `node_modules/eslint/bin/eslint.js`;
 
 export async function readFlags (fixture) {
   try {

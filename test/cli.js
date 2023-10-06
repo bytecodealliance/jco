@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile, rm, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { exec, jcoPath } from './helpers.js';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -24,7 +24,7 @@ export async function cliTest (fixtures) {
       strictEqual(stderr, '');
       await writeFile(`${outDir}/package.json`, JSON.stringify({ type: 'module' }));
       const source = await readFile(`${outDir}/env-allow.composed.js`);
-      const m = await import(`${outDir}/env-allow.composed.js`);
+      const m = await import(`${pathToFileURL(outDir)}/env-allow.composed.js`);
       deepStrictEqual(m.testGetEnv(), [['CUSTOM', 'VAL']]);
     });
 
@@ -219,7 +219,7 @@ export async function cliTest (fixtures) {
           const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', 'componentize', '-o', outDir);
           strictEqual(stderr, '');
         }
-        const m = await import(`${outDir}/componentize.js`);
+        const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
         strictEqual(m.hello(), 'world');
       }
       finally {
