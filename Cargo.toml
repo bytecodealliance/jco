@@ -16,6 +16,8 @@ anyhow = "1.0.75"
 base64 = "0.21.4"
 heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "2.0"
+js-component-bindgen = { path = "./crates/js-component-bindgen" }
+structopt = "0.3.25"
 wasm-encoder = "0.33.1"
 wasm-metadata = "0.10.5"
 wasmparser = "0.113.1"

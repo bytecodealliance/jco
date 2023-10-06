@@ -6,12 +6,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-js-component-bindgen = { path = "../crates/js-component-bindgen" }
-structopt = "0.3.25"
+js-component-bindgen = { workspace = true }
+structopt = { workspace = true }
 wit-component = { workspace = true }
-xshell = "0.1.17"
 
 [build-dependencies]
 anyhow = { workspace = true }
-js-component-bindgen = { path = "../crates/js-component-bindgen" }
+js-component-bindgen = { workspace = true }
 wit-component = { workspace = true }

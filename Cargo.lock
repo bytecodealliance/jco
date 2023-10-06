@@ -806,21 +806,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "xshell"
-version = "0.1.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaad2035244c56da05573d4d7fda5f903c60a5f35b9110e157a14a1df45a9f14"
-dependencies = [
- "xshell-macros",
-]
-
-[[package]]
-name = "xshell-macros"
-version = "0.1.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4916a4a3cad759e499a3620523bf9545cc162d7a06163727dde97ce9aaa4cf39"
-
-[[package]]
 name = "xtask"
 version = "0.0.0"
 dependencies = [
@@ -828,5 +813,4 @@ dependencies = [
  "js-component-bindgen",
  "structopt",
  "wit-component",
- "xshell",
 ]
