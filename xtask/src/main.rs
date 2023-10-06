@@ -1,15 +1,15 @@
 use structopt::StructOpt;
 
-mod build;
+mod self_build;
 
 #[derive(StructOpt)]
 enum Opts {
     /// Build the `jco` tools
-    Build,
+    SelfBuild,
 }
 
 fn main() -> anyhow::Result<()> {
     match Opts::from_args() {
-        Opts::Build => build::run(),
+        Opts::SelfBuild => self_build::run(),
     }
 }
