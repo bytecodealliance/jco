@@ -1,6 +1,7 @@
 use structopt::StructOpt;
 
 mod build;
+mod build_shims;
 mod self_build;
 
 #[derive(StructOpt)]
@@ -9,6 +10,8 @@ enum Opts {
     SelfBuild,
     /// Build
     Build,
+    /// Build the shims
+    BuildShims,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -19,5 +22,6 @@ fn main() -> anyhow::Result<()> {
             self_build::run()?;
             Ok(())
         }
+        Opts::BuildShims => build_shims::run(),
     }
 }

@@ -8,11 +8,6 @@ publish = false
 name = "dummy"
 path = "bin/dummy.rs"
 
-[build-dependencies]
-anyhow = { workspace = true }
-js-component-bindgen = { workspace = true }
-wit-component = { workspace = true }
-
 [workspace]
 members = [
     "crates/js-component-bindgen",
