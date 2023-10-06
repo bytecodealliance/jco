@@ -9,6 +9,7 @@ anyhow = { workspace = true }
 js-component-bindgen = { workspace = true }
 structopt = { workspace = true }
 wit-component = { workspace = true }
+xshell = "0.2"
 
 [build-dependencies]
 anyhow = { workspace = true }
