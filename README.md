@@ -37,7 +37,7 @@ jco can be used as either a library or as a CLI via the `jco` CLI command.
 
 ## Example
 
-See the [example workflow](EXAMPLE.md) page for a full usage example.
+See the [example workflow](docs/src/example.md) page for a full usage example.
 
 ## CLI
 
@@ -176,11 +176,7 @@ Add new producer metadata to a component or core Wasm binary.
 
 ## Contributing
 
-Development is based on a standard `npm install && npm run build && npm run test` workflow.
-
-Tests can be run without bundling via `npm run build:dev && npm run test:dev`.
-
-Specific tests can be run adding the mocha `--grep` flag, for example: `npm run test:dev -- --grep exports_only`.
+See the [Contributing](docs/src/contributing.md) chapter of the jco book.
 
 # License
 
