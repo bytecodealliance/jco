@@ -18,12 +18,18 @@ pub fn run() -> anyhow::Result<()> {
             continue;
         }
 
+        let path = entry.path();
+        let path = match path.to_str() {
+            Some(path) => path,
+            None => continue,
+        };
+
         // only iterate over the `preview2` test programs
-        if let Some(s) = entry.path().to_str() {
-            if !s.contains("preview2") {
-                continue;
-            }
+        if !path.contains("preview2") {
+            continue;
         }
+
+        cmd!(sh, "src/jco.js run {path}").run()?;
         dbg!(entry);
     }
     Ok(())
