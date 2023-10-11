@@ -6,6 +6,12 @@ export class IgnoreStream {
   }
 }
 
+/**
+ * @typedef {{ read: (len: number) => [Uint8Array, 'open' | 'ended'], drop?: () => {} }} ReadableStream
+ * @typedef {{ write: (buf: Uint8Array) {}, drop?: () => {}, flush?: () => {}, check?: () => BigInt }} WriteableStream
+ */
+
+// NOTE: pending asyncify work, all stream methods are synchronous and blocking
 export class Io {
   constructor (
     stdout = new IgnoreStream(),
@@ -39,22 +45,27 @@ export class Io {
       dropInputStream(s) {
         io.dropStream(s);
       },
-      checkWrite(_s) {
-        // TODO: implement
-        return 1000000n;
+      checkWrite(s) {
+        return io.getStream(s).check() || 1000_000n;
       },
       write(s, buf) {
         io.getStream(s).write(buf);
       },
       blockingWriteAndFlush(s, buf) {
-        // TODO: flush
-        io.getStream(s).write(buf);
+        const stream = io.getStream(s);
+        stream.write(buf);
+        if (stream.flush)
+          stream.flush();
       },
-      flush(_s) {
-        // TODO: flush
+      flush(s) {
+        const stream = io.getStream(s);
+        if (stream.flush)
+          stream.flush();
       },
-      blockingFlush(_s) {
-        // TODO: implement
+      blockingFlush(s) {
+        const stream = io.getStream(s);
+        if (stream.flush)
+          stream.flush();
       },
       writeZeroes(s, _len) {
         console.log(`[streams] Write zeroes ${s}`);
@@ -80,17 +91,26 @@ export class Io {
     };
   }
 
+  /**
+   * 
+   * @param {ReadableStream | WriteableStream} stream 
+   * @returns {number}
+   */
   createStream (stream) {
     this.streamEntries[this.streamCnt] = stream;
     return this.streamCnt++;
   }
   
+  /**
+   * @param {number} sid 
+   * @returns {ReadableStream | WriteableStream}
+   */
   getStream (sid) {
     const stream = this.streamEntries[sid];
     if (!stream) throw new Error();
     return stream;
   }
-  
+
   dropStream (sid) {
     const stream = this.streamEntries[sid];
     if (stream.drop) stream.drop();

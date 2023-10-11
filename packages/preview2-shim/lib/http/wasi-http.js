@@ -1,14 +1,9 @@
-// Based on:
-// https://github.com/bytecodealliance/wasmtime/blob/8efcb9851602287fd07a1a1e91501f51f2653d7e/crates/wasi-http/
-
 /**
  * @typedef {import("../../types/interfaces/wasi-http-types").Fields} Fields
  * @typedef {import("../../types/interfaces/wasi-http-types").FutureIncomingResponse} FutureIncomingResponse
  * @typedef {import("../../types/interfaces/wasi-http-types").Headers} Headers
- * @typedef {import("../../types/interfaces/wasi-http-types").IncomingResponse} IncomingResponse
  * @typedef {import("../../types/interfaces/wasi-http-types").IncomingStream} IncomingStream
  * @typedef {import("../../types/interfaces/wasi-http-types").Method} Method
- * @typedef {import("../../types/interfaces/wasi-http-types").OutgoingRequest} OutgoingRequest
  * @typedef {import("../../types/interfaces/wasi-http-types").RequestOptions} RequestOptions
  * @typedef {import("../../types/interfaces/wasi-http-types").Result} Result
  * @typedef {import("../../types/interfaces/wasi-http-types").Scheme} Scheme
@@ -16,355 +11,372 @@
  * @typedef {import("../../types/interfaces/wasi-io-streams").StreamStatus} StreamStatus
 */
 
-import * as io from '@bytecodealliance/preview2-shim/io';
-import * as http from '@bytecodealliance/preview2-shim/http';
-import { UnexpectedError } from './error.js';
+import { fileURLToPath } from 'node:url';
+import { createSyncFn } from './synckit/index.js';
+
+const workerPath = fileURLToPath(new URL('./make-request.js', import.meta.url));
+
+function send(req) {
+  const syncFn = createSyncFn(workerPath);
+  let rawResponse = syncFn(req);
+  let response = JSON.parse(rawResponse);
+  if (response.status) {
+    return {
+      ...response,
+      body: response.body ? Buffer.from(response.body, 'base64') : undefined,
+    };
+  }
+  throw new UnexpectedError(response.message);
+}
+
+class UnexpectedError extends Error {
+  payload;
+  constructor(message = "unexpected-error") {
+    super(message);
+    this.payload = {
+      tag: "unexpected-error",
+      val: message,
+    };
+  }
+}
+
+function combineChunks (chunks) {
+  if (chunks.length === 0)
+    return new Uint8Array();
+  if (chunks.length === 1)
+    return chunks[0];
+  const totalLen = chunks.reduce((total, chunk) => total + chunk.byteLength);
+  const out = new Uint8Array(totalLen);
+  let idx = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, idx);
+    idx += chunk.byteLength;
+  }
+  return out;
+}
 
 export class WasiHttp {
-  requestIdBase = 1;
-  responseIdBase = 1;
-  fieldsIdBase = 1;
-  streamIdBase = 3;
-  futureIdBase = 1;
-  /** @type {Map<number,ActiveRequest>} */ requests = new Map();
-  /** @type {Map<number,ActiveResponse>} */ responses = new Map();
-  /** @type {Map<number,ActiveFields>} */ fields = new Map();
-  /** @type {Map<number,Uint8Array>} */ streams = new Map();
-  /** @type {Map<number,ActiveFuture>} */ futures = new Map();
-
-  constructor() {}
+  requestCnt = 1;
+  responseCnt = 1;
+  fieldsCnt = 1;
+  futureCnt = 1;
+  /** @type {Map<number,OutgoingRequest>} */ requests = new Map();
+  /** @type {Map<number,IncomingResponse>} */ responses = new Map();
+  /** @type {Map<number,Fields>} */ fields = new Map();
+  /** @type {Map<number,Future>} */ futures = new Map();
 
   /**
-   * @param {OutgoingRequest} requestId
-   * @param {RequestOptions | null} options
-   * @returns {FutureIncomingResponse}
+   * 
+   * @param {import('../common/io.js').Io} io 
+   * @returns 
    */
-  handle = (requestId, _options) => {
-    const request = this.requests.get(requestId);
-    if (!request) throw Error("not found!");
+  constructor(io) {
+    const http = this;
 
-    const responseId = this.responseIdBase;
-    this.responseIdBase += 1;
-    const response = new ActiveResponse(responseId);
-
-    const scheme = request.scheme.tag === "HTTP" ? "http://" : "https://";
-
-    const url = scheme + request.authority + request.pathWithQuery;
-    const headers = {
-      "host": request.authority,
-    };
-    if (request.headers) {
-      const requestHeaders = this.fields.get(request.headers);
-      const decoder = new TextDecoder();
-      for (const [key, value] of requestHeaders.fields.entries()) {
-        headers[key] = decoder.decode(value);
+    class OutgoingRequest {
+      /** @type {number} */ id;
+      bodyFinished = false;
+      /** @type {Method} */ method = { tag: 'get' };
+      /** @type {Scheme | undefined} */ scheme = { tag: 'HTTP' };
+      pathWithQuery = undefined;
+      authority = undefined;
+      /** @type {number | undefined} */ headers = undefined;
+      chunks = [];
+      body = io.createStream(this);
+      constructor() {
+        http.requests.set(this.id = http.requestCnt++, this);
+      }
+      write (bytes) {
+        this.chunks.push(bytes);
       }
     }
-    const body =  this.streams.get(request.body);
-
-    const res = http.send({
-      method: request.method.tag,
-      uri: url,
-      headers: headers,
-      params: [],
-      body: body && body.length > 0 ? body : undefined,
-    });
-
-    response.status = res.status;
-    if (res.headers && res.headers.length > 0) {
-      response.headers = this.newFields(res.headers);
+    class IncomingResponse {
+      /** @type {number} */ id;
+      bodyFinished = false;
+      status = 0;
+      chunks = [];
+      body = io.createStream(this);
+      /** @type {number | undefined} */ headers = undefined;
+      constructor() {
+        http.responses.set(this.id = http.responseCnt++, this);
+      }
+      read (_len) {
+        if (this.chunks.length === 0)
+          return [new Uint8Array([]), this.bodyFinished ? 'ended' : 'open'];
+        if (this.chunks.length === 1)
+          return [this.chunks[0], this.bodyFinished ? 'ended' : 'open'];
+        return [this.chunks.shift(), 'open'];
+      }
     }
-    const buf = res.body;
-    response.body = this.streamIdBase;
-    this.streamIdBase += 1;
-    this.streams.set(response.body, buf);
-    this.responses.set(responseId, response);
 
-    const futureId = this.futureIdBase;
-    this.futureIdBase += 1;
-    const future = new ActiveFuture(futureId, responseId);
-    this.futures.set(futureId, future);
-    return futureId;
-  }
-
-  read = (stream, len) => {
-    return this.blockingRead(stream, len);
-  }
-
-  /**
-   * @param {InputStream} stream 
-   * @param {bigint} len 
-   * @returns {[Uint8Array | ArrayBuffer, StreamStatus]}
-   */
-  blockingRead = (stream, len) => {
-    if (stream < 3) {
-      return io.streams.blockingRead(stream);
+    class Future {
+      /** @type {number} */ id;
+      /** @type {number} */ responseId;
+    
+      constructor(responseId) {
+        http.futures.set(this.id = http.futureCnt++, this);
+        this.responseId = responseId;
+      }
     }
-    const s = this.streams.get(stream);
-    if (!s) throw Error(`stream not found: ${stream}`);
-    const position = Number(len);
-    if (position === 0) {
-      return [new Uint8Array(), s.byteLength > 0 ? 'open' : 'ended'];
-    } else if (s.byteLength > position) {
-      this.streams.set(stream, s.slice(position, s.byteLength));
-      return [s.slice(0, position), 'open'];
-    } else {
-      return [s.slice(0, position), 'ended'];
+    
+    class Fields {
+      /** @type {number} */ id;
+      /** @type {Map<string, Uint8Array[]>} */ fields;
+    
+      constructor(fields) {
+        http.fields.set(this.id = http.fieldsCnt++, this);
+        const encoder = new TextEncoder();
+        this.fields = new Map(fields.map(([k, v]) => [k, encoder.encode(v)]));
+      }
     }
-  }
 
-  /**
-   * @param {InputStream} stream 
-   * @returns {Pollable}
-   */
-  subscribeToInputStream = (stream) => {
-    // TODO: not implemented yet
-    console.log(`[streams] Subscribe to input stream ${stream}`);
-  }
+    this.incomingHandler = {
+      // TODO
+      handle () {
 
-  /**
-   * @param {InputStream} stream 
-   */
-  dropInputStream = (stream) => {
-    const s = this.streams.get(stream);
-    if (!s) throw Error(`no such input stream ${stream}`);
-    s.set([]);
-  }
-
-  checkWrite = (stream) => {
-    // TODO: implement
-    return io.streams.checkWrite(stream);
-  }
-
-  /**
-   * @param {OutputStream} stream 
-   * @param {Uint8Array} buf 
-   */
-  write = (stream, buf) => {
-    if (stream < 3) {
-      return io.streams.write(stream, buf);
-    }
-    this.streams.set(stream, buf);
-  }
-
-  blockingWriteAndFlush = (stream, buf) => {
-    if (stream < 3) {
-      return io.streams.blockingWriteAndFlush(stream, buf);
-    }
-    // TODO: implement
-  }
-
-  flush = (stream) => {
-    return this.blockingFlush(stream);
-  }
-
-  blockingFlush = (stream) => {
-    if (stream < 3) {
-      return io.streams.blockingFlush(stream);
-    }
-    // TODO: implement
-  }
-
-  /**
-   * @param {OutputStream} stream 
-   * @returns {Pollable}
-   */
-  subscribeToOutputStream = (stream) => {
-    // TODO: not implemented yet
-    console.log(`[streams] Subscribe to output stream ${stream}`);
-  }
-
-  /**
-   * @param {OutputStream} stream 
-   */
-  dropOutputStream = (stream) => {
-    const s = this.streams.get(stream);
-    if (!s) throw Error(`no such output stream ${stream}`);
-    s.set([]);
-  }
-
-  /**
-   * @param {Fields} fields
-   */
-  dropFields = (fields) => {
-    this.fields.delete(fields);
-  }
-
-  /**
-   * @param {[string, string][]} entries
-   * @returns {Fields}
-   */
-  newFields = (entries) => {
-    const id = this.fieldsIdBase;
-    this.fieldsIdBase += 1;
-    this.fields.set(id, new ActiveFields(id, entries));
-
-    return id;
-  }
-
-  /**
-   * @param {Fields} fields
-   * @returns {[string, Uint8Array][]}
-   */
-  fieldsEntries = (fields) => {
-    const activeFields = this.fields.get(fields);
-    return activeFields ? Array.from(activeFields.fields) : [];
-  }
-
-  /**
-   * @param {OutgoingRequest} request
-   */
-  dropOutgoingRequest = (request) => {
-    this.requests.delete(request);
-  }
-
-  /**
-   * @param {Method} method
-   * @param {string | null} pathWithQuery
-   * @param {Scheme | null} scheme
-   * @param {string | null} authority
-   * @param {Headers} headers
-   * @returns {number}
-   */
-  newOutgoingRequest = (method, pathWithQuery, scheme, authority, headers) => {
-    const id = this.requestIdBase;
-    this.requestIdBase += 1;
-
-    const req = new ActiveRequest(id);
-    req.pathWithQuery = pathWithQuery;
-    req.authority = authority;
-    req.method = method;
-    req.headers = headers;
-    req.scheme = scheme;
-    this.requests.set(id, req);
-    return id;
-  }
-
-  /**
-   * @param {OutgoingRequest} request
-   * @returns {OutgoingStream}
-   */
-  outgoingRequestWrite = (request) => {
-    const req = this.requests.get(request);
-    req.body = this.streamIdBase;
-    this.streamIdBase += 1;
-    return req.body;
-  }
-  
-  /**
-   * @param {IncomingResponse} response
-   */
-  dropIncomingResponse = (response) => {
-    this.responses.delete(response);
-  }
-
-  /**
-   * @param {IncomingResponse} response
-   * @returns {StatusCode}
-   */
-  incomingResponseStatus = (response) => {
-    const r = this.responses.get(response);
-    return r.status;
-  }
-
-  /**
-   * @param {IncomingResponse} response
-   * @returns {Headers}
-   */
-  incomingResponseHeaders = (response) => {
-    const r = this.responses.get(response);
-    return r.headers ?? 0;
-  }
-
-  /**
-   * @param {IncomingResponse} response
-   * @returns {IncomingStream}
-   */
-  incomingResponseConsume = (response) => {
-    const r = this.responses.get(response);
-    return r.body;
-  }
-
-  /**
-   * @param {FutureIncomingResponse} future
-   */
-  dropFutureIncomingResponse = (future) => {
-    return this.futures.delete(future);
-  }
-
-  /**
-   * @param {FutureIncomingResponse} future
-   * @returns {Result<IncomingResponse, Error> | null}
-   */
-  futureIncomingResponseGet = (future) => {
-    const f = this.futures.get(future);
-    if (!f) {
-      return {
-        tag: "err",
-        val: UnexpectedError(`no such future ${f}`),
-      };
-    }
-    // For now this will assume the future will return
-    // the response immediately
-    const response = f.responseId;
-    const r = this.responses.get(response);
-    if (!r) {
-      return {
-        tag: "err",
-        val: UnexpectedError(`no such response ${response}`),
-      };
-    }
-    return {
-      tag: "ok",
-      val: response,
+      }
     };
-  }
-}
 
-class ActiveRequest {
-  /** @type {number} */ id;
-  activeRequest = false;
-  /** @type {Method} */ method = { tag: 'get' };
-  /** @type {Scheme | null} */ scheme = { tag: 'HTTP' };
-  pathWithQuery = null;
-  authority = null;
-  /** @type {number | null} */ headers = null;
-  body = 3;
+    this.outgoingHandler = {
+      /**
+       * @param {OutgoingRequest} requestId
+       * @param {RequestOptions | undefined} options
+       * @returns {FutureIncomingResponse}
+       */
+      handle (requestId, _options) {
+        const request = http.requests.get(requestId);
+        if (!request) throw Error("not found!");
 
-  constructor(id) {
-    this.id = id;
-  }
-}
+        const response = new IncomingResponse();
 
-class ActiveResponse {
-  /** @type {number} */ id;
-  activeResponse = false;
-  status = 0;
-  body = 3;
-  /** @type {number | null} */ headers = null;
+        const scheme = request.scheme.tag === "HTTP" ? "http://" : "https://";
 
-  constructor(id) {
-    this.id = id;
-  }
-}
+        const url = scheme + request.authority + request.pathWithQuery;
+        const headers = {
+          "host": request.authority,
+        };
+        if (request.headers) {
+          const requestHeaders = http.fields.get(request.headers);
+          const decoder = new TextDecoder();
+          for (const [key, value] of requestHeaders.fields.entries()) {
+            headers[key] = decoder.decode(value);
+          }
+        }
 
-class ActiveFuture {
-  /** @type {number} */ id;
-  /** @type {number} */ responseId;
+        const res = send({
+          method: request.method.tag,
+          uri: url,
+          headers: headers,
+          params: [],
+          body: combineChunks(request.chunks),
+        });
 
-  constructor(id, responseId) {
-    this.id = id;
-    this.responseId = responseId;
-  }
-}
+        response.status = res.status;
+        if (res.headers && res.headers.length > 0) {
+          response.headers = types.newFields(res.headers);
+        }
+        http.responses.set(response.id, response);
+        response.chunks = [res.body];
 
-class ActiveFields {
-  /** @type {number} */ id;
-  /** @type {Map<string, Uint8Array[]>} */ fields;
+        const future = new Future(response.id);
+        return future.id;
+      }
+    };
 
-  constructor(id, fields) {
-    this.id = id;
-    const encoder = new TextEncoder();
-    this.fields = new Map(fields.map(([k, v]) => [k, encoder.encode(v)]));
+    const types = this.types = {
+      /**
+       * @param {Fields} fields
+       */
+      dropFields(fields) {
+        http.fields.delete(fields);
+      },
+
+      /**
+       * @param {[string, string][]} entries
+       * @returns {Fields}
+       */
+      newFields(entries) {
+        return new Fields(entries).id;
+      },
+
+      fieldsGet(_fields, _name) {
+        console.log("[types] Fields get");
+      },
+      fieldsSet(_fields, _name, _value) {
+        console.log("[types] Fields set");
+      },
+      fieldsDelete(_fields, _name) {
+        console.log("[types] Fields delete");
+      },
+      fieldsAppend(_fields, _name, _value) {
+        console.log("[types] Fields append");
+      },
+
+      /**
+       * @param {Fields} fields
+       * @returns {[string, Uint8Array][]}
+       */
+      fieldsEntries(fields) {
+        const activeFields = http.fields.get(fields);
+        return activeFields ? Array.from(activeFields.fields) : [];
+      },
+
+      fieldsClone(_fields) {
+        console.log("[types] Fields clone");
+      },
+      finishIncomingStream(s) {
+        io.getStream(s).bodyFinished = true;
+      },
+      finishOutgoingStream(s, _trailers) {
+        io.getStream(s).bodyFinished = true;
+      },
+      dropIncomingRequest(_req) {
+        console.log("[types] Drop incoming request");
+      },
+
+      /**
+       * @param {OutgoingRequest} request
+       */
+      dropOutgoingRequest(request) {
+        http.requests.delete(request);
+      },
+
+      incomingRequestMethod(_req) {
+        console.log("[types] Incoming request method");
+      },
+      incomingRequestPathWithQuery(_req) {
+        console.log("[types] Incoming request path with query");
+      },
+      incomingRequestScheme(_req) {
+        console.log("[types] Incoming request scheme");
+      },
+      incomingRequestAuthority(_req) {
+        console.log("[types] Incoming request authority");
+      },
+      incomingRequestHeaders(_req) {
+        console.log("[types] Incoming request headers");
+      },
+      incomingRequestConsume(_req) {
+        console.log("[types] Incoming request consume");
+      },
+
+      /**
+       * @param {Method} method
+       * @param {string | undefined} pathWithQuery
+       * @param {Scheme | undefined} scheme
+       * @param {string | undefined} authority
+       * @param {Headers} headers
+       * @returns {number}
+       */
+      newOutgoingRequest(method, pathWithQuery, scheme, authority, headers) {
+        const req = new OutgoingRequest();
+        req.pathWithQuery = pathWithQuery;
+        req.authority = authority;
+        req.method = method;
+        req.headers = headers;
+        req.scheme = scheme;
+        return req.id;
+      },
+
+      /**
+       * @param {OutgoingRequest} request
+       * @returns {OutgoingStream}
+       */
+      outgoingRequestWrite(request) {
+        return http.requests.get(request).body;
+      },
+
+      dropResponseOutparam(_res) {
+        console.log("[types] Drop response outparam");
+      },
+      setResponseOutparam(_response) {
+        console.log("[types] Set response outparam");
+      },
+
+      /**
+       * @param {IncomingResponse} response
+       */
+      dropIncomingResponse(response) {
+        http.responses.delete(response);
+      },
+
+      dropOutgoingResponse(_res) {
+        console.log("[types] Drop outgoing response");
+      },
+
+      /**
+       * @param {IncomingResponse} response
+       * @returns {StatusCode}
+       */
+      incomingResponseStatus(response) {
+        const r = http.responses.get(response);
+        return r.status;
+      },
+
+      /**
+       * @param {IncomingResponse} response
+       * @returns {Headers}
+       */
+      incomingResponseHeaders(response) {
+        const r = http.responses.get(response);
+        return r.headers ?? 0;
+      },
+
+      /**
+       * @param {IncomingResponse} response
+       * @returns {IncomingStream}
+       */
+      incomingResponseConsume(response) {
+        const r = http.responses.get(response);
+        return r.body;
+      },
+
+      newOutgoingResponse(_statusCode, _headers) {
+        console.log("[types] New outgoing response");
+      },
+      outgoingResponseWrite(_res) {
+        console.log("[types] Outgoing response write");
+      },
+
+
+      /**
+       * @param {FutureIncomingResponse} future
+       */
+      dropFutureIncomingResponse(future) {
+        return http.futures.delete(future);
+      },
+
+      /**
+       * @param {FutureIncomingResponse} future
+       * @returns {Result<IncomingResponse, Error> | undefined}
+       */
+      futureIncomingResponseGet(future) {
+        const f = http.futures.get(future);
+        if (!f) {
+          return {
+            tag: "err",
+            val: UnexpectedError(`no such future ${f}`),
+          };
+        }
+        // For now this will assume the future will return
+        // the response immediately
+        const response = f.responseId;
+        const r = http.responses.get(response);
+        if (!r) {
+          return {
+            tag: "err",
+            val: UnexpectedError(`no such response ${response}`),
+          };
+        }
+        return {
+          tag: "ok",
+          val: response,
+        };
+      },
+      
+      listenToFutureIncomingResponse(_f) {
+        console.log("[types] Listen to future incoming response");
+      }
+    };
   }
 }

@@ -1,6 +1,6 @@
 import { _io } from './io.js';
 import { environment } from './cli.js';
-import { constants, readSync, openSync, closeSync, fstatSync, lstatSync, statSync, writeSync } from 'node:fs';
+import { constants, readSync, openSync, opendirSync, closeSync, fstatSync, lstatSync, statSync, writeSync } from 'node:fs';
 import { platform } from 'node:process';
 
 const isWindows = platform === 'win32';
@@ -26,24 +26,32 @@ class WriteableFileStream {
     this.position = position;
   }
   write (contents) {
-    writeSync(this.hostFd, contents, null, null, this.position || undefined);
+    const bytesWritten = writeSync(this.hostFd, contents, null, null, this.position || undefined);
+    if (bytesWritten !== contents.byteLength)
+      throw new Error('TODO: write buffering + flush');
   }
 }
 
 class DirStream {
-  constructor (entries) {
-    this.idx = 0;
-    this.entries = entries;
+  constructor (dir) {
+    this.dir = dir;
   }
   read () {
-    if (this.idx === this.entries.length)
+    let entry;
+    try {
+      entry = this.dir.readSync();
+    } catch (e) {
+      throw convertFsError(e);
+    }
+    if (entry === null) {
       return null;
-    const [name, entry] = this.entries[this.idx];
-    this.idx += 1;
-    return {
-      name,
-      type: entry.dir ? 'directory' : 'regular-file'
-    };
+    }
+    const name = entry.name;
+    const type = lookupType(entry);
+    return { name, type };
+  }
+  drop () {
+    this.dir.closeSync();
   }
 }
 
@@ -113,20 +121,7 @@ export class FileSystem {
     if (descriptor.hostPreopen)
       return descriptor.hostPreopen + (descriptor.hostPreopen.endsWith('/') ? '' : '/') + subpath;
     if (!descriptor.dir) throw 'not-directory';
-    
-    // let segmentIdx;
-    // do {
-    //   segmentIdx = subpath.indexOf('/');
-    //   const segment = segmentIdx === -1 ? subpath : subpath.slice(0, segmentIdx);
-    //   if (segment === '.' || segment === '') return fd;
-    //   if (segment === '..') throw 'no-entry';
-    //   if (!entry.dir[segment] && openFlags.create)
-    //     entry = entry.dir[segment] = openFlags.directory ? { dir: {} } : { source: new Uint8Array([]) };
-    //   else
-    //     entry = entry.dir[segment];
-    // } while (segmentIdx !== -1)
-    // if (!entry) throw 'no-entry';
-    // return entry;
+    return descriptor.dir.fullPath + '/' + subpath;
   }
 
   /**
@@ -197,11 +192,10 @@ export class FileSystem {
       },
     
       getType(fd) {
-        if (fd < 3) return 'fifo';
         const descriptor = fs.getDescriptor(fd);
         if (descriptor.stream) return 'fifo';
         if (descriptor.hostPreopen) return 'directory';
-        if (descriptor.dir) return 'regular-file';
+        if (descriptor.dir) return 'directory';
         if (descriptor.file) return 'regular-file';
         return 'unknown';
       },
@@ -229,17 +223,22 @@ export class FileSystem {
       },
 
       write(fd, buffer, offset) {
-        console.log('WRITE');
         const descriptor = fs.getDescriptor(fd);
-        if (offset !== 0) throw 'invalid-seek';
-        descriptor.entry.source = buffer;
-        return buffer.byteLength;
+        if (!descriptor.file) throw 'bad-descriptor';
+        return writeSync(fd, buffer, offset);
       },
 
       readDirectory(fd) {
         const descriptor = fs.getDescriptor(fd);
         if (!descriptor.dir) throw 'bad-descriptor';
-        return io.createStream(new DirStream(Object.entries(descriptor.entry.dir).sort(([a], [b]) => a > b ? 1 : -1)));
+        const { fullPath } = descriptor.dir;
+        try {
+          const dir = opendirSync(isWindows ? fullPath.slice(1) : fullPath);
+          return io.createStream(new DirStream(dir));
+        }
+        catch (e) {
+          throw convertFsError(e);
+        }
       },
 
       sync(fd) {
@@ -264,8 +263,6 @@ export class FileSystem {
         }
         const type = lookupType(stats);
         return {
-          device: stats.dev,
-          inode: stats.ino,
           type,
           linkCount: stats.nlink,
           size: stats.size,
@@ -286,8 +283,6 @@ export class FileSystem {
         }
         const type = lookupType(stats);
         return {
-          device: stats.dev,
-          inode: stats.ino,
           type,
           linkCount: stats.nlink,
           size: stats.size,
@@ -338,7 +333,7 @@ export class FileSystem {
 
         try {
           const fd = openSync(isWindows ? fullPath.slice(1) : fullPath, fsOpenFlags, fsMode);
-          fs.descriptors[childFd] = { file: { fullPath, fd } };
+          fs.descriptors[childFd] = openFlags.directory ? { dir: { fullPath, fd } } : { file: { fullPath, fd } };
         }
         catch (e) {
           throw convertFsError(e);
@@ -404,7 +399,7 @@ export class FileSystem {
       },
 
       readDirectoryEntry(sid) {
-        return io.getStream(sid).next();
+        return io.getStream(sid).read();
       },
 
       dropDirectoryEntryStream(sid) {
@@ -473,118 +468,3 @@ function convertFsError (e) {
     default: throw e;
   }
 }
-
-// export let _streams = {};
-// let streamCnt = 0;
-// export function _createFsStream(fd, type, context) {
-//   _streams[streamCnt] = {
-//     type,
-//     fd,
-//     context
-//   };
-//   return streamCnt++;
-// }
-
-// export function _getFsStreamContext(stream, type) {
-//   const entry = _streams[stream];
-//   if (!entry)
-//     throw new Error(`No '${type}' stream found at stream ${stream}`);
-//   if (entry.type !== type)
-//     throw new Error(`Unexpected '${entry.type}' stream found at stream ${stream}, expected '${type}'`);
-//   return entry.context;
-// }
-
-// export function _dropFsStream(stream) {
-//   // TODO: recycling?
-//   delete _streams[stream];
-// }
-
-// export const streams = {
-//   read(s, len) {
-//     return streams.blockingRead(s, len);
-//   },
-//   blockingRead(s, len) {
-//     len = Number(len);
-//     const stream = _streams[s];
-//     switch (stream?.type) {
-//       case 'file': {
-//         const buf = Buffer.alloc(Number(len));
-//         try {
-//           const readBytes = fsReadSync(stream.fd, buf, 0, Number(len));
-//           if (readBytes < Number(len)) {
-//             return [new Uint8Array(buf.buffer, 0, readBytes), 'ended'];
-//           }
-//           return [new Uint8Array(buf.buffer, 0, readBytes), 'open'];
-//         }
-//         catch (e) {
-//           _convertFsError(e);
-//         }
-//         break;
-//       }
-//     }
-//     throw null;
-//   },
-//   skip(s, _len) {
-//     console.log(`[streams] Skip ${s}`);
-//   },
-//   blockingSkip(s, _len) {
-//     console.log(`[streams] Blocking skip ${s}`);
-//   },
-//   subscribeToInputStream(s) {
-//     console.log(`[streams] Subscribe to input stream ${s}`);
-//   },
-//   dropInputStream(s) {
-//     delete _streams[s];
-//   },
-//   checkWrite(_s) {
-//     // TODO: implement
-//     return 1000000n;
-//   },
-//   write(s, buf) {
-//     switch (s) {
-//       case 0:
-//         throw new Error(`TODO: write stdin`);
-//       case 1: {
-//         process.stdout.write(buf);
-//         break;
-//       }
-//       case 2: {
-//         process.stderr.write(buf);
-//         break;
-//       }
-//       default:
-//         throw new Error(`TODO: write ${s}`);
-//     }
-//   },
-//   blockingWriteAndFlush(s, buf) {
-//     // TODO: implement
-//     return streams.write(s, buf);
-//   },
-//   flush(s) {
-//     return streams.blockingFlush(s);
-//   },
-//   blockingFlush(_s) {
-//     // TODO: implement
-//   },
-//   writeZeroes(s, _len) {
-//     console.log(`[streams] Write zeroes ${s}`);
-//   },
-//   blockingWriteZeroes(s, _len) {
-//     console.log(`[streams] Blocking write zeroes ${s}`);
-//   },
-//   splice(s, _src, _len) {
-//     console.log(`[streams] Splice ${s}`);
-//   },
-//   blockingSplice(s, _src, _len) {
-//     console.log(`[streams] Blocking splice ${s}`);
-//   },
-//   forward(s, _src) {
-//     console.log(`[streams] Forward ${s}`);
-//   },
-//   subscribeToOutputStream(s) {
-//     console.log(`[streams] Subscribe to output stream ${s}`);
-//   },
-//   dropOutputStream(s) {
-//     console.log(`[streams] Drop output stream ${s}`);
-//   }
-// };

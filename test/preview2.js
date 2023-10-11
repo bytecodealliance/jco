@@ -63,22 +63,11 @@ export async function preview2Test () {
         strictEqual(stderr, '');
         const outDir = fileURLToPath(new URL(`./output/${runtimeName}`, import.meta.url));
         {
-          const wasiMap = {
-            'wasi:cli/*': 'cli#*',
-            'wasi:clocks/*': 'clocks#*',
-            'wasi:filesystem/*': 'filesystem#*',
-            'wasi:http/*': 'http#*',
-            'wasi:io/*': 'io#*',
-            'wasi:logging/*': 'logging#*',
-            'wasi:poll/*': 'poll#*',
-            'wasi:random/*': 'random#*',
-            'wasi:sockets/*': 'sockets#*',
-          };
-          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '--tracing', '--instantiation', ...Object.entries(wasiMap).flatMap(([k, v]) => ['--map', `${k}=${v}`]), '-o', outDir);
+          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '--tracing', '-o', outDir);
           strictEqual(stderr, '');
         }
 
-        await exec(process.argv[0], `test/output/${runtimeName}.js`);
+        await exec(`test/output/${runtimeName}.js`);
       }
       finally {
         server.close();

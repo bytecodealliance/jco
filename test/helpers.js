@@ -14,7 +14,7 @@ export async function exec (cmd, ...args) {
       stderr += chunk;
     });
     cp.on('error', reject);
-    cp.on('exit', code => code === 0 ? resolve() : reject(new Error(stderr || stdout)));
+    cp.on('exit', code => code === 0 ? resolve() : reject(new Error((stderr || stdout).toString())));
   });
   return { stdout, stderr };
 }

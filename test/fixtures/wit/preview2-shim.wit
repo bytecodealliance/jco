@@ -1,5 +1,0 @@
-world preview2-shim {
-  export wasi:cli/command
-  export wasi:cli/environment
-  export wasi:cl=
-}
