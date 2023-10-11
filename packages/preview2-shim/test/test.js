@@ -14,7 +14,7 @@ suite('Node.js Preview2', async () => {
     const [rootFd] = filesystem.preopens.getDirectories()[0];
     const fd = filesystem.types.openAt(rootFd, {}, fileURLToPath(import.meta.url), {}, {}, {});
     const stream = filesystem.types.readViaStream(fd, 0);
-    const buf = io.streams.blockingRead(stream, 1_000_000);
+    const [buf] = io.streams.blockingRead(stream, 1_000_000);
     const source = new TextDecoder().decode(buf);
     ok(source.includes('UNIQUE STRING'));
     io.streams.dropOutputStream(stream);
