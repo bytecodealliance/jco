@@ -21,7 +21,7 @@ use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
 use ts_bindgen::ts_bindgen;
-use wit_parser::{Resolve, WorldId};
+use wit_parser::{Resolve, Type, TypeDefKind, TypeId, WorldId};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -163,4 +163,13 @@ fn core_file_name(name: &str, idx: u32) -> String {
         (idx + 1).to_string()
     };
     format!("{}.core{i_str}.wasm", name)
+}
+
+pub fn dealias(resolve: &Resolve, mut id: TypeId) -> TypeId {
+    loop {
+        match &resolve.types[id].kind {
+            TypeDefKind::Type(Type::Id(that_id)) => id = *that_id,
+            _ => break id,
+        }
+    }
 }

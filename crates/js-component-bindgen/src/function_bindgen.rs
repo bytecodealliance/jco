@@ -17,6 +17,17 @@ pub enum ErrHandling {
     ResultCatchHandler,
 }
 
+pub enum ResourceData {
+    Host {
+        id: u32,
+        local_name: String,
+    },
+    Guest {
+        resource_name: String,
+        prefix: Option<String>,
+    },
+}
+
 ///
 /// Map used for resource function bindgen within a given component
 ///
@@ -42,9 +53,8 @@ pub enum ErrHandling {
 /// the direct JS object being referenced, since in JS the object is its own handle.
 ///
 pub struct ResourceTable {
-    pub id: u32,
     pub imported: bool,
-    pub local_name: String,
+    pub data: ResourceData,
 }
 pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
@@ -66,6 +76,7 @@ pub struct FunctionBindgen<'a> {
     pub tracing_prefix: Option<&'a String>,
     pub encoding: StringEncoding,
     pub callee: &'a str,
+    pub resolve: &'a Resolve,
 }
 
 impl FunctionBindgen<'_> {
@@ -1117,52 +1128,93 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(ptr);
             }
 
-            Instruction::HandleLift { handle, .. } => {
+            Instruction::HandleLift { handle, name, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
-                let ResourceTable {
-                    id,
-                    imported,
-                    local_name,
-                } = &self.resource_map[ty];
+                let ResourceTable { imported, data } =
+                    &self.resource_map[&crate::dealias(self.resolve, *ty)];
+
                 let is_own = matches!(handle, Handle::Own(_));
                 let rsc = format!("rsc{}", self.tmp());
 
-                if !imported {
-                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
-                    uwrite!(
-                        self.src,
-                        "const {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
-                        Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: handleTable{id}.get({}).rep }});
-                        ",
-                        operands[0],
-                    );
-                    // when we share an own handle with JS, we need to remove the original handle
-                    // and add a finalizer to the JS handle created
-                    if is_own {
-                        uwriteln!(
-                            self.src,
-                            "handleTable{id}.delete({});
-                            finalizationRegistry{id}.register({rsc}, {}, {rsc});",
-                            operands[0],
-                            operands[0]
-                        );
-                    } else {
-                        // borrow handles are tracked to release after the call
-                        // these are handled by CallInterface
-                        // note that it will definitely be called because it is not possible
-                        // for core Wasm to return a borrow that would be lifted
-                        self.cur_resource_borrows.push(rsc.to_string());
+                match data {
+                    ResourceData::Host { id, local_name } => {
+                        if !imported {
+                            let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                            uwrite!(
+                                self.src,
+                                "const {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
+                                 Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: handleTable{id}.get({}).rep }});
+                                ",
+                                operands[0],
+                            );
+                            // when we share an own handle with JS, we need to remove the original handle
+                            // and add a finalizer to the JS handle created
+                            if is_own {
+                                uwriteln!(
+                                    self.src,
+                                    "handleTable{id}.delete({});
+                                     finalizationRegistry{id}.register({rsc}, {}, {rsc});",
+                                    operands[0],
+                                    operands[0]
+                                );
+                            } else {
+                                // borrow handles are tracked to release after the call
+                                // these are handled by CallInterface
+                                // note that it will definitely be called because it is not possible
+                                // for core Wasm to return a borrow that would be lifted
+                                self.cur_resource_borrows.push(rsc.to_string());
+                            }
+                        } else {
+                            // imported handles need to come out of the instance capture
+                            uwriteln!(
+                                self.src,
+                                "const {rsc} = handleTable{id}.get({}).rep;",
+                                operands[0]
+                            );
+                            // own lifting means we no longer have ownership and can release the handle
+                            if is_own {
+                                uwriteln!(self.src, "handleTable{id}.delete({});", operands[0]);
+                            }
+                        }
                     }
-                } else {
-                    // imported handles need to come out of the instance capture
-                    uwriteln!(
-                        self.src,
-                        "const {rsc} = handleTable{id}.get({}).rep;",
-                        operands[0]
-                    );
-                    // own lifting means we no longer have ownership and can release the handle
-                    if is_own {
-                        uwriteln!(self.src, "handleTable{id}.delete({});", operands[0]);
+
+                    ResourceData::Guest {
+                        resource_name,
+                        prefix,
+                    } => {
+                        let op = &operands[0];
+                        let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                        let prefix = prefix.as_deref().unwrap_or("");
+
+                        if !imported {
+                            uwriteln!(self.src, "const {rsc} = repTable.get({op}).rep;");
+
+                            if is_own {
+                                uwrite!(
+                                    self.src,
+                                    "repTable.delete({op});
+                                     delete {rsc}[{resource_symbol}];
+                                     finalizationRegistry_export${prefix}{resource_name}.unregister({rsc});
+                                    "
+                                );
+                            }
+                        } else {
+                            let class_name = name.to_upper_camel_case();
+
+                            uwrite!(
+                                self.src,
+                                "const {rsc} = new.target === import_{prefix}{class_name} ? this : Object.create(import_{prefix}{class_name}.prototype);
+                                 Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: {op} }});
+                                "
+                            );
+
+                            let resource_name = resource_name.to_lower_camel_case();
+
+                            uwriteln!(
+                                self.src,
+                                "finalizationRegistry_import${prefix}{resource_name}.register({rsc}, {op}, {rsc});",
+                            );
+                        }
                     }
                 }
                 results.push(rsc);
@@ -1171,55 +1223,95 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::HandleLower { handle, name, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
                 let is_own = matches!(handle, Handle::Own(_));
-                let ResourceTable {
-                    id,
-                    imported,
-                    local_name,
-                } = &self.resource_map[ty];
+                let ResourceTable { imported, data } =
+                    &self.resource_map[&crate::dealias(self.resolve, *ty)];
+
                 let class_name = name.to_upper_camel_case();
                 let handle = format!("handle{}", self.tmp());
-                if !imported {
-                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
-                    uwriteln!(
-                        self.src,
-                        "let {handle} = {}[{resource_symbol}];
-                        if ({handle} === null) {{
-                            throw new Error('\"{class_name}\" resource handle lifetime expired / transferred.');
-                        }}
-                        if ({handle} === undefined) {{
-                            throw new Error('Not a valid \"{class_name}\" resource.');
-                        }}
-                        ",
-                        operands[0],
-                    );
+                let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
 
-                    // lowered own handles have their finalizers deregistered
-                    // since the proxy lifecycle has now ended for this own handle
-                    if is_own {
-                        let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
-                        uwriteln!(
-                            self.src,
-                            "
-                            finalizationRegistry{id}.unregister({});
-                            Object.defineProperty({}, {resource_symbol}, {{ value: null }});",
-                            operands[0],
-                            operands[0],
-                        );
+                match data {
+                    ResourceData::Host { id, local_name } => {
+                        if !imported {
+                            uwriteln!(
+                                self.src,
+                                "let {handle} = {}[{resource_symbol}];
+                                 if ({handle} === null) {{
+                                     throw new Error('\"{class_name}\" resource handle lifetime expired / transferred.');
+                                 }}
+                                 if ({handle} === undefined) {{
+                                     throw new Error('Not a valid \"{class_name}\" resource.');
+                                 }}
+                                 ",
+                                operands[0],
+                            );
+
+                            // lowered own handles have their finalizers deregistered
+                            // since the proxy lifecycle has now ended for this own handle
+                            if is_own {
+                                uwriteln!(
+                                    self.src,
+                                    "
+                                     finalizationRegistry{id}.unregister({});
+                                     Object.defineProperty({}, {resource_symbol}, {{ value: null }});",
+                                    operands[0],
+                                    operands[0],
+                                );
+                            }
+                        } else {
+                            // imported resources are always given a unique handle
+                            // their assigned rep is deduped across usage though
+                            uwriteln!(
+                                self.src,
+                                "if (!({} instanceof {local_name})) {{
+                                     throw new Error('Not a valid \"{class_name}\" resource.');
+                                 }}
+                                 const {handle} = handleCnt{id}++;
+                                 handleTable{id}.set({handle}, {{ rep: {}, own: {} }});",
+                                operands[0],
+                                operands[0],
+                                is_own,
+                            );
+                        }
                     }
-                } else {
-                    // imported resources are always given a unique handle
-                    // their assigned rep is deduped across usage though
-                    uwriteln!(
-                        self.src,
-                        "if (!({} instanceof {local_name})) {{
-                            throw new Error('Not a valid \"{class_name}\" resource.');
-                        }}
-                        const {handle} = handleCnt{id}++;
-                        handleTable{id}.set({handle}, {{ rep: {}, own: {} }});",
-                        operands[0],
-                        operands[0],
-                        is_own,
-                    );
+
+                    ResourceData::Guest {
+                        resource_name,
+                        prefix,
+                    } => {
+                        let op = &operands[0];
+                        let resource_name = resource_name.to_lower_camel_case();
+                        let prefix = prefix.as_deref().unwrap_or("");
+
+                        if !imported {
+                            let snake = name.to_snake_case();
+                            let local_rep = format!("localRep{}", self.tmp());
+
+                            uwrite!(
+                                self.src,
+                                "if (!({op} instanceof {class_name})) {{
+                                     throw new Error('Not a valid \"{class_name}\" resource.');
+                                 }}
+                                 let {handle} = {op}[{resource_symbol}];
+                                 if ({handle} === undefined) {{
+                                     const {local_rep} = repCnt++;
+                                     repTable.set({local_rep}, {{ rep: {op}, own: {is_own} }});
+                                     {handle} = $resource_{prefix}new${snake}({local_rep});
+                                     {op}[{resource_symbol}] = {handle};
+                                     finalizationRegistry_export${prefix}{resource_name}.register({op}, {handle}, {op});
+                                 }}
+                                 "
+                            );
+                        } else {
+                            let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                            uwrite!(
+                                self.src,
+                                "const {handle} = {op}[{resource_symbol}];
+                                 finalizationRegistry_import${prefix}{resource_name}.unregister({op});
+                                "
+                            );
+                        }
+                    }
                 }
                 results.push(handle);
             }
