@@ -1,4 +1,5 @@
 import * as assert from 'node:assert';
+// @ts-ignore
 import { commands, incomingHandler } from '../output/wasi-http-proxy/wasi-http-proxy.js';
 
 const defaultHeaders = [

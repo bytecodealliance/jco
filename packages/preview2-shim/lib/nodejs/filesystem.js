@@ -84,8 +84,7 @@ function lookupType (obj) {
  * @typedef {
  *   { stream: number } |
  *   { hostPreopen: string } |
- *   { dir: { fullPath: string, fd: number } } |
- *   { file: { fullPath: string, fd: number } }
+ *   { fullPath: string, fd: number }
  * } Descriptor
  */
 export class FileSystem {
@@ -95,8 +94,10 @@ export class FileSystem {
     return descriptor;
   }
 
-  // Note: Strictly speaking, this should implement per-segment semantics of openAt
-  //       virtualization, but for now we treat this as an unimplemented security property
+  // Note: This should implement per-segment semantics of openAt, but we cannot currently
+  //       due to the lack of support for openat() in Node.js.
+  //       Tracking issue: https://github.com/libuv/libuv/issues/4167
+
   // TODO: support followSymlinks
   getFullPath (fd, subpath, _followSymlinks) {
     if (subpath.indexOf('\\') !== -1)
@@ -120,8 +121,7 @@ export class FileSystem {
     const descriptor = this.getDescriptor(fd);
     if (descriptor.hostPreopen)
       return descriptor.hostPreopen + (descriptor.hostPreopen.endsWith('/') ? '' : '/') + subpath;
-    if (!descriptor.dir) throw 'not-directory';
-    return descriptor.dir.fullPath + '/' + subpath;
+    return descriptor.fullPath + '/' + subpath;
   }
 
   /**
@@ -159,20 +159,18 @@ export class FileSystem {
         const descriptor = fs.getDescriptor(fd);
         if (descriptor.stream)
           return descriptor.stream;
-        if (descriptor.hostPreopen || descriptor.dir)
+        if (descriptor.hostPreopen)
           throw 'is-directory';
-        if (descriptor.file)
-          return io.createStream(new ReadableFileStream(descriptor.file.fd, offset));
+        return io.createStream(new ReadableFileStream(descriptor.fd, offset));
       },
     
       writeViaStream(fd, offset) {
         const descriptor = fs.getDescriptor(fd);
         if (descriptor.stream)
           return descriptor.stream;
-        if (descriptor.hostPreopen || descriptor.dir)
+        if (descriptor.hostPreopen)
           throw 'is-directory';
-        if (descriptor.file)
-          return io.createStream(new WriteableFileStream(descriptor.file.fd, offset));
+        return io.createStream(new WriteableFileStream(descriptor.fd, offset));
       },
     
       appendViaStream(fd) {
@@ -195,9 +193,8 @@ export class FileSystem {
         const descriptor = fs.getDescriptor(fd);
         if (descriptor.stream) return 'fifo';
         if (descriptor.hostPreopen) return 'directory';
-        if (descriptor.dir) return 'directory';
-        if (descriptor.file) return 'regular-file';
-        return 'unknown';
+        const stats = fstatSync(descriptor.fd);
+        return lookupType(stats);
       },
     
       setFlags(fd, flags) {
@@ -214,9 +211,9 @@ export class FileSystem {
 
       read(fd, length, offset) {
         const descriptor = fs.getDescriptor(fd);
-        if (!descriptor.file) throw 'bad-descriptor';
+        if (!descriptor.fullPath) throw 'bad-descriptor';
         const buf = new Uint8Array(length);
-        const bytesRead = readSync(descriptor.file.fd, buf, offset, length, 0);
+        const bytesRead = readSync(descriptor.fd, buf, offset, length, 0);
         const out = new Uint8Array(buf.buffer, 0, bytesRead);
         const done = bytesRead === 0;
         return [out, done];
@@ -224,16 +221,15 @@ export class FileSystem {
 
       write(fd, buffer, offset) {
         const descriptor = fs.getDescriptor(fd);
-        if (!descriptor.file) throw 'bad-descriptor';
-        return writeSync(fd, buffer, offset);
+        if (!descriptor.fullPath) throw 'bad-descriptor';
+        return writeSync(descriptor.fd, buffer, offset);
       },
 
       readDirectory(fd) {
         const descriptor = fs.getDescriptor(fd);
-        if (!descriptor.dir) throw 'bad-descriptor';
-        const { fullPath } = descriptor.dir;
+        if (!descriptor.fullPath) throw 'bad-descriptor';
         try {
-          const dir = opendirSync(isWindows ? fullPath.slice(1) : fullPath);
+          const dir = opendirSync(isWindows ? descriptor.fullPath.slice(1) : descriptor.fullPath);
           return io.createStream(new DirStream(dir));
         }
         catch (e) {
@@ -253,10 +249,9 @@ export class FileSystem {
       stat(fd) {
         const descriptor = fs.getDescriptor(fd);
         if (descriptor.stream || descriptor.hostPreopen) throw 'invalid';
-        const hostFd = descriptor.dir ? descriptor.dir.fd : descriptor.file.fd;
         let stats;
         try {
-          stats = fstatSync(hostFd, { bigint: true });
+          stats = fstatSync(descriptor.fd, { bigint: true });
         }
         catch (e) {
           convertFsError(e);
@@ -276,7 +271,7 @@ export class FileSystem {
         const fullPath = fs.getFullPath(fd, path, false);
         let stats;
         try {
-          stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
+          stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(isWindows ? fullPath.slice(1) : fullPath, { bigint: true });
         }
         catch (e) {
           convertFsError(e);
@@ -333,7 +328,7 @@ export class FileSystem {
 
         try {
           const fd = openSync(isWindows ? fullPath.slice(1) : fullPath, fsOpenFlags, fsMode);
-          fs.descriptors[childFd] = openFlags.directory ? { dir: { fullPath, fd } } : { file: { fullPath, fd } };
+          fs.descriptors[childFd] = { fullPath, fd };
         }
         catch (e) {
           throw convertFsError(e);
@@ -391,10 +386,8 @@ export class FileSystem {
 
       dropDescriptor(fd) {
         const descriptor = fs.getDescriptor(fd);
-        if (descriptor.file)
-          closeSync(descriptor.file.fd);
-        if (descriptor.dir)
-          closeSync(descriptor.dir.fd);
+        if (descriptor.fd)
+          closeSync(descriptor.fd);
         delete fs.descriptors[fd];
       },
 
