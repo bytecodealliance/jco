@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
 defaults:
   run:
     shell: bash
@@ -19,9 +20,19 @@ jobs:
   test:
     name: Test
     strategy:
-      fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        name: [
+            linux,
+            windows,
+            macos
+        ]
+        include:
+          - name: linux
+            os: ubuntu-latest
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2

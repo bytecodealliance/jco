@@ -54,10 +54,6 @@ export async function run (componentPath, args) {
 
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
-      import { _setEnv, _setArgs, _setCwd } from '@bytecodealliance/preview2-shim/cli';
-      _setArgs(process.argv.slice(1));
-      _setEnv(process.env);
-      _setCwd(process.cwd());
       function logInvalidCommand () {
         console.error('Not a valid command component to execute, make sure it was built to a command adapter and with the same version.');
       }

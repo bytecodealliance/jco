@@ -5,6 +5,7 @@ import {
   dropIncomingResponse,
   dropOutgoingRequest,
   fieldsEntries,
+  finishOutgoingStream,
   futureIncomingResponseGet,
   incomingResponseConsume,
   incomingResponseHeaders,
@@ -15,12 +16,12 @@ import {
 } from 'wasi:http/types';
 import { dropPollable } from 'wasi:poll/poll';
 import {
-  checkWrite,
   dropInputStream,
+  dropOutputStream,
   flush,
-  read as readStream,
+  read,
   subscribeToInputStream,
-  write as writeStream,
+  write,
 } from 'wasi:io/streams';
 
 class GenericError extends Error {
@@ -58,37 +59,15 @@ const sendRequest = (
       );
 
       if (body) {
-        const body = outgoingRequestWrite(request);
-        const outputStreamPollable = subscribeToInputStream(body);
-        let buf = new TextEncoder().encode(JSON.stringify({ key: 'value' }));
-  
-        while (buf.byteLength > 0) {
-          // pollOneoff(new Uint32Array([outputStreamPollable]));
-  
-          const permit = Number(checkWrite(body));
-
-          const len = Math.min(buf.byteLength, permit);
-          const chunk = buf.slice(0, len);
-          if (len < buf.byteLength) {
-            buf = buf.slice(len + 1, buf.byteLength);
-          } else {
-            buf = new Uint8Array();
-          }
-          console.warn("[guest] buffer length", buf.length);
-  
-          writeStream(body, chunk);
-        }
-  
-        flush(body);
-        // pollOneoff(new Uint32Array([outputStreamPollable]));
-        checkWrite(body);
-    
-        dropPollable(outputStreamPollable);  
+        const bodyStream = outgoingRequestWrite(request);
+        write(bodyStream, new TextEncoder().encode(body));
+        flush(bodyStream);
+        finishOutgoingStream(bodyStream);
+        dropOutputStream(bodyStream);
       }
-      
+
       const futureResponse = handle(request, undefined);
       incomingResponse = futureIncomingResponseGet(futureResponse).val;
-
       dropOutgoingRequest(request);
       dropFutureIncomingResponse(futureResponse);
     }
@@ -96,7 +75,9 @@ const sendRequest = (
     const status = incomingResponseStatus(incomingResponse);
 
     const headersHandle = incomingResponseHeaders(incomingResponse);
+
     const responseHeaders = fieldsEntries(headersHandle);
+
     const decoder = new TextDecoder();
     const headers = responseHeaders.map(([k, v]) => [k, decoder.decode(v)]);
     dropFields(headersHandle);
@@ -104,7 +85,7 @@ const sendRequest = (
     const bodyStream = incomingResponseConsume(incomingResponse);
     const inputStreamPollable = subscribeToInputStream(bodyStream);
 
-    const [buf, _] = readStream(bodyStream, 50n);
+    const [buf, _] = read(bodyStream, 50n);
     const responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
 
     dropPollable(inputStreamPollable);

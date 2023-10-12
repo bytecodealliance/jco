@@ -14,7 +14,7 @@ export async function runtimeTest (fixtures) {
         try {
           await tsGenerationPromise();
         } catch {}
-        const { stderr } = await exec(process.argv[0], `test/output/${runtimeName}.js`);
+        const { stderr } = await exec(`test/output/${runtimeName}.js`);
         strictEqual(stderr, '');
       });
     }
