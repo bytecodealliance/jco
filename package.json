@@ -54,7 +54,7 @@
     "build": "cargo xtask build",
     "build:types:preview2-shim": "cargo xtask build-shims",
     "lint": "eslint -c eslintrc.cjs lib/**/*.js packages/*/lib/**/*.js",
-    "test": "cp lib/* node_modules/@bytecodealliance/jco/lib/ ; mocha -u tdd test/test.js --timeout 120000"
+    "test": "mocha -u tdd test/test.js --timeout 120000"
   },
   "files": [
     "lib",
