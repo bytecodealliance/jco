@@ -403,7 +403,7 @@ export class FileSystem {
       metadataHash(fd) {
         const descriptor = fs.getDescriptor(fd);
         if (descriptor.stream)
-          return { upper: 0n, lower: BigIntdescriptor.stream}
+          return { upper: 0n, lower: descriptor.stream}
         if (descriptor.hostPreopen)
           return { upper: 0n, lower: BigInt(fd) };
         try {
