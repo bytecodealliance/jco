@@ -8,12 +8,12 @@ const isWindows = platform === 'win32';
 class ReadableFileStream {
   constructor (hostFd, position) {
     this.hostFd = hostFd;
-    this.position = position;
+    this.position = Number(position);
   }
   read (len) {
     const buf = new Uint8Array(Number(len));
-    const bytesRead = readSync(this.hostFd, buf, this.position ? { position: this.position } : undefined);
-    this.position = null;
+    const bytesRead = readSync(this.hostFd, buf, 0, buf.byteLength, this.position);
+    this.position += bytesRead;
     if (bytesRead < buf.byteLength)
       return [new Uint8Array(buf.buffer, 0, bytesRead), bytesRead === 0 ? 'ended' : 'open'];
     return [buf, 'ended'];
@@ -23,10 +23,11 @@ class ReadableFileStream {
 class WriteableFileStream {
   constructor (hostFd, position) {
     this.hostFd = hostFd;
-    this.position = position;
+    this.position = Number(position);
   }
   write (contents) {
-    const bytesWritten = writeSync(this.hostFd, contents, null, null, this.position || undefined);
+    const bytesWritten = writeSync(this.hostFd, contents, null, null, this.position);
+    this.position += bytesWritten;
     if (bytesWritten !== contents.byteLength)
       throw new Error('TODO: write buffering + flush');
   }
@@ -400,15 +401,29 @@ export class FileSystem {
       },
 
       metadataHash(fd) {
-        const stats = fs.types.stat(fd);
-        const upper = BigInt(stats.dataModificationTimestamp.seconds);
-        return { upper, lower: BigInt(0) };
+        const descriptor = fs.getDescriptor(fd);
+        if (descriptor.stream)
+          return { upper: 0n, lower: BigIntdescriptor.stream}
+        if (descriptor.hostPreopen)
+          return { upper: 0n, lower: BigInt(fd) };
+        try {
+          const stats = fstatSync(descriptor.fd, { bigint: true });
+          return { upper: stats.mtimeNs, lower: stats.ino };
+        }
+        catch (e) {
+          convertFsError(e);
+        }
       },
 
       metadataHashAt(fd, pathFlags, path) {
-        const stats = fs.types.statAt(fd, pathFlags, path);
-        const upper = BigInt(stats.dataModificationTimestamp.seconds);
-        return { upper, lower: BigInt(0) };
+        const fullPath = fs.getFullPath(fd, path, false);
+        try {
+          const stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(isWindows ? fullPath.slice(1) : fullPath, { bigint: true });
+          return { upper: stats.mtimeNs, lower: stats.ino };
+        }
+        catch (e) {
+          convertFsError(e);
+        }
       }
     };
   }
