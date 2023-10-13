@@ -1,5 +1,7 @@
-cd lib
-rm wasi_snapshot_preview1.command.wasm
-rm wasi_snapshot_preview1.reactor.wasm
-wget https://github.com/bytecodealliance/wasmtime/releases/download/dev/wasi_snapshot_preview1.command.wasm
-wget https://github.com/bytecodealliance/wasmtime/releases/download/dev/wasi_snapshot_preview1.reactor.wasm
+git submodule foreach --recursive git update --remote
+cd submodules/wasmtime
+
+./ci/build-wasi-preview1-component-adapter.sh
+
+cp target/wasm32-unknown-unknown/release/wasi_snapshot_preview1.command.wasm ../../lib/wasi_snapshot_preview1.command.wasm
+cp target/wasm32-unknown-unknown/release/wasi_snapshot_preview1.reactor.wasm ../../lib/wasi_snapshot_preview1.reactor.wasm
