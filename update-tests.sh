@@ -1,7 +1,8 @@
 #!/bin/bash
 set -ex
 
-git submodule foreach --recursive git update --remote
+git submodule foreach git pull origin main
+git submodule update --init --recursive
 
 cd submodules/wit-bindgen
 cargo test -p wit-bindgen-cli --no-default-features -F rust -F c
