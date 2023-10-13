@@ -44,6 +44,7 @@ pub enum ErrHandling {
 pub struct ResourceTable {
     pub id: u32,
     pub imported: bool,
+    pub local_name: String,
 }
 pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
@@ -1118,7 +1119,11 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::HandleLift { handle, name, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
-                let ResourceTable { id, imported } = self.resource_map[ty];
+                let ResourceTable {
+                    id,
+                    imported,
+                    local_name,
+                } = &self.resource_map[ty];
                 let is_own = matches!(handle, Handle::Own(_));
                 let rsc = format!("rsc{}", self.tmp());
 
@@ -1128,7 +1133,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
                     uwrite!(
                         self.src,
-                        "const {rsc} = new.target === {class_name} ? this : Object.create({class_name}.prototype);
+                        "const {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
                         Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: handleTable{id}.get({}).rep }});
                         ",
                         operands[0],
@@ -1168,7 +1173,11 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::HandleLower { handle, name, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
                 let is_own = matches!(handle, Handle::Own(_));
-                let ResourceTable { id, imported } = self.resource_map[ty];
+                let ResourceTable {
+                    id,
+                    imported,
+                    local_name,
+                } = &self.resource_map[ty];
                 let class_name = name.to_upper_camel_case();
                 let handle = format!("handle{}", self.tmp());
                 if !imported {
@@ -1204,7 +1213,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     // their assigned rep is deduped across usage though
                     uwriteln!(
                         self.src,
-                        "if (!({} instanceof {class_name})) {{
+                        "if (!({} instanceof {local_name})) {{
                             throw new Error('Not a valid \"{class_name}\" resource.');
                         }}
                         const {handle} = handleCnt{id}++;

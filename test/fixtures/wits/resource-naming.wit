@@ -1,0 +1,17 @@
+package test:resource-naming
+
+interface resource-import-and-export {
+    resource thing {
+        constructor(v: u32)
+
+        foo: func() -> u32
+        bar: func(v: u32)
+
+        baz: static func(a: thing, b: thing) -> thing
+    }
+}
+
+world resource-naming {
+  import resource-import-and-export
+  export resource-import-and-export
+}
