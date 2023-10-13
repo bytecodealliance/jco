@@ -1,4 +1,5 @@
 #!/bin/bash
+set -ex
 
 git submodule foreach --recursive git update --remote
 cd submodules/wasmtime
