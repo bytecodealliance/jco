@@ -1,3 +1,12 @@
 [submodule "submodules/wasmtime"]
 	path = submodules/wasmtime
 	url = https://github.com/bytecodealliance/wasmtime
+[submodule "submodules/WASI-Virt"]
+	path = submodules/WASI-Virt
+	url = https://github.com/bytecodealliance/WASI-Virt
+[submodule "submodules/wit-bindgen"]
+	path = submodules/wit-bindgen
+	url = https://github.com/bytecodealliance/wit-bindgen
+[submodule "submodules/wasm-tools"]
+	path = submodules/wasm-tools
+	url = https://github.com/bytecodealliance/wasm-tools
