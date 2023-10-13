@@ -31,10 +31,13 @@ done
 cp tests/runtime/flavorful/world.wit ../../test/fixtures/wit/flavorful.wit
 cd ../..
 
-./src/jco.js componentize test/fixtures/component-gen/import-fn.js --wit test/fixtures/component-gen/import-fn.wit -o test/fixtures/components/import-fn.component.wasm
+# convert the js test fixtures into a wasm component
+./src/jco.js componentize \
+  test/fixtures/component-gen/import-fn.js \
+  --wit test/fixtures/component-gen/import-fn.wit \
+  -o test/fixtures/components/import-fn.component.wasm
 
 ## wasi virt to generate composition case
 cd submodules/wasi-virt
 cargo test
 cp tests/generated/env-allow.composed.wasm ../../test/fixtures/
-cd ../..

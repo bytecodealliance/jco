@@ -14,6 +14,7 @@ cargo build -p wasi-preview1-component-adapter \
     --features reactor
 
 # edit the component adapter's metadata
+# TODO(yosh): point this at a local version of `wasm-tools`
 wasm-tools metadata add \
     --name "wasi_preview1_component_adapter.reactor.adapter:main" \
     target/wasm32-unknown-unknown/release/wasi_snapshot_preview1.wasm \
@@ -28,6 +29,7 @@ cargo build \
     --features command
 
 # edit the component adapter's metadata
+# TODO(yosh): point this at a local version of `wasm-tools`
 wasm-tools metadata add \
     --name "wasi_preview1_component_adapter.command.adapter:main" \
     target/wasm32-unknown-unknown/release/wasi_snapshot_preview1.wasm \
