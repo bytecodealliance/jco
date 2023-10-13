@@ -811,7 +811,11 @@ impl<'a> Instantiator<'a, '_> {
                 let ty = &self.resolve.types[*t1];
                 let resource = ty.name.as_ref().unwrap();
                 let (local_name, _) = self.gen.local_names.get_or_create(
-                    &format!("resource:{resource}"),
+                    &if imported {
+                        format!("import_resource:{resource}")
+                    } else {
+                        format!("resource:{resource}")
+                    },
                     &resource.to_upper_camel_case(),
                 );
 
@@ -1184,7 +1188,7 @@ impl<'a> Instantiator<'a, '_> {
                                 let ty = &self.resolve.types[ty];
                                 let resource = ty.name.as_ref().unwrap();
                                 self.gen.local_names.get_or_create(
-                                    &format!("resource:{export_name}:{resource}"),
+                                    &format!("resource:{resource}"),
                                     &resource.to_upper_camel_case(),
                                 )
                             } else {
