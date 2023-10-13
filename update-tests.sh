@@ -1,3 +1,5 @@
+#!/bin/bash
+
 git submodule foreach --recursive git update --remote
 
 cd submodules/wit-bindgen
