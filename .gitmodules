@@ -1,0 +1,3 @@
+[submodule "submodules/wasmtime"]
+	path = submodules/wasmtime
+	url = https://github.com/bytecodealliance/wasmtime
