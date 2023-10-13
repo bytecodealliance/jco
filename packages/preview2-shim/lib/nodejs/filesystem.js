@@ -217,7 +217,7 @@ export class FileSystem {
         const descriptor = fs.getDescriptor(fd);
         if (!descriptor.fullPath) throw 'bad-descriptor';
         const buf = new Uint8Array(length);
-        const bytesRead = readSync(descriptor.fd, buf, offset, length, 0);
+        const bytesRead = readSync(descriptor.fd, buf, Number(offset), length, 0);
         const out = new Uint8Array(buf.buffer, 0, bytesRead);
         return [out, bytesRead === 0 ? 'ended' : 'open'];
       },
