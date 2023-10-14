@@ -11,7 +11,7 @@ import c from 'chalk-template';
 
 export async function run (componentPath, args) {
   const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
-  const outDir = getTmpDir();
+  const outDir = await getTmpDir();
   let cp;
   try {
     try {

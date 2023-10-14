@@ -14,11 +14,16 @@ export async function preview2Test () {
      *
      * The new directory is created using `fsPromises.mkdtemp()`.
      */
-    function getTmpDir () {
-      return mkdtemp(normalize(tmpdir() + sep));
+    function async getTmpDir () {
+      return await mkdtemp(normalize(tmpdir() + sep));
     }
 
-    const tmpDir = getTmpDir();
+    var tmpDir;
+    var outFile;
+    suiteSetup(async function() {
+      tmpDir = await getTmpDir();
+      outFile = resolve(tmpDir, 'out-component-file');
+    });
     suiteTeardown(async function () {
       try {
         await rm(tmpDir, { recursive: true });
@@ -26,7 +31,6 @@ export async function preview2Test () {
       catch {}
     });
 
-    const outFile = resolve(tmpDir, 'out-component-file');
     teardown(async function () {
       try {
         await rm(outFile);

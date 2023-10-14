@@ -61,8 +61,8 @@ export function table (data, align = []) {
  *
  * The new directory is created using `fsPromises.mkdtemp()`.
  */
-export function getTmpDir () {
-  return mkdtemp(normalize(tmpdir() + sep));
+export async function getTmpDir () {
+  return await mkdtemp(normalize(tmpdir() + sep));
 }
 
 async function readFileCli (file, encoding) {
@@ -76,7 +76,7 @@ async function readFileCli (file, encoding) {
 export { readFileCli as readFile }
 
 export async function spawnIOTmp (cmd, input, args) {
-  const tmpDir = getTmpDir();
+  const tmpDir = await getTmpDir();
   try {
     const inFile = resolve(tmpDir, 'in.wasm');
     let outFile = resolve(tmpDir, 'out.wasm');
