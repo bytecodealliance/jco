@@ -1,5 +1,5 @@
 import { strictEqual } from 'node:assert';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
+import { readFile, rm, writeFile, mkdtemp } from 'node:fs/promises';
 import { createServer} from 'node:http';
 import { tmpdir } from 'node:os';
 import { normalize, resolve, sep } from 'node:path';
@@ -14,7 +14,7 @@ export async function preview2Test () {
      *
      * The new directory is created using `fsPromises.mkdtemp()`.
      */
-    function async getTmpDir () {
+    async function getTmpDir () {
       return await mkdtemp(normalize(tmpdir() + sep));
     }
 

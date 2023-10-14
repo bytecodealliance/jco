@@ -12,7 +12,7 @@ export async function cliTest (fixtures) {
      *
      * The new directory is created using `fsPromises.mkdtemp()`.
      */
-    function async getTmpDir () {
+    async function getTmpDir () {
       return await mkdtemp(normalize(tmpdir() + sep));
     }
 

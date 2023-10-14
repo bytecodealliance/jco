@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { normalize, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { readFile, writeFile, rm, mkdtemp } from 'node:fs/promises';
