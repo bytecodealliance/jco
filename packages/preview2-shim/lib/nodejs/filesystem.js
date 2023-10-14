@@ -16,7 +16,7 @@ class ReadableFileStream {
     this.position += bytesRead;
     if (bytesRead < buf.byteLength)
       return [new Uint8Array(buf.buffer, 0, bytesRead), bytesRead === 0 ? 'ended' : 'open'];
-    return [buf, 'ended'];
+    return [buf, 'open'];
   }
 }
 
@@ -26,10 +26,13 @@ class WriteableFileStream {
     this.position = Number(position);
   }
   write (contents) {
-    const bytesWritten = writeSync(this.hostFd, contents, null, null, this.position);
-    this.position += bytesWritten;
-    if (bytesWritten !== contents.byteLength)
-      throw new Error('TODO: write buffering + flush');
+    let totalWritten = 0;
+    while (totalWritten !== contents.byteLength) {
+      const bytesWritten = writeSync(this.hostFd, contents, null, null, this.position);
+      totalWritten += bytesWritten;
+      contents = new Uint8Array(contents.buffer, bytesWritten);
+    }
+    this.position += contents.byteLength;
   }
 }
 
@@ -214,16 +217,15 @@ export class FileSystem {
         const descriptor = fs.getDescriptor(fd);
         if (!descriptor.fullPath) throw 'bad-descriptor';
         const buf = new Uint8Array(length);
-        const bytesRead = readSync(descriptor.fd, buf, offset, length, 0);
+        const bytesRead = readSync(descriptor.fd, buf, Number(offset), length, 0);
         const out = new Uint8Array(buf.buffer, 0, bytesRead);
-        const done = bytesRead === 0;
-        return [out, done];
+        return [out, bytesRead === 0 ? 'ended' : 'open'];
       },
 
       write(fd, buffer, offset) {
         const descriptor = fs.getDescriptor(fd);
         if (!descriptor.fullPath) throw 'bad-descriptor';
-        return writeSync(descriptor.fd, buffer, offset);
+        return BigInt(writeSync(descriptor.fd, buffer, Number(offset), buffer.byteLength - offset, 0));
       },
 
       readDirectory(fd) {

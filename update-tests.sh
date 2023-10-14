@@ -1,7 +1,15 @@
-git clone https://github.com/bytecodealliance/wit-bindgen
-cd wit-bindgen
+#!/bin/bash
+set -ex
+
+# update dependencies
+git submodule foreach git pull origin main
+git submodule update --init --recursive
+cd submodules/wit-bindgen
+
+# build tests
 cargo test -p wit-bindgen-cli --no-default-features -F rust -F c
 
+# copy over the Rust-based wit-bindgen tests to our repo
 for t in target/runtime-tests/*/rust.wasm
 do
   name="$(basename $(dirname $t))"
@@ -9,28 +17,27 @@ do
   cp $t ../test/fixtures/components/${name}.component.wasm
 done
 
-# c versions override rust versions
+# copy over the C-based wit-bindgen tests to our repo.
+# the C versions always override the Rust versions
 for t in target/runtime-tests/*/c-*/*.component.wasm
 do
   name="$(basename $(dirname $t))"
   name=${name:2}
   echo "cp $t ../test/fixtures/components/${name}.component.wasm"
-  cp $t ../test/fixtures/components/${name}.component.wasm
+  cp $t ../../test/fixtures/components/${name}.component.wasm
 done
 
 # copy flavorful wit case
-cp tests/runtime/flavorful/world.wit ../test/fixtures/wit/flavorful.wit
+cp tests/runtime/flavorful/world.wit ../../test/fixtures/wit/flavorful.wit
+cd ../..
 
-cd ..
-
-./src/jco.js componentize test/fixtures/component-gen/import-fn.js --wit test/fixtures/component-gen/import-fn.wit -o test/fixtures/components/import-fn.component.wasm
-
-rm -rf wit-bindgen
+# convert the js test fixtures into a wasm component
+./src/jco.js componentize \
+  test/fixtures/component-gen/import-fn.js \
+  --wit test/fixtures/component-gen/import-fn.wit \
+  -o test/fixtures/components/import-fn.component.wasm
 
 ## wasi virt to generate composition case
-git clone https://github.com/bytecodealliance/wasi-virt
-cd wasi-virt
+cd submodules/wasi-virt
 cargo test
-cp tests/generated/env-allow.composed.wasm ../test/fixtures/
-cd ..
-rm -rf wasi-virt
+cp tests/generated/env-allow.composed.wasm ../../test/fixtures/

@@ -5,13 +5,12 @@ authors = [
   "Guy Bedford <gbedford@fastly.com>",
 ]
 description = "JS component bindgen for transpiling WebAssembly components into JavaScript"
-version.workspace = true
 license = "Apache-2.0 WITH LLVM-exception"
 categories = ["wasm"]
 keywords = ["webassembly", "wasm"]
 homepage = "https://github.com/bytecodealliance/jco/tree/main/crates/js-component-bindgen"
-
-edition.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
 
 [lib]
 crate-type = ["lib"]
