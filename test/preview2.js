@@ -1,22 +1,38 @@
 import { strictEqual } from 'node:assert';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
 import { createServer} from 'node:http';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'url';
 import { componentNew, preview1AdapterCommandPath } from '../src/api.js';
 import { exec, jcoPath } from './helpers.js';
 
 export async function preview2Test () {
   suite('Preview 2', () => {
-    const outFile = resolve(tmpdir(), 'out-component-file');
+    /**
+    * Securely creates a temporary directory and returns its path.
+    *
+    * The new directory is created using `fsPromises.mkdtemp()`.
+    */
+    function getTmpDir () {
+      return mkdtemp(normalize(tmpdir() + sep));
+    }
 
-    async function cleanup() {
+    const tmpDir = getTmpDir();
+    suiteTeardown(async function () {
+      try {
+        await rm(tmpDir, { recursive: true });
+      }
+      catch {}
+    });
+
+    const outFile = resolve(tmpDir, 'out-component-file');
+    teardown(async function () {
       try {
         await rm(outFile);
       }
       catch {}
-    }
+    })
 
     test('hello_stdout', async () => {
       const component = await readFile(`test/fixtures/modules/hello_stdout.wasm`);
@@ -71,7 +87,6 @@ export async function preview2Test () {
       }
       finally {
         server.close();
-        await cleanup();
       }
     });
   });

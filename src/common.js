@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
-import { resolve } from 'node:path';
+import { normalize, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readFile, writeFile, unlink } from 'node:fs/promises';
+import { readFile, writeFile, rm, mkdtemp } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { argv0 } from 'node:process';
 import c from 'chalk-template';
@@ -56,8 +56,13 @@ export function table (data, align = []) {
   return outTable;
 }
 
-export function getTmpFile (source, ext) {
-  return resolve(tmpdir(), crypto.createHash('sha256').update(source).update(Math.random().toString()).digest('hex') + ext);
+/**
+ * Securely creates a temporary directory and returns its path.
+ *
+ * The new directory is created using `fsPromises.mkdtemp()`.
+ */
+export function getTmpDir () {
+  return mkdtemp(normalize(tmpdir() + sep));
 }
 
 async function readFileCli (file, encoding) {
@@ -71,34 +76,33 @@ async function readFileCli (file, encoding) {
 export { readFileCli as readFile }
 
 export async function spawnIOTmp (cmd, input, args) {
-  const inFile = getTmpFile(input, '.wasm');
-  let outFile = getTmpFile(inFile, '.wasm');
-
-  await writeFile(inFile, input);
-
-  const cp = spawn(argv0, [cmd, inFile, ...args, outFile], { stdio: 'pipe' });
-
-  let stderr = '';
-  const p = new Promise((resolve, reject) => {
-    cp.stderr.on('data', data => stderr += data.toString());
-    cp.on('error', e => {
-      reject(e);
-    });
-    cp.on('exit', code => {
-      if (code === 0)
-        resolve();
-      else
-        reject(stderr);
-    });
-  });
-
+  const tmpDir = getTmpDir();
   try {
+    const inFile = resolve(tmpDir, 'in.wasm');
+    let outFile = resolve(tmpDir, 'out.wasm');
+
+    await writeFile(inFile, input);
+
+    const cp = spawn(argv0, [cmd, inFile, ...args, outFile], { stdio: 'pipe' });
+
+    let stderr = '';
+    const p = new Promise((resolve, reject) => {
+      cp.stderr.on('data', data => stderr += data.toString());
+      cp.on('error', e => {
+        reject(e);
+      });
+      cp.on('exit', code => {
+        if (code === 0)
+          resolve();
+        else
+          reject(stderr);
+      });
+    });
+
     await p;
     var output = await readFile(outFile);
-    await Promise.all([unlink(inFile), unlink(outFile)]); 
     return output;
-  } catch (e) {
-    await unlink(inFile);
-    throw e;
+  } finally {
+    await rm(tmpDir, { recursive: true });
   }
 }
