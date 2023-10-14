@@ -8,10 +8,10 @@ import { resolve, normalize, sep } from 'node:path';
 export async function cliTest (fixtures) {
   suite('CLI', () => {
     /**
-    * Securely creates a temporary directory and returns its path.
-    *
-    * The new directory is created using `fsPromises.mkdtemp()`.
-    */
+     * Securely creates a temporary directory and returns its path.
+     *
+     * The new directory is created using `fsPromises.mkdtemp()`.
+     */
     function getTmpDir () {
       return mkdtemp(normalize(tmpdir() + sep));
     }
