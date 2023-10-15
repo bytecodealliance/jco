@@ -35,7 +35,7 @@ jobs:
             os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Install Rust
       run: rustup update stable --no-self-update && rustup default stable
     - name: Install wasm32-unknown-unknown target
@@ -72,7 +72,7 @@ jobs:
     name: Test Workspaces
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Install NPM packages
       run: npm install
     - name: Test Workspaces
@@ -82,7 +82,7 @@ jobs:
     name: ESLint
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Install NPM packages
       run: npm install
     - name: Lint
@@ -92,7 +92,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Install Rust
       run: rustup update stable && rustup default stable && rustup component add rustfmt
     - name: Format source code
