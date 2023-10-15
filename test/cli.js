@@ -1,5 +1,5 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
-import { readFile, rm, writeFile, mkdtemp } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, writeFile, mkdtemp } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { exec, jcoPath } from './helpers.js';
 import { tmpdir } from 'node:os';
@@ -23,6 +23,10 @@ export async function cliTest (fixtures) {
       tmpDir = await getTmpDir();
       outDir = resolve(tmpDir, 'out-component-dir');
       outFile = resolve(tmpDir, 'out-component-file');
+
+      const modulesDir = resolve(tmpDir, 'node_modules', '@bytecodealliance');
+      await mkdir(modulesDir, { recursive: true });
+      await symlink(fileURLToPath(new URL('../packages/preview2-shim', import.meta.url)), resolve(modulesDir, 'preview2-shim'), 'dir');
     });
     suiteTeardown(async function () {
       try {
