@@ -36,7 +36,7 @@ export async function preview2Test () {
         await rm(outFile);
       }
       catch {}
-    })
+    });
 
     test('hello_stdout', async () => {
       const component = await readFile(`test/fixtures/modules/hello_stdout.wasm`);

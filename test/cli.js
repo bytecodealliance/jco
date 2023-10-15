@@ -37,7 +37,7 @@ export async function cliTest (fixtures) {
         await rm(outFile);
       }
       catch {}
-    })
+    });
 
     test('Transcoding', async () => {
       const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/env-allow.composed.wasm`, '-o', outDir);
