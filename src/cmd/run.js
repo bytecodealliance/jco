@@ -1,20 +1,15 @@
+import { getTmpDir } from '../common.js';
 import { transpile } from './transpile.js';
-import { tmpdir } from 'node:os';
 import { rm, stat, mkdir, writeFile, symlink, chmod } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { argv0, exit } from 'node:process';
 import { fileURLToPath } from 'node:url';
-import * as crypto from 'node:crypto';
 import c from 'chalk-template';
-
-function getTmpDir (name) {
-  return resolve(tmpdir(), crypto.createHash('sha256').update(name).update(Math.random().toString()).digest('hex'));
-}
 
 export async function run (componentPath, args) {
   const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
-  const outDir = resolve(getTmpDir(name));
+  const outDir = await getTmpDir();
   let cp;
   try {
     try {
