@@ -1117,7 +1117,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(ptr);
             }
 
-            Instruction::HandleLift { handle, name, .. } => {
+            Instruction::HandleLift { handle, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
                 let ResourceTable {
                     id,
@@ -1126,8 +1126,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 } = &self.resource_map[ty];
                 let is_own = matches!(handle, Handle::Own(_));
                 let rsc = format!("rsc{}", self.tmp());
-
-                let class_name = name.to_upper_camel_case();
 
                 if !imported {
                     let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
