@@ -2,6 +2,7 @@ use structopt::StructOpt;
 
 mod build;
 mod test;
+mod update;
 
 #[derive(StructOpt)]
 enum Opts {
@@ -9,6 +10,14 @@ enum Opts {
     Build(Build),
     /// Run tests
     Test,
+    /// Update the various dependencies in the project
+    Update(Update),
+}
+
+#[derive(StructOpt)]
+enum Update {
+    /// Update preview 2
+    Preview2,
 }
 
 #[derive(StructOpt)]
@@ -31,5 +40,6 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Opts::Test => test::run(),
+        Opts::Update(Update::Preview2) => update::preview2::run(),
     }
 }
