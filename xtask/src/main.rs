@@ -4,6 +4,7 @@ mod build;
 mod build_self;
 mod build_shims;
 mod test;
+mod update;
 
 #[derive(StructOpt)]
 enum Opts {
@@ -15,6 +16,14 @@ enum Opts {
     BuildShims,
     /// Run tests
     Test,
+    /// Update the various dependencies in the project
+    Update(Update),
+}
+
+#[derive(StructOpt)]
+enum Update {
+    /// Update preview 2
+    Preview2,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -27,5 +36,6 @@ fn main() -> anyhow::Result<()> {
         }
         Opts::BuildShims => build_shims::run(),
         Opts::Test => test::run(),
+        Opts::Update(Update::Preview2) => update::preview2::run(),
     }
 }
