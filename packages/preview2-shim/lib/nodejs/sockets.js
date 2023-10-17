@@ -1,200 +1,90 @@
-export const instanceNetwork = {
-  instanceNetwork () {
-    console.log(`[sockets] instance network`);
-  }
-};
+import { WasiSockets } from "../sockets/wasi-sockets.js";
+
+const _network = new WasiSockets();
+
+export const { instanceNetwork, network } = _network;
 
 export const ipNameLookup = {
-  dropResolveAddressStream () {
-
-  },
-  subscribe () {
-  
-  },
-  resolveAddresses () {
-  
-  },
-  resolveNextAddress () {
-  
-  },
-  nonBlocking () {
-  
-  },
-  setNonBlocking () {
-  
-  },
-};
-
-export const network = {
-  dropNetwork () {
-
-  }
+  dropResolveAddressStream() {},
+  subscribe() {},
+  resolveAddresses() {},
+  resolveNextAddress() {},
+  nonBlocking() {},
+  setNonBlocking() {},
 };
 
 export const tcpCreateSocket = {
-  createTcpSocket () {
-
-  }
+  createTcpSocket(addressFamily) {},
 };
 
 export const tcp = {
-  subscribe () {
-
-  },
-  dropTcpSocket() {
-  
-  },
-  bind() {
-  
-  },
-  connect() {
-  
-  },
-  listen() {
-  
-  },
-  accept() {
-  
-  },
-  localAddress() {
-  
-  },
-  remoteAddress() {
-  
-  },
-  addressFamily() {
-  
-  },
-  ipv6Only() {
-  
-  },
-  setIpv6Only() {
-  
-  },
-  setListenBacklogSize() {
-  
-  },
-  keepAlive() {
-  
-  },
-  setKeepAlive() {
-  
-  },
-  noDelay() {
-  
-  },
-  setNoDelay() {
-  
-  },
-  unicastHopLimit() {
-  
-  },
-  setUnicastHopLimit() {
-  
-  },
-  receiveBufferSize() {
-  
-  },
-  setReceiveBufferSize() {
-  
-  },
-  sendBufferSize() {
-  
-  },
-  setSendBufferSize() {
-  
-  },
-  nonBlocking() {
-  
-  },
-  setNonBlocking() {
-  
-  },
-  shutdown() {
-  
-  }
+  subscribe() {},
+  dropTcpSocket() {},
+  bind() {},
+  connect() {},
+  listen() {},
+  accept() {},
+  localAddress() {},
+  remoteAddress() {},
+  addressFamily() {},
+  ipv6Only() {},
+  setIpv6Only() {},
+  setListenBacklogSize() {},
+  keepAlive() {},
+  setKeepAlive() {},
+  noDelay() {},
+  setNoDelay() {},
+  unicastHopLimit() {},
+  setUnicastHopLimit() {},
+  receiveBufferSize() {},
+  setReceiveBufferSize() {},
+  sendBufferSize() {},
+  setSendBufferSize() {},
+  nonBlocking() {},
+  setNonBlocking() {},
+  shutdown() {},
 };
 
 export const udp = {
-  subscribe () {
+  subscribe() {},
 
-  },
-  
-  dropUdpSocket () {
-  
-  },
-  
-  bind () {
-  
-  },
-  
-  connect () {
-  
-  },
-  
-  receive () {
-  
-  },
-  
-  send () {
-  
-  },
-  
-  localAddress () {
-  
-  },
-  
-  remoteAddress () {
-  
-  },
-  
-  addressFamily () {
-  
-  },
-  
-  ipv6Only () {
-  
-  },
-  
-  setIpv6Only () {
-  
-  },
-  
-  unicastHopLimit () {
-  
-  },
-  
-  setUnicastHopLimit () {
-  
-  },
-  
-  receiveBufferSize () {
-  
-  },
-  
-  setReceiveBufferSize () {
-  
-  },
-  
-  sendBufferSize () {
-  
-  },
-  
-  setSendBufferSize () {
-  
-  },
-  
-  nonBlocking () {
-  
-  },
-  
-  setNonBlocking () {
-  
-  }
+  dropUdpSocket() {},
+
+  bind() {},
+
+  connect() {},
+
+  receive() {},
+
+  send() {},
+
+  localAddress() {},
+
+  remoteAddress() {},
+
+  addressFamily() {},
+
+  ipv6Only() {},
+
+  setIpv6Only() {},
+
+  unicastHopLimit() {},
+
+  setUnicastHopLimit() {},
+
+  receiveBufferSize() {},
+
+  setReceiveBufferSize() {},
+
+  sendBufferSize() {},
+
+  setSendBufferSize() {},
+
+  nonBlocking() {},
+
+  setNonBlocking() {},
 };
 
 export const udpCreateSocket = {
-  createTcpSocket () {
-
-  }
+  createTcpSocket() {},
 };
