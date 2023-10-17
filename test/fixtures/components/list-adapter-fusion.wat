@@ -26,8 +26,8 @@
 
         ;; assert no realloc is actually happening and this is only an
         ;; allocation function
-        (if (local.get 0) (unreachable))
-        (if (local.get 1) (unreachable))
+        (if (local.get 0) (then (unreachable)))
+        (if (local.get 1) (then (unreachable)))
 
         (local.set $ret (global.get $next))
 
