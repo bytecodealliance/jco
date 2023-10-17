@@ -1,31 +1,31 @@
 <div align="center">
-  <h1><code>jco</code></h1>
 
-  <p>
-    <strong>JavaScript component toolchain for working with <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
-  </p>
+  # `jco`
 
-  <strong>A <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project</strong>
+  **JavaScript tooling for working with [WebAssembly Components](https://github.com/WebAssembly/component-model)**
 
-  <p>
-    <a href="https://github.com/bytecodealliance/jco/actions?query=workflow%3ACI"><img src="https://github.com/bytecodealliance/jco/workflows/CI/badge.svg" alt="build status" /></a>
-  </p>
+  **A [Bytecode Alliance](https://bytecodealliance.org/) project**
+
+  [![build status](https://github.com/bytecodealliance/jco/workflows/CI/badge.svg)](https://github.com/bytecodealliance/jco/actions?query=workflow%3ACI)
 </div>
 
 ## Overview
 
-`jco` is a fully native JS tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification in JavaScript.
+`jco` is a fully native JavaScript tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification.
 
-Features include:
+`jco` can convert code between JS and a Wasm component:
 
-* "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-* Optimization helpers for Components via Binaryen.
-* Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments.
-* "Componentize" for WebAssembly Components from JavaScript sources and a WIT world
+* "Transpile" a Wasm component binary into an ES module that can run in any JS environment.
+* "Componentize" JS code and a WIT world into a Wasm component.
 
-For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
+`jco` also includes:
 
-> **Note**: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future.
+* Optimization helpers for components via [Binaryen](https://github.com/WebAssembly/binaryen).
+* Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available in native JS environments for use as a library or via CLI commands.
+
+For creating components in other languages, see [`cargo component`](https://github.com/bytecodealliance/cargo-component) (for Rust) and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest language bindings generators.
+
+> **Note**: This is an experimental project. No guarantees are provided for stability, security or support and breaking changes may be made without notice.
 
 ## Installation
 
@@ -33,7 +33,7 @@ For creating components in other languages, see the [Cargo Component](https://gi
 npm install @bytecodealliance/jco
 ```
 
-jco can be used as either a library or as a CLI via the `jco` CLI command.
+`jco` can be used either as a library or via the `jco` CLI command.
 
 ## Example
 
