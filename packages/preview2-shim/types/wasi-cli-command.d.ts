@@ -12,9 +12,9 @@ import { WasiClocksMonotonicClock } from './interfaces/wasi-clocks-monotonic-clo
 import { WasiClocksTimezone } from './interfaces/wasi-clocks-timezone';
 import { WasiClocksWallClock } from './interfaces/wasi-clocks-wall-clock';
 import { WasiFilesystemPreopens } from './interfaces/wasi-filesystem-preopens';
-import { WasiFilesystemTypes } from './interfaces/wasi-filesystem-types';
+import { Descriptor, WasiFilesystemTypes } from './interfaces/wasi-filesystem-types';
+import { WasiIoPoll } from './interfaces/wasi-io-poll';
 import { WasiIoStreams } from './interfaces/wasi-io-streams';
-import { WasiPollPoll } from './interfaces/wasi-poll-poll';
 import { WasiRandomInsecure } from './interfaces/wasi-random-insecure';
 import { WasiRandomInsecureSeed } from './interfaces/wasi-random-insecure-seed';
 import { WasiRandomRandom } from './interfaces/wasi-random-random';

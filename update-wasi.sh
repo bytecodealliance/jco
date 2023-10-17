@@ -4,7 +4,7 @@ set -ex
 # update dependencies
 git submodule foreach git pull origin main
 git submodule update --init --recursive
-cd submodule/wasmtime
+cd submodules/wasmtime
 
 # build the preview1 component adapter reactor
 cargo build -p wasi-preview1-component-adapter \

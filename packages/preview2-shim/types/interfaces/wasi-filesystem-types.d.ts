@@ -9,7 +9,7 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This allows using `read-stream`, which is similar to `read` in POSIX.
    */
-  export function readViaStream(this_: Descriptor, offset: Filesize): InputStream;
+  export { Descriptor };
   /**
    * Return a stream for writing to a file, if available.
    * 
@@ -18,7 +18,6 @@ export namespace WasiFilesystemTypes {
    * Note: This allows using `write-stream`, which is similar to `write` in
    * POSIX.
    */
-  export function writeViaStream(this_: Descriptor, offset: Filesize): OutputStream;
   /**
    * Return a stream for appending to a file, if available.
    * 
@@ -27,13 +26,11 @@ export namespace WasiFilesystemTypes {
    * Note: This allows using `write-stream`, which is similar to `write` with
    * `O_APPEND` in in POSIX.
    */
-  export function appendViaStream(this_: Descriptor): OutputStream;
   /**
    * Provide file advisory information on a descriptor.
    * 
    * This is similar to `posix_fadvise` in POSIX.
    */
-  export function advise(this_: Descriptor, offset: Filesize, length: Filesize, advice: Advice): void;
   /**
    * Synchronize the data of a file to disk.
    * 
@@ -42,7 +39,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `fdatasync` in POSIX.
    */
-  export function syncData(this_: Descriptor): void;
   /**
    * Get flags associated with a descriptor.
    * 
@@ -51,7 +47,6 @@ export namespace WasiFilesystemTypes {
    * Note: This returns the value that was the `fs_flags` value returned
    * from `fdstat_get` in earlier versions of WASI.
    */
-  export function getFlags(this_: Descriptor): DescriptorFlags;
   /**
    * Get the dynamic type of a descriptor.
    * 
@@ -64,14 +59,12 @@ export namespace WasiFilesystemTypes {
    * Note: This returns the value that was the `fs_filetype` value returned
    * from `fdstat_get` in earlier versions of WASI.
    */
-  export function getType(this_: Descriptor): DescriptorType;
   /**
    * Adjust the size of an open file. If this increases the file's size, the
    * extra bytes are filled with zeros.
    * 
    * Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
    */
-  export function setSize(this_: Descriptor, size: Filesize): void;
   /**
    * Adjust the timestamps of an open file or directory.
    * 
@@ -79,7 +72,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
    */
-  export function setTimes(this_: Descriptor, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
   /**
    * Read from a descriptor, without using and updating the descriptor's offset.
    * 
@@ -93,7 +85,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `pread` in POSIX.
    */
-  export function read(this_: Descriptor, length: Filesize, offset: Filesize): [Uint8Array, boolean];
   /**
    * Write to a descriptor, without using and updating the descriptor's offset.
    * 
@@ -105,7 +96,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `pwrite` in POSIX.
    */
-  export function write(this_: Descriptor, buffer: Uint8Array, offset: Filesize): Filesize;
   /**
    * Read directory entries from a directory.
    * 
@@ -117,7 +107,6 @@ export namespace WasiFilesystemTypes {
    * directory. Multiple streams may be active on the same directory, and they
    * do not interfere with each other.
    */
-  export function readDirectory(this_: Descriptor): DirectoryEntryStream;
   /**
    * Synchronize the data and metadata of a file to disk.
    * 
@@ -126,13 +115,11 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `fsync` in POSIX.
    */
-  export function sync(this_: Descriptor): void;
   /**
    * Create a directory.
    * 
    * Note: This is similar to `mkdirat` in POSIX.
    */
-  export function createDirectoryAt(this_: Descriptor, path: string): void;
   /**
    * Return the attributes of an open file or directory.
    * 
@@ -144,7 +131,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This was called `fd_filestat_get` in earlier versions of WASI.
    */
-  export function stat(this_: Descriptor): DescriptorStat;
   /**
    * Return the attributes of a file or directory.
    * 
@@ -154,7 +140,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This was called `path_filestat_get` in earlier versions of WASI.
    */
-  export function statAt(this_: Descriptor, pathFlags: PathFlags, path: string): DescriptorStat;
   /**
    * Adjust the timestamps of a file or directory.
    * 
@@ -163,13 +148,11 @@ export namespace WasiFilesystemTypes {
    * Note: This was called `path_filestat_set_times` in earlier versions of
    * WASI.
    */
-  export function setTimesAt(this_: Descriptor, pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
   /**
    * Create a hard link.
    * 
    * Note: This is similar to `linkat` in POSIX.
    */
-  export function linkAt(this_: Descriptor, oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
   /**
    * Open a file or directory.
    * 
@@ -190,7 +173,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `openat` in POSIX.
    */
-  export function openAt(this_: Descriptor, pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags, modes: Modes): Descriptor;
   /**
    * Read the contents of a symbolic link.
    * 
@@ -199,7 +181,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `readlinkat` in POSIX.
    */
-  export function readlinkAt(this_: Descriptor, path: string): string;
   /**
    * Remove a directory.
    * 
@@ -207,13 +188,11 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
    */
-  export function removeDirectoryAt(this_: Descriptor, path: string): void;
   /**
    * Rename a filesystem object.
    * 
    * Note: This is similar to `renameat` in POSIX.
    */
-  export function renameAt(this_: Descriptor, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
   /**
    * Create a symbolic link (also known as a "symlink").
    * 
@@ -222,7 +201,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `symlinkat` in POSIX.
    */
-  export function symlinkAt(this_: Descriptor, oldPath: string, newPath: string): void;
   /**
    * Check accessibility of a filesystem path.
    * 
@@ -235,14 +213,12 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `faccessat` with the `AT_EACCESS` flag in POSIX.
    */
-  export function accessAt(this_: Descriptor, pathFlags: PathFlags, path: string, type: AccessType): void;
   /**
    * Unlink a filesystem object that is not a directory.
    * 
    * Return `error-code::is-directory` if the path refers to a directory.
    * Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
    */
-  export function unlinkFileAt(this_: Descriptor, path: string): void;
   /**
    * Change the permissions of a filesystem object that is not a directory.
    * 
@@ -251,7 +227,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `fchmodat` in POSIX.
    */
-  export function changeFilePermissionsAt(this_: Descriptor, pathFlags: PathFlags, path: string, modes: Modes): void;
   /**
    * Change the permissions of a directory.
    * 
@@ -264,7 +239,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `fchmodat` in POSIX.
    */
-  export function changeDirectoryPermissionsAt(this_: Descriptor, pathFlags: PathFlags, path: string, modes: Modes): void;
   /**
    * Request a shared advisory lock for an open file.
    * 
@@ -287,7 +261,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `flock(fd, LOCK_SH)` in Unix.
    */
-  export function lockShared(this_: Descriptor): void;
   /**
    * Request an exclusive advisory lock for an open file.
    * 
@@ -312,7 +285,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `flock(fd, LOCK_EX)` in Unix.
    */
-  export function lockExclusive(this_: Descriptor): void;
   /**
    * Request a shared advisory lock for an open file.
    * 
@@ -336,7 +308,6 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `flock(fd, LOCK_SH | LOCK_NB)` in Unix.
    */
-  export function tryLockShared(this_: Descriptor): void;
   /**
    * Request an exclusive advisory lock for an open file.
    * 
@@ -362,27 +333,11 @@ export namespace WasiFilesystemTypes {
    * 
    * Note: This is similar to `flock(fd, LOCK_EX | LOCK_NB)` in Unix.
    */
-  export function tryLockExclusive(this_: Descriptor): void;
   /**
    * Release a shared or exclusive lock on an open file.
    * 
    * Note: This is similar to `flock(fd, LOCK_UN)` in Unix.
    */
-  export function unlock(this_: Descriptor): void;
-  /**
-   * Dispose of the specified `descriptor`, after which it may no longer
-   * be used.
-   */
-  export function dropDescriptor(this_: Descriptor): void;
-  /**
-   * Read a single directory entry from a `directory-entry-stream`.
-   */
-  export function readDirectoryEntry(this_: DirectoryEntryStream): DirectoryEntry | undefined;
-  /**
-   * Dispose of the specified `directory-entry-stream`, after which it may no longer
-   * be used.
-   */
-  export function dropDirectoryEntryStream(this_: DirectoryEntryStream): void;
   /**
    * Test whether two descriptors refer to the same filesystem object.
    * 
@@ -391,7 +346,6 @@ export namespace WasiFilesystemTypes {
    * wasi-filesystem does not expose device and inode numbers, so this function
    * may be used instead.
    */
-  export function isSameObject(this_: Descriptor, other: Descriptor): boolean;
   /**
    * Return a hash of the metadata associated with a filesystem object referred
    * to by a descriptor.
@@ -413,19 +367,36 @@ export namespace WasiFilesystemTypes {
    * 
    * However, none of these is required.
    */
-  export function metadataHash(this_: Descriptor): MetadataHashValue;
   /**
    * Return a hash of the metadata associated with a filesystem object referred
    * to by a directory descriptor and a relative path.
    * 
    * This performs the same hash computation as `metadata-hash`.
    */
-  export function metadataHashAt(this_: Descriptor, pathFlags: PathFlags, path: string): MetadataHashValue;
+  /**
+   * Read a single directory entry from a `directory-entry-stream`.
+   */
+  export { DirectoryEntryStream };
+  /**
+   * Attempts to extract a filesystem-related `error-code` from the stream
+   * `error` provided.
+   * 
+   * Stream operations which return `stream-error::last-operation-failed`
+   * have a payload with more information about the operation that failed.
+   * This payload can be passed through to this function to see if there's
+   * filesystem-related information about the error to return.
+   * 
+   * Note that this function is fallible because not all stream-related
+   * errors are filesystem-related errors.
+   */
+  export function filesystemErrorCode(err: Error): ErrorCode | undefined;
 }
 import type { InputStream } from '../interfaces/wasi-io-streams';
 export { InputStream };
 import type { OutputStream } from '../interfaces/wasi-io-streams';
 export { OutputStream };
+import type { Error } from '../interfaces/wasi-io-streams';
+export { Error };
 import type { Datetime } from '../interfaces/wasi-clocks-wall-clock';
 export { Datetime };
 /**
@@ -615,16 +586,25 @@ export interface DescriptorStat {
   size: Filesize,
   /**
    * Last data access timestamp.
+   * 
+   * If the `option` is none, the platform doesn't maintain an access
+   * timestamp for this file.
    */
-  dataAccessTimestamp: Datetime,
+  dataAccessTimestamp?: Datetime,
   /**
    * Last data modification timestamp.
+   * 
+   * If the `option` is none, the platform doesn't maintain a
+   * modification timestamp for this file.
    */
-  dataModificationTimestamp: Datetime,
+  dataModificationTimestamp?: Datetime,
   /**
-   * Last file status change timestamp.
+   * Last file status-change timestamp.
+   * 
+   * If the `option` is none, the platform doesn't maintain a
+   * status-change timestamp for this file.
    */
-  statusChangeTimestamp: Datetime,
+  statusChangeTimestamp?: Datetime,
 }
 /**
  * When setting a timestamp, this gives the value to set it to.
@@ -814,14 +794,6 @@ export type ErrorCode = 'access' | 'would-block' | 'already' | 'bad-descriptor' 
  */
 export type Advice = 'normal' | 'sequential' | 'random' | 'will-need' | 'dont-need' | 'no-reuse';
 /**
- * A descriptor is a reference to a filesystem object, which may be a file,
- * directory, named pipe, special file, or other object on which filesystem
- * calls may be made.
- * 
- * This [represents a resource](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Resources).
- */
-export type Descriptor = number;
-/**
  * A 128-bit hash value, split into parts because wasm doesn't have a
  * 128-bit integer type.
  */
@@ -835,9 +807,45 @@ export interface MetadataHashValue {
    */
   upper: bigint,
 }
-/**
- * A stream of directory entries.
- * 
- * This [represents a stream of `dir-entry`](https://github.com/WebAssembly/WASI/blob/main/docs/WitInWasi.md#Streams).
- */
-export type DirectoryEntryStream = number;
+
+export class Descriptor {
+  readViaStream(offset: Filesize): InputStream;
+  writeViaStream(offset: Filesize): OutputStream;
+  appendViaStream(): OutputStream;
+  advise(offset: Filesize, length: Filesize, advice: Advice): void;
+  syncData(): void;
+  getFlags(): DescriptorFlags;
+  getType(): DescriptorType;
+  setSize(size: Filesize): void;
+  setTimes(dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
+  read(length: Filesize, offset: Filesize): [Uint8Array, boolean];
+  write(buffer: Uint8Array, offset: Filesize): Filesize;
+  readDirectory(): DirectoryEntryStream;
+  sync(): void;
+  createDirectoryAt(path: string): void;
+  stat(): DescriptorStat;
+  statAt(pathFlags: PathFlags, path: string): DescriptorStat;
+  setTimesAt(pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
+  linkAt(oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
+  openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags, modes: Modes): Descriptor;
+  readlinkAt(path: string): string;
+  removeDirectoryAt(path: string): void;
+  renameAt(oldPath: string, newDescriptor: Descriptor, newPath: string): void;
+  symlinkAt(oldPath: string, newPath: string): void;
+  accessAt(pathFlags: PathFlags, path: string, type: AccessType): void;
+  unlinkFileAt(path: string): void;
+  changeFilePermissionsAt(pathFlags: PathFlags, path: string, modes: Modes): void;
+  changeDirectoryPermissionsAt(pathFlags: PathFlags, path: string, modes: Modes): void;
+  lockShared(): void;
+  lockExclusive(): void;
+  tryLockShared(): void;
+  tryLockExclusive(): void;
+  unlock(): void;
+  isSameObject(other: Descriptor): boolean;
+  metadataHash(): MetadataHashValue;
+  metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;
+}
+
+export class DirectoryEntryStream {
+  readDirectoryEntry(): DirectoryEntry | undefined;
+}

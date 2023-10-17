@@ -1,4 +1,6 @@
 import { argv, env, cwd } from 'node:process';
+import { streams } from '../common/io.js';
+const { InputStream, OutputStream } = streams;
 
 let _env = Object.entries(env), _args = argv, _cwd = cwd();
 
@@ -20,46 +22,93 @@ export const exit = {
   }
 };
 
+const stdinStream = new InputStream({
+  blockingRead (_len) {
+    // TODO
+  },
+  subscribe () {
+    // TODO
+  },
+  drop () {
+    // TODO
+  }
+});
+const stdoutStream = new OutputStream({
+  write (contents) {
+    process.stdout.write(contents);
+  },
+  blockingFlush () {
+  },
+  drop () {
+  }
+});
+const stderrStream = new OutputStream({
+  write (contents) {
+    process.stderr.write(contents);
+  },
+  blockingFlush () {
+
+  },
+  drop () {
+
+  }
+});
+
 export const stdin = {
+  InputStream,
   getStdin () {
-    return 0;
+    return stdinStream;
   }
 };
 
 export const stdout = {
+  OutputStream,
   getStdout () {
-    return 1;
+    return stdoutStream;
   }
 };
 
 export const stderr = {
+  OutputStream,
   getStderr () {
-    return 2;
+    return stderrStream;
   }
 };
 
+class TerminalInput {}
+class TerminalOutput {}
+
+const terminalStdoutInstance = new TerminalOutput();
+const terminalStderrInstance = new TerminalOutput();
+const terminalStdinInstance = new TerminalInput();
+
 export const terminalInput = {
+  TerminalInput,
   dropTerminalInput () {}
 };
 
 export const terminalOutput = {
+  TerminalOutput,
   dropTerminalOutput () {}
 };
 
 export const terminalStderr = {
+  TerminalOutput,
   getTerminalStderr () {
-    return 0;
+    return terminalStderrInstance;
   }
 };
 
 export const terminalStdin = {
+  TerminalInput,
   getTerminalStdin () {
-    return 1;
+    return terminalStdinInstance;
   }
 };
 
 export const terminalStdout = {
+  TerminalOutput,
   getTerminalStdout () {
-    return 2;
+    return terminalStdoutInstance;
   }
 };

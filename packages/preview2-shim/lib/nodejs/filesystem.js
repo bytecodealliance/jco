@@ -1,63 +1,11 @@
-import { _io } from './io.js';
+import { streams } from '../common/io.js';
 import { environment } from './cli.js';
-import { constants, readSync, openSync, opendirSync, closeSync, fstatSync, lstatSync, statSync, writeSync } from 'node:fs';
+import { constants, readSync, openSync, opendirSync, closeSync, fstatSync, lstatSync, statSync, writeSync, mkdirSync } from 'node:fs';
 import { platform } from 'node:process';
 
+const { InputStream, OutputStream, Error: StreamError } = streams;
+
 const isWindows = platform === 'win32';
-
-class ReadableFileStream {
-  constructor (hostFd, position) {
-    this.hostFd = hostFd;
-    this.position = Number(position);
-  }
-  read (len) {
-    const buf = new Uint8Array(Number(len));
-    const bytesRead = readSync(this.hostFd, buf, 0, buf.byteLength, this.position);
-    this.position += bytesRead;
-    if (bytesRead < buf.byteLength)
-      return [new Uint8Array(buf.buffer, 0, bytesRead), bytesRead === 0 ? 'ended' : 'open'];
-    return [buf, 'open'];
-  }
-}
-
-class WriteableFileStream {
-  constructor (hostFd, position) {
-    this.hostFd = hostFd;
-    this.position = Number(position);
-  }
-  write (contents) {
-    let totalWritten = 0;
-    while (totalWritten !== contents.byteLength) {
-      const bytesWritten = writeSync(this.hostFd, contents, null, null, this.position);
-      totalWritten += bytesWritten;
-      contents = new Uint8Array(contents.buffer, bytesWritten);
-    }
-    this.position += contents.byteLength;
-  }
-}
-
-class DirStream {
-  constructor (dir) {
-    this.dir = dir;
-  }
-  read () {
-    let entry;
-    try {
-      entry = this.dir.readSync();
-    } catch (e) {
-      throw convertFsError(e);
-    }
-    if (entry === null) {
-      return null;
-    }
-    const name = entry.name;
-    const type = lookupType(entry);
-    return { name, type };
-  }
-  drop () {
-    this.dir.closeSync();
-  }
-}
 
 const nsMagnitude = 1_000_000_000_000n;
 function nsToDateTime (ns) {
@@ -86,24 +34,17 @@ function lookupType (obj) {
 
 /**
  * @typedef {
- *   { stream: number } |
  *   { hostPreopen: string } |
  *   { fullPath: string, fd: number }
- * } Descriptor
+ * } DescriptorProps
  */
 export class FileSystem {
-  getDescriptor (fd) {
-    const descriptor = this.descriptors[fd];
-    if (!descriptor) throw 'bad-descriptor';
-    return descriptor;
-  }
-
   // Note: This should implement per-segment semantics of openAt, but we cannot currently
   //       due to the lack of support for openat() in Node.js.
   //       Tracking issue: https://github.com/libuv/libuv/issues/4167
 
   // TODO: support followSymlinks
-  getFullPath (fd, subpath, _followSymlinks) {
+  getFullPath (descriptor, subpath, _followSymlinks) {
     if (subpath.indexOf('\\') !== -1)
       subpath = subpath.replace(/\\/g, '/');
     if (subpath[0] === '/') {
@@ -115,14 +56,13 @@ export class FileSystem {
       }
       if (!bestPreopenMatch)
         throw 'no-entry';
-      fd = bestPreopenMatch[0];
+      descriptor = bestPreopenMatch[0];
       subpath = subpath.slice(bestPreopenMatch[1]);
       if (subpath[0] === '/')
         subpath = subpath.slice(1);
     }
     if (subpath.startsWith('.'))
       subpath = subpath.slice(subpath[1] === '/' ? 2 : 1);
-    const descriptor = this.getDescriptor(fd);
     if (descriptor.hostPreopen)
       return descriptor.hostPreopen + (descriptor.hostPreopen.endsWith('/') ? '' : '/') + subpath;
     return descriptor.fullPath + '/' + subpath;
@@ -130,131 +70,186 @@ export class FileSystem {
 
   /**
    * 
-   * @param {import('./io.js').Io} io 
    * @param {[string, string][]} preopens 
+   * @param {import('./cli.js').environment} environment
    * @returns 
    */
-  constructor (io, preopens, environment) {
-    this.cwd = environment.initialCwd();
-    // io always has streams 0, 1, 2 as stdio streams
-    this.descriptorCnt = 3;
-    /**
-     * @type {Record<number, Descriptor>}
-     */
-    this.descriptors = {
-      0: { stream: 0 },
-      1: { stream: 1 },
-      2: { stream: 2 },
-    };
-    this.preopenEntries = [];
-    for (const [virtualPath, hostPreopen] of Object.entries(preopens)) {
-      const preopenEntry = [this.descriptorCnt, virtualPath];
-      this.preopenEntries.push(preopenEntry);
-      this.descriptors[this.descriptorCnt++] = { hostPreopen };
-    }
+  constructor (preopens, environment) {
     const fs = this;
-    this.preopens = {
-      getDirectories () {
-        return fs.preopenEntries;
-      }
-    };
-    this.types = {
-      readViaStream(fd, offset) {
-        const descriptor = fs.getDescriptor(fd);
-        if (descriptor.stream)
-          return descriptor.stream;
-        if (descriptor.hostPreopen)
-          throw 'is-directory';
-        return io.createStream(new ReadableFileStream(descriptor.fd, offset));
-      },
-    
-      writeViaStream(fd, offset) {
-        const descriptor = fs.getDescriptor(fd);
-        if (descriptor.stream)
-          return descriptor.stream;
-        if (descriptor.hostPreopen)
-          throw 'is-directory';
-        return io.createStream(new WriteableFileStream(descriptor.fd, offset));
-      },
-    
-      appendViaStream(fd) {
-        console.log(`[filesystem] APPEND STREAM ${fd}`);
-      },
-    
-      advise(fd, offset, length, advice) {
-        console.log(`[filesystem] ADVISE`, fd, offset, length, advice);
-      },
-    
-      syncData(fd) {
-        console.log(`[filesystem] SYNC DATA ${fd}`);
-      },
-    
-      getFlags(fd) {
-        console.log(`[filesystem] FLAGS FOR ${fd}`);
-      },
-    
-      getType(fd) {
-        const descriptor = fs.getDescriptor(fd);
-        if (descriptor.stream) return 'fifo';
-        if (descriptor.hostPreopen) return 'directory';
-        const stats = fstatSync(descriptor.fd);
-        return lookupType(stats);
-      },
-    
-      setFlags(fd, flags) {
-        console.log(`[filesystem] SET FLAGS ${fd} ${JSON.stringify(flags)}`);
-      },
-    
-      setSize(fd, size) {
-        console.log(`[filesystem] SET SIZE`, fd, size);
-      },
-    
-      setTimes(fd, dataAccessTimestamp, dataModificationTimestamp) {
-        console.log(`[filesystem] SET TIMES`, fd, dataAccessTimestamp, dataModificationTimestamp);
-      },
+    this.cwd = environment.initialCwd();
 
-      read(fd, length, offset) {
-        const descriptor = fs.getDescriptor(fd);
-        if (!descriptor.fullPath) throw 'bad-descriptor';
+    class FileInputStream extends InputStream {
+      constructor (hostFd, position) {
+        super({
+          blockingRead (len) {
+            const buf = new Uint8Array(Number(len));
+            try {
+              var bytesRead = readSync(this.hostFd, buf, 0, buf.byteLength, this.position);
+            } catch (e) {
+              throw { tag: 'last-operation-failed', val: new StreamError(e.message) };
+            }
+            this.position += bytesRead;
+            if (bytesRead < buf.byteLength) {
+              if (bytesRead === 0)
+                throw { tag: 'closed' };
+              return new Uint8Array(buf.buffer, 0, bytesRead);
+            }
+            return buf;
+          },
+          subscribe () {
+            // TODO
+          },
+          drop () {
+            // TODO
+          }
+        });
+        this.hostFd = hostFd;
+        this.position = Number(position);
+      }
+    }
+    
+    class FileOutputStream extends OutputStream {
+      constructor (hostFd, position) {
+        super({
+          write (contents) {
+            let totalWritten = 0;
+            while (totalWritten !== contents.byteLength) {
+              const bytesWritten = writeSync(this.hostFd, contents, null, null, this.position);
+              totalWritten += bytesWritten;
+              contents = new Uint8Array(contents.buffer, bytesWritten);
+            }
+            this.position += contents.byteLength;
+          },
+          blockingFlush () {
+
+          },
+          drop () {
+
+          }
+        });
+        this.hostFd = hostFd;
+        this.position = Number(position);
+      }
+    }
+    
+    class DirectoryEntryStream {
+      constructor (dir) {
+        this.dir = dir;
+      }
+      readDirectoryEntry () {
+        let entry;
+        try {
+          entry = this.dir.readSync();
+        } catch (e) {
+          throw convertFsError(e);
+        }
+        if (entry === null) {
+          return null;
+        }
+        const name = entry.name;
+        const type = lookupType(entry);
+        return { name, type };
+      }
+      drop () {
+        this.dir.closeSync();
+      }
+    }
+
+    /**
+     * @implements {DescriptorProps}
+     */
+    class Descriptor {
+      constructor () {
+        this.id = fs.descriptorCnt++;
+      }
+      readViaStream(offset) {
+        if (this.hostPreopen)
+          throw { tag: 'last-operation-failed', val: new StreamError };
+        return new FileInputStream(this.fd, offset);
+      }
+      writeViaStream(offset) {
+        if (this.hostPreopen)
+          throw 'is-directory';
+        return new FileOutputStream(this.fd, offset);
+      }
+    
+      appendViaStream() {
+        console.log(`[filesystem] APPEND STREAM ${this.id}`);
+      }
+    
+      advise(offset, length, advice) {
+        console.log(`[filesystem] ADVISE`, this.id, offset, length, advice);
+      }
+    
+      syncData() {
+        console.log(`[filesystem] SYNC DATA ${this.id}`);
+      }
+    
+      getFlags() {
+        console.log(`[filesystem] FLAGS FOR ${this.id}`);
+      }
+    
+      getType() {
+        if (this.hostPreopen) return 'directory';
+        const stats = fstatSync(this.fd);
+        return lookupType(stats);
+      }
+    
+      setFlags(flags) {
+        console.log(`[filesystem] SET FLAGS ${this.id} ${JSON.stringify(flags)}`);
+      }
+    
+      setSize(size) {
+        console.log(`[filesystem] SET SIZE`, this.id, size);
+      }
+    
+      setTimes(dataAccessTimestamp, dataModificationTimestamp) {
+        console.log(`[filesystem] SET TIMES`, this.id, dataAccessTimestamp, dataModificationTimestamp);
+      }
+
+      read(length, offset) {
+        if (!this.fullPath) throw 'bad-descriptor';
         const buf = new Uint8Array(length);
-        const bytesRead = readSync(descriptor.fd, buf, Number(offset), length, 0);
+        const bytesRead = readSync(this.fd, buf, Number(offset), length, 0);
         const out = new Uint8Array(buf.buffer, 0, bytesRead);
         return [out, bytesRead === 0 ? 'ended' : 'open'];
-      },
+      }
 
-      write(fd, buffer, offset) {
-        const descriptor = fs.getDescriptor(fd);
-        if (!descriptor.fullPath) throw 'bad-descriptor';
-        return BigInt(writeSync(descriptor.fd, buffer, Number(offset), buffer.byteLength - offset, 0));
-      },
+      write(buffer, offset) {
+        if (!this.fullPath) throw 'bad-descriptor';
+        return BigInt(writeSync(this.fd, buffer, Number(offset), buffer.byteLength - offset, 0));
+      }
 
-      readDirectory(fd) {
-        const descriptor = fs.getDescriptor(fd);
-        if (!descriptor.fullPath) throw 'bad-descriptor';
+      readDirectory() {
+        if (!this.fullPath) throw 'bad-descriptor';
         try {
-          const dir = opendirSync(isWindows ? descriptor.fullPath.slice(1) : descriptor.fullPath);
-          return io.createStream(new DirStream(dir));
+          const dir = opendirSync(isWindows ? this.fullPath.slice(1) : this.fullPath);
+          return new DirectoryEntryStream(dir);
         }
         catch (e) {
           throw convertFsError(e);
         }
-      },
+      }
 
-      sync(fd) {
-        console.log(`[filesystem] SYNC`, fd);
-      },
+      sync() {
+        console.log(`[filesystem] SYNC`, this.id);
+      }
     
-      createDirectoryAt(fd, path) {
-        const entry = fs.getOrCreateChildDescriptor(fd, path, { create: true, directory: true });
-        if (entry.source) throw 'exist';
-      },
+      createDirectoryAt(path) {
+        const fullPath = fs.getFullPath(this, path);
+        try {
+          mkdirSync(fullPath);
+        }
+        catch (e) {
+          throw convertFsError(e);
+        }
+      }
 
-      stat(fd) {
-        const descriptor = fs.getDescriptor(fd);
-        if (descriptor.stream || descriptor.hostPreopen) throw 'invalid';
+      stat() {
+        if (this.hostPreopen) throw 'invalid';
         let stats;
         try {
-          stats = fstatSync(descriptor.fd, { bigint: true });
+          stats = fstatSync(this.fd, { bigint: true });
         }
         catch (e) {
           convertFsError(e);
@@ -268,10 +263,10 @@ export class FileSystem {
           dataModificationTimestamp: nsToDateTime(stats.mtimeNs),
           statusChangeTimestamp: nsToDateTime(stats.ctimeNs),
         };
-      },
+      }
 
-      statAt(fd, pathFlags, path) {
-        const fullPath = fs.getFullPath(fd, path, false);
+      statAt(pathFlags, path) {
+        const fullPath = fs.getFullPath(this, path, false);
         let stats;
         try {
           stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(isWindows ? fullPath.slice(1) : fullPath, { bigint: true });
@@ -288,19 +283,18 @@ export class FileSystem {
           dataModificationTimestamp: nsToDateTime(stats.mtimeNs),
           statusChangeTimestamp: nsToDateTime(stats.ctimeNs),
         };
-      },
+      }
 
-      setTimesAt(fd) {
-        console.log(`[filesystem] SET TIMES AT`, fd);
-      },
+      setTimesAt() {
+        console.log(`[filesystem] SET TIMES AT`, this.id);
+      }
 
-      linkAt(fd) {
-        console.log(`[filesystem] LINK AT`, fd);
-      },
+      linkAt() {
+        console.log(`[filesystem] LINK AT`, this.id);
+      }
 
-      openAt(fd, pathFlags, path, openFlags, descriptorFlags, modes) {
-        const fullPath = fs.getFullPath(fd, path, pathFlags.symlinkFollow);
-        const childFd = fs.descriptorCnt++;
+      openAt(pathFlags, path, openFlags, descriptorFlags, modes) {
+        const fullPath = fs.getFullPath(this, path, pathFlags.symlinkFollow);
         let fsOpenFlags = 0x0;
         if (openFlags.create)
           fsOpenFlags |= constants.O_CREAT;
@@ -331,94 +325,80 @@ export class FileSystem {
 
         try {
           const fd = openSync(isWindows ? fullPath.slice(1) : fullPath, fsOpenFlags, fsMode);
-          fs.descriptors[childFd] = { fullPath, fd };
+          return Object.assign(new Descriptor(), { fullPath, fd });
         }
         catch (e) {
           throw convertFsError(e);
         }
-        return childFd;
-      },
+      }
 
-      readlinkAt(fd) {
-        console.log(`[filesystem] READLINK AT`, fd);
-      },
+      readlinkAt() {
+        console.log(`[filesystem] READLINK AT`, this.id);
+      }
 
-      removeDirectoryAt(fd) {
-        console.log(`[filesystem] REMOVE DIR AT`, fd);
-      },
+      removeDirectoryAt() {
+        console.log(`[filesystem] REMOVE DIR AT`, this.id);
+      }
 
-      renameAt(fd) {
-        console.log(`[filesystem] RENAME AT`, fd);
-      },
+      renameAt() {
+        console.log(`[filesystem] RENAME AT`, this.id);
+      }
 
-      symlinkAt(fd) {
-        console.log(`[filesystem] SYMLINK AT`, fd);
-      },
+      symlinkAt() {
+        console.log(`[filesystem] SYMLINK AT`, this.id);
+      }
 
-      unlinkFileAt(fd) {
-        console.log(`[filesystem] UNLINK FILE AT`, fd);
-      },
+      unlinkFileAt() {
+        console.log(`[filesystem] UNLINK FILE AT`, this.id);
+      }
 
-      changeFilePermissionsAt(fd) {
-        console.log(`[filesystem] CHANGE FILE PERMISSIONS AT`, fd);
-      },
+      changeFilePermissionsAt() {
+        console.log(`[filesystem] CHANGE FILE PERMISSIONS AT`, this.id);
+      }
 
-      changeDirectoryPermissionsAt(fd) {
-        console.log(`[filesystem] CHANGE DIR PERMISSIONS AT`, fd);
-      },
+      changeDirectoryPermissionsAt() {
+        console.log(`[filesystem] CHANGE DIR PERMISSIONS AT`, this.id);
+      }
 
-      lockShared(fd) {
-        console.log(`[filesystem] LOCK SHARED`, fd);
-      },
+      lockShared() {
+        console.log(`[filesystem] LOCK SHARED`, this.id);
+      }
 
-      lockExclusive(fd) {
-        console.log(`[filesystem] LOCK EXCLUSIVE`, fd);
-      },
+      lockExclusive() {
+        console.log(`[filesystem] LOCK EXCLUSIVE`, this.id);
+      }
 
-      tryLockShared(fd) {
-        console.log(`[filesystem] TRY LOCK SHARED`, fd);
-      },
+      tryLockShared() {
+        console.log(`[filesystem] TRY LOCK SHARED`, this.id);
+      }
 
-      tryLockExclusive(fd) {
-        console.log(`[filesystem] TRY LOCK EXCLUSIVE`, fd);
-      },
+      tryLockExclusive() {
+        console.log(`[filesystem] TRY LOCK EXCLUSIVE`, this.id);
+      }
 
-      unlock(fd) {
-        console.log(`[filesystem] UNLOCK`, fd);
-      },
+      unlock() {
+        console.log(`[filesystem] UNLOCK`, this.id);
+      }
 
-      dropDescriptor(fd) {
-        const descriptor = fs.getDescriptor(fd);
-        if (descriptor.fd)
-          closeSync(descriptor.fd);
-        delete fs.descriptors[fd];
-      },
+      drop() {
+        if (this.fd)
+          closeSync(this.fd);
+      }
 
-      readDirectoryEntry(sid) {
-        return io.getStream(sid).read();
-      },
-
-      dropDirectoryEntryStream(sid) {
-        io.dropStream(sid);
-      },
-
-      metadataHash(fd) {
-        const descriptor = fs.getDescriptor(fd);
-        if (descriptor.stream)
-          return { upper: 0n, lower: descriptor.stream}
-        if (descriptor.hostPreopen)
-          return { upper: 0n, lower: BigInt(fd) };
+      metadataHash() {
+        if (this.hostPreopen)
+          return { upper: 0n, lower: BigInt(this.id) };
         try {
-          const stats = fstatSync(descriptor.fd, { bigint: true });
+          const stats = fstatSync(this.fd, { bigint: true });
           return { upper: stats.mtimeNs, lower: stats.ino };
         }
         catch (e) {
           convertFsError(e);
         }
-      },
+      }
 
-      metadataHashAt(fd, pathFlags, path) {
-        const fullPath = fs.getFullPath(fd, path, false);
+      metadataHashAt(pathFlags, path) {
+        const fullPath = fs.getFullPath(this, path, false);
         try {
           const stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(isWindows ? fullPath.slice(1) : fullPath, { bigint: true });
           return { upper: stats.mtimeNs, lower: stats.ino };
@@ -427,11 +407,27 @@ export class FileSystem {
           convertFsError(e);
         }
       }
+    }
+
+    this.descriptorCnt = 3;
+    this.preopenEntries = [];
+    for (const [virtualPath, hostPreopen] of Object.entries(preopens)) {
+      const preopenEntry = [Object.assign(new Descriptor(), { hostPreopen }), virtualPath];
+      this.preopenEntries.push(preopenEntry);
+    }
+    this.preopens = {
+      Descriptor,
+      getDirectories () {
+        return fs.preopenEntries;
+      }
+    };
+    this.types = {
+      Descriptor,
     };
   }
 }
 
-const _fs = new FileSystem(_io, { '/': '/' }, environment);
+const _fs = new FileSystem({ '/': '/' }, environment);
 
 export const { preopens, types } = _fs;
 

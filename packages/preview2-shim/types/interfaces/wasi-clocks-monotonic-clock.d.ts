@@ -16,7 +16,7 @@ export namespace WasiClocksMonotonicClock {
    */
   export function subscribe(when: Instant, absolute: boolean): Pollable;
 }
-import type { Pollable } from '../interfaces/wasi-poll-poll';
+import type { Pollable } from '../interfaces/wasi-io-poll';
 export { Pollable };
 /**
  * A timestamp in nanoseconds.
