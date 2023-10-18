@@ -2,7 +2,10 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-network").Network} Network
  * @typedef {import("../../types/interfaces/wasi-sockets-network").ErrorCode} ErrorCode
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpAddressFamily} IpAddressFamily
+ * @typedef {import("../../types/interfaces/wasi-sockets-tcp").TcpSocket} TcpSocket
  */
+
+import { TcpSocketImpl } from "./tcp-socket-impl.js";
 
 /** @type {ErrorCode} */
 export const errorCode = {
@@ -51,25 +54,28 @@ export const errorCode = {
   permanentResolverFailure: "permanent-resolver-failure",
 };
 
-/** @type {IpAddressFamily} */
-export const ipAddressFamily = {
-  ipv4: "ipv4",
-  ipv6: "ipv6",
-};
-
 export class WasiSockets {
-  networkCnt = 0;
+  networkCnt = 1;
+  tcpSocketCnt = 1;
 
   /** @type {Map<number,Network>} */ networks = new Map();
+  /** @type {Map<number,TcpSocket} */ tcpSockets = new Map();
 
   constructor() {
     const net = this;
-    this.networks = new Map();
 
     class Network {
       /** @type {number} */ id;
       constructor() {
         this.id = net.networkCnt++;
+        net.networks.set(this.id, this);
+      }
+    }
+
+    class TcpSocket extends TcpSocketImpl {
+      constructor() {
+        super(net.tcpSocketCnt++);
+        net.tcpSockets.set(this.id, this);
       }
     }
 
@@ -100,6 +106,19 @@ export class WasiSockets {
           return;
         }
         net.networks.delete(networkId);
+      },
+    };
+
+    this.tcpCreateSocket = {
+      /**
+       * @param {IpAddressFamily} addressFamily
+       * @returns {number}
+       */
+      createTcpSocket(addressFamily) {
+        console.log(`[tcp] Create tcp socket ${addressFamily}`);
+
+        const socket = new TcpSocket();
+        return socket.id;
       },
     };
   }
