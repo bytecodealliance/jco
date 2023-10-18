@@ -1,5 +1,5 @@
-import { equal, ok, strictEqual,  } from 'node:assert';
-import { fileURLToPath } from 'node:url';
+import { equal, ok, strictEqual } from "node:assert";
+import { fileURLToPath } from "node:url";
 
 suite("Node.js Preview2", () => {
   test("Stdio", async () => {
@@ -159,11 +159,13 @@ suite("Node.js Preview2", () => {
     ok(responseBody.includes("WebAssembly"));
   });
 
-  test('Sockets', async () => {
-    const { sockets } = await import('@bytecodealliance/preview2-shim');
-    const net = sockets.instanceNetwork.instanceNetwork();
-
-    equal(net.id, 0);
+  suite("Sockets", async () => {
+    test("instanceNetwork", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const net1 = sockets.instanceNetwork.instanceNetwork();
+      equal(net1.id, 1);
+      const net2 = sockets.instanceNetwork.instanceNetwork();
+      equal(net2.id, 2);
+    });
   });
-
 });
