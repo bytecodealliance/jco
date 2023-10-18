@@ -58,6 +58,7 @@ export class WasiSockets {
   networkCnt = 1;
   tcpSocketCnt = 1;
 
+  /** @type {Network} */ networkInstance = null;
   /** @type {Map<number,Network>} */ networks = new Map();
   /** @type {Map<number,TcpSocket} */ tcpSockets = new Map();
 
@@ -65,7 +66,7 @@ export class WasiSockets {
     const net = this;
 
     class Network {
-      /** @type {number} */ id;
+      id = 1;
       constructor() {
         this.id = net.networkCnt++;
         net.networks.set(this.id, this);
@@ -81,31 +82,30 @@ export class WasiSockets {
 
     this.instanceNetwork = {
       /**
-       * @returns Network
+       * @returns {Network}
        */
       instanceNetwork() {
         console.log(`[sockets] instance network`);
 
-        let _network;
-        if (!_network) {
-          _network = new Network();
+        // TODO: should networkInstance be a singleton?
+        if (!net.networkInstance) {
+          net.networkInstance = new Network();
         }
-        return _network;
+        return net.networkInstance;
       },
     };
 
     this.network = {
       /**
        * @param {Network} networkId
+       * @returns {void}
        **/
       dropNetwork(networkId) {
         console.log(`[network] Drop network ${networkId}`);
 
-        const network = net.networks.get(networkId);
-        if (!network) {
-          return;
-        }
-        net.networks.delete(networkId);
+        // TODO: shouldn't we return a boolean to indicate success or failure?
+        // TODO: update tsdoc return type
+        return net.networks.delete(networkId);
       },
     };
 

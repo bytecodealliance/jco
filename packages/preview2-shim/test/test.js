@@ -162,10 +162,23 @@ suite("Node.js Preview2", () => {
   suite("Sockets", async () => {
     test("instanceNetwork", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const net1 = sockets.instanceNetwork.instanceNetwork();
-      equal(net1.id, 1);
-      const net2 = sockets.instanceNetwork.instanceNetwork();
-      equal(net2.id, 2);
+      const network1 = sockets.instanceNetwork.instanceNetwork();
+      equal(network1.id, 1);
+      const network2 = sockets.instanceNetwork.instanceNetwork();
+      equal(network2.id, 1);
+    });
+
+    test("dropNetwork", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const net = sockets.instanceNetwork.instanceNetwork();
+
+      // drop existing network
+      const op1 = sockets.network.dropNetwork(net.id);
+      equal(op1, true);
+
+      // drop non-existing network
+      const op2 = sockets.network.dropNetwork(99999);
+      equal(op2, false);
     });
   });
 });

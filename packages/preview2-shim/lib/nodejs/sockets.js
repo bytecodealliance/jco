@@ -2,9 +2,9 @@
 
 import { WasiSockets } from "../sockets/wasi-sockets.js";
 
-const _network = new WasiSockets();
+const sockets = new WasiSockets();
 
-export const { instanceNetwork, network } = _network;
+export const { instanceNetwork, network } = sockets;
 
 export const ipNameLookup = {
   dropResolveAddressStream() {},
