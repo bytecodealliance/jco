@@ -1,7 +1,9 @@
 use crate::core;
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
-use crate::function_bindgen::{ErrHandling, FunctionBindgen, ResourceMap, ResourceTable};
+use crate::function_bindgen::{
+    ErrHandling, FunctionBindgen, ResourceData, ResourceMap, ResourceTable,
+};
 use crate::intrinsics::{render_intrinsics, Intrinsic};
 use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source;
@@ -808,7 +810,9 @@ impl<'a> Instantiator<'a, '_> {
                     .is_none();
                 self.ensure_resource_table(*t2);
 
-                let ty = &self.resolve.types[*t1];
+                let resource_id = crate::dealias(self.resolve, *t1);
+
+                let ty = &self.resolve.types[resource_id];
                 let resource = ty.name.as_ref().unwrap();
                 let (local_name, _) = self.gen.local_names.get_or_create(
                     &if imported {
@@ -820,11 +824,13 @@ impl<'a> Instantiator<'a, '_> {
                 );
 
                 map.insert(
-                    *t1,
+                    resource_id,
                     ResourceTable {
-                        id: t2.as_u32(),
-                        local_name: local_name.to_string(),
                         imported,
+                        data: ResourceData::Host {
+                            id: t2.as_u32(),
+                            local_name: local_name.to_string(),
+                        },
                     },
                 );
             }
@@ -972,6 +978,7 @@ impl<'a> Instantiator<'a, '_> {
                 component::StringEncoding::CompactUtf16 => StringEncoding::CompactUTF16,
             },
             src: source::Source::default(),
+            resolve: self.resolve,
         };
         abi::call(
             self.resolve,
