@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network").Network} Network
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpSocketAddress} IpSocketAddress
@@ -112,7 +114,7 @@ export class TcpSocketImpl {
    * @returns {boolean}
    * */
   ipv6Only(tcpSocket) {
-    console.log(`[tcp] ipv6 only socket ${this_.id}`);
+    console.log(`[tcp] ipv6 only socket ${this.id}`);
     throw new Error("not implemented");
   }
 
@@ -198,7 +200,7 @@ export class TcpSocketImpl {
    * @returns {void}
    * */
   setReceiveBufferSize(tcpSocket, value) {
-    console.log(`[tcp] set receive buffer size socket ${this_.id} to ${value}`);
+    console.log(`[tcp] set receive buffer size socket ${this.id} to ${value}`);
     throw new Error("not implemented");
   }
 
@@ -226,7 +228,7 @@ export class TcpSocketImpl {
    * @returns {Pollable}
    * */
   subscribe(tcpSocket) {
-    console.log(`[tcp] subscribe socket ${this_.id}`);
+    console.log(`[tcp] subscribe socket ${this.id}`);
     throw new Error("not implemented");
   }
 

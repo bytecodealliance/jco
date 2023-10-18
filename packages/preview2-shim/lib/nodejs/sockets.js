@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+
 import { WasiSockets } from "../sockets/wasi-sockets.js";
 
 const _network = new WasiSockets();
