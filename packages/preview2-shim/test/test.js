@@ -200,13 +200,14 @@ suite("Node.js Preview2", () => {
       );
     });
 
-    suite("TCP", async () => {
-      test("tcpSocketBind", async () => {
+    suite("tcp", async () => {
+      test("startBind", async () => {
         const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+        const network = sockets.instanceNetwork.instanceNetwork();
         const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
           sockets.network.IpAddressFamily.ipv4
         );
-        const network = sockets.instanceNetwork.instanceNetwork();
         const localAddress = {
           tag: sockets.network.IpAddressFamily.ipv4,
           val: {
@@ -223,6 +224,24 @@ suite("Node.js Preview2", () => {
         equal(tcpSocket.socketAddress.port, 0);
         equal(tcpSocket.socketAddress.flowlabel, 0);
 
+
+      });
+
+      test("finishBind", async () => {
+        const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+        const network = sockets.instanceNetwork.instanceNetwork();
+        const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
+          sockets.network.IpAddressFamily.ipv4
+        );
+        const localAddress = {
+          tag: sockets.network.IpAddressFamily.ipv4,
+          val: {
+            address: [0, 0, 0, 0],
+            port: 0,
+          },
+        };
+        tcpSocket.startBind(tcpSocket, network, localAddress);
         tcpSocket.finishBind(tcpSocket);
 
         equal(tcpSocket.isBound, false);
