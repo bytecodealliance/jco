@@ -11,7 +11,7 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-tcp").ShutdownType} ShutdownType
  */
 
-import { Socket as NodeSocket } from "node:net";
+import { Socket as NodeSocket, SocketAddress as NodeSocketAddress  } from "node:net";
 
 export class TcpSocketImpl {
   /** @type {number} */ id;
@@ -44,7 +44,12 @@ export class TcpSocketImpl {
       throw new Error("socket is already bound");
     }
 
-    this.localAddress = localAddress;
+    this.socketAddress = new NodeSocketAddress({
+      address: localAddress.val.address.join('.'),
+      port: localAddress.val.port,
+      family: this.addressFamily,
+    });
+
     this.network = network;
     this.isBound = true;
   }
@@ -57,7 +62,7 @@ export class TcpSocketImpl {
     console.log(`[tcp] finish bind socket ${tcpSocket.id}`);
 
     this.network = null;
-    this.localAddress = null;
+    this.socketAddress = null;
     this.isBound = false;
   }
 
@@ -73,10 +78,10 @@ export class TcpSocketImpl {
     this.network = network;
 
     this.socket.connect({
-      localAddress: this.localAddress.address,
-      localPort: this.localAddress.port,
-      host: remoteAddress.address,
-      port: remoteAddress.port,
+      localAddress: this.socketAddress.address.join('.'),
+      localPort: this.socketAddress.port,
+      host: remoteAddress.val.address.join('.'),
+      port: remoteAddress.val.port,
       family: this.addressFamily,
     });
 

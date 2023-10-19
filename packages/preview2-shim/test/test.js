@@ -1,4 +1,4 @@
-import { equal, ok, strictEqual } from "node:assert";
+import { equal, ok, throws } from "node:assert";
 import { fileURLToPath } from "node:url";
 
 suite("Node.js Preview2", () => {
@@ -179,6 +179,57 @@ suite("Node.js Preview2", () => {
       // drop non-existing network
       const op2 = sockets.network.dropNetwork(99999);
       equal(op2, false);
+    });
+
+    test("createTcpSocket", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+      const { id } = sockets.tcpCreateSocket.createTcpSocket(
+        sockets.network.IpAddressFamily.ipv4
+      );
+      equal(id, 1);
+
+      throws(
+        () => {
+          sockets.tcpCreateSocket.createTcpSocket("abc");
+        },
+        {
+          name: "Error",
+          message: sockets.network.errorCode.addressFamilyNotSupported,
+        }
+      );
+    });
+
+    suite("TCP", async () => {
+      test("tcpSocketBind", async () => {
+        const { sockets } = await import("@bytecodealliance/preview2-shim");
+        const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
+          sockets.network.IpAddressFamily.ipv4
+        );
+        const network = sockets.instanceNetwork.instanceNetwork();
+        const localAddress = {
+          tag: sockets.network.IpAddressFamily.ipv4,
+          val: {
+            address: [0, 0, 0, 0],
+            port: 0,
+          },
+        };
+        tcpSocket.startBind(tcpSocket, network, localAddress);
+
+        equal(tcpSocket.isBound, true);
+        equal(tcpSocket.network.id, network.id);
+        equal(tcpSocket.socketAddress.family, "ipv4");
+        equal(tcpSocket.socketAddress.address, "0.0.0.0");
+        equal(tcpSocket.socketAddress.port, 0);
+        equal(tcpSocket.socketAddress.flowlabel, 0);
+
+        tcpSocket.finishBind(tcpSocket);
+
+        equal(tcpSocket.isBound, false);
+        equal(tcpSocket.network, null);
+        equal(tcpSocket.socketAddress, null);
+
+      });
     });
   });
 });

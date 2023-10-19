@@ -54,6 +54,14 @@ export const errorCode = {
   permanentResolverFailure: "permanent-resolver-failure",
 };
 
+/** @type {IpAddressFamily[]} */
+const supportedAddressFamilies = ["ipv4", "ipv6"];
+
+export const IpAddressFamily = {
+  ipv4: "ipv4",
+  ipv6: "ipv6",
+};
+
 export class WasiSockets {
   networkCnt = 1;
   tcpSocketCnt = 1;
@@ -97,6 +105,8 @@ export class WasiSockets {
     };
 
     this.network = {
+      errorCode,
+      IpAddressFamily,
       /**
        * @param {Network} networkId
        * @returns {void}
@@ -113,13 +123,22 @@ export class WasiSockets {
     this.tcpCreateSocket = {
       /**
        * @param {IpAddressFamily} addressFamily
-       * @returns {number}
+       * @returns {TcpSocket}
+       * @throws {Error} not-supported | address-family-not-supported | new-socket-limit
        */
       createTcpSocket(addressFamily) {
         console.log(`[tcp] Create tcp socket ${addressFamily}`);
 
-        const socket = new TcpSocket(addressFamily);
-        return socket.id;
+        if (supportedAddressFamilies.includes(addressFamily) === false) {
+          throw new Error(errorCode.addressFamilyNotSupported);
+        }
+
+        try {
+          return new TcpSocket(addressFamily);
+        }
+        catch (e) {
+          throw new Error(errorCode.notSupported);
+        }
       },
     };
   }
