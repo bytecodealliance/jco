@@ -31,9 +31,15 @@ use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
 use wit_parser::abi::AbiVariant;
 use wit_parser::{
-    Function, FunctionKind, Handle, Resolve, SizeAlign, Type, TypeDefKind, WorldId, WorldItem,
-    WorldKey,
+    Function, FunctionKind, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId, WorldId,
+    WorldItem, WorldKey,
 };
+
+#[derive(Hash)]
+struct ResourceInstance<'a> {
+    resource_id: TypeId,
+    import: Option<&'a str>,
+}
 
 #[derive(Default, Clone)]
 pub struct TranspileOpts {
@@ -103,7 +109,7 @@ pub fn transpile_bindgen(
     };
     bindgen
         .local_names
-        .exclude_intrinsics(Intrinsic::get_all_names());
+        .exclude_globals(Intrinsic::get_global_names());
     bindgen.core_module_cnt = modules.len();
 
     // bindings is the actual `instantiate` method itself, created by this
@@ -671,8 +677,7 @@ impl<'a> Instantiator<'a, '_> {
         let world_key = &self.imports[import_name];
 
         // nested interfaces only currently possible through mapping
-        let (import_specifier, mut maybe_iface_member) =
-            map_import(&self.gen.opts.map, &import_name);
+        let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, &import_name);
 
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
@@ -693,6 +698,8 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
+        let resource_map = self.create_resource_map(func, ty_func_idx);
+
         let callee_name = match func.kind {
             FunctionKind::Freestanding => {
                 let callee_name = self
@@ -706,26 +713,29 @@ impl<'a> Instantiator<'a, '_> {
                     .to_string();
                 callee_name
             }
-            FunctionKind::Method(ty) => {
-                let ty = &self.resolve.types[ty];
-                format!(
-                    "{}.prototype.{}.call",
-                    ty.name.as_ref().unwrap().to_upper_camel_case(),
-                    func.item_name().to_lower_camel_case()
-                )
-            }
-            FunctionKind::Static(ty) => {
-                let ty = &self.resolve.types[ty];
-                format!(
-                    "{}.{}",
-                    ty.name.as_ref().unwrap().to_upper_camel_case(),
-                    func.item_name().to_lower_camel_case()
-                )
-            }
-            FunctionKind::Constructor(ty) => {
-                let ty = &self.resolve.types[ty];
-                format!("new {}", ty.name.as_ref().unwrap().to_upper_camel_case())
-            }
+            FunctionKind::Method(ty) => format!(
+                "{}.prototype.{}.call",
+                match &resource_map[&ty].data {
+                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Guest { .. } => unreachable!(),
+                },
+                func.item_name().to_lower_camel_case()
+            ),
+            FunctionKind::Static(ty) => format!(
+                "{}.{}",
+                match &resource_map[&ty].data {
+                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Guest { .. } => unreachable!(),
+                },
+                func.item_name().to_lower_camel_case()
+            ),
+            FunctionKind::Constructor(ty) => format!(
+                "new {}",
+                match &resource_map[&ty].data {
+                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Guest { .. } => unreachable!(),
+                },
+            ),
         };
 
         let nparams = self
@@ -733,8 +743,6 @@ impl<'a> Instantiator<'a, '_> {
             .wasm_signature(AbiVariant::GuestImport, func)
             .params
             .len();
-
-        let resource_map = self.create_resource_map(func, ty_func_idx);
 
         uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
         self.bindgen(
@@ -749,43 +757,65 @@ impl<'a> Instantiator<'a, '_> {
             options,
             func,
             AbiVariant::GuestImport,
-            resource_map,
+            &resource_map,
         );
         uwriteln!(self.src.js, "");
 
         let (import_name, binding_name) = match func.kind {
             FunctionKind::Freestanding => (func_name.to_lower_camel_case(), callee_name),
-            FunctionKind::Method(ty) | FunctionKind::Static(ty) | FunctionKind::Constructor(ty) => {
-                let ty = &self.resolve.types[ty];
+            FunctionKind::Method(tid)
+            | FunctionKind::Static(tid)
+            | FunctionKind::Constructor(tid) => {
+                let ty = &self.resolve.types[tid];
                 (
                     ty.name.as_ref().unwrap().to_upper_camel_case(),
-                    ty.name.as_ref().unwrap().to_upper_camel_case(),
+                    match &resource_map[&tid].data {
+                        ResourceData::Host { local_name, .. } => local_name.to_string(),
+                        ResourceData::Guest { .. } => unreachable!(),
+                    },
                 )
             }
         };
 
+        self.ensure_import(
+            import_specifier,
+            iface_name,
+            maybe_iface_member.as_deref(),
+            import_name,
+            binding_name,
+        );
+    }
+
+    fn ensure_import(
+        &mut self,
+        import_specifier: String,
+        iface_name: Option<&str>,
+        iface_member: Option<&str>,
+        import_name: String,
+        local_name: String,
+    ) {
         // add the function import to the ESM bindgen
         if let Some(_iface_name) = iface_name {
             // mapping can be used to construct virtual nested namespaces
             // which is used eg to support WASI interface groupings
-            if let Some(iface_member) = maybe_iface_member.take() {
+            if let Some(iface_member) = iface_member {
                 self.gen.esm_bindgen.add_import_binding(
                     &[
                         import_specifier,
                         iface_member.to_lower_camel_case(),
                         import_name,
                     ],
-                    binding_name,
+                    local_name,
                 );
             } else {
                 self.gen
                     .esm_bindgen
-                    .add_import_binding(&[import_specifier, import_name], binding_name);
+                    .add_import_binding(&[import_specifier, import_name], local_name);
             }
         } else {
             self.gen
                 .esm_bindgen
-                .add_import_binding(&[import_specifier], binding_name);
+                .add_import_binding(&[import_specifier], local_name);
         }
     }
 
@@ -814,14 +844,75 @@ impl<'a> Instantiator<'a, '_> {
 
                 let ty = &self.resolve.types[resource_id];
                 let resource = ty.name.as_ref().unwrap();
-                let (local_name, _) = self.gen.local_names.get_or_create(
-                    &if imported {
-                        format!("import_resource:{resource}")
-                    } else {
-                        format!("resource:{resource}")
-                    },
-                    &resource.to_upper_camel_case(),
-                );
+
+                let resource_name = resource.to_upper_camel_case();
+
+                // ensure imported resources are imported
+                let local_name = if imported {
+                    let (world_key, iface_name) = match ty.owner {
+                        wit_parser::TypeOwner::World(world) => (
+                            self.resolve.worlds[world]
+                                .imports
+                                .iter()
+                                .find(|&(_, item)| *item == WorldItem::Type(*t1))
+                                .unwrap()
+                                .0
+                                .clone(),
+                            None,
+                        ),
+                        wit_parser::TypeOwner::Interface(iface) => {
+                            match &self.resolve.interfaces[iface].name {
+                                Some(name) => (WorldKey::Interface(iface), Some(name.as_str())),
+                                None => (
+                                    self.resolve.worlds[self.world]
+                                        .imports
+                                        .iter()
+                                        .find(|&(_, item)| *item == WorldItem::Interface(iface))
+                                        .unwrap()
+                                        .0
+                                        .clone(),
+                                    None,
+                                ),
+                            }
+                        }
+                        wit_parser::TypeOwner::None => unimplemented!(),
+                    };
+
+                    let import_name = self.resolve.name_world_key(&world_key);
+                    let (local_name, _) = self.gen.local_names.get_or_create(
+                        ResourceInstance {
+                            resource_id,
+                            import: Some(&import_name),
+                        },
+                        &resource_name,
+                    );
+
+                    let local_name_str = local_name.to_string();
+
+                    // nested interfaces only currently possible through mapping
+                    let (import_specifier, maybe_iface_member) =
+                        map_import(&self.gen.opts.map, &import_name);
+
+                    self.ensure_import(
+                        import_specifier,
+                        iface_name,
+                        maybe_iface_member.as_deref(),
+                        resource_name,
+                        local_name_str.to_string(),
+                    );
+
+                    local_name_str
+                } else {
+                    let (local_name, _) = self.gen.local_names.get_or_create(
+                        ResourceInstance {
+                            resource_id,
+                            import: None,
+                        },
+                        &resource_name,
+                    );
+
+                    local_name.to_string()
+                };
 
                 map.insert(
                     resource_id,
@@ -829,7 +920,7 @@ impl<'a> Instantiator<'a, '_> {
                         imported,
                         data: ResourceData::Host {
                             id: t2.as_u32(),
-                            local_name: local_name.to_string(),
+                            local_name,
                         },
                     },
                 );
@@ -881,7 +972,7 @@ impl<'a> Instantiator<'a, '_> {
         opts: &CanonicalOptions,
         func: &Function,
         abi: AbiVariant,
-        resource_map: ResourceMap,
+        resource_map: &ResourceMap,
     ) {
         let memory = match opts.memory {
             Some(idx) => Some(format!("memory{}", idx.as_u32())),
@@ -1131,20 +1222,25 @@ impl<'a> Instantiator<'a, '_> {
                         WorldItem::Function(f) => f,
                         WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    let (local_name, existing_resource_def) = if let FunctionKind::Constructor(ty)
-                    | FunctionKind::Method(ty)
-                    | FunctionKind::Static(ty) =
-                        func.kind
-                    {
-                        let ty = &self.resolve.types[ty];
-                        let resource = ty.name.as_ref().unwrap();
-                        self.gen.local_names.get_or_create(
-                            &format!("resource:{resource}"),
-                            &resource.to_upper_camel_case(),
-                        )
-                    } else {
-                        (self.gen.local_names.create_once(export_name), false)
-                    };
+                    let resource_map = self.create_resource_map(func, *ty);
+                    let (local_name, existing_resource_def) =
+                        if let FunctionKind::Constructor(tid)
+                        | FunctionKind::Method(tid)
+                        | FunctionKind::Static(tid) = func.kind
+                        {
+                            let resource_id = crate::dealias(self.resolve, tid);
+                            let ty = &self.resolve.types[tid];
+                            let resource = ty.name.as_ref().unwrap();
+                            self.gen.local_names.get_or_create(
+                                ResourceInstance {
+                                    resource_id,
+                                    import: None,
+                                },
+                                &resource.to_upper_camel_case(),
+                            )
+                        } else {
+                            (self.gen.local_names.create_once(export_name), false)
+                        };
                     let local_name = local_name.to_string();
                     self.export_bindgen(
                         &local_name,
@@ -1152,8 +1248,8 @@ impl<'a> Instantiator<'a, '_> {
                         options,
                         func,
                         existing_resource_def,
-                        *ty,
                         export_name,
+                        &resource_map,
                     );
                     if let FunctionKind::Constructor(ty)
                     | FunctionKind::Method(ty)
@@ -1186,16 +1282,21 @@ impl<'a> Instantiator<'a, '_> {
                         };
 
                         let func = &self.resolve.interfaces[id].functions[func_name];
+                        let resource_map = self.create_resource_map(func, *ty);
 
                         let (local_name, existing_resource_def) =
-                            if let FunctionKind::Constructor(ty)
-                            | FunctionKind::Method(ty)
-                            | FunctionKind::Static(ty) = func.kind
+                            if let FunctionKind::Constructor(tid)
+                            | FunctionKind::Method(tid)
+                            | FunctionKind::Static(tid) = func.kind
                             {
-                                let ty = &self.resolve.types[ty];
+                                let resource_id = crate::dealias(self.resolve, tid);
+                                let ty = &self.resolve.types[tid];
                                 let resource = ty.name.as_ref().unwrap();
                                 self.gen.local_names.get_or_create(
-                                    &format!("resource:{resource}"),
+                                    ResourceInstance {
+                                        resource_id,
+                                        import: None,
+                                    },
                                     &resource.to_upper_camel_case(),
                                 )
                             } else {
@@ -1209,8 +1310,8 @@ impl<'a> Instantiator<'a, '_> {
                             options,
                             func,
                             existing_resource_def,
-                            *ty,
                             export_name,
+                            &resource_map,
                         );
 
                         if let FunctionKind::Constructor(ty)
@@ -1252,10 +1353,9 @@ impl<'a> Instantiator<'a, '_> {
         options: &CanonicalOptions,
         func: &Function,
         existing_resource_def: bool,
-        ty_func_idx: TypeFuncIndex,
         export_name: &String,
+        resource_map: &ResourceMap,
     ) {
-        let resource_map = self.create_resource_map(func, ty_func_idx);
         match func.kind {
             FunctionKind::Freestanding => uwrite!(self.src.js, "\nfunction {local_name}"),
             FunctionKind::Method(_) => {
@@ -1312,7 +1412,7 @@ impl<'a> Instantiator<'a, '_> {
             options,
             func,
             AbiVariant::GuestExport,
-            resource_map,
+            &resource_map,
         );
         match func.kind {
             FunctionKind::Freestanding => self.src.js("\n"),

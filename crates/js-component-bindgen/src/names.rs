@@ -1,17 +1,20 @@
 use heck::ToLowerCamelCase;
+use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasher, Hash, Hasher};
 
 #[derive(Default)]
 pub struct LocalNames {
     // map from exact name to generated local name
-    local_name_ids: HashMap<String, String>,
+    local_name_ids: HashMap<u64, String>,
     local_names: HashSet<String>,
+    random_state: RandomState,
 }
 
 impl<'a> LocalNames {
-    /// provide known intrinsic identifier names to exclude from being assigned
-    pub fn exclude_intrinsics(&mut self, intrinsics: &[&str]) {
-        for name in intrinsics {
+    /// provide known global identifier names to exclude from being assigned
+    pub fn exclude_globals(&mut self, globals: &[&str]) {
+        for name in globals {
             self.local_names.insert(name.to_string());
         }
     }
@@ -39,22 +42,28 @@ impl<'a> LocalNames {
         self.local_names.get(&goal).unwrap()
     }
 
-    pub fn get(&'a self, unique_id: &str) -> &'a str {
-        if !self.local_name_ids.contains_key(unique_id) {
-            panic!("Internal error, no name defined for {}", unique_id);
+    pub fn get<H: Hash>(&'a self, unique_id: H) -> &'a str {
+        let mut new_s = self.random_state.build_hasher();
+        unique_id.hash(&mut new_s);
+        let hash = new_s.finish();
+        if !self.local_name_ids.contains_key(&hash) {
+            panic!("Internal error, no name defined for {}", hash);
         }
-        &self.local_name_ids[unique_id]
+        &self.local_name_ids[&hash]
     }
 
     /// get or create a unique identifier for a string while storing the lookup by unique id
-    pub fn get_or_create(&'a mut self, unique_id: &str, goal_name: &str) -> (&'a str, bool) {
+    pub fn get_or_create<H: Hash>(&'a mut self, unique_id: H, goal_name: &str) -> (&'a str, bool) {
+        let mut new_s = self.random_state.build_hasher();
+        unique_id.hash(&mut new_s);
+        let hash = new_s.finish();
         let mut seen = true;
-        if !self.local_name_ids.contains_key(unique_id) {
+        if !self.local_name_ids.contains_key(&hash) {
             let goal = self.create_once(goal_name).to_string();
-            self.local_name_ids.insert(unique_id.to_string(), goal);
+            self.local_name_ids.insert(hash, goal);
             seen = false;
         }
-        (self.local_name_ids.get(unique_id).unwrap(), seen)
+        (self.local_name_ids.get(&hash).unwrap(), seen)
     }
 }
 
