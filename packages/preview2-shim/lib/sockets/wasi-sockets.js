@@ -74,8 +74,9 @@ export class WasiSockets {
     }
 
     class TcpSocket extends TcpSocketImpl {
-      constructor() {
-        super(net.tcpSocketCnt++);
+      /** @param {IpAddressFamily} addressFamily */
+      constructor(addressFamily) {
+        super(net.tcpSocketCnt++, addressFamily);
         net.tcpSockets.set(this.id, this);
       }
     }
@@ -117,7 +118,7 @@ export class WasiSockets {
       createTcpSocket(addressFamily) {
         console.log(`[tcp] Create tcp socket ${addressFamily}`);
 
-        const socket = new TcpSocket();
+        const socket = new TcpSocket(addressFamily);
         return socket.id;
       },
     };

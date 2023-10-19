@@ -11,11 +11,24 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-tcp").ShutdownType} ShutdownType
  */
 
+import { Socket as NodeSocket } from "node:net";
+
 export class TcpSocketImpl {
   /** @type {number} */ id;
+  /** @type {boolean} */ isBound = false;
+  /** @type {NodeSocket} */ socket = null;
+  /** @type {Network} */ network = null;
+  /** @type {IpAddressFamily} */ addressFamily;
+  /** @type {IpSocketAddress} */ localAddress = null;
 
-  constructor(socketId) {
+  ipv6Only = false;
+  state = "closed";
+
+  constructor(socketId, addressFamily) {
     this.id = socketId;
+    this.addressFamily = addressFamily;
+
+    this.socket = new NodeSocket();
   }
 
   /**
@@ -26,7 +39,14 @@ export class TcpSocketImpl {
    **/
   startBind(tcpSocket, network, localAddress) {
     console.log(`[tcp] start bind socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    if (this.isBound) {
+      throw new Error("socket is already bound");
+    }
+
+    this.localAddress = localAddress;
+    this.network = network;
+    this.isBound = true;
   }
 
   /**
@@ -35,7 +55,10 @@ export class TcpSocketImpl {
    **/
   finishBind(tcpSocket) {
     console.log(`[tcp] finish bind socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    this.network = null;
+    this.localAddress = null;
+    this.isBound = false;
   }
 
   /**
@@ -46,7 +69,46 @@ export class TcpSocketImpl {
    * */
   startConnect(tcpSocket, network, remoteAddress) {
     console.log(`[tcp] start connect socket ${tcpSocket.id} to ${remoteAddress} on network ${network.id}`);
-    throw new Error("not implemented");
+
+    this.network = network;
+
+    this.socket.connect({
+      localAddress: this.localAddress.address,
+      localPort: this.localAddress.port,
+      host: remoteAddress.address,
+      port: remoteAddress.port,
+      family: this.addressFamily,
+    });
+
+    this.socket.on("connect", () => {
+      console.log(`[tcp] connect on socket ${tcpSocket.id}`);
+      this.state = "connected";
+    });
+
+    this.socket.on("ready", () => {
+      console.log(`[tcp] ready on socket ${tcpSocket.id}`);
+      this.state = "connection";
+    });
+
+    this.socket.on("close", () => {
+      console.log(`[tcp] close on socket ${tcpSocket.id}`);
+      this.state = "closed";
+    });
+
+    this.socket.on("end", () => {
+      console.log(`[tcp] end on socket ${tcpSocket.id}`);
+      this.state = "closed";
+    });
+
+    this.socket.on("timeout", () => {
+      console.error(`[tcp] timeout on socket ${tcpSocket.id}`);
+      this.state = "closed";
+    });
+
+    this.socket.on("error", (err) => {
+      console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
+      this.state = "error";
+    });
   }
 
   /**
@@ -55,14 +117,19 @@ export class TcpSocketImpl {
    * */
   finishConnect(tcpSocket) {
     console.log(`[tcp] finish connect socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    this.socket.destroySoon();
   }
 
   /**
    *  @param {TcpSocket} tcpSocket
    * @returns {void}
    * */
-  startListen(tcpSocket) {}
+  startListen(tcpSocket) {
+    console.log(`[tcp] start listen socket ${tcpSocket.id}`);
+
+    this.socket.listen();
+  }
 
   /**
    * @param {TcpSocket} tcpSocket
@@ -88,7 +155,12 @@ export class TcpSocketImpl {
    * */
   localAddress(tcpSocket) {
     console.log(`[tcp] local address socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    if (!this.isBound) {
+      throw new Error("not-bound");
+    }
+
+    return this.socket.localAddress();
   }
 
   /**
@@ -97,7 +169,17 @@ export class TcpSocketImpl {
    * */
   remoteAddress(tcpSocket) {
     console.log(`[tcp] remote address socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+
+    if (!this.isBound) {
+      throw new Error("not-bound");
+    }
+
+    if (this.state !== "connected") {
+      throw new Error("not-connected");
+    }
+
+    return this.socket.remoteAddress();
   }
 
   /**
@@ -106,7 +188,8 @@ export class TcpSocketImpl {
    * */
   addressFamily(tcpSocket) {
     console.log(`[tcp] address family socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    return this.socket.localFamily;
   }
 
   /**
@@ -115,7 +198,8 @@ export class TcpSocketImpl {
    * */
   ipv6Only(tcpSocket) {
     console.log(`[tcp] ipv6 only socket ${this.id}`);
-    throw new Error("not implemented");
+
+    return this.ipv6Only;
   }
 
   /**
@@ -125,7 +209,8 @@ export class TcpSocketImpl {
    * */
   setIpv6Only(tcpSocket, value) {
     console.log(`[tcp] set ipv6 only socket ${tcpSocket.id} to ${value}`);
-    throw new Error("not implemented");
+
+    this.ipv6Only = value;
   }
 
   /**
