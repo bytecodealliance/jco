@@ -18,15 +18,16 @@ export class TcpSocketImpl {
   /** @type {boolean} */ isBound = false;
   /** @type {NodeSocket} */ socket = null;
   /** @type {Network} */ network = null;
-  /** @type {IpAddressFamily} */ addressFamily;
-  /** @type {IpSocketAddress} */ localAddress = null;
+  /** @type {NodeSocketAddress} */ socketAddress = null;
 
-  ipv6Only = false;
-  state = "closed";
+
+  /** @type {IpAddressFamily} */ _addressFamily;
+  _ipv6Only = false;
+  _state = "closed";
 
   constructor(socketId, addressFamily) {
     this.id = socketId;
-    this.addressFamily = addressFamily;
+    this._addressFamily = addressFamily;
 
     this.socket = new NodeSocket();
   }
@@ -47,7 +48,7 @@ export class TcpSocketImpl {
     this.socketAddress = new NodeSocketAddress({
       address: localAddress.val.address.join('.'),
       port: localAddress.val.port,
-      family: this.addressFamily,
+      family: this._addressFamily,
     });
 
     this.network = network;
@@ -82,37 +83,37 @@ export class TcpSocketImpl {
       localPort: this.socketAddress.port,
       host: remoteAddress.val.address.join('.'),
       port: remoteAddress.val.port,
-      family: this.addressFamily,
+      family: this._addressFamily,
     });
 
     this.socket.on("connect", () => {
       console.log(`[tcp] connect on socket ${tcpSocket.id}`);
-      this.state = "connected";
+      this._state = "connected";
     });
 
     this.socket.on("ready", () => {
       console.log(`[tcp] ready on socket ${tcpSocket.id}`);
-      this.state = "connection";
+      this._state = "connection";
     });
 
     this.socket.on("close", () => {
       console.log(`[tcp] close on socket ${tcpSocket.id}`);
-      this.state = "closed";
+      this._state = "closed";
     });
 
     this.socket.on("end", () => {
       console.log(`[tcp] end on socket ${tcpSocket.id}`);
-      this.state = "closed";
+      this._state = "closed";
     });
 
     this.socket.on("timeout", () => {
       console.error(`[tcp] timeout on socket ${tcpSocket.id}`);
-      this.state = "closed";
+      this._state = "closed";
     });
 
     this.socket.on("error", (err) => {
       console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
-      this.state = "error";
+      this._state = "error";
     });
   }
 
@@ -180,7 +181,7 @@ export class TcpSocketImpl {
       throw new Error("not-bound");
     }
 
-    if (this.state !== "connected") {
+    if (this._state !== "connected") {
       throw new Error("not-connected");
     }
 
@@ -204,7 +205,7 @@ export class TcpSocketImpl {
   ipv6Only(tcpSocket) {
     console.log(`[tcp] ipv6 only socket ${this.id}`);
 
-    return this.ipv6Only;
+    return this._ipv6Only;
   }
 
   /**
@@ -215,7 +216,7 @@ export class TcpSocketImpl {
   setIpv6Only(tcpSocket, value) {
     console.log(`[tcp] set ipv6 only socket ${tcpSocket.id} to ${value}`);
 
-    this.ipv6Only = value;
+    this._ipv6Only = value;
   }
 
   /**
