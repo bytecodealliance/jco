@@ -3,8 +3,8 @@ import { transpile } from './transpile.js';
 import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
-import { argv0 } from 'node:process';
 import * as process from 'node:process';
+const { argv0 } = process;
 import { fileURLToPath } from 'node:url';
 import c from 'chalk-template';
 
@@ -28,7 +28,7 @@ export async function run (componentPath, args) {
 
     await writeFile(resolve(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
 
-    let preview2ShimPath = fileURLToPath(new URL('..', '..', 'node_modules', '@bytecodealliance', 'preview2-shim', import.meta.url));
+    let preview2ShimPath = fileURLToPath(new URL('../../node_modules/@bytecodealliance/preview2-shim', import.meta.url));
     while (true) {
       try {
         if ((await stat(preview2ShimPath)).isDirectory()) {
