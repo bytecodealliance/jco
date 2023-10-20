@@ -3,7 +3,8 @@ import { transpile } from './transpile.js';
 import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
-import { argv0, exitCode } from 'node:process';
+import { argv0 } from 'node:process';
+import * as process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import c from 'chalk-template';
 
@@ -25,10 +26,9 @@ export async function run (componentPath, args) {
       throw e;
     }
 
-    await mkdir(resolve(outDir, 'node_modules', '@bytecodealliance'), { recursive: true });
     await writeFile(resolve(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
 
-    let preview2ShimPath = fileURLToPath(new URL('../../node_modules/@bytecodealliance/preview2-shim', import.meta.url));
+    let preview2ShimPath = fileURLToPath(new URL('..', '..', 'node_modules', '@bytecodealliance', 'preview2-shim', import.meta.url));
     while (true) {
       try {
         if ((await stat(preview2ShimPath)).isDirectory()) {
@@ -37,14 +37,16 @@ export async function run (componentPath, args) {
       }
       catch {}
       let len = preview2ShimPath.length;
-      preview2ShimPath = resolve(preview2ShimPath, '../../../node_modules/@bytecodealliance/preview2-shim');
+      preview2ShimPath = resolve(preview2ShimPath, '..', '..', '..', 'node_modules', '@bytecodealliance', 'preview2-shim');
       if (preview2ShimPath.length === len) {
         console.error(c`{red ERR}: Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`);
         return;
       }
     }
 
-    await symlink(preview2ShimPath, resolve(outDir, 'node_modules/@bytecodealliance/preview2-shim'), 'dir');
+    const modulesDir = resolve(outDir, 'node_modules', '@bytecodealliance');
+    await mkdir(modulesDir, { recursive: true });
+    await symlink(preview2ShimPath, resolve(modulesDir, 'preview2-shim'), 'dir');
 
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
@@ -71,7 +73,7 @@ export async function run (componentPath, args) {
       }
     `);
 
-    exitCode = await new Promise((resolve, reject) => {
+    process.exitCode = await new Promise((resolve, reject) => {
       const cp = spawn(argv0, [runPath, ...args], { stdio: 'inherit' });
 
       cp.on('error', reject);
