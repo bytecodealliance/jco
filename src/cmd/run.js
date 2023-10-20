@@ -43,6 +43,7 @@ export async function run (componentPath, args) {
       if (preview2ShimPath.length === len) {
         console.error(c`{red ERR}: Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`);
         process.exitCode = 1;
+        return;
       }
     }
 
