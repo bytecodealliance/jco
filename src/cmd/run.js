@@ -4,7 +4,6 @@ import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { fork } from 'node:child_process';
 import process from 'node:process';
-const { argv0 } = process;
 import { fileURLToPath } from 'node:url';
 import c from 'chalk-template';
 
