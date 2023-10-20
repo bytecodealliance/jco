@@ -1,16 +1,15 @@
 import { getTmpDir } from '../common.js';
 import { transpile } from './transpile.js';
-import { rm, stat, mkdir, writeFile, symlink, chmod } from 'node:fs/promises';
+import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
-import { argv0, exit } from 'node:process';
+import { argv0, exitCode } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import c from 'chalk-template';
 
 export async function run (componentPath, args) {
   const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
   const outDir = await getTmpDir();
-  let cp;
   try {
     try {
       await transpile(componentPath, {
@@ -71,24 +70,17 @@ export async function run (componentPath, args) {
         throw e;
       }
     `);
-    await chmod(runPath, 0o777);
 
-    cp = spawn(argv0, [runPath, ...args], { stdio: 'inherit' });
+    exitCode = await new Promise((resolve, reject) => {
+      const cp = spawn(argv0, [runPath, ...args], { stdio: 'inherit' });
+
+      cp.on('error', reject);
+      cp.on('exit', resolve);
+    });
   }
   finally {
-    if (!cp) {
-      try {
-        await rm(outDir, { recursive: true });
-      } catch {}
-    }
+    try {
+      await rm(outDir, { recursive: true });
+    } catch {}
   }
-
-  const exitCode = await new Promise((resolve, reject) => {
-    cp.on('error', reject);
-    cp.on('exit', resolve);
-  });
-  try {
-    await rm(outDir, { recursive: true });
-  } catch {}
-  exit(exitCode);
 }
