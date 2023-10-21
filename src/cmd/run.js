@@ -77,7 +77,7 @@ export async function run (componentPath, args) {
     `);
 
     process.exitCode = await new Promise((resolve, reject) => {
-      const cp = fork(runPath, args);
+      const cp = fork(runPath, args, { stdio: 'inherit' });
 
       cp.on('error', reject);
       cp.on('exit', resolve);
