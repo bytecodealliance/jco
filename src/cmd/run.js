@@ -24,8 +24,7 @@ export async function run (componentPath, args) {
       });
     }
     catch (e) {
-      console.error(c`{red ERR}: Unable to transpile command for execution`);
-      throw e;
+      throw new Error('Unable to transpile command for execution', { cause: e });
     }
 
     await writeFile(resolve(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
@@ -41,9 +40,7 @@ export async function run (componentPath, args) {
       let len = preview2ShimPath.length;
       preview2ShimPath = resolve(preview2ShimPath, '..', '..', '..', 'node_modules', '@bytecodealliance', 'preview2-shim');
       if (preview2ShimPath.length === len) {
-        console.error(c`{red ERR}: Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`);
-        process.exitCode = 1;
-        return;
+        throw c`Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`;
       }
     }
 
