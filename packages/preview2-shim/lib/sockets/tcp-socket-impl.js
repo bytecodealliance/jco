@@ -29,13 +29,24 @@ export class TcpSocketImpl {
   /** @type {NodeSocketAddress} */ socketAddress = null;
 
   /** @type {IpAddressFamily} */ #addressFamily;
+  #canReceive = true;
+  #canSend = true;
   #ipv6Only = false;
   #state = "closed";
+
+  #noDelay = false;
+  #keepAlive = false;
+
+  // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
+  #backlog = 128;
 
   constructor(socketId, addressFamily) {
     this.id = socketId;
     this.#addressFamily = addressFamily;
-    this.socket = new NodeSocket();
+    this.socket = new NodeSocket({
+      keepAlive: this.#keepAlive,
+      noDelay: this.#noDelay
+    });
   }
 
   #computeIpAddress(localAddress) {
@@ -210,8 +221,7 @@ export class TcpSocketImpl {
    * */
   startListen(tcpSocket) {
     console.log(`[tcp] start listen socket ${tcpSocket.id}`);
-
-    this.socket.listen();
+    throw new Error("not implemented");
   }
 
   /**
@@ -317,7 +327,8 @@ export class TcpSocketImpl {
    * */
   setListenBacklogSize(tcpSocket, value) {
     console.log(`[tcp] set listen backlog size socket ${tcpSocket.id} to ${value}`);
-    throw new Error("not implemented");
+
+    this.#backlog = value;
   }
 
   /**
@@ -326,7 +337,8 @@ export class TcpSocketImpl {
    * */
   keepAlive(tcpSocket) {
     console.log(`[tcp] keep alive socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    this.#keepAlive;
   }
 
   /**
@@ -337,7 +349,9 @@ export class TcpSocketImpl {
    * */
   setKeepAlive(tcpSocket, value) {
     console.log(`[tcp] set keep alive socket ${tcpSocket.id} to ${value}`);
-    throw new Error("not implemented");
+
+    this.#keepAlive = value;
+    this.socket.setKeepAlive(value);
   }
 
   /**
@@ -346,7 +360,8 @@ export class TcpSocketImpl {
    * */
   noDelay(tcpSocket) {
     console.log(`[tcp] no delay socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    return this.#noDelay;
   }
 
   /**
@@ -357,7 +372,9 @@ export class TcpSocketImpl {
    * */
   setNoDelay(tcpSocket, value) {
     console.log(`[tcp] set no delay socket ${tcpSocket.id} to ${value}`);
-    throw new Error("not implemented");
+
+    this.#noDelay = value;
+    this.socket.setNoDelay(value);
   }
 
   /**
@@ -445,7 +462,20 @@ export class TcpSocketImpl {
    * */
   shutdown(tcpSocket, shutdownType) {
     console.log(`[tcp] shutdown socket ${tcpSocket.id} with ${shutdownType}`);
-    throw new Error("not implemented");
+
+    if (this.#state !== "connected") {
+      throw new Error("not-connected");
+    }
+
+    if (shutdownType === "read") {
+      this.#canReceive = false;
+    } else if (shutdownType === "write") {
+      this.#canSend = false;
+    }
+    else if (shutdownType === 'both') {
+      this.#canReceive = false;
+      this.#canSend = false;
+    }
   }
 
   /**
@@ -454,6 +484,9 @@ export class TcpSocketImpl {
    * */
   dropTcpSocket(tcpSocket) {
     console.log(`[tcp] drop socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    this.finishBind(tcpSocket);
+    this.finishConnect(tcpSocket);
+    this.socket.destroy();
   }
 }
