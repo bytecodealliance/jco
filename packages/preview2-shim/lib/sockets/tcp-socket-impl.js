@@ -11,7 +11,7 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-tcp").ShutdownType} ShutdownType
  */
 
-import { Socket as NodeSocket, SocketAddress as NodeSocketAddress, isIPv4, isIPv6, isIP } from "node:net";
+import { Socket as NodeSocket, SocketAddress as NodeSocketAddress, isIP } from "node:net";
 
 function tupleToIPv6(arr) {
   if (arr.length !== 8) {
@@ -38,6 +38,17 @@ export class TcpSocketImpl {
     this.socket = new NodeSocket();
   }
 
+  #computeIpAddress(localAddress) {
+    let { address } = localAddress.val;
+    if (this.#addressFamily.toLocaleLowerCase() === "ipv4") {
+      address = address.join(".");
+    } else if (this.#addressFamily.toLocaleLowerCase() === "ipv6") {
+      address = tupleToIPv6(address);
+    }
+
+    return address;
+  }
+
   /**
    * @param {TcpSocket} tcpSocket
    * @param {Network} network
@@ -54,23 +65,14 @@ export class TcpSocketImpl {
       throw new Error("already-bound");
     }
 
-    let { address } = localAddress.val;
-    if (this.#addressFamily.toLocaleLowerCase() === "ipv4") {
-      address = address.join(".");
-    } else if (this.#addressFamily.toLocaleLowerCase() === "ipv6") {
-      address = tupleToIPv6(address);
-    }
+    const address = this.#computeIpAddress(localAddress);
 
-    console.log({
-      address,
-    });
-    const port = localAddress.val.port;
     const ipFamily = `ipv${isIP(address)}`;
-
     if (this.#addressFamily.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
       throw new Error("address-family-mismatch");
     }
 
+    const { port } = localAddress.val;
     this.socketAddress = new NodeSocketAddress({
       address,
       port,
@@ -114,12 +116,38 @@ export class TcpSocketImpl {
   startConnect(tcpSocket, network, remoteAddress) {
     console.log(`[tcp] start connect socket ${tcpSocket.id} to ${remoteAddress} on network ${network.id}`);
 
+    if (this.network !== null && this.network.id !== network.id) {
+      throw new Error("already-attached");
+    }
     this.network = network;
 
+    if (this.#state === "connected") {
+      throw new Error("already-connected");
+    }
+
+    if (this.#state === "connection") {
+      throw new Error("already-listening");
+    }
+
+    if (this.isBound === false) {
+      throw new Error("not-bound");
+    }
+
+    const host = this.#computeIpAddress(remoteAddress);
+
+    const ipFamily = `ipv${isIP(host)}`;
+    if (ipFamily.toLocaleLowerCase() === "ipv0") {
+      throw new Error("invalid-remote-address");
+    }
+
+    if (this.#addressFamily.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
+      throw new Error("address-family-mismatch");
+    }
+
     this.socket.connect({
-      localAddress: this.socketAddress.address.join("."),
+      localAddress: this.socketAddress.address,
       localPort: this.socketAddress.port,
-      host: remoteAddress.val.address.join("."),
+      host,
       port: remoteAddress.val.port,
       family: this.#addressFamily,
     });
