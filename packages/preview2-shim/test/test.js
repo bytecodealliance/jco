@@ -160,7 +160,7 @@ suite("Node.js Preview2", () => {
   });
 
   suite("Sockets", async () => {
-    test("instanceNetwork", async () => {
+    test("sockets.instanceNetwork()", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network1 = sockets.instanceNetwork.instanceNetwork();
       equal(network1.id, 1);
@@ -168,7 +168,7 @@ suite("Node.js Preview2", () => {
       equal(network2.id, 1);
     });
 
-    test("dropNetwork", async () => {
+    test("sockets.dropNetwork()", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const net = sockets.instanceNetwork.instanceNetwork();
 
@@ -181,12 +181,9 @@ suite("Node.js Preview2", () => {
       equal(op2, false);
     });
 
-    test("createTcpSocket", async () => {
+    test("sockets.tcpCreateSocket()", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
-
-      const { id } = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const { id } = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
       equal(id, 1);
 
       throws(
@@ -199,56 +196,108 @@ suite("Node.js Preview2", () => {
         }
       );
     });
+    test("tcp.startBind(): should bind to a valid ipv4 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      tcpSocket.startBind(tcpSocket, network, localAddress);
 
-    suite("tcp", async () => {
-      test("startBind", async () => {
-        const { sockets } = await import("@bytecodealliance/preview2-shim");
+      equal(tcpSocket.isBound, true);
+      equal(tcpSocket.network.id, network.id);
+      equal(tcpSocket.socketAddress.family, "ipv4");
+      equal(tcpSocket.socketAddress.address, "0.0.0.0");
+      equal(tcpSocket.socketAddress.port, 0);
+      equal(tcpSocket.socketAddress.flowlabel, 0);
+    });
 
-        const network = sockets.instanceNetwork.instanceNetwork();
-        const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-          sockets.network.IpAddressFamily.ipv4
-        );
-        const localAddress = {
-          tag: sockets.network.IpAddressFamily.ipv4,
-          val: {
-            address: [0, 0, 0, 0],
-            port: 0,
-          },
-        };
+    test("tcp.startBind(): should bind to a valid ipv6 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv6);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0001],
+          port: 0,
+        },
+      };
+      tcpSocket.startBind(tcpSocket, network, localAddress);
+
+      equal(tcpSocket.isBound, true);
+      equal(tcpSocket.network.id, network.id);
+      equal(tcpSocket.socketAddress.family, "ipv6");
+      equal(tcpSocket.socketAddress.address, "::ffff:192.168.0.1");
+      equal(tcpSocket.socketAddress.port, 0);
+      equal(tcpSocket.socketAddress.flowlabel, 0);
+    });
+
+    test("tcp.startBind(): should throw address-family-mismatch", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
+        sockets.network.IpAddressFamily.ipv4
+      );
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0001],
+          port: 0,
+        },
+      };
+      throws(() => {
         tcpSocket.startBind(tcpSocket, network, localAddress);
+      }, {
+        name: 'Error',
+        message: 'address-family-mismatch'
+      })
+    });
 
-        equal(tcpSocket.isBound, true);
-        equal(tcpSocket.network.id, network.id);
-        equal(tcpSocket.socketAddress.family, "ipv4");
-        equal(tcpSocket.socketAddress.address, "0.0.0.0");
-        equal(tcpSocket.socketAddress.port, 0);
-        equal(tcpSocket.socketAddress.flowlabel, 0);
+    test("tcp.startBind(): should throw already-bound", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
 
-
-      });
-
-      test("finishBind", async () => {
-        const { sockets } = await import("@bytecodealliance/preview2-shim");
-
-        const network = sockets.instanceNetwork.instanceNetwork();
-        const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-          sockets.network.IpAddressFamily.ipv4
-        );
-        const localAddress = {
-          tag: sockets.network.IpAddressFamily.ipv4,
-          val: {
-            address: [0, 0, 0, 0],
-            port: 0,
-          },
-        };
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      throws(() => {
         tcpSocket.startBind(tcpSocket, network, localAddress);
-        tcpSocket.finishBind(tcpSocket);
+        tcpSocket.startBind(tcpSocket, network, localAddress);
+      }, {
+        name: 'Error',
+        message: 'already-bound'
+      })
+    });
 
-        equal(tcpSocket.isBound, false);
-        equal(tcpSocket.network, null);
-        equal(tcpSocket.socketAddress, null);
+    test("tcp.finishBind()", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      tcpSocket.startBind(tcpSocket, network, localAddress);
+      tcpSocket.finishBind(tcpSocket);
 
-      });
+      equal(tcpSocket.isBound, false);
+      equal(tcpSocket.network, null);
+      equal(tcpSocket.socketAddress, null);
     });
   });
 });

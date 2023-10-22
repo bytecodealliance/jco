@@ -11,7 +11,15 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-tcp").ShutdownType} ShutdownType
  */
 
-import { Socket as NodeSocket, SocketAddress as NodeSocketAddress } from "node:net";
+import { Socket as NodeSocket, SocketAddress as NodeSocketAddress, isIPv4, isIPv6, isIP } from "node:net";
+
+function tupleToIPv6(arr) {
+  if (arr.length !== 8) {
+    return null; // Return null for invalid input
+  }
+  const ipv6Segments = arr.map((segment) => segment.toString(16));
+  return ipv6Segments.join(":");
+}
 
 export class TcpSocketImpl {
   /** @type {number} */ id;
@@ -46,9 +54,26 @@ export class TcpSocketImpl {
       throw new Error("already-bound");
     }
 
+    let { address } = localAddress.val;
+    if (this.#addressFamily.toLocaleLowerCase() === "ipv4") {
+      address = address.join(".");
+    } else if (this.#addressFamily.toLocaleLowerCase() === "ipv6") {
+      address = tupleToIPv6(address);
+    }
+
+    console.log({
+      address,
+    });
+    const port = localAddress.val.port;
+    const ipFamily = `ipv${isIP(address)}`;
+
+    if (this.#addressFamily.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
+      throw new Error("address-family-mismatch");
+    }
+
     this.socketAddress = new NodeSocketAddress({
-      address: localAddress.val.address.join("."),
-      port: localAddress.val.port,
+      address,
+      port,
       family: this.#addressFamily,
     });
 
