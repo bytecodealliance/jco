@@ -39,18 +39,18 @@ function assert(condition, message) {
 }
 
 export class TcpSocketImpl {
-  /** @type {number} */ id;
-  /** @type {boolean} */ isBound = false;
+  id;
   /** @type {NodeSocket} */ #socket = null;
   /** @type {Network} */ network = null;
   /** @type {NodeSocketAddress} */ socketAddress = null;
 
+  #isBound = false;
   #socketOptions = {};
   #canReceive = true;
   #canSend = true;
   #ipv6Only = false;
   #state = "closed";
-  #inprogress = false;
+  #inProgress = false;
 
   // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #backlog = 128;
@@ -80,8 +80,8 @@ export class TcpSocketImpl {
   startBind(tcpSocket, network, localAddress) {
     console.log(`[tcp] start bind socket ${tcpSocket.id}`);
 
-    assert(this.isBound, "already-bound");
-    assert(this.#inprogress, "concurrency-conflict");
+    assert(this.#isBound, "already-bound");
+    assert(this.#inProgress, "concurrency-conflict");
 
     const address = computeIpAddress(localAddress, this.#socketOptions.family);
 
@@ -94,7 +94,7 @@ export class TcpSocketImpl {
     this.#socketOptions.address = address;
     this.#socketOptions.port = port;
     this.network = network;
-    this.#inprogress = true;
+    this.#inProgress = true;
   }
 
   /**
@@ -109,7 +109,7 @@ export class TcpSocketImpl {
   finishBind(tcpSocket) {
     console.log(`[tcp] finish bind socket ${tcpSocket.id}`);
 
-    assert(this.#inprogress === false, "not-in-progress");
+    assert(this.#inProgress === false, "not-in-progress");
 
     const { address, port, family } = this.#socketOptions;
     assert(isIP(address) === 0, "address-not-bindable");
@@ -120,8 +120,8 @@ export class TcpSocketImpl {
       family,
     });
 
-    this.isBound = true;
-    this.#inprogress = false;
+    this.#isBound = true;
+    this.#inProgress = false;
   }
 
   /**
@@ -141,11 +141,10 @@ export class TcpSocketImpl {
     console.log(`[tcp] start connect socket ${tcpSocket.id} to ${remoteAddress} on network ${network.id}`);
 
     assert(this.network !== null && this.network.id !== network.id, "already-attached");
-    assert(this.#inprogress, "concurrency-conflict");
     assert(this.#state === "connected", "already-connected");
     assert(this.#state === "connection", "already-listening");
-    assert(this.#state === "listening", "already-listening");
-    assert(this.isBound === false, "already-bound");
+    assert(this.#inProgress, "concurrency-conflict");
+    assert(this.#isBound === false, "not-bound");
 
     const host = computeIpAddress(remoteAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(host)}`;
@@ -157,7 +156,7 @@ export class TcpSocketImpl {
     this.#socketOptions.remoteAddress = host;
     this.#socketOptions.remotePort = remoteAddress.val.port;
 
-    this.#inprogress = true;
+    this.#inProgress = true;
   }
 
   /**
@@ -213,7 +212,7 @@ export class TcpSocketImpl {
       this.#state = "error";
     });
 
-    this.#inprogress = false;
+    this.#inProgress = false;
   }
 
   /**
@@ -227,7 +226,7 @@ export class TcpSocketImpl {
   startListen(tcpSocket) {
     console.log(`[tcp] start listen socket ${tcpSocket.id}`);
 
-    this.#inprogress = true;
+    this.#inProgress = true;
 
     throw new Error("not implemented");
   }
@@ -242,7 +241,7 @@ export class TcpSocketImpl {
   finishListen(tcpSocket) {
     console.log(`[tcp] finish listen socket ${tcpSocket.id}`);
 
-    this.#inprogress = false;
+    this.#inProgress = false;
 
     throw new Error("not implemented");
   }
@@ -266,7 +265,7 @@ export class TcpSocketImpl {
   localAddress(tcpSocket) {
     console.log(`[tcp] local address socket ${tcpSocket.id}`);
 
-    assert(this.isBound === false, "not-bound");
+    assert(this.#isBound === false, "not-bound");
 
     return this.#socket.localAddress();
   }
@@ -279,7 +278,7 @@ export class TcpSocketImpl {
   remoteAddress(tcpSocket) {
     console.log(`[tcp] remote address socket ${tcpSocket.id}`);
 
-    assert(this.isBound === false, "not-bound");
+    assert(this.#isBound === false, "not-bound");
     assert(this.#state !== "connected", "not-connected");
 
     return this.#socket.remoteAddress();

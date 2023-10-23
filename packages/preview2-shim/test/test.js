@@ -1,5 +1,5 @@
 import { equal, ok, throws } from "node:assert";
-import { mock } from 'node:test';
+import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
 suite("Node.js Preview2", () => {
@@ -211,7 +211,6 @@ suite("Node.js Preview2", () => {
       tcpSocket.startBind(tcpSocket, network, localAddress);
       tcpSocket.finishBind(tcpSocket);
 
-      equal(tcpSocket.isBound, true);
       equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.socketAddress.family, "ipv4");
       equal(tcpSocket.socketAddress.address, "0.0.0.0");
@@ -233,7 +232,6 @@ suite("Node.js Preview2", () => {
       tcpSocket.startBind(tcpSocket, network, localAddress);
       tcpSocket.finishBind(tcpSocket);
 
-      equal(tcpSocket.isBound, true);
       equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.socketAddress.family, "ipv6");
       equal(tcpSocket.socketAddress.address, "::ffff:192.168.0.1");
@@ -245,9 +243,7 @@ suite("Node.js Preview2", () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
       const localAddress = {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
@@ -255,12 +251,15 @@ suite("Node.js Preview2", () => {
           port: 0,
         },
       };
-      throws(() => {
-        tcpSocket.startBind(tcpSocket, network, localAddress);
-      }, {
-        name: 'Error',
-        message: 'address-family-mismatch'
-      })
+      throws(
+        () => {
+          tcpSocket.startBind(tcpSocket, network, localAddress);
+        },
+        {
+          name: "Error",
+          message: "address-family-mismatch",
+        }
+      );
     });
 
     test("tcp.startBind(): should throw already-bound", async () => {
@@ -275,14 +274,17 @@ suite("Node.js Preview2", () => {
           port: 0,
         },
       };
-      throws(() => {
-        tcpSocket.startBind(tcpSocket, network, localAddress);
-        tcpSocket.finishBind(tcpSocket);
-        tcpSocket.startBind(tcpSocket, network, localAddress);
-      }, {
-        name: 'Error',
-        message: 'already-bound'
-      })
+      throws(
+        () => {
+          tcpSocket.startBind(tcpSocket, network, localAddress);
+          tcpSocket.finishBind(tcpSocket);
+          tcpSocket.startBind(tcpSocket, network, localAddress);
+        },
+        {
+          name: "Error",
+          message: "already-bound",
+        }
+      );
     });
 
     test("tcp.startConnect(): should connect to a valid ipv4 address", async () => {
@@ -304,20 +306,17 @@ suite("Node.js Preview2", () => {
         },
       };
 
-      mock.method(tcpSocket.socket(), 'connect', () => console.log('connect called'));
+      mock.method(tcpSocket.socket(), "connect", () => console.log("connect called"));
 
       tcpSocket.startBind(tcpSocket, network, localAddress);
       tcpSocket.finishBind(tcpSocket);
       tcpSocket.startConnect(tcpSocket, network, remoteAddress);
       tcpSocket.finishConnect(tcpSocket);
 
-      equal(tcpSocket.isBound, true);
       equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.socketAddress.family, "ipv4");
       equal(tcpSocket.socketAddress.address, "0.0.0.0");
       equal(tcpSocket.socketAddress.port, 0);
     });
   });
-
-
 });
