@@ -53,6 +53,10 @@ fn transpile(component_path: &str, name: String) -> Result<()> {
             "wasi:random/*".into(),
             "@bytecodealliance/preview2-shim/random#*".into(),
         ),
+        (
+            "wasi:sockets/*".into(),
+            "@bytecodealliance/preview2-shim/sockets#*".into(),
+        ),
     ]);
     let opts = js_component_bindgen::TranspileOpts {
         name,

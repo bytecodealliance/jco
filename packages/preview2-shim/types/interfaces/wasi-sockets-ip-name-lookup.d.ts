@@ -21,9 +21,9 @@ export namespace WasiSocketsIpNameLookup {
    * to `resolve-next-address` never returns `ok(none)`. This may change in the future.
    * 
    * # Typical errors
-   * - `invalid-name`:                 `name` is a syntactically invalid domain name.
-   * - `invalid-name`:                 `name` is an IP address.
-   * - `address-family-not-supported`: The specified `address-family` is not supported. (EAI_FAMILY)
+   * - `invalid-argument`:     `name` is a syntactically invalid domain name.
+   * - `invalid-argument`:     `name` is an IP address.
+   * - `not-supported`:        The specified `address-family` is not supported. (EAI_FAMILY)
    * 
    * # References:
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
@@ -38,7 +38,6 @@ export namespace WasiSocketsIpNameLookup {
    * This function should be called multiple times. On each call, it will
    * return the next address in connection order preference. If all
    * addresses have been exhausted, this function returns `none`.
-   * After which, you should release the stream with `drop-resolve-address-stream`.
    * 
    * This function never returns IPv4-mapped IPv6 addresses.
    * 
@@ -48,22 +47,15 @@ export namespace WasiSocketsIpNameLookup {
    * - `permanent-resolver-failure`: A permanent failure in name resolution occurred. (EAI_FAIL)
    * - `would-block`:                A result is not available yet. (EWOULDBLOCK, EAGAIN)
    */
-  export function resolveNextAddress(this_: ResolveAddressStream): IpAddress | undefined;
-  /**
-   * Dispose of the specified `resolve-address-stream`, after which it may no longer be used.
-   * 
-   * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
-   */
-  export function dropResolveAddressStream(this_: ResolveAddressStream): void;
+  export { ResolveAddressStream };
   /**
    * Create a `pollable` which will resolve once the stream is ready for I/O.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
-  export function subscribe(this_: ResolveAddressStream): Pollable;
 }
-import type { Pollable } from '../interfaces/wasi-poll-poll';
+import type { Pollable } from '../interfaces/wasi-io-poll';
 export { Pollable };
 import type { Network } from '../interfaces/wasi-sockets-network';
 export { Network };
@@ -73,4 +65,8 @@ import type { IpAddress } from '../interfaces/wasi-sockets-network';
 export { IpAddress };
 import type { IpAddressFamily } from '../interfaces/wasi-sockets-network';
 export { IpAddressFamily };
-export type ResolveAddressStream = number;
+
+export class ResolveAddressStream {
+  resolveNextAddress(): IpAddress | undefined;
+  subscribe(): Pollable;
+}

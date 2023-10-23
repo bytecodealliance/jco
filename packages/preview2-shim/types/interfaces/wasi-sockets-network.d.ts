@@ -1,19 +1,5 @@
 export namespace WasiSocketsNetwork {
-  /**
-   * Dispose of the specified `network`, after which it may no longer be used.
-   * 
-   * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
-   */
-  export function dropNetwork(this_: Network): void;
 }
-/**
- * An opaque resource that represents access to (a subset of) the network.
- * This enables context-based security for networking.
- * There is no need for this to map 1:1 to a physical network interface.
- * 
- * FYI, In the future this will be replaced by handle types.
- */
-export type Network = number;
 /**
  * Error codes.
  * 
@@ -24,6 +10,7 @@ export type Network = number;
  * - `access-denied`
  * - `not-supported`
  * - `out-of-memory`
+ * - `concurrency-conflict`
  * 
  * See each individual API for what the POSIX equivalents are. They sometimes differ per API.
  * # Variants
@@ -41,6 +28,11 @@ export type Network = number;
  * The operation is not supported.
  * 
  * POSIX equivalent: EOPNOTSUPP
+ * ## `"invalid-argument"`
+ * 
+ * One of the arguments is invalid.
+ * 
+ * POSIX equivalent: EINVAL
  * ## `"out-of-memory"`
  * 
  * Not enough memory to complete the operation.
@@ -52,6 +44,8 @@ export type Network = number;
  * ## `"concurrency-conflict"`
  * 
  * This operation is incompatible with another asynchronous operation that is already in progress.
+ * 
+ * POSIX equivalent: EALREADY
  * ## `"not-in-progress"`
  * 
  * Trying to finish an asynchronous operation that:
@@ -64,68 +58,32 @@ export type Network = number;
  * The operation has been aborted because it could not be completed immediately.
  * 
  * Note: this is scheduled to be removed when `future`s are natively supported.
- * ## `"address-family-not-supported"`
+ * ## `"invalid-state"`
  * 
- * The specified address-family is not supported.
- * ## `"address-family-mismatch"`
- * 
- * An IPv4 address was passed to an IPv6 resource, or vice versa.
- * ## `"invalid-remote-address"`
- * 
- * The socket address is not a valid remote address. E.g. the IP address is set to INADDR_ANY, or the port is set to 0.
- * ## `"ipv4-only-operation"`
- * 
- * The operation is only supported on IPv4 resources.
- * ## `"ipv6-only-operation"`
- * 
- * The operation is only supported on IPv6 resources.
+ * The operation is not valid in the socket's current state.
  * ## `"new-socket-limit"`
  * 
  * A new socket resource could not be created because of a system limit.
- * ## `"already-attached"`
- * 
- * The socket is already attached to another network.
- * ## `"already-bound"`
- * 
- * The socket is already bound.
- * ## `"already-connected"`
- * 
- * The socket is already in the Connection state.
- * ## `"not-bound"`
- * 
- * The socket is not bound to any local address.
- * ## `"not-connected"`
- * 
- * The socket is not in the Connection state.
  * ## `"address-not-bindable"`
  * 
  * A bind operation failed because the provided address is not an address that the `network` can bind to.
  * ## `"address-in-use"`
  * 
- * A bind operation failed because the provided address is already in use.
- * ## `"ephemeral-ports-exhausted"`
- * 
- * A bind operation failed because there are no ephemeral ports available.
+ * A bind operation failed because the provided address is already in use or because there are no ephemeral ports available.
  * ## `"remote-unreachable"`
  * 
  * The remote address is not reachable
- * ## `"already-listening"`
- * 
- * The socket is already in the Listener state.
- * ## `"not-listening"`
- * 
- * The socket is already in the Listener state.
  * ## `"connection-refused"`
  * 
  * The connection was forcefully rejected
  * ## `"connection-reset"`
  * 
  * The connection was reset.
+ * ## `"connection-aborted"`
+ * 
+ * A connection was aborted.
  * ## `"datagram-too-large"`
  * 
- * ## `"invalid-name"`
- * 
- * The provided name is a syntactically invalid domain name.
  * ## `"name-unresolvable"`
  * 
  * Name does not exist or has no suitable associated IP addresses.
@@ -136,7 +94,7 @@ export type Network = number;
  * 
  * A permanent failure in name resolution occurred.
  */
-export type ErrorCode = 'unknown' | 'access-denied' | 'not-supported' | 'out-of-memory' | 'timeout' | 'concurrency-conflict' | 'not-in-progress' | 'would-block' | 'address-family-not-supported' | 'address-family-mismatch' | 'invalid-remote-address' | 'ipv4-only-operation' | 'ipv6-only-operation' | 'new-socket-limit' | 'already-attached' | 'already-bound' | 'already-connected' | 'not-bound' | 'not-connected' | 'address-not-bindable' | 'address-in-use' | 'ephemeral-ports-exhausted' | 'remote-unreachable' | 'already-listening' | 'not-listening' | 'connection-refused' | 'connection-reset' | 'datagram-too-large' | 'invalid-name' | 'name-unresolvable' | 'temporary-resolver-failure' | 'permanent-resolver-failure';
+export type ErrorCode = 'unknown' | 'access-denied' | 'not-supported' | 'invalid-argument' | 'out-of-memory' | 'timeout' | 'concurrency-conflict' | 'not-in-progress' | 'would-block' | 'invalid-state' | 'new-socket-limit' | 'address-not-bindable' | 'address-in-use' | 'remote-unreachable' | 'connection-refused' | 'connection-reset' | 'connection-aborted' | 'datagram-too-large' | 'name-unresolvable' | 'temporary-resolver-failure' | 'permanent-resolver-failure';
 /**
  * # Variants
  * 

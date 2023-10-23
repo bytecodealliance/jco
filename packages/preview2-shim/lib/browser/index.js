@@ -1,8 +1,7 @@
 import * as clocks from "./clocks.js";
 import * as filesystem from "./filesystem.js";
 import * as http from "./http.js";
-import * as io from "./io.js";
-import * as logging from "./logging.js";
+import * as io from "../common/io.js";
 import * as poll from "./poll.js";
 import * as random from "./random.js";
 import * as sockets from "./sockets.js";
@@ -13,7 +12,6 @@ export {
   filesystem,
   http,
   io,
-  logging,
   poll,
   random,
   sockets,

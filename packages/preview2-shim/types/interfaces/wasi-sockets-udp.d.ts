@@ -11,12 +11,11 @@ export namespace WasiSocketsUdp {
    * Unlike in POSIX, this function is async. This enables interactive WASI hosts to inject permission prompts.
    * 
    * # Typical `start` errors
-   * - `address-family-mismatch`:   The `local-address` has the wrong address family. (EINVAL)
-   * - `already-bound`:             The socket is already bound. (EINVAL)
-   * - `concurrency-conflict`:      Another `bind` or `connect` operation is already in progress. (EALREADY)
+   * - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
+   * - `invalid-state`:             The socket is already bound. (EINVAL)
    * 
    * # Typical `finish` errors
-   * - `ephemeral-ports-exhausted`: No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
+   * - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
    * - `address-in-use`:            Address is already in use. (EADDRINUSE)
    * - `address-not-bindable`:      `local-address` is not an address that the `network` can bind to. (EADDRNOTAVAIL)
    * - `not-in-progress`:           A `bind` operation is not in progress.
@@ -28,8 +27,7 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
    * - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
    */
-  export function startBind(this_: UdpSocket, network: Network, localAddress: IpSocketAddress): void;
-  export function finishBind(this_: UdpSocket): void;
+  export { UdpSocket };
   /**
    * Set the destination address.
    * 
@@ -44,14 +42,14 @@ export namespace WasiSocketsUdp {
    * Unlike in POSIX, this function is async. This enables interactive WASI hosts to inject permission prompts.
    * 
    * # Typical `start` errors
-   * - `address-family-mismatch`:   The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-   * - `invalid-remote-address`:    The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
-   * - `invalid-remote-address`:    The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-   * - `already-attached`:          The socket is already bound to a different network. The `network` passed to `connect` must be identical to the one passed to `bind`.
-   * - `concurrency-conflict`:      Another `bind` or `connect` operation is already in progress. (EALREADY)
+   * - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+   * - `invalid-argument`:          `remote-address` is a non-IPv4-mapped IPv6 address, but the socket was bound to a specific IPv4-mapped IPv6 address. (or vice versa)
+   * - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+   * - `invalid-argument`:          The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+   * - `invalid-argument`:          The socket is already bound to a different network. The `network` passed to `connect` must be identical to the one passed to `bind`.
    * 
    * # Typical `finish` errors
-   * - `ephemeral-ports-exhausted`: Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+   * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
    * - `not-in-progress`:           A `connect` operation is not in progress.
    * - `would-block`:               Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    * 
@@ -61,8 +59,6 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
    * - <https://man.freebsd.org/cgi/man.cgi?connect>
    */
-  export function startConnect(this_: UdpSocket, network: Network, remoteAddress: IpSocketAddress): void;
-  export function finishConnect(this_: UdpSocket): void;
   /**
    * Receive messages on the socket.
    * 
@@ -71,7 +67,7 @@ export namespace WasiSocketsUdp {
    * If `max-results` is 0, this function returns successfully with an empty list.
    * 
    * # Typical errors
-   * - `not-bound`:          The socket is not bound to any local address. (EINVAL)
+   * - `invalid-state`:      The socket is not bound to any local address. (EINVAL)
    * - `remote-unreachable`: The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
    * - `would-block`:        There is no pending data available to be read at the moment. (EWOULDBLOCK, EAGAIN)
    * 
@@ -85,7 +81,6 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms741687(v=vs.85)>
    * - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
    */
-  export function receive(this_: UdpSocket, maxResults: bigint): Datagram[];
   /**
    * Send messages on the socket.
    * 
@@ -102,11 +97,12 @@ export namespace WasiSocketsUdp {
    * call `remote-address` to get their address.
    * 
    * # Typical errors
-   * - `address-family-mismatch`: The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-   * - `invalid-remote-address`:  The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
-   * - `invalid-remote-address`:  The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-   * - `already-connected`:       The socket is in "connected" mode and the `datagram.remote-address` does not match the address passed to `connect`. (EISCONN)
-   * - `not-bound`:               The socket is not bound to any local address. Unlike POSIX, this function does not perform an implicit bind.
+   * - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+   * - `invalid-argument`:        `remote-address` is a non-IPv4-mapped IPv6 address, but the socket was bound to a specific IPv4-mapped IPv6 address. (or vice versa)
+   * - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+   * - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+   * - `invalid-argument`:        The socket is in "connected" mode and the `datagram.remote-address` does not match the address passed to `connect`. (EISCONN)
+   * - `invalid-state`:           The socket is not bound to any local address. Unlike POSIX, this function does not perform an implicit bind.
    * - `remote-unreachable`:      The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
    * - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
    * - `would-block`:             The send buffer is currently full. (EWOULDBLOCK, EAGAIN)
@@ -121,12 +117,17 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
    * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
    */
-  export function send(this_: UdpSocket, datagrams: Datagram[]): bigint;
   /**
    * Get the current bound address.
    * 
+   * POSIX mentions:
+   * > If the socket has not been bound to a local name, the value
+   * > stored in the object pointed to by `address` is unspecified.
+   * 
+   * WASI is stricter and requires `local-address` to return `invalid-state` when the socket hasn't been bound yet.
+   * 
    * # Typical errors
-   * - `not-bound`: The socket is not bound to any local address.
+   * - `invalid-state`: The socket is not bound to any local address.
    * 
    * # References
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
@@ -134,12 +135,11 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
    * - <https://man.freebsd.org/cgi/man.cgi?getsockname>
    */
-  export function localAddress(this_: UdpSocket): IpSocketAddress;
   /**
    * Get the address set with `connect`.
    * 
    * # Typical errors
-   * - `not-connected`: The socket is not connected to a remote address. (ENOTCONN)
+   * - `invalid-state`: The socket is not connected to a remote address. (ENOTCONN)
    * 
    * # References
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
@@ -147,34 +147,24 @@ export namespace WasiSocketsUdp {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
    * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
    */
-  export function remoteAddress(this_: UdpSocket): IpSocketAddress;
   /**
    * Whether this is a IPv4 or IPv6 socket.
    * 
    * Equivalent to the SO_DOMAIN socket option.
    */
-  export function addressFamily(this_: UdpSocket): IpAddressFamily;
   /**
    * Whether IPv4 compatibility (dual-stack) mode is disabled or not.
    * 
    * Equivalent to the IPV6_V6ONLY socket option.
    * 
    * # Typical errors
-   * - `ipv6-only-operation`:  (get/set) `this` socket is an IPv4 socket.
-   * - `already-bound`:        (set) The socket is already bound.
+   * - `not-supported`:        (get/set) `this` socket is an IPv4 socket.
+   * - `invalid-state`:        (set) The socket is already bound.
    * - `not-supported`:        (set) Host does not support dual-stack sockets. (Implementations are not required to.)
-   * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  export function ipv6Only(this_: UdpSocket): boolean;
-  export function setIpv6Only(this_: UdpSocket, value: boolean): void;
   /**
    * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
-   * 
-   * # Typical errors
-   * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  export function unicastHopLimit(this_: UdpSocket): number;
-  export function setUnicastHopLimit(this_: UdpSocket, value: number): void;
   /**
    * The kernel buffer space reserved for sends/receives on this socket.
    * 
@@ -186,29 +176,15 @@ export namespace WasiSocketsUdp {
    * for internal metadata structures.
    * 
    * Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
-   * 
-   * # Typical errors
-   * - `concurrency-conflict`: (set) Another `bind` or `connect` operation is already in progress. (EALREADY)
    */
-  export function receiveBufferSize(this_: UdpSocket): bigint;
-  export function setReceiveBufferSize(this_: UdpSocket, value: bigint): void;
-  export function sendBufferSize(this_: UdpSocket): bigint;
-  export function setSendBufferSize(this_: UdpSocket, value: bigint): void;
   /**
    * Create a `pollable` which will resolve once the socket is ready for I/O.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
-  export function subscribe(this_: UdpSocket): Pollable;
-  /**
-   * Dispose of the specified `udp-socket`, after which it may no longer be used.
-   * 
-   * Note: this function is scheduled to be removed when Resources are natively supported in Wit.
-   */
-  export function dropUdpSocket(this_: UdpSocket): void;
 }
-import type { Pollable } from '../interfaces/wasi-poll-poll';
+import type { Pollable } from '../interfaces/wasi-io-poll';
 export { Pollable };
 import type { Network } from '../interfaces/wasi-sockets-network';
 export { Network };
@@ -218,11 +194,28 @@ import type { IpSocketAddress } from '../interfaces/wasi-sockets-network';
 export { IpSocketAddress };
 import type { IpAddressFamily } from '../interfaces/wasi-sockets-network';
 export { IpAddressFamily };
-/**
- * A UDP socket handle.
- */
-export type UdpSocket = number;
 export interface Datagram {
   data: Uint8Array,
   remoteAddress: IpSocketAddress,
+}
+
+export class UdpSocket {
+  startBind(network: Network, localAddress: IpSocketAddress): void;
+  finishBind(): void;
+  startConnect(network: Network, remoteAddress: IpSocketAddress): void;
+  finishConnect(): void;
+  receive(maxResults: bigint): Datagram[];
+  send(datagrams: Datagram[]): bigint;
+  localAddress(): IpSocketAddress;
+  remoteAddress(): IpSocketAddress;
+  addressFamily(): IpAddressFamily;
+  ipv6Only(): boolean;
+  setIpv6Only(value: boolean): void;
+  unicastHopLimit(): number;
+  setUnicastHopLimit(value: number): void;
+  receiveBufferSize(): bigint;
+  setReceiveBufferSize(value: bigint): void;
+  sendBufferSize(): bigint;
+  setSendBufferSize(value: bigint): void;
+  subscribe(): Pollable;
 }
