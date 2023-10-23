@@ -114,17 +114,6 @@ pub fn transpile_bindgen(
 
     // bindings is the actual `instantiate` method itself, created by this
     // structure.
-    // populate reverse map from import names to world items
-    let mut exports = BTreeMap::new();
-    let mut imports = BTreeMap::new();
-    for (key, _) in &resolve.worlds[id].imports {
-        let name = &resolve.name_world_key(key);
-        imports.insert(name.to_string(), key.clone());
-    }
-    for (key, _) in &resolve.worlds[id].exports {
-        let name = &resolve.name_world_key(key);
-        exports.insert(name.to_string(), key.clone());
-    }
 
     let mut instantiator = Instantiator {
         src: Source::default(),
@@ -137,8 +126,8 @@ pub fn transpile_bindgen(
         translation: component,
         component: &component.component,
         types,
-        imports,
-        exports,
+        imports: BTreeMap::new(),
+        exports: BTreeMap::new(),
         lowering_options: Default::default(),
         imports_resource_map: Default::default(),
         exports_resource_map: Default::default(),
@@ -343,6 +332,7 @@ impl<'a> Instantiator<'a, '_> {
         // as well as the full resource map for the world
         for (key, item) in &self.resolve.worlds[self.world].imports {
             let name = &self.resolve.name_world_key(key);
+            self.imports.insert(name.to_string(), key.clone());
             let Some((_, (_, import))) = self
                 .component
                 .import_types
@@ -408,6 +398,7 @@ impl<'a> Instantiator<'a, '_> {
         self.exports_resource_map = self.imports_resource_map.clone();
         for (key, item) in &self.resolve.worlds[self.world].exports {
             let name = &self.resolve.name_world_key(key);
+            self.exports.insert(name.to_string(), key.clone());
             let (_, export) = self
                 .component
                 .exports
