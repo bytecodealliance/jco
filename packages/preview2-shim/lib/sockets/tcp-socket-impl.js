@@ -21,41 +21,51 @@ function tupleToIPv6(arr) {
   return ipv6Segments.join(":");
 }
 
+function computeIpAddress(localAddress, family) {
+  let { address } = localAddress.val;
+  if (family.toLocaleLowerCase() === "ipv4") {
+    address = address.join(".");
+  } else if (family.toLocaleLowerCase() === "ipv6") {
+    address = tupleToIPv6(address);
+  }
+
+  return address;
+}
+
+function assert(condition, message) {
+  if (condition) {
+    throw new Error(message);
+  }
+}
+
 export class TcpSocketImpl {
   /** @type {number} */ id;
   /** @type {boolean} */ isBound = false;
-  /** @type {NodeSocket} */ socket = null;
+  /** @type {NodeSocket} */ #socket = null;
   /** @type {Network} */ network = null;
   /** @type {NodeSocketAddress} */ socketAddress = null;
 
-  /** @type {IpAddressFamily} */ #addressFamily;
   #socketOptions = {};
   #canReceive = true;
   #canSend = true;
   #ipv6Only = false;
   #state = "closed";
+  #inprogress = false;
 
   // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #backlog = 128;
 
   constructor(socketId, addressFamily) {
     this.id = socketId;
-    this.socket = new NodeSocket();
+    this.#socket = new NodeSocket();
 
     this.#socketOptions.family = addressFamily;
     this.#socketOptions.keepAlive = false;
     this.#socketOptions.noDelay = false;
   }
 
-  #computeIpAddress(localAddress) {
-    let { address } = localAddress.val;
-    if (this.#socketOptions.family.toLocaleLowerCase() === "ipv4") {
-      address = address.join(".");
-    } else if (this.#socketOptions.family.toLocaleLowerCase() === "ipv6") {
-      address = tupleToIPv6(address);
-    }
-
-    return address;
+  socket() {
+    return this.#socket;
   }
 
   /**
@@ -70,11 +80,10 @@ export class TcpSocketImpl {
   startBind(tcpSocket, network, localAddress) {
     console.log(`[tcp] start bind socket ${tcpSocket.id}`);
 
-    if (this.isBound) {
-      throw new Error("already-bound");
-    }
+    assert(this.isBound, "already-bound");
+    assert(this.#inprogress, "concurrency-conflict");
 
-    const address = this.#computeIpAddress(localAddress);
+    const address = computeIpAddress(localAddress, this.#socketOptions.family);
 
     const ipFamily = `ipv${isIP(address)}`;
     if (this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
@@ -85,6 +94,7 @@ export class TcpSocketImpl {
     this.#socketOptions.address = address;
     this.#socketOptions.port = port;
     this.network = network;
+    this.#inprogress = true;
   }
 
   /**
@@ -99,7 +109,11 @@ export class TcpSocketImpl {
   finishBind(tcpSocket) {
     console.log(`[tcp] finish bind socket ${tcpSocket.id}`);
 
+    assert(this.#inprogress === false, "not-in-progress");
+
     const { address, port, family } = this.#socketOptions;
+    assert(isIP(address) === 0, "address-not-bindable");
+
     this.socketAddress = new NodeSocketAddress({
       address,
       port,
@@ -107,6 +121,7 @@ export class TcpSocketImpl {
     });
 
     this.isBound = true;
+    this.#inprogress = false;
   }
 
   /**
@@ -125,36 +140,24 @@ export class TcpSocketImpl {
   startConnect(tcpSocket, network, remoteAddress) {
     console.log(`[tcp] start connect socket ${tcpSocket.id} to ${remoteAddress} on network ${network.id}`);
 
-    if (this.network !== null && this.network.id !== network.id) {
-      throw new Error("already-attached");
-    }
+    assert(this.network !== null && this.network.id !== network.id, "already-attached");
+    assert(this.#inprogress, "concurrency-conflict");
+    assert(this.#state === "connected", "already-connected");
+    assert(this.#state === "connection", "already-listening");
+    assert(this.#state === "listening", "already-listening");
+    assert(this.isBound === false, "already-bound");
 
-    if (this.#state === "connected") {
-      throw new Error("already-connected");
-    }
-
-    if (this.#state === "connection") {
-      throw new Error("already-listening");
-    }
-
-    if (this.isBound === false) {
-      throw new Error("not-bound");
-    }
-
-    const host = this.#computeIpAddress(remoteAddress);
-
+    const host = computeIpAddress(remoteAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(host)}`;
-    if (ipFamily.toLocaleLowerCase() === "ipv0") {
-      throw new Error("invalid-remote-address");
-    }
 
-    if (this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
-      throw new Error("address-family-mismatch");
-    }
+    assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-remote-address");
+    assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "address-family-mismatch");
 
     this.network = network;
     this.#socketOptions.remoteAddress = host;
     this.#socketOptions.remotePort = remoteAddress.val.port;
+
+    this.#inprogress = true;
   }
 
   /**
@@ -172,7 +175,7 @@ export class TcpSocketImpl {
     console.log(`[tcp] finish connect socket ${tcpSocket.id}`);
 
     const { address, port, remoteAddress, remotePort, family } = this.#socketOptions;
-    this.socket.connect({
+    this.#socket.connect({
       localAddress: address,
       localPort: port,
       host: remoteAddress,
@@ -180,35 +183,37 @@ export class TcpSocketImpl {
       family: family,
     });
 
-    this.socket.on("connect", () => {
+    this.#socket.on("connect", () => {
       console.log(`[tcp] connect on socket ${tcpSocket.id}`);
       this.#state = "connected";
     });
 
-    this.socket.on("ready", () => {
+    this.#socket.on("ready", () => {
       console.log(`[tcp] ready on socket ${tcpSocket.id}`);
       this.#state = "connection";
     });
 
-    this.socket.on("close", () => {
+    this.#socket.on("close", () => {
       console.log(`[tcp] close on socket ${tcpSocket.id}`);
       this.#state = "closed";
     });
 
-    this.socket.on("end", () => {
+    this.#socket.on("end", () => {
       console.log(`[tcp] end on socket ${tcpSocket.id}`);
       this.#state = "closed";
     });
 
-    this.socket.on("timeout", () => {
+    this.#socket.on("timeout", () => {
       console.error(`[tcp] timeout on socket ${tcpSocket.id}`);
       this.#state = "closed";
     });
 
-    this.socket.on("error", (err) => {
+    this.#socket.on("error", (err) => {
       console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
       this.#state = "error";
     });
+
+    this.#inprogress = false;
   }
 
   /**
@@ -221,6 +226,9 @@ export class TcpSocketImpl {
    * */
   startListen(tcpSocket) {
     console.log(`[tcp] start listen socket ${tcpSocket.id}`);
+
+    this.#inprogress = true;
+
     throw new Error("not implemented");
   }
 
@@ -233,6 +241,9 @@ export class TcpSocketImpl {
    * */
   finishListen(tcpSocket) {
     console.log(`[tcp] finish listen socket ${tcpSocket.id}`);
+
+    this.#inprogress = false;
+
     throw new Error("not implemented");
   }
 
@@ -255,11 +266,9 @@ export class TcpSocketImpl {
   localAddress(tcpSocket) {
     console.log(`[tcp] local address socket ${tcpSocket.id}`);
 
-    if (!this.isBound) {
-      throw new Error("not-bound");
-    }
+    assert(this.isBound === false, "not-bound");
 
-    return this.socket.localAddress();
+    return this.#socket.localAddress();
   }
 
   /**
@@ -270,15 +279,10 @@ export class TcpSocketImpl {
   remoteAddress(tcpSocket) {
     console.log(`[tcp] remote address socket ${tcpSocket.id}`);
 
-    if (!this.isBound) {
-      throw new Error("not-bound");
-    }
+    assert(this.isBound === false, "not-bound");
+    assert(this.#state !== "connected", "not-connected");
 
-    if (this.#state !== "connected") {
-      throw new Error("not-connected");
-    }
-
-    return this.socket.remoteAddress();
+    return this.#socket.remoteAddress();
   }
 
   /**
@@ -288,7 +292,7 @@ export class TcpSocketImpl {
   addressFamily(tcpSocket) {
     console.log(`[tcp] address family socket ${tcpSocket.id}`);
 
-    return this.socket.localFamily;
+    return this.#socket.localFamily;
   }
 
   /**
@@ -351,7 +355,7 @@ export class TcpSocketImpl {
     console.log(`[tcp] set keep alive socket ${tcpSocket.id} to ${value}`);
 
     this.#socketOptions.keepAlive = value;
-    this.socket.setKeepAlive(value);
+    this.#socket.setKeepAlive(value);
   }
 
   /**
@@ -374,7 +378,7 @@ export class TcpSocketImpl {
     console.log(`[tcp] set no delay socket ${tcpSocket.id} to ${value}`);
 
     this.#socketOptions.noDelay = value;
-    this.socket.setNoDelay(value);
+    this.#socket.setNoDelay(value);
   }
 
   /**
@@ -463,9 +467,7 @@ export class TcpSocketImpl {
   shutdown(tcpSocket, shutdownType) {
     console.log(`[tcp] shutdown socket ${tcpSocket.id} with ${shutdownType}`);
 
-    if (this.#state !== "connected") {
-      throw new Error("not-connected");
-    }
+    assert(this.#state !== "connected", "not-connected");
 
     if (shutdownType === "read") {
       this.#canReceive = false;
@@ -484,6 +486,6 @@ export class TcpSocketImpl {
   dropTcpSocket(tcpSocket) {
     console.log(`[tcp] drop socket ${tcpSocket.id}`);
 
-    this.socket.destroy();
+    this.#socket.destroy();
   }
 }

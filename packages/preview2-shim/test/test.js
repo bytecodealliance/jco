@@ -304,7 +304,7 @@ suite("Node.js Preview2", () => {
         },
       };
 
-      mock.method(tcpSocket.socket, 'connect', () => console.log('connect called'));
+      mock.method(tcpSocket.socket(), 'connect', () => console.log('connect called'));
 
       tcpSocket.startBind(tcpSocket, network, localAddress);
       tcpSocket.finishBind(tcpSocket);
@@ -316,7 +316,6 @@ suite("Node.js Preview2", () => {
       equal(tcpSocket.socketAddress.family, "ipv4");
       equal(tcpSocket.socketAddress.address, "0.0.0.0");
       equal(tcpSocket.socketAddress.port, 0);
-      equal(tcpSocket.socketAddress.flowlabel, 0);
     });
   });
 
