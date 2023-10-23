@@ -1372,7 +1372,7 @@ impl<'a> Instantiator<'a, '_> {
                         | FunctionKind::Method(tid)
                         | FunctionKind::Static(tid) = func.kind
                         {
-                            let resource_id = crate::dealias(self.resolve, tid);
+                            let resource_id = tid;
                             let ty = &self.resolve.types[tid];
                             let resource = ty.name.as_ref().unwrap();
                             self.gen.local_names.get_or_create(
@@ -1393,6 +1393,8 @@ impl<'a> Instantiator<'a, '_> {
                         func,
                         existing_resource_def,
                         export_name,
+                        // exported top-level functions only reference imported resources
+                        false,
                     );
                     if let FunctionKind::Constructor(ty)
                     | FunctionKind::Method(ty)
@@ -1431,7 +1433,7 @@ impl<'a> Instantiator<'a, '_> {
                             | FunctionKind::Method(tid)
                             | FunctionKind::Static(tid) = func.kind
                             {
-                                let resource_id = crate::dealias(self.resolve, tid);
+                                let resource_id = tid;
                                 let ty = &self.resolve.types[tid];
                                 let resource = ty.name.as_ref().unwrap();
                                 self.gen.local_names.get_or_create(
@@ -1453,6 +1455,7 @@ impl<'a> Instantiator<'a, '_> {
                             func,
                             existing_resource_def,
                             export_name,
+                            true,
                         );
 
                         if let FunctionKind::Constructor(ty)
@@ -1495,6 +1498,7 @@ impl<'a> Instantiator<'a, '_> {
         func: &Function,
         existing_resource_def: bool,
         export_name: &String,
+        exports_resource_map: bool,
     ) {
         match func.kind {
             FunctionKind::Freestanding => uwrite!(self.src.js, "\nfunction {local_name}"),
@@ -1552,7 +1556,7 @@ impl<'a> Instantiator<'a, '_> {
             options,
             func,
             AbiVariant::GuestExport,
-            true,
+            exports_resource_map,
         );
         match func.kind {
             FunctionKind::Freestanding => self.src.js("\n"),
