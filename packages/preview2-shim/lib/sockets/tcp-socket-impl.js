@@ -29,31 +29,29 @@ export class TcpSocketImpl {
   /** @type {NodeSocketAddress} */ socketAddress = null;
 
   /** @type {IpAddressFamily} */ #addressFamily;
+  #socketOptions = {};
   #canReceive = true;
   #canSend = true;
   #ipv6Only = false;
   #state = "closed";
-
-  #noDelay = false;
-  #keepAlive = false;
 
   // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #backlog = 128;
 
   constructor(socketId, addressFamily) {
     this.id = socketId;
-    this.#addressFamily = addressFamily;
-    this.socket = new NodeSocket({
-      keepAlive: this.#keepAlive,
-      noDelay: this.#noDelay
-    });
+    this.socket = new NodeSocket();
+
+    this.#socketOptions.family = addressFamily;
+    this.#socketOptions.keepAlive = false;
+    this.#socketOptions.noDelay = false;
   }
 
   #computeIpAddress(localAddress) {
     let { address } = localAddress.val;
-    if (this.#addressFamily.toLocaleLowerCase() === "ipv4") {
+    if (this.#socketOptions.family.toLocaleLowerCase() === "ipv4") {
       address = address.join(".");
-    } else if (this.#addressFamily.toLocaleLowerCase() === "ipv6") {
+    } else if (this.#socketOptions.family.toLocaleLowerCase() === "ipv6") {
       address = tupleToIPv6(address);
     }
 
@@ -79,19 +77,14 @@ export class TcpSocketImpl {
     const address = this.#computeIpAddress(localAddress);
 
     const ipFamily = `ipv${isIP(address)}`;
-    if (this.#addressFamily.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
+    if (this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
       throw new Error("address-family-mismatch");
     }
 
     const { port } = localAddress.val;
-    this.socketAddress = new NodeSocketAddress({
-      address,
-      port,
-      family: this.#addressFamily,
-    });
-
+    this.#socketOptions.address = address;
+    this.#socketOptions.port = port;
     this.network = network;
-    this.isBound = true;
   }
 
   /**
@@ -106,9 +99,14 @@ export class TcpSocketImpl {
   finishBind(tcpSocket) {
     console.log(`[tcp] finish bind socket ${tcpSocket.id}`);
 
-    this.network = null;
-    this.socketAddress = null;
-    this.isBound = false;
+    const { address, port, family } = this.#socketOptions;
+    this.socketAddress = new NodeSocketAddress({
+      address,
+      port,
+      family,
+    });
+
+    this.isBound = true;
   }
 
   /**
@@ -130,7 +128,6 @@ export class TcpSocketImpl {
     if (this.network !== null && this.network.id !== network.id) {
       throw new Error("already-attached");
     }
-    this.network = network;
 
     if (this.#state === "connected") {
       throw new Error("already-connected");
@@ -151,16 +148,36 @@ export class TcpSocketImpl {
       throw new Error("invalid-remote-address");
     }
 
-    if (this.#addressFamily.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
+    if (this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
       throw new Error("address-family-mismatch");
     }
 
+    this.network = network;
+    this.#socketOptions.remoteAddress = host;
+    this.#socketOptions.remotePort = remoteAddress.val.port;
+  }
+
+  /**
+   * @param {TcpSocket} tcpSocket
+   * @returns {Array<InputStream, OutputStream>}
+   * @throws {timeout} Connection timed out. (ETIMEDOUT)
+   * @throws {connection-refused} The connection was forcefully rejected. (ECONNREFUSED)
+   * @throws {connection-reset} The connection was reset. (ECONNRESET)
+   * @throws {remote-unreachable} The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
+   * @throws {ephemeral-ports-exhausted} Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+   * @throws {not-in-progress} A `connect` operation is not in progress.
+   * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
+   * */
+  finishConnect(tcpSocket) {
+    console.log(`[tcp] finish connect socket ${tcpSocket.id}`);
+
+    const { address, port, remoteAddress, remotePort, family } = this.#socketOptions;
     this.socket.connect({
-      localAddress: this.socketAddress.address,
-      localPort: this.socketAddress.port,
-      host,
-      port: remoteAddress.val.port,
-      family: this.#addressFamily,
+      localAddress: address,
+      localPort: port,
+      host: remoteAddress,
+      port: remotePort,
+      family: family,
     });
 
     this.socket.on("connect", () => {
@@ -192,23 +209,6 @@ export class TcpSocketImpl {
       console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
       this.#state = "error";
     });
-  }
-
-  /**
-   * @param {TcpSocket} tcpSocket
-   * @returns {Array<InputStream, OutputStream>}
-   * @throws {timeout} Connection timed out. (ETIMEDOUT)
-   * @throws {connection-refused} The connection was forcefully rejected. (ECONNREFUSED)
-   * @throws {connection-reset} The connection was reset. (ECONNRESET)
-   * @throws {remote-unreachable} The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
-   * @throws {ephemeral-ports-exhausted} Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
-   * @throws {not-in-progress} A `connect` operation is not in progress.
-   * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
-   * */
-  finishConnect(tcpSocket) {
-    console.log(`[tcp] finish connect socket ${tcpSocket.id}`);
-
-    this.socket.destroySoon();
   }
 
   /**
@@ -338,7 +338,7 @@ export class TcpSocketImpl {
   keepAlive(tcpSocket) {
     console.log(`[tcp] keep alive socket ${tcpSocket.id}`);
 
-    this.#keepAlive;
+    this.#socketOptions.keepAlive;
   }
 
   /**
@@ -350,7 +350,7 @@ export class TcpSocketImpl {
   setKeepAlive(tcpSocket, value) {
     console.log(`[tcp] set keep alive socket ${tcpSocket.id} to ${value}`);
 
-    this.#keepAlive = value;
+    this.#socketOptions.keepAlive = value;
     this.socket.setKeepAlive(value);
   }
 
@@ -361,7 +361,7 @@ export class TcpSocketImpl {
   noDelay(tcpSocket) {
     console.log(`[tcp] no delay socket ${tcpSocket.id}`);
 
-    return this.#noDelay;
+    return this.#socketOptions.noDelay;
   }
 
   /**
@@ -373,7 +373,7 @@ export class TcpSocketImpl {
   setNoDelay(tcpSocket, value) {
     console.log(`[tcp] set no delay socket ${tcpSocket.id} to ${value}`);
 
-    this.#noDelay = value;
+    this.#socketOptions.noDelay = value;
     this.socket.setNoDelay(value);
   }
 
@@ -471,8 +471,7 @@ export class TcpSocketImpl {
       this.#canReceive = false;
     } else if (shutdownType === "write") {
       this.#canSend = false;
-    }
-    else if (shutdownType === 'both') {
+    } else if (shutdownType === "both") {
       this.#canReceive = false;
       this.#canSend = false;
     }
@@ -485,8 +484,6 @@ export class TcpSocketImpl {
   dropTcpSocket(tcpSocket) {
     console.log(`[tcp] drop socket ${tcpSocket.id}`);
 
-    this.finishBind(tcpSocket);
-    this.finishConnect(tcpSocket);
     this.socket.destroy();
   }
 }

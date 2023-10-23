@@ -209,6 +209,7 @@ suite("Node.js Preview2", () => {
         },
       };
       tcpSocket.startBind(tcpSocket, network, localAddress);
+      tcpSocket.finishBind(tcpSocket);
 
       equal(tcpSocket.isBound, true);
       equal(tcpSocket.network.id, network.id);
@@ -230,6 +231,7 @@ suite("Node.js Preview2", () => {
         },
       };
       tcpSocket.startBind(tcpSocket, network, localAddress);
+      tcpSocket.finishBind(tcpSocket);
 
       equal(tcpSocket.isBound, true);
       equal(tcpSocket.network.id, network.id);
@@ -275,6 +277,7 @@ suite("Node.js Preview2", () => {
       };
       throws(() => {
         tcpSocket.startBind(tcpSocket, network, localAddress);
+        tcpSocket.finishBind(tcpSocket);
         tcpSocket.startBind(tcpSocket, network, localAddress);
       }, {
         name: 'Error',
@@ -282,24 +285,6 @@ suite("Node.js Preview2", () => {
       })
     });
 
-    test("tcp.finishBind()", async () => {
-      const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
-      const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
-        val: {
-          address: [0, 0, 0, 0],
-          port: 0,
-        },
-      };
-      tcpSocket.startBind(tcpSocket, network, localAddress);
-      tcpSocket.finishBind(tcpSocket);
-
-      equal(tcpSocket.isBound, false);
-      equal(tcpSocket.network, null);
-      equal(tcpSocket.socketAddress, null);
-    });
     test("tcp.startConnect(): should connect to a valid ipv4 address", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
@@ -322,7 +307,9 @@ suite("Node.js Preview2", () => {
       mock.method(tcpSocket.socket, 'connect', () => console.log('connect called'));
 
       tcpSocket.startBind(tcpSocket, network, localAddress);
+      tcpSocket.finishBind(tcpSocket);
       tcpSocket.startConnect(tcpSocket, network, remoteAddress);
+      tcpSocket.finishConnect(tcpSocket);
 
       equal(tcpSocket.isBound, true);
       equal(tcpSocket.network.id, network.id);
