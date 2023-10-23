@@ -17,6 +17,7 @@ pub enum ErrHandling {
     ResultCatchHandler,
 }
 
+#[derive(Clone, Debug)]
 pub enum ResourceData {
     Host {
         id: u32,
@@ -52,6 +53,8 @@ pub enum ResourceData {
 /// In the case of an imported resource tables, in place of "rep" we just store
 /// the direct JS object being referenced, since in JS the object is its own handle.
 ///
+///
+#[derive(Clone, Debug)]
 pub struct ResourceTable {
     pub imported: bool,
     pub data: ResourceData,
