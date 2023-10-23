@@ -349,7 +349,14 @@ impl<'a> Instantiator<'a, '_> {
                 .iter()
                 .find(|(_, (impt_name, _))| impt_name == name)
             else {
-                // TODO: debug?
+                match item {
+                    WorldItem::Interface(_) => unreachable!(),
+                    WorldItem::Function(_) => unreachable!(),
+                    WorldItem::Type(ty) => assert!(!matches!(
+                        self.resolve.types[*ty].kind,
+                        TypeDefKind::Resource
+                    )),
+                }
                 continue;
             };
             match item {
@@ -360,14 +367,18 @@ impl<'a> Instantiator<'a, '_> {
                     let import_ty = &self.types[*instance];
                     let iface = &self.resolve.interfaces[*iface];
                     for (ty_name, ty) in &iface.types {
-                        match &import_ty.exports[ty_name] {
-                            TypeDef::Resource(resource) => {
+                        match &import_ty.exports.get(ty_name) {
+                            Some(TypeDef::Resource(resource)) => {
                                 self.connect_resources(*ty, *resource, false);
                             }
-                            TypeDef::Interface(iface) => {
+                            Some(TypeDef::Interface(iface)) => {
                                 self.connect_resource_types(*ty, iface, false);
                             }
-                            _ => unreachable!(),
+                            Some(_) => unreachable!(),
+                            None => {
+                                // This can be safely ignored because you can import
+                                // less than an interface actually has
+                            }
                         }
                     }
                     for (func_name, func) in &iface.functions {
