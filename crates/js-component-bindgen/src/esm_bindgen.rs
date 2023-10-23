@@ -25,7 +25,7 @@ impl EsmBindgen {
     /// first segment
     /// arbitrary nesting of interfaces is supported in order to support virtual WASI interfaces
     /// only two-level nesting supports serialization into imports currently
-    pub fn add_import_binding(&mut self, path: &[String], func_name: String) {
+    pub fn add_import_binding(&mut self, path: &[String], binding_name: String) {
         let mut iface = &mut self.imports;
         for i in 0..path.len() - 1 {
             if !iface.contains_key(&path[i]) {
@@ -39,7 +39,10 @@ impl EsmBindgen {
                 ),
             };
         }
-        iface.insert(path[path.len() - 1].to_string(), Binding::Local(func_name));
+        iface.insert(
+            path[path.len() - 1].to_string(),
+            Binding::Local(binding_name),
+        );
     }
 
     /// add an exported function binding, optionally on an interface id or kebab name
