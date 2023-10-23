@@ -173,6 +173,8 @@ export class TcpSocketImpl {
   finishConnect(tcpSocket) {
     console.log(`[tcp] finish connect socket ${tcpSocket.id}`);
 
+    assert(this.#inProgress === false, "not-in-progress");
+
     const { address, port, remoteAddress, remotePort, family } = this.#socketOptions;
     this.#socket.connect({
       localAddress: address,
@@ -204,12 +206,26 @@ export class TcpSocketImpl {
 
     this.#socket.on("timeout", () => {
       console.error(`[tcp] timeout on socket ${tcpSocket.id}`);
-      this.#state = "closed";
+      this.#state = "timeout";
     });
 
     this.#socket.on("error", (err) => {
       console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
+
       this.#state = "error";
+
+      assert(err.code === "ERRADDRINUSE", "ephemeral-ports-exhausted");
+      assert(err.code === "EADDRNOTAVAIL", "ephemeral-ports-exhausted");
+      assert(err.code === "EAGAIN", "ephemeral-ports-exhausted");
+      assert(err.code === "EADDRINUSE", "ephemeral-ports-exhausted");
+      assert(err.code === "ECONNREFUSED", "connection-refused");
+      assert(err.code === "ECONNRESET", "connection-reset");
+      assert(err.code === "ETIMEDOUT", "timeout");
+      assert(err.code === "EHOSTUNREACH", "remote-unreachable");
+      assert(err.code === "EHOSTDOWN", "remote-unreachable");
+      assert(err.code === "ENETUNREACH", "remote-unreachable");
+      assert(err.code === "ENETDOWN", "remote-unreachable");
+
     });
 
     this.#inProgress = false;
@@ -228,7 +244,10 @@ export class TcpSocketImpl {
 
     this.#inProgress = true;
 
-    throw new Error("not implemented");
+    assert(this.#isBound === false, "not-bound");
+    assert(this.#state === "connected", "already-connected");
+    assert(this.#state === "connection", "already-listening");
+    assert(this.#inProgress, "concurrency-conflict");
   }
 
   /**
@@ -240,6 +259,10 @@ export class TcpSocketImpl {
    * */
   finishListen(tcpSocket) {
     console.log(`[tcp] finish listen socket ${tcpSocket.id}`);
+
+    assert(this.#inProgress === false, "not-in-progress");
+
+    this.#socket.listen(this.#backlog);
 
     this.#inProgress = false;
 
