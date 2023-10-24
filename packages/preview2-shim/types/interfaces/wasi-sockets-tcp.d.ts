@@ -238,19 +238,19 @@ export namespace WasiSocketsTcp {
    * - <https://man.freebsd.org/cgi/man.cgi?query=shutdown&sektion=2>
    */
 }
-import type { InputStream } from '../interfaces/wasi-io-streams';
+import type { InputStream } from '../interfaces/wasi-io-streams.js';
 export { InputStream };
-import type { OutputStream } from '../interfaces/wasi-io-streams';
+import type { OutputStream } from '../interfaces/wasi-io-streams.js';
 export { OutputStream };
-import type { Pollable } from '../interfaces/wasi-io-poll';
+import type { Pollable } from '../interfaces/wasi-io-poll.js';
 export { Pollable };
-import type { Network } from '../interfaces/wasi-sockets-network';
+import type { Network } from '../interfaces/wasi-sockets-network.js';
 export { Network };
-import type { ErrorCode } from '../interfaces/wasi-sockets-network';
+import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
 export { ErrorCode };
-import type { IpSocketAddress } from '../interfaces/wasi-sockets-network';
+import type { IpSocketAddress } from '../interfaces/wasi-sockets-network.js';
 export { IpSocketAddress };
-import type { IpAddressFamily } from '../interfaces/wasi-sockets-network';
+import type { IpAddressFamily } from '../interfaces/wasi-sockets-network.js';
 export { IpAddressFamily };
 /**
  * # Variants

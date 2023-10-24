@@ -183,7 +183,7 @@ export async function cliTest (fixtures) {
       }]);
     });
 
-    test.skip('Componentize', async () => {
+    test('Componentize', async () => {
       const { stdout, stderr } = await exec(jcoPath,
           'componentize',
           'test/fixtures/componentize/source.js',
@@ -196,6 +196,7 @@ export async function cliTest (fixtures) {
         const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', 'componentize', '-o', outDir);
         strictEqual(stderr, '');
       }
+      await writeFile(`${outDir}/package.json`, JSON.stringify({ type: 'module' }));
       const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
       strictEqual(m.hello(), 'world');
     });

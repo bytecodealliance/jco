@@ -1,28 +1,15 @@
-import { handle } from 'wasi:http/outgoing-handler';
+import { handle } from 'wasi:http/outgoing-handler@0.2.0-rc-2023-11-05';
 import {
-  dropFields,
-  dropFutureIncomingResponse,
-  dropIncomingResponse,
-  dropOutgoingRequest,
-  fieldsEntries,
-  finishOutgoingStream,
-  futureIncomingResponseGet,
-  incomingResponseConsume,
-  incomingResponseHeaders,
-  incomingResponseStatus,
-  newFields,
-  newOutgoingRequest,
-  outgoingRequestWrite,
-} from 'wasi:http/types';
-import { dropPollable } from 'wasi:poll/poll';
-import {
-  dropInputStream,
-  dropOutputStream,
-  flush,
-  read,
-  subscribeToInputStream,
-  write,
-} from 'wasi:io/streams';
+  Fields,
+  IncomingRequest,
+  IncomingResponse,
+  ResponseOutparam,
+  OutgoingRequest,
+  OutgoingResponse,
+  FutureIncomingResponse,
+  IncomingBody,
+  FutureTrailers,
+} from 'wasi:http/types@0.2.0-rc-2023-11-05';
 
 class GenericError extends Error {
   payload;
@@ -45,12 +32,12 @@ const sendRequest = (
   try {
     let incomingResponse;
     {
-      const headers = newFields([
+      const headers = new Fields([
         ['User-agent', 'WASI-HTTP/0.0.1'],
         ['Content-type', 'application/json'],
       ]);
 
-      const request = newOutgoingRequest(
+      const request = new OutgoingRequest(
         method,
         pathWithQuery,
         scheme,

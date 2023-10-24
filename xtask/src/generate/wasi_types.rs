@@ -19,7 +19,7 @@ pub(crate) fn run() -> Result<()> {
         let preview2 = *resolve
             .package_names
             .iter()
-            .find(|(name, _)| name.interface_id(world_name) == world)
+            .find(|(name, _)| format!("{}:{}/{world_name}", name.namespace, name.name) == world)
             .unwrap()
             .1;
 
@@ -39,7 +39,7 @@ pub(crate) fn run() -> Result<()> {
 
         let files = generate_types(name, resolve, world, opts)?;
 
-        if !fs::metadata("./packages/preview2-shim/types").is_err() {
+        if fs::metadata("./packages/preview2-shim/types").is_err() {
             fs::remove_dir_all("./packages/preview2-shim/types")?;
         }
         for (filename, contents) in files.iter() {

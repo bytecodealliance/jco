@@ -883,7 +883,11 @@ impl<'a> TsInterface<'a> {
 }
 
 fn interface_goal_name(iface_name: &str) -> String {
-    iface_name
+    let iface_name_sans_version = match iface_name.find('@') {
+        Some(version_idx) => &iface_name[0..version_idx],
+        None => iface_name.as_ref(),
+    };
+    iface_name_sans_version
         .replace('/', "-")
         .replace(':', "-")
         .to_kebab_case()
