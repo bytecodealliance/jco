@@ -93,7 +93,7 @@ export class TcpSocketImpl extends EventEmitter {
     this.id = socketId;
     this.#clientHandle = new TCP(TCPConstants.SOCKET);
     this.#serverHandle = new TCP(TCPConstants.SERVER);
-    this.#serverHandle.onconnection = this.#onServerConnection.bind(this);
+    this.#serverHandle.onconnection = this.onServerConnection.bind(this);
     this.#socketOptions.family = addressFamily;
     this.#socketOptions.keepAlive = false;
     this.#socketOptions.noDelay = false;
@@ -106,13 +106,31 @@ export class TcpSocketImpl extends EventEmitter {
     return this.#clientHandle;
   }
 
-  #onServerConnection(err, clientHandle) {
-    console.log(`[tcp] connection on socket ${tcpSocket.id}`);
+  onServerConnection(err, clientHandle) {
+    console.log(`[tcp] on server connection`);
 
     if (err) {
-      console.error("Error accepting connection:", err);
-      return;
+      throw new Error(err);
     }
+
+    const socket = new NodeSocket({ handle: clientHandle });
+    // TODO: handle data received from the client
+  }
+
+  onClientConnectComplete(err) {
+    console.log(`[tcp] on client connect complete`);
+
+    if (err) {
+      assert(err === -99, "ephemeral-ports-exhausted");
+      assert(err === -104, "connection-reset");
+      assert(err === -110, "timeout");
+      assert(err === -111, "connection-refused");
+      assert(err === -113, "remote-unreachable");
+
+      throw new Error(err);
+    }
+
+    this.#state = "connected";
   }
 
   /**
@@ -248,21 +266,7 @@ export class TcpSocketImpl extends EventEmitter {
       this.#state = "error";
     }
 
-    connectReq.oncomplete = (err) => {
-      if (err) {
-        assert(err === -99, "ephemeral-ports-exhausted");
-        assert(err === -104, "connection-reset");
-        assert(err === -110, "timeout");
-        assert(err === -111, "connection-refused");
-        assert(err === -113, "remote-unreachable");
-
-        throw new Error(err);
-      }
-
-      console.log(`[tcp] connect on socket ${tcpSocket.id}`);
-      this.#state = "connected";
-    };
-
+    connectReq.oncomplete = this.onClientConnectComplete.bind(this);
     this.#inProgress = false;
   }
 
