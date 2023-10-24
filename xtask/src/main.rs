@@ -1,6 +1,7 @@
 use structopt::StructOpt;
 
 mod build;
+mod generate;
 mod test;
 mod update;
 
@@ -8,10 +9,12 @@ mod update;
 enum Opts {
     /// Build the project
     Build(Build),
-    /// Run tests
+    /// Run cargo tests
     Test,
     /// Update the various dependencies in the project
     Update(Update),
+    /// Generate code
+    Generate(Generate),
 }
 
 #[derive(StructOpt)]
@@ -30,6 +33,12 @@ enum Build {
     Workspace,
 }
 
+#[derive(StructOpt)]
+enum Generate {
+    /// Generate tests
+    Tests,
+}
+
 fn main() -> anyhow::Result<()> {
     match Opts::from_args() {
         Opts::Build(Build::Jco) => build::jco::run(),
@@ -41,5 +50,6 @@ fn main() -> anyhow::Result<()> {
         }
         Opts::Test => test::run(),
         Opts::Update(Update::Preview2) => update::preview2::run(),
+        Opts::Generate(Generate::Tests) => generate::tests::run(),
     }
 }

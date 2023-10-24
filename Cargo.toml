@@ -1,7 +1,7 @@
 [package]
 name = "jco"
-version.workspace = true
-edition.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
 publish = false
 
 [[bin]]
@@ -38,3 +38,8 @@ wit-bindgen = { version = "0.13.0" }
 wit-bindgen-core = { version = "0.13.0" }
 wit-component = { version = "0.16.0", features = ["dummy-module"] }
 wit-parser = "0.12.1"
+
+[dev-dependencies]
+tempdir = "0.3.7"
+xshell = "0.2.5"
+anyhow = { workspace = true }
