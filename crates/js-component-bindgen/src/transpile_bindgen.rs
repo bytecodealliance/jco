@@ -791,13 +791,18 @@ impl<'a> Instantiator<'a, '_> {
         let world_key = &self.imports[import_name];
 
         // nested interfaces only currently possible through mapping
-        let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, &import_name);
+        let import_name_sans_version = match import_name.find('@') {
+            Some(version_idx) => &import_name[0..version_idx],
+            None => import_name.as_ref(),
+        };
+        let (import_specifier, maybe_iface_member) =
+            map_import(&self.gen.opts.map, &import_name_sans_version);
 
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
                     assert_eq!(path.len(), 0);
-                    (func, import_name, None)
+                    (func, import_name_sans_version, None)
                 }
                 WorldItem::Interface(i) => {
                     assert_eq!(path.len(), 1);
@@ -805,8 +810,13 @@ impl<'a> Instantiator<'a, '_> {
                     let func = &iface.functions[&path[0]];
                     (
                         func,
-                        &path[0],
-                        Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
+                        path[0].as_ref(),
+                        Some(
+                            iface
+                                .name
+                                .as_deref()
+                                .unwrap_or_else(|| import_name_sans_version),
+                        ),
                     )
                 }
                 WorldItem::Type(_) => unreachable!(),
@@ -828,7 +838,10 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Method(ty) => format!(
                 "{}.prototype.{}.call",
                 match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Host { local_name, .. } => {
+                        self.gen.esm_bindgen.ensure_import_binding(local_name);
+                        local_name
+                    }
                     ResourceData::Guest { .. } => unreachable!(),
                 },
                 func.item_name().to_lower_camel_case()
@@ -836,7 +849,10 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Static(ty) => format!(
                 "{}.{}",
                 match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Host { local_name, .. } => {
+                        self.gen.esm_bindgen.ensure_import_binding(local_name);
+                        local_name
+                    }
                     ResourceData::Guest { .. } => unreachable!(),
                 },
                 func.item_name().to_lower_camel_case()
@@ -844,7 +860,10 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Constructor(ty) => format!(
                 "new {}",
                 match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Host { local_name, .. } => {
+                        self.gen.esm_bindgen.ensure_import_binding(local_name);
+                        local_name
+                    }
                     ResourceData::Guest { .. } => unreachable!(),
                 },
             ),
@@ -882,7 +901,10 @@ impl<'a> Instantiator<'a, '_> {
                 (
                     ty.name.as_ref().unwrap().to_upper_camel_case(),
                     match &self.imports_resource_map[&tid].data {
-                        ResourceData::Host { local_name, .. } => local_name.to_string(),
+                        ResourceData::Host { local_name, .. } => {
+                            self.gen.esm_bindgen.ensure_import_binding(local_name);
+                            local_name.to_string()
+                        }
                         ResourceData::Guest { .. } => unreachable!(),
                     },
                 )
@@ -899,6 +921,7 @@ impl<'a> Instantiator<'a, '_> {
                 None
             },
             binding_name,
+            false,
         );
     }
 
@@ -909,6 +932,7 @@ impl<'a> Instantiator<'a, '_> {
         iface_member: Option<&str>,
         import_binding: Option<String>,
         local_name: String,
+        unused: bool,
     ) {
         // add the function import to the ESM bindgen
         if let Some(_iface_name) = iface_name {
@@ -922,22 +946,26 @@ impl<'a> Instantiator<'a, '_> {
                         import_binding.unwrap().to_string(),
                     ],
                     local_name,
+                    unused,
                 );
             } else {
                 self.gen.esm_bindgen.add_import_binding(
                     &[import_specifier, import_binding.unwrap().to_string()],
                     local_name,
+                    unused,
                 );
             }
         } else {
             if let Some(import_binding) = import_binding {
-                self.gen
-                    .esm_bindgen
-                    .add_import_binding(&[import_specifier, import_binding], local_name);
+                self.gen.esm_bindgen.add_import_binding(
+                    &[import_specifier, import_binding],
+                    local_name,
+                    unused,
+                );
             } else {
                 self.gen
                     .esm_bindgen
-                    .add_import_binding(&[import_specifier], local_name);
+                    .add_import_binding(&[import_specifier], local_name, unused);
             }
         }
     }
@@ -998,8 +1026,12 @@ impl<'a> Instantiator<'a, '_> {
             let local_name_str = local_name.to_string();
 
             // nested interfaces only currently possible through mapping
+            let import_name_sans_version = match import_name.find('@') {
+                Some(version_idx) => &import_name[0..version_idx],
+                None => import_name.as_ref(),
+            };
             let (import_specifier, maybe_iface_member) =
-                map_import(&self.gen.opts.map, &import_name);
+                map_import(&self.gen.opts.map, &import_name_sans_version);
 
             self.ensure_import(
                 import_specifier,
@@ -1007,6 +1039,7 @@ impl<'a> Instantiator<'a, '_> {
                 maybe_iface_member.as_deref(),
                 Some(resource_name),
                 local_name_str.to_string(),
+                true,
             );
 
             local_name_str

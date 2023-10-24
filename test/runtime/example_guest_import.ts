@@ -1,4 +1,4 @@
-// Flags: --map example2:component/backend@0.1.0=../example_guest_import.js
+// Flags: --map example2:component/backend=../example_guest_import.js
 
 import { ok, strictEqual } from 'node:assert';
 
