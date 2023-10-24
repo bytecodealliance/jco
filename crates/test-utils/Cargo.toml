@@ -1,0 +1,12 @@
+[package]
+name = "test-utils"
+authors = ["Yosh Wuyts <rust@yosh.is>", "Guy Bedford <gbedford@fastly.com>"]
+publish = false
+
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+xshell = { workspace = true }
+tempdir = { workspace = true }
