@@ -423,6 +423,7 @@ export class FileSystem {
     };
     this.types = {
       Descriptor,
+      DirectoryEntryStream,
     };
   }
 }

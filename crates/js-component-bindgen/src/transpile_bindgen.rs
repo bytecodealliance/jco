@@ -828,7 +828,10 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Method(ty) => format!(
                 "{}.prototype.{}.call",
                 match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Host { local_name, .. } => {
+                        self.gen.esm_bindgen.ensure_import_binding(local_name);
+                        local_name
+                    }
                     ResourceData::Guest { .. } => unreachable!(),
                 },
                 func.item_name().to_lower_camel_case()
@@ -836,7 +839,10 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Static(ty) => format!(
                 "{}.{}",
                 match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Host { local_name, .. } => {
+                        self.gen.esm_bindgen.ensure_import_binding(local_name);
+                        local_name
+                    }
                     ResourceData::Guest { .. } => unreachable!(),
                 },
                 func.item_name().to_lower_camel_case()
@@ -844,7 +850,10 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Constructor(ty) => format!(
                 "new {}",
                 match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => local_name,
+                    ResourceData::Host { local_name, .. } => {
+                        self.gen.esm_bindgen.ensure_import_binding(local_name);
+                        local_name
+                    }
                     ResourceData::Guest { .. } => unreachable!(),
                 },
             ),
@@ -882,7 +891,10 @@ impl<'a> Instantiator<'a, '_> {
                 (
                     ty.name.as_ref().unwrap().to_upper_camel_case(),
                     match &self.imports_resource_map[&tid].data {
-                        ResourceData::Host { local_name, .. } => local_name.to_string(),
+                        ResourceData::Host { local_name, .. } => {
+                            self.gen.esm_bindgen.ensure_import_binding(local_name);
+                            local_name.to_string()
+                        }
                         ResourceData::Guest { .. } => unreachable!(),
                     },
                 )
@@ -899,6 +911,7 @@ impl<'a> Instantiator<'a, '_> {
                 None
             },
             binding_name,
+            false,
         );
     }
 
@@ -909,6 +922,7 @@ impl<'a> Instantiator<'a, '_> {
         iface_member: Option<&str>,
         import_binding: Option<String>,
         local_name: String,
+        unused: bool,
     ) {
         // add the function import to the ESM bindgen
         if let Some(_iface_name) = iface_name {
@@ -922,22 +936,26 @@ impl<'a> Instantiator<'a, '_> {
                         import_binding.unwrap().to_string(),
                     ],
                     local_name,
+                    unused,
                 );
             } else {
                 self.gen.esm_bindgen.add_import_binding(
                     &[import_specifier, import_binding.unwrap().to_string()],
                     local_name,
+                    unused,
                 );
             }
         } else {
             if let Some(import_binding) = import_binding {
-                self.gen
-                    .esm_bindgen
-                    .add_import_binding(&[import_specifier, import_binding], local_name);
+                self.gen.esm_bindgen.add_import_binding(
+                    &[import_specifier, import_binding],
+                    local_name,
+                    unused,
+                );
             } else {
                 self.gen
                     .esm_bindgen
-                    .add_import_binding(&[import_specifier], local_name);
+                    .add_import_binding(&[import_specifier], local_name, unused);
             }
         }
     }
@@ -1007,6 +1025,7 @@ impl<'a> Instantiator<'a, '_> {
                 maybe_iface_member.as_deref(),
                 Some(resource_name),
                 local_name_str.to_string(),
+                true,
             );
 
             local_name_str
@@ -1582,8 +1601,22 @@ impl Source {
 }
 
 fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Option<String>) {
+    let impt_sans_version = match impt.find('@') {
+        Some(version_idx) => &impt[0..version_idx],
+        None => impt.as_ref(),
+    };
     if let Some(map) = map.as_ref() {
         if let Some(mapping) = map.get(impt) {
+            return if let Some(hash_idx) = mapping.find('#') {
+                (
+                    mapping[0..hash_idx].to_string(),
+                    Some(mapping[hash_idx + 1..].into()),
+                )
+            } else {
+                (mapping.into(), None)
+            };
+        }
+        if let Some(mapping) = map.get(impt_sans_version) {
             return if let Some(hash_idx) = mapping.find('#') {
                 (
                     mapping[0..hash_idx].to_string(),
@@ -1597,6 +1630,19 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
             if let Some(wildcard_idx) = key.find('*') {
                 let lhs = &key[0..wildcard_idx];
                 let rhs = &key[wildcard_idx + 1..];
+                if impt_sans_version.starts_with(lhs) && impt_sans_version.ends_with(rhs) {
+                    let matched = &impt_sans_version[wildcard_idx
+                        ..wildcard_idx + impt_sans_version.len() - lhs.len() - rhs.len()];
+                    let mapping = mapping.replace('*', matched);
+                    return if let Some(hash_idx) = mapping.find('#') {
+                        (
+                            mapping[0..hash_idx].to_string(),
+                            Some(mapping[hash_idx + 1..].into()),
+                        )
+                    } else {
+                        (mapping.into(), None)
+                    };
+                }
                 if impt.starts_with(lhs) && impt.ends_with(rhs) {
                     let matched =
                         &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
@@ -1613,7 +1659,7 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
             }
         }
     }
-    (impt.to_string(), None)
+    (impt_sans_version.to_string(), None)
 }
 
 pub fn parse_world_key<'a>(name: &'a str) -> Option<(&'a str, &'a str, &'a str)> {

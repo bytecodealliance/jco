@@ -163,3 +163,19 @@ class OutputStream {
 }
 
 export const streams = { Error, InputStream, OutputStream };
+
+class Pollable {}
+
+function pollList (_list) {
+  // TODO
+}
+
+function pollOne (_poll) {
+  // TODO
+}
+
+export const poll = {
+  Pollable,
+  pollList,
+  pollOne
+};
