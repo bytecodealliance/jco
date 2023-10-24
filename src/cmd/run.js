@@ -1,16 +1,18 @@
 import { getTmpDir } from '../common.js';
 import { transpile } from './transpile.js';
-import { rm, stat, mkdir, writeFile, symlink, chmod } from 'node:fs/promises';
+import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
-import { spawn } from 'node:child_process';
-import { argv0, exit } from 'node:process';
+import { fork } from 'node:child_process';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import c from 'chalk-template';
 
 export async function run (componentPath, args) {
+  // Ensure that `args` is an array
+  args = [...args];
+
   const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
   const outDir = await getTmpDir();
-  let cp;
   try {
     try {
       await transpile(componentPath, {
@@ -22,11 +24,9 @@ export async function run (componentPath, args) {
       });
     }
     catch (e) {
-      console.error(c`{red ERR}: Unable to transpile command for execution`);
-      throw e;
+      throw new Error('Unable to transpile command for execution', { cause: e });
     }
 
-    await mkdir(resolve(outDir, 'node_modules', '@bytecodealliance'), { recursive: true });
     await writeFile(resolve(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
 
     let preview2ShimPath = fileURLToPath(new URL('../../node_modules/@bytecodealliance/preview2-shim', import.meta.url));
@@ -38,14 +38,15 @@ export async function run (componentPath, args) {
       }
       catch {}
       let len = preview2ShimPath.length;
-      preview2ShimPath = resolve(preview2ShimPath, '../../../node_modules/@bytecodealliance/preview2-shim');
+      preview2ShimPath = resolve(preview2ShimPath, '..', '..', '..', 'node_modules', '@bytecodealliance', 'preview2-shim');
       if (preview2ShimPath.length === len) {
-        console.error(c`{red ERR}: Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`);
-        return;
+        throw c`Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`;
       }
     }
 
-    await symlink(preview2ShimPath, resolve(outDir, 'node_modules/@bytecodealliance/preview2-shim'), 'dir');
+    const modulesDir = resolve(outDir, 'node_modules', '@bytecodealliance');
+    await mkdir(modulesDir, { recursive: true });
+    await symlink(preview2ShimPath, resolve(modulesDir, 'preview2-shim'), 'dir');
 
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
@@ -71,24 +72,17 @@ export async function run (componentPath, args) {
         throw e;
       }
     `);
-    await chmod(runPath, 0o777);
 
-    cp = spawn(argv0, [runPath, ...args], { stdio: 'inherit' });
+    process.exitCode = await new Promise((resolve, reject) => {
+      const cp = fork(runPath, args, { stdio: 'inherit' });
+
+      cp.on('error', reject);
+      cp.on('exit', resolve);
+    });
   }
   finally {
-    if (!cp) {
-      try {
-        await rm(outDir, { recursive: true });
-      } catch {}
-    }
+    try {
+      await rm(outDir, { recursive: true });
+    } catch {}
   }
-
-  const exitCode = await new Promise((resolve, reject) => {
-    cp.on('error', reject);
-    cp.on('exit', resolve);
-  });
-  try {
-    await rm(outDir, { recursive: true });
-  } catch {}
-  exit(exitCode);
 }
