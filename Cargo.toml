@@ -13,6 +13,7 @@ members = [
     "crates/js-component-bindgen",
     "crates/js-component-bindgen-component",
     "crates/wasm-tools-component",
+    "crates/test-utils",
     "xtask",
 ]
 resolver = "2"
@@ -28,6 +29,7 @@ heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "2.0"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 structopt = "0.3.25"
+tempdir = "0.3.7"
 wasm-encoder = "0.35.0"
 wasm-metadata = "0.10.9"
 wasmparser = "0.115.0"
@@ -38,8 +40,10 @@ wit-bindgen = { version = "0.13.0" }
 wit-bindgen-core = { version = "0.13.0" }
 wit-component = { version = "0.16.0", features = ["dummy-module"] }
 wit-parser = "0.12.1"
+xshell = "0.2.5"
 
 [dev-dependencies]
-tempdir = "0.3.7"
-xshell = "0.2.5"
 anyhow = { workspace = true }
+tempdir = { workspace = true }
+xshell = { workspace = true }
+test-utils = { path = "./crates/test-utils" }

@@ -192,6 +192,7 @@ version = "0.11.0"
 dependencies = [
  "anyhow",
  "tempdir",
+ "test-utils",
  "xshell",
 ]
 
@@ -487,6 +488,15 @@ checksum = "15f2b5fb00ccdf689e0149d1b1b3c03fead81c2b37735d812fa8bddbbf41b6d8"
 dependencies = [
  "rand",
  "remove_dir_all",
+]
+
+[[package]]
+name = "test-utils"
+version = "0.11.0"
+dependencies = [
+ "anyhow",
+ "tempdir",
+ "xshell",
 ]
 
 [[package]]

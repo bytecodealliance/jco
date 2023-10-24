@@ -1,0 +1,12 @@
+use tempdir::TempDir;
+use xshell::{cmd, Shell};
+
+#[test]
+fn cli_hello_stdout() -> anyhow::Result<()> {
+    let sh = Shell::new()?;
+    let tempdir = TempDir::new("cli-hello-test")?;
+    let file_name = "cli_hello_stdout";
+    let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
+    cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
+    Ok(())
+}
