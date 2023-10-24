@@ -11,7 +11,14 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-tcp").ShutdownType} ShutdownType
  */
 
-import { Socket as NodeSocket, SocketAddress as NodeSocketAddress, isIP } from "node:net";
+// See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
+const {
+  TCP,
+  TCPConnectWrap,
+  constants: TCPConstants,
+} = process.binding("tcp_wrap");
+import { isIP, Socket as NodeSocket } from "node:net";
+import { EventEmitter } from "node:events";
 
 function tupleToIPv6(arr) {
   if (arr.length !== 8) {
@@ -21,14 +28,39 @@ function tupleToIPv6(arr) {
   return ipv6Segments.join(":");
 }
 
-function computeIpAddress(localAddress, family) {
-  let { address } = localAddress.val;
+function tupleToIpv4(arr) {
+  if (arr.length !== 4) {
+    return null; // Return null for invalid input
+  }
+  const ipv4Segments = arr.map((segment) => segment.toString(10));
+  return ipv4Segments.join(".");
+}
+
+function ipv6ToTuple(ipv6) {
+  return ipv6.split(":").map((segment) => parseInt(segment, 16));
+}
+
+function ipv4ToTuple(ipv4) {
+  return ipv4.split(".").map((segment) => parseInt(segment, 10));
+}
+
+function serializeIpAddress(addr, family) {
+  let { address } = addr.val;
   if (family.toLocaleLowerCase() === "ipv4") {
-    address = address.join(".");
+    address = tupleToIpv4(address);
   } else if (family.toLocaleLowerCase() === "ipv6") {
     address = tupleToIPv6(address);
   }
+  return address;
+}
 
+function deserializeIpAddress(addr, family) {
+  let address = [];
+  if (family.toLocaleLowerCase() === "ipv4") {
+    address = ipv4ToTuple(addr);
+  } else if (family.toLocaleLowerCase() === "ipv6") {
+    address = ipv6ToTuple(addr);
+  }
   return address;
 }
 
@@ -38,11 +70,10 @@ function assert(condition, message) {
   }
 }
 
-export class TcpSocketImpl {
+export class TcpSocketImpl extends EventEmitter {
   id;
-  /** @type {NodeSocket} */ #socket = null;
+  /** @type {TCP} */ #handle = null;
   /** @type {Network} */ network = null;
-  /** @type {NodeSocketAddress} */ socketAddress = null;
 
   #isBound = false;
   #socketOptions = {};
@@ -56,8 +87,17 @@ export class TcpSocketImpl {
   #backlog = 128;
 
   constructor(socketId, addressFamily) {
+    super();
     this.id = socketId;
-    this.#socket = new NodeSocket();
+    this.#handle = new TCP(TCPConstants.SERVER);
+    this.#handle.onconnection = (err, clientHandle) => {
+      console.log(`[tcp] connection on socket ${tcpSocket.id}`);
+
+      if (err) {
+        console.error('Error accepting connection:', err);
+        return;
+      }
+    };
 
     this.#socketOptions.family = addressFamily;
     this.#socketOptions.keepAlive = false;
@@ -65,7 +105,7 @@ export class TcpSocketImpl {
   }
 
   socket() {
-    return this.#socket;
+    return this.#handle;
   }
 
   /**
@@ -83,16 +123,20 @@ export class TcpSocketImpl {
     assert(this.#isBound, "already-bound");
     assert(this.#inProgress, "concurrency-conflict");
 
-    const address = computeIpAddress(localAddress, this.#socketOptions.family);
-
+    const address = serializeIpAddress(
+      localAddress,
+      this.#socketOptions.family
+    );
     const ipFamily = `ipv${isIP(address)}`;
-    if (this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase()) {
-      throw new Error("address-family-mismatch");
-    }
+    assert(
+      this.#socketOptions.family.toLocaleLowerCase() !==
+        ipFamily.toLocaleLowerCase(),
+      "address-family-mismatch"
+    );
 
     const { port } = localAddress.val;
-    this.#socketOptions.address = address;
-    this.#socketOptions.port = port;
+    this.#socketOptions.localAddress = address;
+    this.#socketOptions.localPort = port;
     this.network = network;
     this.#inProgress = true;
   }
@@ -111,14 +155,14 @@ export class TcpSocketImpl {
 
     assert(this.#inProgress === false, "not-in-progress");
 
-    const { address, port, family } = this.#socketOptions;
-    assert(isIP(address) === 0, "address-not-bindable");
+    const { localAddress, localPort, family } = this.#socketOptions;
+    assert(isIP(localAddress) === 0, "address-not-bindable");
 
-    this.socketAddress = new NodeSocketAddress({
-      address,
-      port,
-      family,
-    });
+    const err = this.#handle.bind(localAddress, family, localPort);
+    if (err) {
+      console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
+      this.#state = "error";
+    }
 
     this.#isBound = true;
     this.#inProgress = false;
@@ -138,19 +182,28 @@ export class TcpSocketImpl {
    * @throws {concurrency-conflict} Another `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    * */
   startConnect(tcpSocket, network, remoteAddress) {
-    console.log(`[tcp] start connect socket ${tcpSocket.id} to ${remoteAddress} on network ${network.id}`);
+    console.log(
+      `[tcp] start connect socket ${tcpSocket.id} to ${remoteAddress.val.address} on network ${network.id}`
+    );
 
-    assert(this.network !== null && this.network.id !== network.id, "already-attached");
+    assert(
+      this.network !== null && this.network.id !== network.id,
+      "already-attached"
+    );
     assert(this.#state === "connected", "already-connected");
     assert(this.#state === "connection", "already-listening");
     assert(this.#inProgress, "concurrency-conflict");
     assert(this.#isBound === false, "not-bound");
 
-    const host = computeIpAddress(remoteAddress, this.#socketOptions.family);
+    const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(host)}`;
 
     assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-remote-address");
-    assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "address-family-mismatch");
+    assert(
+      this.#socketOptions.family.toLocaleLowerCase() !==
+        ipFamily.toLocaleLowerCase(),
+      "address-family-mismatch"
+    );
 
     this.network = network;
     this.#socketOptions.remoteAddress = host;
@@ -175,58 +228,49 @@ export class TcpSocketImpl {
 
     assert(this.#inProgress === false, "not-in-progress");
 
-    const { address, port, remoteAddress, remotePort, family } = this.#socketOptions;
-    this.#socket.connect({
-      localAddress: address,
-      localPort: port,
-      host: remoteAddress,
-      port: remotePort,
-      family: family,
-    });
+    const { remoteAddress, remotePort } = this.#socketOptions;
+    const clientHandle = new TCP(TCPConstants.SOCKET);
+    const connectReq = new TCPConnectWrap();
+    const err = clientHandle.connect(connectReq, remoteAddress, remotePort);
 
-    this.#socket.on("connect", () => {
+    if (err) {
+      console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
+      this.#state = "error";
+    }
+
+    connectReq.oncomplete = (err) => {
+      if (err) {
+        assert(err === -111, "connection-refused");
+        assert(err === -104, "connection-reset");
+        assert(err === -110, "timeout");
+        assert(err === -113, "remote-unreachable");
+        assert(err === -99, "ephemeral-ports-exhausted");
+
+        console.error({err});
+        return;
+      }
+
       console.log(`[tcp] connect on socket ${tcpSocket.id}`);
       this.#state = "connected";
-    });
+    };
 
-    this.#socket.on("ready", () => {
-      console.log(`[tcp] ready on socket ${tcpSocket.id}`);
-      this.#state = "connection";
-    });
+    // this.#handle.on("error", (err) => {
+    //   console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
 
-    this.#socket.on("close", () => {
-      console.log(`[tcp] close on socket ${tcpSocket.id}`);
-      this.#state = "closed";
-    });
+    //   this.#state = "error";
 
-    this.#socket.on("end", () => {
-      console.log(`[tcp] end on socket ${tcpSocket.id}`);
-      this.#state = "closed";
-    });
-
-    this.#socket.on("timeout", () => {
-      console.error(`[tcp] timeout on socket ${tcpSocket.id}`);
-      this.#state = "timeout";
-    });
-
-    this.#socket.on("error", (err) => {
-      console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
-
-      this.#state = "error";
-
-      assert(err.code === "ERRADDRINUSE", "ephemeral-ports-exhausted");
-      assert(err.code === "EADDRNOTAVAIL", "ephemeral-ports-exhausted");
-      assert(err.code === "EAGAIN", "ephemeral-ports-exhausted");
-      assert(err.code === "EADDRINUSE", "ephemeral-ports-exhausted");
-      assert(err.code === "ECONNREFUSED", "connection-refused");
-      assert(err.code === "ECONNRESET", "connection-reset");
-      assert(err.code === "ETIMEDOUT", "timeout");
-      assert(err.code === "EHOSTUNREACH", "remote-unreachable");
-      assert(err.code === "EHOSTDOWN", "remote-unreachable");
-      assert(err.code === "ENETUNREACH", "remote-unreachable");
-      assert(err.code === "ENETDOWN", "remote-unreachable");
-
-    });
+    //   assert(err.code === "ERRADDRINUSE", "ephemeral-ports-exhausted");
+    //   assert(err.code === "EADDRNOTAVAIL", "ephemeral-ports-exhausted");
+    //   assert(err.code === "EAGAIN", "ephemeral-ports-exhausted");
+    //   assert(err.code === "EADDRINUSE", "ephemeral-ports-exhausted");
+    //   assert(err.code === "ECONNREFUSED", "connection-refused");
+    //   assert(err.code === "ECONNRESET", "connection-reset");
+    //   assert(err.code === "ETIMEDOUT", "timeout");
+    //   assert(err.code === "EHOSTUNREACH", "remote-unreachable");
+    //   assert(err.code === "EHOSTDOWN", "remote-unreachable");
+    //   assert(err.code === "ENETUNREACH", "remote-unreachable");
+    //   assert(err.code === "ENETDOWN", "remote-unreachable");
+    // });
 
     this.#inProgress = false;
   }
@@ -242,12 +286,12 @@ export class TcpSocketImpl {
   startListen(tcpSocket) {
     console.log(`[tcp] start listen socket ${tcpSocket.id}`);
 
-    this.#inProgress = true;
-
     assert(this.#isBound === false, "not-bound");
     assert(this.#state === "connected", "already-connected");
     assert(this.#state === "connection", "already-listening");
     assert(this.#inProgress, "concurrency-conflict");
+
+    this.#inProgress = true;
   }
 
   /**
@@ -262,11 +306,14 @@ export class TcpSocketImpl {
 
     assert(this.#inProgress === false, "not-in-progress");
 
-    this.#socket.listen(this.#backlog);
+    const err = this.#handle.listen(this.#backlog);
+
+    if (err) {
+      this.#handle.close();
+      throw new Error(err);
+    }
 
     this.#inProgress = false;
-
-    throw new Error("not implemented");
   }
 
   /**
@@ -290,7 +337,14 @@ export class TcpSocketImpl {
 
     assert(this.#isBound === false, "not-bound");
 
-    return this.#socket.localAddress();
+    const { localAddress, localPort, family } = this.#socketOptions;
+    return {
+      tag: family,
+      val: {
+        address: deserializeIpAddress(localAddress, family),
+        port: localPort,
+      },
+    };
   }
 
   /**
@@ -304,7 +358,7 @@ export class TcpSocketImpl {
     assert(this.#isBound === false, "not-bound");
     assert(this.#state !== "connected", "not-connected");
 
-    return this.#socket.remoteAddress();
+    return this.#socketOptions.remoteAddress;
   }
 
   /**
@@ -314,7 +368,7 @@ export class TcpSocketImpl {
   addressFamily(tcpSocket) {
     console.log(`[tcp] address family socket ${tcpSocket.id}`);
 
-    return this.#socket.localFamily;
+    return this.#socketOptions.family;
   }
 
   /**
@@ -352,7 +406,9 @@ export class TcpSocketImpl {
    * @throws {concurrency-conflict} (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    * */
   setListenBacklogSize(tcpSocket, value) {
-    console.log(`[tcp] set listen backlog size socket ${tcpSocket.id} to ${value}`);
+    console.log(
+      `[tcp] set listen backlog size socket ${tcpSocket.id} to ${value}`
+    );
 
     this.#backlog = value;
   }
@@ -377,7 +433,7 @@ export class TcpSocketImpl {
     console.log(`[tcp] set keep alive socket ${tcpSocket.id} to ${value}`);
 
     this.#socketOptions.keepAlive = value;
-    this.#socket.setKeepAlive(value);
+    this.#handle.setKeepAlive(value);
   }
 
   /**
@@ -400,7 +456,7 @@ export class TcpSocketImpl {
     console.log(`[tcp] set no delay socket ${tcpSocket.id} to ${value}`);
 
     this.#socketOptions.noDelay = value;
-    this.#socket.setNoDelay(value);
+    this.#handle.setNoDelay(value);
   }
 
   /**
@@ -423,7 +479,9 @@ export class TcpSocketImpl {
 
    * */
   setUnicastHopLimit(tcpSocket, value) {
-    console.log(`[tcp] set unicast hop limit socket ${tcpSocket.id} to ${value}`);
+    console.log(
+      `[tcp] set unicast hop limit socket ${tcpSocket.id} to ${value}`
+    );
     throw new Error("not implemented");
   }
 
@@ -467,7 +525,9 @@ export class TcpSocketImpl {
    * @throws {concurrency-conflict} (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    * */
   setSendBufferSize(tcpSocket, value) {
-    console.log(`[tcp] set send buffer size socket ${tcpSocket.id} to ${value}`);
+    console.log(
+      `[tcp] set send buffer size socket ${tcpSocket.id} to ${value}`
+    );
     throw new Error("not implemented");
   }
 
@@ -508,6 +568,6 @@ export class TcpSocketImpl {
   dropTcpSocket(tcpSocket) {
     console.log(`[tcp] drop socket ${tcpSocket.id}`);
 
-    this.#socket.destroy();
+    this.#handle.destroy();
   }
 }
