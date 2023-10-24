@@ -860,7 +860,7 @@ impl<'a> TsInterface<'a> {
             Some(owned_interface_name) => {
                 uwriteln!(
                     self.src,
-                    "import type {{ {type_name} }} from '../interfaces/{owned_interface_name}';",
+                    "import type {{ {type_name} }} from '../interfaces/{owned_interface_name}.js';",
                 );
                 self.src.push_str(&format!("export {{ {} }};\n", type_name));
             }
