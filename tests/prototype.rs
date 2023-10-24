@@ -11,6 +11,7 @@ fn cli_hello_stdout() -> anyhow::Result<()> {
     let tempdir = TempDir::new("jco-test")?;
     let file_name = "cli_hello_stdout";
     let wasi_file = generate_new(&sh, &tempdir, &file_name)?;
+    cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
 
@@ -21,7 +22,8 @@ fn generate_new(sh: &Shell, tmpdir: &TempDir, file_name: &str) -> anyhow::Result
         return Err(anyhow!("src: {src_file:?} does not exists on disk"));
     }
 
-    let dest_file = tmpdir.path().join(format!("{file_name}.component.wasm"));
+    let out_dir = tmpdir.path();
+    let dest_file = out_dir.join(format!("{file_name}.component.wasm"));
     File::create(&dest_file)?;
 
     cmd!(
@@ -29,12 +31,6 @@ fn generate_new(sh: &Shell, tmpdir: &TempDir, file_name: &str) -> anyhow::Result
         "./src/jco.js new {src_file} --wasi-command -o {dest_file}"
     )
     .run()?;
+
     Ok(dest_file)
 }
-
-// src/jco.js
-// new
-// submodules/wasmtime/target/wasm32-wasi/release/preview2_tcp_states.wasm
-// --wasi-command
-// -o
-// /var/folders/br/qt2hrwj14b902j9kzvms10_c0000gn/T/jco-test.CXlfkVBRDqmz/preview2_tcp_states.wasm.component.wasm
