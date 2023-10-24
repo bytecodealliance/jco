@@ -791,18 +791,13 @@ impl<'a> Instantiator<'a, '_> {
         let world_key = &self.imports[import_name];
 
         // nested interfaces only currently possible through mapping
-        let import_name_sans_version = match import_name.find('@') {
-            Some(version_idx) => &import_name[0..version_idx],
-            None => import_name.as_ref(),
-        };
-        let (import_specifier, maybe_iface_member) =
-            map_import(&self.gen.opts.map, &import_name_sans_version);
+        let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, &import_name);
 
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
                     assert_eq!(path.len(), 0);
-                    (func, import_name_sans_version, None)
+                    (func, import_name, None)
                 }
                 WorldItem::Interface(i) => {
                     assert_eq!(path.len(), 1);
@@ -810,13 +805,8 @@ impl<'a> Instantiator<'a, '_> {
                     let func = &iface.functions[&path[0]];
                     (
                         func,
-                        path[0].as_ref(),
-                        Some(
-                            iface
-                                .name
-                                .as_deref()
-                                .unwrap_or_else(|| import_name_sans_version),
-                        ),
+                        &path[0],
+                        Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
                     )
                 }
                 WorldItem::Type(_) => unreachable!(),
@@ -1026,12 +1016,8 @@ impl<'a> Instantiator<'a, '_> {
             let local_name_str = local_name.to_string();
 
             // nested interfaces only currently possible through mapping
-            let import_name_sans_version = match import_name.find('@') {
-                Some(version_idx) => &import_name[0..version_idx],
-                None => import_name.as_ref(),
-            };
             let (import_specifier, maybe_iface_member) =
-                map_import(&self.gen.opts.map, &import_name_sans_version);
+                map_import(&self.gen.opts.map, &import_name);
 
             self.ensure_import(
                 import_specifier,
@@ -1615,8 +1601,22 @@ impl Source {
 }
 
 fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Option<String>) {
+    let impt_sans_version = match impt.find('@') {
+        Some(version_idx) => &impt[0..version_idx],
+        None => impt.as_ref(),
+    };
     if let Some(map) = map.as_ref() {
         if let Some(mapping) = map.get(impt) {
+            return if let Some(hash_idx) = mapping.find('#') {
+                (
+                    mapping[0..hash_idx].to_string(),
+                    Some(mapping[hash_idx + 1..].into()),
+                )
+            } else {
+                (mapping.into(), None)
+            };
+        }
+        if let Some(mapping) = map.get(impt_sans_version) {
             return if let Some(hash_idx) = mapping.find('#') {
                 (
                     mapping[0..hash_idx].to_string(),
@@ -1630,6 +1630,19 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
             if let Some(wildcard_idx) = key.find('*') {
                 let lhs = &key[0..wildcard_idx];
                 let rhs = &key[wildcard_idx + 1..];
+                if impt_sans_version.starts_with(lhs) && impt_sans_version.ends_with(rhs) {
+                    let matched = &impt_sans_version[wildcard_idx
+                        ..wildcard_idx + impt_sans_version.len() - lhs.len() - rhs.len()];
+                    let mapping = mapping.replace('*', matched);
+                    return if let Some(hash_idx) = mapping.find('#') {
+                        (
+                            mapping[0..hash_idx].to_string(),
+                            Some(mapping[hash_idx + 1..].into()),
+                        )
+                    } else {
+                        (mapping.into(), None)
+                    };
+                }
                 if impt.starts_with(lhs) && impt.ends_with(rhs) {
                     let matched =
                         &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
@@ -1646,7 +1659,7 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
             }
         }
     }
-    (impt.to_string(), None)
+    (impt_sans_version.to_string(), None)
 }
 
 pub fn parse_world_key<'a>(name: &'a str) -> Option<(&'a str, &'a str, &'a str)> {
