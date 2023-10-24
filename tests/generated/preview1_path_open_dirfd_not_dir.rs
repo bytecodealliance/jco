@@ -13,4 +13,3 @@ fn preview1_path_open_dirfd_not_dir() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

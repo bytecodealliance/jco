@@ -13,4 +13,3 @@ fn preview2_stream_pollable_traps() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

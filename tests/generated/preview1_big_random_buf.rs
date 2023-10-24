@@ -13,4 +13,3 @@ fn preview1_big_random_buf() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

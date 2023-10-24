@@ -13,4 +13,3 @@ fn preview1_path_exists() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

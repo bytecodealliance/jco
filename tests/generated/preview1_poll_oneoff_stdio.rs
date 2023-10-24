@@ -13,4 +13,3 @@ fn preview1_poll_oneoff_stdio() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

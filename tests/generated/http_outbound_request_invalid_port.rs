@@ -13,4 +13,3 @@ fn http_outbound_request_invalid_port() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

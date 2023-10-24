@@ -13,4 +13,3 @@ fn cli_exit_default() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

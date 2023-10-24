@@ -13,4 +13,3 @@ fn preview1_path_rename_dir_trailing_slashes() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

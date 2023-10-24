@@ -13,4 +13,3 @@ fn preview1_file_truncation() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

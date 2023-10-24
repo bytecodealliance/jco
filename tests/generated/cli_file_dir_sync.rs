@@ -13,4 +13,3 @@ fn cli_file_dir_sync() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

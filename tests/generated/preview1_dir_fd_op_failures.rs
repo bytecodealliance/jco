@@ -13,4 +13,3 @@ fn preview1_dir_fd_op_failures() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

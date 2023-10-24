@@ -13,4 +13,3 @@ fn preview2_tcp_bind() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

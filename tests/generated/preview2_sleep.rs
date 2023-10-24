@@ -13,4 +13,3 @@ fn preview2_sleep() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

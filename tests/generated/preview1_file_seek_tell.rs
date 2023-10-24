@@ -13,4 +13,3 @@ fn preview1_file_seek_tell() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

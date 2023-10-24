@@ -13,4 +13,3 @@ fn preview2_ip_name_lookup() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

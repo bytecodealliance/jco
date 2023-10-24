@@ -13,4 +13,3 @@ fn preview2_udp_sample_application() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

@@ -13,4 +13,3 @@ fn preview1_sched_yield() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    

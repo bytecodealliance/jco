@@ -13,4 +13,3 @@ fn cli_export_cabi_realloc() -> anyhow::Result<()> {
     cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
     Ok(())
 }
-    
