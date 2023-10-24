@@ -161,7 +161,7 @@ suite("Node.js Preview2", () => {
   });
 
   suite("Sockets", async () => {
-    test("sockets.instanceNetwork()", async () => {
+    test("sockets.instanceNetwork() should be a singleton", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network1 = sockets.instanceNetwork.instanceNetwork();
       equal(network1.id, 1);
@@ -363,8 +363,11 @@ suite("Node.js Preview2", () => {
         },
       };
 
-      mock.method(tcpSocket.socket(), "listen", () => {
+      mock.method(tcpSocket.server(), "listen", () => {
         console.log("listen called");
+      });
+      mock.method(tcpSocket.client(), "connect", () => {
+        console.log("connect called");
       });
 
       tcpSocket.startBind(tcpSocket, network, localAddress);
@@ -374,7 +377,8 @@ suite("Node.js Preview2", () => {
       tcpSocket.startListen(tcpSocket);
       tcpSocket.finishListen(tcpSocket);
 
-      strictEqual(tcpSocket.socket().listen.mock.calls.length, 1);
+      strictEqual(tcpSocket.server().listen.mock.calls.length, 1);
+      strictEqual(tcpSocket.client().connect.mock.calls.length, 1);
 
       mock.reset();
     });

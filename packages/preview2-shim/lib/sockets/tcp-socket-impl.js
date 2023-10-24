@@ -70,9 +70,11 @@ function assert(condition, message) {
   }
 }
 
+// TODO: implement would-block errors
 export class TcpSocketImpl extends EventEmitter {
   id;
-  /** @type {TCP} */ #handle = null;
+  /** @type {TCP.TCPConstants.SERVER} */ #serverHandle = null;
+  /** @type {TCP.TCPConstants.SOCKET} */ #clientHandle = null;
   /** @type {Network} */ network = null;
 
   #isBound = false;
@@ -89,23 +91,28 @@ export class TcpSocketImpl extends EventEmitter {
   constructor(socketId, addressFamily) {
     super();
     this.id = socketId;
-    this.#handle = new TCP(TCPConstants.SERVER);
-    this.#handle.onconnection = (err, clientHandle) => {
-      console.log(`[tcp] connection on socket ${tcpSocket.id}`);
-
-      if (err) {
-        console.error('Error accepting connection:', err);
-        return;
-      }
-    };
-
+    this.#clientHandle = new TCP(TCPConstants.SOCKET);
+    this.#serverHandle = new TCP(TCPConstants.SERVER);
+    this.#serverHandle.onconnection = this.#onServerConnection.bind(this);
     this.#socketOptions.family = addressFamily;
     this.#socketOptions.keepAlive = false;
     this.#socketOptions.noDelay = false;
   }
 
-  socket() {
-    return this.#handle;
+  server() {
+    return this.#serverHandle;
+  }
+  client() {
+    return this.#clientHandle;
+  }
+
+  #onServerConnection(err, clientHandle) {
+    console.log(`[tcp] connection on socket ${tcpSocket.id}`);
+
+    if (err) {
+      console.error("Error accepting connection:", err);
+      return;
+    }
   }
 
   /**
@@ -158,7 +165,7 @@ export class TcpSocketImpl extends EventEmitter {
     const { localAddress, localPort, family } = this.#socketOptions;
     assert(isIP(localAddress) === 0, "address-not-bindable");
 
-    const err = this.#handle.bind(localAddress, family, localPort);
+    const err = this.#serverHandle.bind(localAddress, family, localPort);
     if (err) {
       console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
       this.#state = "error";
@@ -229,9 +236,12 @@ export class TcpSocketImpl extends EventEmitter {
     assert(this.#inProgress === false, "not-in-progress");
 
     const { remoteAddress, remotePort } = this.#socketOptions;
-    const clientHandle = new TCP(TCPConstants.SOCKET);
     const connectReq = new TCPConnectWrap();
-    const err = clientHandle.connect(connectReq, remoteAddress, remotePort);
+    const err = this.#clientHandle.connect(
+      connectReq,
+      remoteAddress,
+      remotePort
+    );
 
     if (err) {
       console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
@@ -240,37 +250,18 @@ export class TcpSocketImpl extends EventEmitter {
 
     connectReq.oncomplete = (err) => {
       if (err) {
-        assert(err === -111, "connection-refused");
+        assert(err === -99, "ephemeral-ports-exhausted");
         assert(err === -104, "connection-reset");
         assert(err === -110, "timeout");
+        assert(err === -111, "connection-refused");
         assert(err === -113, "remote-unreachable");
-        assert(err === -99, "ephemeral-ports-exhausted");
 
-        console.error({err});
-        return;
+        throw new Error(err);
       }
 
       console.log(`[tcp] connect on socket ${tcpSocket.id}`);
       this.#state = "connected";
     };
-
-    // this.#handle.on("error", (err) => {
-    //   console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
-
-    //   this.#state = "error";
-
-    //   assert(err.code === "ERRADDRINUSE", "ephemeral-ports-exhausted");
-    //   assert(err.code === "EADDRNOTAVAIL", "ephemeral-ports-exhausted");
-    //   assert(err.code === "EAGAIN", "ephemeral-ports-exhausted");
-    //   assert(err.code === "EADDRINUSE", "ephemeral-ports-exhausted");
-    //   assert(err.code === "ECONNREFUSED", "connection-refused");
-    //   assert(err.code === "ECONNRESET", "connection-reset");
-    //   assert(err.code === "ETIMEDOUT", "timeout");
-    //   assert(err.code === "EHOSTUNREACH", "remote-unreachable");
-    //   assert(err.code === "EHOSTDOWN", "remote-unreachable");
-    //   assert(err.code === "ENETUNREACH", "remote-unreachable");
-    //   assert(err.code === "ENETDOWN", "remote-unreachable");
-    // });
 
     this.#inProgress = false;
   }
@@ -306,10 +297,10 @@ export class TcpSocketImpl extends EventEmitter {
 
     assert(this.#inProgress === false, "not-in-progress");
 
-    const err = this.#handle.listen(this.#backlog);
+    const err = this.#serverHandle.listen(this.#backlog);
 
     if (err) {
-      this.#handle.close();
+      this.#serverHandle.close();
       throw new Error(err);
     }
 
@@ -433,7 +424,7 @@ export class TcpSocketImpl extends EventEmitter {
     console.log(`[tcp] set keep alive socket ${tcpSocket.id} to ${value}`);
 
     this.#socketOptions.keepAlive = value;
-    this.#handle.setKeepAlive(value);
+    this.#serverHandle.setKeepAlive(value);
   }
 
   /**
@@ -456,7 +447,7 @@ export class TcpSocketImpl extends EventEmitter {
     console.log(`[tcp] set no delay socket ${tcpSocket.id} to ${value}`);
 
     this.#socketOptions.noDelay = value;
-    this.#handle.setNoDelay(value);
+    this.#serverHandle.setNoDelay(value);
   }
 
   /**
@@ -568,6 +559,6 @@ export class TcpSocketImpl extends EventEmitter {
   dropTcpSocket(tcpSocket) {
     console.log(`[tcp] drop socket ${tcpSocket.id}`);
 
-    this.#handle.destroy();
+    this.#serverHandle.destroy();
   }
 }
