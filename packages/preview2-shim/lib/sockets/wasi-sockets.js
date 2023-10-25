@@ -10,47 +10,90 @@ import { TcpSocketImpl } from "./tcp-socket-impl.js";
 /** @type {ErrorCode} */
 export const errorCode = {
   // ### GENERAL ERRORS ###
+
+  /// Unknown error
   unknown: "unknown",
+
+  /// Access denied.
+  ///
+  /// POSIX equivalent: EACCES, EPERM
   accessDenied: "access-denied",
+
+  /// The operation is not supported.
+  ///
+  /// POSIX equivalent: EOPNOTSUPP
   notSupported: "not-supported",
+
+  /// One of the arguments is invalid.
+  ///
+  /// POSIX equivalent: EINVAL
+  invalidArgument: "invalid-argument",
+
+  /// Not enough memory to complete the operation.
+  ///
+  /// POSIX equivalent: ENOMEM, ENOBUFS, EAI_MEMORY
   outOfMemory: "out-of-memory",
+
+  /// The operation timed out before it could finish completely.
   timeout: "timeout",
+
+  /// This operation is incompatible with another asynchronous operation that is already in progress.
+  ///
+  /// POSIX equivalent: EALREADY
   concurrencyConflict: "concurrency-conflict",
+
+  /// Trying to finish an asynchronous operation that:
+  /// - has not been started yet, or:
+  /// - was already finished by a previous `finish-*` call.
+  ///
+  /// Note: this is scheduled to be removed when `future`s are natively supported.
   notInProgress: "not-in-progress",
+
+  /// The operation has been aborted because it could not be completed immediately.
+  ///
+  /// Note: this is scheduled to be removed when `future`s are natively supported.
   wouldBlock: "would-block",
 
-  // ### IP ERRORS ###
-  addressFamilyNotSupported: "address-family-not-supported",
-  addressFamilyMismatch: "address-family-mismatch",
-  invalidRemoteAddress: "invalid-remote-address",
-  ipv4OnlyOperation: "ipv4-only-operation",
-  ipv6OnlyOperation: "ipv6-only-operation",
-
   // ### TCP & UDP SOCKET ERRORS ###
+
+  /// The operation is not valid in the socket's current state.
+  invalidState: "invalid-state",
+
+  /// A new socket resource could not be created because of a system limit.
   newSocketLimit: "new-socket-limit",
-  alreadyAttached: "already-attached",
-  alreadyBound: "already-bound",
-  alreadyConnected: "already-connected",
-  notBound: "not-bound",
-  notConnected: "not-connected",
+
+  /// A bind operation failed because the provided address is not an address that the `network` can bind to.
   addressNotBindable: "address-not-bindable",
+
+  /// A bind operation failed because the provided address is already in use or because there are no ephemeral ports available.
   addressInUse: "address-in-use",
-  ephemeralPortsExhausted: "ephemeral-ports-exhausted",
+
+  /// The remote address is not reachable
   remoteUnreachable: "remote-unreachable",
 
   // ### TCP SOCKET ERRORS ###
-  alreadyListening: "already-listening",
-  notListening: "not-listening",
+
+  /// The connection was forcefully rejected
   connectionRefused: "connection-refused",
+
+  /// The connection was reset.
   connectionReset: "connection-reset",
+
+  /// A connection was aborted.
+  connectionAborted: "connection-aborted",
 
   // ### UDP SOCKET ERRORS ###
   datagramTooLarge: "datagram-too-large",
 
   // ### NAME LOOKUP ERRORS ###
-  invalidName: "invalid-name",
+
+  /// Name does not exist or has no suitable associated IP addresses.
   nameUnresolvable: "name-unresolvable",
+
+  /// A temporary failure in name resolution occurred.
   temporaryResolverFailure: "temporary-resolver-failure",
+
+  /// A permanent failure in name resolution occurred.
   permanentResolverFailure: "permanent-resolver-failure",
 };
 
@@ -64,7 +107,10 @@ export const IpAddressFamily = {
 
 export class WasiSockets {
   networkCnt = 1;
-  tcpSocketCnt = 1;
+  socketCnt = 1;
+
+  // TODO: figure out what the max number of sockets should be
+  maxSockets = 100;
 
   /** @type {Network} */ networkInstance = null;
   /** @type {Map<number,Network>} */ networks = new Map();
@@ -84,7 +130,7 @@ export class WasiSockets {
     class TcpSocket extends TcpSocketImpl {
       /** @param {IpAddressFamily} addressFamily */
       constructor(addressFamily) {
-        super(net.tcpSocketCnt++, addressFamily);
+        super(addressFamily);
         net.tcpSockets.set(this.id, this);
       }
     }
@@ -107,36 +153,30 @@ export class WasiSockets {
     this.network = {
       errorCode,
       IpAddressFamily,
-      /**
-       * @param {Network} networkId
-       * @returns {void}
-       **/
-      dropNetwork(networkId) {
-        console.log(`[network] Drop network ${networkId}`);
-
-        // TODO: shouldn't we return a boolean to indicate success or failure?
-        // TODO: update tsdoc return type
-        return net.networks.delete(networkId);
-      },
     };
 
     this.tcpCreateSocket = {
       /**
        * @param {IpAddressFamily} addressFamily
        * @returns {TcpSocket}
-       * @throws {Error} not-supported | address-family-not-supported | new-socket-limit
+       * @throws {Error} not-supported
+       * @throws {Error} new-socket-limit
        */
       createTcpSocket(addressFamily) {
         console.log(`[tcp] Create tcp socket ${addressFamily}`);
 
         if (supportedAddressFamilies.includes(addressFamily) === false) {
-          throw new Error(errorCode.addressFamilyNotSupported);
+          throw new Error(errorCode.notSupported);
+        }
+
+        if (net.socketCnt + 1 > net.maxSockets) {
+          throw new Error(errorCode.newSocketLimit);
         }
 
         try {
+          net.socketCnt++;
           return new TcpSocket(addressFamily);
-        }
-        catch (e) {
+        } catch {
           throw new Error(errorCode.notSupported);
         }
       },

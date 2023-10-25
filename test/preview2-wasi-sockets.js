@@ -12,11 +12,11 @@ const serverAddress = {
 const server = sockets.tcpCreateSocket.createTcpSocket(
   sockets.network.IpAddressFamily.ipv4
 );
-server.startBind(server, network, serverAddress);
-server.finishBind(server);
-server.startListen(server);
-server.finishListen(server);
-const {address, port} = server.localAddress(server).val;
+server.startBind(network, serverAddress);
+server.finishBind();
+server.startListen();
+server.finishListen();
+const {address, port} = server.localAddress().val;
 console.log(`[wasi-sockets] Server listening on: ${address}:${port}`);
 
 // client
@@ -25,9 +25,11 @@ const client = sockets.tcpCreateSocket.createTcpSocket(
   sockets.network.IpAddressFamily.ipv4
 );
 
-client.startConnect(client, network, serverAddress);
-client.finishConnect(client);
+client.startConnect(network, serverAddress);
+client.finishConnect();
+
 setTimeout(() => {
-  client.dropTcpSocket(client);
-  server.dropTcpSocket(server);
+    client.shutdown("send");
+    server.shutdown("receive");
+    process.exit(0);
 }, 2000);

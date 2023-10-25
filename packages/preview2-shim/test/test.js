@@ -1,4 +1,4 @@
-import { deepEqual, equal, ok, throws, strictEqual } from "node:assert";
+import { deepEqual, equal, ok, throws, strictEqual, notEqual } from "node:assert";
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -169,25 +169,12 @@ suite("Node.js Preview2", () => {
       equal(network2.id, 1);
     });
 
-    test("sockets.dropNetwork()", async () => {
-      const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const net = sockets.instanceNetwork.instanceNetwork();
-
-      // drop existing network
-      const op1 = sockets.network.dropNetwork(net.id);
-      equal(op1, true);
-
-      // drop non-existing network
-      const op2 = sockets.network.dropNetwork(99999);
-      equal(op2, false);
-    });
-
     test("sockets.tcpCreateSocket()", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const { id } = sockets.tcpCreateSocket.createTcpSocket(
+      const socket = sockets.tcpCreateSocket.createTcpSocket(
         sockets.network.IpAddressFamily.ipv4
       );
-      equal(id, 1);
+      notEqual(socket, null);
 
       throws(
         () => {
@@ -195,7 +182,7 @@ suite("Node.js Preview2", () => {
         },
         {
           name: "Error",
-          message: sockets.network.errorCode.addressFamilyNotSupported,
+          message: sockets.network.errorCode.notSupported,
         }
       );
     });
@@ -212,18 +199,18 @@ suite("Node.js Preview2", () => {
           port: 0,
         },
       };
-      tcpSocket.startBind(tcpSocket, network, localAddress);
-      tcpSocket.finishBind(tcpSocket);
+      tcpSocket.startBind(network, localAddress);
+      tcpSocket.finishBind();
 
       equal(tcpSocket.network.id, network.id);
-      deepEqual(tcpSocket.localAddress(tcpSocket), {
+      deepEqual(tcpSocket.localAddress(), {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
           address: [0, 0, 0, 0],
           port: 0,
         },
       });
-      equal(tcpSocket.addressFamily(tcpSocket), "ipv4");
+      equal(tcpSocket.addressFamily(), "ipv4");
     });
 
     test("tcp.bind(): should bind to a valid ipv6 address", async () => {
@@ -239,12 +226,12 @@ suite("Node.js Preview2", () => {
           port: 0,
         },
       };
-      tcpSocket.startBind(tcpSocket, network, localAddress);
-      tcpSocket.finishBind(tcpSocket);
+      tcpSocket.startBind(network, localAddress);
+      tcpSocket.finishBind();
 
       equal(tcpSocket.network.id, network.id);
-      equal(tcpSocket.addressFamily(tcpSocket), "ipv6");
-      deepEqual(tcpSocket.localAddress(tcpSocket), {
+      equal(tcpSocket.addressFamily(), "ipv6");
+      deepEqual(tcpSocket.localAddress(), {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
           address: [0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0001],
@@ -253,7 +240,7 @@ suite("Node.js Preview2", () => {
       });
     });
 
-    test("tcp.bind(): should throw address-family-mismatch", async () => {
+    test("tcp.bind(): should throw invalid-argument", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
@@ -261,6 +248,7 @@ suite("Node.js Preview2", () => {
         sockets.network.IpAddressFamily.ipv4
       );
       const localAddress = {
+        // invalid address family
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
           address: [0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0001],
@@ -269,16 +257,15 @@ suite("Node.js Preview2", () => {
       };
       throws(
         () => {
-          tcpSocket.startBind(tcpSocket, network, localAddress);
+          tcpSocket.startBind(network, localAddress);
         },
         {
-          name: "Error",
-          message: "address-family-mismatch",
+          code: "invalid-argument",
         }
       );
     });
 
-    test("tcp.bind(): should throw already-bound", async () => {
+    test("tcp.bind(): should throw invalid-state", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
@@ -294,13 +281,13 @@ suite("Node.js Preview2", () => {
       };
       throws(
         () => {
-          tcpSocket.startBind(tcpSocket, network, localAddress);
-          tcpSocket.finishBind(tcpSocket);
-          tcpSocket.startBind(tcpSocket, network, localAddress);
+          tcpSocket.startBind(network, localAddress);
+          tcpSocket.finishBind();
+          // already bound
+          tcpSocket.startBind(network, localAddress);
         },
         {
-          name: "Error",
-          message: "already-bound",
+          code: "invalid-state",
         }
       );
     });
@@ -323,14 +310,12 @@ suite("Node.js Preview2", () => {
         console.log("mock listen called");
       });
 
-      tcpSocket.startBind(tcpSocket, network, localAddress);
-      tcpSocket.finishBind(tcpSocket);
-      tcpSocket.startListen(tcpSocket);
-      tcpSocket.finishListen(tcpSocket);
+      tcpSocket.startBind(network, localAddress);
+      tcpSocket.finishBind();
+      tcpSocket.startListen();
+      tcpSocket.finishListen();
 
       strictEqual(tcpSocket.server().listen.mock.calls.length, 1);
-
-      tcpSocket.dropTcpSocket(tcpSocket);
 
       mock.reset();
     });
@@ -361,16 +346,16 @@ suite("Node.js Preview2", () => {
         console.log("mock connect called");
       });
 
-      tcpSocket.startBind(tcpSocket, network, localAddress);
-      tcpSocket.finishBind(tcpSocket);
-      tcpSocket.startConnect(tcpSocket, network, remoteAddress);
-      tcpSocket.finishConnect(tcpSocket);
+      tcpSocket.startBind(network, localAddress);
+      tcpSocket.finishBind();
+      tcpSocket.startConnect(network, remoteAddress);
+      tcpSocket.finishConnect();
 
       strictEqual(tcpSocket.client().connect.mock.calls.length, 1);
 
       equal(tcpSocket.network.id, network.id);
-      equal(tcpSocket.addressFamily(tcpSocket), "ipv4");
-      deepEqual(tcpSocket.localAddress(tcpSocket), {
+      equal(tcpSocket.addressFamily(), "ipv4");
+      deepEqual(tcpSocket.localAddress(), {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
           address: [0, 0, 0, 0],
