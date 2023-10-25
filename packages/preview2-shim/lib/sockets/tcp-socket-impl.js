@@ -17,23 +17,22 @@ const {
   TCPConnectWrap,
   constants: TCPConstants,
 } = process.binding("tcp_wrap");
+const { ShutdownWrap } = process.binding("stream_wrap");
 import { isIP, Socket as NodeSocket } from "node:net";
 import { EventEmitter } from "node:events";
 
 function tupleToIPv6(arr) {
   if (arr.length !== 8) {
-    return null; // Return null for invalid input
+    return null;
   }
-  const ipv6Segments = arr.map((segment) => segment.toString(16));
-  return ipv6Segments.join(":");
+  return arr.map((segment) => segment.toString(16)).join(":");
 }
 
 function tupleToIpv4(arr) {
   if (arr.length !== 4) {
-    return null; // Return null for invalid input
+    return null;
   }
-  const ipv4Segments = arr.map((segment) => segment.toString(10));
-  return ipv4Segments.join(".");
+  return arr.map((segment) => segment.toString(10)).join(".");
 }
 
 function ipv6ToTuple(ipv6) {
@@ -70,13 +69,14 @@ function assert(condition, message) {
   }
 }
 
-// TODO: implement would-block errors
+// TODO: implement would-block exceptions
+// TODO: implement concurrency-conflict exceptions
 export class TcpSocketImpl extends EventEmitter {
-  id;
   /** @type {TCP.TCPConstants.SERVER} */ #serverHandle = null;
   /** @type {TCP.TCPConstants.SOCKET} */ #clientHandle = null;
   /** @type {Network} */ network = null;
 
+  id = 0;
   #isBound = false;
   #socketOptions = {};
   #canReceive = true;
@@ -84,6 +84,7 @@ export class TcpSocketImpl extends EventEmitter {
   #ipv6Only = false;
   #state = "closed";
   #inProgress = false;
+  #connections = 0;
 
   // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #backlog = 128;
@@ -91,12 +92,14 @@ export class TcpSocketImpl extends EventEmitter {
   constructor(socketId, addressFamily) {
     super();
     this.id = socketId;
-    this.#clientHandle = new TCP(TCPConstants.SOCKET);
-    this.#serverHandle = new TCP(TCPConstants.SERVER);
-    this.#serverHandle.onconnection = this.onServerConnection.bind(this);
     this.#socketOptions.family = addressFamily;
     this.#socketOptions.keepAlive = false;
     this.#socketOptions.noDelay = false;
+
+    this.#clientHandle = new TCP(TCPConstants.SOCKET);
+    this.#serverHandle = new TCP(TCPConstants.SERVER);
+    this._handle = this.#serverHandle;
+    this._handle.onconnection = this.#handleConnection.bind(this);
   }
 
   server() {
@@ -106,7 +109,7 @@ export class TcpSocketImpl extends EventEmitter {
     return this.#clientHandle;
   }
 
-  onServerConnection(err, clientHandle) {
+  #handleConnection(err, clientHandle) {
     console.log(`[tcp] on server connection`);
 
     if (err) {
@@ -114,7 +117,22 @@ export class TcpSocketImpl extends EventEmitter {
     }
 
     const socket = new NodeSocket({ handle: clientHandle });
-    // TODO: handle data received from the client
+    this.#connections++;
+
+    // reserved
+    socket.server = this.#serverHandle;
+    socket._server = this.#serverHandle;
+
+    this.emit("connection", socket);
+
+    socket._handle.onread = (nread, buffer) => {
+      if (nread > 0) {
+        // TODO: handle data received from the client
+        const data = buffer.toString("utf8", 0, nread);
+        console.log("Received data:", data);
+      }
+    };
+    socket._handle.readStart();
   }
 
   onClientConnectComplete(err) {
@@ -126,6 +144,7 @@ export class TcpSocketImpl extends EventEmitter {
       assert(err === -110, "timeout");
       assert(err === -111, "connection-refused");
       assert(err === -113, "remote-unreachable");
+      assert(err === -125, "operation-cancelled");
 
       throw new Error(err);
     }
@@ -143,7 +162,9 @@ export class TcpSocketImpl extends EventEmitter {
    * @throws {concurrency-conflict} Another `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    **/
   startBind(tcpSocket, network, localAddress) {
-    console.log(`[tcp] start bind socket ${tcpSocket.id}`);
+    console.log(
+      `[tcp] start bind socket ${tcpSocket.id} to ${localAddress.val.address}:${localAddress.val.port}`
+    );
 
     assert(this.#isBound, "already-bound");
     assert(this.#inProgress, "concurrency-conflict");
@@ -183,11 +204,16 @@ export class TcpSocketImpl extends EventEmitter {
     const { localAddress, localPort, family } = this.#socketOptions;
     assert(isIP(localAddress) === 0, "address-not-bindable");
 
-    const err = this.#serverHandle.bind(localAddress, family, localPort);
+    const err = this.#serverHandle.bind(localAddress, localPort, family);
     if (err) {
+      this.#serverHandle.close();
       console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
       this.#state = "error";
     }
+
+    console.log(
+      `[tcp] bound socket ${tcpSocket.id} to ${localAddress}:${localPort}`
+    );
 
     this.#isBound = true;
     this.#inProgress = false;
@@ -208,7 +234,7 @@ export class TcpSocketImpl extends EventEmitter {
    * */
   startConnect(tcpSocket, network, remoteAddress) {
     console.log(
-      `[tcp] start connect socket ${tcpSocket.id} to ${remoteAddress.val.address} on network ${network.id}`
+      `[tcp] start connect socket ${tcpSocket.id} to ${remoteAddress.val.address}:${remoteAddress.val.port}`
     );
 
     assert(
@@ -218,7 +244,6 @@ export class TcpSocketImpl extends EventEmitter {
     assert(this.#state === "connected", "already-connected");
     assert(this.#state === "connection", "already-listening");
     assert(this.#inProgress, "concurrency-conflict");
-    assert(this.#isBound === false, "not-bound");
 
     const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(host)}`;
@@ -253,7 +278,8 @@ export class TcpSocketImpl extends EventEmitter {
 
     assert(this.#inProgress === false, "not-in-progress");
 
-    const { remoteAddress, remotePort } = this.#socketOptions;
+    const { localAddress, localPort, remoteAddress, remotePort } =
+      this.#socketOptions;
     const connectReq = new TCPConnectWrap();
     const err = this.#clientHandle.connect(
       connectReq,
@@ -267,7 +293,23 @@ export class TcpSocketImpl extends EventEmitter {
     }
 
     connectReq.oncomplete = this.onClientConnectComplete.bind(this);
+    connectReq.address = remoteAddress;
+    connectReq.port = remotePort;
+    connectReq.localAddress = localAddress;
+    connectReq.localPort = localPort;
+
+    this.#clientHandle.onread = (buffer) => {
+      // TODO: handle data received from the server
+
+      console.log({
+        buffer,
+      });
+    };
+    this.#clientHandle.readStart();
     this.#inProgress = false;
+
+    // TODO: return InputStream and OutputStream
+    return [];
   }
 
   /**
@@ -279,7 +321,11 @@ export class TcpSocketImpl extends EventEmitter {
    * @throws {concurrency-conflict} Another `bind`, `connect` or `listen` operation is already in progress. (EINVAL on BSD)
    * */
   startListen(tcpSocket) {
-    console.log(`[tcp] start listen socket ${tcpSocket.id}`);
+    console.log(
+      `[tcp] start listen socket ${tcpSocket.id} on ${
+        this.#socketOptions.localAddress
+      }:${this.#socketOptions.localPort}`
+    );
 
     assert(this.#isBound === false, "not-bound");
     assert(this.#state === "connected", "already-connected");
@@ -297,13 +343,15 @@ export class TcpSocketImpl extends EventEmitter {
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    * */
   finishListen(tcpSocket) {
-    console.log(`[tcp] finish listen socket ${tcpSocket.id}`);
+    console.log(
+      `[tcp] finish listen socket ${tcpSocket.id} (backlog: ${this.#backlog})`
+    );
 
     assert(this.#inProgress === false, "not-in-progress");
 
     const err = this.#serverHandle.listen(this.#backlog);
-
     if (err) {
+      console.error(`[tcp] error on socket ${tcpSocket.id}: ${err}`);
       this.#serverHandle.close();
       throw new Error(err);
     }
@@ -319,7 +367,8 @@ export class TcpSocketImpl extends EventEmitter {
    * */
   accept(tcpSocket) {
     console.log(`[tcp] accept socket ${tcpSocket.id}`);
-    throw new Error("not implemented");
+
+    assert(this.#state !== "listening", "not-listening");
   }
 
   /**
@@ -428,7 +477,7 @@ export class TcpSocketImpl extends EventEmitter {
     console.log(`[tcp] set keep alive socket ${tcpSocket.id} to ${value}`);
 
     this.#socketOptions.keepAlive = value;
-    this.#serverHandle.setKeepAlive(value);
+    this.#clientHandle.setKeepAlive(value);
   }
 
   /**
@@ -531,7 +580,7 @@ export class TcpSocketImpl extends EventEmitter {
    * @returns {Pollable}
    * */
   subscribe(tcpSocket) {
-    console.log(`[tcp] subscribe socket ${this.id}`);
+    console.log(`[tcp] subscribe socket ${tcpSocket.id}`);
     throw new Error("not implemented");
   }
 
@@ -554,6 +603,18 @@ export class TcpSocketImpl extends EventEmitter {
       this.#canReceive = false;
       this.#canSend = false;
     }
+
+    const req = new ShutdownWrap();
+    req.oncomplete = this.#afterShutdown.bind(this);
+    req.handle = this._handle;
+    req.callback = () => {};
+    const err = this._handle.shutdown(req);
+
+    assert(err === 1, "not-connected");
+  }
+
+  #afterShutdown() {
+    console.log(`[tcp] after shutdown socket ${this.id}`);
   }
 
   /**
@@ -563,6 +624,9 @@ export class TcpSocketImpl extends EventEmitter {
   dropTcpSocket(tcpSocket) {
     console.log(`[tcp] drop socket ${tcpSocket.id}`);
 
-    this.#serverHandle.destroy();
+    this._handle.close();
+    this._handle = null;
+    this.#serverHandle.close();
+    this.#clientHandle.close();
   }
 }
