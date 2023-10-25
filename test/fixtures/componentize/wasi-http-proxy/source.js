@@ -11,17 +11,6 @@ import {
   FutureTrailers,
 } from 'wasi:http/types@0.2.0-rc-2023-11-05';
 
-class GenericError extends Error {
-  payload;
-  constructor(message) {
-    super(message);
-    this.payload = {
-      tag: "generic",
-      val: message,
-    };
-  }
-}
-
 const sendRequest = (
   method,
   scheme,
@@ -85,12 +74,12 @@ const sendRequest = (
       body: responseBody,
     });
   } catch (err) {
-    console.error(err);
-    throw new GenericError(err.message);
+    throw new Error(err);
   }
 }
 
 export const commands = {
+  Error,
   getExample: () => {
     return sendRequest(
       {
