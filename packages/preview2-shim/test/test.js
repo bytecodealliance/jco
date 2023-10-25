@@ -305,12 +305,43 @@ suite("Node.js Preview2", () => {
       );
     });
 
+    test("tcp.listen(): should listen to an ipv4 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
+        sockets.network.IpAddressFamily.ipv4
+      );
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+
+      mock.method(tcpSocket.server(), "listen", () => {
+        console.log("mock listen called");
+      });
+
+      tcpSocket.startBind(tcpSocket, network, localAddress);
+      tcpSocket.finishBind(tcpSocket);
+      tcpSocket.startListen(tcpSocket);
+      tcpSocket.finishListen(tcpSocket);
+
+      strictEqual(tcpSocket.server().listen.mock.calls.length, 1);
+
+      tcpSocket.dropTcpSocket(tcpSocket);
+
+      mock.reset();
+    });
+
     test("tcp.connect(): should connect to a valid ipv4 address", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
         sockets.network.IpAddressFamily.ipv4
       );
+
       const localAddress = {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
@@ -326,10 +357,16 @@ suite("Node.js Preview2", () => {
         },
       };
 
+      mock.method(tcpSocket.client(), "connect", () => {
+        console.log("mock connect called");
+      });
+
       tcpSocket.startBind(tcpSocket, network, localAddress);
       tcpSocket.finishBind(tcpSocket);
       tcpSocket.startConnect(tcpSocket, network, remoteAddress);
       tcpSocket.finishConnect(tcpSocket);
+
+      strictEqual(tcpSocket.client().connect.mock.calls.length, 1);
 
       equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.addressFamily(tcpSocket), "ipv4");
@@ -340,47 +377,6 @@ suite("Node.js Preview2", () => {
           port: 0,
         },
       });
-    });
-
-    test("tcp.listen(): should listen to an ipv4 address", async () => {
-      const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
-      const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
-        val: {
-          address: [0, 0, 0, 0],
-          port: 0,
-        },
-      };
-      const remoteAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
-        val: {
-          address: [0, 0, 0, 0],
-          port: 0,
-        },
-      };
-
-      mock.method(tcpSocket.server(), "listen", () => {
-        console.log("listen called");
-      });
-      mock.method(tcpSocket.client(), "connect", () => {
-        console.log("connect called");
-      });
-
-      tcpSocket.startBind(tcpSocket, network, localAddress);
-      tcpSocket.finishBind(tcpSocket);
-      tcpSocket.startConnect(tcpSocket, network, remoteAddress);
-      tcpSocket.finishConnect(tcpSocket);
-      tcpSocket.startListen(tcpSocket);
-      tcpSocket.finishListen(tcpSocket);
-
-      strictEqual(tcpSocket.server().listen.mock.calls.length, 1);
-      strictEqual(tcpSocket.client().connect.mock.calls.length, 1);
-
-      mock.reset();
     });
   });
 });
