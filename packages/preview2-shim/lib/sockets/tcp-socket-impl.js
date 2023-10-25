@@ -31,7 +31,9 @@ const SocketState = {
   Error: "Error",
   Connection: "Connection",
   Listener: "Listener",
-}
+};
+
+function noop() {}
 
 function tupleToIPv6(arr) {
   if (arr.length !== 8) {
@@ -79,6 +81,7 @@ function assert(condition, code, message) {
   if (condition) {
     const ex = new Error(message);
     ex.name = "Error";
+    ex.message = message;
     ex.code = code;
     throw ex;
   }
@@ -108,6 +111,7 @@ export class TcpSocketImpl extends EventEmitter {
     this.#socketOptions.family = addressFamily;
     this.#socketOptions.keepAlive = false;
     this.#socketOptions.noDelay = false;
+    this.#socketOptions.unicastHopLimit = 10;
 
     this.#clientHandle = new TCP(TCPConstants.SOCKET);
     this.#serverHandle = new TCP(TCPConstants.SERVER);
@@ -173,17 +177,17 @@ export class TcpSocketImpl extends EventEmitter {
    * @throws {invalid-state} The socket is already bound. (EINVAL)
    * */
   startBind(network, localAddress) {
-    console.log(
-      `[tcp] start bind socket to ${localAddress.val.address}:${localAddress.val.port}`
-    );
-
-    assert(this.#isBound, "invalid-state", "The socket is already bound");
-
     const address = serializeIpAddress(
       localAddress,
       this.#socketOptions.family
     );
     const ipFamily = `ipv${isIP(address)}`;
+
+    console.log(
+      `[tcp] start bind socket to ${address}:${localAddress.val.port}`
+    );
+
+    assert(this.#isBound, "invalid-state", "The socket is already bound");
     assert(
       this.#socketOptions.family.toLocaleLowerCase() !==
         ipFamily.toLocaleLowerCase(),
@@ -221,11 +225,17 @@ export class TcpSocketImpl extends EventEmitter {
     const { localAddress, localPort, family } = this.#socketOptions;
     assert(isIP(localAddress) === 0, "address-not-bindable");
 
-    const err = this.#serverHandle.bind(localAddress, localPort, family);
+    let err = null;
+    if (family.toLocaleLowerCase() === "ipv4") {
+      err = this.#serverHandle.bind(localAddress, localPort);
+    } else if (family.toLocaleLowerCase() === "ipv6") {
+      err = this.#serverHandle.bind6(localAddress, localPort);
+    }
+
     if (err) {
       this.#serverHandle.close();
-      console.error(`[tcp] error on socket: ${err}`);
-      this.#state = "error";
+      assert(err === -22, "address-in-use");
+      assert(true, "", err);
     }
 
     console.log(`[tcp] bound socket to ${localAddress}:${localPort}`);
@@ -294,17 +304,19 @@ export class TcpSocketImpl extends EventEmitter {
 
     assert(this.#inProgress === false, "not-in-progress");
 
-    const { localAddress, localPort, remoteAddress, remotePort } =
+    const { localAddress, localPort, remoteAddress, remotePort, family } =
       this.#socketOptions;
     const connectReq = new TCPConnectWrap();
-    const err = this.#clientHandle.connect(
-      connectReq,
-      remoteAddress,
-      remotePort
-    );
+
+    let err = null;
+    if (family.toLocaleLowerCase() === "ipv4") {
+      err = this.#clientHandle.connect(connectReq, remoteAddress, remotePort);
+    } else if (family.toLocaleLowerCase() === "ipv6") {
+      err = this.#clientHandle.connect6(connectReq, remoteAddress, remotePort);
+    }
 
     if (err) {
-      console.error(`[tcp] error on socket: ${err}`);
+      console.error(`[tcp] connect error on socket: ${err}`);
       this.#state = SocketState.Error;
     }
 
@@ -361,7 +373,7 @@ export class TcpSocketImpl extends EventEmitter {
 
     const err = this.#serverHandle.listen(this.#backlog);
     if (err) {
-      console.error(`[tcp] error on socket: ${err}`);
+      console.error(`[tcp] listen error on socket: ${err}`);
       this.#serverHandle.close();
       throw new Error(err);
     }
@@ -377,9 +389,7 @@ export class TcpSocketImpl extends EventEmitter {
    * @throws {new-socket-limit} The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
    * */
   accept() {
-    console.log(`[tcp] accept socket`);
-
-    assert(this.#state !== "listening", "not-listening");
+    return noop();
   }
 
   /**
@@ -503,7 +513,8 @@ export class TcpSocketImpl extends EventEmitter {
    * */
   unicastHopLimit() {
     console.log(`[tcp] unicast hop limit socket`);
-    throw new Error("not implemented");
+
+    return this.#socketOptions.unicastHopLimit;
   }
 
   /**
@@ -515,7 +526,8 @@ export class TcpSocketImpl extends EventEmitter {
    * */
   setUnicastHopLimit(value) {
     console.log(`[tcp] set unicast hop limit socket to ${value}`);
-    throw new Error("not implemented");
+
+    this.#socketOptions.unicastHopLimit = value;
   }
 
   /**
