@@ -8,7 +8,6 @@ use heck::*;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write;
-use std::mem;
 use wit_parser::*;
 
 struct TsBindgen {
@@ -403,6 +402,20 @@ impl TsBindgen {
         for (_, func) in resolve.interfaces[id].functions.iter() {
             gen.ts_func(func, false, true);
         }
+        for (_, ty) in resolve.interfaces[id].types.iter() {
+            let ty = &resolve.types[*ty];
+            match ty.kind {
+                TypeDefKind::Resource => {
+                    let resource = ty.name.as_ref().unwrap();
+                    if !gen.resources.contains_key(resource) {
+                        uwriteln!(gen.src, "export {{ {} }};", resource.to_upper_camel_case());
+                        gen.resources
+                            .insert(resource.to_string(), TsInterface::new(resolve));
+                    }
+                }
+                _ => {}
+            }
+        }
         uwriteln!(gen.src, "}}");
 
         gen.types(id);
@@ -677,11 +690,15 @@ impl<'a> TsInterface<'a> {
     }
 
     fn post_types(&mut self) {
-        if mem::take(&mut self.needs_ty_option) {
+        let needs_ty_option =
+            self.needs_ty_option || self.resources.iter().any(|(_, r)| r.needs_ty_option);
+        let needs_ty_result =
+            self.needs_ty_result || self.resources.iter().any(|(_, r)| r.needs_ty_result);
+        if needs_ty_option {
             self.src
                 .push_str("export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };\n");
         }
-        if mem::take(&mut self.needs_ty_result) {
+        if needs_ty_result {
             self.src.push_str(
                 "export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };\n",
             );

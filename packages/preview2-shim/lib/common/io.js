@@ -16,7 +16,7 @@ class Error {
  *   skip?: (len: BigInt) => BigInt,
  *   blockingSkip?: (len: BigInt) => BigInt,
  *   subscribe: () => void,
- *   drop: () => void,
+ *   drop?: () => void,
  * }} InputStreamHandler
  * 
  * @typedef {{
@@ -32,7 +32,7 @@ class Error {
  *   blockingSplice?: (src: InputStream, len: BigInt) => BigInt,
  *   forward?: (src: InputStream) => void,
  *   subscribe?: () => void,
- *   drop: () => void,
+ *   drop?: () => void,
  * }} OutputStreamHandler
  * 
  **/

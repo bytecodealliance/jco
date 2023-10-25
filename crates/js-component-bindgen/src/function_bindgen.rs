@@ -474,7 +474,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     results.push(format!("variant{}_{}", tmp, i));
                 }
 
-                let expr_to_match = format!("variant{}.tag", tmp);
+                let expr_to_match = format!("variant{tmp}.tag");
 
                 uwriteln!(self.src, "switch ({expr_to_match}) {{");
                 for (case, (block, block_results)) in variant.cases.iter().zip(blocks) {
@@ -498,7 +498,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.src,
                     "default: {{
                         throw new TypeError('invalid variant specified for {variant_name}');
-                    }}"
+                    }}",
                 );
                 uwriteln!(self.src, "}}");
             }

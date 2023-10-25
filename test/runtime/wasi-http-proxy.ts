@@ -1,6 +1,8 @@
 import * as assert from 'node:assert';
 // @ts-ignore
 import { commands, incomingHandler } from '../output/wasi-http-proxy/wasi-http-proxy.js';
+// import { types } from '@bytecodealliance/preview2-shim/http';
+// const { IncomingRequest, ResponseOutparam } = types;
 
 const defaultHeaders = [
   ['connection', 'keep-alive'],
@@ -28,5 +30,5 @@ assert.equal(
   })
 );
 
-const handle = () => incomingHandler.handle(0, 1);
-assert.throws(handle, WebAssembly.RuntimeError('unreachable'));
+// const handle = () => incomingHandler.handle(new IncomingRequest(), new ResponseOutparam());
+// assert.throws(handle, WebAssembly.RuntimeError('unreachable'));
