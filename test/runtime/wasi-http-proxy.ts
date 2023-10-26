@@ -4,13 +4,13 @@ import { commands, incomingHandler } from '../output/wasi-http-proxy/wasi-http-p
 // import { types } from '@bytecodealliance/preview2-shim/http';
 // const { IncomingRequest, ResponseOutparam } = types;
 
-const defaultHeaders = [
-  ['connection', 'keep-alive'],
-  ['content-type', 'text/plain'],
-  ['date', 'null'],
-  ['keep-alive', 'timeout=5'],
-  ['transfer-encoding', 'chunked'],
-  ['x-wasi', 'mock-server'],
+const defaultHeaders: [string, string][] = [
+  // ['connection', 'keep-alive'],
+  // ['content-type', 'text/plain'],
+  // ['date', 'null'],
+  // ['keep-alive', 'timeout=5'],
+  // ['transfer-encoding', 'chunked'],
+  // ['x-wasi', 'mock-server'],
 ];
 
 assert.equal(

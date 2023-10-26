@@ -1,14 +1,8 @@
 import { handle } from 'wasi:http/outgoing-handler@0.2.0-rc-2023-11-05';
 import {
   Fields,
-  IncomingRequest,
-  IncomingResponse,
-  ResponseOutparam,
   OutgoingRequest,
-  OutgoingResponse,
-  FutureIncomingResponse,
-  IncomingBody,
-  FutureTrailers,
+  OutgoingBody,
 } from 'wasi:http/types@0.2.0-rc-2023-11-05';
 
 const sendRequest = (
@@ -51,7 +45,7 @@ const sendRequest = (
     }
 
     const status = incomingResponse.status();
-    const h = incomingResponse.headers();
+    // const h = incomingResponse.headers();
     // const responseHeaders = incomingResponse.headers().entries();
 
     const decoder = new TextDecoder();
@@ -63,11 +57,12 @@ const sendRequest = (
     {
       const bodyStream = incomingBody.stream();
       // const bodyStreamPollable = bodyStream.subscribe();
-      const [buf, _] = bodyStream.read(50n);
+      const buf = bodyStream.read(50n);
       // TODO: explicit drops
       responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
     }
 
+    console.error(responseBody);
     return JSON.stringify({
       status,
       headers,
