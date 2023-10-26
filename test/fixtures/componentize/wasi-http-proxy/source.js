@@ -32,8 +32,7 @@ const sendRequest = (
         const outgoingBody = request.write();
         {
           const bodyStream = outgoingBody.write();
-          bodyStream.write(encoder.encode(body));
-          bodyStream.flush();
+          bodyStream.blockingWriteAndFlush(encoder.encode(body));
         }
         // TODO: we should explicitly drop the bodyStream here
         //       when we have support for Symbol.dispose
@@ -58,11 +57,11 @@ const sendRequest = (
       const bodyStream = incomingBody.stream();
       // const bodyStreamPollable = bodyStream.subscribe();
       const buf = bodyStream.read(50n);
+      // TODO: actual streaming
       // TODO: explicit drops
       responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
     }
 
-    console.error(responseBody);
     return JSON.stringify({
       status,
       headers,
