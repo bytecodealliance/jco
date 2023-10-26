@@ -126,11 +126,12 @@ pub fn transpile_bindgen(
         translation: component,
         component: &component.component,
         types,
-        imports: BTreeMap::new(),
-        exports: BTreeMap::new(),
+        imports: Default::default(),
+        exports: Default::default(),
         lowering_options: Default::default(),
         imports_resource_map: Default::default(),
         exports_resource_map: Default::default(),
+        defined_resource_classes: Default::default(),
         resource_tables_initialized: (0..component.component.num_resource_tables)
             .map(|_| false)
             .collect(),
@@ -322,6 +323,7 @@ struct Instantiator<'a, 'b> {
     imports: BTreeMap<String, WorldKey>,
     imports_resource_map: ResourceMap,
     exports_resource_map: ResourceMap,
+    defined_resource_classes: BTreeSet<String>,
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
 }
@@ -1386,31 +1388,23 @@ impl<'a> Instantiator<'a, '_> {
                         WorldItem::Function(f) => f,
                         WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    let (local_name, existing_resource_def) =
-                        if let FunctionKind::Constructor(tid)
-                        | FunctionKind::Method(tid)
-                        | FunctionKind::Static(tid) = func.kind
-                        {
-                            let resource_id = tid;
-                            let ty = &self.resolve.types[tid];
-                            let resource = ty.name.as_ref().unwrap();
-                            self.gen.local_names.get_or_create(
-                                ResourceInstance {
-                                    resource_id,
-                                    import: None,
-                                },
-                                &resource.to_upper_camel_case(),
-                            )
-                        } else {
-                            (self.gen.local_names.create_once(export_name), false)
-                        };
-                    let local_name = local_name.to_string();
+                    let local_name = if let FunctionKind::Constructor(resource_id)
+                    | FunctionKind::Method(resource_id)
+                    | FunctionKind::Static(resource_id) = func.kind
+                    {
+                        self.gen.local_names.get(ResourceInstance {
+                            resource_id,
+                            import: None,
+                        })
+                    } else {
+                        self.gen.local_names.create_once(export_name)
+                    }
+                    .to_string();
                     self.export_bindgen(
                         &local_name,
                         def,
                         options,
                         func,
-                        existing_resource_def,
                         export_name,
                         // exported top-level functions only reference imported resources
                         false,
@@ -1447,35 +1441,20 @@ impl<'a> Instantiator<'a, '_> {
 
                         let func = &self.resolve.interfaces[id].functions[func_name];
 
-                        let (local_name, existing_resource_def) =
-                            if let FunctionKind::Constructor(tid)
-                            | FunctionKind::Method(tid)
-                            | FunctionKind::Static(tid) = func.kind
-                            {
-                                let resource_id = tid;
-                                let ty = &self.resolve.types[tid];
-                                let resource = ty.name.as_ref().unwrap();
-                                self.gen.local_names.get_or_create(
-                                    ResourceInstance {
-                                        resource_id,
-                                        import: None,
-                                    },
-                                    &resource.to_upper_camel_case(),
-                                )
-                            } else {
-                                (self.gen.local_names.create_once(func_name), false)
-                            };
+                        let local_name = if let FunctionKind::Constructor(resource_id)
+                        | FunctionKind::Method(resource_id)
+                        | FunctionKind::Static(resource_id) = func.kind
+                        {
+                            self.gen.local_names.get(ResourceInstance {
+                                resource_id,
+                                import: None,
+                            })
+                        } else {
+                            self.gen.local_names.create_once(func_name)
+                        }
+                        .to_string();
 
-                        let local_name = local_name.to_string();
-                        self.export_bindgen(
-                            &local_name,
-                            def,
-                            options,
-                            func,
-                            existing_resource_def,
-                            export_name,
-                            true,
-                        );
+                        self.export_bindgen(&local_name, def, options, func, export_name, true);
 
                         if let FunctionKind::Constructor(ty)
                         | FunctionKind::Method(ty)
@@ -1515,15 +1494,15 @@ impl<'a> Instantiator<'a, '_> {
         def: &CoreDef,
         options: &CanonicalOptions,
         func: &Function,
-        existing_resource_def: bool,
         export_name: &String,
         exports_resource_map: bool,
     ) {
         match func.kind {
             FunctionKind::Freestanding => uwrite!(self.src.js, "\nfunction {local_name}"),
             FunctionKind::Method(_) => {
-                if !existing_resource_def {
+                if !self.defined_resource_classes.contains(local_name) {
                     uwriteln!(self.src.js, "\nclass {local_name} {{}}");
+                    self.defined_resource_classes.insert(local_name.to_string());
                 }
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
@@ -1532,8 +1511,9 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             FunctionKind::Static(_) => {
-                if !existing_resource_def {
+                if !self.defined_resource_classes.contains(local_name) {
                     uwriteln!(self.src.js, "\nclass {local_name} {{}}");
+                    self.defined_resource_classes.insert(local_name.to_string());
                 }
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
@@ -1542,6 +1522,9 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             FunctionKind::Constructor(ty) => {
+                if self.defined_resource_classes.contains(local_name) {
+                    panic!("Internal error: Resource constructor must be defined before other methods and statics");
+                }
                 let ty = &self.resolve.types[ty];
                 let name = ty.name.as_ref().unwrap();
                 if name.to_upper_camel_case() == local_name {
@@ -1560,6 +1543,7 @@ impl<'a> Instantiator<'a, '_> {
                         name.to_upper_camel_case()
                     );
                 }
+                self.defined_resource_classes.insert(local_name.to_string());
             }
         }
         let callee = self.core_def(def);

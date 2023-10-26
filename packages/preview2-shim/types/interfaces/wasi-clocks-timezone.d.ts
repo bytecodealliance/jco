@@ -14,7 +14,7 @@ export namespace WasiClocksTimezone {
    */
   export function utcOffset(when: Datetime): number;
 }
-import type { Datetime } from '../interfaces/wasi-clocks-wall-clock';
+import type { Datetime } from '../interfaces/wasi-clocks-wall-clock.js';
 export { Datetime };
 /**
  * Information useful for displaying the timezone of a specific `datetime`.

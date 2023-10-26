@@ -48,7 +48,7 @@ export async function preview2Test () {
       strictEqual(stderr, 'writing to stderr: hello, world\n');
     });
 
-    test.skip('wasi-http-proxy', async () => {
+    test('wasi-http-proxy', async () => {
       const server = createServer(async (req, res) => {
         if (req.url == '/api/examples') { 
           res.writeHead(200, {
@@ -83,7 +83,7 @@ export async function preview2Test () {
         strictEqual(stderr, '');
         const outDir = fileURLToPath(new URL(`./output/${runtimeName}`, import.meta.url));
         {
-          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '--tracing', '-o', outDir);
+          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '-o', outDir);
           strictEqual(stderr, '');
         }
 

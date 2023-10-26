@@ -22,11 +22,11 @@ export namespace WasiSocketsUdpCreateSocket {
    */
   export function createUdpSocket(addressFamily: IpAddressFamily): UdpSocket;
 }
-import type { Network } from '../interfaces/wasi-sockets-network';
+import type { Network } from '../interfaces/wasi-sockets-network.js';
 export { Network };
-import type { ErrorCode } from '../interfaces/wasi-sockets-network';
+import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
 export { ErrorCode };
-import type { IpAddressFamily } from '../interfaces/wasi-sockets-network';
+import type { IpAddressFamily } from '../interfaces/wasi-sockets-network.js';
 export { IpAddressFamily };
-import type { UdpSocket } from '../interfaces/wasi-sockets-udp';
+import type { UdpSocket } from '../interfaces/wasi-sockets-udp.js';
 export { UdpSocket };

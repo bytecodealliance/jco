@@ -55,15 +55,15 @@ export namespace WasiSocketsIpNameLookup {
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
 }
-import type { Pollable } from '../interfaces/wasi-io-poll';
+import type { Pollable } from '../interfaces/wasi-io-poll.js';
 export { Pollable };
-import type { Network } from '../interfaces/wasi-sockets-network';
+import type { Network } from '../interfaces/wasi-sockets-network.js';
 export { Network };
-import type { ErrorCode } from '../interfaces/wasi-sockets-network';
+import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
 export { ErrorCode };
-import type { IpAddress } from '../interfaces/wasi-sockets-network';
+import type { IpAddress } from '../interfaces/wasi-sockets-network.js';
 export { IpAddress };
-import type { IpAddressFamily } from '../interfaces/wasi-sockets-network';
+import type { IpAddressFamily } from '../interfaces/wasi-sockets-network.js';
 export { IpAddressFamily };
 
 export class ResolveAddressStream {

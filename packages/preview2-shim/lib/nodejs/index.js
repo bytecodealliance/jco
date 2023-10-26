@@ -17,6 +17,3 @@ export {
   sockets,
   cli
 }
-
-export { WasiHttp } from "../http/wasi-http.js";
-

@@ -22,11 +22,11 @@ export namespace WasiSocketsTcpCreateSocket {
    */
   export function createTcpSocket(addressFamily: IpAddressFamily): TcpSocket;
 }
-import type { Network } from '../interfaces/wasi-sockets-network';
+import type { Network } from '../interfaces/wasi-sockets-network.js';
 export { Network };
-import type { ErrorCode } from '../interfaces/wasi-sockets-network';
+import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
 export { ErrorCode };
-import type { IpAddressFamily } from '../interfaces/wasi-sockets-network';
+import type { IpAddressFamily } from '../interfaces/wasi-sockets-network.js';
 export { IpAddressFamily };
-import type { TcpSocket } from '../interfaces/wasi-sockets-tcp';
+import type { TcpSocket } from '../interfaces/wasi-sockets-tcp.js';
 export { TcpSocket };

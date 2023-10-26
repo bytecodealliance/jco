@@ -1,39 +1,9 @@
-import { handle } from 'wasi:http/outgoing-handler';
+import { handle } from 'wasi:http/outgoing-handler@0.2.0-rc-2023-11-05';
 import {
-  dropFields,
-  dropFutureIncomingResponse,
-  dropIncomingResponse,
-  dropOutgoingRequest,
-  fieldsEntries,
-  finishOutgoingStream,
-  futureIncomingResponseGet,
-  incomingResponseConsume,
-  incomingResponseHeaders,
-  incomingResponseStatus,
-  newFields,
-  newOutgoingRequest,
-  outgoingRequestWrite,
-} from 'wasi:http/types';
-import { dropPollable } from 'wasi:poll/poll';
-import {
-  dropInputStream,
-  dropOutputStream,
-  flush,
-  read,
-  subscribeToInputStream,
-  write,
-} from 'wasi:io/streams';
-
-class GenericError extends Error {
-  payload;
-  constructor(message) {
-    super(message);
-    this.payload = {
-      tag: "generic",
-      val: message,
-    };
-  }
-}
+  Fields,
+  OutgoingRequest,
+  OutgoingBody,
+} from 'wasi:http/types@0.2.0-rc-2023-11-05';
 
 const sendRequest = (
   method,
@@ -45,52 +15,52 @@ const sendRequest = (
   try {
     let incomingResponse;
     {
-      const headers = newFields([
-        ['User-agent', 'WASI-HTTP/0.0.1'],
-        ['Content-type', 'application/json'],
-      ]);
+      let encoder = new TextEncoder();
 
-      const request = newOutgoingRequest(
+      const request = new OutgoingRequest(
         method,
         pathWithQuery,
         scheme,
         authority,
-        headers
+        new Fields([
+          ['User-agent', encoder.encode('WASI-HTTP/0.0.1')],
+          ['Content-type', encoder.encode('application/json')],
+        ])
       );
 
       if (body) {
-        const bodyStream = outgoingRequestWrite(request);
-        write(bodyStream, new TextEncoder().encode(body));
-        flush(bodyStream);
-        finishOutgoingStream(bodyStream);
-        dropOutputStream(bodyStream);
+        const outgoingBody = request.write();
+        {
+          const bodyStream = outgoingBody.write();
+          bodyStream.blockingWriteAndFlush(encoder.encode(body));
+        }
+        // TODO: we should explicitly drop the bodyStream here
+        //       when we have support for Symbol.dispose
+        OutgoingBody.finish(outgoingBody);
       }
 
-      const futureResponse = handle(request, undefined);
-      incomingResponse = futureIncomingResponseGet(futureResponse).val;
-      dropOutgoingRequest(request);
-      dropFutureIncomingResponse(futureResponse);
+      const futureIncomingResponse = handle(request);
+      incomingResponse = futureIncomingResponse.get().val.val;
     }
 
-    const status = incomingResponseStatus(incomingResponse);
-
-    const headersHandle = incomingResponseHeaders(incomingResponse);
-
-    const responseHeaders = fieldsEntries(headersHandle);
+    const status = incomingResponse.status();
+    // const h = incomingResponse.headers();
+    // const responseHeaders = incomingResponse.headers().entries();
 
     const decoder = new TextDecoder();
-    const headers = responseHeaders.map(([k, v]) => [k, decoder.decode(v)]);
-    dropFields(headersHandle);
+    // const headers = responseHeaders.map(([k, v]) => [k, decoder.decode(v)]);
+    const headers = [];
 
-    const bodyStream = incomingResponseConsume(incomingResponse);
-    const inputStreamPollable = subscribeToInputStream(bodyStream);
-
-    const [buf, _] = read(bodyStream, 50n);
-    const responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
-
-    dropPollable(inputStreamPollable);
-    dropInputStream(bodyStream);
-    dropIncomingResponse(incomingResponse);
+    let responseBody;
+    const incomingBody = incomingResponse.consume();
+    {
+      const bodyStream = incomingBody.stream();
+      // const bodyStreamPollable = bodyStream.subscribe();
+      const buf = bodyStream.read(50n);
+      // TODO: actual streaming
+      // TODO: explicit drops
+      responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
+    }
 
     return JSON.stringify({
       status,
@@ -98,12 +68,12 @@ const sendRequest = (
       body: responseBody,
     });
   } catch (err) {
-    console.error(err);
-    throw new GenericError(err.message);
+    throw new Error(err);
   }
 }
 
 export const commands = {
+  Error,
   getExample: () => {
     return sendRequest(
       {
