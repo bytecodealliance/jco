@@ -21,52 +21,52 @@ const sendRequest = (
   try {
     let incomingResponse;
     {
-      const headers = new Fields([
-        ['User-agent', 'WASI-HTTP/0.0.1'],
-        ['Content-type', 'application/json'],
-      ]);
+      let encoder = new TextEncoder();
 
       const request = new OutgoingRequest(
         method,
         pathWithQuery,
         scheme,
         authority,
-        headers
+        new Fields([
+          ['User-agent', encoder.encode('WASI-HTTP/0.0.1')],
+          ['Content-type', encoder.encode('application/json')],
+        ])
       );
 
       if (body) {
-        const bodyStream = outgoingRequestWrite(request);
-        write(bodyStream, new TextEncoder().encode(body));
-        flush(bodyStream);
-        finishOutgoingStream(bodyStream);
-        dropOutputStream(bodyStream);
+        const outgoingBody = request.write();
+        {
+          const bodyStream = outgoingBody.write();
+          bodyStream.write(encoder.encode(body));
+          bodyStream.flush();
+        }
+        // TODO: we should explicitly drop the bodyStream here
+        //       when we have support for Symbol.dispose
+        OutgoingBody.finish(outgoingBody);
       }
 
-      const futureResponse = handle(request, undefined);
-      incomingResponse = futureIncomingResponseGet(futureResponse).val;
-      dropOutgoingRequest(request);
-      dropFutureIncomingResponse(futureResponse);
+      const futureIncomingResponse = handle(request);
+      incomingResponse = futureIncomingResponse.get().val.val;
     }
 
-    const status = incomingResponseStatus(incomingResponse);
-
-    const headersHandle = incomingResponseHeaders(incomingResponse);
-
-    const responseHeaders = fieldsEntries(headersHandle);
+    const status = incomingResponse.status();
+    const h = incomingResponse.headers();
+    // const responseHeaders = incomingResponse.headers().entries();
 
     const decoder = new TextDecoder();
-    const headers = responseHeaders.map(([k, v]) => [k, decoder.decode(v)]);
-    dropFields(headersHandle);
+    // const headers = responseHeaders.map(([k, v]) => [k, decoder.decode(v)]);
+    const headers = [];
 
-    const bodyStream = incomingResponseConsume(incomingResponse);
-    const inputStreamPollable = subscribeToInputStream(bodyStream);
-
-    const [buf, _] = read(bodyStream, 50n);
-    const responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
-
-    dropPollable(inputStreamPollable);
-    dropInputStream(bodyStream);
-    dropIncomingResponse(incomingResponse);
+    let responseBody;
+    const incomingBody = incomingResponse.consume();
+    {
+      const bodyStream = incomingBody.stream();
+      // const bodyStreamPollable = bodyStream.subscribe();
+      const [buf, _] = bodyStream.read(50n);
+      // TODO: explicit drops
+      responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
+    }
 
     return JSON.stringify({
       status,

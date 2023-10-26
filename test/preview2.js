@@ -83,7 +83,7 @@ export async function preview2Test () {
         strictEqual(stderr, '');
         const outDir = fileURLToPath(new URL(`./output/${runtimeName}`, import.meta.url));
         {
-          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '--tracing', '-o', outDir);
+          const { stderr } = await exec(jcoPath, 'transpile', outFile, '--name', runtimeName, '-o', outDir);
           strictEqual(stderr, '');
         }
 
