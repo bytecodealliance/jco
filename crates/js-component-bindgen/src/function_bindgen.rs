@@ -22,6 +22,7 @@ pub enum ResourceData {
     Host {
         id: u32,
         local_name: String,
+        dtor_name: Option<String>,
     },
     Guest {
         resource_name: String,
@@ -466,8 +467,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     .drain(self.blocks.len() - variant.cases.len()..)
                     .collect::<Vec<_>>();
                 let tmp = self.tmp();
-                let operand = &operands[0];
-                uwriteln!(self.src, "const variant{tmp} = {operand};");
+                let op = &operands[0];
+                uwriteln!(self.src, "const variant{tmp} = {op};");
 
                 for i in 0..result_types.len() {
                     uwriteln!(self.src, "let variant{tmp}_{i};");
@@ -510,12 +511,12 @@ impl Bindgen for FunctionBindgen<'_> {
                     .collect::<Vec<_>>();
 
                 let tmp = self.tmp();
-                let operand = &operands[0];
+                let op = &operands[0];
 
                 uwriteln!(
                     self.src,
                     "let variant{tmp};
-                    switch ({operand}) {{"
+                    switch ({op}) {{"
                 );
 
                 for (i, (case, (block, block_results))) in
@@ -564,8 +565,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let (mut none, none_results) = self.blocks.pop().unwrap();
 
                 let tmp = self.tmp();
-                let operand = &operands[0];
-                uwriteln!(self.src, "const variant{tmp} = {operand};");
+                let op = &operands[0];
+                uwriteln!(self.src, "const variant{tmp} = {op};");
 
                 for i in 0..result_types.len() {
                     uwriteln!(self.src, "let variant{tmp}_{i};");
@@ -616,7 +617,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let some_result = &some_results[0];
 
                 let tmp = self.tmp();
-                let operand = &operands[0];
+                let op = &operands[0];
 
                 let (v_none, v_some) = if maybe_null(resolve, payload) {
                     (
@@ -636,7 +637,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(
                         self.src,
                         "let variant{tmp};
-                        switch ({operand}) {{
+                        switch ({op}) {{
                             case 0: {{
                                 {none}\
                                 variant{tmp} = {v_none};
@@ -656,7 +657,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(
                         self.src,
                         "let variant{tmp};
-                        if ({operand}) {{
+                        if ({op}) {{
                             {some}\
                             variant{tmp} = {v_some};
                         }} else {{
@@ -677,8 +678,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let (mut ok, ok_results) = self.blocks.pop().unwrap();
 
                 let tmp = self.tmp();
-                let operand = &operands[0];
-                uwriteln!(self.src, "const variant{tmp} = {operand};");
+                let op = &operands[0];
+                uwriteln!(self.src, "const variant{tmp} = {op};");
 
                 for i in 0..result_types.len() {
                     uwriteln!(self.src, "let variant{tmp}_{i};");
@@ -782,8 +783,8 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::EnumLower { name, enum_, .. } => {
                 let tmp = self.tmp();
 
-                let operand = &operands[0];
-                uwriteln!(self.src, "const val{tmp} = {operand};");
+                let op = &operands[0];
+                uwriteln!(self.src, "const val{tmp} = {op};");
 
                 // Declare a variable to hold the result.
                 uwriteln!(
@@ -805,8 +806,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 if !self.valid_lifting_optimization {
                     uwriteln!(
                         self.src,
-                        "if (({operand}) instanceof Error) {{
-                        console.error({operand});
+                        "if (({op}) instanceof Error) {{
+                        console.error({op});
                     }}"
                     );
                 }
@@ -1072,11 +1073,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // after a high level call, we need to deactivate the component resource borrows
                 if self.cur_resource_borrows.len() > 0 {
-                    let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                    let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
                     for resource in &self.cur_resource_borrows {
-                        uwriteln!(self.src,
-                            "Object.defineProperty({resource}, {resource_symbol}, {{ value: null }});"
-                        );
+                        uwriteln!(self.src, "{resource}[{symbol_resource_handle}] = null;");
                     }
                     self.cur_resource_borrows = Vec::new();
                 }
@@ -1089,13 +1088,13 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 if self.err == ErrHandling::ThrowResultErr {
                     let component_err = self.intrinsic(Intrinsic::ComponentError);
-                    let operand = &operands[0];
+                    let op = &operands[0];
                     uwriteln!(
                         self.src,
-                        "if ({operand}.tag === 'err') {{
-                            throw new {component_err}({operand}.val);
+                        "if ({op}.tag === 'err') {{
+                            throw new {component_err}({op}.val);
                         }}
-                        return {operand}.val;"
+                        return {op}.val;"
                     );
                 } else {
                     match amt {
@@ -1138,27 +1137,46 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let is_own = matches!(handle, Handle::Own(_));
                 let rsc = format!("rsc{}", self.tmp());
+                let handle = format!("handle{}", self.tmp());
+                uwriteln!(self.src, "const {handle} = {};", &operands[0]);
 
                 match data {
-                    ResourceData::Host { id, local_name } => {
+                    ResourceData::Host {
+                        id,
+                        local_name,
+                        dtor_name,
+                    } => {
+                        let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
                         if !imported {
-                            let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                            let rep = format!("rep{}", self.tmp());
+                            let symbol_resource_handle =
+                                self.intrinsic(Intrinsic::SymbolResourceHandle);
                             uwrite!(
                                 self.src,
                                 "const {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
-                                 Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: handleTable{id}.get({}).rep }});
+                                 const {rep} = handleTable{id}.get({handle}).rep;
+                                 Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
                                 ",
-                                operands[0],
                             );
-                            // when we share an own handle with JS, we need to remove the original handle
-                            // and add a finalizer to the JS handle created
                             if is_own {
+                                // when we share an own handle with JS, we need to remove the original handle
+                                // and add a finalizer to the JS handle created
+                                // in addition, we add a Symbol.dispose function for manual destructor calls
+                                // / integration with explicit resource management
                                 uwriteln!(
                                     self.src,
-                                    "handleTable{id}.delete({});
-                                     finalizationRegistry{id}.register({rsc}, {}, {rsc});",
-                                    operands[0],
-                                    operands[0]
+                                    "finalizationRegistry{id}.register({rsc}, {handle}, {rsc});
+                                    Object.defineProperty({rsc}, {symbol_dispose}, function () {{{}}});
+                                    ",
+                                    match dtor_name {
+                                        Some(dtor) => format!("
+                                            finalizationRegistry{id}.unregister({rsc});
+                                            handleTable{id}.delete({handle});
+                                            {rsc}[{symbol_dispose}] = {rsc}[{symbol_resource_handle}] = null;
+                                            {dtor}({rep});
+                                        "),
+                                        None => "".into(),
+                                    }
                                 );
                             } else {
                                 // borrow handles are tracked to release after the call
@@ -1168,16 +1186,13 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.cur_resource_borrows.push(rsc.to_string());
                             }
                         } else {
-                            // imported handles need to come out of the instance capture
-                            uwriteln!(
-                                self.src,
-                                "const {rsc} = handleTable{id}.get({}).rep;",
-                                operands[0]
-                            );
-                            // own lifting means we no longer have ownership and can release the handle
-                            if is_own {
-                                uwriteln!(self.src, "handleTable{id}.delete({});", operands[0]);
-                            }
+                            // imported handles lift as instance capture from a previous lowering
+                            uwriteln!(self.src, "const {rsc} = handleTable{id}.get({handle}).rep;");
+                        }
+
+                        // an own lifting is a transfer to JS, so handle is implicitly dropped
+                        if is_own {
+                            uwriteln!(self.src, "handleTable{id}.delete({handle});");
                         }
                     }
 
@@ -1185,19 +1200,19 @@ impl Bindgen for FunctionBindgen<'_> {
                         resource_name,
                         prefix,
                     } => {
-                        let op = &operands[0];
-                        let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                        let symbol_resource_handle =
+                            self.intrinsic(Intrinsic::SymbolResourceHandle);
                         let prefix = prefix.as_deref().unwrap_or("");
                         let lower_camel = resource_name.to_lower_camel_case();
 
                         if !imported {
-                            uwriteln!(self.src, "const {rsc} = repTable.get({op}).rep;");
+                            uwriteln!(self.src, "const {rsc} = repTable.get({handle}).rep;");
 
                             if is_own {
                                 uwrite!(
                                     self.src,
-                                    "repTable.delete({op});
-                                     delete {rsc}[{resource_symbol}];
+                                    "repTable.delete({handle});
+                                     delete {rsc}[{symbol_resource_handle}];
                                      finalizationRegistry_export${prefix}{lower_camel}.unregister({rsc});
                                     "
                                 );
@@ -1208,13 +1223,13 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwrite!(
                                 self.src,
                                 "const {rsc} = new.target === import_{prefix}{upper_camel} ? this : Object.create(import_{prefix}{upper_camel}.prototype);
-                                 Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: {op} }});
+                                 Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                 "
                             );
 
                             uwriteln!(
                                 self.src,
-                                "finalizationRegistry_import${prefix}{lower_camel}.register({rsc}, {op}, {rsc});",
+                                "finalizationRegistry_import${prefix}{lower_camel}.register({rsc}, {handle}, {rsc});",
                             );
                         }
                     }
@@ -1230,22 +1245,23 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let class_name = name.to_upper_camel_case();
                 let handle = format!("handle{}", self.tmp());
-                let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
+                let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
+                let op = &operands[0];
 
                 match data {
-                    ResourceData::Host { id, local_name } => {
+                    ResourceData::Host { id, local_name, .. } => {
                         if !imported {
                             uwriteln!(
                                 self.src,
-                                "let {handle} = {}[{resource_symbol}];
+                                "const {handle} = {op}[{symbol_resource_handle}];
                                  if ({handle} === null) {{
-                                     throw new Error('\"{class_name}\" resource handle lifetime expired / transferred.');
+                                     throw new Error('\"{class_name}\" resource handle lifetime expired.');
                                  }}
                                  if ({handle} === undefined) {{
                                      throw new Error('Not a valid \"{class_name}\" resource.');
                                  }}
                                  ",
-                                operands[0],
                             );
 
                             // lowered own handles have their finalizers deregistered
@@ -1253,11 +1269,8 @@ impl Bindgen for FunctionBindgen<'_> {
                             if is_own {
                                 uwriteln!(
                                     self.src,
-                                    "
-                                     finalizationRegistry{id}.unregister({});
-                                     Object.defineProperty({}, {resource_symbol}, {{ value: null }});",
-                                    operands[0],
-                                    operands[0],
+                                    "finalizationRegistry{id}.unregister({op});
+                                     {op}[{symbol_dispose}] = {op}[{symbol_resource_handle}] = null;"
                                 );
                             }
                         } else {
@@ -1265,14 +1278,11 @@ impl Bindgen for FunctionBindgen<'_> {
                             // their assigned rep is deduped across usage though
                             uwriteln!(
                                 self.src,
-                                "if (!({} instanceof {local_name})) {{
+                                "if (!({op} instanceof {local_name})) {{
                                      throw new Error('Not a valid \"{class_name}\" resource.');
                                  }}
                                  const {handle} = handleCnt{id}++;
-                                 handleTable{id}.set({handle}, {{ rep: {}, own: {} }});",
-                                operands[0],
-                                operands[0],
-                                is_own,
+                                 handleTable{id}.set({handle}, {{ rep: {op}, own: {is_own} }});",
                             );
                         }
                     }
@@ -1281,7 +1291,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         resource_name,
                         prefix,
                     } => {
-                        let op = &operands[0];
                         let upper_camel = resource_name.to_upper_camel_case();
                         let lower_camel = resource_name.to_lower_camel_case();
                         let prefix = prefix.as_deref().unwrap_or("");
@@ -1294,21 +1303,22 @@ impl Bindgen for FunctionBindgen<'_> {
                                 "if (!({op} instanceof {upper_camel})) {{
                                      throw new Error('Not a valid \"{upper_camel}\" resource.');
                                  }}
-                                 let {handle} = {op}[{resource_symbol}];
+                                 let {handle} = {op}[{symbol_resource_handle}];
                                  if ({handle} === undefined) {{
                                      const {local_rep} = repCnt++;
                                      repTable.set({local_rep}, {{ rep: {op}, own: {is_own} }});
                                      {handle} = $resource_{prefix}new${lower_camel}({local_rep});
-                                     {op}[{resource_symbol}] = {handle};
+                                     {op}[{symbol_resource_handle}] = {handle};
                                      finalizationRegistry_export${prefix}{lower_camel}.register({op}, {handle}, {op});
                                  }}
                                  "
                             );
                         } else {
-                            let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
+                            let symbol_resource_handle =
+                                self.intrinsic(Intrinsic::SymbolResourceHandle);
                             uwrite!(
                                 self.src,
-                                "const {handle} = {op}[{resource_symbol}];
+                                "const {handle} = {op}[{symbol_resource_handle}];
                                  finalizationRegistry_import${prefix}{lower_camel}.unregister({op});
                                 "
                             );

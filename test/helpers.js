@@ -6,7 +6,7 @@ export const jcoPath = 'src/jco.js';
 export async function exec (cmd, ...args) {
   let stdout = '', stderr = '';
   await new Promise((resolve, reject) => {
-    const cp = spawn(argv[0], ['--no-warnings', cmd, ...args], { stdio: 'pipe' });
+    const cp = spawn(argv[0], [cmd, ...args], { stdio: 'pipe' });
     cp.stdout.on('data', chunk => {
       stdout += chunk;
     });

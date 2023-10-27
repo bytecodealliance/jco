@@ -18,7 +18,8 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
-    ResourceSymbol,
+    SymbolResourceHandle,
+    SymbolDispose,
     ThrowInvalidBool,
     ThrowUninitialized,
     /// Implementation of https://tc39.es/ecma262/#sec-tobigint64.
@@ -85,6 +86,16 @@ pub fn render_intrinsics(
 
     for i in intrinsics.iter() {
         match i {
+            Intrinsic::Base64Compile => if !no_nodejs_compat {
+                output.push_str("
+                    const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
+                ")
+            } else {
+                output.push_str("
+                    const base64Compile = str => WebAssembly.compile(Uint8Array.from(atob(str), b => b.charCodeAt(0)));
+                ")
+            },
+
             Intrinsic::ClampGuest => output.push_str("
                 function clampGuest(i, min, max) {
                     if (i < min || i > max) \
@@ -92,33 +103,6 @@ pub fn render_intrinsics(
                     return i;
                 }
             "),
-
-            Intrinsic::HasOwnProperty => output.push_str("
-                const hasOwnProperty = Object.prototype.hasOwnProperty;
-            "),
-
-            Intrinsic::ToResultString => output.push_str("
-                function toResultString(obj) {
-                    return JSON.stringify(obj, (_, v) => {
-                        if (v && Object.getPrototypeOf(v) === Uint8Array.prototype) {
-                            return `[${v[Symbol.toStringTag]} (${v.byteLength})]`;
-                        } else if (typeof v === 'bigint') {
-                            return v.toString();
-                        }
-                        return v;
-                    });
-                }
-            "),
-
-            Intrinsic::GetErrorPayload => {
-                let hop = Intrinsic::HasOwnProperty.name();
-                uwrite!(output, "
-                    function getErrorPayload(e) {{
-                        if (e && {hop}.call(e, 'payload')) return e.payload;
-                        return e;
-                    }}
-                ")
-            },
 
             Intrinsic::ComponentError => output.push_str("
                 class ComponentError extends Error {
@@ -133,6 +117,10 @@ pub fn render_intrinsics(
             Intrinsic::DataView => output.push_str("
                 let dv = new DataView(new ArrayBuffer());
                 const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
+            "),
+
+            Intrinsic::F64ToI64 => output.push_str("
+                const f64ToI64 = f => (i64ToF64F[0] = f, i64ToF64I[0]);
             "),
 
             Intrinsic::FetchCompile => if !no_nodejs_compat {
@@ -153,15 +141,29 @@ pub fn render_intrinsics(
                 ")
             },
 
-            Intrinsic::Base64Compile => if !no_nodejs_compat {
-                output.push_str("
-                    const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
-                ")
-            } else {
-                output.push_str("
-                    const base64Compile = str => WebAssembly.compile(Uint8Array.from(atob(str), b => b.charCodeAt(0)));
+            Intrinsic::GetErrorPayload => {
+                let hop = Intrinsic::HasOwnProperty.name();
+                uwrite!(output, "
+                    function getErrorPayload(e) {{
+                        if (e && {hop}.call(e, 'payload')) return e.payload;
+                        return e;
+                    }}
                 ")
             },
+
+            Intrinsic::HasOwnProperty => output.push_str("
+                const hasOwnProperty = Object.prototype.hasOwnProperty;
+            "),
+
+            Intrinsic::I32ToF32 => output.push_str("
+                const i32ToF32 = i => (i32ToF32I[0] = i, i32ToF32F[0]);
+            "),
+            Intrinsic::F32ToI32 => output.push_str("
+                const f32ToI32 = f => (i32ToF32F[0] = f, i32ToF32I[0]);
+            "),
+            Intrinsic::I64ToF64 => output.push_str("
+                const i64ToF64 = i => (i64ToF64I[0] = i, i64ToF64F[0]);
+            "),
 
             Intrinsic::InstantiateCore => if !instantiation {
                 output.push_str("
@@ -173,38 +175,32 @@ pub fn render_intrinsics(
                 const isLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
             "),
 
-            Intrinsic::ValidateGuestChar => output.push_str("
-                function validateGuestChar(i) {
-                    if ((i > 0x10ffff) || (i >= 0xd800 && i <= 0xdfff)) \
-                        throw new TypeError(`not a valid char`);
-                    return String.fromCodePoint(i);
+            Intrinsic::SymbolResourceHandle => output.push_str("
+                const resourceHandleSymbol = Symbol('resource');
+            "),
+
+            Intrinsic::SymbolDispose => output.push_str("
+                const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+            "),
+
+            Intrinsic::ThrowInvalidBool => output.push_str("
+                function throwInvalidBool() {
+                    throw new TypeError('invalid variant discriminant for bool');
                 }
             "),
 
-            // TODO: this is incorrect. It at least allows strings of length > 0
-            // but it probably doesn't do the right thing for unicode or invalid
-            // utf16 strings either.
-            Intrinsic::ValidateHostChar => output.push_str("
-                function validateHostChar(s) {
-                    if (typeof s !== 'string') \
-                        throw new TypeError(`must be a string`);
-                    return s.codePointAt(0);
+            Intrinsic::ThrowUninitialized => output.push_str("
+                function throwUninitialized() {
+                    throw new TypeError('Wasm uninitialized use `await $init` first');
                 }
             "),
 
-            Intrinsic::ResourceSymbol => output.push_str("
-                const resourceHandleSymbol = Symbol();
+            Intrinsic::ToBigInt64 => output.push_str("
+                const toInt64 = val => BigInt.asIntN(64, val);
             "),
 
-            Intrinsic::ToInt32 => output.push_str("
-                function toInt32(val) {
-                    return val >> 0;
-                }
-            "),
-            Intrinsic::ToUint32 => output.push_str("
-                function toUint32(val) {
-                    return val >>> 0;
-                }
+            Intrinsic::ToBigUint64 => output.push_str("
+                const toUint64 = val => BigInt.asUintN(64, val);
             "),
 
             Intrinsic::ToInt16 => output.push_str("
@@ -217,13 +213,13 @@ pub fn render_intrinsics(
                     return val;
                 }
             "),
-            Intrinsic::ToUint16 => output.push_str("
-                function toUint16(val) {
-                    val >>>= 0;
-                    val %= 2 ** 16;
-                    return val;
+
+            Intrinsic::ToInt32 => output.push_str("
+                function toInt32(val) {
+                    return val >> 0;
                 }
             "),
+
             Intrinsic::ToInt8 => output.push_str("
                 function toInt8(val) {
                     val >>>= 0;
@@ -234,19 +230,18 @@ pub fn render_intrinsics(
                     return val;
                 }
             "),
-            Intrinsic::ToUint8 => output.push_str("
-                function toUint8(val) {
-                    val >>>= 0;
-                    val %= 2 ** 8;
-                    return val;
-                }
-            "),
 
-            Intrinsic::ToBigInt64 => output.push_str("
-                const toInt64 = val => BigInt.asIntN(64, val);
-            "),
-            Intrinsic::ToBigUint64 => output.push_str("
-                const toUint64 = val => BigInt.asUintN(64, val);
+            Intrinsic::ToResultString => output.push_str("
+                function toResultString(obj) {
+                    return JSON.stringify(obj, (_, v) => {
+                        if (v && Object.getPrototypeOf(v) === Uint8Array.prototype) {
+                            return `[${v[Symbol.toStringTag]} (${v.byteLength})]`;
+                        } else if (typeof v === 'bigint') {
+                            return v.toString();
+                        }
+                        return v;
+                    });
+                }
             "),
 
             // Calling `String` almost directly calls `ToString`, except that it also allows symbols,
@@ -260,25 +255,53 @@ pub fn render_intrinsics(
                 }
             "),
 
-            Intrinsic::I32ToF32 => output.push_str("
-                const i32ToF32 = i => (i32ToF32I[0] = i, i32ToF32F[0]);
-            "),
-            Intrinsic::F32ToI32 => output.push_str("
-                const f32ToI32 = f => (i32ToF32F[0] = f, i32ToF32I[0]);
-            "),
-            Intrinsic::I64ToF64 => output.push_str("
-                const i64ToF64 = i => (i64ToF64I[0] = i, i64ToF64F[0]);
-            "),
-            Intrinsic::F64ToI64 => output.push_str("
-                const f64ToI64 = f => (i64ToF64F[0] = f, i64ToF64I[0]);
+            Intrinsic::ToUint16 => output.push_str("
+                function toUint16(val) {
+                    val >>>= 0;
+                    val %= 2 ** 16;
+                    return val;
+                }
             "),
 
-            Intrinsic::Utf8Decoder => output.push_str("
-                const utf8Decoder = new TextDecoder();
+            Intrinsic::ToUint32 => output.push_str("
+                function toUint32(val) {
+                    return val >>> 0;
+                }
+            "),
+
+            Intrinsic::ToUint8 => output.push_str("
+                function toUint8(val) {
+                    val >>>= 0;
+                    val %= 2 ** 8;
+                    return val;
+                }
             "),
 
             Intrinsic::Utf16Decoder => output.push_str("
                 const utf16Decoder = new TextDecoder('utf-16');
+            "),
+
+            Intrinsic::Utf16Encode => {
+                let is_le = Intrinsic::IsLE.name();
+                uwrite!(output, "
+                    function utf16Encode (str, realloc, memory) {{
+                        const len = str.length, ptr = realloc(0, 0, 2, len * 2), out = new Uint16Array(memory.buffer, ptr, len);
+                        let i = 0;
+                        if ({is_le}) {{
+                            while (i < len) out[i] = str.charCodeAt(i++);
+                        }} else {{
+                            while (i < len) {{
+                                const ch = str.charCodeAt(i);
+                                out[i++] = (ch & 0xff) << 8 | ch >>> 8;
+                            }}
+                        }}
+                        return ptr;
+                    }}
+                ");
+            },
+
+            Intrinsic::Utf8Decoder => output.push_str("
+                const utf8Decoder = new TextDecoder();
             "),
 
             Intrinsic::Utf8EncodedLen => {},
@@ -314,34 +337,22 @@ pub fn render_intrinsics(
                 }
             "),
 
-            Intrinsic::Utf16Encode => {
-                let is_le = Intrinsic::IsLE.name();
-                uwrite!(output, "
-                    function utf16Encode (str, realloc, memory) {{
-                        const len = str.length, ptr = realloc(0, 0, 2, len * 2), out = new Uint16Array(memory.buffer, ptr, len);
-                        let i = 0;
-                        if ({is_le}) {{
-                            while (i < len) out[i] = str.charCodeAt(i++);
-                        }} else {{
-                            while (i < len) {{
-                                const ch = str.charCodeAt(i);
-                                out[i++] = (ch & 0xff) << 8 | ch >>> 8;
-                            }}
-                        }}
-                        return ptr;
-                    }}
-                ");
-            },
-
-            Intrinsic::ThrowInvalidBool => output.push_str("
-                function throwInvalidBool() {
-                    throw new TypeError('invalid variant discriminant for bool');
+            Intrinsic::ValidateGuestChar => output.push_str("
+                function validateGuestChar(i) {
+                    if ((i > 0x10ffff) || (i >= 0xd800 && i <= 0xdfff)) \
+                        throw new TypeError(`not a valid char`);
+                    return String.fromCodePoint(i);
                 }
             "),
 
-            Intrinsic::ThrowUninitialized => output.push_str("
-                function throwUninitialized() {
-                    throw new TypeError('Wasm uninitialized use `await $init` first');
+            // TODO: this is incorrect. It at least allows strings of length > 0
+            // but it probably doesn't do the right thing for unicode or invalid
+            // utf16 strings either.
+            Intrinsic::ValidateHostChar => output.push_str("
+                function validateHostChar(s) {
+                    if (typeof s !== 'string') \
+                        throw new TypeError(`must be a string`);
+                    return s.codePointAt(0);
                 }
             "),
       }
@@ -377,6 +388,7 @@ impl Intrinsic {
             "Object",
             "process",
             "String",
+            "symbolDispose",
             "throwInvalidBool",
             "throwUninitialized",
             "toInt16",
@@ -411,14 +423,15 @@ impl Intrinsic {
             Intrinsic::DataView => "dataView",
             Intrinsic::F32ToI32 => "f32ToI32",
             Intrinsic::F64ToI64 => "f64ToI64",
+            Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::GetErrorPayload => "getErrorPayload",
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::I32ToF32 => "i32ToF32",
             Intrinsic::I64ToF64 => "i64ToF64",
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
-            Intrinsic::FetchCompile => "fetchCompile",
-            Intrinsic::ResourceSymbol => "resourceHandleSymbol",
+            Intrinsic::SymbolResourceHandle => "resourceHandleSymbol",
+            Intrinsic::SymbolDispose => "symbolDispose",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
             Intrinsic::ThrowUninitialized => "throwUninitialized",
             Intrinsic::ToBigInt64 => "toInt64",

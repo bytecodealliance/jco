@@ -308,5 +308,4 @@ export class WasiHttp {
   }
 }
 
-const http = new WasiHttp();
-export const { outgoingHandler, types } = http;
+export const { outgoingHandler, types } = new WasiHttp();
