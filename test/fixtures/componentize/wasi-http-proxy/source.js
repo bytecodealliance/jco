@@ -44,12 +44,10 @@ const sendRequest = (
     }
 
     const status = incomingResponse.status();
-    // const h = incomingResponse.headers();
-    // const responseHeaders = incomingResponse.headers().entries();
+    const responseHeaders = incomingResponse.headers().entries();
 
     const decoder = new TextDecoder();
-    // const headers = responseHeaders.map(([k, v]) => [k, decoder.decode(v)]);
-    const headers = [];
+    const headers = responseHeaders.map(([k, v]) => [k, decoder.decode(v)]);
 
     let responseBody;
     const incomingBody = incomingResponse.consume();
