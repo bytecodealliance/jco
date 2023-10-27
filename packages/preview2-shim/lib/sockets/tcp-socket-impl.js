@@ -11,6 +11,8 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-tcp").ShutdownType} ShutdownType
  */
 
+import { assert } from "../common/assert.js";
+
 // See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
 const {
   TCP,
@@ -77,16 +79,6 @@ function deserializeIpAddress(addr, family) {
   return address;
 }
 
-function assert(condition, code, message) {
-  if (condition) {
-    const ex = new Error(message);
-    ex.name = "Error";
-    ex.message = message;
-    ex.code = code;
-    throw ex;
-  }
-}
-
 // TODO: implement would-block exceptions
 // TODO: implement concurrency-conflict exceptions
 export class TcpSocketImpl extends EventEmitter {
@@ -102,16 +94,21 @@ export class TcpSocketImpl extends EventEmitter {
   #state = "closed";
   #inProgress = false;
   #connections = 0;
+  #keepAlive = false;
+  #noDelay = false;
+  #unicastHopLimit = 10;
 
   // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #backlog = 128;
 
+  /**
+   * @param {IpAddressFamily} addressFamily
+   * @returns
+   * */
   constructor(addressFamily) {
     super();
+
     this.#socketOptions.family = addressFamily;
-    this.#socketOptions.keepAlive = false;
-    this.#socketOptions.noDelay = false;
-    this.#socketOptions.unicastHopLimit = 10;
 
     this.#clientHandle = new TCP(TCPConstants.SOCKET);
     this.#serverHandle = new TCP(TCPConstants.SERVER);
@@ -128,7 +125,6 @@ export class TcpSocketImpl extends EventEmitter {
 
     const socket = new NodeSocket({ handle: clientHandle });
     this.#connections++;
-
     // reserved
     socket.server = this.#serverHandle;
     socket._server = this.#serverHandle;
@@ -389,6 +385,7 @@ export class TcpSocketImpl extends EventEmitter {
    * @throws {new-socket-limit} The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
    * */
   accept() {
+    // uv_accept is automatically called by uv_listen when a new connection is received.
     return noop();
   }
 
@@ -473,7 +470,7 @@ export class TcpSocketImpl extends EventEmitter {
   keepAlive() {
     console.log(`[tcp] keep alive socket`);
 
-    this.#socketOptions.keepAlive;
+    this.#keepAlive;
   }
 
   /**
@@ -483,7 +480,7 @@ export class TcpSocketImpl extends EventEmitter {
   setKeepAlive(value) {
     console.log(`[tcp] set keep alive socket to ${value}`);
 
-    this.#socketOptions.keepAlive = value;
+    this.#keepAlive = value;
     this.#clientHandle.setKeepAlive(value);
   }
 
@@ -493,7 +490,7 @@ export class TcpSocketImpl extends EventEmitter {
   noDelay() {
     console.log(`[tcp] no delay socket`);
 
-    return this.#socketOptions.noDelay;
+    return this.#noDelay;
   }
 
   /**
@@ -504,8 +501,8 @@ export class TcpSocketImpl extends EventEmitter {
   setNoDelay(value) {
     console.log(`[tcp] set no delay socket to ${value}`);
 
-    this.#socketOptions.noDelay = value;
-    this.#serverHandle.setNoDelay(value);
+    this.#noDelay = value;
+    this.#clientHandle.setNoDelay(value);
   }
 
   /**
@@ -514,7 +511,7 @@ export class TcpSocketImpl extends EventEmitter {
   unicastHopLimit() {
     console.log(`[tcp] unicast hop limit socket`);
 
-    return this.#socketOptions.unicastHopLimit;
+    return this.#unicastHopLimit;
   }
 
   /**
@@ -527,7 +524,7 @@ export class TcpSocketImpl extends EventEmitter {
   setUnicastHopLimit(value) {
     console.log(`[tcp] set unicast hop limit socket to ${value}`);
 
-    this.#socketOptions.unicastHopLimit = value;
+    this.#unicastHopLimit = value;
   }
 
   /**
