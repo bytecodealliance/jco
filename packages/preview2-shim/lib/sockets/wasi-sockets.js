@@ -6,6 +6,7 @@
  */
 
 import { TcpSocketImpl } from "./tcp-socket-impl.js";
+import { assert } from "../common/assert.js";
 
 /** @type {ErrorCode} */
 export const errorCode = {
@@ -128,7 +129,10 @@ export class WasiSockets {
     }
 
     class TcpSocket extends TcpSocketImpl {
-      /** @param {IpAddressFamily} addressFamily */
+      /**
+       * @param {IpAddressFamily} addressFamily
+       * @param {InputStream|OutputStream} io
+       * */
       constructor(addressFamily) {
         super(addressFamily);
         net.tcpSockets.set(this.id, this);
@@ -159,25 +163,29 @@ export class WasiSockets {
       /**
        * @param {IpAddressFamily} addressFamily
        * @returns {TcpSocket}
-       * @throws {Error} not-supported
-       * @throws {Error} new-socket-limit
+       * @throws {not-supported} The specified `address-family` is not supported. (EAFNOSUPPORT)
+       * @throws {new-socket-limit} The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
        */
       createTcpSocket(addressFamily) {
         console.log(`[tcp] Create tcp socket ${addressFamily}`);
 
-        if (supportedAddressFamilies.includes(addressFamily) === false) {
-          throw new Error(errorCode.notSupported);
-        }
+        assert(
+          supportedAddressFamilies.includes(addressFamily) === false,
+          errorCode.notSupported,
+          "The specified `address-family` is not supported."
+        );
 
-        if (net.socketCnt + 1 > net.maxSockets) {
-          throw new Error(errorCode.newSocketLimit);
-        }
+        assert(
+          net.socketCnt + 1 > net.maxSockets,
+          errorCode.newSocketLimit,
+          "The new socket resource could not be created because of a system limit"
+        );
 
         try {
           net.socketCnt++;
           return new TcpSocket(addressFamily);
-        } catch {
-          throw new Error(errorCode.notSupported);
+        } catch (err) {
+          assert(true, errorCode.notSupported, err);
         }
       },
     };
