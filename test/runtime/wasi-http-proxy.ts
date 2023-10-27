@@ -5,12 +5,12 @@ import { commands, incomingHandler } from '../output/wasi-http-proxy/wasi-http-p
 // const { IncomingRequest, ResponseOutparam } = types;
 
 const defaultHeaders: [string, string][] = [
-  // ['connection', 'keep-alive'],
-  // ['content-type', 'text/plain'],
-  // ['date', 'null'],
-  // ['keep-alive', 'timeout=5'],
-  // ['transfer-encoding', 'chunked'],
-  // ['x-wasi', 'mock-server'],
+  ['connection', 'keep-alive'],
+  ['content-type', 'text/plain'],
+  ['date', 'null'],
+  ['keep-alive', 'timeout=5'],
+  ['transfer-encoding', 'chunked'],
+  ['x-wasi', 'mock-server'],
 ];
 
 assert.equal(
