@@ -1131,7 +1131,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(ptr);
             }
 
-            Instruction::HandleLift { handle, name, .. } => {
+            Instruction::HandleLift { handle, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
                 let ResourceTable { imported, data } =
                     &self.resource_map[&crate::dealias(self.resolve, *ty)];
@@ -1188,6 +1188,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         let op = &operands[0];
                         let resource_symbol = self.intrinsic(Intrinsic::ResourceSymbol);
                         let prefix = prefix.as_deref().unwrap_or("");
+                        let lower_camel = resource_name.to_lower_camel_case();
 
                         if !imported {
                             uwriteln!(self.src, "const {rsc} = repTable.get({op}).rep;");
@@ -1197,25 +1198,23 @@ impl Bindgen for FunctionBindgen<'_> {
                                     self.src,
                                     "repTable.delete({op});
                                      delete {rsc}[{resource_symbol}];
-                                     finalizationRegistry_export${prefix}{resource_name}.unregister({rsc});
+                                     finalizationRegistry_export${prefix}{lower_camel}.unregister({rsc});
                                     "
                                 );
                             }
                         } else {
-                            let class_name = name.to_upper_camel_case();
+                            let upper_camel = resource_name.to_upper_camel_case();
 
                             uwrite!(
                                 self.src,
-                                "const {rsc} = new.target === import_{prefix}{class_name} ? this : Object.create(import_{prefix}{class_name}.prototype);
+                                "const {rsc} = new.target === import_{prefix}{upper_camel} ? this : Object.create(import_{prefix}{upper_camel}.prototype);
                                  Object.defineProperty({rsc}, {resource_symbol}, {{ writable: true, value: {op} }});
                                 "
                             );
 
-                            let resource_name = resource_name.to_lower_camel_case();
-
                             uwriteln!(
                                 self.src,
-                                "finalizationRegistry_import${prefix}{resource_name}.register({rsc}, {op}, {rsc});",
+                                "finalizationRegistry_import${prefix}{lower_camel}.register({rsc}, {op}, {rsc});",
                             );
                         }
                     }
@@ -1283,25 +1282,25 @@ impl Bindgen for FunctionBindgen<'_> {
                         prefix,
                     } => {
                         let op = &operands[0];
-                        let resource_name = resource_name.to_lower_camel_case();
+                        let upper_camel = resource_name.to_upper_camel_case();
+                        let lower_camel = resource_name.to_lower_camel_case();
                         let prefix = prefix.as_deref().unwrap_or("");
 
                         if !imported {
-                            let snake = name.to_snake_case();
                             let local_rep = format!("localRep{}", self.tmp());
 
                             uwrite!(
                                 self.src,
-                                "if (!({op} instanceof {class_name})) {{
-                                     throw new Error('Not a valid \"{class_name}\" resource.');
+                                "if (!({op} instanceof {upper_camel})) {{
+                                     throw new Error('Not a valid \"{upper_camel}\" resource.');
                                  }}
                                  let {handle} = {op}[{resource_symbol}];
                                  if ({handle} === undefined) {{
                                      const {local_rep} = repCnt++;
                                      repTable.set({local_rep}, {{ rep: {op}, own: {is_own} }});
-                                     {handle} = $resource_{prefix}new${snake}({local_rep});
+                                     {handle} = $resource_{prefix}new${lower_camel}({local_rep});
                                      {op}[{resource_symbol}] = {handle};
-                                     finalizationRegistry_export${prefix}{resource_name}.register({op}, {handle}, {op});
+                                     finalizationRegistry_export${prefix}{lower_camel}.register({op}, {handle}, {op});
                                  }}
                                  "
                             );
@@ -1310,7 +1309,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwrite!(
                                 self.src,
                                 "const {handle} = {op}[{resource_symbol}];
-                                 finalizationRegistry_import${prefix}{resource_name}.unregister({op});
+                                 finalizationRegistry_import${prefix}{lower_camel}.unregister({op});
                                 "
                             );
                         }
