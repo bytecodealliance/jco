@@ -382,7 +382,7 @@ impl TsBindgen {
         if !local_exists {
             uwriteln!(
                 self.src,
-                "import {{ {} }} from './{}';",
+                "import {{ {} }} from './{}.js';",
                 if camel == local_name {
                     camel.to_string()
                 } else {
