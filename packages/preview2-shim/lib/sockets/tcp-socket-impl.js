@@ -236,6 +236,7 @@ export class TcpSocketImpl {
       this.#serverHandle.close();
       assert(err === -22, "address-in-use");
       assert(err === -49, "address-not-bindable");
+      assert(err === -99, "address-not-bindable"); // EADDRNOTAVAIL
       assert(true, "", err);
     }
 
