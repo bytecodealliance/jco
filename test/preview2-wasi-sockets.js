@@ -16,7 +16,7 @@ server.startBind(network, serverAddressIpv6);
 server.finishBind();
 server.startListen();
 server.finishListen();
-const {address, port} = server.localAddress().val;
+const { address, port } = server.localAddress().val;
 console.log(`[wasi-sockets] Server listening on: ${address}:${port}`);
 
 // client
@@ -30,7 +30,12 @@ client.startConnect(network, serverAddressIpv6);
 client.finishConnect();
 
 setTimeout(() => {
-    client.shutdown("send");
-    server.shutdown("receive");
-    process.exit(0);
+  // const [socket, input, output] = server.accept();
+  // output.write(new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]));
+  // const buff = input.read(2);
+  // console.log(`[wasi-sockets] Server received: ${buff}`);
+
+  // client.shutdown("send");
+  // server.shutdown("receive");
+  // process.exit(0);
 }, 2000);

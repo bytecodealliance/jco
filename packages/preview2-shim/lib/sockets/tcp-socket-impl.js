@@ -11,6 +11,9 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-tcp").ShutdownType} ShutdownType
  */
 
+import { streams } from "../common/io.js";
+const { InputStream, OutputStream } = streams;
+
 import { assert } from "../common/assert.js";
 
 // See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
@@ -81,7 +84,7 @@ function deserializeIpAddress(addr, family) {
 
 // TODO: implement would-block exceptions
 // TODO: implement concurrency-conflict exceptions
-export class TcpSocketImpl extends EventEmitter {
+export class TcpSocketImpl {
   /** @type {TCP.TCPConstants.SERVER} */ #serverHandle = null;
   /** @type {TCP.TCPConstants.SOCKET} */ #clientHandle = null;
   /** @type {Network} */ network = null;
@@ -97,6 +100,7 @@ export class TcpSocketImpl extends EventEmitter {
   #keepAlive = false;
   #noDelay = false;
   #unicastHopLimit = 10;
+  #acceptedClient = null;
 
   // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #backlog = 128;
@@ -106,7 +110,6 @@ export class TcpSocketImpl extends EventEmitter {
    * @returns
    * */
   constructor(addressFamily) {
-    super();
 
     this.#socketOptions.family = addressFamily;
 
@@ -114,31 +117,32 @@ export class TcpSocketImpl extends EventEmitter {
     this.#serverHandle = new TCP(TCPConstants.SERVER);
     this._handle = this.#serverHandle;
     this._handle.onconnection = this.#handleConnection.bind(this);
+    this._handle.onclose = this.#handleDisconnect.bind(this);
   }
 
-  #handleConnection(err, clientHandle) {
+  #handleConnection(err, newClientSocket) {
     console.log(`[tcp] on server connection`);
 
     if (err) {
-      throw new Error(err);
+      assert(true, "", err);
     }
 
-    const socket = new NodeSocket({ handle: clientHandle });
+    this.#acceptedClient = new NodeSocket({ handle: newClientSocket });
     this.#connections++;
     // reserved
-    socket.server = this.#serverHandle;
-    socket._server = this.#serverHandle;
-
-    this.emit("connection", socket);
-
-    socket._handle.onread = (nread, buffer) => {
+    this.#acceptedClient.server = this.#serverHandle;
+    this.#acceptedClient._server = this.#serverHandle;
+    this.#acceptedClient._handle.onread = (nread, buffer) => {
       if (nread > 0) {
         // TODO: handle data received from the client
         const data = buffer.toString("utf8", 0, nread);
-        console.log("Received data:", data);
+        console.log("accepted socket on read:", data);
       }
     };
-    socket._handle.readStart();
+  }
+
+  #handleDisconnect(err) {
+    console.log(`[tcp] on server disconnect`);
   }
 
   #onClientConnectComplete(err) {
@@ -160,7 +164,7 @@ export class TcpSocketImpl extends EventEmitter {
 
   // TODO: is this needed?
   #handleAfterShutdown() {
-    console.log(`[tcp] after shutdown socket ${this.id}`);
+    console.log(`[tcp] after shutdown socket`);
   }
 
   /**
@@ -324,11 +328,8 @@ export class TcpSocketImpl extends EventEmitter {
 
     this.#clientHandle.onread = (buffer) => {
       // TODO: handle data received from the server
-
-      console.log({
-        buffer,
-      });
     };
+
     this.#clientHandle.readStart();
     this.#inProgress = false;
 
@@ -386,7 +387,21 @@ export class TcpSocketImpl extends EventEmitter {
    * */
   accept() {
     // uv_accept is automatically called by uv_listen when a new connection is received.
-    return noop();
+
+    const _this = this;
+    const outgoingStream = new OutputStream({
+      write(bytes) {
+        _this.#acceptedClient.write(bytes);
+      },
+    });
+    const ingoingStream = new InputStream({
+      read(len) {
+        console.log(`[tcp] read socket`);
+        return _this.#acceptedClient.read(len);
+      },
+    })
+
+    return [this.#acceptedClient, ingoingStream, outgoingStream];
   }
 
   /**
