@@ -182,7 +182,7 @@ suite("Node.js Preview2", () => {
         },
         {
           name: "Error",
-          message: sockets.network.errorCode.notSupported,
+          code: sockets.network.errorCode.notSupported,
         }
       );
     });
