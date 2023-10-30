@@ -6,6 +6,7 @@
  */
 
 import { TcpSocketImpl } from "./tcp-socket-impl.js";
+import { UdpSocketImpl } from "./udp-socket-impl.js";
 import { assert } from "../common/assert.js";
 
 /** @type {ErrorCode} */
@@ -128,10 +129,19 @@ export class WasiSockets {
       }
     }
 
+    class UdpSocket extends UdpSocketImpl {
+      /**
+       * @param {IpAddressFamily} addressFamily
+       * */
+      constructor(addressFamily) {
+        super(addressFamily);
+        net.udpSockets.set(this.id, this);
+      }
+    }
+
     class TcpSocket extends TcpSocketImpl {
       /**
        * @param {IpAddressFamily} addressFamily
-       * @param {InputStream|OutputStream} io
        * */
       constructor(addressFamily) {
         super(addressFamily);
@@ -157,6 +167,32 @@ export class WasiSockets {
     this.network = {
       errorCode,
       IpAddressFamily,
+    };
+
+    this.udpCreateSocket = {
+      createUdpSocket(addressFamily) {
+        net.socketCnt++;
+        console.log(`[tcp] Create udp socket ${addressFamily}`);
+
+        assert(
+          supportedAddressFamilies.includes(addressFamily) === false,
+          errorCode.notSupported,
+          "The specified `address-family` is not supported."
+        );
+
+        assert(
+          net.socketCnt + 1 > net.maxSockets,
+          errorCode.newSocketLimit,
+          "The new socket resource could not be created because of a system limit"
+        );
+
+        try {
+          net.socketCnt++;
+          return new UdpSocket(addressFamily);
+        } catch (err) {
+          assert(true, errorCode.notSupported, err);
+        }
+      },
     };
 
     this.tcpCreateSocket = {

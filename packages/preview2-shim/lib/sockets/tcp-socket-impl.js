@@ -108,7 +108,7 @@ export class TcpSocketImpl {
   /**
    * @param {IpAddressFamily} addressFamily
    * @returns
-   * */
+   */
   constructor(addressFamily) {
 
     this.#socketOptions.family = addressFamily;
@@ -175,7 +175,7 @@ export class TcpSocketImpl {
    * @throws {invalid-argument} `local-address` is not a unicast address. (EINVAL)
    * @throws {invalid-argument} `local-address` is an IPv4-mapped IPv6 address, but the socket has `ipv6-only` enabled. (EINVAL)
    * @throws {invalid-state} The socket is already bound. (EINVAL)
-   * */
+   */
   startBind(network, localAddress) {
     const address = serializeIpAddress(
       localAddress,
@@ -258,7 +258,7 @@ export class TcpSocketImpl {
    * @throws {invalid-argument} The socket is already attached to a different network. The `network` passed to `connect` must be identical to the one passed to `bind`.
    * @throws {invalid-state} The socket is already in the Connection state. (EISCONN)
    * @throws {invalid-state} The socket is already in the Listener state. (EOPNOTSUPP, EINVAL on Windows)
-   * */
+   */
   startConnect(network, remoteAddress) {
     console.log(
       `[tcp] start connect socket to ${remoteAddress.val.address}:${remoteAddress.val.port}`
@@ -299,7 +299,7 @@ export class TcpSocketImpl {
    * @throws {address-in-use} Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
    * @throws {not-in-progress} A `connect` operation is not in progress.
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
-   * */
+   */
   finishConnect() {
     console.log(`[tcp] finish connect socket`);
 
@@ -343,7 +343,7 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is not bound to any local address. (EDESTADDRREQ)
    * @throws {invalid-state} The socket is already in the Connection state. (EISCONN, EINVAL on BSD)
    * @throws {invalid-state} The socket is already in the Listener state.
-   * */
+   */
   startListen() {
     console.log(
       `[tcp] start listen socket on ${this.#socketOptions.localAddress}:${
@@ -363,7 +363,7 @@ export class TcpSocketImpl {
    * @throws {address-in-use} Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
    * @throws {not-in-progress} A `listen` operation is not in progress.
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
-   * */
+   */
   finishListen() {
     console.log(`[tcp] finish listen socket (backlog: ${this.#backlog})`);
 
@@ -385,7 +385,7 @@ export class TcpSocketImpl {
    * @throws {would-block} No pending connections at the moment. (EWOULDBLOCK, EAGAIN)
    * @throws {connection-aborted} An incoming connection was pending, but was terminated by the client before this listener could accept it. (ECONNABORTED)
    * @throws {new-socket-limit} The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
-   * */
+   */
   accept() {
     // uv_accept is automatically called by uv_listen when a new connection is received.
 
@@ -408,7 +408,7 @@ export class TcpSocketImpl {
   /**
    * @returns {IpSocketAddress}
    * @throws {invalid-state} The socket is not bound to any local address.
-   * */
+   */
   localAddress() {
     console.log(`[tcp] local address socket`);
 
@@ -427,7 +427,7 @@ export class TcpSocketImpl {
   /**
    * @returns {IpSocketAddress}
    * @throws {invalid-state} The socket is not connected to a remote address. (ENOTCONN)
-   * */
+   */
   remoteAddress() {
     console.log(`[tcp] remote address socket`);
 
@@ -438,7 +438,7 @@ export class TcpSocketImpl {
 
   /**
    * @returns {IpAddressFamily}
-   * */
+   */
   addressFamily() {
     console.log(`[tcp] address family socket`);
 
@@ -448,7 +448,7 @@ export class TcpSocketImpl {
   /**
    * @returns {boolean}
    * @throws {not-supported} (get/set) `this` socket is an IPv4 socket.
-   * */
+   */
   ipv6Only() {
     console.log(`[tcp] ipv6 only socket ${this.id}`);
 
@@ -461,7 +461,7 @@ export class TcpSocketImpl {
    * @throws {invalid-state} (set) The socket is already bound.
    * @throws {invalid-state} (get/set) `this` socket is an IPv4 socket.
    * @throws {not-supported} (set) Host does not support dual-stack sockets. (Implementations are not required to.)
-   * */
+   */
   setIpv6Only(value) {
     console.log(`[tcp] set ipv6 only socket to ${value}`);
 
@@ -473,7 +473,7 @@ export class TcpSocketImpl {
    * @returns {void}
    * @throws {not-supported} (set) The platform does not support changing the backlog size after the initial listen.
    * @throws {invalid-state} (set) The socket is already in the Connection state.
-   * */
+   */
   setListenBacklogSize(value) {
     console.log(`[tcp] set listen backlog size socket to ${value}`);
 
@@ -482,7 +482,7 @@ export class TcpSocketImpl {
 
   /**
    * @returns {boolean}
-   * */
+   */
   keepAlive() {
     console.log(`[tcp] keep alive socket`);
 
@@ -492,7 +492,7 @@ export class TcpSocketImpl {
   /**
    * @param {boolean} value
    * @returns {void}
-   * */
+   */
   setKeepAlive(value) {
     console.log(`[tcp] set keep alive socket to ${value}`);
 
@@ -502,7 +502,7 @@ export class TcpSocketImpl {
 
   /**
    * @returns {boolean}
-   * */
+   */
   noDelay() {
     console.log(`[tcp] no delay socket`);
 
@@ -513,7 +513,7 @@ export class TcpSocketImpl {
    * @param {boolean} value
    * @returns {void}
    * @throws {concurrency-conflict} (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
-   * */
+   */
   setNoDelay(value) {
     console.log(`[tcp] set no delay socket to ${value}`);
 
@@ -523,7 +523,7 @@ export class TcpSocketImpl {
 
   /**
    * @returns {number}
-   * */
+   */
   unicastHopLimit() {
     console.log(`[tcp] unicast hop limit socket`);
 
@@ -536,7 +536,7 @@ export class TcpSocketImpl {
    * @throws {invalid-argument} (set) The TTL value must be 1 or higher.
    * @throws {invalid-state} (set) The socket is already in the Connection state.
    * @throws {invalid-state} (set) The socket is already in the Listener state.
-   * */
+   */
   setUnicastHopLimit(value) {
     console.log(`[tcp] set unicast hop limit socket to ${value}`);
 
@@ -545,7 +545,7 @@ export class TcpSocketImpl {
 
   /**
    * @returns {bigint}
-   * */
+   */
   receiveBufferSize() {
     console.log(`[tcp] receive buffer size socket`);
     throw new Error("not implemented");
@@ -556,7 +556,7 @@ export class TcpSocketImpl {
    * @returns {void}
    * @throws {invalid-state} (set) The socket is already in the Connection state.
    * @throws {invalid-state} (set) The socket is already in the Listener state.
-   * */
+   */
   setReceiveBufferSize(value) {
     console.log(`[tcp] set receive buffer size socket to ${value}`);
     throw new Error("not implemented");
@@ -564,7 +564,7 @@ export class TcpSocketImpl {
 
   /**
    * @returns {bigint}
-   * */
+   */
   sendBufferSize() {
     console.log(`[tcp] send buffer size socket`);
     throw new Error("not implemented");
@@ -575,7 +575,7 @@ export class TcpSocketImpl {
    * @returns {void}
    * @throws {invalid-state} (set) The socket is already in the Connection state.
    * @throws {invalid-state} (set) The socket is already in the Listener state.
-   * */
+   */
   setSendBufferSize(value) {
     console.log(`[tcp] set send buffer size socket to ${value}`);
     throw new Error("not implemented");
@@ -583,7 +583,7 @@ export class TcpSocketImpl {
 
   /**
    * @returns {Pollable}
-   * */
+   */
   subscribe() {
     console.log(`[tcp] subscribe socket`);
     throw new Error("not implemented");
@@ -593,7 +593,7 @@ export class TcpSocketImpl {
    * @param {ShutdownType} shutdownType
    * @returns {void}
    * @throws {invalid-state} The socket is not in the Connection state. (ENOTCONN)
-   * */
+   */
   shutdown(shutdownType) {
     console.log(`[tcp] shutdown socket with type ${shutdownType}`);
 
