@@ -1,5 +1,7 @@
 let id = 0;
 
+const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+
 class Error {
   constructor (msg) {
     this.msg = msg;
@@ -73,7 +75,7 @@ class InputStream {
   subscribe() {
     console.log(`[streams] Subscribe to input stream ${this.id}`);
   }
-  drop () {
+  [symbolDispose] () {
     if (this.handler.drop)
       this.handler.drop.call(this);
   }
@@ -158,7 +160,7 @@ class OutputStream {
   subscribe() {
     console.log(`[streams] Subscribe to output stream ${this.id}`);
   }
-  drop() {
+  [symbolDispose]() {
   }
 }
 

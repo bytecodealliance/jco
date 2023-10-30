@@ -17,6 +17,6 @@ suite('Node.js Preview2', async () => {
     const buf = stream.blockingRead(1_000_000);
     const source = new TextDecoder().decode(buf);
     ok(source.includes('UNIQUE STRING'));
-    stream.drop();
+    stream[Symbol.dispose]();
   });
 });

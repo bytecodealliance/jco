@@ -132,6 +132,7 @@ pub fn transpile_bindgen(
         imports_resource_map: Default::default(),
         exports_resource_map: Default::default(),
         defined_resource_classes: Default::default(),
+        resource_dtors: Default::default(),
         resource_tables_initialized: (0..component.component.num_resource_tables)
             .map(|_| false)
             .collect(),
@@ -139,6 +140,7 @@ pub fn transpile_bindgen(
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
     instantiator.instantiate();
+    instantiator.destructors();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
 
@@ -324,6 +326,7 @@ struct Instantiator<'a, 'b> {
     imports_resource_map: ResourceMap,
     exports_resource_map: ResourceMap,
     defined_resource_classes: BTreeSet<String>,
+    resource_dtors: BTreeMap<TypeId, CoreDef>,
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
 }
@@ -491,6 +494,20 @@ impl<'a> Instantiator<'a, '_> {
         self.exports(&self.component.exports);
     }
 
+    fn destructors(&mut self) {
+        for (ty, dtor) in self.resource_dtors.iter() {
+            let dtor_name_str = self.core_def(dtor);
+            let Some(ResourceTable {
+                data: ResourceData::Host { dtor_name, .. },
+                ..
+            }) = self.exports_resource_map.get_mut(ty)
+            else {
+                panic!("Expected exports resource map entry for dtor")
+            };
+            let _ = dtor_name.insert(dtor_name_str);
+        }
+    }
+
     fn ensure_resource_table(&mut self, idx: TypeResourceTableIndex) {
         let rid = idx.as_u32();
         if !self.resource_tables_initialized[rid as usize] {
@@ -538,13 +555,13 @@ impl<'a> Instantiator<'a, '_> {
                     "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
                         const handleEntry = handleTable{rid}.get(handle);
                         if (handleEntry) {{
-                            handleTable{rid}.delete(handle);{}
+                            handleTable{rid}.delete(handle);
+                            {}
                         }}
                     }});
                     ",
                     dtor
                 );
-            } else {
             }
             self.resource_tables_initialized[rid as usize] = true;
         }
@@ -655,18 +672,25 @@ impl<'a> Instantiator<'a, '_> {
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
-                        Some(format!(
+                        format!(
                             "if (handleEntry.own) {{
                                 {}(handleEntry.rep);
                             }}
                             ",
                             self.core_def(&dtor)
-                        ))
+                        )
                     } else {
-                        None
+                        "".into()
                     }
                 } else {
-                    None
+                    // if there is a Symbol.dispose handler, call it explicitly for imported
+                    // resources when the resource is dropped
+                    let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
+                    format!(
+                        "if (handleEntry.own && handleEntry.rep[{symbol_dispose}]) {{
+                            handleEntry.rep[{symbol_dispose}]();
+                        }}"
+                    )
                 };
 
                 uwrite!(
@@ -676,10 +700,10 @@ impl<'a> Instantiator<'a, '_> {
                         if (!handleEntry) {{
                             throw new Error(`Resource error: Invalid handle ${{handle}}`);
                         }}
-                        handleTable{rid}.delete(handle);{}
+                        handleTable{rid}.delete(handle);
+                        {dtor}
                     }}
                     ",
-                    dtor.as_deref().unwrap_or("")
                 );
             }
             Trampoline::ResourceTransferOwn => unimplemented!(),
@@ -970,6 +994,24 @@ impl<'a> Instantiator<'a, '_> {
 
         let resource_id = crate::dealias(self.resolve, t1);
 
+        let resource = self.types[t2].ty;
+        if let Some(resource_idx) = self.component.defined_resource_index(resource) {
+            let resource_def = self
+                .component
+                .initializers
+                .iter()
+                .filter_map(|i| match i {
+                    GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
+                    _ => None,
+                })
+                .next()
+                .unwrap();
+
+            if let Some(dtor) = &resource_def.dtor {
+                self.resource_dtors.insert(resource_id, dtor.clone());
+            }
+        }
+
         let ty = &self.resolve.types[resource_id];
         let resource = ty.name.as_ref().unwrap();
 
@@ -1047,6 +1089,7 @@ impl<'a> Instantiator<'a, '_> {
             imported,
             data: ResourceData::Host {
                 id: t2.as_u32(),
+                dtor_name: None,
                 local_name,
             },
         };
