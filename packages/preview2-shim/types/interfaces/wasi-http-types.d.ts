@@ -1,5 +1,9 @@
 export namespace WasiHttpTypes {
   /**
+   * Construct an empty HTTP Fields.
+   */
+  export { Fields };
+  /**
    * Construct an HTTP Fields.
    * 
    * The list represents each key-value pair in the Fields. Keys
@@ -10,14 +14,19 @@ export namespace WasiHttpTypes {
    * Value, represented as a list of bytes. In a valid Fields, all keys
    * and values are valid UTF-8 strings. However, values are not always
    * well-formed, so they are represented as a raw list of bytes.
+   * 
+   * An error result will be returned if any header or value was
+   * syntactically invalid, or if a header was forbidden.
    */
-  export { Fields };
   /**
    * Get all of the values corresponding to a key.
    */
   /**
    * Set all of the values for a key. Clears any existing values for that
    * key, if they have been set.
+   * 
+   * The operation can fail if the name or value arguments are invalid, or if
+   * the name is forbidden.
    */
   /**
    * Delete all values for a key. Does nothing if no values for the key
@@ -26,6 +35,9 @@ export namespace WasiHttpTypes {
   /**
    * Append a value for a key. Does not change or delete any existing
    * values for that key.
+   * 
+   * The operation can fail if the name or value arguments are invalid, or if
+   * the name is forbidden.
    */
   /**
    * Retrieve the full set of keys and values in the Fields. Like the
@@ -65,11 +77,98 @@ export namespace WasiHttpTypes {
    */
   /**
    * Construct a new `outgoing-request`.
+   * 
+   * * `method` represents the HTTP Method for the Request.
+   * * `path-with-query` is the combination of the HTTP Path and Query for
+   * the Request. When `none`, this represents an empty Path and empty
+   * Query.
+   * * `scheme` is the HTTP Related Scheme for the Request. When `none`,
+   * the implementation may choose an appropriate default scheme.
+   * * `authority` is the HTTP Authority for the Request. A value of `none`
+   * may be used with Related Schemes which do not require an Authority.
+   * The HTTP and HTTPS schemes always require an authority.
+   * * `headers` is the HTTP Headers for the Request.
+   * 
+   * It is possible to construct, or manipulate with the accessor functions
+   * below, an `outgoing-request` with an invalid combination of `scheme`
+   * and `authority`, or `headers` which are not permitted to be sent.
+   * It is the obligation of the `outgoing-handler.handle` implementation
+   * to reject invalid constructions of `outgoing-request`.
    */
   export { OutgoingRequest };
   /**
-   * Will return the outgoing-body child at most once. If called more than
-   * once, subsequent calls will return error.
+   * Returns the resource corresponding to the outgoing Body for this
+   * Request.
+   * 
+   * Returns success on the first call: the `outgoing-body` resource for
+   * this `outgoing-response` can be retrieved at most once. Subsequent
+   * calls will return error.
+   */
+  /**
+   * Get the Method for the Request.
+   */
+  /**
+   * Set the Method for the Request.
+   */
+  /**
+   * Get the combination of the HTTP Path and Query for the Request.
+   * When `none`, this represents an empty Path and empty Query.
+   */
+  /**
+   * Set the combination of the HTTP Path and Query for the Request.
+   * When `none`, this represents an empty Path and empty Query.
+   */
+  /**
+   * Get the HTTP Related Scheme for the Request. When `none`, the
+   * implementation may choose an appropriate default scheme.
+   */
+  /**
+   * Set the HTTP Related Scheme for the Request. When `none`, the
+   * implementation may choose an appropriate default scheme.
+   */
+  /**
+   * Get the HTTP Authority for the Request. A value of `none` may be used
+   * with Related Schemes which do not require an Authority. The HTTP and
+   * HTTPS schemes always require an authority.
+   */
+  /**
+   * Set the HTTP Authority for the Request. A value of `none` may be used
+   * with Related Schemes which do not require an Authority. The HTTP and
+   * HTTPS schemes always require an authority.
+   */
+  /**
+   * Get the headers associated with the Request.
+   * 
+   * This headers resource is a child: it must be dropped before the parent
+   * `outgoing-request` is dropped, or its ownership is transfered to
+   * another component by e.g. `outgoing-handler.handle`.
+   */
+  /**
+   * Construct a default `request-options` value.
+   */
+  export { RequestOptions };
+  /**
+   * The timeout for the initial connect to the HTTP Server.
+   */
+  /**
+   * Set the timeout for the initial connect to the HTTP Server. An error
+   * return value indicates that this timeout is not supported.
+   */
+  /**
+   * The timeout for receiving the first byte of the Response body.
+   */
+  /**
+   * Set the timeout for receiving the first byte of the Response body. An
+   * error return value indicates that this timeout is not supported.
+   */
+  /**
+   * The timeout for receiving subsequent chunks of bytes in the Response
+   * body stream.
+   */
+  /**
+   * Set the timeout for receiving subsequent chunks of bytes in the Response
+   * body stream. An error return value indicates that this timeout is not
+   * supported.
    */
   /**
    * Set the value of the `response-outparam` to either send a response,
@@ -78,6 +177,9 @@ export namespace WasiHttpTypes {
    * This method consumes the `response-outparam` to ensure that it is
    * called at most once. If it is never called, the implementation
    * will respond with an error.
+   * 
+   * The user may provide an `error` to `response` to allow the
+   * implementation determine how to respond with an HTTP error response.
    */
   export { ResponseOutparam };
   /**
@@ -128,20 +230,35 @@ export namespace WasiHttpTypes {
    * 
    * The `result` represents that either the HTTP Request or Response body,
    * as well as any trailers, were received successfully, or that an error
-   * occured receiving them.
+   * occured receiving them. The optional `trailers` indicates whether or not
+   * trailers were present in the body.
    */
   /**
    * Construct an `outgoing-response`.
+   * 
+   * * `status-code` is the HTTP Status Code for the Response.
+   * * `headers` is the HTTP Headers for the Response.
    */
   export { OutgoingResponse };
+  /**
+   * Get the HTTP Status Code for the Response.
+   */
+  /**
+   * Set the HTTP Status Code for the Response.
+   */
+  /**
+   * Get the headers associated with the Request.
+   * 
+   * This headers resource is a child: it must be dropped before the parent
+   * `outgoing-request` is dropped, or its ownership is transfered to
+   * another component by e.g. `outgoing-handler.handle`.
+   */
   /**
    * Returns the resource corresponding to the outgoing Body for this Response.
    * 
    * Returns success on the first call: the `outgoing-body` resource for
-   * this `outgoing-response` can be retrieved at most once. Sunsequent
+   * this `outgoing-response` can be retrieved at most once. Subsequent
    * calls will return error.
-   * 
-   * FIXME: rename this method to `body`.
    */
   /**
    * Returns a stream for writing the body contents.
@@ -184,6 +301,8 @@ export namespace WasiHttpTypes {
    * `output-stream` child.
    */
 }
+import type { Duration } from '../interfaces/wasi-clocks-monotonic-clock.js';
+export { Duration };
 import type { InputStream } from '../interfaces/wasi-io-streams.js';
 export { InputStream };
 import type { OutputStream } from '../interfaces/wasi-io-streams.js';
@@ -262,6 +381,17 @@ export interface ErrorUnexpectedError {
   val: string,
 }
 /**
+ * This tyep enumerates the different kinds of errors that may occur when
+ * setting or appending to a `fields` resource.
+ */
+export type HeaderError = HeaderErrorInvalidSyntax | HeaderErrorForbidden;
+export interface HeaderErrorInvalidSyntax {
+  tag: 'invalid-syntax',
+}
+export interface HeaderErrorForbidden {
+  tag: 'forbidden',
+}
+/**
  * Field keys are always strings.
  */
 export type FieldKey = string;
@@ -280,58 +410,32 @@ export type Headers = Fields;
  */
 export type Trailers = Fields;
 /**
- * Parameters for making an HTTP Request. Each of these parameters is an
- * optional timeout, with the unit in milliseconds, applicable to the
- * transport layer of the HTTP protocol.
- * 
- * These timeouts are separate from any the user may use to bound a
- * blocking call to `wasi:io/poll.poll-list`.
- * 
- * FIXME: Make this a resource to allow it to be optionally extended by
- * future evolution of the standard and/or other interfaces at some later
- * date?
- */
-export interface RequestOptions {
-  /**
-   * The timeout for the initial connect to the HTTP Server.
-   */
-  connectTimeoutMs?: number,
-  /**
-   * The timeout for receiving the first byte of the Response body.
-   */
-  firstByteTimeoutMs?: number,
-  /**
-   * The timeout for receiving subsequent chunks of bytes in the Response
-   * body stream.
-   */
-  betweenBytesTimeoutMs?: number,
-}
-/**
  * This type corresponds to the HTTP standard Status Code.
  */
 export type StatusCode = number;
+export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
 export class OutgoingRequest {
   constructor(method: Method, pathWithQuery: string | undefined, scheme: Scheme | undefined, authority: string | undefined, headers: Headers)
-  write(): OutgoingBody;
-}
-
-export class IncomingBody {
-  stream(): InputStream;
-  static finish(this_: IncomingBody): FutureTrailers;
+  body(): OutgoingBody;
+  method(): Method;
+  setMethod(method: Method): void;
+  pathWithQuery(): string | undefined;
+  setPathWithQuery(pathWithQuery: string | undefined): void;
+  scheme(): Scheme | undefined;
+  setScheme(scheme: Scheme | undefined): void;
+  authority(): string | undefined;
+  setAuthority(authority: string | undefined): void;
+  headers(): Headers;
 }
 
 export class ResponseOutparam {
   static set(param: ResponseOutparam, response: Result<OutgoingResponse, Error>): void;
 }
 
-export class OutgoingResponse {
-  constructor(statusCode: StatusCode, headers: Headers)
-  write(): OutgoingBody;
-}
-
 export class Fields {
-  constructor(entries: [FieldKey, FieldValue][])
+  constructor()
+  static fromList(entries: [FieldKey, FieldValue][]): Fields;
   get(name: FieldKey): FieldValue[];
   set(name: FieldKey, value: FieldValue[]): void;
   delete(name: FieldKey): void;
@@ -340,20 +444,43 @@ export class Fields {
   clone(): Fields;
 }
 
+export class OutgoingResponse {
+  constructor(statusCode: StatusCode, headers: Headers)
+  statusCode(): StatusCode;
+  setStatusCode(statusCode: StatusCode): void;
+  headers(): Headers;
+  body(): OutgoingBody;
+}
+
+export class RequestOptions {
+  constructor()
+  connectTimeoutMs(): Duration | undefined;
+  setConnectTimeoutMs(ms: Duration | undefined): void;
+  firstByteTimeoutMs(): Duration | undefined;
+  setFirstByteTimeoutMs(ms: Duration | undefined): void;
+  betweenBytesTimeoutMs(): Duration | undefined;
+  setBetweenBytesTimeoutMs(ms: Duration | undefined): void;
+}
+
+export class OutgoingBody {
+  write(): OutputStream;
+  static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
+}
+
+export class FutureIncomingResponse {
+  subscribe(): Pollable;
+  get(): Result<Result<IncomingResponse, Error>, void> | undefined;
+}
+
 export class FutureTrailers {
   subscribe(): Pollable;
-  get(): Result<Trailers, Error> | undefined;
+  get(): Result<Trailers | undefined, Error> | undefined;
 }
 
 export class IncomingResponse {
   status(): StatusCode;
   headers(): Headers;
   consume(): IncomingBody;
-}
-
-export class OutgoingBody {
-  write(): OutputStream;
-  static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
 }
 
 export class IncomingRequest {
@@ -365,7 +492,7 @@ export class IncomingRequest {
   consume(): IncomingBody;
 }
 
-export class FutureIncomingResponse {
-  subscribe(): Pollable;
-  get(): Result<Result<IncomingResponse, Error>, void> | undefined;
+export class IncomingBody {
+  stream(): InputStream;
+  static finish(this_: IncomingBody): FutureTrailers;
 }

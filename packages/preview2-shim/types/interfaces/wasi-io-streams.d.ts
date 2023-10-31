@@ -219,6 +219,10 @@ export namespace WasiIoStreams {
       tag: 'closed',
     }
     
+    export class Error {
+      toDebugString(): string;
+    }
+    
     export class OutputStream {
       checkWrite(): bigint;
       write(contents: Uint8Array): void;
@@ -230,10 +234,6 @@ export namespace WasiIoStreams {
       blockingWriteZeroesAndFlush(len: bigint): void;
       splice(src: InputStream, len: bigint): bigint;
       blockingSplice(src: InputStream, len: bigint): bigint;
-    }
-    
-    export class Error {
-      toDebugString(): string;
     }
     
     export class InputStream {

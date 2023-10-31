@@ -240,105 +240,6 @@ export namespace WasiFilesystemTypes {
    * Note: This is similar to `fchmodat` in POSIX.
    */
   /**
-   * Request a shared advisory lock for an open file.
-   * 
-   * This requests a *shared* lock; more than one shared lock can be held for
-   * a file at the same time.
-   * 
-   * If the open file has an exclusive lock, this function downgrades the lock
-   * to a shared lock. If it has a shared lock, this function has no effect.
-   * 
-   * This requests an *advisory* lock, meaning that the file could be accessed
-   * by other programs that don't hold the lock.
-   * 
-   * It is unspecified how shared locks interact with locks acquired by
-   * non-WASI programs.
-   * 
-   * This function blocks until the lock can be acquired.
-   * 
-   * Not all filesystems support locking; on filesystems which don't support
-   * locking, this function returns `error-code::unsupported`.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_SH)` in Unix.
-   */
-  /**
-   * Request an exclusive advisory lock for an open file.
-   * 
-   * This requests an *exclusive* lock; no other locks may be held for the
-   * file while an exclusive lock is held.
-   * 
-   * If the open file has a shared lock and there are no exclusive locks held
-   * for the file, this function upgrades the lock to an exclusive lock. If the
-   * open file already has an exclusive lock, this function has no effect.
-   * 
-   * This requests an *advisory* lock, meaning that the file could be accessed
-   * by other programs that don't hold the lock.
-   * 
-   * It is unspecified whether this function succeeds if the file descriptor
-   * is not opened for writing. It is unspecified how exclusive locks interact
-   * with locks acquired by non-WASI programs.
-   * 
-   * This function blocks until the lock can be acquired.
-   * 
-   * Not all filesystems support locking; on filesystems which don't support
-   * locking, this function returns `error-code::unsupported`.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_EX)` in Unix.
-   */
-  /**
-   * Request a shared advisory lock for an open file.
-   * 
-   * This requests a *shared* lock; more than one shared lock can be held for
-   * a file at the same time.
-   * 
-   * If the open file has an exclusive lock, this function downgrades the lock
-   * to a shared lock. If it has a shared lock, this function has no effect.
-   * 
-   * This requests an *advisory* lock, meaning that the file could be accessed
-   * by other programs that don't hold the lock.
-   * 
-   * It is unspecified how shared locks interact with locks acquired by
-   * non-WASI programs.
-   * 
-   * This function returns `error-code::would-block` if the lock cannot be
-   * acquired.
-   * 
-   * Not all filesystems support locking; on filesystems which don't support
-   * locking, this function returns `error-code::unsupported`.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_SH | LOCK_NB)` in Unix.
-   */
-  /**
-   * Request an exclusive advisory lock for an open file.
-   * 
-   * This requests an *exclusive* lock; no other locks may be held for the
-   * file while an exclusive lock is held.
-   * 
-   * If the open file has a shared lock and there are no exclusive locks held
-   * for the file, this function upgrades the lock to an exclusive lock. If the
-   * open file already has an exclusive lock, this function has no effect.
-   * 
-   * This requests an *advisory* lock, meaning that the file could be accessed
-   * by other programs that don't hold the lock.
-   * 
-   * It is unspecified whether this function succeeds if the file descriptor
-   * is not opened for writing. It is unspecified how exclusive locks interact
-   * with locks acquired by non-WASI programs.
-   * 
-   * This function returns `error-code::would-block` if the lock cannot be
-   * acquired.
-   * 
-   * Not all filesystems support locking; on filesystems which don't support
-   * locking, this function returns `error-code::unsupported`.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_EX | LOCK_NB)` in Unix.
-   */
-  /**
-   * Release a shared or exclusive lock on an open file.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_UN)` in Unix.
-   */
-  /**
    * Test whether two descriptors refer to the same filesystem object.
    * 
    * In POSIX, this corresponds to testing whether the two descriptors have the
@@ -836,11 +737,6 @@ export class Descriptor {
   unlinkFileAt(path: string): void;
   changeFilePermissionsAt(pathFlags: PathFlags, path: string, modes: Modes): void;
   changeDirectoryPermissionsAt(pathFlags: PathFlags, path: string, modes: Modes): void;
-  lockShared(): void;
-  lockExclusive(): void;
-  tryLockShared(): void;
-  tryLockExclusive(): void;
-  unlock(): void;
   isSameObject(other: Descriptor): boolean;
   metadataHash(): MetadataHashValue;
   metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;

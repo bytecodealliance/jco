@@ -2,6 +2,7 @@
 /// HTTP Requests and Responses, both incoming and outgoing, as well as
 /// their headers, trailers, and bodies.
 interface types {
+  use wasi:clocks/monotonic-clock@0.2.0-rc-2023-11-05.{duration};
   use wasi:io/streams@0.2.0-rc-2023-11-05.{input-stream, output-stream};
   use wasi:io/poll@0.2.0-rc-2023-11-05.{pollable};
 
@@ -36,6 +37,13 @@ interface types {
     unexpected-error(string)
   }
 
+  /// This tyep enumerates the different kinds of errors that may occur when
+  /// setting or appending to a `fields` resource.
+  variant header-error {
+    invalid-syntax,
+    forbidden,
+  }
+
   /// Field keys are always strings.
   type field-key = string;
 
@@ -49,6 +57,9 @@ interface types {
   /// Headers and Trailers.
   resource fields {
 
+    /// Construct an empty HTTP Fields.
+    constructor();
+
     /// Construct an HTTP Fields.
     ///
     /// The list represents each key-value pair in the Fields. Keys
@@ -59,14 +70,22 @@ interface types {
     /// Value, represented as a list of bytes. In a valid Fields, all keys
     /// and values are valid UTF-8 strings. However, values are not always
     /// well-formed, so they are represented as a raw list of bytes.
-    constructor(entries: list<tuple<field-key,field-value>>);
+    ///
+    /// An error result will be returned if any header or value was
+    /// syntactically invalid, or if a header was forbidden.
+    from-list: static func(
+      entries: list<tuple<field-key,field-value>>
+    ) -> result<fields, header-error>;
 
     /// Get all of the values corresponding to a key.
     get: func(name: field-key) -> list<field-value>;
 
     /// Set all of the values for a key. Clears any existing values for that
     /// key, if they have been set.
-    set: func(name: field-key, value: list<field-value>);
+    ///
+    /// The operation can fail if the name or value arguments are invalid, or if
+    /// the name is forbidden.
+    set: func(name: field-key, value: list<field-value>) -> result<_, header-error>;
 
     /// Delete all values for a key. Does nothing if no values for the key
     /// exist.
@@ -74,7 +93,10 @@ interface types {
 
     /// Append a value for a key. Does not change or delete any existing
     /// values for that key.
-    append: func(name: field-key, value: field-value);
+    ///
+    /// The operation can fail if the name or value arguments are invalid, or if
+    /// the name is forbidden.
+    append: func(name: field-key, value: field-value) -> result<_, header-error>;
 
 
     /// Retrieve the full set of keys and values in the Fields. Like the
@@ -127,17 +149,73 @@ interface types {
   resource outgoing-request {
 
     /// Construct a new `outgoing-request`.
+    ///
+    /// * `method` represents the HTTP Method for the Request.
+    /// * `path-with-query` is the combination of the HTTP Path and Query for
+    ///    the Request. When `none`, this represents an empty Path and empty
+    ///    Query.
+    /// * `scheme` is the HTTP Related Scheme for the Request. When `none`,
+    ///    the implementation may choose an appropriate default scheme.
+    /// * `authority` is the HTTP Authority for the Request. A value of `none`
+    ///    may be used with Related Schemes which do not require an Authority.
+    ///    The HTTP and HTTPS schemes always require an authority.
+    /// * `headers` is the HTTP Headers for the Request.
+    ///
+    /// It is possible to construct, or manipulate with the accessor functions
+    /// below, an `outgoing-request` with an invalid combination of `scheme`
+    /// and `authority`, or `headers` which are not permitted to be sent.
+    /// It is the obligation of the `outgoing-handler.handle` implementation
+    /// to reject invalid constructions of `outgoing-request`.
     constructor(
       method: method,
       path-with-query: option<string>,
       scheme: option<scheme>,
       authority: option<string>,
-      headers: borrow<headers>
+      headers: headers
     );
 
-    /// Will return the outgoing-body child at most once. If called more than
-    /// once, subsequent calls will return error.
-    write: func() -> result<outgoing-body>;
+    /// Returns the resource corresponding to the outgoing Body for this
+    /// Request.
+    ///
+    /// Returns success on the first call: the `outgoing-body` resource for
+    /// this `outgoing-response` can be retrieved at most once. Subsequent
+    /// calls will return error.
+    body: func() -> result<outgoing-body>;
+
+    /// Get the Method for the Request.
+    method: func() -> method;
+    /// Set the Method for the Request.
+    set-method: func(method: method);
+
+    /// Get the combination of the HTTP Path and Query for the Request.
+    /// When `none`, this represents an empty Path and empty Query.
+    path-with-query: func() -> option<string>;
+    /// Set the combination of the HTTP Path and Query for the Request.
+    /// When `none`, this represents an empty Path and empty Query.
+    set-path-with-query: func(path-with-query: option<string>);
+
+    /// Get the HTTP Related Scheme for the Request. When `none`, the
+    /// implementation may choose an appropriate default scheme.
+    scheme: func() -> option<scheme>;
+    /// Set the HTTP Related Scheme for the Request. When `none`, the
+    /// implementation may choose an appropriate default scheme.
+    set-scheme: func(scheme: option<scheme>);
+
+    /// Get the HTTP Authority for the Request. A value of `none` may be used
+    /// with Related Schemes which do not require an Authority. The HTTP and
+    /// HTTPS schemes always require an authority.
+    authority: func() -> option<string>;
+    /// Set the HTTP Authority for the Request. A value of `none` may be used
+    /// with Related Schemes which do not require an Authority. The HTTP and
+    /// HTTPS schemes always require an authority.
+    set-authority: func(authority: option<string>);
+
+    /// Get the headers associated with the Request.
+    ///
+    /// This headers resource is a child: it must be dropped before the parent
+    /// `outgoing-request` is dropped, or its ownership is transfered to
+    /// another component by e.g. `outgoing-handler.handle`.
+    headers: func() -> headers;
   }
 
   /// Parameters for making an HTTP Request. Each of these parameters is an
@@ -145,22 +223,33 @@ interface types {
   /// transport layer of the HTTP protocol.
   ///
   /// These timeouts are separate from any the user may use to bound a
-  /// blocking call to `wasi:io/poll.poll-list`.
-  ///
-  /// FIXME: Make this a resource to allow it to be optionally extended by
-  /// future evolution of the standard and/or other interfaces at some later
-  /// date?
-  record request-options {
+  /// blocking call to `wasi:io/poll.poll`.
+  resource request-options {
+    /// Construct a default `request-options` value.
+    constructor();
 
     /// The timeout for the initial connect to the HTTP Server.
-    connect-timeout-ms: option<u32>,
+    connect-timeout-ms: func() -> option<duration>;
+
+    /// Set the timeout for the initial connect to the HTTP Server. An error
+    /// return value indicates that this timeout is not supported.
+    set-connect-timeout-ms: func(ms: option<duration>) -> result;
 
     /// The timeout for receiving the first byte of the Response body.
-    first-byte-timeout-ms: option<u32>,
+    first-byte-timeout-ms: func() -> option<duration>;
+
+    /// Set the timeout for receiving the first byte of the Response body. An
+    /// error return value indicates that this timeout is not supported.
+    set-first-byte-timeout-ms: func(ms: option<duration>) -> result;
 
     /// The timeout for receiving subsequent chunks of bytes in the Response
     /// body stream.
-    between-bytes-timeout-ms: option<u32>
+    between-bytes-timeout-ms: func() -> option<duration>;
+
+    /// Set the timeout for receiving subsequent chunks of bytes in the Response
+    /// body stream. An error return value indicates that this timeout is not
+    /// supported.
+    set-between-bytes-timeout-ms: func(ms: option<duration>) -> result;
   }
 
   /// Represents the ability to send an HTTP Response.
@@ -176,6 +265,9 @@ interface types {
     /// This method consumes the `response-outparam` to ensure that it is
     /// called at most once. If it is never called, the implementation
     /// will respond with an error.
+    ///
+    /// The user may provide an `error` to `response` to allow the
+    /// implementation determine how to respond with an HTTP error response.
     set: static func(
       param: response-outparam,
       response: result<outgoing-response, error>,
@@ -251,24 +343,38 @@ interface types {
     ///
     /// The `result` represents that either the HTTP Request or Response body,
     /// as well as any trailers, were received successfully, or that an error
-    /// occured receiving them.
-    get: func() -> option<result<trailers, error>>;
+    /// occured receiving them. The optional `trailers` indicates whether or not
+    /// trailers were present in the body.
+    get: func() -> option<result<option<trailers>, error>>;
   }
 
   /// Represents an outgoing HTTP Response.
   resource outgoing-response {
 
     /// Construct an `outgoing-response`.
-    constructor(status-code: status-code, headers: borrow<headers>);
+    ///
+    /// * `status-code` is the HTTP Status Code for the Response.
+    /// * `headers` is the HTTP Headers for the Response.
+    constructor(status-code: status-code, headers: headers);
+
+    /// Get the HTTP Status Code for the Response.
+    status-code: func() -> status-code;
+    /// Set the HTTP Status Code for the Response.
+    set-status-code: func(status-code: status-code);
+
+    /// Get the headers associated with the Request.
+    ///
+    /// This headers resource is a child: it must be dropped before the parent
+    /// `outgoing-request` is dropped, or its ownership is transfered to
+    /// another component by e.g. `outgoing-handler.handle`.
+    headers: func() -> headers;
 
     /// Returns the resource corresponding to the outgoing Body for this Response.
     ///
     /// Returns success on the first call: the `outgoing-body` resource for
-    /// this `outgoing-response` can be retrieved at most once. Sunsequent
+    /// this `outgoing-response` can be retrieved at most once. Subsequent
     /// calls will return error.
-    ///
-    /// FIXME: rename this method to `body`.
-    write: func() -> result<outgoing-body>;
+    body: func() -> result<outgoing-body>;
   }
 
   /// Represents an outgoing HTTP Request or Response's Body.

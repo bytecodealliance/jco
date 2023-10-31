@@ -1,5 +1,18 @@
 export namespace WasiIoPoll {
   /**
+   * Return the readiness of a pollable. This function never blocks.
+   * 
+   * Returns `true` when the pollable is ready, and `false` otherwise.
+   */
+  export { Pollable };
+  /**
+   * `block` returns immediately if the pollable is ready, and otherwise
+   * blocks until ready.
+   * 
+   * This function is equivalent to calling `poll.poll` on a list
+   * containing only this pollable.
+   */
+  /**
    * Poll for completion on a set of pollables.
    * 
    * This function takes a list of pollables, which identify I/O sources of
@@ -19,12 +32,10 @@ export namespace WasiIoPoll {
    * the pollables has an error, it is indicated by marking the source as
    * being reaedy for I/O.
    */
-  export function pollList(in_: Pollable[]): Uint32Array;
-  /**
-   * Poll for completion on a single pollable.
-   * 
-   * This function is similar to `poll-list`, but operates on only a single
-   * pollable. When it returns, the handle is ready for I/O.
-   */
-  export function pollOne(in_: Pollable): void;
+  export function poll(in_: Pollable[]): Uint32Array;
+}
+
+export class Pollable {
+  ready(): boolean;
+  block(): void;
 }
