@@ -1223,7 +1223,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwrite!(
                                 self.src,
                                 "const {rsc} = new.target === import_{prefix}{upper_camel} ? this : Object.create(import_{prefix}{upper_camel}.prototype);
-                                 Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
+                                 Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, configurable: true, value: {handle} }});
                                 "
                             );
 
