@@ -160,7 +160,7 @@ suite("Node.js Preview2", () => {
     ok(responseBody.includes("WebAssembly"));
   });
 
-  suite("Sockets", async () => {
+  suite("Sockets::TCP", async () => {
     test("sockets.instanceNetwork() should be a singleton", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network1 = sockets.instanceNetwork.instanceNetwork();
@@ -222,7 +222,7 @@ suite("Node.js Preview2", () => {
       const localAddress = {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
-          address: [0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0001],
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
           port: 0,
         },
       };
@@ -234,7 +234,7 @@ suite("Node.js Preview2", () => {
       deepEqual(tcpSocket.localAddress(), {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
-          address: [0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0001],
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
           port: 0,
         },
       });
@@ -362,6 +362,52 @@ suite("Node.js Preview2", () => {
           port: 0,
         },
       });
+    });
+  });
+
+  suite("Sockets::UDP", async () => {
+    test("sockets.udpCreateSocket()", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const socket = sockets.udpCreateSocket.createUdpSocket(
+        sockets.network.IpAddressFamily.ipv4
+      );
+      notEqual(socket, null);
+
+      throws(
+        () => {
+          sockets.udpCreateSocket.createUdpSocket("xyz");
+        },
+        {
+          name: "Error",
+          code: sockets.network.errorCode.notSupported,
+        }
+      );
+    });
+    test("udp.bind(): should bind to a valid ipv4 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const socket = sockets.udpCreateSocket.createUdpSocket(
+        sockets.network.IpAddressFamily.ipv4
+      );
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      socket.startBind(network, localAddress);
+      socket.finishBind();
+
+      equal(socket.network.id, network.id);
+      deepEqual(socket.localAddress(), {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      });
+      equal(socket.addressFamily(), "ipv4");
     });
   });
 });

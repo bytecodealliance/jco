@@ -24,7 +24,8 @@ const {
 } = process.binding("tcp_wrap");
 const { ShutdownWrap } = process.binding("stream_wrap");
 import { isIP, Socket as NodeSocket } from "node:net";
-import { EventEmitter } from "node:events";
+
+import { serializeIpAddress, deserializeIpAddress } from "./socket-common.js";
 
 const ShutdownType = {
   receive: "receive",
@@ -37,50 +38,6 @@ const SocketState = {
   Connection: "Connection",
   Listener: "Listener",
 };
-
-function noop() {}
-
-function tupleToIPv6(arr) {
-  if (arr.length !== 8) {
-    return null;
-  }
-  return arr.map((segment) => segment.toString(16)).join(":");
-}
-
-function tupleToIpv4(arr) {
-  if (arr.length !== 4) {
-    return null;
-  }
-  return arr.map((segment) => segment.toString(10)).join(".");
-}
-
-function ipv6ToTuple(ipv6) {
-  return ipv6.split(":").map((segment) => parseInt(segment, 16));
-}
-
-function ipv4ToTuple(ipv4) {
-  return ipv4.split(".").map((segment) => parseInt(segment, 10));
-}
-
-function serializeIpAddress(addr, family) {
-  let { address } = addr.val;
-  if (family.toLocaleLowerCase() === "ipv4") {
-    address = tupleToIpv4(address);
-  } else if (family.toLocaleLowerCase() === "ipv6") {
-    address = tupleToIPv6(address);
-  }
-  return address;
-}
-
-function deserializeIpAddress(addr, family) {
-  let address = [];
-  if (family.toLocaleLowerCase() === "ipv4") {
-    address = ipv4ToTuple(addr);
-  } else if (family.toLocaleLowerCase() === "ipv6") {
-    address = ipv6ToTuple(addr);
-  }
-  return address;
-}
 
 // TODO: implement would-block exceptions
 // TODO: implement concurrency-conflict exceptions
@@ -224,11 +181,12 @@ export class TcpSocketImpl {
 
     const { localAddress, localPort, family } = this.#socketOptions;
     assert(isIP(localAddress) === 0, "address-not-bindable");
-
+    
     let err = null;
     if (family.toLocaleLowerCase() === "ipv4") {
       err = this.#serverHandle.bind(localAddress, localPort);
     } else if (family.toLocaleLowerCase() === "ipv6") {
+      console.log(`[tcp] xxxx bind socket to ${localAddress}:${localPort}`);
       err = this.#serverHandle.bind6(localAddress, localPort);
     }
 
@@ -451,7 +409,7 @@ export class TcpSocketImpl {
    * @throws {not-supported} (get/set) `this` socket is an IPv4 socket.
    */
   ipv6Only() {
-    console.log(`[tcp] ipv6 only socket ${this.id}`);
+    console.log(`[tcp] ipv6 only socket`);
 
     return this.#ipv6Only;
   }

@@ -31,7 +31,7 @@ client.finishConnect();
 
 setTimeout(() => {
   // const [socket, input, output] = server.accept();
-  // output.write(new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]));
+  // output.write('hello world');
   // const buff = input.read(2);
   // console.log(`[wasi-sockets] Server received: ${buff}`);
 
