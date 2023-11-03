@@ -13,8 +13,9 @@
 
 import { streams } from "../common/io.js";
 const { InputStream, OutputStream } = streams;
-
 import { assert } from "../common/assert.js";
+
+const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 
 // See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
 const {
@@ -575,6 +576,12 @@ export class TcpSocketImpl {
     const err = this._handle.shutdown(req);
 
     assert(err === 1, "invalid-state");
+  }
+
+  [symbolDispose] () {
+    console.log(`[tcp] dispose socket`);
+    this.#serverHandle.close();
+    this.#clientHandle.close();
   }
 
   server() {

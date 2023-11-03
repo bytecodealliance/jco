@@ -17,7 +17,6 @@ const { UDP, constants: UDPConstants } = process.binding("udp_wrap");
 export class UdpSocketImpl {
   /** @type {Socket} */ #clientHandle = null;
   /** @type {Socket} */ #serverHandle = null;
-
   /** @type {Network} */ network = null;
 
   #isBound = false;
@@ -25,7 +24,7 @@ export class UdpSocketImpl {
 
   /**
    * @param {IpAddressFamily} addressFamily
-   * @returns
+   * @returns {void}
    */
   constructor(addressFamily) {
     this.#socketOptions.family = addressFamily;
@@ -87,7 +86,15 @@ export class UdpSocketImpl {
    * @throws {invalid-argument} The socket is already bound to a different network. The `network` passed to `connect` must be identical to the one passed to `bind`.
    */
   startConnect(network, remoteAddress) {
-    throw new Error("Not implemented");
+    const address = serializeIpAddress(
+      remoteAddress,
+      this.#socketOptions.family
+    );
+
+    const { port } = remoteAddress.val;
+    this.#socketOptions.remoteAddress = address;
+    this.#socketOptions.remotePort = port;
+    this.network = network;
   }
 
   /**
@@ -98,7 +105,8 @@ export class UdpSocketImpl {
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    */
   finishConnect() {
-    throw new Error("Not implemented");
+    const { remoteAddress, remotePort } = this.#socketOptions;
+    this.#clientHandle.connect(remoteAddress, remotePort);
   }
 
   /**
@@ -245,5 +253,18 @@ export class UdpSocketImpl {
    */
   subscribe() {
     throw new Error("Not implemented");
+  }
+
+  [Symbol.dispose] () {
+    console.log(`[udp] dispose socket`);
+    this.#clientHandle.close();
+    this.#serverHandle.close();
+  }
+
+  client() {
+    return this.#clientHandle;
+  }
+  server() {
+    return this.#serverHandle;
   }
 }
