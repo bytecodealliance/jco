@@ -1,9 +1,8 @@
 import { argv, env, cwd } from 'node:process';
-import { streams } from '../common/io.js';
+import { streams, _streamTypes, _inputStreamCreate, _outputStreamCreate } from '../io/worker-io.js';
 const { InputStream, OutputStream } = streams;
 
 let _env = Object.entries(env), _args = argv.slice(1), _cwd = cwd();
-const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 
 export const environment = {
   getEnvironment () {
@@ -23,37 +22,9 @@ export const exit = {
   }
 };
 
-const stdinStream = new InputStream({
-  blockingRead (_len) {
-    // TODO
-  },
-  subscribe () {
-    // TODO
-  },
-  [symbolDispose] () {
-    // TODO
-  }
-});
-const stdoutStream = new OutputStream({
-  write (contents) {
-    process.stdout.write(contents);
-  },
-  blockingFlush () {
-  },
-  [symbolDispose] () {
-  }
-});
-const stderrStream = new OutputStream({
-  write (contents) {
-    process.stderr.write(contents);
-  },
-  blockingFlush () {
-
-  },
-  [symbolDispose] () {
-
-  }
-});
+const stdinStream = _inputStreamCreate(_streamTypes.STDIN);
+const stdoutStream = _outputStreamCreate(_streamTypes.STDOUT);
+const stderrStream = _outputStreamCreate(_streamTypes.STDERR);
 
 export const stdin = {
   InputStream,

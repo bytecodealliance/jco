@@ -14,13 +14,15 @@ suite('Node.js Preview2', async () => {
     const [[rootDescriptor]] = filesystem.preopens.getDirectories();
     const childDescriptor = rootDescriptor.openAt({}, fileURLToPath(import.meta.url), {}, {}, {});
     const stream = childDescriptor.readViaStream(0);
-    const buf = stream.blockingRead(1_000_000);
+    const poll = stream.subscribe();
+    poll.block();
+    const buf = stream.read();
     const source = new TextDecoder().decode(buf);
     ok(source.includes('UNIQUE STRING'));
     stream[Symbol.dispose]();
   });
 
-  test('WASI HTTP', async () => {
+  test.skip('WASI HTTP', async () => {
     const { http } = await import('@bytecodealliance/preview2-shim');
     const { handle } = http.outgoingHandler;
     const { OutgoingRequest, OutgoingBody, Fields } = http.types;

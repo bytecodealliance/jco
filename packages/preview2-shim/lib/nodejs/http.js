@@ -1,6 +1,4 @@
-import { streams } from '../common/io.js';
-import { fileURLToPath } from 'node:url';
-import { createSyncFn } from '../synckit/index.js';
+import { streams } from '../io/worker-io.js';
 
 const { InputStream, OutputStream } = streams;
 
@@ -10,22 +8,6 @@ const { InputStream, OutputStream } = streams;
  * @typedef {import("../../types/interfaces/wasi-http-types").Scheme} Scheme
  * @typedef {import("../../types/interfaces/wasi-http-types").Error} HttpError
 */
-
-const workerPath = fileURLToPath(new URL('../common/make-request.js', import.meta.url));
-
-function send(req) {
-  const syncFn = createSyncFn(workerPath);
-  let rawResponse = syncFn(req);
-  let response = JSON.parse(rawResponse);
-  if (response.status) {
-    return {
-      ...response,
-      body: response.body ? Buffer.from(response.body, 'base64') : undefined,
-    };
-  }
-  // HttpError
-  throw { tag: 'unexpected-error', val: response.message };
-}
 
 function combineChunks (chunks) {
   if (chunks.length === 0)

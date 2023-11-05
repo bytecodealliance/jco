@@ -1,0 +1,331 @@
+import { runAsWorker } from '../synckit/index.js';
+import * as calls from './calls.js';
+import * as streamTypes from './stream-types.js';
+import * as fs from 'node:fs';
+
+let streamCnt = 0, pollCnt = 0;
+
+function trap () {
+  // TODO: figure out what a trap actually is properly
+  throw new Error('Internal error: trapped');
+}
+
+/** @type {Map<number, Promise<void>>} */
+const unfinishedPolls = new Map();
+
+/** @type {Map<number, { flushPromise: Promise<void> | null, stream: NodeJS.ReadableStream | NodeJS.WritableStream, blocksMainThread: bool }>} */
+const unfinishedStreams = new Map();
+
+/** #@type {Map<number, {}} */
+const errorResources = new Map();
+
+/**
+ * 
+ * @param {number} streamId 
+ * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream 
+ */
+function streamError (streamId, stream, err) {
+  // destroy the stream
+  if (stream.destroy && !stream.destroyed)
+    stream.destroy(err);
+  else
+    stream.end();
+  // we delete the stream from unfinishedStreams as it is now "finished" (closed)
+  unfinishedStreams.delete(streamId);
+  return {
+    tag: 'stream-error',
+    val: { tag: 'last-operation-failed', val: err }
+  };
+}
+
+/**
+ * 
+ * @param {number} streamId 
+ * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, flushPromise: Promise<void> | null, blocksMainThread: bool }}
+ */
+function getStreamOrThrow (streamId) {
+  const stream = unfinishedStreams.get(streamId);
+  // not in unfinished streams <=> closed
+  if (!stream)
+    throw { tag: 'stream-error', val: { tag: 'closed' } };
+  if (stream.stream.errored)
+    throw streamError(streamId, stream, stream.stream.errored);
+  if (stream.stream.closed) {
+    stream.destroy();
+    unfinishedStreams.delete(streamId);
+    throw { tag: 'closed' };
+  }
+  return stream;
+}
+
+/**
+ * @param {number} call
+ * @param {number | null} id
+ * @param {any} payload
+ * @returns {Promise<any>}
+ */
+function handle(call, id, payload) {
+  switch (call) {
+    // Specific call implementations
+    case calls.HTTP_CREATE_REQUEST: return createHttpRequest(payload);
+    
+    // Stdio
+    case calls.INPUT_STREAM_CREATE | streamTypes.STDIN:
+      unfinishedStreams.set(++streamCnt, {
+        flushPromise: null,
+        stream: process.stdin,
+        blocksMainThread: true
+      });
+      return streamCnt;
+    case calls.OUTPUT_STREAM_CREATE | streamTypes.STDOUT:
+      unfinishedStreams.set(++streamCnt, {
+        flushPromise: null,
+        stream: process.stdout,
+        blocksMainThread: true
+      });
+      return streamCnt;
+    case calls.OUTPUT_STREAM_CREATE | streamTypes.STDERR:
+      unfinishedStreams.set(++streamCnt, {
+        flushPromise: null,
+        stream: process.stderr,
+        blocksMainThread: true
+      });
+      return streamCnt;
+
+    // Filesystem
+    case calls.INPUT_STREAM_CREATE | streamTypes.FILE:
+      var { fd, offset } = payload;
+      var stream = fs.createReadStream(null, { fd, autoClose: false, start: Number(offset) });
+      unfinishedStreams.set(++streamCnt, {
+        flushPromise: null,
+        stream,
+        blocksMainThread: false
+      });
+      return streamCnt;
+    case calls.OUTPUT_STREAM_CREATE | streamTypes.FILE: throw new Error('todo: file write');
+
+    // Generic call implementations (streams + polls)
+    default: switch (call & calls.CALL_MASK) {
+      case calls.INPUT_STREAM_READ:
+        var { stream } = getStreamOrThrow(id);
+        return stream.read(Number(payload)) ?? new Uint8Array();
+      case calls.INPUT_STREAM_BLOCKING_READ:
+        var { stream } = getStreamOrThrow(id);
+        var resolve, reject;
+        return new Promise((_resolve, _reject) => {
+          stream
+            .once('readable', resolve = _resolve)
+            .once('error', reject = _reject);
+        }).then(() => {
+          stream.off('error', reject);
+          return stream.read(Number(payload)) || new Uint8Array();
+        }, err => {
+          stream.off('readable', resolve);
+          throw streamError(id, stream, err);
+        });
+      case calls.INPUT_STREAM_SKIP:
+        return handle(calls.INPUT_STREAM_READ | (call & calls.CALL_TYPE_MASK), id, new Uint8Array(Number(payload)));
+      case calls.INPUT_STREAM_BLOCKING_SKIP:
+        return handle(calls.INPUT_STREAM_BLOCKING_READ | (call & calls.CALL_TYPE_MASK), id, new Uint8Array(Number(payload)));
+      case calls.INPUT_STREAM_SUBSCRIBE:
+        return ++pollCnt;
+        var stream = unfinishedStreams.get(id)?.stream;
+        // already closed -> immediately return poll
+        if (!stream || stream.closed || stream.errored || stream.readable) return ++pollCnt;
+        // console.error(stream);
+        return ++pollCnt;
+        var resolve, reject;
+        unfinishedPolls.set(++pollCnt, new Promise((_resolve, _reject) => {
+          stream
+            .once('readable', resolve = _resolve)
+            .once('error', reject = _reject);
+        }).then(() => {
+          console.error('READABLE');
+          unfinishedPolls.delete(pollCnt);
+          stream.off('error', reject);
+        }, err => {
+          stream.off('readable', resolve);
+          unfinishedPolls.delete(pollCnt);
+          throw streamError(id, stream.stream, err);
+        }));
+        return pollCnt;
+      case calls.INPUT_STREAM_DROP:
+        var stream = unfinishedStreams.get(id);
+        // if already closed, no need to destroy
+        if (stream) {
+          unfinishedStreams.delete(id);
+        }
+        return;
+
+      case calls.OUTPUT_STREAM_CHECK_WRITE:
+        var { stream } = getStreamOrThrow(id);
+        return BigInt(stream.writableHighWaterMark - stream.writableLength);
+      case calls.OUTPUT_STREAM_WRITE:
+        var { stream } = getStreamOrThrow(id);
+        if (payload.byteLength > stream.writableHighWaterMark - stream.writableLength)
+          return trap();
+        return void stream.write(payload);
+      case calls.OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH:
+        var { stream, blocksMainThread } = getStreamOrThrow(id);
+        // if an existing flush, we will just be after that anyway
+        if (payload.byteLength > stream.writableHighWaterMark - stream.writableLength) {
+          throw streamError(id, stream, new Error('Cannot write more than permitted writable length'));
+        }
+        // if it blocks the main thread, we can't actually blocking write and flush
+        // instead we eagerly return. This is primarily for stdio. Note Node.js actually
+        // provides no blocking write to stdout mechanism on Windows.
+        // This can be resolved when components themselves move into workers
+        if (blocksMainThread) {
+          stream.write(payload);
+          return;
+        }
+        return new Promise((resolve, reject) => {
+          stream.write(payload, err => err
+              ? reject(streamError(id, stream, err))
+              : resolve(BigInt(payload.byteLength))
+          );
+        });
+      case calls.OUTPUT_STREAM_FLUSH:
+        var stream = getStreamOrThrow(id);
+        if (stream.flushPromise) return stream.flushPromise;
+        return stream.flushPromise = new Promise((resolve, reject) => {
+          stream.stream.write(new Uint8Array([]), err => err ? reject(streamError(id, stream, err)) : resolve());
+        }).then(() => {
+          stream.stream.flushPromise = null;
+        }, err => {
+          stream.stream.flushPromise = null;
+          throw streamError(id, stream.stream, err);
+        });
+      case calls.OUTPUT_STREAM_BLOCKING_FLUSH:
+        var { stream } = getStreamOrThrow(id);
+        return new Promise((resolve, reject) => {
+          stream.write(new Uint8Array([]), err => err ? reject(streamError(id, stream, err)) : resolve());
+        });
+      case calls.OUTPUT_STREAM_WRITE_ZEROES:
+        var { stream } = getStreamOrThrow(id);
+        return void stream.write(new Uint8Array(Number(payload)));
+      case calls.OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH:
+        var { stream } = getStreamOrThrow(id);
+        return new Promise((resolve, reject) => {
+          stream.write(new Uint8Array(Number(payload)), err => err
+            ? reject(streamError(id, stream, err))
+            : resolve(BigInt(payload.byteLength))
+          )
+        });
+      case calls.OUTPUT_STREAM_SPLICE:
+        var { stream: outputStream } = getStreamOrThrow(id);
+        var { stream: inputStream } = getStreamOrThrow(payload.src);
+        var bytesRemaining = Number(payload.len);
+        var chunk;
+        while (bytesRemaining > 0 && (chunk = inputStream.read(Math.min(outputstream.writableHighWaterMark - stream.writableLength, bytesRemaining)))) {
+          bytesRemaining -= chunk.byteLength;
+          outputStream.write(chunk);
+        }
+        // TODO: these error handlers should be attached, and only for the duration of the splice flush
+        if (inputStream.errored) {
+          streamError(payload.src, inputStream, inputStream.errored); // error ignored?
+          throw streamError(id, outputStream, inputStream.errored);
+        }
+        if (outputStream.errored) {
+          // input stream not closed?
+          throw streamError(id, outputStream, outputStream.errored);
+        }
+        return payload.len - BigInt(bytesRemaining);
+      case calls.OUTPUT_STREAM_SUBSCRIBE:
+        var stream = unfinishedStreams.get(id)?.stream;
+        // not added to unfinishedPolls => it's an immediately resolved poll
+        if (!stream || stream.closed || stream.errored || !stream.writableNeedDrain)
+          return ++pollCnt;
+        var resolve, reject;
+        unfinishedPolls.set(++pollCnt, new Promise((_resolve, _reject) => {
+          stream
+            .once('drain', resolve = _resolve)
+            .once('error', reject = _reject);
+        }).then(() => {
+          unfinishedPolls.delete(pollCnt);
+          stream.off('error', reject);
+        }, err => {
+          stream.off('drain', resolve);
+          unfinishedPolls.delete(pollCnt);
+          throw streamError(id, stream, err);
+        }));
+        return pollCnt;
+      case calls.OUTPUT_STREAM_BLOCKING_SPLICE:
+        var { stream: outputStream } = getStreamOrThrow(id);
+        var promise = Promise.resolve();
+        var resolve, reject;
+        if (outputStream.writableNeedDrain) {
+          promise = new Promise((_resolve, _reject) => {
+            stream
+              .once('drain', resolve = _resolve)
+              .once('error', reject = _reject);
+          }).then(
+            () => void stream.off('error', reject),
+            err => {
+              stream.off('drain', resolve);
+              throw streamError(err);
+            }
+          );
+        }
+        var { stream: inputStream } = getStreamOrThrow(payload.src);
+        if (!inputStream.readable) {
+          promise = promise
+            .then(() => new Promise((_resolve, _reject) => {
+              stream
+                .once('readable', resolve = _resolve)
+                .once('error', reject = _reject);
+            }).then(
+              () => void stream.off('error', reject),
+              err => {
+                stream.off('readable', resolve);
+                throw streamError(err);
+              }
+            ));
+        }
+        return promise.then(() => handle(calls.OUTPUT_STREAM_SPLICE, id, payload));
+      case calls.OUTPUT_STREAM_DROP:
+        var stream = unfinishedStreams.get(id);
+        if (stream) {
+          stream.end();
+          unfinishedStreams.delete(id);
+        }
+        return;
+
+      case calls.POLL_POLLABLE_READY:
+        return !unfinishedPolls.has(id);
+      case calls.POLL_POLLABLE_BLOCK:
+        return unfinishedPolls.get(id);
+      case calls.POLL_POLL_LIST:
+        const resolvedList = payload.filter(id => !unfinishedPolls.has(id));
+        if (resolvedList.length)
+          return resolvedList;
+        return Promise.race(
+          payload.map(id => unfinishedPolls.get(id)).filter(promise => promise)
+        );
+
+      default:
+        throw new Error(`Unknown call ${(call & calls.CALL_MASK) >> calls.CALL_SHIFT} with type ${call & calls.CALL_TYPE_MASK}`);
+    }
+  }
+}
+
+async function createHttpRequest (req) {
+  let headers = new Headers(req.headers);
+  const resp = await fetch(req.uri, {
+    method: req.method.toString(),
+    headers,
+    body: req.body && req.body.length > 0 ? req.body : undefined,
+    redirect: "manual",
+  });
+  let arrayBuffer = await resp.arrayBuffer();
+  return JSON.stringify({
+    status: resp.status,
+    headers: Array.from(resp.headers),
+    body:
+      arrayBuffer.byteLength > 0
+        ? Buffer.from(arrayBuffer).toString("base64")
+        : undefined,
+  });
+}
+
+runAsWorker(handle);

@@ -1,9 +1,10 @@
-import { streams } from '../common/io.js';
+import { streams, _inputStreamCreate, _outputStreamCreate } from '../io/worker-io.js';
+import * as streamTypes from '../io/stream-types.js';
 import { environment } from './cli.js';
 import { constants, readSync, openSync, opendirSync, closeSync, fstatSync, lstatSync, statSync, writeSync, mkdirSync } from 'node:fs';
 import { platform } from 'node:process';
 
-const { InputStream, OutputStream, Error: StreamError } = streams;
+const { Error: StreamError } = streams;
 
 const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 
@@ -50,66 +51,6 @@ export class FileSystem {
   constructor (preopens, environment) {
     const fs = this;
     this.cwd = environment.initialCwd();
-
-    class FileInputStream extends InputStream {
-      #hostFd;
-      #position;
-      constructor (hostFd, position) {
-        super({
-          blockingRead (len) {
-            const buf = new Uint8Array(Number(len));
-            try {
-              var bytesRead = readSync(self.#hostFd, buf, 0, buf.byteLength, self.#position);
-            } catch (e) {
-              throw { tag: 'last-operation-failed', val: new StreamError(e.message) };
-            }
-            self.#position += bytesRead;
-            if (bytesRead < buf.byteLength) {
-              if (bytesRead === 0)
-                throw { tag: 'closed' };
-              return new Uint8Array(buf.buffer, 0, bytesRead);
-            }
-            return buf;
-          },
-          subscribe () {
-            // TODO
-          },
-          [symbolDispose] () {
-            // TODO
-          }
-        });
-        const self = this;
-        this.#hostFd = hostFd;
-        this.#position = Number(position);
-      }
-    }
-    
-    class FileOutputStream extends OutputStream {
-      #hostFd;
-      #position;
-      constructor (hostFd, position) {
-        super({
-          write (contents) {
-            let totalWritten = 0;
-            while (totalWritten !== contents.byteLength) {
-              const bytesWritten = writeSync(self.#hostFd, contents, null, null, self.#position);
-              totalWritten += bytesWritten;
-              contents = new Uint8Array(contents.buffer, bytesWritten);
-            }
-            self.#position += contents.byteLength;
-          },
-          blockingFlush () {
-
-          },
-          drop () {
-
-          }
-        });
-        const self = this;
-        this.#hostFd = hostFd;
-        this.#position = Number(position);
-      }
-    }
     
     class DirectoryEntryStream {
       #dir;
@@ -156,6 +97,7 @@ export class FileSystem {
         descriptor.#hostPreopen = hostPreopen;
         return descriptor;
       }
+
       static _create (fd, fullPath) {
         const descriptor = new Descriptor();
         descriptor.#fd = fd;
@@ -166,17 +108,19 @@ export class FileSystem {
       constructor () {
         this.id = fs.descriptorCnt++;
       }
+
       readViaStream(offset) {
         if (this.#hostPreopen)
           throw { tag: 'last-operation-failed', val: new StreamError };
-        return new FileInputStream(this.#fd, offset);
+        return _inputStreamCreate(streamTypes.FILE, { fd: this.#fd, offset });
       }
+
       writeViaStream(offset) {
         if (this.#hostPreopen)
           throw 'is-directory';
-        return new FileOutputStream(this.#fd, offset);
+        return _outputStreamCreate(streamTypes.FILE, { fd: this.#fd, offset });
       }
-    
+
       appendViaStream() {
         console.log(`[filesystem] APPEND STREAM ${this.id}`);
       }
