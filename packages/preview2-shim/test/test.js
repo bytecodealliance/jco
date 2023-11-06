@@ -16,10 +16,11 @@ suite('Node.js Preview2', async () => {
     const stream = childDescriptor.readViaStream(0);
     const poll = stream.subscribe();
     poll.block();
-    const buf = stream.read();
+    const buf = stream.read(10000);
     const source = new TextDecoder().decode(buf);
     ok(source.includes('UNIQUE STRING'));
     stream[Symbol.dispose]();
+    childDescriptor[Symbol.dispose]();
   });
 
   test.skip('WASI HTTP', async () => {

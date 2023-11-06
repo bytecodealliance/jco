@@ -11,6 +11,7 @@ module.exports = {
     },
     "rules": {
       "no-sparse-arrays": 0,
-      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
+      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+      "no-redeclare": 0
     }
 };

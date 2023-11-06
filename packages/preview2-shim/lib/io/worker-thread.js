@@ -16,19 +16,13 @@ const unfinishedPolls = new Map();
 /** @type {Map<number, { flushPromise: Promise<void> | null, stream: NodeJS.ReadableStream | NodeJS.WritableStream, blocksMainThread: bool }>} */
 const unfinishedStreams = new Map();
 
-/** #@type {Map<number, {}} */
-const errorResources = new Map();
-
 /**
  * 
  * @param {number} streamId 
  * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream 
  */
 function streamError (streamId, stream, err) {
-  // destroy the stream
-  if (stream.destroy && !stream.destroyed)
-    stream.destroy(err);
-  else
+  if (stream.end)
     stream.end();
   // we delete the stream from unfinishedStreams as it is now "finished" (closed)
   unfinishedStreams.delete(streamId);
@@ -51,7 +45,6 @@ function getStreamOrThrow (streamId) {
   if (stream.stream.errored)
     throw streamError(streamId, stream, stream.stream.errored);
   if (stream.stream.closed) {
-    stream.destroy();
     unfinishedStreams.delete(streamId);
     throw { tag: 'closed' };
   }
@@ -96,10 +89,13 @@ function handle(call, id, payload) {
     case calls.INPUT_STREAM_CREATE | streamTypes.FILE:
       var { fd, offset } = payload;
       var stream = fs.createReadStream(null, { fd, autoClose: false, start: Number(offset) });
+      // Node.js needs an initial empty read to start actually reading
+      if (stream.read())
+        throw new Error('Internal error unexpected data');
       unfinishedStreams.set(++streamCnt, {
         flushPromise: null,
         stream,
-        blocksMainThread: false
+        blocksMainThread: false,
       });
       return streamCnt;
     case calls.OUTPUT_STREAM_CREATE | streamTypes.FILE: throw new Error('todo: file write');
@@ -110,51 +106,41 @@ function handle(call, id, payload) {
         var { stream } = getStreamOrThrow(id);
         return stream.read(Number(payload)) ?? new Uint8Array();
       case calls.INPUT_STREAM_BLOCKING_READ:
-        var { stream } = getStreamOrThrow(id);
-        var resolve, reject;
-        return new Promise((_resolve, _reject) => {
-          stream
-            .once('readable', resolve = _resolve)
-            .once('error', reject = _reject);
-        }).then(() => {
-          stream.off('error', reject);
-          return stream.read(Number(payload)) || new Uint8Array();
-        }, err => {
-          stream.off('readable', resolve);
-          throw streamError(id, stream, err);
-        });
+        return Promise.resolve(
+          unfinishedPolls.get(handle(calls.INPUT_STREAM_SUBSCRIBE | (call & calls.CALL_TYPE_MASK), id))
+        )
+        .then(() => handle(calls.INPUT_STREAM_READ | (call & calls.CALL_TYPE_MASK), id, payload));
       case calls.INPUT_STREAM_SKIP:
         return handle(calls.INPUT_STREAM_READ | (call & calls.CALL_TYPE_MASK), id, new Uint8Array(Number(payload)));
       case calls.INPUT_STREAM_BLOCKING_SKIP:
         return handle(calls.INPUT_STREAM_BLOCKING_READ | (call & calls.CALL_TYPE_MASK), id, new Uint8Array(Number(payload)));
       case calls.INPUT_STREAM_SUBSCRIBE:
-        return ++pollCnt;
         var stream = unfinishedStreams.get(id)?.stream;
-        // already closed -> immediately return poll
-        if (!stream || stream.closed || stream.errored || stream.readable) return ++pollCnt;
-        // console.error(stream);
-        return ++pollCnt;
+        // already closed or errored -> immediately return poll
+        // (poll 0 is immediately resolved)
+        if (!stream || stream.closed || stream.errored || stream.readable) return 0;
         var resolve, reject;
+        // TODO: can we do this better with a single listener setup on stream
+        // creation to track the lifecycle promise?
         unfinishedPolls.set(++pollCnt, new Promise((_resolve, _reject) => {
           stream
             .once('readable', resolve = _resolve)
             .once('error', reject = _reject);
         }).then(() => {
-          console.error('READABLE');
           unfinishedPolls.delete(pollCnt);
-          stream.off('error', reject);
+          stream
+            .off('error', reject)
+            .off('readable', resolve);
         }, err => {
-          stream.off('readable', resolve);
+          stream
+            .off('error', reject)
+            .off('readable', resolve);
           unfinishedPolls.delete(pollCnt);
           throw streamError(id, stream.stream, err);
         }));
         return pollCnt;
       case calls.INPUT_STREAM_DROP:
-        var stream = unfinishedStreams.get(id);
-        // if already closed, no need to destroy
-        if (stream) {
-          unfinishedStreams.delete(id);
-        }
+        unfinishedStreams.delete(id);
         return;
 
       case calls.OUTPUT_STREAM_CHECK_WRITE:
@@ -217,7 +203,7 @@ function handle(call, id, payload) {
         var { stream: inputStream } = getStreamOrThrow(payload.src);
         var bytesRemaining = Number(payload.len);
         var chunk;
-        while (bytesRemaining > 0 && (chunk = inputStream.read(Math.min(outputstream.writableHighWaterMark - stream.writableLength, bytesRemaining)))) {
+        while (bytesRemaining > 0 && (chunk = inputStream.read(Math.min(outputStream.writableHighWaterMark - stream.writableLength, bytesRemaining)))) {
           bytesRemaining -= chunk.byteLength;
           outputStream.write(chunk);
         }
@@ -235,7 +221,7 @@ function handle(call, id, payload) {
         var stream = unfinishedStreams.get(id)?.stream;
         // not added to unfinishedPolls => it's an immediately resolved poll
         if (!stream || stream.closed || stream.errored || !stream.writableNeedDrain)
-          return ++pollCnt;
+          return 0;
         var resolve, reject;
         unfinishedPolls.set(++pollCnt, new Promise((_resolve, _reject) => {
           stream
@@ -296,7 +282,7 @@ function handle(call, id, payload) {
       case calls.POLL_POLLABLE_BLOCK:
         return unfinishedPolls.get(id);
       case calls.POLL_POLL_LIST:
-        const resolvedList = payload.filter(id => !unfinishedPolls.has(id));
+        var resolvedList = payload.filter(id => !unfinishedPolls.has(id));
         if (resolvedList.length)
           return resolvedList;
         return Promise.race(

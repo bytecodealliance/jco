@@ -9,20 +9,20 @@ const { InputStream, OutputStream } = streams;
  * @typedef {import("../../types/interfaces/wasi-http-types").Error} HttpError
 */
 
-function combineChunks (chunks) {
-  if (chunks.length === 0)
-    return new Uint8Array();
-  if (chunks.length === 1)
-    return chunks[0];
-  const totalLen = chunks.reduce((total, chunk) => total + chunk.byteLength);
-  const out = new Uint8Array(totalLen);
-  let idx = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, idx);
-    idx += chunk.byteLength;
-  }
-  return out;
-}
+// function combineChunks (chunks) {
+//   if (chunks.length === 0)
+//     return new Uint8Array();
+//   if (chunks.length === 1)
+//     return chunks[0];
+//   const totalLen = chunks.reduce((total, chunk) => total + chunk.byteLength);
+//   const out = new Uint8Array(totalLen);
+//   let idx = 0;
+//   for (const chunk of chunks) {
+//     out.set(chunk, idx);
+//     idx += chunk.byteLength;
+//   }
+//   return out;
+// }
 
 export class WasiHttp {
   requestCnt = 1;
@@ -127,8 +127,8 @@ export class WasiHttp {
       }
 
       static _handle (request) {
-        const scheme = request.#scheme.tag === "HTTP" ? "http://" : "https://";
-        const url = scheme + request.#authority + request.#pathWithQuery;
+        // const scheme = request.#scheme.tag === "HTTP" ? "http://" : "https://";
+        // const url = scheme + request.#authority + request.#pathWithQuery;
         const headers = {
           "host": request.#authority,
         };
@@ -139,13 +139,13 @@ export class WasiHttp {
 
         let res;
         try {
-          res = send({
-            method: request.#method.tag,
-            uri: url,
-            headers: headers,
-            params: [],
-            body: combineChunks(outgoingBodyGetChunks(request.#body)),
-          });
+          // res = send({
+          //   method: request.#method.tag,
+          //   uri: url,
+          //   headers: headers,
+          //   params: [],
+          //   body: combineChunks(outgoingBodyGetChunks(request.#body)),
+          // });
         } catch (err) {
           return newFutureIncomingResponse(err.toString(), true);
         }
@@ -182,7 +182,7 @@ export class WasiHttp {
         return body.#chunks;
       }
     }
-    const outgoingBodyGetChunks = OutgoingBody._getChunks;
+    // const outgoingBodyGetChunks = OutgoingBody._getChunks;
     delete OutgoingBody._getChunks;
 
     class IncomingResponse {

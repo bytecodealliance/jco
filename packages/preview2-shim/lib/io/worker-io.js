@@ -42,15 +42,17 @@ function streamIoErrorCall(call, id, payload) {
   try {
     return ioCall(call, id, payload);
   } catch (e) {
-    if (e.tag === 'stream-error') {
-      if (e.val.tag === 'last-operation-failed') {
-        const msg = e.val.val.message;
-        e.val.val = Object.assign(new IoError(), e.val);
-        throw new ComponentError("StreamError", msg, e);
-      }
-      throw new ComponentError("StreamError", "stream closed", e);
+    // trap?
+    if (e.tag !== 'stream-error') {
+      console.error(e);
+      process.exit(1);
     }
-    throw e;
+    if (e.val.tag === 'last-operation-failed') {
+      const msg = e.val.val.message;
+      e.val.val = Object.assign(new IoError(), e.val);
+      throw new ComponentError("StreamError", msg, e);
+    }
+    throw new ComponentError("StreamError", "stream closed", e);
   }
 }
 
