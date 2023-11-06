@@ -1166,7 +1166,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     "finalizationRegistry{id}.register({rsc}, {handle}, {rsc});
-                                    Object.defineProperty({rsc}, {symbol_dispose}, function () {{{}}});
+                                    Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{{}}} }});
                                     ",
                                     match dtor_name {
                                         Some(dtor) => format!("
