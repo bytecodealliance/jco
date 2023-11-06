@@ -42,7 +42,7 @@ function streamIoErrorCall(call, id, payload) {
   try {
     return ioCall(call, id, payload);
   } catch (e) {
-    // trap?
+    // any invalid error is a trap
     if (e.tag !== 'stream-error') {
       console.error(e);
       process.exit(1);

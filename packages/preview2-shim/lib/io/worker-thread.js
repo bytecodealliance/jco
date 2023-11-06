@@ -5,11 +5,6 @@ import * as fs from 'node:fs';
 
 let streamCnt = 0, pollCnt = 0;
 
-function trap () {
-  // TODO: figure out what a trap actually is properly
-  throw new Error('Internal error: trapped');
-}
-
 /** @type {Map<number, Promise<void>>} */
 const unfinishedPolls = new Map();
 
@@ -149,7 +144,7 @@ function handle(call, id, payload) {
       case calls.OUTPUT_STREAM_WRITE:
         var { stream } = getStreamOrThrow(id);
         if (payload.byteLength > stream.writableHighWaterMark - stream.writableLength)
-          return trap();
+          throw new Error('wasi-io error: attempt to write too many bytes');
         return void stream.write(payload);
       case calls.OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH:
         var { stream, blocksMainThread } = getStreamOrThrow(id);
