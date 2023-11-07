@@ -1,6 +1,6 @@
 {
   "name": "@bytecodealliance/jco",
-  "version": "0.13.2",
+  "version": "0.13.3",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "author": "Guy Bedford",
   "bin": {
@@ -18,7 +18,7 @@
   },
   "type": "module",
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "0.0.20",
+    "@bytecodealliance/preview2-shim": "0.0.21",
     "binaryen": "^111.0.0",
     "chalk-template": "^0.4.0",
     "commander": "^9.4.1",

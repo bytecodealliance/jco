@@ -428,15 +428,13 @@ export class FileSystem {
             throw 'no-entry';
           descriptor = bestPreopenMatch[0];
           subpath = subpath.slice(bestPreopenMatch[1]);
+          if (subpath[0] === '/')
+            subpath = subpath.slice(1);
         }
-        if (descriptor.#hostPreopen) {
-          if (subpath[0] === '/' || subpath.startsWith('.') && subpath[1] === '/' || subpath[1] === '.' && subpath[2] === '/') {
-            subpath = subpath.slice(subpath[1] === '/' ? 2 : 1);
-            return descriptor.#hostPreopen + (descriptor.#hostPreopen.endsWith('/') ? '' : '/') + subpath;
-          } else {
-            return fs.cwd + (fs.cwd.endsWith('/') ? '' : '/') + subpath;
-          }
-        }
+        if (subpath.startsWith('.'))
+          subpath = subpath.slice(subpath[1] === '/' ? 2 : 1);
+        if (descriptor.#hostPreopen)
+          return descriptor.#hostPreopen + (descriptor.#hostPreopen.endsWith('/') ? '' : '/') + subpath;
         return descriptor.#fullPath + '/' + subpath;
       }
     }
