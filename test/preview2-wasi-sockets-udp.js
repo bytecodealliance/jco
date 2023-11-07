@@ -9,33 +9,38 @@ const serverAddressIpv6 = {
     port: 3000,
   },
 };
-const server = sockets.tcpCreateSocket.createTcpSocket(
+const server = sockets.udpCreateSocket.createUdpSocket(
   sockets.network.IpAddressFamily.ipv6
 );
 server.startBind(network, serverAddressIpv6);
 server.finishBind();
-server.startListen();
-server.finishListen();
 const { address, port } = server.localAddress().val;
-console.log(`[wasi-sockets] Server listening on: ${address}:${port}`);
+console.log(`[wasi-sockets-udp] Server listening on: ${address}:${port}`);
 
 // client
-const client = sockets.tcpCreateSocket.createTcpSocket(
+const client = sockets.udpCreateSocket.createUdpSocket(
   sockets.network.IpAddressFamily.ipv6
 );
 
-client.setKeepAlive(true);
-client.setNoDelay(true);
 client.startConnect(network, serverAddressIpv6);
 client.finishConnect();
 
 setTimeout(() => {
-  // const [socket, input, output] = server.accept();
-  // output.write('hello world');
-  // const buff = input.read(2);
-  // console.log(`[wasi-sockets] Server received: ${buff}`);
+  client.send([
+    {
+      data: [Buffer.from('hello world')],
+      remoteAddress: serverAddressIpv6,
+    }
+  ]);
 
-  // client.shutdown("send");
-  // server.shutdown("receive");
-  // process.exit(0);
+  const data = server.receive();
+  console.log(`[wasi-sockets-udp] Server received`);
+  console.log({
+    data
+  });
 }, 2000);
+
+setTimeout(() => {
+  server[Symbol.dispose]();
+  client[Symbol.dispose]();
+}, 5000);

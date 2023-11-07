@@ -36,6 +36,7 @@ const ShutdownType = {
 
 const SocketState = {
   Error: "Error",
+  Closed: "Closed",
   Connection: "Connection",
   Listener: "Listener",
 };
@@ -52,7 +53,7 @@ export class TcpSocketImpl {
   #canReceive = true;
   #canSend = true;
   #ipv6Only = false;
-  #state = "closed";
+  #state = SocketState.Closed;
   #inProgress = false;
   #connections = 0;
   #keepAlive = false;
@@ -187,7 +188,6 @@ export class TcpSocketImpl {
     if (family.toLocaleLowerCase() === "ipv4") {
       err = this.#serverHandle.bind(localAddress, localPort);
     } else if (family.toLocaleLowerCase() === "ipv6") {
-      console.log(`[tcp] xxxx bind socket to ${localAddress}:${localPort}`);
       err = this.#serverHandle.bind6(localAddress, localPort);
     }
 
@@ -242,10 +242,10 @@ export class TcpSocketImpl {
       "address-family-mismatch"
     );
 
-    this.network = network;
     this.#socketOptions.remoteAddress = host;
     this.#socketOptions.remotePort = remoteAddress.val.port;
-
+    
+    this.network = network;
     this.#inProgress = true;
   }
 
@@ -275,7 +275,7 @@ export class TcpSocketImpl {
     } else if (family.toLocaleLowerCase() === "ipv6") {
       err = this.#clientHandle.connect6(connectReq, remoteAddress, remotePort);
     }
-
+    
     if (err) {
       console.error(`[tcp] connect error on socket: ${err}`);
       this.#state = SocketState.Error;
@@ -349,16 +349,17 @@ export class TcpSocketImpl {
   accept() {
     // uv_accept is automatically called by uv_listen when a new connection is received.
 
-    const _this = this;
+    const self = this;
     const outgoingStream = new OutputStream({
       write(bytes) {
-        _this.#acceptedClient.write(bytes);
+        console.log(`[tcp] write socket`);
+        self.#acceptedClient.write(bytes);
       },
     });
     const ingoingStream = new InputStream({
       read(len) {
         console.log(`[tcp] read socket`);
-        return _this.#acceptedClient.read(len);
+        return self.#acceptedClient.read(len);
       },
     })
 

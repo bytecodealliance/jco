@@ -1,5 +1,6 @@
 /* eslint-disable no-unused-vars */
 
+import { isIP } from "node:net";
 import { assert } from "../common/assert.js";
 import { deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
 
@@ -12,14 +13,23 @@ import { deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
  */
 
 // See: https://github.com/nodejs/node/blob/main/src/udp_wrap.cc
-const { UDP, constants: UDPConstants } = process.binding("udp_wrap");
+const { UDP, SendWrap, constants: UDPConstants } = process.binding("udp_wrap");
+
+const SocketState = {
+  Error: "Error",
+  Closed: "Closed",
+  Connection: "Connection",
+  Listener: "Listener",
+};
 
 export class UdpSocketImpl {
-  /** @type {Socket} */ #clientHandle = null;
-  /** @type {Socket} */ #serverHandle = null;
+  /** @type {Socket} */ #socket = null;
   /** @type {Network} */ network = null;
 
   #isBound = false;
+  #inProgress = false;
+  #ipv6Only = false;
+  #state = SocketState.Closed;
   #socketOptions = {};
 
   /**
@@ -29,8 +39,7 @@ export class UdpSocketImpl {
   constructor(addressFamily) {
     this.#socketOptions.family = addressFamily;
 
-    this.#clientHandle = new UDP(UDPConstants.SOCKET);
-    this.#serverHandle = new UDP(UDPConstants.SERVER);
+    this.#socket = new UDP();
   }
   /**
    *
@@ -41,15 +50,23 @@ export class UdpSocketImpl {
    * @returns {void}
    */
   startBind(network, localAddress) {
-    const address = serializeIpAddress(
-      localAddress,
-      this.#socketOptions.family
+    const address = serializeIpAddress(localAddress, this.#socketOptions.family);
+    const ipFamily = `ipv${isIP(address)}`;
+
+    console.log(`[tcp] start bind socket to ${address}:${localAddress.val.port}`);
+
+    assert(this.#isBound, "invalid-state", "The socket is already bound");
+    assert(
+      this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(),
+      "invalid-argument",
+      "The `local-address` has the wrong address family"
     );
 
     const { port } = localAddress.val;
     this.#socketOptions.localAddress = address;
     this.#socketOptions.localPort = port;
     this.network = network;
+    this.#inProgress = true;
   }
 
   /**
@@ -62,13 +79,26 @@ export class UdpSocketImpl {
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    **/
   finishBind() {
+    console.log(`[udp] finish bind socket`);
+
+    assert(this.#inProgress === false, "not-in-progress");
+
     const { localAddress, localPort, family } = this.#socketOptions;
 
     // TODO: see https://github.com/libuv/libuv/blob/93efccf4ee1ed3c740d10660b4bfb08edc68a1b5/src/unix/udp.c#L486
     const flags = 0;
-    let err = this.#serverHandle.bind(localAddress, localPort, flags);
+    let err = null;
+    if (family.toLocaleLowerCase() === "ipv4") {
+      err = this.#socket.bind(localAddress, localPort, flags);
+    } else if (family.toLocaleLowerCase() === "ipv6") {
+      err = this.#socket.bind6(localAddress, localPort, flags);
+    }
+
     if (err) {
-      throw new Error(err);
+      assert(err === -22, "address-in-use");
+      assert(err === -49, "address-not-bindable");
+      assert(err === -99, "address-not-bindable"); // EADDRNOTAVAIL
+      assert(true, "", err);
     }
 
     this.#isBound = true;
@@ -86,15 +116,21 @@ export class UdpSocketImpl {
    * @throws {invalid-argument} The socket is already bound to a different network. The `network` passed to `connect` must be identical to the one passed to `bind`.
    */
   startConnect(network, remoteAddress) {
-    const address = serializeIpAddress(
-      remoteAddress,
-      this.#socketOptions.family
-    );
+    console.log(`[udp] start connect socket`);
+
+    const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
+    const ipFamily = `ipv${isIP(host)}`;
+
+    assert(this.network !== null && this.network.id !== network.id, "invalid-argument");
+    assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
+    assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "invalid-argument");
 
     const { port } = remoteAddress.val;
-    this.#socketOptions.remoteAddress = address;
+    this.#socketOptions.remoteAddress = host;
     this.#socketOptions.remotePort = port;
+
     this.network = network;
+    this.#inProgress = true;
   }
 
   /**
@@ -105,8 +141,10 @@ export class UdpSocketImpl {
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    */
   finishConnect() {
+    console.log(`[udp] finish connect socket`);
+
     const { remoteAddress, remotePort } = this.#socketOptions;
-    this.#clientHandle.connect(remoteAddress, remotePort);
+    this.#socket.connect(remoteAddress, remotePort);
   }
 
   /**
@@ -117,7 +155,20 @@ export class UdpSocketImpl {
    * @throws {would-block} There is no pending data available to be read at the moment. (EWOULDBLOCK, EAGAIN)
    */
   receive(maxResults) {
-    throw new Error("Not implemented");
+    console.log(`[udp] receive socket`);
+
+    assert(this.#isBound === false, "invalid-state");
+    assert(this.#inProgress === false, "not-in-progress");
+
+    if (maxResults === 0n) {
+      return [];
+    }
+
+    this.#socket.onmessage = (...args) => console.log('recv onmessage', args[2].toString());
+    this.#socket.onerror = (err) => console.log('recv error', err);
+    this.#socket.recvStart();
+    const datagrams = [];
+    return datagrams;
   }
 
   /**
@@ -135,7 +186,34 @@ export class UdpSocketImpl {
    * @throws {would-block} The send buffer is currently full. (EWOULDBLOCK, EAGAIN)
    */
   send(datagrams) {
-    throw new Error("Not implemented");
+    console.log(`[udp] send socket`);
+
+    const req = new SendWrap();
+    const doSend = (data, port, host, family) => {
+      console.log(`[udp] send socket to ${host}:${port}`);
+
+      // setting hasCallback to false will make send() synchronous
+      // TODO: handle async send
+      const hasCallback = false;
+
+      let err = null;
+      if (family.toLocaleLowerCase() === "ipv4") {
+        err = this.#socket.send(req, data, data.length, port, host, hasCallback);
+      } else if (family.toLocaleLowerCase() === "ipv6") {
+        err = this.#socket.send6(req, data, data.length, port, host, hasCallback);
+      }
+      return err;
+    };
+
+    datagrams.forEach((datagram) => {
+      const { data, remoteAddress } = datagram;
+      const { tag: family, val } = remoteAddress;
+      const { address, port } = val;
+      const err = doSend(data, port, serializeIpAddress(remoteAddress, family), family);
+      console.error({
+        err,
+      });
+    });
   }
 
   /**
@@ -164,7 +242,11 @@ export class UdpSocketImpl {
    * @throws {invalid-state} The socket is not connected to a remote address. (ENOTCONN)
    */
   remoteAddress() {
-    throw new Error("Not implemented");
+    console.log(`[udp] remote address socket`);
+
+    assert(this.#state !== SocketState.Connection, "invalid-state");
+
+    return this.#socketOptions.remoteAddress;
   }
 
   /**
@@ -172,7 +254,7 @@ export class UdpSocketImpl {
    * @returns {IpAddressFamily}
    */
   addressFamily() {
-    console.log(`[tcp] address family socket`);
+    console.log(`[udp] address family socket`);
 
     return this.#socketOptions.family;
   }
@@ -183,7 +265,9 @@ export class UdpSocketImpl {
    * @throws {not-supported} (get/set) `this` socket is an IPv4 socket.
    */
   ipv6Only() {
-    throw new Error("Not implemented");
+    console.log(`[udp] ipv6 only socket`);
+
+    return this.#ipv6Only;
   }
 
   /**
@@ -195,14 +279,20 @@ export class UdpSocketImpl {
    * @throws {invalid-state} (set) The socket is already bound.
    */
   setIpv6Only(value) {
-    throw new Error("Not implemented");
+    console.log(`[udp] set ipv6 only socket to ${value}`);
+
+    this.#ipv6Only = value;
   }
 
   /**
    *
    * @returns {number}
    */
-  unicastHopLimit() {}
+  unicastHopLimit() {
+    console.log(`[udp] unicast hop limit socket`);
+
+    throw new Error("Not implemented");
+  }
 
   /**
    *
@@ -210,6 +300,8 @@ export class UdpSocketImpl {
    * @returns {void}
    */
   setUnicastHopLimit(value) {
+    console.log(`[udp] set unicast hop limit socket`);
+
     throw new Error("Not implemented");
   }
 
@@ -218,6 +310,8 @@ export class UdpSocketImpl {
    * @returns {bigint}
    */
   receiveBufferSize() {
+    console.log(`[udp] receive buffer size socket`);
+
     throw new Error("Not implemented");
   }
 
@@ -227,6 +321,8 @@ export class UdpSocketImpl {
    * @returns {void}
    */
   setReceiveBufferSize(value) {
+    console.log(`[udp] set receive buffer size socket`);
+
     throw new Error("Not implemented");
   }
 
@@ -235,6 +331,8 @@ export class UdpSocketImpl {
    * @returns {bigint}
    */
   sendBufferSize() {
+    console.log(`[udp] send buffer size socket`);
+
     throw new Error("Not implemented");
   }
 
@@ -244,6 +342,8 @@ export class UdpSocketImpl {
    * @returns {void}
    */
   setSendBufferSize(value) {
+    console.log(`[udp] set send buffer size socket`);
+
     throw new Error("Not implemented");
   }
 
@@ -252,19 +352,33 @@ export class UdpSocketImpl {
    * @returns {Pollable}
    */
   subscribe() {
+    console.log(`[udp] subscribe socket`);
+
     throw new Error("Not implemented");
   }
 
-  [Symbol.dispose] () {
+  [Symbol.dispose]() {
     console.log(`[udp] dispose socket`);
-    this.#clientHandle.close();
-    this.#serverHandle.close();
+
+    let err = null;
+    err = this.#socket.recvStop((...args) => {
+      console.log("stop recv", args);
+    });
+
+    if (err) {
+      assert(err === -9, "invalid-state", "Interface is not currently Up");
+      assert(err === -11, "not-in-progress");
+      assert(true, "", err);
+    }
+
+    this.#socket.close();
+    this.#socket.close();
   }
 
   client() {
-    return this.#clientHandle;
+    return this.#socket;
   }
   server() {
-    return this.#serverHandle;
+    return this.#socket;
   }
 }
