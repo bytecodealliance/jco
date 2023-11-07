@@ -498,7 +498,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "default: {{
-                        throw new TypeError('invalid variant specified for {variant_name}');
+                        throw new TypeError(`invalid variant ${{JSON.stringify({expr_to_match})}} specified for {variant_name}`);
                     }}",
                 );
                 uwriteln!(self.src, "}}");

@@ -54,6 +54,7 @@ export async function run (componentPath, args) {
         console.error('Not a valid command component to execute, make sure it was built to a command adapter and with the same version.');
       }
       try {
+        process.argv[1] = "${name}";
         const mod = await import('./${name}.js');
         if (!mod.run || !mod.run.run) {
           logInvalidCommand();
