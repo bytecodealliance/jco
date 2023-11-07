@@ -2,7 +2,7 @@ import { argv, env, cwd } from 'node:process';
 import { streams } from '../common/io.js';
 const { InputStream, OutputStream } = streams;
 
-let _env = Object.entries(env), _args = argv, _cwd = cwd();
+let _env = Object.entries(env), _args = argv.slice(1), _cwd = cwd();
 const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 
 export const environment = {

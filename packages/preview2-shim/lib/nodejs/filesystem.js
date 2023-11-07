@@ -431,10 +431,14 @@ export class FileSystem {
           if (subpath[0] === '/')
             subpath = subpath.slice(1);
         }
-        if (subpath.startsWith('.'))
-          subpath = subpath.slice(subpath[1] === '/' ? 2 : 1);
-        if (descriptor.#hostPreopen)
-          return descriptor.#hostPreopen + (descriptor.#hostPreopen.endsWith('/') ? '' : '/') + subpath;
+        if (descriptor.#hostPreopen) {
+          if (subpath.startsWith('.') && subpath[1] === '/' || subpath[1] === '.' && subpath[2] === '/') {
+            subpath = subpath.slice(subpath[1] === '/' ? 2 : 1);
+            return descriptor.#hostPreopen + (descriptor.#hostPreopen.endsWith('/') ? '' : '/') + subpath;
+          } else {
+            return fs.cwd + (fs.cwd.endsWith('/') ? '' : '/') + subpath;
+          }
+        }
         return descriptor.#fullPath + '/' + subpath;
       }
     }

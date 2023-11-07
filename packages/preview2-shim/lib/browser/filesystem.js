@@ -1,15 +1,7 @@
-import { _io } from './io.js';
+import { streams } from './io.js';
 import { environment } from './cli.js';
 
-const { createStream, getStream, dropStream } = _io;
-
-let _preopens = [[3, '/']], _rootPreopen = _preopens[0];
-
-export function _setPreopens (preopens) {
-  _preopens = preopens;
-  descriptorCnt = 3 + _preopens.length;
-  _rootPreopen = _preopens.find(preopen => preopen[1] === '/');
-}
+const { InputStream, OutputStream } = streams;
 
 let _cwd = null;
 
@@ -19,11 +11,7 @@ export function _setCwd (cwd) {
 
 export function _setFileData (fileData) {
   _fileData = fileData;
-  _setPreopens(Object.keys(fileData).map((key) => {
-    const fd = descriptorCnt++;
-    descriptorTable[fd] = { entry: fileData[key] };
-    return [fd, key];
-  }));
+  _rootPreopen[0] = new Descriptor(fileData);
   const cwd = environment.initialCwd();
   _setCwd(cwd || '/');
 }
@@ -32,34 +20,20 @@ export function _getFileData () {
   return JSON.stringify(_fileData);
 }
 
-let _fileData = {};
-
-let descriptorCnt = 4;
-const descriptorTable = {
-  0: { stream: 0 },
-  1: { stream: 1 },
-  2: { stream: 2 },
-  3: { entry: { dir: {} } },
-};
+let _fileData = { dir: {} };
 
 const timeZero = {
   seconds: BigInt(0),
   nanoseconds: 0
 };
 
-function getDescriptor (fd) {
-  const descriptor = descriptorTable[fd];
-  if (!descriptor) throw 'bad-descriptor';
-  return descriptor;
-}
-
-function getChildEntry (fd, subpath, openFlags) {
-  if (subpath === '.' && _rootPreopen && _rootPreopen[0] === fd) {
+function getChildEntry (parentEntry, subpath, openFlags) {
+  if (subpath === '.' && _rootPreopen && descriptorGetEntry(_rootPreopen[0]) === parentEntry) {
     subpath = _cwd;
-    if (subpath.startsWith('/'))
+    if (subpath.startsWith('/') && subpath !== '/')
       subpath = subpath.slice(1);
   }
-  let entry = getDescriptor(fd)?.entry;
+  let entry = parentEntry;
   let segmentIdx;
   do {
     if (!entry || !entry.dir) throw 'not-directory';
@@ -76,13 +50,6 @@ function getChildEntry (fd, subpath, openFlags) {
   return entry;
 }
 
-function createChildDescriptor (fd, subpath, openFlags) {
-  const entry = getChildEntry(fd, subpath, openFlags);
-  const childFd = descriptorCnt++;
-  descriptorTable[childFd] = { entry };
-  return childFd;
-}
-
 function getSource (fileEntry) {
   if (typeof fileEntry.source === 'string') {
     fileEntry.source = new TextEncoder().encode(fileEntry.source);
@@ -90,12 +57,12 @@ function getSource (fileEntry) {
   return fileEntry.source;
 }
 
-class DirStream {
+class DirectoryEntryStream {
   constructor (entries) {
     this.idx = 0;
     this.entries = entries;
   }
-  next () {
+  readDirectoryEntry () {
     if (this.idx === this.entries.length)
       return null;
     const [name, entry] = this.entries[this.idx];
@@ -107,117 +74,120 @@ class DirStream {
   }
 }
 
-export const preopens = {
-  getDirectories () {
-    return _preopens;
-  }
-}
+class Descriptor {
+  #stream;
+  #entry;
+  #mtime = 0;
 
-export const types = {
-  readViaStream(fd, offset) {
-    const descriptor = getDescriptor(fd);
-    const source = getSource(descriptor.entry);
-    return createStream({
-      i: Number(offset),
-      source,
-      read (len) {
-        const bytes = this.source.slice(this.i, this.i + Number(len));
-        this.i += bytes.byteLength;
-        return [bytes, this.i === this.source.byteLength ? 'ended' : 'open'];
+  _getEntry (descriptor) {
+    return descriptor.#entry;
+  }
+
+  constructor (entry, isStream) {
+    if (isStream)
+      this.#stream = entry;
+    else
+      this.#entry = entry;
+  }
+
+  readViaStream(_offset) {
+    const source = getSource(this.#entry);
+    let offset = Number(_offset);
+    return new InputStream({
+      blockingRead (len) {
+        if (offset === source.byteLength)
+          throw { tag: 'closed' };
+        const bytes = source.slice(offset, offset + Number(len));
+        offset += bytes.byteLength;
+        return bytes;
       }
     });
-  },
+  }
 
-  writeViaStream(fd, offset) {
-    const descriptor = getDescriptor(fd);
-    return createStream({
-      i: Number(offset),
-      entry: descriptor.entry,
+  writeViaStream(_offset) {
+    const entry = this.#entry;
+    let offset = Number(_offset);
+    return new OutputStream({
       write (buf) {
-        const newSource = new Uint8Array(buf.byteLength + this.entry.source.byteLength);
-        newSource.set(this.entry.source, 0);
-        newSource.set(buf, this.i);
-        this.i += buf.byteLength;
-        this.entry.source = newSource;
+        const newSource = new Uint8Array(buf.byteLength + entry.source.byteLength);
+        newSource.set(entry.source, 0);
+        newSource.set(buf, offset);
+        offset += buf.byteLength;
+        entry.source = newSource;
         return buf.byteLength;
       }
     });
-  },
+  }
 
-  appendViaStream(fd) {
-    console.log(`[filesystem] APPEND STREAM ${fd}`);
-  },
+  appendViaStream() {
+    console.log(`[filesystem] APPEND STREAM`);
+  }
 
-  advise(fd, offset, length, advice) {
-    console.log(`[filesystem] ADVISE`, fd, offset, length, advice);
-  },
+  advise(descriptor, offset, length, advice) {
+    console.log(`[filesystem] ADVISE`, descriptor, offset, length, advice);
+  }
 
-  syncData(fd) {
-    console.log(`[filesystem] SYNC DATA ${fd}`);
-  },
+  syncData() {
+    console.log(`[filesystem] SYNC DATA`);
+  }
 
-  getFlags(fd) {
-    console.log(`[filesystem] FLAGS FOR ${fd}`);
-  },
+  getFlags() {
+    console.log(`[filesystem] FLAGS FOR`);
+  }
 
-  getType(fd) {
-    if (fd < 3) return 'fifo';
-    const descriptor = getDescriptor(fd);
-    if (descriptor.stream) return 'fifo';
-    if (descriptor.entry.dir) return 'directory';
-    if (descriptor.entry.source) return 'regular-file';
+  getType() {
+    if (this.#stream) return 'fifo';
+    if (this.#entry.dir) return 'directory';
+    if (this.#entry.source) return 'regular-file';
     return 'unknown';
-  },
+  }
 
-  setFlags(fd, flags) {
-    console.log(`[filesystem] SET FLAGS ${fd} ${JSON.stringify(flags)}`);
-  },
+  setFlags(flags) {
+    console.log(`[filesystem] SET FLAGS ${JSON.stringify(flags)}`);
+  }
 
-  setSize(fd, size) {
-    console.log(`[filesystem] SET SIZE`, fd, size);
-  },
+  setSize(size) {
+    console.log(`[filesystem] SET SIZE`, size);
+  }
 
-  setTimes(fd, dataAccessTimestamp, dataModificationTimestamp) {
-    console.log(`[filesystem] SET TIMES`, fd, dataAccessTimestamp, dataModificationTimestamp);
-  },
+  setTimes(dataAccessTimestamp, dataModificationTimestamp) {
+    console.log(`[filesystem] SET TIMES`, dataAccessTimestamp, dataModificationTimestamp);
+  }
 
-  read(fd, length, offset) {
-    const descriptor = getDescriptor(fd);
-    const source = getSource(descriptor.entry);
+  read(length, offset) {
+    const source = getSource(this.#entry);
     return [source.slice(offset, offset + length), offset + length >= source.byteLength];
-  },
+  }
 
-  write(fd, buffer, offset) {
-    const descriptor = getDescriptor(fd);
+  write(buffer, offset) {
     if (offset !== 0) throw 'invalid-seek';
-    descriptor.entry.source = buffer;
+    this.#entry.source = buffer;
     return buffer.byteLength;
-  },
+  }
 
-  readDirectory(fd) {
-    const descriptor = getDescriptor(fd);
-    if (!descriptor?.entry?.dir) throw 'bad-descriptor';
-    return createStream(new DirStream(Object.entries(descriptor.entry.dir).sort(([a], [b]) => a > b ? 1 : -1)));
-  },
+  readDirectory() {
+    if (!this.#entry?.dir)
+      throw 'bad-descriptor';
+    return new DirectoryEntryStream(Object.entries(this.#entry.dir).sort(([a], [b]) => a > b ? 1 : -1));
+  }
 
-  sync(fd) {
-    console.log(`[filesystem] SYNC`, fd);
-  },
+  sync() {
+    console.log(`[filesystem] SYNC`);
+  }
 
-  createDirectoryAt(fd, path) {
-    const entry = getChildEntry(fd, path, { create: true, directory: true });
+  createDirectoryAt(path) {
+    const entry = getChildEntry(this.#entry, path, { create: true, directory: true });
     if (entry.source) throw 'exist';
-  },
+  }
 
-  stat(fd) {
-    const descriptor = getDescriptor(fd);
+  stat() {
     let type = 'unknown', size = BigInt(0);
-    if (descriptor.entry.source) {
+    if (this.#entry.source) {
       type = 'directory';
     }
-    else if (descriptor.entry.dir) {
+    else if (this.#entry.dir) {
       type = 'regular-file';
-      const source = getSource(descriptor.entry);
+      const source = getSource(this.#entry);
       size = BigInt(source.byteLength);
     }
     return {
@@ -228,10 +198,10 @@ export const types = {
       dataModificationTimestamp: timeZero,
       statusChangeTimestamp: timeZero,
     }
-  },
+  }
   
-  statAt(fd, pathFlags, path) {
-    const entry = getChildEntry(fd, path);
+  statAt(_pathFlags, path) {
+    const entry = getChildEntry(this.#entry, path);
     let type = 'unknown', size = BigInt(0);
     if (entry.source) {
       type = 'regular-file';
@@ -249,95 +219,95 @@ export const types = {
       dataModificationTimestamp: timeZero,
       statusChangeTimestamp: timeZero,
     };
-  },
+  }
 
-  setTimesAt(fd) {
-    console.log(`[filesystem] SET TIMES AT`, fd);
-  },
+  setTimesAt() {
+    console.log(`[filesystem] SET TIMES AT`);
+  }
 
-  linkAt(fd) {
-    console.log(`[filesystem] LINK AT`, fd);
-  },
+  linkAt() {
+    console.log(`[filesystem] LINK AT`);
+  }
 
-  openAt(fd, _pathFlags, path, openFlags, _descriptorFlags, _modes) {
-    return createChildDescriptor(fd, path, openFlags);
-  },
+  openAt(_pathFlags, path, openFlags, _descriptorFlags, _modes) {
+    const childEntry = getChildEntry(this.#entry, path, openFlags);
+    return new Descriptor(childEntry);
+  }
 
-  readlinkAt(fd) {
-    console.log(`[filesystem] READLINK AT`, fd);
-  },
+  readlinkAt() {
+    console.log(`[filesystem] READLINK AT`);
+  }
 
-  removeDirectoryAt(fd) {
-    console.log(`[filesystem] REMOVE DIR AT`, fd);
-  },
+  removeDirectoryAt() {
+    console.log(`[filesystem] REMOVE DIR AT`);
+  }
 
-  renameAt(fd) {
-    console.log(`[filesystem] RENAME AT`, fd);
-  },
+  renameAt() {
+    console.log(`[filesystem] RENAME AT`);
+  }
 
-  symlinkAt(fd) {
-    console.log(`[filesystem] SYMLINK AT`, fd);
-  },
+  symlinkAt() {
+    console.log(`[filesystem] SYMLINK AT`);
+  }
 
-  unlinkFileAt(fd) {
-    console.log(`[filesystem] UNLINK FILE AT`, fd);
-  },
+  unlinkFileAt() {
+    console.log(`[filesystem] UNLINK FILE AT`);
+  }
 
-  changeFilePermissionsAt(fd) {
-    console.log(`[filesystem] CHANGE FILE PERMISSIONS AT`, fd);
-  },
+  changeFilePermissionsAt() {
+    console.log(`[filesystem] CHANGE FILE PERMISSIONS AT`);
+  }
 
-  changeDirectoryPermissionsAt(fd) {
-    console.log(`[filesystem] CHANGE DIR PERMISSIONS AT`, fd);
-  },
+  changeDirectoryPermissionsAt() {
+    console.log(`[filesystem] CHANGE DIR PERMISSIONS AT`);
+  }
 
-  lockShared(fd) {
-    console.log(`[filesystem] LOCK SHARED`, fd);
-  },
+  lockShared() {
+    console.log(`[filesystem] LOCK SHARED`);
+  }
 
-  lockExclusive(fd) {
-    console.log(`[filesystem] LOCK EXCLUSIVE`, fd);
-  },
+  lockExclusive() {
+    console.log(`[filesystem] LOCK EXCLUSIVE`);
+  }
 
-  tryLockShared(fd) {
-    console.log(`[filesystem] TRY LOCK SHARED`, fd);
-  },
+  tryLockShared() {
+    console.log(`[filesystem] TRY LOCK SHARED`);
+  }
 
-  tryLockExclusive(fd) {
-    console.log(`[filesystem] TRY LOCK EXCLUSIVE`, fd);
-  },
+  tryLockExclusive() {
+    console.log(`[filesystem] TRY LOCK EXCLUSIVE`);
+  }
 
-  unlock(fd) {
-    console.log(`[filesystem] UNLOCK`, fd);
-  },
+  unlock() {
+    console.log(`[filesystem] UNLOCK`);
+  }
 
-  dropDescriptor(fd) {
-    if (fd < _preopens.length + 3)
-      return;
-    delete descriptorTable[fd];
-  },
-
-  readDirectoryEntry(sid) {
-    return getStream(sid).next();
-  },
-
-  dropDirectoryEntryStream(sid) {
-    dropStream(sid);
-  },
-
-  metadataHash(fd) {
-    const descriptor = getDescriptor(fd);
+  metadataHash() {
     let upper = BigInt(0);
-    upper += BigInt(descriptor.mtime || 0);
-    return { upper, lower: BigInt(0) };
-  },
-
-  metadataHashAt(fd, _pathFlags, _path) {
-    const descriptor = getDescriptor(fd);
-    let upper = BigInt(0);
-    upper += BigInt(descriptor.mtime || 0);
+    upper += BigInt(this.#mtime);
     return { upper, lower: BigInt(0) };
   }
+
+  metadataHashAt(_pathFlags, _path) {
+    let upper = BigInt(0);
+    upper += BigInt(this.#mtime);
+    return { upper, lower: BigInt(0) };
+  }
+}
+const descriptorGetEntry = Descriptor.prototype._getEntry;
+delete Descriptor.prototype._getEntry;
+
+let _preopens = [[new Descriptor(_fileData), '/']], _rootPreopen = _preopens[0];
+
+export const preopens = {
+  getDirectories () {
+    return _preopens;
+  }
+}
+
+export const types = {
+  Descriptor,
+  DirectoryEntryStream
 };
 
 export { types as filesystemTypes }
