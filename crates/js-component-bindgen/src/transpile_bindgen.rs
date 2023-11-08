@@ -49,7 +49,7 @@ pub struct TranspileOpts {
     pub no_typescript: bool,
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
-    pub instantiation: bool,
+    pub instantiation: Option<InstantiationMode>,
     /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of
     /// component import specifiers to JS import specifiers.
     pub map: Option<HashMap<String, String>>,
@@ -66,6 +66,13 @@ pub struct TranspileOpts {
     pub valid_lifting_optimization: bool,
     /// Whether or not to emit `tracing` calls on function entry/exit.
     pub tracing: bool,
+}
+
+#[derive(Default, Clone, Debug)]
+pub enum InstantiationMode {
+    #[default]
+    Async,
+    Sync,
 }
 
 struct JsBindgen<'a> {
@@ -174,7 +181,7 @@ impl<'a> JsBindgen<'a> {
         for i in 0..self.core_module_cnt {
             let local_name = format!("module{}", i);
             let mut name_idx = core_file_name(name, i as u32);
-            if self.opts.instantiation {
+            if self.opts.instantiation.is_some() {
                 uwriteln!(
                     compilation_promises,
                     "const {local_name} = compileCore('{name_idx}');"
@@ -208,23 +215,40 @@ impl<'a> JsBindgen<'a> {
         let js_intrinsics = render_intrinsics(
             &mut self.all_intrinsics,
             self.opts.no_nodejs_compat,
-            self.opts.instantiation,
+            self.opts.instantiation.clone(),
         );
 
-        if self.opts.instantiation {
-            uwrite!(
-                output,
-                "\
-                    {}
-                    export async function instantiate(compileCore, imports, instantiateCore = WebAssembly.instantiate) {{
+        match self.opts.instantiation {
+            Some(InstantiationMode::Async) => {
+                uwrite!(
+                    output,
+                    "\
                         {}
-                ",
-                &js_intrinsics as &str,
-                &compilation_promises as &str,
-            );
+                        export async function instantiate(compileCore, imports, instantiateCore = WebAssembly.instantiate) {{
+                            {}
+                    ",
+                    &js_intrinsics as &str,
+                    &compilation_promises as &str,
+                )
+            }
+
+            Some(InstantiationMode::Sync) => {
+                uwrite!(
+                    output,
+                    "\
+                        {}
+                        export function instantiate(compileCore, imports, instantiateCore = WebAssembly.Instance) {{
+                            {}
+                    ",
+                    &js_intrinsics as &str,
+                    &compilation_promises as &str,
+                )
+            }
+
+            None => {}
         }
 
-        let imports_object = if self.opts.instantiation {
+        let imports_object = if self.opts.instantiation.is_some() {
             Some("imports")
         } else {
             None
@@ -232,10 +256,10 @@ impl<'a> JsBindgen<'a> {
         self.esm_bindgen
             .render_imports(&mut output, imports_object, &mut self.local_names);
 
-        if self.opts.instantiation {
+        if self.opts.instantiation.is_some() {
             self.esm_bindgen.render_exports(
                 &mut self.src.js,
-                self.opts.instantiation,
+                self.opts.instantiation.is_some(),
                 &mut self.local_names,
             );
             uwrite!(
@@ -285,7 +309,7 @@ impl<'a> JsBindgen<'a> {
 
             self.esm_bindgen.render_exports(
                 &mut output,
-                self.opts.instantiation,
+                self.opts.instantiation.is_some(),
                 &mut self.local_names,
             );
         }
@@ -462,17 +486,19 @@ impl<'a> Instantiator<'a, '_> {
             assert_eq!(i, *index);
         }
 
-        // To avoid uncaught promise rejection errors, we attach an intermediate
-        // Promise.all with a rejection handler, if there are multiple promises.
-        if self.modules.len() > 1 {
-            self.src.js_init.push_str("Promise.all([");
-            for i in 0..self.modules.len() {
-                if i > 0 {
-                    self.src.js_init.push_str(", ");
+        if let Some(InstantiationMode::Async) = self.gen.opts.instantiation {
+            // To avoid uncaught promise rejection errors, we attach an intermediate
+            // Promise.all with a rejection handler, if there are multiple promises.
+            if self.modules.len() > 1 {
+                self.src.js_init.push_str("Promise.all([");
+                for i in 0..self.modules.len() {
+                    if i > 0 {
+                        self.src.js_init.push_str(", ");
+                    }
+                    self.src.js_init.push_str(&format!("module{}", i));
                 }
-                self.src.js_init.push_str(&format!("module{}", i));
+                uwriteln!(self.src.js_init, "]).catch(() => {{}});");
             }
-            uwriteln!(self.src.js_init, "]).catch(() => {{}});");
         }
 
         for init in self.component.initializers.iter() {
@@ -484,7 +510,7 @@ impl<'a> Instantiator<'a, '_> {
             self.trampoline(i, trampoline);
         }
 
-        if self.gen.opts.instantiation {
+        if self.gen.opts.instantiation.is_some() {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
         }
@@ -780,11 +806,24 @@ impl<'a> Instantiator<'a, '_> {
         let iu32 = i.as_u32();
         let instantiate = self.gen.intrinsic(Intrinsic::InstantiateCore);
         uwriteln!(self.src.js, "let exports{iu32};");
-        uwriteln!(
-            self.src.js_init,
-            "({{ exports: exports{iu32} }} = await {instantiate}(await module{}{imports}));",
-            idx.as_u32()
-        );
+
+        match self.gen.opts.instantiation {
+            Some(InstantiationMode::Async) | None => {
+                uwriteln!(
+                    self.src.js_init,
+                    "({{ exports: exports{iu32} }} = await {instantiate}(await module{}{imports}));",
+                    idx.as_u32()
+                )
+            }
+
+            Some(InstantiationMode::Sync) => {
+                uwriteln!(
+                    self.src.js_init,
+                    "({{ exports: exports{iu32} }} = {instantiate}(module{}{imports}));",
+                    idx.as_u32()
+                )
+            }
+        }
     }
 
     fn create_resource_fn_map(
@@ -1392,8 +1431,7 @@ impl<'a> Instantiator<'a, '_> {
                 module
                     .exports()
                     .iter()
-                    .filter_map(|(name, i)| if *i == idx { Some(name) } else { None })
-                    .next()
+                    .find_map(|(name, i)| if *i == idx { Some(name) } else { None })
                     .unwrap()
             }
             ExportItem::Name(s) => s,
