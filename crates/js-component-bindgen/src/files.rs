@@ -18,14 +18,11 @@ impl Files {
     }
 
     pub fn get_size(&mut self, name: &str) -> Option<usize> {
-        match self.files.get(name) {
-            Some(data) => Some(data.len()),
-            None => None,
-        }
+        self.files.get(name).map(|data| data.len())
     }
 
     pub fn remove(&mut self, name: &str) -> Option<Vec<u8>> {
-        return self.files.remove(name);
+        self.files.remove(name)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&'_ str, &'_ [u8])> {

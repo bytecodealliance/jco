@@ -76,7 +76,7 @@ impl Guest for WasmToolsJs {
 
         let pkg = if let Some(wit_source) = &embed_opts.wit_source {
             let path = PathBuf::from("component.wit");
-            UnresolvedPackage::parse(&path, &wit_source).map_err(|e| e.to_string())?
+            UnresolvedPackage::parse(&path, wit_source).map_err(|e| e.to_string())?
         } else {
             let wit_path = &embed_opts.wit_path.as_ref().unwrap();
             UnresolvedPackage::parse_file(&PathBuf::from(wit_path)).map_err(|e| e.to_string())?
@@ -84,10 +84,7 @@ impl Guest for WasmToolsJs {
 
         let id = resolve.push(pkg).map_err(|e| e.to_string())?;
 
-        let world_string = match &embed_opts.world {
-            Some(world) => Some(world.to_string()),
-            None => None,
-        };
+        let world_string = embed_opts.world.as_ref().map(|world| world.to_string());
         let world = resolve
             .select_world(id, world_string.as_deref())
             .map_err(|e| e.to_string())?;
@@ -127,7 +124,7 @@ impl Guest for WasmToolsJs {
                         return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
                     }
                     for (name, version) in items {
-                        producers.add(&field_name, &name, &version);
+                        producers.add(field_name, name, version);
                     }
                 }
                 Some(producers)

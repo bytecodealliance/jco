@@ -92,7 +92,7 @@ impl FunctionBindgen<'_> {
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
-        return intrinsic.name().to_string();
+        intrinsic.name().to_string()
     }
 
     fn clamp_guest<T>(&mut self, results: &mut Vec<String>, operands: &[String], min: T, max: T)
@@ -149,7 +149,7 @@ impl Bindgen for FunctionBindgen<'_> {
     type Operand = String;
 
     fn sizes(&self) -> &SizeAlign {
-        &self.sizes
+        self.sizes
     }
 
     fn push_block(&mut self) {
@@ -351,7 +351,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 for (field, op) in record.fields.iter().zip(operands) {
                     result.push_str(&format!("{}: {},\n", field.name.to_lower_camel_case(), op));
                 }
-                result.push_str("}");
+                result.push('}');
                 results.push(result);
             }
 
@@ -534,7 +534,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         assert!(block_results.len() == 1);
                         uwriteln!(self.src, "   val: {}", block_results[0]);
                     } else {
-                        assert!(block_results.len() == 0);
+                        assert!(block_results.is_empty());
                     }
                     uwriteln!(
                         self.src,
@@ -612,7 +612,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::OptionLift { payload, .. } => {
                 let (some, some_results) = self.blocks.pop().unwrap();
                 let (none, none_results) = self.blocks.pop().unwrap();
-                assert!(none_results.len() == 0);
+                assert!(none_results.is_empty());
                 assert!(some_results.len() == 1);
                 let some_result = &some_results[0];
 
@@ -716,14 +716,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 let (ok, ok_results) = self.blocks.pop().unwrap();
                 let ok_result = if result.ok.is_some() {
                     assert_eq!(ok_results.len(), 1);
-                    format!("{}", ok_results[0])
+                    ok_results[0].to_string()
                 } else {
                     assert_eq!(ok_results.len(), 0);
                     String::from("undefined")
                 };
                 let err_result = if result.err.is_some() {
                     assert_eq!(err_results.len(), 1);
-                    format!("{}", err_results[0])
+                    err_results[0].to_string()
                 } else {
                     assert_eq!(err_results.len(), 0);
                     String::from("undefined")
@@ -1072,7 +1072,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 // after a high level call, we need to deactivate the component resource borrows
-                if self.cur_resource_borrows.len() > 0 {
+                if !self.cur_resource_borrows.is_empty() {
                     let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
                     for resource in &self.cur_resource_borrows {
                         uwriteln!(self.src, "{resource}[{symbol_resource_handle}] = null;");

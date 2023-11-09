@@ -179,31 +179,29 @@ impl<'a> JsBindgen<'a> {
                     compilation_promises,
                     "const {local_name} = compileCore('{name_idx}');"
                 );
+            } else if files.get_size(&name_idx).unwrap() < self.opts.base64_cutoff {
+                assert!(removed.insert(i));
+                let data = files.remove(&name_idx).unwrap();
+                uwriteln!(
+                    compilation_promises,
+                    "const {local_name} = {}('{}');",
+                    self.intrinsic(Intrinsic::Base64Compile),
+                    general_purpose::STANDARD_NO_PAD.encode(&data),
+                );
             } else {
-                if files.get_size(&name_idx).unwrap() < self.opts.base64_cutoff {
-                    assert!(removed.insert(i));
+                // Maintain numerical file orderings when a previous file was
+                // inlined
+                if let Some(&replacement) = removed.iter().next() {
+                    assert!(removed.remove(&replacement) && removed.insert(i));
                     let data = files.remove(&name_idx).unwrap();
-                    uwriteln!(
-                        compilation_promises,
-                        "const {local_name} = {}('{}');",
-                        self.intrinsic(Intrinsic::Base64Compile),
-                        general_purpose::STANDARD_NO_PAD.encode(&data),
-                    );
-                } else {
-                    // Maintain numerical file orderings when a previous file was
-                    // inlined
-                    if let Some(&replacement) = removed.iter().next() {
-                        assert!(removed.remove(&replacement) && removed.insert(i));
-                        let data = files.remove(&name_idx).unwrap();
-                        name_idx = core_file_name(name, replacement as u32);
-                        files.push(&name_idx, &data);
-                    }
-                    uwriteln!(
-                        compilation_promises,
-                        "const {local_name} = {}(new URL('./{name_idx}', import.meta.url));",
-                        self.intrinsic(Intrinsic::FetchCompile)
-                    );
+                    name_idx = core_file_name(name, replacement as u32);
+                    files.push(&name_idx, &data);
                 }
+                uwriteln!(
+                    compilation_promises,
+                    "const {local_name} = {}(new URL('./{name_idx}', import.meta.url));",
+                    self.intrinsic(Intrinsic::FetchCompile)
+                );
             }
         }
 
@@ -302,7 +300,7 @@ impl<'a> JsBindgen<'a> {
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
-        return intrinsic.name().to_string();
+        intrinsic.name().to_string()
     }
 }
 
@@ -533,7 +531,7 @@ impl<'a> Instantiator<'a, '_> {
                                 if (handleEntry.own) {{
                                     {}(handleEntry.rep);
                                 }}",
-                                self.core_def(&dtor)
+                                self.core_def(dtor)
                             ),
                         )
                     } else {
@@ -677,7 +675,7 @@ impl<'a> Instantiator<'a, '_> {
                                 {}(handleEntry.rep);
                             }}
                             ",
-                            self.core_def(&dtor)
+                            self.core_def(dtor)
                         )
                     } else {
                         "".into()
@@ -775,7 +773,7 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 imports.push_str("},\n");
             }
-            imports.push_str("}");
+            imports.push('}');
         }
 
         let i = self.instances.push(idx);
@@ -817,7 +815,7 @@ impl<'a> Instantiator<'a, '_> {
         let world_key = &self.imports[import_name];
 
         // nested interfaces only currently possible through mapping
-        let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, &import_name);
+        let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, import_name);
 
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
@@ -971,18 +969,16 @@ impl<'a> Instantiator<'a, '_> {
                     unused,
                 );
             }
+        } else if let Some(import_binding) = import_binding {
+            self.gen.esm_bindgen.add_import_binding(
+                &[import_specifier, import_binding],
+                local_name,
+                unused,
+            );
         } else {
-            if let Some(import_binding) = import_binding {
-                self.gen.esm_bindgen.add_import_binding(
-                    &[import_specifier, import_binding],
-                    local_name,
-                    unused,
-                );
-            } else {
-                self.gen
-                    .esm_bindgen
-                    .add_import_binding(&[import_specifier], local_name, unused);
-            }
+            self.gen
+                .esm_bindgen
+                .add_import_binding(&[import_specifier], local_name, unused);
         }
     }
 
@@ -1129,10 +1125,8 @@ impl<'a> Instantiator<'a, '_> {
             (TypeDefKind::Variant(t1), InterfaceType::Variant(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.cases.iter().zip(t2.cases.iter()) {
-                    if let Some(t1) = &f1.ty {
-                        if let Type::Id(id) = t1 {
-                            self.connect_resource_types(*id, f2.ty.as_ref().unwrap(), is_exports);
-                        }
+                    if let Some(Type::Id(id)) = &f1.ty {
+                        self.connect_resource_types(*id, f2.ty.as_ref().unwrap(), is_exports);
                     }
                 }
             }
@@ -1144,15 +1138,11 @@ impl<'a> Instantiator<'a, '_> {
             }
             (TypeDefKind::Result(t1), InterfaceType::Result(t2)) => {
                 let t2 = &self.types[*t2];
-                if let Some(t1) = &t1.ok {
-                    if let Type::Id(id) = t1 {
-                        self.connect_resource_types(*id, &t2.ok.unwrap(), is_exports);
-                    }
+                if let Some(Type::Id(id)) = &t1.ok {
+                    self.connect_resource_types(*id, &t2.ok.unwrap(), is_exports);
                 }
-                if let Some(t1) = &t1.err {
-                    if let Type::Id(id) = t1 {
-                        self.connect_resource_types(*id, &t2.err.unwrap(), is_exports);
-                    }
+                if let Some(Type::Id(id)) = &t1.err {
+                    self.connect_resource_types(*id, &t2.err.unwrap(), is_exports);
                 }
             }
             (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
@@ -1181,18 +1171,11 @@ impl<'a> Instantiator<'a, '_> {
         abi: AbiVariant,
         is_exports: bool,
     ) {
-        let memory = match opts.memory {
-            Some(idx) => Some(format!("memory{}", idx.as_u32())),
-            None => None,
-        };
-        let realloc = match opts.realloc {
-            Some(idx) => Some(format!("realloc{}", idx.as_u32())),
-            None => None,
-        };
-        let post_return = match opts.post_return {
-            Some(idx) => Some(format!("postReturn{}", idx.as_u32())),
-            None => None,
-        };
+        let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
+        let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
+        let post_return = opts
+            .post_return
+            .map(|idx| format!("postReturn{}", idx.as_u32()));
 
         self.src.js("(");
         let mut params = Vec::new();
@@ -1630,7 +1613,7 @@ impl Source {
 fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Option<String>) {
     let impt_sans_version = match impt.find('@') {
         Some(version_idx) => &impt[0..version_idx],
-        None => impt.as_ref(),
+        None => impt,
     };
     if let Some(map) = map.as_ref() {
         if let Some(mapping) = map.get(impt) {
@@ -1667,7 +1650,7 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                             Some(mapping[hash_idx + 1..].into()),
                         )
                     } else {
-                        (mapping.into(), None)
+                        (mapping, None)
                     };
                 }
                 if impt.starts_with(lhs) && impt.ends_with(rhs) {
@@ -1680,7 +1663,7 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                             Some(mapping[hash_idx + 1..].into()),
                         )
                     } else {
-                        (mapping.into(), None)
+                        (mapping, None)
                     };
                 }
             }
@@ -1689,7 +1672,7 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
     (impt_sans_version.to_string(), None)
 }
 
-pub fn parse_world_key<'a>(name: &'a str) -> Option<(&'a str, &'a str, &'a str)> {
+pub fn parse_world_key(name: &str) -> Option<(&str, &str, &str)> {
     let registry_idx = match name.find(':') {
         Some(idx) => idx,
         None => return None,
@@ -1709,7 +1692,7 @@ pub fn parse_world_key<'a>(name: &'a str) -> Option<(&'a str, &'a str, &'a str)>
             ))
         }
         // interface is a namespace, function is a default export
-        None => Some((ns, &name[registry_idx + 1..], "".as_ref())),
+        None => Some((ns, &name[registry_idx + 1..], "")),
     }
 }
 
