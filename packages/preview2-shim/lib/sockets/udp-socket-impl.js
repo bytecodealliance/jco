@@ -1,19 +1,18 @@
 /* eslint-disable no-unused-vars */
 
-import { isIP } from "node:net";
-import { assert } from "../common/assert.js";
-import { deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
-
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network").Network} Network
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpSocketAddress} IpSocketAddress
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpAddressFamily} IpAddressFamily
  * @typedef {import("../../types/interfaces/wasi-sockets-udp").Datagram} Datagram
  * @typedef {import("../../types/interfaces/wasi-io-poll-poll").Pollable} Pollable
- */
+*/
 
 // See: https://github.com/nodejs/node/blob/main/src/udp_wrap.cc
-const { UDP, SendWrap, constants: UDPConstants } = process.binding("udp_wrap");
+const { UDP, SendWrap } = process.binding("udp_wrap");
+import { isIP } from "node:net";
+import { assert } from "../common/assert.js";
+import { deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
 
 const SocketState = {
   Error: "Error",
