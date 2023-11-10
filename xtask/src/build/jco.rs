@@ -2,7 +2,6 @@ use anyhow::Context;
 use std::{collections::HashMap, fs, io::Write, path::PathBuf};
 
 use anyhow::Result;
-use js_component_bindgen;
 use wit_component::ComponentEncoder;
 
 pub(crate) fn run() -> Result<()> {
@@ -19,10 +18,10 @@ pub(crate) fn run() -> Result<()> {
 }
 
 fn transpile(component_path: &str, name: String) -> Result<()> {
-    let component = fs::read(&component_path).context("wasm bindgen component missing")?;
+    let component = fs::read(component_path).context("wasm bindgen component missing")?;
 
     let adapter_path = "lib/wasi_snapshot_preview1.reactor.wasm";
-    let adapter = fs::read(&adapter_path).context("preview1 adapter file missing")?;
+    let adapter = fs::read(adapter_path).context("preview1 adapter file missing")?;
 
     let mut encoder = ComponentEncoder::default()
         .validate(true)

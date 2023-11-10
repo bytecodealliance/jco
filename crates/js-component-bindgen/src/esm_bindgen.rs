@@ -114,14 +114,14 @@ impl EsmBindgen {
     }
 
     /// get the exports (including exported aliases) from the bindgen
-    pub fn exports<'a>(&'a self) -> Vec<(&'a str, &'a str)> {
+    pub fn exports(&self) -> Vec<(&str, &str)> {
         self.export_aliases
             .iter()
             .map(|(alias, name)| (alias.as_ref(), name.as_ref()))
             .chain(
                 self.exports
-                    .iter()
-                    .map(|(name, _)| (name.as_ref(), name.as_ref())),
+                    .keys()
+                    .map(|name| (name.as_ref(), name.as_ref())),
             )
             .collect()
     }
@@ -146,7 +146,7 @@ impl EsmBindgen {
                 continue;
             };
             let (local_name, _) =
-                local_names.get_or_create(&format!("export:{}", export_name), &export_name);
+                local_names.get_or_create(&format!("export:{export_name}"), export_name);
             uwriteln!(output, "const {local_name} = {{");
             for (func_name, export) in iface {
                 let Binding::Local(local_name) = export else {
@@ -173,7 +173,7 @@ impl EsmBindgen {
                 Binding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
             };
             let alias_maybe_quoted = maybe_quote_id(alias);
-            if local_name == &alias_maybe_quoted {
+            if local_name == alias_maybe_quoted {
                 output.push_str(local_name);
             } else if instantiation {
                 uwrite!(output, "{alias_maybe_quoted}: {local_name}");
@@ -192,7 +192,7 @@ impl EsmBindgen {
                 Binding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
             };
             let export_name_maybe_quoted = maybe_quote_id(export_name);
-            if local_name == &export_name_maybe_quoted {
+            if local_name == export_name_maybe_quoted {
                 output.push_str(local_name);
             } else if instantiation {
                 uwrite!(output, "{export_name_maybe_quoted}: {local_name}");
@@ -230,7 +230,7 @@ impl EsmBindgen {
             }
             match binding {
                 Binding::Interface(bindings) => {
-                    if !imports_object.is_some() && bindings.len() == 1 {
+                    if imports_object.is_none() && bindings.len() == 1 {
                         let (import_name, import) = bindings.iter().next().unwrap();
                         if import_name == "default" {
                             let local_name = match import {
@@ -267,12 +267,10 @@ impl EsmBindgen {
                         };
                         if external_name == local_name {
                             uwrite!(output, "{external_name}");
+                        } else if imports_object.is_some() {
+                            uwrite!(output, "{external_name}: {local_name}");
                         } else {
-                            if imports_object.is_some() {
-                                uwrite!(output, "{external_name}: {local_name}");
-                            } else {
-                                uwrite!(output, "{external_name} as {local_name}");
-                            }
+                            uwrite!(output, "{external_name} as {local_name}");
                         }
                     }
                     if !first {

@@ -82,15 +82,17 @@ pub enum AugmentedOp {
 
 impl<'a> Translation<'a> {
     pub fn new(translation: ModuleTranslation<'a>) -> Result<Translation<'a>> {
-        let mut features = WasmFeatures::default();
-        features.multi_memory = false;
-        match Validator::new_with_features(features).validate_all(&translation.wasm) {
+        let mut features = WasmFeatures {
+            multi_memory: false,
+            ..Default::default()
+        };
+        match Validator::new_with_features(features).validate_all(translation.wasm) {
             // This module validates without multi-memory, no need to augment
             // it
             Ok(_) => return Ok(Translation::Normal(translation)),
             Err(e) => {
                 features.multi_memory = true;
-                match Validator::new_with_features(features).validate_all(&translation.wasm) {
+                match Validator::new_with_features(features).validate_all(translation.wasm) {
                     // This module validates with multi-memory, so fall through
                     // to augmentation.
                     Ok(_) => {}
@@ -609,7 +611,7 @@ macro_rules! define_translate {
     // the cases below.
     ($(@$p:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident)*) => {
         $(
-            #[allow(clippy::drop_copy)]
+            #[allow(dropping_copy_types)]
             fn $visit(&mut self $(, $($arg: $argty),*)?)  {
                 #[allow(unused_imports)]
                 use wasm_encoder::Instruction::*;

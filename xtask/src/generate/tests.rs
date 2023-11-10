@@ -19,7 +19,7 @@ pub fn run() -> anyhow::Result<()> {
         let entry = entry?;
 
         // skip all files which don't end with `.wasm`
-        if entry.path().extension().map(|p| p.to_str()).flatten() != Some("wasm") {
+        if entry.path().extension().and_then(|p| p.to_str()) != Some("wasm") {
             continue;
         }
 
@@ -33,12 +33,12 @@ pub fn run() -> anyhow::Result<()> {
         test_names.push(test_name.to_owned());
         let content = generate_test(test_name);
         let file_name = format!("tests/generated/{test_name}.rs");
-        fs::write(&file_name, content)?;
+        fs::write(file_name, content)?;
     }
 
     let content = generate_mod(test_names.as_slice());
-    let file_name = format!("tests/generated/mod.rs");
-    fs::write(&file_name, content)?;
+    let file_name = "tests/generated/mod.rs";
+    fs::write(file_name, content)?;
     println!("generated {} tests", test_names.len());
     Ok(())
 }
@@ -67,8 +67,12 @@ fn {test_name}() -> anyhow::Result<()> {{
 
 /// Generate the mod.rs file containing all tests
 fn generate_mod(test_names: &[String]) -> String {
+    use std::fmt::Write;
+
     test_names
-        .into_iter()
-        .map(|t| format!("mod {t};\n"))
-        .collect()
+        .iter()
+        .fold(String::new(), |mut output, test_name| {
+            let _ = write!(output, "mod {test_name};\n");
+            output
+        })
 }

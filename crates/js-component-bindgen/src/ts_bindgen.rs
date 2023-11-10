@@ -120,7 +120,7 @@ pub fn ts_bindgen(
         }
         // kebab import funcs (always default imports)
         for (name, func) in funcs {
-            bindgen.import_funcs(resolve, &name, &func, files);
+            bindgen.import_funcs(resolve, &name, func, files);
         }
         // namespace imports are grouped by namespace / kebab name
         // kebab name imports are direct
@@ -154,7 +154,7 @@ pub fn ts_bindgen(
                 };
                 seen_names.insert(export_name.to_string());
                 let local_name =
-                    bindgen.export_interface(resolve, &export_name, *id, files, opts.instantiation);
+                    bindgen.export_interface(resolve, export_name, *id, files, opts.instantiation);
                 export_aliases.push((iface_name.to_lower_camel_case(), local_name));
             }
             WorldItem::Type(_) => unimplemented!("type exports"),
@@ -277,11 +277,11 @@ impl TsBindgen {
         files: &mut Files,
     ) {
         if ifaces.len() == 1 {
-            let (iface_name, &id) = ifaces.iter().next().unwrap();
+            let (iface_name, &id) = ifaces.first().unwrap();
             if iface_name == "*" {
                 uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
                 let name = resolve.interfaces[id].name.as_ref().unwrap();
-                let local_name = self.generate_interface(&name, resolve, id, files);
+                let local_name = self.generate_interface(name, resolve, id, files);
                 uwriteln!(self.import_object, "typeof {local_name},",);
                 return;
             }
@@ -289,7 +289,7 @@ impl TsBindgen {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         for (iface_name, &id) in ifaces {
             let name = resolve.interfaces[id].name.as_ref().unwrap();
-            let local_name = self.generate_interface(&name, resolve, id, files);
+            let local_name = self.generate_interface(name, resolve, id, files);
             uwriteln!(
                 self.import_object,
                 "{}: typeof {local_name},",
@@ -329,18 +329,16 @@ impl TsBindgen {
                 "{}: typeof {local_name},",
                 maybe_quote_id(export_name)
             );
+        } else if export_name != maybe_quote_id(export_name) {
+            // TODO: TypeScript doesn't currently support
+            // non-identifier exports
+            // tracking in https://github.com/microsoft/TypeScript/issues/40594
         } else {
-            if export_name != maybe_quote_id(export_name) {
-                // TODO: TypeScript doesn't currently support
-                // non-identifier exports
-                // tracking in https://github.com/microsoft/TypeScript/issues/40594
-            } else {
-                uwriteln!(
-                    self.export_object,
-                    "export const {}: typeof {local_name};",
-                    maybe_quote_id(export_name)
-                );
-            }
+            uwriteln!(
+                self.export_object,
+                "export const {}: typeof {local_name};",
+                maybe_quote_id(export_name)
+            );
         }
         local_name
     }
@@ -372,11 +370,11 @@ impl TsBindgen {
         let goal_name = interface_goal_name(&id_name);
         let goal_name_kebab = goal_name.to_kebab_case();
         let file_name = &format!("interfaces/{}.d.ts", goal_name_kebab);
-        let (name, iface_exists) = self.interface_names.get_or_create(&file_name, &goal_name);
+        let (name, iface_exists) = self.interface_names.get_or_create(file_name, &goal_name);
 
         let camel = name.to_upper_camel_case();
 
-        let (local_name, local_exists) = self.local_names.get_or_create(&file_name, &goal_name);
+        let (local_name, local_exists) = self.local_names.get_or_create(file_name, &goal_name);
         let local_name = local_name.to_upper_camel_case();
 
         if !local_exists {
@@ -404,16 +402,13 @@ impl TsBindgen {
         }
         for (_, ty) in resolve.interfaces[id].types.iter() {
             let ty = &resolve.types[*ty];
-            match ty.kind {
-                TypeDefKind::Resource => {
-                    let resource = ty.name.as_ref().unwrap();
-                    if !gen.resources.contains_key(resource) {
-                        uwriteln!(gen.src, "export {{ {} }};", resource.to_upper_camel_case());
-                        gen.resources
-                            .insert(resource.to_string(), TsInterface::new(resolve));
-                    }
+            if let TypeDefKind::Resource = ty.kind {
+                let resource = ty.name.as_ref().unwrap();
+                if !gen.resources.contains_key(resource) {
+                    uwriteln!(gen.src, "export {{ {} }};", resource.to_upper_camel_case());
+                    gen.resources
+                        .insert(resource.to_string(), TsInterface::new(resolve));
                 }
-                _ => {}
             }
         }
         uwriteln!(gen.src, "}}");
@@ -472,9 +467,8 @@ impl<'a> TsInterface<'a> {
     }
 
     fn docs(&mut self, docs: &Docs) {
-        match &docs.contents {
-            Some(docs) => self.docs_raw(docs),
-            None => return,
+        if let Some(docs) = &docs.contents {
+            self.docs_raw(docs);
         }
     }
 
@@ -615,9 +609,6 @@ impl<'a> TsInterface<'a> {
         } else {
             self
         };
-
-        let is_resource = !matches!(func.kind, FunctionKind::Freestanding);
-        if is_resource {}
 
         let end_character = if declaration {
             iface.src.push_str(match func.kind {
@@ -902,10 +893,9 @@ impl<'a> TsInterface<'a> {
 fn interface_goal_name(iface_name: &str) -> String {
     let iface_name_sans_version = match iface_name.find('@') {
         Some(version_idx) => &iface_name[0..version_idx],
-        None => iface_name.as_ref(),
+        None => iface_name,
     };
     iface_name_sans_version
-        .replace('/', "-")
-        .replace(':', "-")
+        .replace(['/', ':'], "-")
         .to_kebab_case()
 }

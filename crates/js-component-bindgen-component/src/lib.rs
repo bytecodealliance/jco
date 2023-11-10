@@ -49,10 +49,7 @@ impl Guest for JsComponentBindgenComponent {
             name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),
             instantiation: options.instantiation.unwrap_or(false),
-            map: match options.map {
-                Some(map) => Some(map.into_iter().collect()),
-                None => None,
-            },
+            map: options.map.map(|map| map.into_iter().collect()),
             no_nodejs_compat: options.no_nodejs_compat.unwrap_or(false),
             base64_cutoff: options.base64_cutoff.unwrap_or(5000) as usize,
             tla_compat: options
@@ -110,10 +107,7 @@ impl Guest for JsComponentBindgenComponent {
         };
         let id = resolve.push(pkg).map_err(|e| e.to_string())?;
 
-        let world_string = match &opts.world {
-            Some(world) => Some(world.to_string()),
-            None => None,
-        };
+        let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
             .select_world(id, world_string.as_deref())
             .map_err(|e| e.to_string())?;
@@ -123,10 +117,7 @@ impl Guest for JsComponentBindgenComponent {
             no_typescript: false,
             no_nodejs_compat: false,
             instantiation: opts.instantiation.unwrap_or(false),
-            map: match opts.map {
-                Some(map) => Some(map.into_iter().collect()),
-                None => None,
-            },
+            map: opts.map.map(|map| map.into_iter().collect()),
             tla_compat: opts.tla_compat.unwrap_or(false),
             valid_lifting_optimization: false,
             base64_cutoff: 0,

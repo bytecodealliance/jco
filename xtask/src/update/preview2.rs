@@ -4,7 +4,7 @@ use xshell::{cmd, Shell};
 pub(crate) fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
     update_submodules(&sh)?;
-    let _guard = sh.change_dir("submodules/wasmtime");
+    sh.change_dir("submodules/wasmtime");
 
     // Build the artifacts
     cmd!(sh, "./ci/build-wasi-preview1-component-adapter.sh").run()?;
