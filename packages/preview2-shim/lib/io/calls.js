@@ -35,3 +35,6 @@ export const POLL_POLL_LIST = ++call_id << CALL_SHIFT;
 
 // Http
 export const HTTP_CREATE_REQUEST = ++call_id << 24;
+
+// Clocks
+export const CLOCKS_DURATION_SUBSCRIBE = ++call_id << 24;

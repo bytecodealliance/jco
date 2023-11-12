@@ -171,6 +171,8 @@ class Pollable {
   static _create (id) {
     const pollable = new Pollable();
     pollable.#id = id;
+    if (id === 0)
+      pollable.#ready = true;
     return pollable;
   }
   static _listToIds (list) {
@@ -203,3 +205,11 @@ export const poll = {
     });
   }
 };
+
+export function resolvedPoll () {
+  return pollableCreate(0);
+}
+
+export function createPoll (call, id, initPayload) {
+  return pollableCreate(ioCall(call, id, initPayload));
+}

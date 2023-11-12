@@ -1,5 +1,18 @@
 export namespace WasiHttpTypes {
   /**
+   * Attempts to extract a http-related `error` from the stream `error`
+   * provided.
+   * 
+   * Stream operations which return `stream-error::last-operation-failed` have
+   * a payload with more information about the operation that failed. This
+   * payload can be passed through to this function to see if there's
+   * http-related information about the error to return.
+   * 
+   * Note that this function is fallible because not all stream-related errors
+   * are http-related errors.
+   */
+  export function httpErrorCode(err: StreamError): ErrorCode | undefined;
+  /**
    * Construct an empty HTTP Fields.
    */
   export { Fields };
@@ -24,9 +37,6 @@ export namespace WasiHttpTypes {
   /**
    * Set all of the values for a key. Clears any existing values for that
    * key, if they have been set.
-   * 
-   * The operation can fail if the name or value arguments are invalid, or if
-   * the name is forbidden.
    */
   /**
    * Delete all values for a key. Does nothing if no values for the key
@@ -35,9 +45,6 @@ export namespace WasiHttpTypes {
   /**
    * Append a value for a key. Does not change or delete any existing
    * values for that key.
-   * 
-   * The operation can fail if the name or value arguments are invalid, or if
-   * the name is forbidden.
    */
   /**
    * Retrieve the full set of keys and values in the Fields. Like the
@@ -76,17 +83,9 @@ export namespace WasiHttpTypes {
    * return success at most once, and subsequent calls will return error.
    */
   /**
-   * Construct a new `outgoing-request`.
+   * Construct a new `outgoing-request` with a default `method` of `GET`, and
+   * `none` values for `path-with-query`, `scheme`, and `authority`.
    * 
-   * * `method` represents the HTTP Method for the Request.
-   * * `path-with-query` is the combination of the HTTP Path and Query for
-   * the Request. When `none`, this represents an empty Path and empty
-   * Query.
-   * * `scheme` is the HTTP Related Scheme for the Request. When `none`,
-   * the implementation may choose an appropriate default scheme.
-   * * `authority` is the HTTP Authority for the Request. A value of `none`
-   * may be used with Related Schemes which do not require an Authority.
-   * The HTTP and HTTPS schemes always require an authority.
    * * `headers` is the HTTP Headers for the Request.
    * 
    * It is possible to construct, or manipulate with the accessor functions
@@ -108,7 +107,8 @@ export namespace WasiHttpTypes {
    * Get the Method for the Request.
    */
   /**
-   * Set the Method for the Request.
+   * Set the Method for the Request. Fails if the string present in a
+   * `method.other` argument is not a syntactically valid method.
    */
   /**
    * Get the combination of the HTTP Path and Query for the Request.
@@ -116,7 +116,8 @@ export namespace WasiHttpTypes {
    */
   /**
    * Set the combination of the HTTP Path and Query for the Request.
-   * When `none`, this represents an empty Path and empty Query.
+   * When `none`, this represents an empty Path and empty Query. Fails is the
+   * string given is not a syntactically valid path and query uri component.
    */
   /**
    * Get the HTTP Related Scheme for the Request. When `none`, the
@@ -124,7 +125,8 @@ export namespace WasiHttpTypes {
    */
   /**
    * Set the HTTP Related Scheme for the Request. When `none`, the
-   * implementation may choose an appropriate default scheme.
+   * implementation may choose an appropriate default scheme. Fails if the
+   * string given is not a syntactically valid uri scheme.
    */
   /**
    * Get the HTTP Authority for the Request. A value of `none` may be used
@@ -134,7 +136,8 @@ export namespace WasiHttpTypes {
   /**
    * Set the HTTP Authority for the Request. A value of `none` may be used
    * with Related Schemes which do not require an Authority. The HTTP and
-   * HTTPS schemes always require an authority.
+   * HTTPS schemes always require an authority. Fails if the string given is
+   * not a syntactically valid uri authority.
    */
   /**
    * Get the headers associated with the Request.
@@ -234,9 +237,10 @@ export namespace WasiHttpTypes {
    * trailers were present in the body.
    */
   /**
-   * Construct an `outgoing-response`.
+   * Construct an `outgoing-response`, with a default `status-code` of `200`.
+   * If a different `status-code` is needed, it must be set via the
+   * `set-status-code` method.
    * 
-   * * `status-code` is the HTTP Status Code for the Response.
    * * `headers` is the HTTP Headers for the Response.
    */
   export { OutgoingResponse };
@@ -244,7 +248,8 @@ export namespace WasiHttpTypes {
    * Get the HTTP Status Code for the Response.
    */
   /**
-   * Set the HTTP Status Code for the Response.
+   * Set the HTTP Status Code for the Response. Fails if the status-code
+   * given is not a valid http status code.
    */
   /**
    * Get the headers associated with the Request.
@@ -307,6 +312,8 @@ import type { InputStream } from '../interfaces/wasi-io-streams.js';
 export { InputStream };
 import type { OutputStream } from '../interfaces/wasi-io-streams.js';
 export { OutputStream };
+import type { StreamError } from '../interfaces/wasi-io-streams.js';
+export { StreamError };
 import type { Pollable } from '../interfaces/wasi-io-poll.js';
 export { Pollable };
 /**
@@ -359,37 +366,196 @@ export interface SchemeOther {
   val: string,
 }
 /**
- * TODO: perhaps better align with HTTP semantics?
- * This type enumerates the different kinds of errors that may occur when
- * initially returning a response.
+ * Defines the case payload type for `DNS-error` above:
  */
-export type Error = ErrorInvalidUrl | ErrorTimeoutError | ErrorProtocolError | ErrorUnexpectedError;
-export interface ErrorInvalidUrl {
-  tag: 'invalid-url',
-  val: string,
-}
-export interface ErrorTimeoutError {
-  tag: 'timeout-error',
-  val: string,
-}
-export interface ErrorProtocolError {
-  tag: 'protocol-error',
-  val: string,
-}
-export interface ErrorUnexpectedError {
-  tag: 'unexpected-error',
-  val: string,
+export interface DnsErrorPayload {
+  rcode?: string,
+  infoCode?: number,
 }
 /**
- * This tyep enumerates the different kinds of errors that may occur when
+ * Defines the case payload type for `TLS-alert-received` above:
+ */
+export interface TlsAlertReceivedPayload {
+  alertId?: number,
+  alertMessage?: string,
+}
+/**
+ * Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
+ */
+export interface FieldSizePayload {
+  fieldName?: string,
+  fieldSize?: number,
+}
+/**
+ * These cases are inspired by the IANA HTTP Proxy Error Types:
+ * https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types
+ */
+export type ErrorCode = ErrorCodeDnsTimeout | ErrorCodeDnsError | ErrorCodeDestinationNotFound | ErrorCodeDestinationUnavailable | ErrorCodeDestinationIpProhibited | ErrorCodeDestinationIpUnroutable | ErrorCodeConnectionRefused | ErrorCodeConnectionTerminated | ErrorCodeConnectionTimeout | ErrorCodeConnectionReadTimeout | ErrorCodeConnectionWriteTimeout | ErrorCodeConnectionLimitReached | ErrorCodeTlsProtocolError | ErrorCodeTlsCertificateError | ErrorCodeTlsAlertReceived | ErrorCodeHttpRequestDenied | ErrorCodeHttpRequestLengthRequired | ErrorCodeHttpRequestBodySize | ErrorCodeHttpRequestMethodInvalid | ErrorCodeHttpRequestUriInvalid | ErrorCodeHttpRequestUriTooLong | ErrorCodeHttpRequestHeaderSectionSize | ErrorCodeHttpRequestHeaderSize | ErrorCodeHttpRequestTrailerSectionSize | ErrorCodeHttpRequestTrailerSize | ErrorCodeHttpResponseIncomplete | ErrorCodeHttpResponseHeaderSectionSize | ErrorCodeHttpResponseHeaderSize | ErrorCodeHttpResponseBodySize | ErrorCodeHttpResponseTrailerSectionSize | ErrorCodeHttpResponseTrailerSize | ErrorCodeHttpResponseTransferCoding | ErrorCodeHttpResponseContentCoding | ErrorCodeHttpResponseTimeout | ErrorCodeHttpUpgradeFailed | ErrorCodeHttpProtocolError | ErrorCodeLoopDetected | ErrorCodeConfigurationError | ErrorCodeInternalError;
+export interface ErrorCodeDnsTimeout {
+  tag: 'DNS-timeout',
+}
+export interface ErrorCodeDnsError {
+  tag: 'DNS-error',
+  val: DnsErrorPayload,
+}
+export interface ErrorCodeDestinationNotFound {
+  tag: 'destination-not-found',
+}
+export interface ErrorCodeDestinationUnavailable {
+  tag: 'destination-unavailable',
+}
+export interface ErrorCodeDestinationIpProhibited {
+  tag: 'destination-IP-prohibited',
+}
+export interface ErrorCodeDestinationIpUnroutable {
+  tag: 'destination-IP-unroutable',
+}
+export interface ErrorCodeConnectionRefused {
+  tag: 'connection-refused',
+}
+export interface ErrorCodeConnectionTerminated {
+  tag: 'connection-terminated',
+}
+export interface ErrorCodeConnectionTimeout {
+  tag: 'connection-timeout',
+}
+export interface ErrorCodeConnectionReadTimeout {
+  tag: 'connection-read-timeout',
+}
+export interface ErrorCodeConnectionWriteTimeout {
+  tag: 'connection-write-timeout',
+}
+export interface ErrorCodeConnectionLimitReached {
+  tag: 'connection-limit-reached',
+}
+export interface ErrorCodeTlsProtocolError {
+  tag: 'TLS-protocol-error',
+}
+export interface ErrorCodeTlsCertificateError {
+  tag: 'TLS-certificate-error',
+}
+export interface ErrorCodeTlsAlertReceived {
+  tag: 'TLS-alert-received',
+  val: TlsAlertReceivedPayload,
+}
+export interface ErrorCodeHttpRequestDenied {
+  tag: 'HTTP-request-denied',
+}
+export interface ErrorCodeHttpRequestLengthRequired {
+  tag: 'HTTP-request-length-required',
+}
+export interface ErrorCodeHttpRequestBodySize {
+  tag: 'HTTP-request-body-size',
+  val: bigint | undefined,
+}
+export interface ErrorCodeHttpRequestMethodInvalid {
+  tag: 'HTTP-request-method-invalid',
+}
+export interface ErrorCodeHttpRequestUriInvalid {
+  tag: 'HTTP-request-URI-invalid',
+}
+export interface ErrorCodeHttpRequestUriTooLong {
+  tag: 'HTTP-request-URI-too-long',
+}
+export interface ErrorCodeHttpRequestHeaderSectionSize {
+  tag: 'HTTP-request-header-section-size',
+  val: number | undefined,
+}
+export interface ErrorCodeHttpRequestHeaderSize {
+  tag: 'HTTP-request-header-size',
+  val: FieldSizePayload | undefined,
+}
+export interface ErrorCodeHttpRequestTrailerSectionSize {
+  tag: 'HTTP-request-trailer-section-size',
+  val: number | undefined,
+}
+export interface ErrorCodeHttpRequestTrailerSize {
+  tag: 'HTTP-request-trailer-size',
+  val: FieldSizePayload,
+}
+export interface ErrorCodeHttpResponseIncomplete {
+  tag: 'HTTP-response-incomplete',
+}
+export interface ErrorCodeHttpResponseHeaderSectionSize {
+  tag: 'HTTP-response-header-section-size',
+  val: number | undefined,
+}
+export interface ErrorCodeHttpResponseHeaderSize {
+  tag: 'HTTP-response-header-size',
+  val: FieldSizePayload,
+}
+export interface ErrorCodeHttpResponseBodySize {
+  tag: 'HTTP-response-body-size',
+  val: bigint | undefined,
+}
+export interface ErrorCodeHttpResponseTrailerSectionSize {
+  tag: 'HTTP-response-trailer-section-size',
+  val: number | undefined,
+}
+export interface ErrorCodeHttpResponseTrailerSize {
+  tag: 'HTTP-response-trailer-size',
+  val: FieldSizePayload,
+}
+export interface ErrorCodeHttpResponseTransferCoding {
+  tag: 'HTTP-response-transfer-coding',
+  val: string | undefined,
+}
+export interface ErrorCodeHttpResponseContentCoding {
+  tag: 'HTTP-response-content-coding',
+  val: string | undefined,
+}
+export interface ErrorCodeHttpResponseTimeout {
+  tag: 'HTTP-response-timeout',
+}
+export interface ErrorCodeHttpUpgradeFailed {
+  tag: 'HTTP-upgrade-failed',
+}
+export interface ErrorCodeHttpProtocolError {
+  tag: 'HTTP-protocol-error',
+}
+export interface ErrorCodeLoopDetected {
+  tag: 'loop-detected',
+}
+export interface ErrorCodeConfigurationError {
+  tag: 'configuration-error',
+}
+/**
+ * This is a catch-all error for anything that doesn't fit cleanly into a
+ * more specific case. It also includes an optional string for an
+ * unstructured description of the error. Users should not depend on the
+ * string for diagnosing errors, as it's not required to be consistent
+ * between implementations.
+ */
+export interface ErrorCodeInternalError {
+  tag: 'internal-error',
+  val: string | undefined,
+}
+/**
+ * This type enumerates the different kinds of errors that may occur when
  * setting or appending to a `fields` resource.
  */
-export type HeaderError = HeaderErrorInvalidSyntax | HeaderErrorForbidden;
+export type HeaderError = HeaderErrorInvalidSyntax | HeaderErrorForbidden | HeaderErrorImmutable;
+/**
+ * This error indicates that a `field-key` or `field-value` was
+ * syntactically invalid when used with an operation that sets headers in a
+ * `fields`.
+ */
 export interface HeaderErrorInvalidSyntax {
   tag: 'invalid-syntax',
 }
+/**
+ * This error indicates that a forbidden `field-key` was used when trying
+ * to set a header in a `fields`.
+ */
 export interface HeaderErrorForbidden {
   tag: 'forbidden',
+}
+/**
+ * This error indicates that the operation on the `fields` was not
+ * permitted because the fields are immutable.
+ */
+export interface HeaderErrorImmutable {
+  tag: 'immutable',
 }
 /**
  * Field keys are always strings.
@@ -415,8 +581,31 @@ export type Trailers = Fields;
 export type StatusCode = number;
 export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
+export class FutureIncomingResponse {
+  subscribe(): Pollable;
+  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
+}
+
+export class OutgoingBody {
+  write(): OutputStream;
+  static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
+}
+
+export class ResponseOutparam {
+  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
+}
+
+export class IncomingRequest {
+  method(): Method;
+  pathWithQuery(): string | undefined;
+  scheme(): Scheme | undefined;
+  authority(): string | undefined;
+  headers(): Headers;
+  consume(): IncomingBody;
+}
+
 export class OutgoingRequest {
-  constructor(method: Method, pathWithQuery: string | undefined, scheme: Scheme | undefined, authority: string | undefined, headers: Headers)
+  constructor(headers: Headers)
   body(): OutgoingBody;
   method(): Method;
   setMethod(method: Method): void;
@@ -429,8 +618,30 @@ export class OutgoingRequest {
   headers(): Headers;
 }
 
-export class ResponseOutparam {
-  static set(param: ResponseOutparam, response: Result<OutgoingResponse, Error>): void;
+export class RequestOptions {
+  constructor()
+  connectTimeoutMs(): Duration | undefined;
+  setConnectTimeoutMs(ms: Duration | undefined): void;
+  firstByteTimeoutMs(): Duration | undefined;
+  setFirstByteTimeoutMs(ms: Duration | undefined): void;
+  betweenBytesTimeoutMs(): Duration | undefined;
+  setBetweenBytesTimeoutMs(ms: Duration | undefined): void;
+}
+
+export class IncomingResponse {
+  status(): StatusCode;
+  headers(): Headers;
+  consume(): IncomingBody;
+}
+
+export class IncomingBody {
+  stream(): InputStream;
+  static finish(this_: IncomingBody): FutureTrailers;
+}
+
+export class FutureTrailers {
+  subscribe(): Pollable;
+  get(): Result<Trailers | undefined, ErrorCode> | undefined;
 }
 
 export class Fields {
@@ -445,54 +656,9 @@ export class Fields {
 }
 
 export class OutgoingResponse {
-  constructor(statusCode: StatusCode, headers: Headers)
+  constructor(headers: Headers)
   statusCode(): StatusCode;
   setStatusCode(statusCode: StatusCode): void;
   headers(): Headers;
   body(): OutgoingBody;
-}
-
-export class RequestOptions {
-  constructor()
-  connectTimeoutMs(): Duration | undefined;
-  setConnectTimeoutMs(ms: Duration | undefined): void;
-  firstByteTimeoutMs(): Duration | undefined;
-  setFirstByteTimeoutMs(ms: Duration | undefined): void;
-  betweenBytesTimeoutMs(): Duration | undefined;
-  setBetweenBytesTimeoutMs(ms: Duration | undefined): void;
-}
-
-export class OutgoingBody {
-  write(): OutputStream;
-  static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
-}
-
-export class FutureIncomingResponse {
-  subscribe(): Pollable;
-  get(): Result<Result<IncomingResponse, Error>, void> | undefined;
-}
-
-export class FutureTrailers {
-  subscribe(): Pollable;
-  get(): Result<Trailers | undefined, Error> | undefined;
-}
-
-export class IncomingResponse {
-  status(): StatusCode;
-  headers(): Headers;
-  consume(): IncomingBody;
-}
-
-export class IncomingRequest {
-  method(): Method;
-  pathWithQuery(): string | undefined;
-  scheme(): Scheme | undefined;
-  authority(): string | undefined;
-  headers(): Headers;
-  consume(): IncomingBody;
-}
-
-export class IncomingBody {
-  stream(): InputStream;
-  static finish(this_: IncomingBody): FutureTrailers;
 }

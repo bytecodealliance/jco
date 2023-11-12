@@ -1,31 +1,21 @@
 export namespace WasiIoStreams {
   /**
-   * Returns a string that's suitable to assist humans in debugging this
-   * error.
-   * 
-   * The returned string will change across platforms and hosts which
-   * means that parsing it, for example, would be a
-   * platform-compatibility hazard.
-   */
-  export { Error };
-  /**
    * Perform a non-blocking read from the stream.
    * 
-   * This function returns a list of bytes containing the data that was
-   * read, along with a `stream-status` which, indicates whether further
-   * reads are expected to produce data. The returned list will contain up to
-   * `len` bytes; it may return fewer than requested, but not more. An
-   * empty list and `stream-status:open` indicates no more data is
-   * available at this time, and that the pollable given by `subscribe`
-   * will be ready when more data is available.
+   * This function returns a list of bytes containing the read data,
+   * when successful. The returned list will contain up to `len` bytes;
+   * it may return fewer than requested, but not more. The list is
+   * empty when no bytes are available for reading at this time. The
+   * pollable given by `subscribe` will be ready when more bytes are
+   * available.
    * 
-   * Once a stream has reached the end, subsequent calls to `read` or
-   * `skip` will always report `stream-status:ended` rather than producing more
-   * data.
+   * This function fails with a `stream-error` when the operation
+   * encounters an error, giving `last-operation-failed`, or when the
+   * stream is closed, giving `closed`.
    * 
-   * When the caller gives a `len` of 0, it represents a request to read 0
-   * bytes. This read should  always succeed and return an empty list and
-   * the current `stream-status`.
+   * When the caller gives a `len` of 0, it represents a request to
+   * read 0 bytes. If the stream is still open, this call should
+   * succeed and return an empty list, or otherwise fail with `closed`.
    * 
    * The `len` parameter is a `u64`, which could represent a list of u8 which
    * is not possible to allocate in wasm32, or not desirable to allocate as
@@ -35,21 +25,13 @@ export namespace WasiIoStreams {
   export { InputStream };
   /**
    * Read bytes from a stream, after blocking until at least one byte can
-   * be read. Except for blocking, identical to `read`.
+   * be read. Except for blocking, behavior is identical to `read`.
    */
   /**
-   * Skip bytes from a stream.
+   * Skip bytes from a stream. Returns number of bytes skipped.
    * 
-   * This is similar to the `read` function, but avoids copying the
-   * bytes into the instance.
-   * 
-   * Once a stream has reached the end, subsequent calls to read or
-   * `skip` will always report end-of-stream rather than producing more
-   * data.
-   * 
-   * This function returns the number of bytes skipped, along with a
-   * `stream-status` indicating whether the end of the stream was
-   * reached. The returned value will be at most `len`; it may be less.
+   * Behaves identical to `read`, except instead of returning a list
+   * of bytes, returns the number of bytes consumed from the stream.
    */
   /**
    * Skip bytes from a stream, after blocking until at least one byte
@@ -195,6 +177,8 @@ export namespace WasiIoStreams {
        * is ready for reading, before performing the `splice`.
        */
     }
+    import type { Error } from '../interfaces/wasi-io-error.js';
+    export { Error };
     import type { Pollable } from '../interfaces/wasi-io-poll.js';
     export { Pollable };
     /**
@@ -217,10 +201,6 @@ export namespace WasiIoStreams {
      */
     export interface StreamErrorClosed {
       tag: 'closed',
-    }
-    
-    export class Error {
-      toDebugString(): string;
     }
     
     export class OutputStream {

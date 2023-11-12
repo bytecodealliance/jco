@@ -1,6 +1,6 @@
-import { streams } from '../io/worker-io.js';
-
+import { streams, _inputStreamCreate, _outputStreamCreate, _streamTypes } from '../io/worker-io.js';
 const { InputStream, OutputStream } = streams;
+
 
 /**
  * @typedef {import("../../types/interfaces/wasi-http-types").Method} Method
@@ -35,33 +35,14 @@ export class WasiHttp {
 
     class IncomingBody {
       #bodyFinished = false;
-      #chunks = [];
       stream () {
-        const incomingBody = this;
-        return new InputStream({
-          blockingRead (_len) {
-            if (incomingBody.#bodyFinished)
-              throw { tag: 'closed' };
-            if (incomingBody.#chunks.length === 0)
-              return new Uint8Array([]);
-            // TODO: handle chunk splitting case where len is less than chunk length
-            return incomingBody.#chunks.shift();
-          },
-          subscribe () {
-            // TODO
-          }
-        });
+        return _inputStreamCreate(_streamTypes.INCOMING_BODY, this);
       }
       static finish (incomingBody) {
         incomingBody.#bodyFinished = true;
         return futureTrailersCreate(new Fields([]), false);
       }
-      static _addChunk (incomingBody, chunk) {
-        incomingBody.#chunks.push(chunk);
-      }
     }
-    const incomingBodyAddChunk = IncomingBody._addChunk;
-    delete IncomingBody._addChunk;
 
     // TODO
     class IncomingRequest {}
@@ -127,8 +108,8 @@ export class WasiHttp {
       }
 
       static _handle (request) {
-        // const scheme = request.#scheme.tag === "HTTP" ? "http://" : "https://";
-        // const url = scheme + request.#authority + request.#pathWithQuery;
+        const scheme = request.#scheme.tag === "HTTP" ? "http://" : "https://";
+        const url = scheme + request.#authority + request.#pathWithQuery;
         const headers = {
           "host": request.#authority,
         };
@@ -137,22 +118,22 @@ export class WasiHttp {
           headers[key] = decoder.decode(value);
         }
 
-        let res;
-        try {
-          // res = send({
-          //   method: request.#method.tag,
-          //   uri: url,
-          //   headers: headers,
-          //   params: [],
-          //   body: combineChunks(outgoingBodyGetChunks(request.#body)),
-          // });
-        } catch (err) {
-          return newFutureIncomingResponse(err.toString(), true);
-        }
+        // let res;
+        // try {
+        //   // res = send({
+        //   //   method: request.#method.tag,
+        //   //   uri: url,
+        //   //   headers: headers,
+        //   //   params: [],
+        //   //   body: combineChunks(outgoingBodyGetChunks(request.#body)),
+        //   // });
+        // } catch (err) {
+        //   return newFutureIncomingResponse(err.toString(), true);
+        // }
 
-        const encoder = new TextEncoder();
-        const response = newIncomingResponse(res.status, new Fields(res.headers.map(([key, value]) => [key, encoder.encode(value)])), [res.body]);
-        return newFutureIncomingResponse({ tag: 'ok', val: response }, false);
+        // const encoder = new TextEncoder();
+        // const response = newIncomingResponse(res.status, new Fields(res.headers.map(([key, value]) => [key, encoder.encode(value)])), [res.body]);
+        // return newFutureIncomingResponse({ tag: 'ok', val: response }, false);
       }
     }
 
@@ -160,15 +141,11 @@ export class WasiHttp {
     delete OutgoingRequest._handle;
 
     class OutgoingBody {
-      #chunks = [];
+      #outputStream = null;
       write () {
-        const body = this;
-        return new OutputStream({
-          write (bytes) {
-            body.#chunks.push(bytes);
-          },
-          blockingFlush () {}
-        });
+        if (this.#outputStream)
+          throw new Error('output stream already created for writing');
+        return this.#outputStream = _outputStreamCreate(_streamTypes.OUTGOING_BODY);
       }
       /**
        * @param {OutgoingBody} body 
@@ -177,13 +154,7 @@ export class WasiHttp {
       static finish (_body, _trailers) {
         // TODO
       }
-
-      static _getChunks (body) {
-        return body.#chunks;
-      }
     }
-    // const outgoingBodyGetChunks = OutgoingBody._getChunks;
-    delete OutgoingBody._getChunks;
 
     class IncomingResponse {
       id = http.responseCnt++;
@@ -223,7 +194,7 @@ export class WasiHttp {
       #value;
       #isError;
       subscribe () {
-        // TODO
+        
       }
       get () {
         return { tag: this.#isError ? 'err' : 'ok', val: this.#value };

@@ -1,5 +1,4 @@
-import { streams, _inputStreamCreate, _outputStreamCreate } from '../io/worker-io.js';
-import * as streamTypes from '../io/stream-types.js';
+import { streams, _inputStreamCreate, _outputStreamCreate, _streamTypes } from '../io/worker-io.js';
 import { environment } from './cli.js';
 import { constants, readSync, openSync, opendirSync, closeSync, fstatSync, lstatSync, statSync, writeSync, mkdirSync } from 'node:fs';
 import { platform } from 'node:process';
@@ -112,13 +111,13 @@ export class FileSystem {
       readViaStream(offset) {
         if (this.#hostPreopen)
           throw { tag: 'last-operation-failed', val: new StreamError };
-        return _inputStreamCreate(streamTypes.FILE, { fd: this.#fd, offset });
+        return _inputStreamCreate(_streamTypes.FILE, { fd: this.#fd, offset });
       }
 
       writeViaStream(offset) {
         if (this.#hostPreopen)
           throw 'is-directory';
-        return _outputStreamCreate(streamTypes.FILE, { fd: this.#fd, offset });
+        return _outputStreamCreate(_streamTypes.FILE, { fd: this.#fd, offset });
       }
 
       appendViaStream() {
@@ -141,10 +140,6 @@ export class FileSystem {
         if (this.#hostPreopen) return 'directory';
         const stats = fstatSync(this.#fd);
         return lookupType(stats);
-      }
-    
-      setFlags(flags) {
-        console.log(`[filesystem] SET FLAGS ${this.id} ${JSON.stringify(flags)}`);
       }
     
       setSize(size) {
@@ -241,7 +236,7 @@ export class FileSystem {
         console.log(`[filesystem] LINK AT`, this.id);
       }
 
-      openAt(pathFlags, path, openFlags, descriptorFlags, modes) {
+      openAt(pathFlags, path, openFlags, descriptorFlags) {
         const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
         let fsOpenFlags = 0x0;
         if (openFlags.create)
@@ -263,16 +258,8 @@ export class FileSystem {
         // if (descriptorFlags.requestedWriteSync)
         // if (descriptorFlags.mutateDirectory)
 
-        let fsMode = 0x0;
-        if (modes.readable)
-          fsMode |= 0o444;
-        if (modes.writeable)
-          fsMode |= 0o222;
-        if (modes.executable)
-          fsMode |= 0o111;
-
         try {
-          const fd = openSync(isWindows ? fullPath.slice(1) : fullPath, fsOpenFlags, fsMode);
+          const fd = openSync(isWindows ? fullPath.slice(1) : fullPath, fsOpenFlags);
           return descriptorCreate(fd, fullPath);
         }
         catch (e) {
@@ -300,37 +287,8 @@ export class FileSystem {
         console.log(`[filesystem] UNLINK FILE AT`, this.id);
       }
 
-      changeFilePermissionsAt() {
-        console.log(`[filesystem] CHANGE FILE PERMISSIONS AT`, this.id);
-      }
-
-      changeDirectoryPermissionsAt() {
-        console.log(`[filesystem] CHANGE DIR PERMISSIONS AT`, this.id);
-      }
-
-      lockShared() {
-        console.log(`[filesystem] LOCK SHARED`, this.id);
-      }
-
-      lockExclusive() {
-        console.log(`[filesystem] LOCK EXCLUSIVE`, this.id);
-      }
-
-      tryLockShared() {
-        console.log(`[filesystem] TRY LOCK SHARED`, this.id);
-      }
-
-      tryLockExclusive() {
-        console.log(`[filesystem] TRY LOCK EXCLUSIVE`, this.id);
-      }
-
-      unlock() {
-        console.log(`[filesystem] UNLOCK`, this.id);
-      }
-
-      [symbolDispose]() {
-        if (this.#fd)
-          closeSync(this.#fd);
+      isSameObject(other) {
+        return other === this;
       }
 
       metadataHash() {
@@ -380,6 +338,11 @@ export class FileSystem {
         if (descriptor.#hostPreopen)
           return descriptor.#hostPreopen + (descriptor.#hostPreopen.endsWith('/') ? '' : '/') + subpath;
         return descriptor.#fullPath + '/' + subpath;
+      }
+
+      [symbolDispose]() {
+        if (this.#fd)
+          closeSync(this.#fd);
       }
     }
 

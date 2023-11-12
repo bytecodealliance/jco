@@ -3,7 +3,7 @@
 /// their headers, trailers, and bodies.
 interface types {
   use wasi:clocks/monotonic-clock@0.2.0-rc-2023-11-05.{duration};
-  use wasi:io/streams@0.2.0-rc-2023-11-05.{input-stream, output-stream};
+  use wasi:io/streams@0.2.0-rc-2023-11-05.{input-stream, output-stream, error as stream-error};
   use wasi:io/poll@0.2.0-rc-2023-11-05.{pollable};
 
   /// This type corresponds to HTTP standard Methods.
@@ -27,21 +27,100 @@ interface types {
     other(string)
   }
 
-  /// TODO: perhaps better align with HTTP semantics?
-  /// This type enumerates the different kinds of errors that may occur when
-  /// initially returning a response.
-  variant error {
-    invalid-url(string),
-    timeout-error(string),
-    protocol-error(string),
-    unexpected-error(string)
+  /// These cases are inspired by the IANA HTTP Proxy Error Types:
+  ///   https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types
+  variant error-code {
+    DNS-timeout,
+    DNS-error(DNS-error-payload),
+    destination-not-found,
+    destination-unavailable,
+    destination-IP-prohibited,
+    destination-IP-unroutable,
+    connection-refused,
+    connection-terminated,
+    connection-timeout,
+    connection-read-timeout,
+    connection-write-timeout,
+    connection-limit-reached,
+    TLS-protocol-error,
+    TLS-certificate-error,
+    TLS-alert-received(TLS-alert-received-payload),
+    HTTP-request-denied,
+    HTTP-request-length-required,
+    HTTP-request-body-size(option<u64>),
+    HTTP-request-method-invalid,
+    HTTP-request-URI-invalid,
+    HTTP-request-URI-too-long,
+    HTTP-request-header-section-size(option<u32>),
+    HTTP-request-header-size(option<field-size-payload>),
+    HTTP-request-trailer-section-size(option<u32>),
+    HTTP-request-trailer-size(field-size-payload),
+    HTTP-response-incomplete,
+    HTTP-response-header-section-size(option<u32>),
+    HTTP-response-header-size(field-size-payload),
+    HTTP-response-body-size(option<u64>),
+    HTTP-response-trailer-section-size(option<u32>),
+    HTTP-response-trailer-size(field-size-payload),
+    HTTP-response-transfer-coding(option<string>),
+    HTTP-response-content-coding(option<string>),
+    HTTP-response-timeout,
+    HTTP-upgrade-failed,
+    HTTP-protocol-error,
+    loop-detected,
+    configuration-error,
+    /// This is a catch-all error for anything that doesn't fit cleanly into a
+    /// more specific case. It also includes an optional string for an
+    /// unstructured description of the error. Users should not depend on the
+    /// string for diagnosing errors, as it's not required to be consistent
+    /// between implementations.
+    internal-error(option<string>)
   }
 
-  /// This tyep enumerates the different kinds of errors that may occur when
+  /// Defines the case payload type for `DNS-error` above:
+  record DNS-error-payload {
+    rcode: option<string>,
+    info-code: option<u16>
+  }
+
+  /// Defines the case payload type for `TLS-alert-received` above:
+  record TLS-alert-received-payload {
+    alert-id: option<u8>,
+    alert-message: option<string>
+  }
+
+  /// Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
+  record field-size-payload {
+    field-name: option<string>,
+    field-size: option<u32>
+  }
+
+  /// Attempts to extract a http-related `error` from the stream `error`
+  /// provided.
+  ///
+  /// Stream operations which return `stream-error::last-operation-failed` have
+  /// a payload with more information about the operation that failed. This
+  /// payload can be passed through to this function to see if there's
+  /// http-related information about the error to return.
+  ///
+  /// Note that this function is fallible because not all stream-related errors
+  /// are http-related errors.
+  http-error-code: func(err: borrow<stream-error>) -> option<error-code>;
+
+  /// This type enumerates the different kinds of errors that may occur when
   /// setting or appending to a `fields` resource.
   variant header-error {
+    /// This error indicates that a `field-key` or `field-value` was
+    /// syntactically invalid when used with an operation that sets headers in a
+    /// `fields`.
     invalid-syntax,
+
+    /// This error indicates that a forbidden `field-key` was used when trying
+    /// to set a header in a `fields`.
     forbidden,
+
+    /// This error indicates that the operation on the `fields` was not
+    /// permitted because the fields are immutable.
+    immutable,
   }
 
   /// Field keys are always strings.
@@ -82,22 +161,15 @@ interface types {
 
     /// Set all of the values for a key. Clears any existing values for that
     /// key, if they have been set.
-    ///
-    /// The operation can fail if the name or value arguments are invalid, or if
-    /// the name is forbidden.
     set: func(name: field-key, value: list<field-value>) -> result<_, header-error>;
 
     /// Delete all values for a key. Does nothing if no values for the key
     /// exist.
-    delete: func(name: field-key);
+    delete: func(name: field-key) -> result<_, header-error>;
 
     /// Append a value for a key. Does not change or delete any existing
     /// values for that key.
-    ///
-    /// The operation can fail if the name or value arguments are invalid, or if
-    /// the name is forbidden.
     append: func(name: field-key, value: field-value) -> result<_, header-error>;
-
 
     /// Retrieve the full set of keys and values in the Fields. Like the
     /// constructor, the list represents each key-value pair. 
@@ -148,17 +220,9 @@ interface types {
   /// Represents an outgoing HTTP Request.
   resource outgoing-request {
 
-    /// Construct a new `outgoing-request`.
+    /// Construct a new `outgoing-request` with a default `method` of `GET`, and
+    /// `none` values for `path-with-query`, `scheme`, and `authority`.
     ///
-    /// * `method` represents the HTTP Method for the Request.
-    /// * `path-with-query` is the combination of the HTTP Path and Query for
-    ///    the Request. When `none`, this represents an empty Path and empty
-    ///    Query.
-    /// * `scheme` is the HTTP Related Scheme for the Request. When `none`,
-    ///    the implementation may choose an appropriate default scheme.
-    /// * `authority` is the HTTP Authority for the Request. A value of `none`
-    ///    may be used with Related Schemes which do not require an Authority.
-    ///    The HTTP and HTTPS schemes always require an authority.
     /// * `headers` is the HTTP Headers for the Request.
     ///
     /// It is possible to construct, or manipulate with the accessor functions
@@ -167,10 +231,6 @@ interface types {
     /// It is the obligation of the `outgoing-handler.handle` implementation
     /// to reject invalid constructions of `outgoing-request`.
     constructor(
-      method: method,
-      path-with-query: option<string>,
-      scheme: option<scheme>,
-      authority: option<string>,
       headers: headers
     );
 
@@ -184,22 +244,25 @@ interface types {
 
     /// Get the Method for the Request.
     method: func() -> method;
-    /// Set the Method for the Request.
-    set-method: func(method: method);
+    /// Set the Method for the Request. Fails if the string present in a
+    /// `method.other` argument is not a syntactically valid method.
+    set-method: func(method: method) -> result;
 
     /// Get the combination of the HTTP Path and Query for the Request.
     /// When `none`, this represents an empty Path and empty Query.
     path-with-query: func() -> option<string>;
     /// Set the combination of the HTTP Path and Query for the Request.
-    /// When `none`, this represents an empty Path and empty Query.
-    set-path-with-query: func(path-with-query: option<string>);
+    /// When `none`, this represents an empty Path and empty Query. Fails is the
+    /// string given is not a syntactically valid path and query uri component.
+    set-path-with-query: func(path-with-query: option<string>) -> result;
 
     /// Get the HTTP Related Scheme for the Request. When `none`, the
     /// implementation may choose an appropriate default scheme.
     scheme: func() -> option<scheme>;
     /// Set the HTTP Related Scheme for the Request. When `none`, the
-    /// implementation may choose an appropriate default scheme.
-    set-scheme: func(scheme: option<scheme>);
+    /// implementation may choose an appropriate default scheme. Fails if the
+    /// string given is not a syntactically valid uri scheme.
+    set-scheme: func(scheme: option<scheme>) -> result;
 
     /// Get the HTTP Authority for the Request. A value of `none` may be used
     /// with Related Schemes which do not require an Authority. The HTTP and
@@ -207,8 +270,9 @@ interface types {
     authority: func() -> option<string>;
     /// Set the HTTP Authority for the Request. A value of `none` may be used
     /// with Related Schemes which do not require an Authority. The HTTP and
-    /// HTTPS schemes always require an authority.
-    set-authority: func(authority: option<string>);
+    /// HTTPS schemes always require an authority. Fails if the string given is
+    /// not a syntactically valid uri authority.
+    set-authority: func(authority: option<string>) -> result;
 
     /// Get the headers associated with the Request.
     ///
@@ -270,7 +334,7 @@ interface types {
     /// implementation determine how to respond with an HTTP error response.
     set: static func(
       param: response-outparam,
-      response: result<outgoing-response, error>,
+      response: result<outgoing-response, error-code>,
     );
   }
 
@@ -345,22 +409,25 @@ interface types {
     /// as well as any trailers, were received successfully, or that an error
     /// occured receiving them. The optional `trailers` indicates whether or not
     /// trailers were present in the body.
-    get: func() -> option<result<option<trailers>, error>>;
+    get: func() -> option<result<option<trailers>, error-code>>;
   }
 
   /// Represents an outgoing HTTP Response.
   resource outgoing-response {
 
-    /// Construct an `outgoing-response`.
+    /// Construct an `outgoing-response`, with a default `status-code` of `200`.
+    /// If a different `status-code` is needed, it must be set via the
+    /// `set-status-code` method.
     ///
-    /// * `status-code` is the HTTP Status Code for the Response.
     /// * `headers` is the HTTP Headers for the Response.
-    constructor(status-code: status-code, headers: headers);
+    constructor(headers: headers);
 
     /// Get the HTTP Status Code for the Response.
     status-code: func() -> status-code;
-    /// Set the HTTP Status Code for the Response.
-    set-status-code: func(status-code: status-code);
+
+    /// Set the HTTP Status Code for the Response. Fails if the status-code
+    /// given is not a valid http status code.
+    set-status-code: func(status-code: status-code) -> result;
 
     /// Get the headers associated with the Request.
     ///
@@ -438,7 +505,7 @@ interface types {
     /// occured. Errors may also occur while consuming the response body,
     /// but those will be reported by the `incoming-body` and its
     /// `output-stream` child.
-    get: func() -> option<result<result<incoming-response, error>>>;
+    get: func() -> option<result<result<incoming-response, error-code>>>;
 
   }
 }

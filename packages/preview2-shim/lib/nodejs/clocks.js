@@ -1,33 +1,28 @@
-import { hrtime } from "node:process";
+import { hrtime } from 'node:process';
+import { createPoll, resolvedPoll } from '../io/worker-io.js';
+import * as calls from '../io/calls.js';
 
-let _hrStart = hrtime.bigint();
+const _hrStart = hrtime.bigint();
 
 export const monotonicClock = {
   resolution () {
     return 1n;
   },
-
   now () {
     return hrtime.bigint() - _hrStart;
   },
-
-  subscribe (_when, _absolute) {
-    console.log(`[monotonic-clock] Subscribe`);
-  }
-};
-
-export const timezone = {
-  display (timezone, when) {
-    console.log(`[timezone] DISPLAY ${timezone} ${when}`);
+  subscribeInstant (instant) {
+    instant = BigInt(instant);
+    const now = this.now();
+    if (instant <= now)
+      return resolvedPoll();
+    return this.subscribeDuration(instant - now);
   },
-
-  utcOffset (timezone, when) {
-    console.log(`[timezone] UTC OFFSET ${timezone} ${when}`);
-    return 0;
-  },
-
-  dropTimezone (timezone) {
-    console.log(`[timezone] DROP ${timezone}`);
+  subscribeDuration (duration) {
+    duration = BigInt(duration);
+    if (duration === 0n)
+      return resolvedPoll();
+    return createPoll(calls.CLOCKS_DURATION_SUBSCRIBE, null, duration);
   }
 };
 
@@ -37,8 +32,7 @@ export const wallClock = {
     const nanoseconds = (Date.now() % 1e3) * 1e6;
     return { seconds, nanoseconds };
   },
-
   resolution() {
-    console.log(`[wall-clock] Wall clock resolution`);
+    return { seconds: 0n, nanoseconds: 1e6 };
   }
 };

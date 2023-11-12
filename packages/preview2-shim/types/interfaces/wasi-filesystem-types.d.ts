@@ -202,42 +202,10 @@ export namespace WasiFilesystemTypes {
    * Note: This is similar to `symlinkat` in POSIX.
    */
   /**
-   * Check accessibility of a filesystem path.
-   * 
-   * Check whether the given filesystem path names an object which is
-   * readable, writable, or executable, or whether it exists.
-   * 
-   * This does not a guarantee that subsequent accesses will succeed, as
-   * filesystem permissions may be modified asynchronously by external
-   * entities.
-   * 
-   * Note: This is similar to `faccessat` with the `AT_EACCESS` flag in POSIX.
-   */
-  /**
    * Unlink a filesystem object that is not a directory.
    * 
    * Return `error-code::is-directory` if the path refers to a directory.
    * Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
-   */
-  /**
-   * Change the permissions of a filesystem object that is not a directory.
-   * 
-   * Note that the ultimate meanings of these permissions is
-   * filesystem-specific.
-   * 
-   * Note: This is similar to `fchmodat` in POSIX.
-   */
-  /**
-   * Change the permissions of a directory.
-   * 
-   * Note that the ultimate meanings of these permissions is
-   * filesystem-specific.
-   * 
-   * Unlike in POSIX, the `executable` flag is not reinterpreted as a "search"
-   * flag. `read` on a directory implies readability and searchability, and
-   * `execute` is not valid for directories.
-   * 
-   * Note: This is similar to `fchmodat` in POSIX.
    */
   /**
    * Test whether two descriptors refer to the same filesystem object.
@@ -423,44 +391,6 @@ export interface OpenFlags {
    * Truncate file to size 0, similar to `O_TRUNC` in POSIX.
    */
   truncate?: boolean,
-}
-/**
- * Permissions mode used by `open-at`, `change-file-permissions-at`, and
- * similar.
- */
-export interface Modes {
-  /**
-   * True if the resource is considered readable by the containing
-   * filesystem.
-   */
-  readable?: boolean,
-  /**
-   * True if the resource is considered writable by the containing
-   * filesystem.
-   */
-  writable?: boolean,
-  /**
-   * True if the resource is considered executable by the containing
-   * filesystem. This does not apply to directories.
-   */
-  executable?: boolean,
-}
-/**
- * Access type used by `access-at`.
- */
-export type AccessType = AccessTypeAccess | AccessTypeExists;
-/**
- * Test for readability, writeability, or executability.
- */
-export interface AccessTypeAccess {
-  tag: 'access',
-  val: Modes,
-}
-/**
- * Test whether the path exists.
- */
-export interface AccessTypeExists {
-  tag: 'exists',
 }
 /**
  * Number of hard links to an inode.
@@ -728,15 +658,12 @@ export class Descriptor {
   statAt(pathFlags: PathFlags, path: string): DescriptorStat;
   setTimesAt(pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
   linkAt(oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
-  openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags, modes: Modes): Descriptor;
+  openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags): Descriptor;
   readlinkAt(path: string): string;
   removeDirectoryAt(path: string): void;
   renameAt(oldPath: string, newDescriptor: Descriptor, newPath: string): void;
   symlinkAt(oldPath: string, newPath: string): void;
-  accessAt(pathFlags: PathFlags, path: string, type: AccessType): void;
   unlinkFileAt(path: string): void;
-  changeFilePermissionsAt(pathFlags: PathFlags, path: string, modes: Modes): void;
-  changeDirectoryPermissionsAt(pathFlags: PathFlags, path: string, modes: Modes): void;
   isSameObject(other: Descriptor): boolean;
   metadataHash(): MetadataHashValue;
   metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;

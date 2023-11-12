@@ -3,32 +3,26 @@ function _hrtimeBigint () {
   return BigInt(Math.floor(performance.now() * 1e6));
 }
 
-let _hrStart = _hrtimeBigint();
+const _hrStart = _hrtimeBigint();
 
 export const monotonicClock = {
   resolution() {
-    return 1n;
+    // usually we dont get sub-millisecond accuracy in the browser
+    // TODO: better way to determine this?
+    return 1e6;
   },
   now () {
     return _hrtimeBigint() - _hrStart;
   },
-  subscribe (_when, _absolute) {
-    console.log(`[monotonic-clock] Subscribe`);
-  }
-};
-
-export const timezone = {
-  display (timezone, when) {
-    console.log(`[timezone] DISPLAY ${timezone} ${when}`);
+  subscribeInstant (instant) {
+    instant = BigInt(instant);
+    if (instant <= _hrStart)
+      return this.subscribeDuration(0);
+    return this.subscribeDuration(instant - _hrStart);
   },
-
-  utcOffset (timezone, when) {
-    console.log(`[timezone] UTC OFFSET ${timezone} ${when}`);
-    return 0;
-  },
-
-  dropTimezone (timezone) {
-    console.log(`[timezone] DROP ${timezone}`);
+  subscribeDuration (_duration) {
+    _duration = BigInt(_duration);
+    console.log(`[monotonic-clock] subscribe`);
   }
 };
 
@@ -39,8 +33,7 @@ export const wallClock = {
     const nanoseconds = (now % 1e3) * 1e6;
     return { seconds, nanoseconds };
   },
-
   resolution() {
-    console.log(`[wall-clock] Wall clock resolution`);
+    return { seconds: 0n, nanoseconds: 1e6 };
   }
 };

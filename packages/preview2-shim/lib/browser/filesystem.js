@@ -142,10 +142,6 @@ class Descriptor {
     return 'unknown';
   }
 
-  setFlags(flags) {
-    console.log(`[filesystem] SET FLAGS ${JSON.stringify(flags)}`);
-  }
-
   setSize(size) {
     console.log(`[filesystem] SET SIZE`, size);
   }
@@ -254,32 +250,8 @@ class Descriptor {
     console.log(`[filesystem] UNLINK FILE AT`);
   }
 
-  changeFilePermissionsAt() {
-    console.log(`[filesystem] CHANGE FILE PERMISSIONS AT`);
-  }
-
-  changeDirectoryPermissionsAt() {
-    console.log(`[filesystem] CHANGE DIR PERMISSIONS AT`);
-  }
-
-  lockShared() {
-    console.log(`[filesystem] LOCK SHARED`);
-  }
-
-  lockExclusive() {
-    console.log(`[filesystem] LOCK EXCLUSIVE`);
-  }
-
-  tryLockShared() {
-    console.log(`[filesystem] TRY LOCK SHARED`);
-  }
-
-  tryLockExclusive() {
-    console.log(`[filesystem] TRY LOCK EXCLUSIVE`);
-  }
-
-  unlock() {
-    console.log(`[filesystem] UNLOCK`);
+  isSameObject(other) {
+    return other === this;
   }
 
   metadataHash() {

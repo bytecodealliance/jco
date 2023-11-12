@@ -60,7 +60,8 @@ export namespace WasiSocketsUdp {
        * - `invalid-argument`:          The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
        * - `invalid-state`:             The socket is not bound.
        * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
-       * - `remote-unreachable`:        The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
+       * - `remote-unreachable`:        The remote address is not reachable. (ECONNRESET, ENETRESET, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+       * - `connection-refused`:        The connection was refused. (ECONNREFUSED)
        * 
        * # References
        * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
@@ -115,18 +116,23 @@ export namespace WasiSocketsUdp {
        */
       /**
        * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
+       * 
+       * If the provided value is 0, an `invalid-argument` error is returned.
+       * 
+       * # Typical errors
+       * - `invalid-argument`:     (set) The TTL value must be 1 or higher.
        */
       /**
        * The kernel buffer space reserved for sends/receives on this socket.
        * 
-       * Note #1: an implementation may choose to cap or round the buffer size when setting the value.
-       * In other words, after setting a value, reading the same setting back may return a different value.
-       * 
-       * Note #2: there is not necessarily a direct relationship between the kernel buffer size and the bytes of
-       * actual data to be sent/received by the application, because the kernel might also use the buffer space
-       * for internal metadata structures.
+       * If the provided value is 0, an `invalid-argument` error is returned.
+       * Any other value will never cause an error, but it might be silently clamped and/or rounded.
+       * I.e. after setting a value, reading the same setting back may return a different value.
        * 
        * Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
+       * 
+       * # Typical errors
+       * - `invalid-argument`:     (set) The provided value was 0.
        */
       /**
        * Create a `pollable` which will resolve once the socket is ready for I/O.
@@ -146,7 +152,8 @@ export namespace WasiSocketsUdp {
        * This function never returns `error(would-block)`.
        * 
        * # Typical errors
-       * - `remote-unreachable`: The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
+       * - `remote-unreachable`: The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+       * - `connection-refused`: The connection was refused. (ECONNREFUSED)
        * 
        * # References
        * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
@@ -202,7 +209,8 @@ export namespace WasiSocketsUdp {
        * - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
        * - `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `stream`. (EISCONN)
        * - `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
-       * - `remote-unreachable`:      The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
+       * - `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+       * - `connection-refused`:      The connection was refused. (ECONNREFUSED)
        * - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
        * 
        * # References
@@ -271,12 +279,6 @@ export namespace WasiSocketsUdp {
       remoteAddress?: IpSocketAddress,
     }
     
-    export class OutgoingDatagramStream {
-      checkSend(): bigint;
-      send(datagrams: OutgoingDatagram[]): bigint;
-      subscribe(): Pollable;
-    }
-    
     export class IncomingDatagramStream {
       receive(maxResults: bigint): IncomingDatagram[];
       subscribe(): Pollable;
@@ -297,6 +299,12 @@ export namespace WasiSocketsUdp {
       setReceiveBufferSize(value: bigint): void;
       sendBufferSize(): bigint;
       setSendBufferSize(value: bigint): void;
+      subscribe(): Pollable;
+    }
+    
+    export class OutgoingDatagramStream {
+      checkSend(): bigint;
+      send(datagrams: OutgoingDatagram[]): bigint;
       subscribe(): Pollable;
     }
     

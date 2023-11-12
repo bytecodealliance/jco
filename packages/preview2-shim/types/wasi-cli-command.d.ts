@@ -9,10 +9,10 @@ import { WasiCliTerminalStderr } from './interfaces/wasi-cli-terminal-stderr.js'
 import { WasiCliTerminalStdin } from './interfaces/wasi-cli-terminal-stdin.js';
 import { WasiCliTerminalStdout } from './interfaces/wasi-cli-terminal-stdout.js';
 import { WasiClocksMonotonicClock } from './interfaces/wasi-clocks-monotonic-clock.js';
-import { WasiClocksTimezone } from './interfaces/wasi-clocks-timezone.js';
 import { WasiClocksWallClock } from './interfaces/wasi-clocks-wall-clock.js';
 import { WasiFilesystemPreopens } from './interfaces/wasi-filesystem-preopens.js';
 import { WasiFilesystemTypes } from './interfaces/wasi-filesystem-types.js';
+import { WasiIoError } from './interfaces/wasi-io-error.js';
 import { WasiIoPoll } from './interfaces/wasi-io-poll.js';
 import { WasiIoStreams } from './interfaces/wasi-io-streams.js';
 import { WasiRandomInsecureSeed } from './interfaces/wasi-random-insecure-seed.js';

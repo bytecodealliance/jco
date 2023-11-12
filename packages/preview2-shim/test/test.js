@@ -1,12 +1,83 @@
 import { ok, strictEqual } from 'node:assert';
 import { fileURLToPath } from 'node:url';
 
-suite('Node.js Preview2', async () => {
+suite('Node.js Preview2', () => {
   test('Stdio', async () => {
     const { cli } = await import('@bytecodealliance/preview2-shim');
     // todo: wrap in a process call to not spill to test output
     cli.stdout.getStdout().blockingWriteAndFlush(new TextEncoder().encode('test stdout'));
     cli.stderr.getStderr().blockingWriteAndFlush(new TextEncoder().encode('test stderr'));
+  });
+
+  suite('Clocks', () => {
+    test('Wall clock', async () => {
+      const { clocks: { wallClock } } = await import('@bytecodealliance/preview2-shim');
+
+      {
+        const { seconds, nanoseconds } = wallClock.now();
+        strictEqual(typeof seconds, 'bigint');
+        strictEqual(typeof nanoseconds, 'number');
+      }
+
+      {
+        const { seconds, nanoseconds } = wallClock.resolution();
+        strictEqual(typeof seconds, 'bigint');
+        strictEqual(typeof nanoseconds, 'number');
+      }
+    });
+
+    test('Monotonic clock now', async () => {
+      const { clocks: { monotonicClock } } = await import('@bytecodealliance/preview2-shim');
+      
+      strictEqual(typeof monotonicClock.resolution(), 'bigint');
+      const curNow = monotonicClock.now();
+      strictEqual(typeof curNow, 'bigint');
+      ok(monotonicClock.now() > curNow);
+    });
+
+    test('Monotonic clock immediately resolved polls', async () => {
+      const { clocks: { monotonicClock } } = await import('@bytecodealliance/preview2-shim');
+
+      const curNow = monotonicClock.now();
+
+      {
+        const poll = monotonicClock.subscribeInstant(curNow - 10n);
+        ok(poll.ready());
+      }
+
+      {
+        const poll = monotonicClock.subscribeDuration(0n);
+        ok(poll.ready());
+      }
+    });
+
+    test('Monotonic clock subscribe duration', async () => {
+      const { clocks: { monotonicClock } } = await import('@bytecodealliance/preview2-shim');
+      
+      const curNow = monotonicClock.now();
+
+      const poll = monotonicClock.subscribeDuration(10e6);
+      poll.block();
+
+      // verify we are at the right time, and within 1ms of the original now
+      const nextNow = monotonicClock.now();
+      ok(nextNow - curNow > 10e6);
+      ok(nextNow - curNow < 11e6);
+    });
+
+    test('Monotonic clock subscribe instant', async () => {
+      const { clocks: { monotonicClock } } = await import('@bytecodealliance/preview2-shim');
+      
+      const curNow = monotonicClock.now();
+
+      const poll = monotonicClock.subscribeInstant(curNow + BigInt(10e6));
+      poll.block();
+
+      // verify we are at the right time, and within 1ms of the original now
+      const nextNow = monotonicClock.now();
+      ok(nextNow - curNow > 10e6);
+      ok(nextNow - curNow < 11e6);
+    });
   });
 
   test('FS read', async () => {
@@ -23,7 +94,7 @@ suite('Node.js Preview2', async () => {
     childDescriptor[Symbol.dispose]();
   });
 
-  test.skip('WASI HTTP', async () => {
+  test('WASI HTTP', async () => {
     const { http } = await import('@bytecodealliance/preview2-shim');
     const { handle } = http.outgoingHandler;
     const { OutgoingRequest, OutgoingBody, Fields } = http.types;
