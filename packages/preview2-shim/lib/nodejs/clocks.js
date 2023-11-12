@@ -2,18 +2,16 @@ import { hrtime } from 'node:process';
 import { createPoll, resolvedPoll } from '../io/worker-io.js';
 import * as calls from '../io/calls.js';
 
-const _hrStart = hrtime.bigint();
-
 export const monotonicClock = {
   resolution () {
     return 1n;
   },
   now () {
-    return hrtime.bigint() - _hrStart;
+    return hrtime.bigint();
   },
   subscribeInstant (instant) {
     instant = BigInt(instant);
-    const now = this.now();
+    const now = hrtime.bigint();
     if (instant <= now)
       return resolvedPoll();
     return this.subscribeDuration(instant - now);

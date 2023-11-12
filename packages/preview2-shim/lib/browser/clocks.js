@@ -1,24 +1,19 @@
-function _hrtimeBigint () {
-  // performance.now() is in milliseconds, but we want nanoseconds
-  return BigInt(Math.floor(performance.now() * 1e6));
-}
-
-const _hrStart = _hrtimeBigint();
-
 export const monotonicClock = {
   resolution() {
     // usually we dont get sub-millisecond accuracy in the browser
-    // TODO: better way to determine this?
+    // Note: is there a better way to determine this?
     return 1e6;
   },
   now () {
-    return _hrtimeBigint() - _hrStart;
+    // performance.now() is in milliseconds, but we want nanoseconds
+    return BigInt(Math.floor(performance.now() * 1e6));
   },
   subscribeInstant (instant) {
     instant = BigInt(instant);
-    if (instant <= _hrStart)
+    const now = this.now();
+    if (instant <= now)
       return this.subscribeDuration(0);
-    return this.subscribeDuration(instant - _hrStart);
+    return this.subscribeDuration(instant - now);
   },
   subscribeDuration (_duration) {
     _duration = BigInt(_duration);
