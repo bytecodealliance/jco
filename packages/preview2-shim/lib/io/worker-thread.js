@@ -6,17 +6,7 @@ import { hrtime } from 'node:process';
 
 let streamCnt = 0, pollCnt = 0;
 
-const PollType = {
-  Promise: 1,
-  Instant: 2,
-};
-
-/** @typedef {
- *    { type: number, promise: Promise<void> } |
- *    { type: number, instant: BigInt }
- *  } Poll */
-
-/** @type {Map<number, Poll} */
+/** @type {Map<number, Promise<void>} */
 const unfinishedPolls = new Map();
 
 /** @type {Map<number, { flushPromise: Promise<void> | null, stream: NodeJS.ReadableStream | NodeJS.WritableStream, blocksMainThread: bool }>} */
@@ -70,9 +60,12 @@ function handle(call, id, payload) {
 
     // Clocks
     case calls.CLOCKS_DURATION_SUBSCRIBE: {
-      const instant = hrtime.bigint() + payload;
-      unfinishedPolls.set(++pollCnt, { type: PollType.Instant, instant });
-      return pollCnt;
+      const pollId = ++pollCnt;
+      unfinishedPolls.set(pollId, 
+        new Promise(resolve => setTimeout(resolve, Number(payload) / 1e6))
+          .then(() => void unfinishedPolls.delete(pollId))
+      );
+      return pollId;
     }
     
     // Stdio
@@ -123,7 +116,7 @@ function handle(call, id, payload) {
       }
       case calls.INPUT_STREAM_BLOCKING_READ:
         return Promise.resolve(
-          unfinishedPolls.get(handle(calls.INPUT_STREAM_SUBSCRIBE | (call & calls.CALL_TYPE_MASK), id))?.promise
+          unfinishedPolls.get(handle(calls.INPUT_STREAM_SUBSCRIBE | (call & calls.CALL_TYPE_MASK), id))
         )
         .then(() => handle(calls.INPUT_STREAM_READ | (call & calls.CALL_TYPE_MASK), id, payload));
       case calls.INPUT_STREAM_SKIP:
@@ -138,22 +131,20 @@ function handle(call, id, payload) {
         let resolve, reject;
         // TODO: can we do this better with a single listener setup on stream
         // creation to track the lifecycle promise?
-        unfinishedPolls.set(++pollCnt, {
-          type: PollType.Promise,
-          promise: new Promise((_resolve, _reject) => {
-            stream
-              .once('readable', resolve = _resolve)
-              .once('error', reject = _reject);
-          }).then(() => {
-            unfinishedPolls.delete(pollCnt);
-            stream.off('error', reject);
-          }, err => {
-            stream.off('readable', resolve);
-            unfinishedPolls.delete(pollCnt);
-            throw streamError(id, stream.stream, err);
-          })
-        });
-        return pollCnt;
+        const pollId = ++pollCnt;
+        unfinishedPolls.set(pollId, new Promise((_resolve, _reject) => {
+          stream
+            .once('readable', resolve = _resolve)
+            .once('error', reject = _reject);
+        }).then(() => {
+          unfinishedPolls.delete(pollId);
+          stream.off('error', reject);
+        }, err => {
+          stream.off('readable', resolve);
+          unfinishedPolls.delete(pollId);
+          throw streamError(id, stream.stream, err);
+        }));
+        return pollId;
       }
       case calls.INPUT_STREAM_DROP:
         unfinishedStreams.delete(id);
@@ -247,22 +238,20 @@ function handle(call, id, payload) {
         if (!stream || stream.closed || stream.errored || !stream.writableNeedDrain)
           return 0;
         let resolve, reject;
-        unfinishedPolls.set(++pollCnt, {
-          type: PollType.Promise,
-          promise: new Promise((_resolve, _reject) => {
-            stream
-              .once('drain', resolve = _resolve)
-              .once('error', reject = _reject);
-          }).then(() => {
-            unfinishedPolls.delete(pollCnt);
-            stream.off('error', reject);
-          }, err => {
-            stream.off('drain', resolve);
-            unfinishedPolls.delete(pollCnt);
-            throw streamError(id, stream, err);
-          })
-        });
-        return pollCnt;
+        const pollId = ++pollCnt;
+        unfinishedPolls.set(pollId, new Promise((_resolve, _reject) => {
+          stream
+            .once('drain', resolve = _resolve)
+            .once('error', reject = _reject);
+        }).then(() => {
+          unfinishedPolls.delete(pollId);
+          stream.off('error', reject);
+        }, err => {
+          stream.off('drain', resolve);
+          unfinishedPolls.delete(pollId);
+          throw streamError(id, stream, err);
+        }));
+        return pollId;
       }
       case calls.OUTPUT_STREAM_BLOCKING_SPLICE: {
         const { stream: outputStream } = getStreamOrThrow(id);
@@ -328,31 +317,11 @@ function handle(call, id, payload) {
         if (resolvedList.length > 0)
           return resolvedList;
         // if all polls are promise type, we just race them
-        const polls = payload.map(id => unfinishedPolls.get(id));
-        if (polls.every(poll => poll.type === PollType.Promise))
-          return Promise.race(polls.map(poll => poll.promise))
-            .then(() => {
-              const resolvedList = payload.filter(id => !unfinishedPolls.has(id));
-              if (resolvedList.length === 0) throw new Error('unexpected non-poll resolution for poll list');
-              return resolvedList;
-            });
-        // otherwise we run a tight loop for both the promise & non-promise handlers
-        // with set immediate to handle microtask clearing for promise resolutions
-        // this then ensures that eg duration polls give accurate timing
-        return Promise.resolve()
-          .then(async () => {
-            while (true) {
-              for (const id of payload) {
-                const poll = unfinishedPolls.get(id);
-                if (!poll)
-                  return payload.filter(id => !unfinishedPolls.has(id));
-                if (handlePollType(poll)) {
-                  unfinishedPolls.delete(id);
-                  return [id];
-                }
-              }
-              await new Promise(resolve => setImmediate(resolve));
-            }
+        return Promise.race(payload.map(id => unfinishedPolls.get(id)))
+          .then(() => {
+            const resolvedList = payload.filter(id => !unfinishedPolls.has(id));
+            if (resolvedList.length === 0) throw new Error('poll promise did not unregister poll');
+            return resolvedList;
           });
       }
 
@@ -360,20 +329,6 @@ function handle(call, id, payload) {
         throw new Error(`Unknown call ${(call & calls.CALL_MASK) >> calls.CALL_SHIFT} with type ${call & calls.CALL_TYPE_MASK}`);
     }
   }
-}
-
-function handlePollType (poll) {
-  switch (poll.type) {
-    case PollType.Promise:
-      break;
-    case PollType.Instant:
-      if (poll.instant <= hrtime.bigint())
-        return true;
-      break;
-    default:
-      throw new Error(`unknown poll type ${poll.type}`);
-  }
-  return false;
 }
 
 async function createHttpRequest (req) {

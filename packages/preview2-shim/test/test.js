@@ -37,14 +37,11 @@ suite('Node.js Preview2', () => {
 
     test('Monotonic clock immediately resolved polls', async () => {
       const { clocks: { monotonicClock } } = await import('@bytecodealliance/preview2-shim');
-
       const curNow = monotonicClock.now();
-
       {
         const poll = monotonicClock.subscribeInstant(curNow - 10n);
         ok(poll.ready());
       }
-
       {
         const poll = monotonicClock.subscribeDuration(0n);
         ok(poll.ready());
@@ -62,7 +59,7 @@ suite('Node.js Preview2', () => {
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
       ok(nextNow - curNow > 10e6);
-      ok(nextNow - curNow < 11e6);
+      ok(nextNow - curNow < 12e6);
     });
 
     test('Monotonic clock subscribe instant', async () => {
@@ -83,7 +80,7 @@ suite('Node.js Preview2', () => {
   test('FS read', async () => {
     const { filesystem } = await import('@bytecodealliance/preview2-shim');
     const [[rootDescriptor]] = filesystem.preopens.getDirectories();
-    const childDescriptor = rootDescriptor.openAt({}, fileURLToPath(import.meta.url), {}, {}, {});
+    const childDescriptor = rootDescriptor.openAt({}, fileURLToPath(import.meta.url), {}, {});
     const stream = childDescriptor.readViaStream(0);
     const poll = stream.subscribe();
     poll.block();
@@ -100,22 +97,22 @@ suite('Node.js Preview2', () => {
     const { OutgoingRequest, OutgoingBody, Fields } = http.types;
     const encoder = new TextEncoder();
     const request = new OutgoingRequest(
-      { tag: 'GET' },
-      '/',
-      { tag: 'HTTPS' },
-      'webassembly.org',
       new Fields([
         ['User-agent', encoder.encode('WASI-HTTP/0.0.1')],
         ['Content-type', encoder.encode('application/json')],
       ])
     );
+    request.setPathWithQuery('/');
+    request.setAuthority('webassembly.org');
+    request.setScheme({ tag: 'HTTPS' });
 
-    const outgoingBody = request.write();
+    const outgoingBody = request.body();
     // TODO: we should explicitly drop the bodyStream here
     //       when we have support for Symbol.dispose
     OutgoingBody.finish(outgoingBody);
 
     const futureIncomingResponse = handle(request);
+    console.log(futureIncomingResponse);
     const incomingResponse = futureIncomingResponse.get().val.val;
 
     const status = incomingResponse.status();

@@ -1,4 +1,6 @@
-import { streams, _inputStreamCreate, _outputStreamCreate, _streamTypes } from '../io/worker-io.js';
+import * as calls from '../io/calls.js';
+import { poll, streams, _inputStreamCreate, _outputStreamCreate, _streamTypes } from '../io/worker-io.js';
+const { Poll } = poll;
 const { InputStream, OutputStream } = streams;
 
 
@@ -91,24 +93,46 @@ export class WasiHttp {
     class OutgoingRequest {
       id = http.requestCnt++;
       /** @type {Method} */ #method = { tag: 'get' };
-      /** @type {Scheme | undefined} */ #scheme = { tag: 'HTTP' };
+      /** @type {Scheme | undefined} */ #scheme = undefined;
       /** @type {string | undefined} */ #pathWithQuery = undefined;
       /** @type {string | undefined} */ #authority = undefined;
-      /** @type {Fields} */ #headers = undefined;
+      /** @type {Fields} */ #headers;
       /** @type {OutgoingBody} */ #body = new OutgoingBody();
-      constructor(method, pathWithQuery, scheme, authority, headers) {
-        this.#method = method;
-        this.#pathWithQuery = pathWithQuery;
-        this.#scheme = scheme;
-        this.#authority = authority;
+      constructor(headers) {
         this.#headers = headers;
       }
-      write () {
+      body () {
         return this.#body;
       }
-
+      method () {
+        return this.#method;
+      }
+      setMethod (method) {
+        this.#method = method;
+      }
+      pathWithQuery () {
+        return this.#pathWithQuery;
+      }
+      setPathWithQuery (pathWithQuery) {
+        this.#pathWithQuery = pathWithQuery;
+      }
+      scheme () {
+        return this.#scheme;
+      }
+      setScheme (scheme) {
+        this.#scheme = scheme;
+      }
+      authority () {
+        return this.#authority;
+      }
+      setAuthority (authority) {
+        this.#authority = authority;
+      }
+      headers () {
+        return this.#headers;
+      }
       static _handle (request) {
-        const scheme = request.#scheme.tag === "HTTP" ? "http://" : "https://";
+        const scheme = request.#scheme.tag === 'HTTP' ? 'http://' : 'https://';
         const url = scheme + request.#authority + request.#pathWithQuery;
         const headers = {
           "host": request.#authority,
@@ -117,7 +141,6 @@ export class WasiHttp {
         for (const [key, value] of request.#headers.entries()) {
           headers[key] = decoder.decode(value);
         }
-
         // let res;
         // try {
         //   // res = send({
@@ -193,6 +216,7 @@ export class WasiHttp {
       id = this.futureCnt++;
       #value;
       #isError;
+      #pollable;
       subscribe () {
         
       }
@@ -212,13 +236,15 @@ export class WasiHttp {
 
     class Fields {
       id = http.fieldsCnt++;
-      /** @type {Record<string, Uint8Array[]>} */ #fields;
+      /** @type {Record<string, Uint8Array[]>} */ #fields = Object.create(null);
 
       /**
-       * @param {[string, Uint8Array[]][]} fields
+       * @param {[string, Uint8Array[]][]} entries
        */
-      constructor(fields) {
-        this.#fields = Object.fromEntries(fields);
+      static fromList (entries) {
+        const fields = new Fields();
+        fields.#fields = Object.fromEntries(fields);
+        return fields;
       }
       get (name) {
         return this.#fields[name];
@@ -229,11 +255,14 @@ export class WasiHttp {
       delete (name) {
         delete this.#fields[name];
       }
+      append (name, value) {
+        // TODO
+      }
       entries () {
         return Object.entries(this.#fields);
       }
       clone () {
-        return new Fields(this.entries());
+        return Fields.fromList(this.entries());
       }
     }
 
