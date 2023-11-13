@@ -184,7 +184,7 @@ impl<'a> JsBindgen<'a> {
             if self.opts.instantiation.is_some() {
                 uwriteln!(
                     compilation_promises,
-                    "const {local_name} = compileCore('{name_idx}');"
+                    "const {local_name} = getCoreModule('{name_idx}');"
                 );
             } else if files.get_size(&name_idx).unwrap() < self.opts.base64_cutoff {
                 assert!(removed.insert(i));
@@ -224,7 +224,7 @@ impl<'a> JsBindgen<'a> {
                     output,
                     "\
                         {}
-                        export async function instantiate(compileCore, imports, instantiateCore = WebAssembly.instantiate) {{
+                        export async function instantiate(getCoreModule, imports, instantiateCore = WebAssembly.instantiate) {{
                             {}
                     ",
                     &js_intrinsics as &str,
@@ -237,7 +237,7 @@ impl<'a> JsBindgen<'a> {
                     output,
                     "\
                         {}
-                        export function instantiate(compileCore, imports, instantiateCore = WebAssembly.Instance) {{
+                        export function instantiate(getCoreModule, imports, instantiateCore = WebAssembly.Instance) {{
                             {}
                     ",
                     &js_intrinsics as &str,
