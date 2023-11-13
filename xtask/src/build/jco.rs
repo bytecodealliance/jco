@@ -1,8 +1,7 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use std::{collections::HashMap, fs, io::Write, path::PathBuf};
-
-use anyhow::Result;
 use wit_component::ComponentEncoder;
+use xshell::{cmd, Shell};
 
 pub(crate) fn run() -> Result<()> {
     transpile(
@@ -13,6 +12,17 @@ pub(crate) fn run() -> Result<()> {
         "target/wasm32-wasi/release/wasm_tools_js.wasm",
         "wasm-tools".to_string(),
     )?;
+
+    let sh = Shell::new()?;
+    //Typescript doesn't support arbitrary module namespace identifier names so
+    //we need to remove it from wasm-tools.js before compiling
+    //See: https://github.com/microsoft/TypeScript/issues/40594
+    cmd!(
+        sh,
+        "sed -i'' -e 's/tools as \"local:wasm-tools\\/tools\"//g' ./obj/wasm-tools.js"
+    )
+    .read()?;
+    cmd!(sh, "npx tsc -p tsconfig.json").read()?;
 
     Ok(())
 }
