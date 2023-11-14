@@ -112,15 +112,16 @@ function handle(call, id, payload) {
       const stream = createReadStream(null, {
         fd,
         autoClose: false,
+        highWaterMark: 64 * 1024,
         start: Number(offset),
       });
-      // Node.js needs an initial empty read to start actually reading
-      if (stream.read()) throw new Error("Internal error unexpected data");
       unfinishedStreams.set(++streamCnt, {
         flushPromise: null,
         stream,
         blocksMainThread: false,
       });
+      // for some reason fs streams dont emit readable on end
+      stream.on('end', () => void stream.emit('readable'));
       return streamCnt;
     }
     case calls.OUTPUT_STREAM_CREATE | streamTypes.FILE:
@@ -131,7 +132,8 @@ function handle(call, id, payload) {
       switch (call & calls.CALL_MASK) {
         case calls.INPUT_STREAM_READ: {
           const { stream } = getStreamOrThrow(id);
-          return stream.read(Number(payload)) ?? new Uint8Array();
+          const res = stream.read(Number(payload));
+          return res ?? new Uint8Array();
         }
         case calls.INPUT_STREAM_BLOCKING_READ:
           return Promise.resolve(
@@ -164,11 +166,9 @@ function handle(call, id, payload) {
           const stream = unfinishedStreams.get(id)?.stream;
           // already closed or errored -> immediately return poll
           // (poll 0 is immediately resolved)
-          if (!stream || stream.closed || stream.errored || stream.readable)
+          if (!stream || stream.closed || stream.errored || stream.readableLength > 0)
             return 0;
           let resolve, reject;
-          // TODO: can we do this better with a single listener setup on stream
-          // creation to track the lifecycle promise?
           return createPoll(
             new Promise((_resolve, _reject) => {
               stream
@@ -237,9 +237,7 @@ function handle(call, id, payload) {
               err ? reject(streamError(id, stream, err)) : resolve()
             );
           }).then(
-            () => {
-              stream.stream.flushPromise = null;
-            },
+            () => void (stream.stream.flushPromise = null),
             (err) => {
               stream.stream.flushPromise = null;
               throw streamError(id, stream.stream, err);

@@ -102,7 +102,9 @@ suite("Node.js Preview2", () => {
     );
     const stream = childDescriptor.readViaStream(0);
     stream.subscribe().block();
-    const buf = stream.read(10000);
+    let buf = stream.read(10000n);
+    while (buf.byteLength === 0)
+      buf = stream.read(10000n);
     const source = new TextDecoder().decode(buf);
     ok(source.includes("UNIQUE STRING"));
     stream[Symbol.dispose]();
