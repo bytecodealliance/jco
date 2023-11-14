@@ -63,7 +63,7 @@ export namespace WasiSocketsTcp {
    * - `connection-refused`:        The connection was forcefully rejected. (ECONNREFUSED)
    * - `connection-reset`:          The connection was reset. (ECONNRESET)
    * - `connection-aborted`:        The connection was aborted. (ECONNABORTED)
-   * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
+   * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
    * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
    * - `not-in-progress`:           A `connect` operation is not in progress.
    * - `would-block`:               Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
@@ -105,9 +105,11 @@ export namespace WasiSocketsTcp {
    * The returned socket is bound and in the Connection state. The following properties are inherited from the listener socket:
    * - `address-family`
    * - `ipv6-only`
-   * - `keep-alive`
-   * - `no-delay`
-   * - `unicast-hop-limit`
+   * - `keep-alive-enabled`
+   * - `keep-alive-idle-time`
+   * - `keep-alive-interval`
+   * - `keep-alive-count`
+   * - `hop-limit`
    * - `receive-buffer-size`
    * - `send-buffer-size`
    * 
@@ -157,6 +159,11 @@ export namespace WasiSocketsTcp {
    * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
    */
   /**
+   * Whether the socket is listening for new connections.
+   * 
+   * Equivalent to the SO_ACCEPTCONN socket option.
+   */
+  /**
    * Whether this is a IPv4 or IPv6 socket.
    * 
    * Equivalent to the SO_DOMAIN socket option.
@@ -174,20 +181,65 @@ export namespace WasiSocketsTcp {
   /**
    * Hints the desired listen queue size. Implementations are free to ignore this.
    * 
+   * If the provided value is 0, an `invalid-argument` error is returned.
+   * Any other value will never cause an error, but it might be silently clamped and/or rounded.
+   * 
    * # Typical errors
    * - `not-supported`:        (set) The platform does not support changing the backlog size after the initial listen.
+   * - `invalid-argument`:     (set) The provided value was 0.
    * - `invalid-state`:        (set) The socket is already in the Connection state.
    */
   /**
+   * Enables or disables keepalive.
+   * 
+   * The keepalive behavior can be adjusted using:
+   * - `keep-alive-idle-time`
+   * - `keep-alive-interval`
+   * - `keep-alive-count`
+   * These properties can be configured while `keep-alive-enabled` is false, but only come into effect when `keep-alive-enabled` is true.
+   * 
    * Equivalent to the SO_KEEPALIVE socket option.
    */
   /**
-   * Equivalent to the TCP_NODELAY socket option.
+   * Amount of time the connection has to be idle before TCP starts sending keepalive packets.
    * 
-   * The default value is `false`.
+   * If the provided value is 0, an `invalid-argument` error is returned.
+   * Any other value will never cause an error, but it might be silently clamped and/or rounded.
+   * I.e. after setting a value, reading the same setting back may return a different value.
+   * 
+   * Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
+   * 
+   * # Typical errors
+   * - `invalid-argument`:     (set) The provided value was 0.
+   */
+  /**
+   * The time between keepalive packets.
+   * 
+   * If the provided value is 0, an `invalid-argument` error is returned.
+   * Any other value will never cause an error, but it might be silently clamped and/or rounded.
+   * I.e. after setting a value, reading the same setting back may return a different value.
+   * 
+   * Equivalent to the TCP_KEEPINTVL socket option.
+   * 
+   * # Typical errors
+   * - `invalid-argument`:     (set) The provided value was 0.
+   */
+  /**
+   * The maximum amount of keepalive packets TCP should send before aborting the connection.
+   * 
+   * If the provided value is 0, an `invalid-argument` error is returned.
+   * Any other value will never cause an error, but it might be silently clamped and/or rounded.
+   * I.e. after setting a value, reading the same setting back may return a different value.
+   * 
+   * Equivalent to the TCP_KEEPCNT socket option.
+   * 
+   * # Typical errors
+   * - `invalid-argument`:     (set) The provided value was 0.
    */
   /**
    * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
+   * 
+   * If the provided value is 0, an `invalid-argument` error is returned.
    * 
    * # Typical errors
    * - `invalid-argument`:     (set) The TTL value must be 1 or higher.
@@ -197,16 +249,14 @@ export namespace WasiSocketsTcp {
   /**
    * The kernel buffer space reserved for sends/receives on this socket.
    * 
-   * Note #1: an implementation may choose to cap or round the buffer size when setting the value.
-   * In other words, after setting a value, reading the same setting back may return a different value.
-   * 
-   * Note #2: there is not necessarily a direct relationship between the kernel buffer size and the bytes of
-   * actual data to be sent/received by the application, because the kernel might also use the buffer space
-   * for internal metadata structures.
+   * If the provided value is 0, an `invalid-argument` error is returned.
+   * Any other value will never cause an error, but it might be silently clamped and/or rounded.
+   * I.e. after setting a value, reading the same setting back may return a different value.
    * 
    * Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
    * 
    * # Typical errors
+   * - `invalid-argument`:     (set) The provided value was 0.
    * - `invalid-state`:        (set) The socket is already in the Connection state.
    * - `invalid-state`:        (set) The socket is already in the Listener state.
    */
@@ -244,6 +294,8 @@ import type { OutputStream } from '../interfaces/wasi-io-streams.js';
 export { OutputStream };
 import type { Pollable } from '../interfaces/wasi-io-poll.js';
 export { Pollable };
+import type { Duration } from '../interfaces/wasi-clocks-monotonic-clock.js';
+export { Duration };
 import type { Network } from '../interfaces/wasi-sockets-network.js';
 export { Network };
 import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
@@ -277,16 +329,21 @@ export class TcpSocket {
   accept(): [TcpSocket, InputStream, OutputStream];
   localAddress(): IpSocketAddress;
   remoteAddress(): IpSocketAddress;
+  isListening(): boolean;
   addressFamily(): IpAddressFamily;
   ipv6Only(): boolean;
   setIpv6Only(value: boolean): void;
   setListenBacklogSize(value: bigint): void;
-  keepAlive(): boolean;
-  setKeepAlive(value: boolean): void;
-  noDelay(): boolean;
-  setNoDelay(value: boolean): void;
-  unicastHopLimit(): number;
-  setUnicastHopLimit(value: number): void;
+  keepAliveEnabled(): boolean;
+  setKeepAliveEnabled(value: boolean): void;
+  keepAliveIdleTime(): Duration;
+  setKeepAliveIdleTime(value: Duration): void;
+  keepAliveInterval(): Duration;
+  setKeepAliveInterval(value: Duration): void;
+  keepAliveCount(): number;
+  setKeepAliveCount(value: number): void;
+  hopLimit(): number;
+  setHopLimit(value: number): void;
   receiveBufferSize(): bigint;
   setReceiveBufferSize(value: bigint): void;
   sendBufferSize(): bigint;

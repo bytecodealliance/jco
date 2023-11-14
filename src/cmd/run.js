@@ -62,6 +62,8 @@ export async function run (componentPath, args) {
         }
         try {
           mod.run.run();
+          // TODO: figure out stdout flush!
+          setTimeout(() => {});
         }
         catch (e) {
           console.error(e);

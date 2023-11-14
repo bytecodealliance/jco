@@ -75,7 +75,7 @@ function startWorkerThread(
   const worker = new Worker(workerPath, {
     workerData: { workerPort },
     transferList: [workerPort],
-    execArgv: execArgv,
+    execArgv: execArgv
   });
   let nextID = 0;
   const syncFn = (...args) => {

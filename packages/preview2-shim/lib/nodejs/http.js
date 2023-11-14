@@ -1,46 +1,20 @@
-import { streams } from '../common/io.js';
-import { fileURLToPath } from 'node:url';
-import { createSyncFn } from '../synckit/index.js';
+import * as calls from "../io/calls.js";
+import {
+  ioCall,
+  pollableCreate,
+  inputStreamCreate,
+  outputStreamCreate,
+  streamTypes,
+} from "../io/worker-io.js";
 
-const { InputStream, OutputStream } = streams;
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 /**
  * @typedef {import("../../types/interfaces/wasi-http-types").Method} Method
  * @typedef {import("../../types/interfaces/wasi-http-types").RequestOptions} RequestOptions
  * @typedef {import("../../types/interfaces/wasi-http-types").Scheme} Scheme
  * @typedef {import("../../types/interfaces/wasi-http-types").Error} HttpError
-*/
-
-const workerPath = fileURLToPath(new URL('../common/make-request.js', import.meta.url));
-
-function send(req) {
-  const syncFn = createSyncFn(workerPath);
-  let rawResponse = syncFn(req);
-  let response = JSON.parse(rawResponse);
-  if (response.status) {
-    return {
-      ...response,
-      body: response.body ? Buffer.from(response.body, 'base64') : undefined,
-    };
-  }
-  // HttpError
-  throw { tag: 'unexpected-error', val: response.message };
-}
-
-function combineChunks (chunks) {
-  if (chunks.length === 0)
-    return new Uint8Array();
-  if (chunks.length === 1)
-    return chunks[0];
-  const totalLen = chunks.reduce((total, chunk) => total + chunk.byteLength);
-  const out = new Uint8Array(totalLen);
-  let idx = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, idx);
-    idx += chunk.byteLength;
-  }
-  return out;
-}
+ */
 
 export class WasiHttp {
   requestCnt = 1;
@@ -52,49 +26,47 @@ export class WasiHttp {
     const http = this;
 
     class IncomingBody {
-      #bodyFinished = false;
-      #chunks = [];
-      stream () {
-        const incomingBody = this;
-        return new InputStream({
-          blockingRead (_len) {
-            if (incomingBody.#bodyFinished)
-              throw { tag: 'closed' };
-            if (incomingBody.#chunks.length === 0)
-              return new Uint8Array([]);
-            // TODO: handle chunk splitting case where len is less than chunk length
-            return incomingBody.#chunks.shift();
-          },
-          subscribe () {
-            // TODO
-          }
-        });
+      #finished = false;
+      #streamId = undefined;
+      stream() {
+        if (!this.#streamId) throw undefined;
+        const streamId = this.#streamId;
+        this.#streamId = undefined;
+        return inputStreamCreate(streamTypes.INCOMING_BODY, streamId);
       }
-      static finish (incomingBody) {
-        incomingBody.#bodyFinished = true;
+      static finish(incomingBody) {
+        if (incomingBody.#finished)
+          throw new Error('incoming body already finished');
+        incomingBody.#finished = true;
         return futureTrailersCreate(new Fields([]), false);
       }
-      static _addChunk (incomingBody, chunk) {
-        incomingBody.#chunks.push(chunk);
+      [symbolDispose]() {
+        if (!this.#finished)
+          ioCall(calls.INPUT_STREAM_DROP, this.#streamId);
+      }
+      static _create(streamId) {
+        const incomingBody = new IncomingBody();
+        incomingBody.#streamId = streamId;
+        return incomingBody;
       }
     }
-    const incomingBodyAddChunk = IncomingBody._addChunk;
-    delete IncomingBody._addChunk;
+    const incomingBodyCreate = IncomingBody._create;
+    delete IncomingBody.create;
 
     // TODO
     class IncomingRequest {}
 
     class FutureTrailers {
-      id = this.futureCnt++;
+      _id = http.futureCnt++;
       #value;
       #isError;
-      subscribe () {
+      subscribe() {
         // TODO
       }
-      get () {
-        return { tag: this.#isError ? 'err' : 'ok', val: this.#value };
+      get() {
+        return { tag: this.#isError ? "err" : "ok", val: this.#value };
       }
-      static _create (value, isError) {
+      static _create(value, isError) {
         const res = new FutureTrailers();
         res.#value = value;
         res.#isError = isError;
@@ -105,72 +77,83 @@ export class WasiHttp {
     delete FutureTrailers._create;
 
     class OutgoingResponse {
-      id = http.responseCnt++;
-      /** @type {number} */ _statusCode;
-      /** @type {Fields} */ _headers;
+      _id = http.responseCnt++;
+      /** @type {number} */ #statusCode;
+      /** @type {Fields} */ #headers;
 
       /**
-       * @param {number} statusCode 
-       * @param {Fields} headers 
+       * @param {number} statusCode
+       * @param {Fields} headers
        */
-      constructor (statusCode, headers) {
-        this._statusCode = statusCode;
-        this.headers = headers;
+      constructor(statusCode, headers) {
+        this.#statusCode = statusCode;
+        this.#headers = headers;
       }
     }
 
     class ResponseOutparam {
-      static set (_param, _response) {
+      static set(_param, _response) {
         // TODO
       }
     }
 
     class OutgoingRequest {
-      id = http.requestCnt++;
-      /** @type {Method} */ #method = { tag: 'get' };
-      /** @type {Scheme | undefined} */ #scheme = { tag: 'HTTP' };
+      _id = http.requestCnt++;
+      /** @type {Method} */ #method = { tag: "get" };
+      /** @type {Scheme | undefined} */ #scheme = undefined;
       /** @type {string | undefined} */ #pathWithQuery = undefined;
       /** @type {string | undefined} */ #authority = undefined;
-      /** @type {Fields} */ #headers = undefined;
+      /** @type {Fields} */ #headers;
       /** @type {OutgoingBody} */ #body = new OutgoingBody();
-      constructor(method, pathWithQuery, scheme, authority, headers) {
-        this.#method = method;
-        this.#pathWithQuery = pathWithQuery;
-        this.#scheme = scheme;
-        this.#authority = authority;
+      constructor(headers) {
         this.#headers = headers;
       }
-      write () {
+      body() {
         return this.#body;
       }
-
-      static _handle (request) {
+      method() {
+        return this.#method;
+      }
+      setMethod(method) {
+        this.#method = method;
+      }
+      pathWithQuery() {
+        return this.#pathWithQuery;
+      }
+      setPathWithQuery(pathWithQuery) {
+        this.#pathWithQuery = pathWithQuery;
+      }
+      scheme() {
+        return this.#scheme;
+      }
+      setScheme(scheme) {
+        this.#scheme = scheme;
+      }
+      authority() {
+        return this.#authority;
+      }
+      setAuthority(authority) {
+        this.#authority = authority;
+      }
+      headers() {
+        return this.#headers;
+      }
+      static _handle(request) {
         const scheme = request.#scheme.tag === "HTTP" ? "http://" : "https://";
         const url = scheme + request.#authority + request.#pathWithQuery;
         const headers = {
-          "host": request.#authority,
+          host: request.#authority,
         };
         const decoder = new TextDecoder();
         for (const [key, value] of request.#headers.entries()) {
           headers[key] = decoder.decode(value);
         }
-
-        let res;
-        try {
-          res = send({
-            method: request.#method.tag,
-            uri: url,
-            headers: headers,
-            params: [],
-            body: combineChunks(outgoingBodyGetChunks(request.#body)),
-          });
-        } catch (err) {
-          return newFutureIncomingResponse(err.toString(), true);
-        }
-
-        const encoder = new TextEncoder();
-        const response = newIncomingResponse(res.status, new Fields(res.headers.map(([key, value]) => [key, encoder.encode(value)])), [res.body]);
-        return newFutureIncomingResponse({ tag: 'ok', val: response }, false);
+        return futureIncomingResponseCreate(
+          request.#method.val || request.#method.tag,
+          url,
+          Object.entries(headers),
+          null
+        );
       }
     }
 
@@ -178,109 +161,134 @@ export class WasiHttp {
     delete OutgoingRequest._handle;
 
     class OutgoingBody {
-      #chunks = [];
-      write () {
-        const body = this;
-        return new OutputStream({
-          write (bytes) {
-            body.#chunks.push(bytes);
-          },
-          blockingFlush () {}
-        });
+      #finished = false;
+      #outputStream = null;
+      write() {
+        if (this.#outputStream)
+          throw new Error("output stream already created for writing");
+        return (this.#outputStream = outputStreamCreate(
+          streamTypes.OUTGOING_BODY
+        ));
       }
       /**
-       * @param {OutgoingBody} body 
+       * @param {OutgoingBody} body
        * @param {Fields | undefined} trailers
        */
-      static finish (_body, _trailers) {
-        // TODO
-      }
-
-      static _getChunks (body) {
-        return body.#chunks;
+      static finish(body, _trailers) {
+        body.#finished = true;
       }
     }
-    const outgoingBodyGetChunks = OutgoingBody._getChunks;
-    delete OutgoingBody._getChunks;
 
     class IncomingResponse {
-      id = http.responseCnt++;
-      /** @type {InputStream} */ #body;
+      _id = http.responseCnt++;
       /** @type {Fields} */ #headers = undefined;
       #status = 0;
-      #bodyConsumed = false;
-      status () {
+      /** @type {number} */ #bodyStreamId;
+      status() {
         return this.#status;
       }
-      headers () {
+      headers() {
         return this.#headers;
       }
-      consume () {
-        if (this.#bodyConsumed)
-          throw { tag: 'unexpected-error', val: 'request body already consumed' };
-        this.#bodyConsumed = true;
-        return this.#body;
+      consume() {
+        if (this.#bodyStreamId === null) throw undefined;
+        const bodyStreamId = this.#bodyStreamId;
+        this.#bodyStreamId = null;
+        return incomingBodyCreate(bodyStreamId);
       }
-      static _create (status, headers, chunks) {
+      [symbolDispose] () {
+        if (this.#bodyStreamId)
+          ioCall(calls.INPUT_STREAM_DROP, this.#bodyStreamId);
+      }
+      static _create(status, headers, bodyStreamId) {
         const res = new IncomingResponse();
         res.#status = status;
         res.#headers = headers;
-        res.#body = new IncomingBody();
-        for (const chunk of chunks) {
-          incomingBodyAddChunk(res.#body, chunk);
-        }
+        res.#bodyStreamId = bodyStreamId;
         return res;
       }
     }
 
-    const newIncomingResponse = IncomingResponse._create;
+    const incomingResponseCreate = IncomingResponse._create;
     delete IncomingResponse._create;
 
     class FutureIncomingResponse {
-      id = this.futureCnt++;
-      #value;
-      #isError;
-      subscribe () {
-        // TODO
+      _id = http.futureCnt++;
+      #pollId;
+      subscribe() {
+        if (this.#pollId) return pollableCreate(this.#pollId);
+        // 0 poll is immediately resolving
+        return pollableCreate(0);
       }
-      get () {
-        return { tag: this.#isError ? 'err' : 'ok', val: this.#value };
+      get() {
+        // already taken
+        if (!this.#pollId) return;
+        const { value, error } = ioCall(
+          calls.FUTURE_DROP_AND_GET_VALUE,
+          this.#pollId
+        );
+        this.#pollId = undefined;
+        if (error) return { tag: "err", val: value };
+        const { status, headers, bodyStreamId } = value;
+        const textEncoder = new TextEncoder();
+        return {
+          tag: "ok",
+          val: incomingResponseCreate(
+            status,
+            Fields.fromList(
+              headers.map(([key, val]) => [key, textEncoder.encode(val)])
+            ),
+            bodyStreamId
+          ),
+        };
       }
-      static _create (value, isError) {
+      [symbolDispose]() {
+        if (this.#pollId) ioCall(calls.FUTURE_DROP, this.#pollId);
+      }
+      static _create(method, url, headers, body) {
         const res = new FutureIncomingResponse();
-        res.#value = value;
-        res.#isError = isError;
+        res.#pollId = ioCall(calls.HTTP_CREATE_REQUEST, null, {
+          method,
+          url,
+          headers,
+          body,
+        });
         return res;
       }
     }
 
-    const newFutureIncomingResponse = FutureIncomingResponse._create;
+    const futureIncomingResponseCreate = FutureIncomingResponse._create;
     delete FutureIncomingResponse._create;
 
     class Fields {
-      id = http.fieldsCnt++;
-      /** @type {Record<string, Uint8Array[]>} */ #fields;
+      _id = http.fieldsCnt++;
+      /** @type {Record<string, Uint8Array[]>} */ #fields = Object.create(null);
 
       /**
-       * @param {[string, Uint8Array[]][]} fields
+       * @param {[string, Uint8Array[]][]} entries
        */
-      constructor(fields) {
-        this.#fields = Object.fromEntries(fields);
+      static fromList(entries) {
+        const fields = new Fields();
+        fields.#fields = Object.fromEntries(entries);
+        return fields;
       }
-      get (name) {
+      get(name) {
         return this.#fields[name];
       }
-      set (name, value) {
+      set(name, value) {
         this.#fields[name] = value;
       }
-      delete (name) {
+      delete(name) {
         delete this.#fields[name];
       }
-      entries () {
+      append(_name, _value) {
+        // TODO
+      }
+      entries() {
         return Object.entries(this.#fields);
       }
-      clone () {
-        return new Fields(this.entries());
+      clone() {
+        return Fields.fromList(this.entries());
       }
     }
 
@@ -290,7 +298,7 @@ export class WasiHttp {
        * @param {RequestOptions | undefined} _options
        * @returns {FutureIncomingResponse}
        */
-      handle: outgoingRequestHandle
+      handle: outgoingRequestHandle,
     };
 
     this.types = {
@@ -303,7 +311,7 @@ export class WasiHttp {
       OutgoingBody,
       OutgoingRequest,
       OutgoingResponse,
-      ResponseOutparam
+      ResponseOutparam,
     };
   }
 }

@@ -205,11 +205,11 @@ pub fn render_intrinsics(
             "),
 
             Intrinsic::ToBigInt64 => output.push_str("
-                const toInt64 = val => BigInt.asIntN(64, val);
+                const toInt64 = val => BigInt.asIntN(64, BigInt(val));
             "),
 
             Intrinsic::ToBigUint64 => output.push_str("
-                const toUint64 = val => BigInt.asUintN(64, val);
+                const toUint64 = val => BigInt.asUintN(64, BigInt(val));
             "),
 
             Intrinsic::ToInt16 => output.push_str("

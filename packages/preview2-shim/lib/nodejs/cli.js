@@ -1,79 +1,61 @@
-import { argv, env, cwd } from 'node:process';
-import { streams } from '../common/io.js';
+import { argv, env, cwd } from "node:process";
+import {
+  streams,
+  ioCall,
+  streamTypes,
+  inputStreamCreate,
+  outputStreamCreate,
+} from "../io/worker-io.js";
+import * as calls from "../io/calls.js";
 const { InputStream, OutputStream } = streams;
 
-let _env = Object.entries(env), _args = argv.slice(1), _cwd = cwd();
-const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+let _env = Object.entries(env),
+  _args = argv.slice(1),
+  _cwd = cwd();
 
 export const environment = {
-  getEnvironment () {
+  getEnvironment() {
     return _env;
   },
-  getArguments () {
+  getArguments() {
     return _args;
   },
-  initialCwd () {
+  initialCwd() {
     return _cwd;
-  }
+  },
 };
 
 export const exit = {
-  exit (status) {
-    process.exit(status.tag === 'err' ? 1 : 0);
-  }
+  exit(status) {
+    process.exit(status.tag === "err" ? 1 : 0);
+  },
 };
 
-const stdinStream = new InputStream({
-  blockingRead (_len) {
-    // TODO
-  },
-  subscribe () {
-    // TODO
-  },
-  [symbolDispose] () {
-    // TODO
-  }
-});
-const stdoutStream = new OutputStream({
-  write (contents) {
-    process.stdout.write(contents);
-  },
-  blockingFlush () {
-  },
-  [symbolDispose] () {
-  }
-});
-const stderrStream = new OutputStream({
-  write (contents) {
-    process.stderr.write(contents);
-  },
-  blockingFlush () {
-
-  },
-  [symbolDispose] () {
-
-  }
-});
+const stdinStream = inputStreamCreate(
+  ioCall(calls.INPUT_STREAM_CREATE | streamTypes.STDIN, null, null)
+);
+const stdoutStream = outputStreamCreate(streamTypes.STDOUT);
+const stderrStream = outputStreamCreate(streamTypes.STDERR);
 
 export const stdin = {
   InputStream,
-  getStdin () {
+  getStdin() {
     return stdinStream;
-  }
+  },
 };
 
 export const stdout = {
   OutputStream,
-  getStdout () {
+  getStdout() {
     return stdoutStream;
-  }
+  },
 };
 
 export const stderr = {
   OutputStream,
-  getStderr () {
+  getStderr() {
     return stderrStream;
-  }
+  },
 };
 
 class TerminalInput {}
@@ -85,31 +67,31 @@ const terminalStdinInstance = new TerminalInput();
 
 export const terminalInput = {
   TerminalInput,
-  dropTerminalInput () {}
+  dropTerminalInput() {},
 };
 
 export const terminalOutput = {
   TerminalOutput,
-  dropTerminalOutput () {}
+  dropTerminalOutput() {},
 };
 
 export const terminalStderr = {
   TerminalOutput,
-  getTerminalStderr () {
+  getTerminalStderr() {
     return terminalStderrInstance;
-  }
+  },
 };
 
 export const terminalStdin = {
   TerminalInput,
-  getTerminalStdin () {
+  getTerminalStdin() {
     return terminalStdinInstance;
-  }
+  },
 };
 
 export const terminalStdout = {
   TerminalOutput,
-  getTerminalStdout () {
+  getTerminalStdout() {
     return terminalStdoutInstance;
-  }
+  },
 };

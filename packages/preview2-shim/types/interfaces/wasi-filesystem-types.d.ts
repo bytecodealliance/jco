@@ -202,141 +202,10 @@ export namespace WasiFilesystemTypes {
    * Note: This is similar to `symlinkat` in POSIX.
    */
   /**
-   * Check accessibility of a filesystem path.
-   * 
-   * Check whether the given filesystem path names an object which is
-   * readable, writable, or executable, or whether it exists.
-   * 
-   * This does not a guarantee that subsequent accesses will succeed, as
-   * filesystem permissions may be modified asynchronously by external
-   * entities.
-   * 
-   * Note: This is similar to `faccessat` with the `AT_EACCESS` flag in POSIX.
-   */
-  /**
    * Unlink a filesystem object that is not a directory.
    * 
    * Return `error-code::is-directory` if the path refers to a directory.
    * Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
-   */
-  /**
-   * Change the permissions of a filesystem object that is not a directory.
-   * 
-   * Note that the ultimate meanings of these permissions is
-   * filesystem-specific.
-   * 
-   * Note: This is similar to `fchmodat` in POSIX.
-   */
-  /**
-   * Change the permissions of a directory.
-   * 
-   * Note that the ultimate meanings of these permissions is
-   * filesystem-specific.
-   * 
-   * Unlike in POSIX, the `executable` flag is not reinterpreted as a "search"
-   * flag. `read` on a directory implies readability and searchability, and
-   * `execute` is not valid for directories.
-   * 
-   * Note: This is similar to `fchmodat` in POSIX.
-   */
-  /**
-   * Request a shared advisory lock for an open file.
-   * 
-   * This requests a *shared* lock; more than one shared lock can be held for
-   * a file at the same time.
-   * 
-   * If the open file has an exclusive lock, this function downgrades the lock
-   * to a shared lock. If it has a shared lock, this function has no effect.
-   * 
-   * This requests an *advisory* lock, meaning that the file could be accessed
-   * by other programs that don't hold the lock.
-   * 
-   * It is unspecified how shared locks interact with locks acquired by
-   * non-WASI programs.
-   * 
-   * This function blocks until the lock can be acquired.
-   * 
-   * Not all filesystems support locking; on filesystems which don't support
-   * locking, this function returns `error-code::unsupported`.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_SH)` in Unix.
-   */
-  /**
-   * Request an exclusive advisory lock for an open file.
-   * 
-   * This requests an *exclusive* lock; no other locks may be held for the
-   * file while an exclusive lock is held.
-   * 
-   * If the open file has a shared lock and there are no exclusive locks held
-   * for the file, this function upgrades the lock to an exclusive lock. If the
-   * open file already has an exclusive lock, this function has no effect.
-   * 
-   * This requests an *advisory* lock, meaning that the file could be accessed
-   * by other programs that don't hold the lock.
-   * 
-   * It is unspecified whether this function succeeds if the file descriptor
-   * is not opened for writing. It is unspecified how exclusive locks interact
-   * with locks acquired by non-WASI programs.
-   * 
-   * This function blocks until the lock can be acquired.
-   * 
-   * Not all filesystems support locking; on filesystems which don't support
-   * locking, this function returns `error-code::unsupported`.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_EX)` in Unix.
-   */
-  /**
-   * Request a shared advisory lock for an open file.
-   * 
-   * This requests a *shared* lock; more than one shared lock can be held for
-   * a file at the same time.
-   * 
-   * If the open file has an exclusive lock, this function downgrades the lock
-   * to a shared lock. If it has a shared lock, this function has no effect.
-   * 
-   * This requests an *advisory* lock, meaning that the file could be accessed
-   * by other programs that don't hold the lock.
-   * 
-   * It is unspecified how shared locks interact with locks acquired by
-   * non-WASI programs.
-   * 
-   * This function returns `error-code::would-block` if the lock cannot be
-   * acquired.
-   * 
-   * Not all filesystems support locking; on filesystems which don't support
-   * locking, this function returns `error-code::unsupported`.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_SH | LOCK_NB)` in Unix.
-   */
-  /**
-   * Request an exclusive advisory lock for an open file.
-   * 
-   * This requests an *exclusive* lock; no other locks may be held for the
-   * file while an exclusive lock is held.
-   * 
-   * If the open file has a shared lock and there are no exclusive locks held
-   * for the file, this function upgrades the lock to an exclusive lock. If the
-   * open file already has an exclusive lock, this function has no effect.
-   * 
-   * This requests an *advisory* lock, meaning that the file could be accessed
-   * by other programs that don't hold the lock.
-   * 
-   * It is unspecified whether this function succeeds if the file descriptor
-   * is not opened for writing. It is unspecified how exclusive locks interact
-   * with locks acquired by non-WASI programs.
-   * 
-   * This function returns `error-code::would-block` if the lock cannot be
-   * acquired.
-   * 
-   * Not all filesystems support locking; on filesystems which don't support
-   * locking, this function returns `error-code::unsupported`.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_EX | LOCK_NB)` in Unix.
-   */
-  /**
-   * Release a shared or exclusive lock on an open file.
-   * 
-   * Note: This is similar to `flock(fd, LOCK_UN)` in Unix.
    */
   /**
    * Test whether two descriptors refer to the same filesystem object.
@@ -522,44 +391,6 @@ export interface OpenFlags {
    * Truncate file to size 0, similar to `O_TRUNC` in POSIX.
    */
   truncate?: boolean,
-}
-/**
- * Permissions mode used by `open-at`, `change-file-permissions-at`, and
- * similar.
- */
-export interface Modes {
-  /**
-   * True if the resource is considered readable by the containing
-   * filesystem.
-   */
-  readable?: boolean,
-  /**
-   * True if the resource is considered writable by the containing
-   * filesystem.
-   */
-  writable?: boolean,
-  /**
-   * True if the resource is considered executable by the containing
-   * filesystem. This does not apply to directories.
-   */
-  executable?: boolean,
-}
-/**
- * Access type used by `access-at`.
- */
-export type AccessType = AccessTypeAccess | AccessTypeExists;
-/**
- * Test for readability, writeability, or executability.
- */
-export interface AccessTypeAccess {
-  tag: 'access',
-  val: Modes,
-}
-/**
- * Test whether the path exists.
- */
-export interface AccessTypeExists {
-  tag: 'exists',
 }
 /**
  * Number of hard links to an inode.
@@ -827,20 +658,12 @@ export class Descriptor {
   statAt(pathFlags: PathFlags, path: string): DescriptorStat;
   setTimesAt(pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
   linkAt(oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
-  openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags, modes: Modes): Descriptor;
+  openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags): Descriptor;
   readlinkAt(path: string): string;
   removeDirectoryAt(path: string): void;
   renameAt(oldPath: string, newDescriptor: Descriptor, newPath: string): void;
   symlinkAt(oldPath: string, newPath: string): void;
-  accessAt(pathFlags: PathFlags, path: string, type: AccessType): void;
   unlinkFileAt(path: string): void;
-  changeFilePermissionsAt(pathFlags: PathFlags, path: string, modes: Modes): void;
-  changeDirectoryPermissionsAt(pathFlags: PathFlags, path: string, modes: Modes): void;
-  lockShared(): void;
-  lockExclusive(): void;
-  tryLockShared(): void;
-  tryLockExclusive(): void;
-  unlock(): void;
   isSameObject(other: Descriptor): boolean;
   metadataHash(): MetadataHashValue;
   metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;
