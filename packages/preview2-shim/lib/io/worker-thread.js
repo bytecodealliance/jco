@@ -273,14 +273,10 @@ function handle(call, id, payload) {
             outputStream.write(chunk);
           }
           // TODO: these error handlers should be attached, and only for the duration of the splice flush
-          if (inputStream.errored) {
-            streamError(payload.src, inputStream, inputStream.errored); // error ignored?
-            throw streamError(id, outputStream, inputStream.errored);
-          }
-          if (outputStream.errored) {
-            // input stream not closed?
+          if (inputStream.errored)
+            throw streamError(payload.src, inputStream, inputStream.errored);
+          if (outputStream.errored)
             throw streamError(id, outputStream, outputStream.errored);
-          }
           return payload.len - BigInt(bytesRemaining);
         }
         case calls.OUTPUT_STREAM_SUBSCRIBE: {
