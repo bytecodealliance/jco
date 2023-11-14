@@ -1,8 +1,8 @@
-package local:js-component-bindgen
+package local:js-component-bindgen;
 
 world js-component-bindgen {
-  type files = list<tuple<string, list<u8>>>
-  type maps = list<tuple<string, string>>
+  type files = list<tuple<string, list<u8>>>;
+  type maps = list<tuple<string, string>>;
 
   variant instantiation-mode {
     async,
@@ -79,7 +79,7 @@ world js-component-bindgen {
   /// Generate the file structure for the transpiled of a component
   /// into a JS embedding, returns the file list and imports and exports of the
   /// output JS generation component
-  export generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>
+  export generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>;
 
-  export generate-types: func(name: string, options: type-generation-options) -> result<files, string>
+  export generate-types: func(name: string, options: type-generation-options) -> result<files, string>;
 }

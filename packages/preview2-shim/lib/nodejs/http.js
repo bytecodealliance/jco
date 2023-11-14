@@ -78,16 +78,16 @@ export class WasiHttp {
 
     class OutgoingResponse {
       _id = http.responseCnt++;
-      /** @type {number} */ _statusCode;
-      /** @type {Fields} */ _headers;
+      /** @type {number} */ #statusCode;
+      /** @type {Fields} */ #headers;
 
       /**
        * @param {number} statusCode
        * @param {Fields} headers
        */
       constructor(statusCode, headers) {
-        this._statusCode = statusCode;
-        this.headers = headers;
+        this.#statusCode = statusCode;
+        this.#headers = headers;
       }
     }
 

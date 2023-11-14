@@ -24,22 +24,22 @@ version = "0.13.2"
 
 [workspace.dependencies]
 anyhow = "1.0.75"
-base64 = "0.21.4"
+base64 = "0.21.5"
 heck =  { version = "0.4", features = ["unicode"] }
 indexmap = "2.0"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
-structopt = "0.3.25"
+structopt = "0.3.26"
 tempdir = "0.3.7"
-wasm-encoder = "0.35.0"
-wasm-metadata = "0.10.9"
-wasmparser = "0.115.0"
-wasmprinter = "0.2.70"
-wasmtime-environ = { version = "14.0.1", features = ["component-model"] }
-wat = "1.0.77"
-wit-bindgen = { version = "0.13.0" }
-wit-bindgen-core = { version = "0.13.0" }
-wit-component = { version = "0.16.0", features = ["dummy-module"] }
-wit-parser = "0.12.1"
+wasm-encoder = "0.36.2"
+wasm-metadata = "0.10.11"
+wasmparser = "0.116.1"
+wasmprinter = "0.2.72"
+wasmtime-environ = { version = "14.0.4", features = ["component-model"] }
+wat = "1.0.79"
+wit-bindgen = { version = "0.14.0" }
+wit-bindgen-core = { version = "0.14.0" }
+wit-component = { version = "0.18.0", features = ["dummy-module"] }
+wit-parser = "0.13.0"
 xshell = "0.2.5"
 
 [dev-dependencies]
