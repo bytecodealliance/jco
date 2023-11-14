@@ -2,7 +2,7 @@ let id = 0;
 
 const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 
-class Error {
+const IoError = class Error {
   constructor (msg) {
     this.msg = msg;
   }
@@ -164,7 +164,9 @@ class OutputStream {
   }
 }
 
-export const streams = { Error, InputStream, OutputStream };
+export const error = { Error: IoError };
+
+export const streams = { InputStream, OutputStream };
 
 class Pollable {}
 

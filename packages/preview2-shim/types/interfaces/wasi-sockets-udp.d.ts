@@ -279,11 +279,6 @@ export namespace WasiSocketsUdp {
       remoteAddress?: IpSocketAddress,
     }
     
-    export class IncomingDatagramStream {
-      receive(maxResults: bigint): IncomingDatagram[];
-      subscribe(): Pollable;
-    }
-    
     export class UdpSocket {
       startBind(network: Network, localAddress: IpSocketAddress): void;
       finishBind(): void;
@@ -299,6 +294,11 @@ export namespace WasiSocketsUdp {
       setReceiveBufferSize(value: bigint): void;
       sendBufferSize(): bigint;
       setSendBufferSize(value: bigint): void;
+      subscribe(): Pollable;
+    }
+    
+    export class IncomingDatagramStream {
+      receive(maxResults: bigint): IncomingDatagram[];
       subscribe(): Pollable;
     }
     

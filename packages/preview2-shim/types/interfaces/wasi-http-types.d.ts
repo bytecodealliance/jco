@@ -1,23 +1,28 @@
 export namespace WasiHttpTypes {
   /**
-   * Attempts to extract a http-related `error` from the stream `error`
+   * Attempts to extract a http-related `error` from the wasi:io `error`
    * provided.
    * 
-   * Stream operations which return `stream-error::last-operation-failed` have
-   * a payload with more information about the operation that failed. This
-   * payload can be passed through to this function to see if there's
-   * http-related information about the error to return.
+   * Stream operations which return
+   * `wasi:io/stream/stream-error::last-operation-failed` have a payload of
+   * type `wasi:io/error/error` with more information about the operation
+   * that failed. This payload can be passed through to this function to see
+   * if there's http-related information about the error to return.
    * 
-   * Note that this function is fallible because not all stream-related errors
-   * are http-related errors.
+   * Note that this function is fallible because not all io-errors are
+   * http-related errors.
    */
-  export function httpErrorCode(err: StreamError): ErrorCode | undefined;
+  export function httpErrorCode(err: IoError): ErrorCode | undefined;
   /**
    * Construct an empty HTTP Fields.
+   * 
+   * The resulting `fields` is mutable.
    */
   export { Fields };
   /**
    * Construct an HTTP Fields.
+   * 
+   * The resulting `fields` is mutable.
    * 
    * The list represents each key-value pair in the Fields. Keys
    * which have multiple values are represented by multiple entries in this
@@ -37,14 +42,20 @@ export namespace WasiHttpTypes {
   /**
    * Set all of the values for a key. Clears any existing values for that
    * key, if they have been set.
+   * 
+   * Fails with `header-error.immutable` if the `fields` are immutable.
    */
   /**
    * Delete all values for a key. Does nothing if no values for the key
    * exist.
+   * 
+   * Fails with `header-error.immutable` if the `fields` are immutable.
    */
   /**
    * Append a value for a key. Does not change or delete any existing
    * values for that key.
+   * 
+   * Fails with `header-error.immutable` if the `fields` are immutable.
    */
   /**
    * Retrieve the full set of keys and values in the Fields. Like the
@@ -56,7 +67,8 @@ export namespace WasiHttpTypes {
    */
   /**
    * Make a deep copy of the Fields. Equivelant in behavior to calling the
-   * `fields` constructor on the return value of `entries`
+   * `fields` constructor on the return value of `entries`. The resulting
+   * `fields` is mutable.
    */
   /**
    * Returns the method of the incoming request.
@@ -72,7 +84,10 @@ export namespace WasiHttpTypes {
    * Returns the authority from the request, if it was present.
    */
   /**
-   * Returns the `headers` from the request.
+   * Get the `headers` associated with the request.
+   * 
+   * The returned `headers` resource is immutable: `set`, `append`, and
+   * `delete` operations will fail with `header-error.immutable`.
    * 
    * The `headers` returned are a child resource: it must be dropped before
    * the parent `incoming-request` is dropped. Dropping this
@@ -100,7 +115,7 @@ export namespace WasiHttpTypes {
    * Request.
    * 
    * Returns success on the first call: the `outgoing-body` resource for
-   * this `outgoing-response` can be retrieved at most once. Subsequent
+   * this `outgoing-request` can be retrieved at most once. Subsequent
    * calls will return error.
    */
   /**
@@ -141,6 +156,9 @@ export namespace WasiHttpTypes {
    */
   /**
    * Get the headers associated with the Request.
+   * 
+   * The returned `headers` resource is immutable: `set`, `append`, and
+   * `delete` operations will fail with `header-error.immutable`.
    * 
    * This headers resource is a child: it must be dropped before the parent
    * `outgoing-request` is dropped, or its ownership is transfered to
@@ -191,6 +209,12 @@ export namespace WasiHttpTypes {
   export { IncomingResponse };
   /**
    * Returns the headers from the incoming response.
+   * 
+   * The returned `headers` resource is immutable: `set`, `append`, and
+   * `delete` operations will fail with `header-error.immutable`.
+   * 
+   * This headers resource is a child: it must be dropped before the parent
+   * `incoming-response` is dropped.
    */
   /**
    * Returns the incoming body. May be called at most once. Returns error
@@ -235,6 +259,11 @@ export namespace WasiHttpTypes {
    * as well as any trailers, were received successfully, or that an error
    * occured receiving them. The optional `trailers` indicates whether or not
    * trailers were present in the body.
+   * 
+   * When some `trailers` are returned by this method, the `trailers`
+   * resource is immutable, and a child. Use of the `set`, `append`, or
+   * `delete` methods will return an error, and the resource must be
+   * dropped before the parent `future-trailers` is dropped.
    */
   /**
    * Construct an `outgoing-response`, with a default `status-code` of `200`.
@@ -253,6 +282,9 @@ export namespace WasiHttpTypes {
    */
   /**
    * Get the headers associated with the Request.
+   * 
+   * The returned `headers` resource is immutable: `set`, `append`, and
+   * `delete` operations will fail with `header-error.immutable`.
    * 
    * This headers resource is a child: it must be dropped before the parent
    * `outgoing-request` is dropped, or its ownership is transfered to
@@ -282,6 +314,11 @@ export namespace WasiHttpTypes {
    * called to signal that the response is complete. If the `outgoing-body`
    * is dropped without calling `outgoing-body.finalize`, the implementation
    * should treat the body as corrupted.
+   * 
+   * Fails if the body's `outgoing-request` or `outgoing-response` was
+   * constructed with a Content-Length header, and the contents written
+   * to the body (via `write`) does not match the value given in the
+   * Content-Length.
    */
   /**
    * Returns a pollable which becomes ready when either the Response has
@@ -312,8 +349,8 @@ import type { InputStream } from '../interfaces/wasi-io-streams.js';
 export { InputStream };
 import type { OutputStream } from '../interfaces/wasi-io-streams.js';
 export { OutputStream };
-import type { StreamError } from '../interfaces/wasi-io-streams.js';
-export { StreamError };
+import type { IoError } from '../interfaces/wasi-io-error.js';
+export { IoError };
 import type { Pollable } from '../interfaces/wasi-io-poll.js';
 export { Pollable };
 /**
@@ -581,20 +618,6 @@ export type Trailers = Fields;
 export type StatusCode = number;
 export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
-export class FutureIncomingResponse {
-  subscribe(): Pollable;
-  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
-}
-
-export class OutgoingBody {
-  write(): OutputStream;
-  static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
-}
-
-export class ResponseOutparam {
-  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
-}
-
 export class IncomingRequest {
   method(): Method;
   pathWithQuery(): string | undefined;
@@ -602,6 +625,35 @@ export class IncomingRequest {
   authority(): string | undefined;
   headers(): Headers;
   consume(): IncomingBody;
+}
+
+export class FutureIncomingResponse {
+  subscribe(): Pollable;
+  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
+}
+
+export class Fields {
+  constructor()
+  static fromList(entries: [FieldKey, FieldValue][]): Fields;
+  get(name: FieldKey): FieldValue[];
+  set(name: FieldKey, value: FieldValue[]): void;
+  delete(name: FieldKey): void;
+  append(name: FieldKey, value: FieldValue): void;
+  entries(): [FieldKey, FieldValue][];
+  clone(): Fields;
+}
+
+export class FutureTrailers {
+  subscribe(): Pollable;
+  get(): Result<Trailers | undefined, ErrorCode> | undefined;
+}
+
+export class OutgoingResponse {
+  constructor(headers: Headers)
+  statusCode(): StatusCode;
+  setStatusCode(statusCode: StatusCode): void;
+  headers(): Headers;
+  body(): OutgoingBody;
 }
 
 export class OutgoingRequest {
@@ -634,31 +686,16 @@ export class IncomingResponse {
   consume(): IncomingBody;
 }
 
+export class ResponseOutparam {
+  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
+}
+
 export class IncomingBody {
   stream(): InputStream;
   static finish(this_: IncomingBody): FutureTrailers;
 }
 
-export class FutureTrailers {
-  subscribe(): Pollable;
-  get(): Result<Trailers | undefined, ErrorCode> | undefined;
-}
-
-export class Fields {
-  constructor()
-  static fromList(entries: [FieldKey, FieldValue][]): Fields;
-  get(name: FieldKey): FieldValue[];
-  set(name: FieldKey, value: FieldValue[]): void;
-  delete(name: FieldKey): void;
-  append(name: FieldKey, value: FieldValue): void;
-  entries(): [FieldKey, FieldValue][];
-  clone(): Fields;
-}
-
-export class OutgoingResponse {
-  constructor(headers: Headers)
-  statusCode(): StatusCode;
-  setStatusCode(statusCode: StatusCode): void;
-  headers(): Headers;
-  body(): OutgoingBody;
+export class OutgoingBody {
+  write(): OutputStream;
+  static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
 }

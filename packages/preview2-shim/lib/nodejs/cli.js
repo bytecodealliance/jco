@@ -1,50 +1,61 @@
-import { argv, env, cwd } from 'node:process';
-import { streams, _streamTypes, _inputStreamCreate, _outputStreamCreate } from '../io/worker-io.js';
+import { argv, env, cwd } from "node:process";
+import {
+  streams,
+  ioCall,
+  streamTypes,
+  inputStreamCreate,
+  outputStreamCreate,
+} from "../io/worker-io.js";
+import * as calls from "../io/calls.js";
 const { InputStream, OutputStream } = streams;
 
-let _env = Object.entries(env), _args = argv.slice(1), _cwd = cwd();
+let _env = Object.entries(env),
+  _args = argv.slice(1),
+  _cwd = cwd();
 
 export const environment = {
-  getEnvironment () {
+  getEnvironment() {
     return _env;
   },
-  getArguments () {
+  getArguments() {
     return _args;
   },
-  initialCwd () {
+  initialCwd() {
     return _cwd;
-  }
+  },
 };
 
 export const exit = {
-  exit (status) {
-    process.exit(status.tag === 'err' ? 1 : 0);
-  }
+  exit(status) {
+    process.exit(status.tag === "err" ? 1 : 0);
+  },
 };
 
-const stdinStream = _inputStreamCreate(_streamTypes.STDIN);
-const stdoutStream = _outputStreamCreate(_streamTypes.STDOUT);
-const stderrStream = _outputStreamCreate(_streamTypes.STDERR);
+const stdinStream = inputStreamCreate(
+  ioCall(calls.INPUT_STREAM_CREATE | streamTypes.STDIN, null, null)
+);
+const stdoutStream = outputStreamCreate(streamTypes.STDOUT);
+const stderrStream = outputStreamCreate(streamTypes.STDERR);
 
 export const stdin = {
   InputStream,
-  getStdin () {
+  getStdin() {
     return stdinStream;
-  }
+  },
 };
 
 export const stdout = {
   OutputStream,
-  getStdout () {
+  getStdout() {
     return stdoutStream;
-  }
+  },
 };
 
 export const stderr = {
   OutputStream,
-  getStderr () {
+  getStderr() {
     return stderrStream;
-  }
+  },
 };
 
 class TerminalInput {}
@@ -56,31 +67,31 @@ const terminalStdinInstance = new TerminalInput();
 
 export const terminalInput = {
   TerminalInput,
-  dropTerminalInput () {}
+  dropTerminalInput() {},
 };
 
 export const terminalOutput = {
   TerminalOutput,
-  dropTerminalOutput () {}
+  dropTerminalOutput() {},
 };
 
 export const terminalStderr = {
   TerminalOutput,
-  getTerminalStderr () {
+  getTerminalStderr() {
     return terminalStderrInstance;
-  }
+  },
 };
 
 export const terminalStdin = {
   TerminalInput,
-  getTerminalStdin () {
+  getTerminalStdin() {
     return terminalStdinInstance;
-  }
+  },
 };
 
 export const terminalStdout = {
   TerminalOutput,
-  getTerminalStdout () {
+  getTerminalStdout() {
     return terminalStdoutInstance;
-  }
+  },
 };

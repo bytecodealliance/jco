@@ -1,1 +1,1 @@
-export { streams, poll } from '../io/worker-io.js';
+export { error, streams, poll } from '../io/worker-io.js';
