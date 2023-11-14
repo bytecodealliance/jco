@@ -1,5 +1,4 @@
-import { hrtime } from "node:process";
-import { createPoll, resolvedPoll } from "../io/worker-io.js";
+import { ioCall, createPoll, resolvedPoll } from "../io/worker-io.js";
 import * as calls from "../io/calls.js";
 
 export const monotonicClock = {
@@ -7,13 +6,10 @@ export const monotonicClock = {
     return 1n;
   },
   now() {
-    return hrtime.bigint();
+    return ioCall(calls.CLOCKS_NOW);
   },
   subscribeInstant(instant) {
-    instant = BigInt(instant);
-    const now = hrtime.bigint();
-    if (instant <= now) return resolvedPoll();
-    return this.subscribeDuration(instant - now);
+    return createPoll(calls.CLOCKS_INSTANT_SUBSCRIBE, null, instant);
   },
   subscribeDuration(duration) {
     duration = BigInt(duration);

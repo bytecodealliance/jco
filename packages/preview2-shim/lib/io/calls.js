@@ -42,4 +42,6 @@ export const FUTURE_DROP = ++call_id << CALL_SHIFT;
 export const HTTP_CREATE_REQUEST = ++call_id << 24;
 
 // Clocks
+export const CLOCKS_NOW = ++call_id << 24;
 export const CLOCKS_DURATION_SUBSCRIBE = ++call_id << 24;
+export const CLOCKS_INSTANT_SUBSCRIBE = ++call_id << 24;

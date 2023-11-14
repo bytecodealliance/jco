@@ -3,6 +3,7 @@ import * as calls from "./calls.js";
 import * as streamTypes from "./stream-types.js";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
+import { hrtime } from "node:process";
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -49,6 +50,17 @@ function getStreamOrThrow(streamId) {
   return stream;
 }
 
+function subscribeInstant(instant) {
+  const duration = instant - hrtime.bigint();
+  if (duration <= 0)
+    return Promise.resolve();
+  return new Promise(resolve => duration < 10e6 ? setImmediate(resolve) : setTimeout(resolve, Number(duration) / 1e6))
+    .then(() => {
+      if (hrtime.bigint() < instant)
+        return subscribeInstant(instant);
+    });
+}
+
 /**
  * @param {number} call
  * @param {number | null} id
@@ -64,10 +76,12 @@ function handle(call, id, payload) {
     }
 
     // Clocks
+    case calls.CLOCKS_NOW:
+      return hrtime.bigint();
     case calls.CLOCKS_DURATION_SUBSCRIBE:
-      return createPoll(
-        new Promise((resolve) => setTimeout(resolve, Number(payload) / 1e6))
-      );
+      return createPoll(subscribeInstant(hrtime.bigint() + payload));
+    case calls.CLOCKS_INSTANT_SUBSCRIBE:
+      return createPoll(subscribeInstant(payload));
 
     // Stdio
     case calls.INPUT_STREAM_CREATE | streamTypes.STDIN:
@@ -264,7 +278,7 @@ function handle(call, id, payload) {
             (chunk = inputStream.read(
               Math.min(
                 outputStream.writableHighWaterMark -
-                  outputStream.writableLength,
+                outputStream.writableLength,
                 bytesRemaining
               )
             ))
@@ -384,8 +398,7 @@ function handle(call, id, payload) {
 
         default:
           throw new Error(
-            `Unknown call ${
-              (call & calls.CALL_MASK) >> calls.CALL_SHIFT
+            `Unknown call ${(call & calls.CALL_MASK) >> calls.CALL_SHIFT
             } with type ${call & calls.CALL_TYPE_MASK}`
           );
       }

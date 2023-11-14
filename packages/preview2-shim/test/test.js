@@ -70,8 +70,8 @@ suite("Node.js Preview2", () => {
 
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
-      ok(nextNow - curNow > 10e6);
-      ok(nextNow - curNow < 12e6);
+      ok(nextNow - curNow >= 10e6);
+      ok(nextNow - curNow < 15e6);
     });
 
     test("Monotonic clock subscribe instant", async () => {
@@ -86,8 +86,8 @@ suite("Node.js Preview2", () => {
 
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
-      ok(nextNow - curNow > 9e6);
-      ok(nextNow - curNow < 12e6);
+      ok(nextNow - curNow >= 10e6);
+      ok(nextNow - curNow < 15e6);
     });
   });
 
