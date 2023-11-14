@@ -36,6 +36,8 @@ pub fn run() -> anyhow::Result<()> {
         fs::write(file_name, content)?;
     }
 
+    test_names.sort();
+
     let content = generate_mod(test_names.as_slice());
     let file_name = "tests/generated/mod.rs";
     fs::write(file_name, content)?;
