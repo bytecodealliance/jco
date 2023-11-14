@@ -27,7 +27,7 @@ import { preview2Test } from './preview2.js';
 import { tsTest } from './typescript.js';
 
 await codegenTest(componentFixtures);
-await tsTest();
+tsTest();
 await preview2Test();
 await runtimeTest(componentFixtures);
 await apiTest(componentFixtures);

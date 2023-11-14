@@ -64,7 +64,7 @@ async function wasm2Js (source) {
  * @param {Uint8Array} component 
  * @param {{
  *   name: string,
- *   instantiation?: bool,
+ *   instantiation?: 'async' | 'sync',
  *   map?: Record<string, string>,
  *   validLiftingOptimization?: bool,
  *   tracing?: bool,
@@ -103,10 +103,18 @@ export async function transpileComponent (component, opts = {}) {
     }, opts.map || {});
   }
 
+  let instantiation = null;
+
+  if (opts.instantiation) {
+    instantiation = { tag: opts.instantiation };
+  } else if (opts.js) {
+    instantiation = { tag: 'async' };
+  }
+
   let { files, imports, exports } = generate(component, {
     name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? {}),
-    instantiation: opts.instantiation || opts.js,
+    instantiation,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     tracing: opts.tracing ?? false,
     noNodejsCompat: !(opts.nodejsCompat ?? true),

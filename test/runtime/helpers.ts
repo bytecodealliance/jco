@@ -1,6 +1,8 @@
 // @ts-ignore
 import { readFile } from 'node:fs/promises';
 // @ts-ignore
+import { readFileSync } from 'node:fs';
+// @ts-ignore
 import { stdout, stderr } from 'node:process';
 // @ts-ignore
 import { basename } from 'node:path';
@@ -15,6 +17,12 @@ import { basename } from 'node:path';
 export async function loadWasm(path: string) {
   const name = basename(path).replace(/\.core\d*\.wasm$/, '');
   return await WebAssembly.compile(await readFile(new URL(`./${name}/${path}`, import.meta.url)));
+}
+
+// Just like `loadWasm`, but not async :-).
+export function loadWasmSync(path: string) {
+  const name = basename(path).replace(/\.core\d*\.wasm$/, '');
+  return new WebAssembly.Module(readFileSync(new URL(`./${name}/${path}`, import.meta.url)));
 }
 
 // Export a WASI interface directly for instance imports

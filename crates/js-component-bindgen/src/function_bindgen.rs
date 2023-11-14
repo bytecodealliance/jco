@@ -497,9 +497,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let variant_name = name.to_upper_camel_case();
                 uwriteln!(
                     self.src,
-                    "default: {{
-                        throw new TypeError(`invalid variant ${{JSON.stringify({expr_to_match})}} specified for {variant_name}`);
-                    }}",
+                    r#"default: {{
+                        throw new TypeError(`invalid variant tag value \`${{JSON.stringify({expr_to_match})}}\` (received \`${{variant{tmp}}}\`) specified for \`{variant_name}\``);
+                    }}"#,
                 );
                 uwriteln!(self.src, "}}");
             }
