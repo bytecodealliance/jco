@@ -1,4 +1,5 @@
 mod api_proxy;
+mod api_proxy_streaming;
 mod api_reactor;
 mod api_read_only;
 mod api_time;
@@ -15,6 +16,7 @@ mod cli_file_append;
 mod cli_file_dir_sync;
 mod cli_file_read;
 mod cli_hello_stdout;
+mod cli_splice_stdin;
 mod cli_stdin;
 mod http_outbound_request_get;
 mod http_outbound_request_invalid_dnsname;
