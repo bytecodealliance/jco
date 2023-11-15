@@ -7,22 +7,19 @@
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").InputStream} InputStream
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").OutputStream} OutputStream
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
- * @typedef {import("../../types/interfaces/wasi-io-poll-poll").Pollable} Pollable
+ * @typedef {import("../../../types/interfaces/wasi-io-poll-poll").Pollable} Pollable
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").ShutdownType} ShutdownType
+ * @typedef {import("../../../types/interfaces/wasi-clocks-monotonic-clock.js").Duration} Duration
  */
 
 import { streams } from "../io.js";
 const { InputStream, OutputStream } = streams;
 import { assert } from "../../common/assert.js";
 
-const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 // See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
-const {
-  TCP,
-  TCPConnectWrap,
-  constants: TCPConstants,
-} = process.binding("tcp_wrap");
+const { TCP, TCPConnectWrap, constants: TCPConstants } = process.binding("tcp_wrap");
 const { ShutdownWrap } = process.binding("stream_wrap");
 import { isIP, Socket as NodeSocket } from "node:net";
 
@@ -57,6 +54,9 @@ export class TcpSocketImpl {
   #inProgress = false;
   #connections = 0;
   #keepAlive = false;
+  #keepAliveCount = 1;
+  #keepAliveIdleTime = 1;
+  #keepAliveInterval = 1;
   #noDelay = false;
   #unicastHopLimit = 10;
   #acceptedClient = null;
@@ -69,7 +69,6 @@ export class TcpSocketImpl {
    * @returns
    */
   constructor(addressFamily) {
-
     this.#socketOptions.family = addressFamily;
 
     this.#clientHandle = new TCP(TCPConstants.SOCKET);
@@ -136,20 +135,14 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already bound. (EINVAL)
    */
   startBind(network, localAddress) {
-    const address = serializeIpAddress(
-      localAddress,
-      this.#socketOptions.family
-    );
+    const address = serializeIpAddress(localAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(address)}`;
 
-    console.log(
-      `[tcp] start bind socket to ${address}:${localAddress.val.port}`
-    );
+    console.log(`[tcp] start bind socket to ${address}:${localAddress.val.port}`);
 
     assert(this.#isBound, "invalid-state", "The socket is already bound");
     assert(
-      this.#socketOptions.family.toLocaleLowerCase() !==
-        ipFamily.toLocaleLowerCase(),
+      this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(),
       "invalid-argument",
       "The `local-address` has the wrong address family"
     );
@@ -183,7 +176,7 @@ export class TcpSocketImpl {
 
     const { localAddress, localPort, family } = this.#socketOptions;
     assert(isIP(localAddress) === 0, "address-not-bindable");
-    
+
     let err = null;
     if (family.toLocaleLowerCase() === "ipv4") {
       err = this.#serverHandle.bind(localAddress, localPort);
@@ -220,14 +213,9 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already in the Listener state. (EOPNOTSUPP, EINVAL on Windows)
    */
   startConnect(network, remoteAddress) {
-    console.log(
-      `[tcp] start connect socket to ${remoteAddress.val.address}:${remoteAddress.val.port}`
-    );
+    console.log(`[tcp] start connect socket to ${remoteAddress.val.address}:${remoteAddress.val.port}`);
 
-    assert(
-      this.network !== null && this.network.id !== network.id,
-      "already-attached"
-    );
+    assert(this.network !== null && this.network.id !== network.id, "already-attached");
     assert(this.#state === "connected", "already-connected");
     assert(this.#state === "connection", "already-listening");
     assert(this.#inProgress, "concurrency-conflict");
@@ -236,15 +224,11 @@ export class TcpSocketImpl {
     const ipFamily = `ipv${isIP(host)}`;
 
     assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-remote-address");
-    assert(
-      this.#socketOptions.family.toLocaleLowerCase() !==
-        ipFamily.toLocaleLowerCase(),
-      "address-family-mismatch"
-    );
+    assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "address-family-mismatch");
 
     this.#socketOptions.remoteAddress = host;
     this.#socketOptions.remotePort = remoteAddress.val.port;
-    
+
     this.network = network;
     this.#inProgress = true;
   }
@@ -265,8 +249,7 @@ export class TcpSocketImpl {
 
     assert(this.#inProgress === false, "not-in-progress");
 
-    const { localAddress, localPort, remoteAddress, remotePort, family } =
-      this.#socketOptions;
+    const { localAddress, localPort, remoteAddress, remotePort, family } = this.#socketOptions;
     const connectReq = new TCPConnectWrap();
 
     let err = null;
@@ -275,7 +258,7 @@ export class TcpSocketImpl {
     } else if (family.toLocaleLowerCase() === "ipv6") {
       err = this.#clientHandle.connect6(connectReq, remoteAddress, remotePort);
     }
-    
+
     if (err) {
       console.error(`[tcp] connect error on socket: ${err}`);
       this.#state = SocketState.Error;
@@ -305,11 +288,7 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already in the Listener state.
    */
   startListen() {
-    console.log(
-      `[tcp] start listen socket on ${this.#socketOptions.localAddress}:${
-        this.#socketOptions.localPort
-      }`
-    );
+    console.log(`[tcp] start listen socket on ${this.#socketOptions.localAddress}:${this.#socketOptions.localPort}`);
 
     assert(this.#isBound === false, "invalid-state");
     assert(this.#state === SocketState.Connection, "invalid-state");
@@ -361,7 +340,7 @@ export class TcpSocketImpl {
         console.log(`[tcp] read socket`);
         return self.#acceptedClient.read(len);
       },
-    })
+    });
 
     return [this.#acceptedClient, ingoingStream, outgoingStream];
   }
@@ -395,6 +374,12 @@ export class TcpSocketImpl {
     assert(this.#state !== SocketState.Connection, "invalid-state");
 
     return this.#socketOptions.remoteAddress;
+  }
+
+  isListening() {
+    console.log(`[tcp] is listening socket`);
+
+    return this.#state === SocketState.Listener;
   }
 
   /**
@@ -444,7 +429,7 @@ export class TcpSocketImpl {
   /**
    * @returns {boolean}
    */
-  keepAlive() {
+  keepAliveEnabled() {
     console.log(`[tcp] keep alive socket`);
 
     this.#keepAlive;
@@ -454,11 +439,89 @@ export class TcpSocketImpl {
    * @param {boolean} value
    * @returns {void}
    */
-  setKeepAlive(value) {
+  setKeepAliveEnabled(value) {
     console.log(`[tcp] set keep alive socket to ${value}`);
 
     this.#keepAlive = value;
     this.#clientHandle.setKeepAlive(value);
+    
+    if (value) {
+      this.#clientHandle.setKeepAliveIdleTime(this.keepAliveIdleTime());
+      this.#clientHandle.setKeepAliveInterval(this.keepAliveInterval());
+      this.#clientHandle.setKeepAliveCount(this.keepAliveCount());
+    }
+  }
+
+  /**
+   * 
+   * @returns {Duration}
+   */
+  keepAliveIdleTime() {
+    console.log(`[tcp] keep alive idle time socket`);
+
+    return this.#keepAliveIdleTime;
+  }
+
+  /**
+   * 
+   * @param {Duration} value
+   * @returns {void}
+   * @throws {invalid-argument} (set) The idle time must be 1 or higher.
+   */
+  setKeepAliveIdleTime(value) {
+    console.log(`[tcp] set keep alive idle time socket to ${value}`);
+
+    assert(value < 1, "invalid-argument", "The idle time must be 1 or higher.");
+
+    this.#keepAliveIdleTime = value;
+  }
+
+  /**
+   * 
+   * @returns {Duration}
+   */
+  keepAliveInterval() {
+    console.log(`[tcp] keep alive interval socket`);
+
+    return this.#keepAliveInterval;
+  }
+
+  /**
+   * 
+   * @param {Duration} value
+   * @returns {void}
+   * @throws {invalid-argument} (set) The interval must be 1 or higher.
+   */
+  setKeepAliveInterval(value) {
+    console.log(`[tcp] set keep alive interval socket to ${value}`);
+
+    assert(value < 1, "invalid-argument", "The interval must be 1 or higher.");
+
+    this.#keepAliveInterval = value;
+  }
+
+  /**
+   * 
+   * @returns {Duration}
+   */
+  keepAliveCount() {
+    console.log(`[tcp] keep alive count socket`);
+
+    return this.#keepAliveCount;
+  }
+
+  /**
+   * 
+   * @param {Duration} value
+   * @returns {void}
+   * @throws {invalid-argument} (set) The count must be 1 or higher.
+   */
+  setKeepAliveCount(value) {
+    console.log(`[tcp] set keep alive count socket to ${value}`);
+
+    assert(value < 1, "invalid-argument", "The count must be 1 or higher.");
+
+    this.#keepAliveCount = value;
   }
 
   /**
@@ -579,7 +642,7 @@ export class TcpSocketImpl {
     assert(err === 1, "invalid-state");
   }
 
-  [symbolDispose] () {
+  [symbolDispose]() {
     console.log(`[tcp] dispose socket`);
     this.#serverHandle.close();
     this.#clientHandle.close();

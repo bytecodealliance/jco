@@ -387,7 +387,7 @@ suite("Node.js Preview2", () => {
       });
       equal(socket.addressFamily(), "ipv4");
     });
-    test("udp.connect(): should connect to a valid ipv4 address", async () => {
+    test("udp.stream(): should connect to a valid ipv4 address", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
@@ -412,8 +412,7 @@ suite("Node.js Preview2", () => {
 
       socket.startBind(network, localAddress);
       socket.finishBind();
-      socket.startConnect(network, remoteAddress);
-      socket.finishConnect();
+      socket.stream(remoteAddress);
 
       strictEqual(socket.client().connect.mock.calls.length, 1);
 

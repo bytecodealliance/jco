@@ -1,9 +1,9 @@
 /**
- * @typedef {import("../../types/interfaces/wasi-sockets-network").Network} Network
- * @typedef {import("../../types/interfaces/wasi-sockets-network").ErrorCode} ErrorCode
- * @typedef {import("../../types/interfaces/wasi-sockets-network").IpAddressFamily} IpAddressFamily
- * @typedef {import("../../types/interfaces/wasi-sockets-tcp").TcpSocket} TcpSocket
- * @typedef {import("../../types/interfaces/wasi-sockets-udp").UdpSocket} UdpSocket
+ * @typedef {import("../../../types/interfaces/wasi-sockets-network").Network} Network
+ * @typedef {import("../../../types/interfaces/wasi-sockets-network").ErrorCode} ErrorCode
+ * @typedef {import("../../../types/interfaces/wasi-sockets-network").IpAddressFamily} IpAddressFamily
+ * @typedef {import("../../../types/interfaces/wasi-sockets-tcp").TcpSocket} TcpSocket
+ * @typedef {import("../../../types/interfaces/wasi-sockets-udp").UdpSocket} UdpSocket
  */
 
 import { TcpSocketImpl } from "./tcp-socket-impl.js";
