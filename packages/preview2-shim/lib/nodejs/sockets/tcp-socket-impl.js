@@ -79,8 +79,6 @@ export class TcpSocketImpl {
   }
 
   #handleConnection(err, newClientSocket) {
-    console.log(`[tcp] on server connection`);
-
     if (err) {
       assert(true, "", err);
     }
@@ -99,13 +97,9 @@ export class TcpSocketImpl {
     };
   }
 
-  #handleDisconnect(err) {
-    console.log(`[tcp] on server disconnect`);
-  }
+  #handleDisconnect(err) {}
 
   #onClientConnectComplete(err) {
-    console.log(`[tcp] on client connect complete`);
-
     if (err) {
       assert(err === -99, "ephemeral-ports-exhausted");
       assert(err === -104, "connection-reset");
@@ -121,9 +115,7 @@ export class TcpSocketImpl {
   }
 
   // TODO: is this needed?
-  #handleAfterShutdown() {
-    console.log(`[tcp] after shutdown socket`);
-  }
+  #handleAfterShutdown() {}
 
   /**
    * @param {Network} network
@@ -137,8 +129,6 @@ export class TcpSocketImpl {
   startBind(network, localAddress) {
     const address = serializeIpAddress(localAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(address)}`;
-
-    console.log(`[tcp] start bind socket to ${address}:${localAddress.val.port}`);
 
     assert(this.#isBound, "invalid-state", "The socket is already bound");
     assert(
@@ -170,8 +160,6 @@ export class TcpSocketImpl {
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    **/
   finishBind() {
-    console.log(`[tcp] finish bind socket`);
-
     assert(this.#inProgress === false, "not-in-progress");
 
     const { localAddress, localPort, family } = this.#socketOptions;
@@ -192,8 +180,6 @@ export class TcpSocketImpl {
       assert(true, "", err);
     }
 
-    console.log(`[tcp] bound socket to ${localAddress}:${localPort}`);
-
     this.#isBound = true;
     this.#inProgress = false;
   }
@@ -213,8 +199,6 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already in the Listener state. (EOPNOTSUPP, EINVAL on Windows)
    */
   startConnect(network, remoteAddress) {
-    console.log(`[tcp] start connect socket to ${remoteAddress.val.address}:${remoteAddress.val.port}`);
-
     assert(this.network !== null && this.network.id !== network.id, "already-attached");
     assert(this.#state === "connected", "already-connected");
     assert(this.#state === "connection", "already-listening");
@@ -245,8 +229,6 @@ export class TcpSocketImpl {
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    */
   finishConnect() {
-    console.log(`[tcp] finish connect socket`);
-
     assert(this.#inProgress === false, "not-in-progress");
 
     const { localAddress, localPort, remoteAddress, remotePort, family } = this.#socketOptions;
@@ -288,8 +270,6 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already in the Listener state.
    */
   startListen() {
-    console.log(`[tcp] start listen socket on ${this.#socketOptions.localAddress}:${this.#socketOptions.localPort}`);
-
     assert(this.#isBound === false, "invalid-state");
     assert(this.#state === SocketState.Connection, "invalid-state");
     assert(this.#state === SocketState.Listener, "invalid-state");
@@ -304,8 +284,6 @@ export class TcpSocketImpl {
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    */
   finishListen() {
-    console.log(`[tcp] finish listen socket (backlog: ${this.#backlog})`);
-
     assert(this.#inProgress === false, "not-in-progress");
 
     const err = this.#serverHandle.listen(this.#backlog);
@@ -331,13 +309,11 @@ export class TcpSocketImpl {
     const self = this;
     const outgoingStream = new OutputStream({
       write(bytes) {
-        console.log(`[tcp] write socket`);
         self.#acceptedClient.write(bytes);
       },
     });
     const ingoingStream = new InputStream({
       read(len) {
-        console.log(`[tcp] read socket`);
         return self.#acceptedClient.read(len);
       },
     });
@@ -350,8 +326,6 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is not bound to any local address.
    */
   localAddress() {
-    console.log(`[tcp] local address socket`);
-
     assert(this.#isBound === false, "invalid-state");
 
     const { localAddress, localPort, family } = this.#socketOptions;
@@ -369,16 +343,12 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is not connected to a remote address. (ENOTCONN)
    */
   remoteAddress() {
-    console.log(`[tcp] remote address socket`);
-
     assert(this.#state !== SocketState.Connection, "invalid-state");
 
     return this.#socketOptions.remoteAddress;
   }
 
   isListening() {
-    console.log(`[tcp] is listening socket`);
-
     return this.#state === SocketState.Listener;
   }
 
@@ -386,8 +356,6 @@ export class TcpSocketImpl {
    * @returns {IpAddressFamily}
    */
   addressFamily() {
-    console.log(`[tcp] address family socket`);
-
     return this.#socketOptions.family;
   }
 
@@ -396,8 +364,6 @@ export class TcpSocketImpl {
    * @throws {not-supported} (get/set) `this` socket is an IPv4 socket.
    */
   ipv6Only() {
-    console.log(`[tcp] ipv6 only socket`);
-
     return this.#ipv6Only;
   }
 
@@ -409,8 +375,6 @@ export class TcpSocketImpl {
    * @throws {not-supported} (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    */
   setIpv6Only(value) {
-    console.log(`[tcp] set ipv6 only socket to ${value}`);
-
     this.#ipv6Only = value;
   }
 
@@ -421,8 +385,6 @@ export class TcpSocketImpl {
    * @throws {invalid-state} (set) The socket is already in the Connection state.
    */
   setListenBacklogSize(value) {
-    console.log(`[tcp] set listen backlog size socket to ${value}`);
-
     this.#backlog = value;
   }
 
@@ -430,8 +392,6 @@ export class TcpSocketImpl {
    * @returns {boolean}
    */
   keepAliveEnabled() {
-    console.log(`[tcp] keep alive socket`);
-
     this.#keepAlive;
   }
 
@@ -440,11 +400,9 @@ export class TcpSocketImpl {
    * @returns {void}
    */
   setKeepAliveEnabled(value) {
-    console.log(`[tcp] set keep alive socket to ${value}`);
-
     this.#keepAlive = value;
     this.#clientHandle.setKeepAlive(value);
-    
+
     if (value) {
       this.#clientHandle.setKeepAliveIdleTime(this.keepAliveIdleTime());
       this.#clientHandle.setKeepAliveInterval(this.keepAliveInterval());
@@ -453,72 +411,60 @@ export class TcpSocketImpl {
   }
 
   /**
-   * 
+   *
    * @returns {Duration}
    */
   keepAliveIdleTime() {
-    console.log(`[tcp] keep alive idle time socket`);
-
     return this.#keepAliveIdleTime;
   }
 
   /**
-   * 
+   *
    * @param {Duration} value
    * @returns {void}
    * @throws {invalid-argument} (set) The idle time must be 1 or higher.
    */
   setKeepAliveIdleTime(value) {
-    console.log(`[tcp] set keep alive idle time socket to ${value}`);
-
     assert(value < 1, "invalid-argument", "The idle time must be 1 or higher.");
 
     this.#keepAliveIdleTime = value;
   }
 
   /**
-   * 
+   *
    * @returns {Duration}
    */
   keepAliveInterval() {
-    console.log(`[tcp] keep alive interval socket`);
-
     return this.#keepAliveInterval;
   }
 
   /**
-   * 
+   *
    * @param {Duration} value
    * @returns {void}
    * @throws {invalid-argument} (set) The interval must be 1 or higher.
    */
   setKeepAliveInterval(value) {
-    console.log(`[tcp] set keep alive interval socket to ${value}`);
-
     assert(value < 1, "invalid-argument", "The interval must be 1 or higher.");
 
     this.#keepAliveInterval = value;
   }
 
   /**
-   * 
+   *
    * @returns {Duration}
    */
   keepAliveCount() {
-    console.log(`[tcp] keep alive count socket`);
-
     return this.#keepAliveCount;
   }
 
   /**
-   * 
+   *
    * @param {Duration} value
    * @returns {void}
    * @throws {invalid-argument} (set) The count must be 1 or higher.
    */
   setKeepAliveCount(value) {
-    console.log(`[tcp] set keep alive count socket to ${value}`);
-
     assert(value < 1, "invalid-argument", "The count must be 1 or higher.");
 
     this.#keepAliveCount = value;
@@ -528,8 +474,6 @@ export class TcpSocketImpl {
    * @returns {boolean}
    */
   noDelay() {
-    console.log(`[tcp] no delay socket`);
-
     return this.#noDelay;
   }
 
@@ -539,8 +483,6 @@ export class TcpSocketImpl {
    * @throws {concurrency-conflict} (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
    */
   setNoDelay(value) {
-    console.log(`[tcp] set no delay socket to ${value}`);
-
     this.#noDelay = value;
     this.#clientHandle.setNoDelay(value);
   }
@@ -549,8 +491,6 @@ export class TcpSocketImpl {
    * @returns {number}
    */
   unicastHopLimit() {
-    console.log(`[tcp] unicast hop limit socket`);
-
     return this.#unicastHopLimit;
   }
 
@@ -562,8 +502,6 @@ export class TcpSocketImpl {
    * @throws {invalid-state} (set) The socket is already in the Listener state.
    */
   setUnicastHopLimit(value) {
-    console.log(`[tcp] set unicast hop limit socket to ${value}`);
-
     this.#unicastHopLimit = value;
   }
 
@@ -571,7 +509,6 @@ export class TcpSocketImpl {
    * @returns {bigint}
    */
   receiveBufferSize() {
-    console.log(`[tcp] receive buffer size socket`);
     throw new Error("not implemented");
   }
 
@@ -582,7 +519,6 @@ export class TcpSocketImpl {
    * @throws {invalid-state} (set) The socket is already in the Listener state.
    */
   setReceiveBufferSize(value) {
-    console.log(`[tcp] set receive buffer size socket to ${value}`);
     throw new Error("not implemented");
   }
 
@@ -590,7 +526,6 @@ export class TcpSocketImpl {
    * @returns {bigint}
    */
   sendBufferSize() {
-    console.log(`[tcp] send buffer size socket`);
     throw new Error("not implemented");
   }
 
@@ -601,7 +536,6 @@ export class TcpSocketImpl {
    * @throws {invalid-state} (set) The socket is already in the Listener state.
    */
   setSendBufferSize(value) {
-    console.log(`[tcp] set send buffer size socket to ${value}`);
     throw new Error("not implemented");
   }
 
@@ -609,7 +543,6 @@ export class TcpSocketImpl {
    * @returns {Pollable}
    */
   subscribe() {
-    console.log(`[tcp] subscribe socket`);
     throw new Error("not implemented");
   }
 
@@ -619,8 +552,6 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is not in the Connection state. (ENOTCONN)
    */
   shutdown(shutdownType) {
-    console.log(`[tcp] shutdown socket with type ${shutdownType}`);
-
     // TODO: figure out how to handle shutdownTypes
     if (shutdownType === ShutdownType.receive) {
       this.#canReceive = false;
@@ -634,16 +565,13 @@ export class TcpSocketImpl {
     const req = new ShutdownWrap();
     req.oncomplete = this.#handleAfterShutdown.bind(this);
     req.handle = this._handle;
-    req.callback = () => {
-      console.log(`[tcp] shutdown callback`);
-    };
+    req.callback = () => {};
     const err = this._handle.shutdown(req);
 
     assert(err === 1, "invalid-state");
   }
 
   [symbolDispose]() {
-    console.log(`[tcp] dispose socket`);
     this.#serverHandle.close();
     this.#clientHandle.close();
   }

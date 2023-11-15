@@ -91,17 +91,11 @@ suite("Node.js Preview2", () => {
   test("FS read", async () => {
     const { filesystem } = await import("@bytecodealliance/preview2-shim");
     const [[rootDescriptor]] = filesystem.preopens.getDirectories();
-    const childDescriptor = rootDescriptor.openAt(
-      {},
-      fileURLToPath(import.meta.url),
-      {},
-      {}
-    );
+    const childDescriptor = rootDescriptor.openAt({}, fileURLToPath(import.meta.url), {}, {});
     const stream = childDescriptor.readViaStream(0);
     stream.subscribe().block();
     let buf = stream.read(10000n);
-    while (buf.byteLength === 0)
-      buf = stream.read(10000n);
+    while (buf.byteLength === 0) buf = stream.read(10000n);
     const source = new TextDecoder().decode(buf);
     ok(source.includes("UNIQUE STRING"));
     stream[Symbol.dispose]();
@@ -136,9 +130,7 @@ suite("Node.js Preview2", () => {
     const responseHeaders = incomingResponse.headers().entries();
 
     const decoder = new TextDecoder();
-    const headers = Object.fromEntries(
-      responseHeaders.map(([k, v]) => [k, decoder.decode(v)])
-    );
+    const headers = Object.fromEntries(responseHeaders.map(([k, v]) => [k, decoder.decode(v)]));
 
     let responseBody;
     const incomingBody = incomingResponse.consume();
@@ -146,8 +138,7 @@ suite("Node.js Preview2", () => {
       const bodyStream = incomingBody.stream();
       bodyStream.subscribe().block();
       let buf = bodyStream.read(5000n);
-      while (buf.byteLength === 0)
-        buf = bodyStream.read(5000n);
+      while (buf.byteLength === 0) buf = bodyStream.read(5000n);
       responseBody = new TextDecoder().decode(buf);
     }
 
@@ -156,7 +147,7 @@ suite("Node.js Preview2", () => {
     ok(responseBody.includes("WebAssembly"));
   });
 
-  suite("Sockets::TCP", async () => {
+  suite("WASI Sockets (TCP)", async () => {
     test("sockets.instanceNetwork() should be a singleton", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network1 = sockets.instanceNetwork.instanceNetwork();
@@ -165,7 +156,7 @@ suite("Node.js Preview2", () => {
       equal(network2.id, 1);
     });
 
-    test("sockets.tcpCreateSocket()", async () => {
+    test("sockets.tcpCreateSocket() should throw no-supported", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const socket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
       notEqual(socket, null);
@@ -230,7 +221,7 @@ suite("Node.js Preview2", () => {
       });
     });
 
-    test("tcp.bind(): should throw invalid-argument", async () => {
+    test("tcp.bind(): should throw invalid-argument when invalid address family", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
@@ -253,7 +244,7 @@ suite("Node.js Preview2", () => {
       );
     });
 
-    test("tcp.bind(): should throw invalid-state", async () => {
+    test("tcp.bind(): should throw invalid-state when already bound", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
@@ -291,7 +282,7 @@ suite("Node.js Preview2", () => {
       };
 
       mock.method(tcpSocket.server(), "listen", () => {
-        console.log("mock listen called");
+        // mock listen
       });
 
       tcpSocket.startBind(network, localAddress);
@@ -325,7 +316,7 @@ suite("Node.js Preview2", () => {
       };
 
       mock.method(tcpSocket.client(), "connect", () => {
-        console.log("mock connect called");
+        // mock connect
       });
 
       tcpSocket.startBind(network, localAddress);
@@ -347,11 +338,13 @@ suite("Node.js Preview2", () => {
     });
   });
 
-  suite("Sockets::UDP", async () => {
-    test("sockets.udpCreateSocket()", async () => {
+  suite("WASI Sockets (UDP)", async () => {
+    test("sockets.udpCreateSocket() should be a singleton", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
-      notEqual(socket, null);
+      const socket1 = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
+      notEqual(socket1.id, 1);
+      const socket2 = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
+      notEqual(socket2.id, 1);
 
       throws(
         () => {
@@ -387,6 +380,30 @@ suite("Node.js Preview2", () => {
       });
       equal(socket.addressFamily(), "ipv4");
     });
+    test("udp.bind(): should bind to a valid ipv6 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv6);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      socket.startBind(network, localAddress);
+      socket.finishBind();
+
+      equal(socket.network.id, network.id);
+      deepEqual(socket.localAddress(), {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 0,
+        },
+      });
+      equal(socket.addressFamily(), "ipv6");
+    });
     test("udp.stream(): should connect to a valid ipv4 address", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
@@ -407,7 +424,7 @@ suite("Node.js Preview2", () => {
       };
 
       mock.method(socket.client(), "connect", () => {
-        console.log("mock connect called");
+        // mock connect
       });
 
       socket.startBind(network, localAddress);
@@ -416,12 +433,51 @@ suite("Node.js Preview2", () => {
 
       strictEqual(socket.client().connect.mock.calls.length, 1);
 
-      equal(socket.network.id, network.id);
-      equal(socket.addressFamily(), "ipv4");
+      strictEqual(socket.network.id, network.id);
+      strictEqual(socket.addressFamily(), "ipv4");
       deepEqual(socket.localAddress(), {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
           address: [0, 0, 0, 0],
+          port: 0,
+        },
+      });
+    });
+    test("udp.stream(): should connect to a valid ipv6 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv6);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      const remoteAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 80,
+        },
+      };
+
+      mock.method(socket.client(), "connect", () => {
+        // mock connect
+      });
+
+      socket.startBind(network, localAddress);
+      socket.finishBind();
+      socket.stream(remoteAddress);
+
+      strictEqual(socket.client().connect.mock.calls.length, 1);
+
+      strictEqual(socket.network.id, network.id);
+      strictEqual(socket.addressFamily(), "ipv6");
+      deepEqual(socket.localAddress(), {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
           port: 0,
         },
       });

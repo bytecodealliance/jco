@@ -156,8 +156,6 @@ export class WasiSockets {
        * @returns {Network}
        */
       instanceNetwork() {
-        console.log(`[sockets] instance network`);
-
         // TODO: should networkInstance be a singleton?
         if (!net.networkInstance) {
           net.networkInstance = new Network();
@@ -174,7 +172,6 @@ export class WasiSockets {
     this.udpCreateSocket = {
       createUdpSocket(addressFamily) {
         net.socketCnt++;
-        console.log(`[udp] Create udp socket ${addressFamily}`);
 
         assert(
           supportedAddressFamilies.includes(addressFamily) === false,
@@ -205,8 +202,6 @@ export class WasiSockets {
        * @throws {new-socket-limit} The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
        */
       createTcpSocket(addressFamily) {
-        console.log(`[tcp] Create tcp socket ${addressFamily}`);
-
         assert(
           supportedAddressFamilies.includes(addressFamily) === false,
           errorCode.notSupported,
