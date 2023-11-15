@@ -1,19 +1,19 @@
 /* eslint-disable no-unused-vars */
 
 /**
- * @typedef {import("../../types/interfaces/wasi-sockets-network").Network} Network
- * @typedef {import("../../types/interfaces/wasi-sockets-network").IpSocketAddress} IpSocketAddress
- * @typedef {import("../../types/interfaces/wasi-sockets-tcp").TcpSocket} TcpSocket
- * @typedef {import("../../types/interfaces/wasi-sockets-tcp").InputStream} InputStream
- * @typedef {import("../../types/interfaces/wasi-sockets-tcp").OutputStream} OutputStream
- * @typedef {import("../../types/interfaces/wasi-sockets-tcp").IpAddressFamily} IpAddressFamily
+ * @typedef {import("../../../types/interfaces/wasi-sockets-network.js").Network} Network
+ * @typedef {import("../../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
+ * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").TcpSocket} TcpSocket
+ * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").InputStream} InputStream
+ * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").OutputStream} OutputStream
+ * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
  * @typedef {import("../../types/interfaces/wasi-io-poll-poll").Pollable} Pollable
- * @typedef {import("../../types/interfaces/wasi-sockets-tcp").ShutdownType} ShutdownType
+ * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").ShutdownType} ShutdownType
  */
 
-import { streams } from "../common/io.js";
+import { streams } from "../io.js";
 const { InputStream, OutputStream } = streams;
-import { assert } from "../common/assert.js";
+import { assert } from "../../common/assert.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 

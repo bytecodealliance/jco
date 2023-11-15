@@ -16,5 +16,5 @@ export {
   cli
 }
 
-export { WasiSockets } from "../sockets/wasi-sockets.js";
+export { WasiSockets } from "./sockets/wasi-sockets.js";
 

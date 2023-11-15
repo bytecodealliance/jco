@@ -11,7 +11,7 @@
 // See: https://github.com/nodejs/node/blob/main/src/udp_wrap.cc
 const { UDP, SendWrap } = process.binding("udp_wrap");
 import { isIP } from "node:net";
-import { assert } from "../common/assert.js";
+import { assert } from "../../common/assert.js";
 import { deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
 
 const SocketState = {

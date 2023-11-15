@@ -8,7 +8,7 @@
 
 import { TcpSocketImpl } from "./tcp-socket-impl.js";
 import { UdpSocketImpl } from "./udp-socket-impl.js";
-import { assert } from "../common/assert.js";
+import { assert } from "../../common/assert.js";
 
 /** @type {ErrorCode} */
 export const errorCode = {
