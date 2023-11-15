@@ -51,7 +51,7 @@ export class WasiHttp {
       }
     }
     const incomingBodyCreate = IncomingBody._create;
-    delete IncomingBody.create;
+    delete IncomingBody._create;
 
     // TODO
     class IncomingRequest {}
