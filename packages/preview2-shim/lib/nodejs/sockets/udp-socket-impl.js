@@ -6,7 +6,7 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpAddressFamily} IpAddressFamily
  * @typedef {import("../../types/interfaces/wasi-sockets-udp").Datagram} Datagram
  * @typedef {import("../../types/interfaces/wasi-io-poll-poll").Pollable} Pollable
-*/
+ */
 
 // See: https://github.com/nodejs/node/blob/main/src/udp_wrap.cc
 const { UDP, SendWrap } = process.binding("udp_wrap");
@@ -21,14 +21,19 @@ const SocketState = {
   Listener: "Listener",
 };
 
+const symbolState = Symbol("state");
+
 export class UdpSocketImpl {
   /** @type {Socket} */ #socket = null;
   /** @type {Network} */ network = null;
 
-  #isBound = false;
-  #inProgress = false;
-  #ipv6Only = false;
-  #state = SocketState.Closed;
+  [symbolState] = {
+    isBound: false,
+    inProgress: false,
+    ipv6Only: false,
+    state: SocketState.Closed,
+  };
+
   #socketOptions = {};
 
   /**
@@ -54,7 +59,7 @@ export class UdpSocketImpl {
 
     console.log(`[tcp] start bind socket to ${address}:${localAddress.val.port}`);
 
-    assert(this.#isBound, "invalid-state", "The socket is already bound");
+    assert(this[symbolState].isBound, "invalid-state", "The socket is already bound");
     assert(
       this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(),
       "invalid-argument",
@@ -65,7 +70,7 @@ export class UdpSocketImpl {
     this.#socketOptions.localAddress = address;
     this.#socketOptions.localPort = port;
     this.network = network;
-    this.#inProgress = true;
+    this[symbolState].inProgress = true;
   }
 
   /**
@@ -80,7 +85,7 @@ export class UdpSocketImpl {
   finishBind() {
     console.log(`[udp] finish bind socket`);
 
-    assert(this.#inProgress === false, "not-in-progress");
+    assert(this[symbolState].inProgress === false, "not-in-progress");
 
     const { localAddress, localPort, family } = this.#socketOptions;
 
@@ -100,7 +105,7 @@ export class UdpSocketImpl {
       assert(true, "", err);
     }
 
-    this.#isBound = true;
+    this[symbolState].isBound = true;
   }
 
   /**
@@ -129,7 +134,7 @@ export class UdpSocketImpl {
     this.#socketOptions.remotePort = port;
 
     this.network = network;
-    this.#inProgress = true;
+    this[symbolState].inProgress = true;
   }
 
   /**
@@ -156,15 +161,15 @@ export class UdpSocketImpl {
   receive(maxResults) {
     console.log(`[udp] receive socket`);
 
-    assert(this.#isBound === false, "invalid-state");
-    assert(this.#inProgress === false, "not-in-progress");
+    assert(this[symbolState].isBound === false, "invalid-state");
+    assert(this[symbolState].inProgress === false, "not-in-progress");
 
     if (maxResults === 0n) {
       return [];
     }
 
-    this.#socket.onmessage = (...args) => console.log('recv onmessage', args[2].toString());
-    this.#socket.onerror = (err) => console.log('recv error', err);
+    this.#socket.onmessage = (...args) => console.log("recv onmessage", args[2].toString());
+    this.#socket.onerror = (err) => console.log("recv error", err);
     this.#socket.recvStart();
     const datagrams = [];
     return datagrams;
@@ -223,7 +228,7 @@ export class UdpSocketImpl {
   localAddress() {
     console.log(`[udp] local address socket`);
 
-    assert(this.#isBound === false, "invalid-state");
+    assert(this[symbolState].isBound === false, "invalid-state");
 
     const { localAddress, localPort, family } = this.#socketOptions;
     return {
@@ -243,7 +248,7 @@ export class UdpSocketImpl {
   remoteAddress() {
     console.log(`[udp] remote address socket`);
 
-    assert(this.#state !== SocketState.Connection, "invalid-state");
+    assert(this[symbolState].state !== SocketState.Connection, "invalid-state");
 
     return this.#socketOptions.remoteAddress;
   }
@@ -266,7 +271,7 @@ export class UdpSocketImpl {
   ipv6Only() {
     console.log(`[udp] ipv6 only socket`);
 
-    return this.#ipv6Only;
+    return this[symbolState].ipv6Only;
   }
 
   /**
@@ -280,7 +285,7 @@ export class UdpSocketImpl {
   setIpv6Only(value) {
     console.log(`[udp] set ipv6 only socket to ${value}`);
 
-    this.#ipv6Only = value;
+    this[symbolState].ipv6Only = value;
   }
 
   /**
