@@ -1,20 +1,10 @@
-# WASI Preview2 JavaScript Shim
+# Preview2 Shim
 
-_**Experimental**_ shim modules for the [WASI Preview2](https://github.com/bytecodealliance/preview2-prototyping) component interfaces in JS environments.
+WASI Preview2 implementations for Node.js & browsers.
 
-Currently supports Node.js and browser versions, but alternative implementations for any JS environments can be supported.
+Browser support is considered experimental, and not currently suitable for production applications.
 
-## Implementation Status
-
-| Interface       | Node.js                      | Browser                      |
-| --------------- | ----------------------------:|-----------------------------:|
-| Clocks          | Pending timezone, poll       | Pending timezone, poll       |
-| Filesystem      | Basic read support           | _N/A_                        |
-| HTTP            | Experimental support         | :x:                          |
-| IO              | Experimental support         | Experimental support         |
-| Random          | :heavy_check_mark:           | :heavy_check_mark:           |
-| Sockets         | :x:                          | _N/A_                        |
-| CLI             | :heavy_check_mark:           | :heavy_check_mark:           |
+Node.js support is currently being stabilized, which can be tracked in https://github.com/bytecodealliance/jco/milestone/1.
 
 # License
 

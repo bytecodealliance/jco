@@ -29,11 +29,10 @@ world cowsay {
       elephant-in-snake,
       elephant,
       eyes,
-      flaming-sheep,
-      ...
+      flaming-sheep
     }
 
-    say: func(text: string, cow: option<cows>) -> string
+    say: func(text: string, cow: option<cows>) -> string;
   }
 }
 ```
