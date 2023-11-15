@@ -147,7 +147,42 @@
                         <h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
 <p>Development is based on a standard <code>npm install &amp;&amp; npm run build &amp;&amp; npm run test</code> workflow.</p>
 <p>Tests can be run without bundling via <code>npm run build:dev &amp;&amp; npm run test:dev</code>.</p>
-<p>Specific tests can be run adding the mocha <code>--grep</code> flag, for example: <code>npm run test:dev -- --grep exports_only</code>.</p>
+<p>Specific tests can be run adding the mocha <code>--grep</code> / <code>-g</code> flag, for example: <code>npm run test:dev -- --grep exports_only</code>.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>Required prerequisites for building jco include:</p>
+<ul>
+<li>Latest stable Rust with the <code>wasm32-wasi</code> target</li>
+<li>Node.js 18+ &amp; npm (https://nodejs.org/en)</li>
+</ul>
+<h3 id="rust-toolchain"><a class="header" href="#rust-toolchain">Rust Toolchain</a></h3>
+<p>The latest Rust stable toolchain can be installed using <a href="https://rustup.rs/">rustup</a>.</p>
+<p>Specifically:</p>
+<pre><code>rustup toolchain install stable
+rustup target add wasm32-wasi
+</code></pre>
+<h2 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h2>
+<p>jco is effectively a monorepo consisting of the following projects:</p>
+<ul>
+<li><code>crates/js-component-bindgen</code>: Rust crate for creating JS component bindgen, published under https://crates.io/crates/js-component-bindgen.</li>
+<li><code>crates/js-component-bindgen-component</code>: Component wrapper crate for the component bindgen. This allows bindgen to be self-hosted in JS.</li>
+<li><code>crates/wasm-tools-component</code>: Component wrapper crate for wasm-tools, allowing jco to invoke various Wasm toolchain functionality and also make it available through the jco API.</li>
+<li><code>src/api.js</code>: The jco API which can be used as a library dependency on npm. Published as https://npmjs.org/package/@bytecodealliance/jco.</li>
+<li><code>src/jco.js</code>: The jco CLI. Published as https://npmjs.org/package/@bytecodealliance/jco.</li>
+<li><code>packages/preview2-shim</code>: The WASI Preview2 host implementations for Node.js &amp; browsers. Published as https://www.npmjs.com/package/@bytecodealliance/preview2-shim.</li>
+</ul>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<p>To build jco, run:</p>
+<pre><code>npm install
+npm run build
+</code></pre>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<p>There are three test suites in jco:</p>
+<ul>
+<li><code>npm run test</code>: Project-level transpilation, CLI &amp; API tests.</li>
+<li><code>npm run test --workspace packages/preview2-shim</code>: <code>preview2-shim</code> unit tests.</li>
+<li><code>test/browser.html</code>: Bare-minimum browser validation test.</li>
+<li><code>cargo test</code>: Wasmtime preview2 conformance tests (not currently passing).</li>
+</ul>
 
                     </main>
 
