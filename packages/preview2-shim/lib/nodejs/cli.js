@@ -1,12 +1,10 @@
 import { argv, env, cwd } from "node:process";
 import {
   streams,
-  ioCall,
-  streamTypes,
   inputStreamCreate,
   outputStreamCreate,
 } from "../io/worker-io.js";
-import * as calls from "../io/calls.js";
+import { STDIN, STDOUT, STDERR } from "../io/stream-types.js";
 const { InputStream, OutputStream } = streams;
 
 let _env = Object.entries(env),
@@ -31,11 +29,9 @@ export const exit = {
   },
 };
 
-const stdinStream = inputStreamCreate(
-  ioCall(calls.INPUT_STREAM_CREATE | streamTypes.STDIN, null, null)
-);
-const stdoutStream = outputStreamCreate(streamTypes.STDOUT);
-const stderrStream = outputStreamCreate(streamTypes.STDERR);
+const stdinStream = inputStreamCreate(STDIN, null);
+const stdoutStream = outputStreamCreate(STDOUT, null);
+const stderrStream = outputStreamCreate(STDERR, null);
 
 export const stdin = {
   InputStream,

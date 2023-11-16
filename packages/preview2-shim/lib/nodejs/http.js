@@ -1,11 +1,18 @@
-import * as calls from "../io/calls.js";
+import {
+  INPUT_STREAM_DROP,
+  HTTP_CREATE_REQUEST,
+  OUTPUT_STREAM_CREATE,
+  FUTURE_DROP_AND_GET_VALUE,
+  FUTURE_DROP,
+} from "../io/calls.js";
 import {
   ioCall,
   pollableCreate,
   inputStreamCreate,
   outputStreamCreate,
-  streamTypes,
 } from "../io/worker-io.js";
+
+import { INCOMING_BODY, OUTGOING_BODY } from "../io/stream-types.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -32,17 +39,16 @@ export class WasiHttp {
         if (!this.#streamId) throw undefined;
         const streamId = this.#streamId;
         this.#streamId = undefined;
-        return inputStreamCreate(streamTypes.INCOMING_BODY, streamId);
+        return inputStreamCreate(INCOMING_BODY, streamId);
       }
       static finish(incomingBody) {
         if (incomingBody.#finished)
-          throw new Error('incoming body already finished');
+          throw new Error("incoming body already finished");
         incomingBody.#finished = true;
         return futureTrailersCreate(new Fields([]), false);
       }
       [symbolDispose]() {
-        if (!this.#finished)
-          ioCall(calls.INPUT_STREAM_DROP, this.#streamId);
+        if (!this.#finished) ioCall(INPUT_STREAM_DROP, this.#streamId);
       }
       static _create(streamId) {
         const incomingBody = new IncomingBody();
@@ -167,7 +173,8 @@ export class WasiHttp {
         if (this.#outputStream)
           throw new Error("output stream already created for writing");
         return (this.#outputStream = outputStreamCreate(
-          streamTypes.OUTGOING_BODY
+          OUTGOING_BODY,
+          ioCall(OUTPUT_STREAM_CREATE | OUTGOING_BODY, null, null)
         ));
       }
       /**
@@ -196,9 +203,8 @@ export class WasiHttp {
         this.#bodyStreamId = null;
         return incomingBodyCreate(bodyStreamId);
       }
-      [symbolDispose] () {
-        if (this.#bodyStreamId)
-          ioCall(calls.INPUT_STREAM_DROP, this.#bodyStreamId);
+      [symbolDispose]() {
+        if (this.#bodyStreamId) ioCall(INPUT_STREAM_DROP, this.#bodyStreamId);
       }
       static _create(status, headers, bodyStreamId) {
         const res = new IncomingResponse();
@@ -222,32 +228,34 @@ export class WasiHttp {
       }
       get() {
         // already taken
-        if (!this.#pollId) return;
-        const { value, error } = ioCall(
-          calls.FUTURE_DROP_AND_GET_VALUE,
-          this.#pollId
-        );
+        if (!this.#pollId) return { tag: "err" };
+        const ret = ioCall(FUTURE_DROP_AND_GET_VALUE, this.#pollId);
+        if (!ret) return;
         this.#pollId = undefined;
-        if (error) return { tag: "err", val: value };
-        const { status, headers, bodyStreamId } = value;
+        if (ret.error)
+          return { tag: "ok", val: { tag: "err", val: ret.value } };
+        const { status, headers, bodyStreamId } = ret.value;
         const textEncoder = new TextEncoder();
         return {
           tag: "ok",
-          val: incomingResponseCreate(
-            status,
-            Fields.fromList(
-              headers.map(([key, val]) => [key, textEncoder.encode(val)])
+          val: {
+            tag: "ok",
+            val: incomingResponseCreate(
+              status,
+              Fields.fromList(
+                headers.map(([key, val]) => [key, textEncoder.encode(val)])
+              ),
+              bodyStreamId
             ),
-            bodyStreamId
-          ),
+          },
         };
       }
       [symbolDispose]() {
-        if (this.#pollId) ioCall(calls.FUTURE_DROP, this.#pollId);
+        if (this.#pollId) ioCall(FUTURE_DROP, this.#pollId);
       }
       static _create(method, url, headers, body) {
         const res = new FutureIncomingResponse();
-        res.#pollId = ioCall(calls.HTTP_CREATE_REQUEST, null, {
+        res.#pollId = ioCall(HTTP_CREATE_REQUEST, null, {
           method,
           url,
           headers,
