@@ -25,7 +25,7 @@ Features include:
 
 For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
-> **Note**: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future.
+> **Note**: This is an experimental project, no guarantees are provided for stability, security or support and breaking changes may be made without notice.
 
 ## Installation
 
@@ -33,7 +33,7 @@ For creating components in other languages, see the [Cargo Component](https://gi
 npm install @bytecodealliance/jco
 ```
 
-jco can be used as either a library or as a CLI via the `jco` CLI command.
+jco can be used as either a library or a CLI via the `jco` CLI command.
 
 ## Example
 
