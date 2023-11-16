@@ -57,7 +57,6 @@ export class TcpSocketImpl {
   #keepAliveCount = 1;
   #keepAliveIdleTime = 1;
   #keepAliveInterval = 1;
-  #noDelay = false;
   #unicastHopLimit = 10;
   #acceptedClient = null;
 
@@ -468,23 +467,6 @@ export class TcpSocketImpl {
     assert(value < 1, "invalid-argument", "The count must be 1 or higher.");
 
     this.#keepAliveCount = value;
-  }
-
-  /**
-   * @returns {boolean}
-   */
-  noDelay() {
-    return this.#noDelay;
-  }
-
-  /**
-   * @param {boolean} value
-   * @returns {void}
-   * @throws {concurrency-conflict} (set) A `bind`, `connect` or `listen` operation is already in progress. (EALREADY)
-   */
-  setNoDelay(value) {
-    this.#noDelay = value;
-    this.#clientHandle.setNoDelay(value);
   }
 
   /**
