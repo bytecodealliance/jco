@@ -1,5 +1,5 @@
 import { runAsWorker } from "../synckit/index.js";
-import * as streamTypes from "./stream-types.js";
+import { FILE, STDOUT, STDERR, STDIN } from "./stream-types.js";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { hrtime } from "node:process";
@@ -48,6 +48,20 @@ const unfinishedStreams = new Map();
 
 /** @type {Map<number, { value: any, error: bool }>} */
 const unfinishedFutures = new Map();
+
+// Stdio
+unfinishedStreams.set(++streamCnt, {
+  flushPromise: Promise.resolve(),
+  stream: process.stdin,
+});
+unfinishedStreams.set(++streamCnt, {
+  flushPromise: Promise.resolve(),
+  stream: process.stdout,
+});
+unfinishedStreams.set(++streamCnt, {
+  flushPromise: Promise.resolve(),
+  stream: process.stderr,
+});
 
 /**
  *
@@ -108,6 +122,12 @@ function handle(call, id, payload) {
       return createFuture(createHttpRequest(method, url, headers, body));
     }
 
+    // Stdio
+    case OUTPUT_STREAM_DROP | STDOUT:
+    case OUTPUT_STREAM_DROP | STDERR:
+    case INPUT_STREAM_DROP | STDIN:
+      return;
+
     // Clocks
     case CLOCKS_NOW:
       return hrtime.bigint();
@@ -116,28 +136,8 @@ function handle(call, id, payload) {
     case CLOCKS_INSTANT_SUBSCRIBE:
       return createPoll(subscribeInstant(payload));
 
-    // Stdio
-    case INPUT_STREAM_CREATE | streamTypes.STDIN:
-      unfinishedStreams.set(++streamCnt, {
-        flushPromise: null,
-        stream: process.stdin,
-      });
-      return streamCnt;
-    case OUTPUT_STREAM_CREATE | streamTypes.STDOUT:
-      unfinishedStreams.set(++streamCnt, {
-        flushPromise: null,
-        stream: process.stdout,
-      });
-      return streamCnt;
-    case OUTPUT_STREAM_CREATE | streamTypes.STDERR:
-      unfinishedStreams.set(++streamCnt, {
-        flushPromise: null,
-        stream: process.stderr,
-      });
-      return streamCnt;
-
     // Filesystem
-    case INPUT_STREAM_CREATE | streamTypes.FILE: {
+    case INPUT_STREAM_CREATE | FILE: {
       const { fd, offset } = payload;
       const stream = createReadStream(null, {
         fd,
@@ -153,7 +153,7 @@ function handle(call, id, payload) {
       stream.on("end", () => void stream.emit("readable"));
       return streamCnt;
     }
-    case OUTPUT_STREAM_CREATE | streamTypes.FILE:
+    case OUTPUT_STREAM_CREATE | FILE:
       throw new Error("todo: file write");
 
     // Generic call implementations (streams + polls)
@@ -186,6 +186,10 @@ function handle(call, id, payload) {
           );
         case INPUT_STREAM_SUBSCRIBE: {
           const stream = unfinishedStreams.get(id)?.stream;
+          if (id === 1) {
+            // TODO: stdin subscribe
+            return 0;
+          }
           // already closed or errored -> immediately return poll
           // (poll 0 is immediately resolved)
           if (
@@ -228,8 +232,10 @@ function handle(call, id, payload) {
           return void stream.write(payload);
         }
         case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH: {
-          const { stream } = getStreamOrThrow(id);
-          // if an existing flush, we will just be after that anyway
+          const { stream, flushPromise } = getStreamOrThrow(id);
+          // if an existing flush, try again after that
+          if (flushPromise)
+            return flushPromise.then(() => handle(call, id, payload));
           if (
             payload.byteLength >
             stream.writableHighWaterMark - stream.writableLength
@@ -240,6 +246,7 @@ function handle(call, id, payload) {
               new Error("Cannot write more than permitted writable length")
             );
           }
+
           return new Promise((resolve, reject) => {
             stream.write(payload, (err) =>
               err
@@ -250,10 +257,10 @@ function handle(call, id, payload) {
         }
         case OUTPUT_STREAM_FLUSH: {
           const stream = getStreamOrThrow(id);
-          if (stream.flushPromise) return stream.flushPromise;
+          if (stream.flushPromise) return;
           return (stream.flushPromise = new Promise((resolve, reject) => {
             stream.stream.write(new Uint8Array([]), (err) =>
-              err ? reject(streamError(id, stream, err)) : resolve()
+              err ? reject(streamError(id, stream.stream, err)) : resolve()
             );
           }).then(
             () => void (stream.stream.flushPromise = null),
@@ -264,27 +271,18 @@ function handle(call, id, payload) {
           ));
         }
         case OUTPUT_STREAM_BLOCKING_FLUSH: {
-          const { stream } = getStreamOrThrow(id);
+          const { stream, flushPromise } = getStreamOrThrow(id);
+          if (flushPromise) return flushPromise;
           return new Promise((resolve, reject) => {
             stream.write(new Uint8Array([]), (err) =>
               err ? reject(streamError(id, stream, err)) : resolve()
             );
           });
         }
-        case OUTPUT_STREAM_WRITE_ZEROES: {
-          const { stream } = getStreamOrThrow(id);
-          return void stream.write(new Uint8Array(Number(payload)));
-        }
-        case OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH: {
-          const { stream } = getStreamOrThrow(id);
-          return new Promise((resolve, reject) => {
-            stream.write(new Uint8Array(Number(payload)), (err) =>
-              err
-                ? reject(streamError(id, stream, err))
-                : resolve(BigInt(payload.byteLength))
-            );
-          });
-        }
+        case OUTPUT_STREAM_WRITE_ZEROES:
+          return handle(OUTPUT_STREAM_WRITE | (call & CALL_TYPE_MASK), id, new Uint8Array(Number(payload)));
+        case OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH:
+          return handle(OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | (call & CALL_TYPE_MASK), id, new Uint8Array(Number(payload)));
         case OUTPUT_STREAM_SPLICE: {
           const { stream: outputStream } = getStreamOrThrow(id);
           const { stream: inputStream } = getStreamOrThrow(payload.src);
@@ -311,7 +309,8 @@ function handle(call, id, payload) {
           return payload.len - BigInt(bytesRemaining);
         }
         case OUTPUT_STREAM_SUBSCRIBE: {
-          const stream = unfinishedStreams.get(id)?.stream;
+          const { stream, flushPromise } = unfinishedStreams.get(id) ?? {};
+          if (flushPromise) return flushPromise;
           // not added to unfinishedPolls => it's an immediately resolved poll
           if (
             !stream ||
