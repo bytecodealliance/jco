@@ -10,6 +10,7 @@ pub enum Intrinsic {
     ClampGuest,
     ComponentError,
     DataView,
+    EmptyFunc,
     F32ToI32,
     F64ToI64,
     FetchCompile,
@@ -118,6 +119,10 @@ pub fn render_intrinsics(
             Intrinsic::DataView => output.push_str("
                 let dv = new DataView(new ArrayBuffer());
                 const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
+            "),
+
+            Intrinsic::EmptyFunc => output.push_str("
+                const emptyFunc = () => {};
             "),
 
             Intrinsic::F64ToI64 => output.push_str("
@@ -380,6 +385,8 @@ impl Intrinsic {
             "ComponentError",
             "dataView",
             "DataView",
+            "dv",
+            "emptyFunc",
             "Error",
             "f32ToI32",
             "f64ToI64",
@@ -430,6 +437,7 @@ impl Intrinsic {
             Intrinsic::ClampGuest => "clampGuest",
             Intrinsic::ComponentError => "ComponentError",
             Intrinsic::DataView => "dataView",
+            Intrinsic::EmptyFunc => "emptyFunc",
             Intrinsic::F32ToI32 => "f32ToI32",
             Intrinsic::F64ToI64 => "f64ToI64",
             Intrinsic::FetchCompile => "fetchCompile",

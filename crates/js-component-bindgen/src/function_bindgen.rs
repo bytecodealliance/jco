@@ -131,7 +131,7 @@ impl FunctionBindgen<'_> {
                 results.push("ret".to_string());
             }
             n => {
-                uwrite!(self.src, "const [");
+                uwrite!(self.src, "var [");
                 for i in 0..n {
                     if i > 0 {
                         uwrite!(self.src, ", ");
@@ -311,7 +311,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::BoolFromI32 => {
                 let tmp = self.tmp();
-                uwrite!(self.src, "const bool{} = {};\n", tmp, operands[0]);
+                uwrite!(self.src, "var bool{} = {};\n", tmp, operands[0]);
                 if self.valid_lifting_optimization {
                     results.push(format!("!!bool{tmp}"));
                 } else {
@@ -329,7 +329,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 // use destructuring field access to get each
                 // field individually.
                 let tmp = self.tmp();
-                let mut expr = "const {".to_string();
+                let mut expr = "var {".to_string();
                 for (i, field) in record.fields.iter().enumerate() {
                     if i > 0 {
                         expr.push_str(", ");
@@ -360,7 +360,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 // destructuring assignment to lower the tuple into its
                 // components.
                 let tmp = self.tmp();
-                let mut expr = "const [".to_string();
+                let mut expr = "var [".to_string();
                 for i in 0..tuple.types.len() {
                     if i > 0 {
                         expr.push_str(", ");
@@ -442,7 +442,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 }
 
-                uwriteln!(self.src, "const flags{tmp} = {{");
+                uwriteln!(self.src, "var flags{tmp} = {{");
 
                 for (i, flag) in flags.flags.iter().enumerate() {
                     let flag = flag.name.to_lower_camel_case();
@@ -468,7 +468,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     .collect::<Vec<_>>();
                 let tmp = self.tmp();
                 let op = &operands[0];
-                uwriteln!(self.src, "const variant{tmp} = {op};");
+                uwriteln!(self.src, "var variant{tmp} = {op};");
 
                 for i in 0..result_types.len() {
                     uwriteln!(self.src, "let variant{tmp}_{i};");
@@ -566,7 +566,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let tmp = self.tmp();
                 let op = &operands[0];
-                uwriteln!(self.src, "const variant{tmp} = {op};");
+                uwriteln!(self.src, "var variant{tmp} = {op};");
 
                 for i in 0..result_types.len() {
                     uwriteln!(self.src, "let variant{tmp}_{i};");
@@ -679,7 +679,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let tmp = self.tmp();
                 let op = &operands[0];
-                uwriteln!(self.src, "const variant{tmp} = {op};");
+                uwriteln!(self.src, "var variant{tmp} = {op};");
 
                 for i in 0..result_types.len() {
                     uwriteln!(self.src, "let variant{tmp}_{i};");
@@ -784,7 +784,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
 
                 let op = &operands[0];
-                uwriteln!(self.src, "const val{tmp} = {op};");
+                uwriteln!(self.src, "var val{tmp} = {op};");
 
                 // Declare a variable to hold the result.
                 uwriteln!(
@@ -862,26 +862,26 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let size = self.sizes.size(element);
                 let align = self.sizes.align(element);
-                uwriteln!(self.src, "const val{tmp} = {};", operands[0]);
+                uwriteln!(self.src, "var val{tmp} = {};", operands[0]);
                 if matches!(element, Type::U8) {
-                    uwriteln!(self.src, "const len{tmp} = val{tmp}.byteLength;");
+                    uwriteln!(self.src, "var len{tmp} = val{tmp}.byteLength;");
                 } else {
-                    uwriteln!(self.src, "const len{tmp} = val{tmp}.length;");
+                    uwriteln!(self.src, "var len{tmp} = val{tmp}.length;");
                 }
                 uwriteln!(
                     self.src,
-                    "const ptr{tmp} = {realloc}(0, 0, {align}, len{tmp} * {size});"
+                    "var ptr{tmp} = {realloc}(0, 0, {align}, len{tmp} * {size});"
                 );
                 // TODO: this is the wrong endianness
                 if matches!(element, Type::U8) {
                     uwriteln!(
                         self.src,
-                        "const src{tmp} = new Uint8Array(val{tmp}.buffer || val{tmp}, val{tmp}.byteOffset, len{tmp} * {size});",
+                        "var src{tmp} = new Uint8Array(val{tmp}.buffer || val{tmp}, val{tmp}.byteOffset, len{tmp} * {size});",
                     );
                 } else {
                     uwriteln!(
                         self.src,
-                        "const src{tmp} = new Uint8Array(val{tmp}.buffer, val{tmp}.byteOffset, len{tmp} * {size});",
+                        "var src{tmp} = new Uint8Array(val{tmp}.buffer, val{tmp}.byteOffset, len{tmp} * {size});",
                     );
                 }
                 uwriteln!(
@@ -894,13 +894,13 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::ListCanonLift { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
-                uwriteln!(self.src, "const ptr{tmp} = {};", operands[0]);
-                uwriteln!(self.src, "const len{tmp} = {};", operands[1]);
+                uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
+                uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
                 // TODO: this is the wrong endianness
                 let array_ty = array_ty(resolve, element).unwrap();
                 uwriteln!(
                     self.src,
-                    "const result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {}));",
+                    "var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {}));",
                     self.sizes.size(element),
                 );
                 results.push(format!("result{tmp}"));
@@ -923,14 +923,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 let realloc = self.realloc.unwrap_or(&str);
                 uwriteln!(
                     self.src,
-                    "const ptr{tmp} = {encode}({}, {realloc}, {memory});",
+                    "var ptr{tmp} = {encode}({}, {realloc}, {memory});",
                     operands[0],
                 );
                 if self.encoding == StringEncoding::UTF8 {
                     let encoded_len = self.intrinsic(Intrinsic::Utf8EncodedLen);
-                    uwriteln!(self.src, "const len{tmp} = {encoded_len};");
+                    uwriteln!(self.src, "var len{tmp} = {encoded_len};");
                 } else {
-                    uwriteln!(self.src, "const len{tmp} = {}.length;", operands[0]);
+                    uwriteln!(self.src, "var len{tmp} = {}.length;", operands[0]);
                 }
                 results.push(format!("ptr{}", tmp));
                 results.push(format!("len{}", tmp));
@@ -949,11 +949,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 let decoder = self.intrinsic(intrinsic);
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
-                uwriteln!(self.src, "const ptr{tmp} = {};", operands[0]);
-                uwriteln!(self.src, "const len{tmp} = {};", operands[1]);
+                uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
+                uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
                 uwriteln!(
                     self.src,
-                    "const result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
+                    "var result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
                     if self.encoding == StringEncoding::UTF16 { "16" } else { "8" }
                 );
                 results.push(format!("result{tmp}"));
@@ -971,14 +971,14 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // first store our vec-to-lower in a temporary since we'll
                 // reference it multiple times.
-                uwriteln!(self.src, "const {vec} = {};", operands[0]);
-                uwriteln!(self.src, "const {len} = {vec}.length;");
+                uwriteln!(self.src, "var {vec} = {};", operands[0]);
+                uwriteln!(self.src, "var {len} = {vec}.length;");
 
                 // ... then realloc space for the result in the guest module
                 let realloc = self.realloc.as_ref().unwrap();
                 uwriteln!(
                     self.src,
-                    "const {result} = {realloc}(0, 0, {align}, {len} * {size});"
+                    "var {result} = {realloc}(0, 0, {align}, {len} * {size});"
                 );
 
                 // ... then consume the vector and use the block to lower the
@@ -998,11 +998,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let size = self.sizes.size(element);
                 let len = format!("len{tmp}");
-                uwriteln!(self.src, "const {len} = {};", operands[1]);
+                uwriteln!(self.src, "var {len} = {};", operands[1]);
                 let base = format!("base{tmp}");
-                uwriteln!(self.src, "const {base} = {};", operands[0]);
+                uwriteln!(self.src, "var {base} = {};", operands[0]);
                 let result = format!("result{tmp}");
-                uwriteln!(self.src, "const {result} = [];");
+                uwriteln!(self.src, "var {result} = [];");
                 results.push(result.clone());
 
                 uwriteln!(self.src, "for (let i = 0; i < {len}; i++) {{");
@@ -1021,6 +1021,17 @@ impl Bindgen for FunctionBindgen<'_> {
                 let sig_results_length = sig.results.len();
                 self.bind_results(sig_results_length, results);
                 uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+
+                if !self.cur_resource_borrows.is_empty() {
+                    uwriteln!(
+                        self.src,
+                        "if ({}) {{
+                            throw new Error('Resource error: borrows were not dropped');
+                        }}",
+                        self.cur_resource_borrows.join(" || ")
+                    );
+                    self.cur_resource_borrows = Vec::new();
+                }
 
                 if let Some(prefix) = self.tracing_prefix {
                     let to_result_string = self.intrinsic(Intrinsic::ToResultString);
@@ -1126,7 +1137,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let realloc = self.realloc.as_ref().unwrap();
                 let ptr = format!("ptr{tmp}");
-                uwriteln!(self.src, "const {ptr} = {realloc}(0, 0, {align}, {size});",);
+                uwriteln!(self.src, "var {ptr} = {realloc}(0, 0, {align}, {size});",);
                 results.push(ptr);
             }
 
@@ -1138,7 +1149,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let is_own = matches!(handle, Handle::Own(_));
                 let rsc = format!("rsc{}", self.tmp());
                 let handle = format!("handle{}", self.tmp());
-                uwriteln!(self.src, "const {handle} = {};", &operands[0]);
+                uwriteln!(self.src, "var {handle} = {};", &operands[0]);
 
                 match data {
                     ResourceData::Host {
@@ -1153,8 +1164,8 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
                             uwrite!(
                                 self.src,
-                                "const {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
-                                 const {rep} = handleTable{id}.get({handle}).rep;
+                                "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
+                                 var {rep} = handleTable{id}.get({handle}).rep;
                                  Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
                                 ",
                             );
@@ -1163,6 +1174,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 // and add a finalizer to the JS handle created
                                 // in addition, we add a Symbol.dispose function for manual destructor calls
                                 // / integration with explicit resource management
+                                let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(
                                     self.src,
                                     "finalizationRegistry{id}.register({rsc}, {handle}, {rsc});
@@ -1172,7 +1184,8 @@ impl Bindgen for FunctionBindgen<'_> {
                                         Some(dtor) => format!("
                                             finalizationRegistry{id}.unregister({rsc});
                                             handleTable{id}.delete({handle});
-                                            {rsc}[{symbol_dispose}] = {rsc}[{symbol_resource_handle}] = null;
+                                            {rsc}[{symbol_dispose}] = {empty_func};
+                                            {rsc}[{symbol_resource_handle}] = null;
                                             {dtor}({rep});
                                         "),
                                         None => "".into(),
@@ -1187,7 +1200,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             }
                         } else {
                             // imported handles lift as instance capture from a previous lowering
-                            uwriteln!(self.src, "const {rsc} = handleTable{id}.get({handle}).rep;");
+                            uwriteln!(self.src, "var {rsc} = handleTable{id}.get({handle}).rep;");
                         }
 
                         // an own lifting is a transfer to JS, so handle is implicitly dropped
@@ -1206,7 +1219,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         let lower_camel = resource_name.to_lower_camel_case();
 
                         if !imported {
-                            uwriteln!(self.src, "const {rsc} = repTable.get({handle}).rep;");
+                            uwriteln!(self.src, "var {rsc} = repTable.get({handle}).rep;");
 
                             if is_own {
                                 uwrite!(
@@ -1222,7 +1235,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                             uwrite!(
                                 self.src,
-                                "const {rsc} = new.target === import_{prefix}{upper_camel} ? this : Object.create(import_{prefix}{upper_camel}.prototype);
+                                "var {rsc} = new.target === import_{prefix}{upper_camel} ? this : Object.create(import_{prefix}{upper_camel}.prototype);
                                  Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                 "
                             );
@@ -1254,12 +1267,12 @@ impl Bindgen for FunctionBindgen<'_> {
                         if !imported {
                             uwriteln!(
                                 self.src,
-                                "const {handle} = {op}[{symbol_resource_handle}];
+                                "var {handle} = {op}[{symbol_resource_handle}];
                                  if ({handle} === null) {{
-                                     throw new Error('\"{class_name}\" resource handle lifetime expired.');
+                                     throw new Error('Resource error: \"{class_name}\" lifetime expired.');
                                  }}
                                  if ({handle} === undefined) {{
-                                     throw new Error('Not a valid \"{class_name}\" resource.');
+                                     throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
                                  ",
                             );
@@ -1267,10 +1280,12 @@ impl Bindgen for FunctionBindgen<'_> {
                             // lowered own handles have their finalizers deregistered
                             // since the proxy lifecycle has now ended for this own handle
                             if is_own {
+                                let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(
                                     self.src,
                                     "finalizationRegistry{id}.unregister({op});
-                                     {op}[{symbol_dispose}] = {op}[{symbol_resource_handle}] = null;"
+                                     {op}[{symbol_dispose}] = {empty_func};
+                                     {op}[{symbol_resource_handle}] = null;"
                                 );
                             }
                         } else {
@@ -1279,11 +1294,22 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {local_name})) {{
-                                     throw new Error('Not a valid \"{class_name}\" resource.');
+                                     throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
-                                 const {handle} = handleCnt{id}++;
+                                 var {handle} = handleCnt{id}++;
                                  handleTable{id}.set({handle}, {{ rep: {op}, own: {is_own} }});",
                             );
+                        }
+
+                        // track lowered borrows to ensure they are dropped
+                        // cur_resource_borrows can be reused because:
+                        // - it is not possible to have a Wasm call that lifts a a borrow handle argument
+                        //   and wasm calls cannot return borrow handles for lifting
+                        // - conversely, it is not possible to have a JS call that lowers a borrow handle argument
+                        //   and JS calls cannot return borrows for lowering
+                        if !is_own && !self.valid_lifting_optimization {
+                            self.cur_resource_borrows
+                                .push(format!("handleTable{id}.get({handle})"));
                         }
                     }
 
@@ -1301,11 +1327,11 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwrite!(
                                 self.src,
                                 "if (!({op} instanceof {upper_camel})) {{
-                                     throw new Error('Not a valid \"{upper_camel}\" resource.');
+                                     throw new Error('Resource error: Not a valid \"{upper_camel}\" resource.');
                                  }}
                                  let {handle} = {op}[{symbol_resource_handle}];
                                  if ({handle} === undefined) {{
-                                     const {local_rep} = repCnt++;
+                                     var {local_rep} = repCnt++;
                                      repTable.set({local_rep}, {{ rep: {op}, own: {is_own} }});
                                      {handle} = $resource_{prefix}new${lower_camel}({local_rep});
                                      {op}[{symbol_resource_handle}] = {handle};
@@ -1318,7 +1344,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
                             uwrite!(
                                 self.src,
-                                "const {handle} = {op}[{symbol_resource_handle}];
+                                "var {handle} = {op}[{symbol_resource_handle}];
                                  finalizationRegistry_import${prefix}{lower_camel}.unregister({op});
                                 "
                             );
