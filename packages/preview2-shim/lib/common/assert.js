@@ -1,9 +1,7 @@
-export function assert(condition, code, message) {
+export function assert(condition, tag, _val) {
   if (condition) {
-    const ex = new Error(message);
-    ex.name = "Error";
-    ex.message = message;
-    ex.code = code;
-    throw ex;
+    // TODO: throw meaningful errors
+    // NOTE: wasmtime conformance tests are expecting a string here (a tag)
+    throw tag;
   }
 }

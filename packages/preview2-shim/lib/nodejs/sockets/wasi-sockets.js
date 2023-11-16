@@ -140,6 +140,9 @@ export class WasiSockets {
         net.udpSockets.set(this.id, this);
       }
     }
+    this.udp = {
+      UdpSocket
+    };
 
     class TcpSocket extends TcpSocketImpl {
       /**
@@ -150,6 +153,9 @@ export class WasiSockets {
         net.tcpSockets.set(this.id, this);
       }
     }
+    this.tcp = {
+      TcpSocket
+    };
 
     this.instanceNetwork = {
       /**
@@ -167,6 +173,7 @@ export class WasiSockets {
     this.network = {
       errorCode,
       IpAddressFamily,
+      Network,
     };
 
     this.udpCreateSocket = {

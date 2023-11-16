@@ -8,4 +8,6 @@ export const {
     network, 
     tcpCreateSocket,
     udpCreateSocket,
+    tcp,
+    udp,
 } = sockets;
