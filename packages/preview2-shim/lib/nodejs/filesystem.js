@@ -3,9 +3,9 @@ import {
   streams,
   inputStreamCreate,
   outputStreamCreate,
-  streamTypes,
 } from "../io/worker-io.js";
-import * as calls from "../io/calls.js";
+import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE } from "../io/calls.js";
+import { FILE } from "../io/stream-types.js";
 import { environment } from "./cli.js";
 import {
   constants,
@@ -124,8 +124,8 @@ export class FileSystem {
         if (this.#hostPreopen)
           throw { tag: "last-operation-failed", val: new StreamError() };
         return inputStreamCreate(
-          streamTypes.FILE,
-          ioCall(calls.INPUT_STREAM_CREATE | streamTypes.FILE, null, {
+          FILE,
+          ioCall(INPUT_STREAM_CREATE | FILE, null, {
             fd: this.#fd,
             offset,
           })
@@ -134,7 +134,10 @@ export class FileSystem {
 
       writeViaStream(offset) {
         if (this.#hostPreopen) throw "is-directory";
-        return outputStreamCreate(streamTypes.FILE, { fd: this.#fd, offset });
+        return outputStreamCreate(
+          FILE,
+          ioCall(OUTPUT_STREAM_CREATE | FILE, null, { fd: this.#fd, offset })
+        );
       }
 
       appendViaStream() {

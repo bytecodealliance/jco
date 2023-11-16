@@ -133,7 +133,7 @@ suite("Node.js Preview2", () => {
 
     const futureIncomingResponse = handle(request);
     futureIncomingResponse.subscribe().block();
-    const incomingResponse = futureIncomingResponse.get().val;
+    const incomingResponse = futureIncomingResponse.get().val.val;
 
     const status = incomingResponse.status();
     const responseHeaders = incomingResponse.headers().entries();

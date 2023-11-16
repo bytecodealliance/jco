@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { createSyncFn } from "../synckit/index.js";
 import * as calls from "./calls.js";
-import * as streamTypes from "./stream-types.js";
+import { STDERR } from "./stream-types.js";
 
 const DEBUG = false;
 
@@ -37,8 +37,6 @@ if (DEBUG) {
     }
   };
 }
-
-export { streamTypes };
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -145,6 +143,7 @@ class OutputStream {
     );
   }
   write(buf) {
+    if (this.#streamType <= STDERR) return this.blockingWriteAndFlush(buf);
     return streamIoErrorCall(
       calls.OUTPUT_STREAM_WRITE | this.#streamType,
       this.#id,
@@ -152,6 +151,10 @@ class OutputStream {
     );
   }
   blockingWriteAndFlush(buf) {
+    if (this.#streamType <= STDERR) {
+      const stream = this.#streamType === STDERR ? process.stderr : process.stdout;
+      return void stream.write(buf);
+    }
     return streamIoErrorCall(
       calls.OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | this.#streamType,
       this.#id,
@@ -213,13 +216,9 @@ class OutputStream {
    * @param {OutputStreamType} streamType
    * @param {any} createPayload
    */
-  static _create(streamType, createPayload) {
+  static _create(streamType, id) {
     const stream = new OutputStream();
-    stream.#id = ioCall(
-      calls.OUTPUT_STREAM_CREATE | streamType,
-      null,
-      createPayload
-    );
+    stream.#id = id;
     stream.#streamType = streamType;
     return stream;
   }
