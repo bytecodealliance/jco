@@ -29,9 +29,9 @@ export const exit = {
   },
 };
 
-const stdinStream = inputStreamCreate(STDIN, null);
-const stdoutStream = outputStreamCreate(STDOUT, null);
-const stderrStream = outputStreamCreate(STDERR, null);
+const stdinStream = inputStreamCreate(STDIN, 1);
+const stdoutStream = outputStreamCreate(STDOUT, 2);
+const stderrStream = outputStreamCreate(STDERR, 3);
 
 export const stdin = {
   InputStream,
