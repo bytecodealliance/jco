@@ -53,7 +53,10 @@ program.command('transpile')
 program.command('run')
   .description('Run a WebAssembly Command component')
   .usage('<command.wasm> <args...>')
+  .helpOption(false)
   .argument('<command>', 'Wasm command binary to run')
+  .option('--jco-debug', 'Enable call tracing debug output and retain output for debugging')
+  .option('--jco-import <module>', 'Custom module to import before the run executes to support custom environment setup')
   .argument('[args...]', 'Any CLI arguments to provide to the command')
   .action(asyncAction(run));
 

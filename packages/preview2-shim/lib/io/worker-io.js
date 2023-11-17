@@ -1,6 +1,30 @@
 import { fileURLToPath } from "node:url";
 import { createSyncFn } from "../synckit/index.js";
-import * as calls from "./calls.js";
+import {
+  CALL_MASK,
+  CALL_SHIFT,
+  CALL_TYPE_MASK,
+  INPUT_STREAM_BLOCKING_READ,
+  INPUT_STREAM_BLOCKING_SKIP,
+  INPUT_STREAM_DISPOSE,
+  INPUT_STREAM_READ,
+  INPUT_STREAM_SKIP,
+  INPUT_STREAM_SUBSCRIBE,
+  OUTPUT_STREAM_BLOCKING_FLUSH,
+  OUTPUT_STREAM_BLOCKING_SPLICE,
+  OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH,
+  OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH,
+  OUTPUT_STREAM_CHECK_WRITE,
+  OUTPUT_STREAM_DISPOSE,
+  OUTPUT_STREAM_FLUSH,
+  OUTPUT_STREAM_SPLICE,
+  OUTPUT_STREAM_SUBSCRIBE,
+  OUTPUT_STREAM_WRITE_ZEROES,
+  OUTPUT_STREAM_WRITE,
+  POLL_POLL_LIST,
+  POLL_POLLABLE_BLOCK,
+  POLL_POLLABLE_READY,
+} from "./calls.js";
 import { STDERR } from "./stream-types.js";
 
 const DEBUG = false;
@@ -20,20 +44,18 @@ if (DEBUG) {
     try {
       ret = _ioCall(num, id, payload);
       return ret;
-    }
-    catch (e) {
+    } catch (e) {
       ret = e;
       throw ret;
-    }
-    finally {
+    } finally {
       console.trace(
-        (num & calls.CALL_MASK) >> calls.CALL_SHIFT,
-        num & calls.CALL_TYPE_MASK,
+        (num & CALL_MASK) >> CALL_SHIFT,
+        num & CALL_TYPE_MASK,
         id,
         payload,
-        '->',
+        "->",
         ret
-      );  
+      );
     }
   };
 }
@@ -81,39 +103,39 @@ class InputStream {
   }
   read(len) {
     return streamIoErrorCall(
-      calls.INPUT_STREAM_READ | this.#streamType,
+      INPUT_STREAM_READ | this.#streamType,
       this.#id,
       len
     );
   }
   blockingRead(len) {
     return streamIoErrorCall(
-      calls.INPUT_STREAM_BLOCKING_READ | this.#streamType,
+      INPUT_STREAM_BLOCKING_READ | this.#streamType,
       this.#id,
       len
     );
   }
   skip(len) {
     return streamIoErrorCall(
-      calls.INPUT_STREAM_SKIP | this.#streamType,
+      INPUT_STREAM_SKIP | this.#streamType,
       this.#id,
       len
     );
   }
   blockingSkip(len) {
     return streamIoErrorCall(
-      calls.INPUT_STREAM_BLOCKING_SKIP | this.#streamType,
+      INPUT_STREAM_BLOCKING_SKIP | this.#streamType,
       this.#id,
       len
     );
   }
   subscribe() {
     return pollableCreate(
-      ioCall(calls.INPUT_STREAM_SUBSCRIBE | this.#streamType, this.#id)
+      ioCall(INPUT_STREAM_SUBSCRIBE | this.#streamType, this.#id)
     );
   }
   [symbolDispose]() {
-    ioCall(calls.INPUT_STREAM_DROP | this.#streamType, this.#id);
+    ioCall(INPUT_STREAM_DISPOSE | this.#streamType, this.#id);
   }
   /**
    * @param {InputStreamType} streamType
@@ -137,7 +159,7 @@ class OutputStream {
   }
   checkWrite(len) {
     return streamIoErrorCall(
-      calls.OUTPUT_STREAM_CHECK_WRITE | this.#streamType,
+      OUTPUT_STREAM_CHECK_WRITE | this.#streamType,
       this.#id,
       len
     );
@@ -145,51 +167,49 @@ class OutputStream {
   write(buf) {
     if (this.#streamType <= STDERR) return this.blockingWriteAndFlush(buf);
     return streamIoErrorCall(
-      calls.OUTPUT_STREAM_WRITE | this.#streamType,
+      OUTPUT_STREAM_WRITE | this.#streamType,
       this.#id,
       buf
     );
   }
   blockingWriteAndFlush(buf) {
     if (this.#streamType <= STDERR) {
-      const stream = this.#streamType === STDERR ? process.stderr : process.stdout;
+      const stream =
+        this.#streamType === STDERR ? process.stderr : process.stdout;
       return void stream.write(buf);
     }
     return streamIoErrorCall(
-      calls.OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | this.#streamType,
+      OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | this.#streamType,
       this.#id,
       buf
     );
   }
   flush() {
-    return streamIoErrorCall(
-      calls.OUTPUT_STREAM_FLUSH | this.#streamType,
-      this.#id
-    );
+    return streamIoErrorCall(OUTPUT_STREAM_FLUSH | this.#streamType, this.#id);
   }
   blockingFlush() {
     return streamIoErrorCall(
-      calls.OUTPUT_STREAM_BLOCKING_FLUSH | this.#streamType,
+      OUTPUT_STREAM_BLOCKING_FLUSH | this.#streamType,
       this.#id
     );
   }
   writeZeroes(len) {
     return streamIoErrorCall(
-      calls.OUTPUT_STREAM_WRITE_ZEROES | this.#streamType,
+      OUTPUT_STREAM_WRITE_ZEROES | this.#streamType,
       this.#id,
       len
     );
   }
   blockingWriteZeroesAndFlush(len) {
     return streamIoErrorCall(
-      calls.OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH | this.#streamType,
+      OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH | this.#streamType,
       this.#id,
       len
     );
   }
   splice(src, len) {
     return streamIoErrorCall(
-      calls.OUTPUT_STREAM_SPLICE | this.#streamType,
+      OUTPUT_STREAM_SPLICE | this.#streamType,
       this.#id,
       src.#id,
       len
@@ -197,7 +217,7 @@ class OutputStream {
   }
   blockingSplice(src, len) {
     return streamIoErrorCall(
-      calls.OUTPUT_STREAM_BLOCKING_SPLICE | this.#streamType,
+      OUTPUT_STREAM_BLOCKING_SPLICE | this.#streamType,
       this.#id,
       src.#id,
       len
@@ -205,11 +225,11 @@ class OutputStream {
   }
   subscribe() {
     return pollableCreate(
-      ioCall(calls.OUTPUT_STREAM_SUBSCRIBE | this.#streamType, this.#id)
+      ioCall(OUTPUT_STREAM_SUBSCRIBE | this.#streamType, this.#id)
     );
   }
   [symbolDispose]() {
-    ioCall(calls.OUTPUT_STREAM_DISPOSE, this.#id);
+    ioCall(OUTPUT_STREAM_DISPOSE, this.#id);
   }
 
   /**
@@ -239,13 +259,13 @@ class Pollable {
   }
   ready() {
     if (this.#ready) return true;
-    const ready = ioCall(calls.POLL_POLLABLE_READY, this.#id);
+    const ready = ioCall(POLL_POLLABLE_READY, this.#id);
     if (ready) this.#ready = true;
     return ready;
   }
   block() {
     if (!this.#ready) {
-      ioCall(calls.POLL_POLLABLE_BLOCK, this.#id);
+      ioCall(POLL_POLLABLE_BLOCK, this.#id);
       this.#ready = true;
     }
   }
@@ -275,11 +295,7 @@ delete Pollable._markReady;
 export const poll = {
   Pollable,
   poll(list) {
-    const includeList = ioCall(
-      calls.POLL_POLL_LIST,
-      null,
-      pollableListToIds(list)
-    );
+    const includeList = ioCall(POLL_POLL_LIST, null, pollableListToIds(list));
     return list.filter((pollable) => {
       if (includeList.includes(pollable.id)) {
         pollableMarkReady(pollable);

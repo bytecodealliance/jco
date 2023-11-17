@@ -147,6 +147,7 @@ pub fn transpile_bindgen(
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
     instantiator.instantiate();
+    instantiator.ensure_resource_tables();
     instantiator.destructors();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
@@ -518,26 +519,27 @@ impl<'a> Instantiator<'a, '_> {
         self.exports(&self.component.exports);
     }
 
-    fn destructors(&mut self) {
-        for (ty, dtor) in self.resource_dtors.iter() {
-            let dtor_name_str = self.core_def(dtor);
-            let Some(ResourceTable {
-                data: ResourceData::Host { dtor_name, .. },
-                ..
-            }) = self.exports_resource_map.get_mut(ty)
-            else {
-                panic!("Expected exports resource map entry for dtor")
+    fn ensure_resource_tables(&mut self) {
+        let mut ids_to_ensure = BTreeSet::new();
+        for (_, ResourceTable { data, .. }) in self.imports_resource_map.iter() {
+            let ResourceData::Host { id, .. } = &data else {
+                panic!("unexpected guest data")
             };
-            let _ = dtor_name.insert(dtor_name_str);
+            ids_to_ensure.insert(id.clone());
         }
-    }
-
-    fn ensure_resource_table(&mut self, idx: TypeResourceTableIndex) {
-        let rid = idx.as_u32();
-        if !self.resource_tables_initialized[rid as usize] {
-            let resource = self.types[idx].ty;
-            let (is_imported, dtor) =
-                if let Some(resource_idx) = self.component.defined_resource_index(resource) {
+        for (_, ResourceTable { data, .. }) in self.exports_resource_map.iter() {
+            let ResourceData::Host { id, .. } = &data else {
+                panic!("unexpected guest data")
+            };
+            ids_to_ensure.insert(id.clone());
+        }
+        for id in ids_to_ensure {
+            let rid = id.as_u32();
+            if !self.resource_tables_initialized[rid as usize] {
+                let resource = self.types[id].ty;
+                let (is_imported, dtor) = if let Some(resource_idx) =
+                    self.component.defined_resource_index(resource)
+                {
                     let resource_def = self
                         .component
                         .initializers
@@ -554,9 +556,9 @@ impl<'a> Instantiator<'a, '_> {
                             false,
                             format!(
                                 "
-                                if (handleEntry.own) {{
-                                    {}(handleEntry.rep);
-                                }}",
+                                    if (handleEntry.own) {{
+                                        {}(handleEntry.rep);
+                                    }}",
                                 self.core_def(dtor)
                             ),
                         )
@@ -567,27 +569,42 @@ impl<'a> Instantiator<'a, '_> {
                     (true, "".into())
                 };
 
-            uwriteln!(
-                self.src.js,
-                "const handleTable{rid} = new Map();
-                let handleCnt{rid} = 0;",
-            );
-
-            if !is_imported {
                 uwriteln!(
                     self.src.js,
-                    "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
-                        const handleEntry = handleTable{rid}.get(handle);
-                        if (handleEntry) {{
-                            handleTable{rid}.delete(handle);
-                            {}
-                        }}
-                    }});
-                    ",
-                    dtor
+                    "const handleTable{rid} = new Map();
+                    let handleCnt{rid} = 0;",
                 );
+
+                if !is_imported {
+                    uwriteln!(
+                        self.src.js,
+                        "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
+                            const handleEntry = handleTable{rid}.get(handle);
+                            if (handleEntry) {{
+                                handleTable{rid}.delete(handle);
+                                {}
+                            }}
+                        }});
+                        ",
+                        dtor
+                    );
+                }
+                self.resource_tables_initialized[rid as usize] = true;
             }
-            self.resource_tables_initialized[rid as usize] = true;
+        }
+    }
+
+    fn destructors(&mut self) {
+        for (ty, dtor) in self.resource_dtors.iter() {
+            let dtor_name_str = self.core_def(dtor);
+            let Some(ResourceTable {
+                data: ResourceData::Host { dtor_name, .. },
+                ..
+            }) = self.exports_resource_map.get_mut(ty)
+            else {
+                panic!("Expected exports resource map entry for dtor")
+            };
+            let _ = dtor_name.insert(dtor_name_str);
         }
     }
 
@@ -650,7 +667,6 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ResourceNew(resource) => {
-                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
                     self.src.js,
@@ -663,7 +679,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceRep(resource) => {
-                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
                     self.src.js,
@@ -678,7 +693,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceDrop(resource) => {
-                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 let resource = &self.types[*resource];
                 let dtor = if let Some(resource_idx) =
@@ -1123,7 +1137,7 @@ impl<'a> Instantiator<'a, '_> {
         let entry = ResourceTable {
             imported,
             data: ResourceData::Host {
-                id: t2.as_u32(),
+                id: t2,
                 dtor_name: None,
                 local_name,
             },

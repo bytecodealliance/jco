@@ -4,12 +4,14 @@ import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { fork } from 'node:child_process';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import c from 'chalk-template';
 
-export async function run (componentPath, args) {
+export async function run (componentPath, args, opts) {
   // Ensure that `args` is an array
   args = [...args];
+
+  const jcoImport = opts.jcoImport ? resolve(opts.jcoImport) : null;
 
   const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
   const outDir = await getTmpDir();
@@ -20,7 +22,8 @@ export async function run (componentPath, args) {
         quiet: true,
         noTypescript: true,
         wasiShim: true,
-        outDir
+        outDir,
+        tracing: opts.jcoDebug
       });
     }
     catch (e) {
@@ -50,6 +53,7 @@ export async function run (componentPath, args) {
 
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
+      ${jcoImport ? `import ${JSON.stringify(jcoImport)}` : ''}
       function logInvalidCommand () {
         console.error('Not a valid command component to execute, make sure it was built to a command adapter and with the same version.');
       }
@@ -85,7 +89,8 @@ export async function run (componentPath, args) {
   }
   finally {
     try {
-      await rm(outDir, { recursive: true });
+      if (!opts.jcoDebug)
+        await rm(outDir, { recursive: true });
     } catch {}
   }
 }

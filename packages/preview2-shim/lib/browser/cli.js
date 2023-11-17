@@ -123,13 +123,11 @@ const terminalStderrInstance = new TerminalOutput();
 const terminalStdinInstance = new TerminalInput();
 
 export const terminalInput = {
-  TerminalInput,
-  dropTerminalInput () {}
+  TerminalInput
 };
 
 export const terminalOutput = {
-  TerminalOutput,
-  dropTerminalOutput () {}
+  TerminalOutput
 };
 
 export const terminalStderr = {
