@@ -5,6 +5,7 @@ use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
+use wasmtime_environ::component::TypeResourceTableIndex;
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
@@ -20,7 +21,7 @@ pub enum ErrHandling {
 #[derive(Clone, Debug)]
 pub enum ResourceData {
     Host {
-        id: u32,
+        id: TypeResourceTableIndex,
         local_name: String,
         dtor_name: Option<String>,
     },
@@ -1157,6 +1158,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         local_name,
                         dtor_name,
                     } => {
+                        let id = id.as_u32();
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
                         if !imported {
                             let rep = format!("rep{}", self.tmp());
@@ -1264,6 +1266,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 match data {
                     ResourceData::Host { id, local_name, .. } => {
+                        let id = id.as_u32();
                         if !imported {
                             uwriteln!(
                                 self.src,

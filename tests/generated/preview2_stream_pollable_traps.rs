@@ -10,6 +10,7 @@ fn preview2_stream_pollable_traps() -> anyhow::Result<()> {
     let file_name = "preview2_stream_pollable_traps";
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    cmd!(sh, "./src/jco.js run {wasi_file}").run()?;
+    cmd!(sh, "./src/jco.js run  --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'")
+        .run().expect_err("test should exit with code 1");
     Ok(())
 }

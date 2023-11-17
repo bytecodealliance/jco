@@ -335,8 +335,7 @@ pub fn render_intrinsics(
                     let ptr = 0;
                     let writtenTotal = 0;
                     while (s.length > 0) {
-                        ptr = realloc(ptr, allocLen, 1, allocLen + s.length);
-                        allocLen += s.length;
+                        ptr = realloc(ptr, allocLen, 1, allocLen += s.length * 2);
                         const { read, written } = utf8Encoder.encodeInto(
                             s,
                             new Uint8Array(memory.buffer, ptr + writtenTotal, allocLen - writtenTotal),
@@ -344,8 +343,6 @@ pub fn render_intrinsics(
                         writtenTotal += written;
                         s = s.slice(read);
                     }
-                    if (allocLen > writtenTotal)
-                        ptr = realloc(ptr, allocLen, 1, writtenTotal);
                     utf8EncodedLen = writtenTotal;
                     return ptr;
                 }

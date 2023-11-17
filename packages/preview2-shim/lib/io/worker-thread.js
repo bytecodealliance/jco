@@ -10,13 +10,13 @@ import {
   CLOCKS_DURATION_SUBSCRIBE,
   CLOCKS_INSTANT_SUBSCRIBE,
   CLOCKS_NOW,
-  FUTURE_DROP_AND_GET_VALUE,
-  FUTURE_DROP,
+  FUTURE_DISPOSE_AND_GET_VALUE,
+  FUTURE_DISPOSE,
   HTTP_CREATE_REQUEST,
   INPUT_STREAM_BLOCKING_READ,
   INPUT_STREAM_BLOCKING_SKIP,
   INPUT_STREAM_CREATE,
-  INPUT_STREAM_DROP,
+  INPUT_STREAM_DISPOSE,
   INPUT_STREAM_READ,
   INPUT_STREAM_SKIP,
   INPUT_STREAM_SUBSCRIBE,
@@ -26,7 +26,7 @@ import {
   OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH,
   OUTPUT_STREAM_CHECK_WRITE,
   OUTPUT_STREAM_CREATE,
-  OUTPUT_STREAM_DROP,
+  OUTPUT_STREAM_DISPOSE,
   OUTPUT_STREAM_FLUSH,
   OUTPUT_STREAM_SPLICE,
   OUTPUT_STREAM_SUBSCRIBE,
@@ -123,9 +123,9 @@ function handle(call, id, payload) {
     }
 
     // Stdio
-    case OUTPUT_STREAM_DROP | STDOUT:
-    case OUTPUT_STREAM_DROP | STDERR:
-    case INPUT_STREAM_DROP | STDIN:
+    case OUTPUT_STREAM_DISPOSE | STDOUT:
+    case OUTPUT_STREAM_DISPOSE | STDERR:
+    case INPUT_STREAM_DISPOSE | STDIN:
       return;
 
     // Clocks
@@ -214,7 +214,7 @@ function handle(call, id, payload) {
             )
           );
         }
-        case INPUT_STREAM_DROP:
+        case INPUT_STREAM_DISPOSE:
           unfinishedStreams.delete(id);
           return;
 
@@ -371,7 +371,7 @@ function handle(call, id, payload) {
           }
           return promise.then(() => handle(OUTPUT_STREAM_SPLICE, id, payload));
         }
-        case OUTPUT_STREAM_DROP: {
+        case OUTPUT_STREAM_DISPOSE: {
           const stream = unfinishedStreams.get(id);
           if (stream) {
             stream.stream.end();
@@ -401,7 +401,7 @@ function handle(call, id, payload) {
           });
         }
 
-        case FUTURE_DROP_AND_GET_VALUE: {
+        case FUTURE_DISPOSE_AND_GET_VALUE: {
           const future = unfinishedFutures.get(id);
           if (!future) {
             // future not ready yet
@@ -411,7 +411,7 @@ function handle(call, id, payload) {
           unfinishedFutures.delete(id);
           return future;
         }
-        case FUTURE_DROP:
+        case FUTURE_DISPOSE:
           return void unfinishedFutures.delete(id);
 
         default:
