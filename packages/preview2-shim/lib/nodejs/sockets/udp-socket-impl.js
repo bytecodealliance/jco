@@ -247,9 +247,14 @@ export class UdpSocketImpl {
     const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(host)}`;
 
-    assert(this.network !== null && this.network.id !== network.id, "invalid-argument");
     assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
     assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "invalid-argument");
+
+    if (this[symbolState].state === SocketConnectionState.Connected) {
+      // reusing a connected socket. See #finishConnect()
+      return;
+    } else {
+    }
 
     const { port } = remoteAddress.val;
     this.#socketOptions.remoteAddress = host;
@@ -268,7 +273,13 @@ export class UdpSocketImpl {
    */
   #finishConnect() {
     const { remoteAddress, remotePort } = this.#socketOptions;
-    this.#socket.connect(remoteAddress, remotePort);
+
+    if (this[symbolState].state === SocketConnectionState.Connected) {
+      // TODO: figure out how to reuse a connected socket
+      this.#socket.connect();
+    } else {
+      this.#socket.connect(remoteAddress, remotePort);
+    }
   }
 
   /**
@@ -285,6 +296,8 @@ export class UdpSocketImpl {
    * @throws {connection-refused} The connection was refused. (ECONNREFUSED)
    */
   stream(remoteAddress = undefined) {
+    assert(this[symbolState].isBound === false, "invalid-state");
+
     this.#startConnect(this.network, remoteAddress);
     this.#finishConnect();
     return [this.incomingDatagramStreamCreate(), this.outgoingDatagramStreamCreate()];
@@ -320,11 +333,7 @@ export class UdpSocketImpl {
     assert(this[symbolState].state !== SocketConnectionState.Connected, "invalid-state");
 
     const out = {};
-    console.log({
-      out
-    })
     this.#socket.getpeername(out);
-
 
     const { address, port, family } = out;
     return {
