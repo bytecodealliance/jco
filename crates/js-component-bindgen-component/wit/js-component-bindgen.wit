@@ -39,6 +39,10 @@ world js-component-bindgen {
 
     /// Whether or not to emit `tracing` calls on function entry/exit.
     tracing: option<bool>,
+
+    /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
+    /// These exports can break typescript builds.
+    no-namespaced-exports: option<bool>,
   }
 
   variant wit {

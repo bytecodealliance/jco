@@ -2,7 +2,7 @@ use heck::ToLowerCamelCase;
 
 use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source::Source;
-use crate::{uwrite, uwriteln};
+use crate::{uwrite, uwriteln, TranspileOpts};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
@@ -131,6 +131,7 @@ impl EsmBindgen {
         output: &mut Source,
         instantiation: bool,
         local_names: &mut LocalNames,
+        opts: &TranspileOpts,
     ) {
         if self.exports.is_empty() {
             if instantiation {
@@ -196,7 +197,7 @@ impl EsmBindgen {
                 output.push_str(local_name);
             } else if instantiation {
                 uwrite!(output, "{export_name_maybe_quoted}: {local_name}");
-            } else {
+            } else if !opts.no_namespaced_exports {
                 uwrite!(output, "{local_name} as {export_name_maybe_quoted}");
             }
         }

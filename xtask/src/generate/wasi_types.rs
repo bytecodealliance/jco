@@ -35,6 +35,7 @@ pub(crate) fn run() -> Result<()> {
             valid_lifting_optimization: false,
             base64_cutoff: 0,
             tracing: false,
+            no_namespaced_exports: true,
         };
 
         let files = generate_types(name, resolve, world, opts)?;

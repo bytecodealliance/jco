@@ -77,6 +77,7 @@ fn transpile(component_path: &str, name: String) -> Result<()> {
         tla_compat: true,
         valid_lifting_optimization: false,
         tracing: false,
+        no_namespaced_exports: true,
     };
 
     let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;
