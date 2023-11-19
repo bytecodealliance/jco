@@ -7,7 +7,7 @@
  */
 
 import { TcpSocketImpl } from "./tcp-socket-impl.js";
-import { UdpSocketImpl } from "./udp-socket-impl.js";
+import { UdpSocketImpl, OutgoingDatagramStream, IncomingDatagramStream } from "./udp-socket-impl.js";
 import { assert } from "../../common/assert.js";
 
 /** @type {ErrorCode} */
@@ -140,8 +140,11 @@ export class WasiSockets {
         net.udpSockets.set(this.id, this);
       }
     }
+
     this.udp = {
-      UdpSocket
+      UdpSocket,
+      OutgoingDatagramStream,
+      IncomingDatagramStream,
     };
 
     class TcpSocket extends TcpSocketImpl {
@@ -154,7 +157,7 @@ export class WasiSockets {
       }
     }
     this.tcp = {
-      TcpSocket
+      TcpSocket,
     };
 
     this.instanceNetwork = {

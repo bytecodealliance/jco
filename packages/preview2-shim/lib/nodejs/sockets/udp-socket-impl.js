@@ -31,8 +31,136 @@ const flags = {
   UV_UDP_REUSEADDR: 4,
 };
 
+const bufferSizeFlags = {
+  SO_RCVBUF: true,
+  SO_SNDBUF: false,
+};
+
+
+export class IncomingDatagramStream {
+  static _create(socket) {
+    const stream = new IncomingDatagramStream(socket);
+    return stream;
+  }
+
+  #socket = null;
+  constructor(socket) {
+    this.#socket = socket;
+  }
+
+  /**
+   *
+   * @param {bigint} maxResults
+   * @returns {Datagram[]}
+   * @throws {invalid-state} The socket is not bound to any local address. (EINVAL)
+   * @throws {not-in-progress} The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
+   * @throws {remote-unreachable} The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+   * @throws {connection-refused} The connection was refused. (ECONNREFUSED)
+   * @throws {would-block} There is no pending data available to be read at the moment. (EWOULDBLOCK, EAGAIN)
+   */
+  receive(maxResults) {
+    assert(self[symbolState].isBound === false, "invalid-state");
+    assert(self[symbolState].operationInProgress === false, "not-in-progress");
+
+    if (maxResults === 0n) {
+      return [];
+    }
+
+    const socket = this.#socket;
+    socket.onmessage = (...args) => console.log("recv onmessage", args[2].toString());
+    socket.onerror = (err) => console.log("recv error", err);
+    socket.recvStart();
+    const datagrams = [];
+    return datagrams;
+  }
+
+  /**
+   *
+   * @returns {Pollable} A pollable which will resolve once the stream is ready to receive again.
+   */
+  subscribe() {
+    throw new Error("Not implemented");
+  }
+}
+const incomingDatagramStreamCreate = IncomingDatagramStream._create;
+delete IncomingDatagramStream._create;
+
+export class OutgoingDatagramStream {
+  static _create(socket) {
+    const stream = new OutgoingDatagramStream(socket);
+    return stream;
+  }
+
+  #socket = null;
+  constructor(socket) {
+    this.#socket = socket;
+  }
+
+  /**
+   *
+   * @returns {bigint}
+   * @throws {invalid-state} The socket is not bound to any local address. (EINVAL)
+   */
+  checkSend() {
+    throw new Error("Not implemented");
+  }
+
+  /**
+   *
+   * @param {Datagram[]} datagrams
+   * @returns {bigint}
+   * @throws {invalid-argument} The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+   * @throws {invalid-argument} `remote-address` is a non-IPv4-mapped IPv6 address, but the socket was bound to a specific IPv4-mapped IPv6 address. (or vice versa)
+   * @throws {invalid-argument} The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+   * @throws {invalid-argument} The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+   * @throws {invalid-argument} The socket is in "connected" mode and the `datagram.remote-address` does not match the address passed to `connect`. (EISCONN)
+   * @throws {invalid-argument} The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
+   * @throws {remote-unreachable} The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
+   * @throws {connection-refused} The connection was refused. (ECONNREFUSED)
+   * @throws {datagram-too-large} The datagram is too large. (EMSGSIZE)
+   */
+  send(datagrams) {
+    const req = new SendWrap();
+    const doSend = (data, port, host, family) => {
+      // setting hasCallback to false will make send() synchronous
+      // TODO: handle async send
+      const hasCallback = false;
+      const socket = this.#socket;
+
+      let err = null;
+      if (family.toLocaleLowerCase() === "ipv4") {
+        err = socket.send(req, data, data.length, port, host, hasCallback);
+      } else if (family.toLocaleLowerCase() === "ipv6") {
+        err = socket.send6(req, data, data.length, port, host, hasCallback);
+      }
+      return err;
+    };
+
+    datagrams.forEach((datagram) => {
+      const { data, remoteAddress } = datagram;
+      const { tag: family, val } = remoteAddress;
+      const { address, port } = val;
+      const err = doSend(data, port, serializeIpAddress(remoteAddress, family), family);
+      console.error({
+        err,
+      });
+    });
+  }
+
+  /**
+   *
+   * @returns {Pollable} A pollable which will resolve once the stream is ready to send again.
+   */
+  subscribe() {
+    throw new Error("Not implemented");
+  }
+}
+const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
+delete OutgoingDatagramStream._create;
+
+
 export class UdpSocketImpl {
-  /** @type {Socket} */ #socket = null;
+  /** @type {UDP} */ #socket = null;
   /** @type {Network} */ network = null;
 
   [symbolState] = {
@@ -40,9 +168,20 @@ export class UdpSocketImpl {
     operationInProgress: false,
     ipv6Only: false,
     state: SocketConnectionState.Closed,
+
+    // TODO: what these default values should be?
+    unicastHopLimit: 1,
+    receiveBufferSize: 1,
+    sendBufferSize: 1,
   };
 
-  #socketOptions = {};
+  #socketOptions = {
+    family: "ipv4",
+    localAddress: "",
+    localPort: 0,
+    remoteAddress: "",
+    remotePort: 0,
+  };
 
   /**
    * @param {IpAddressFamily} addressFamily
@@ -52,120 +191,8 @@ export class UdpSocketImpl {
     this.#socketOptions.family = addressFamily;
 
     this.#socket = new UDP();
-
-    const self = this;
-
-    class IncomingDatagramStream {
-      static _create() {
-        const stream = new IncomingDatagramStream();
-        return stream;
-      }
-
-      /**
-       *
-       * @param {bigint} maxResults
-       * @returns {Datagram[]}
-       * @throws {invalid-state} The socket is not bound to any local address. (EINVAL)
-       * @throws {not-in-progress} The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
-       * @throws {remote-unreachable} The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-       * @throws {connection-refused} The connection was refused. (ECONNREFUSED)
-       * @throws {would-block} There is no pending data available to be read at the moment. (EWOULDBLOCK, EAGAIN)
-       */
-      receive(maxResults) {
-        assert(self[symbolState].isBound === false, "invalid-state");
-        assert(self[symbolState].operationInProgress === false, "not-in-progress");
-
-        if (maxResults === 0n) {
-          return [];
-        }
-
-        const socket = self.#socket;
-        socket.onmessage = (...args) => console.log("recv onmessage", args[2].toString());
-        socket.onerror = (err) => console.log("recv error", err);
-        socket.recvStart();
-        const datagrams = [];
-        return datagrams;
-      }
-
-      /**
-       *
-       * @returns {Pollable} A pollable which will resolve once the stream is ready to receive again.
-       */
-      subscribe() {
-        throw new Error("Not implemented");
-      }
-    }
-    this.incomingDatagramStreamCreate = IncomingDatagramStream._create;
-    delete IncomingDatagramStream._create;
-
-    class OutgoingDatagramStream {
-      static _create() {
-        const stream = new OutgoingDatagramStream();
-        return stream;
-      }
-
-      /**
-       *
-       * @returns {bigint}
-       * @throws {invalid-state} The socket is not bound to any local address. (EINVAL)
-       */
-      checkSend() {
-        throw new Error("Not implemented");
-      }
-
-      /**
-       *
-       * @param {Datagram[]} datagrams
-       * @returns {bigint}
-       * @throws {invalid-argument} The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-       * @throws {invalid-argument} `remote-address` is a non-IPv4-mapped IPv6 address, but the socket was bound to a specific IPv4-mapped IPv6 address. (or vice versa)
-       * @throws {invalid-argument} The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
-       * @throws {invalid-argument} The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-       * @throws {invalid-argument} The socket is in "connected" mode and the `datagram.remote-address` does not match the address passed to `connect`. (EISCONN)
-       * @throws {invalid-argument} The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
-       * @throws {remote-unreachable} The remote address is not reachable. (ECONNREFUSED, ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN)
-       * @throws {connection-refused} The connection was refused. (ECONNREFUSED)
-       * @throws {datagram-too-large} The datagram is too large. (EMSGSIZE)
-       */
-      send(datagrams) {
-        const req = new SendWrap();
-        const doSend = (data, port, host, family) => {
-          // setting hasCallback to false will make send() synchronous
-          // TODO: handle async send
-          const hasCallback = false;
-          const socket = self.#socket;
-
-          let err = null;
-          if (family.toLocaleLowerCase() === "ipv4") {
-            err = socket.send(req, data, data.length, port, host, hasCallback);
-          } else if (family.toLocaleLowerCase() === "ipv6") {
-            err = socket.send6(req, data, data.length, port, host, hasCallback);
-          }
-          return err;
-        };
-
-        datagrams.forEach((datagram) => {
-          const { data, remoteAddress } = datagram;
-          const { tag: family, val } = remoteAddress;
-          const { address, port } = val;
-          const err = doSend(data, port, serializeIpAddress(remoteAddress, family), family);
-          console.error({
-            err,
-          });
-        });
-      }
-
-      /**
-       *
-       * @returns {Pollable} A pollable which will resolve once the stream is ready to send again.
-       */
-      subscribe() {
-        throw new Error("Not implemented");
-      }
-    }
-    this.outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
-    delete OutgoingDatagramStream._create;
   }
+
   /**
    *
    * @param {Network} network
@@ -176,6 +203,8 @@ export class UdpSocketImpl {
    * @returns {void}
    */
   startBind(network, localAddress) {
+    this[symbolState].operationInProgress = false;
+
     const address = serializeIpAddress(localAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(address)}`;
 
@@ -221,7 +250,9 @@ export class UdpSocketImpl {
       err = this.#socket.bind6(localAddress, localPort, flags);
     }
 
-    if (err) {
+    if (err === 0) {
+      this[symbolState].isBound = true;
+    } else {
       assert(err === -22, "address-in-use");
       assert(err === -48, "address-in-use"); // macos
       assert(err === -49, "address-not-bindable");
@@ -229,7 +260,15 @@ export class UdpSocketImpl {
       assert(true, "unknown", err);
     }
 
-    this[symbolState].isBound = true;
+    this[symbolState].operationInProgress = false;
+  }
+
+  /**
+   * Alias for startBind() and finishBind()
+   */
+  bind(network, localAddress) {
+    this.startBind(network, localAddress);
+    this.finishBind();
   }
 
   /**
@@ -244,6 +283,8 @@ export class UdpSocketImpl {
    * @throws {invalid-argument} The socket is already bound to a different network. The `network` passed to `connect` must be identical to the one passed to `bind`.
    */
   #startConnect(network, remoteAddress = undefined) {
+    this[symbolState].operationInProgress = false;
+
     const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(host)}`;
 
@@ -273,6 +314,7 @@ export class UdpSocketImpl {
    */
   #finishConnect() {
     const { remoteAddress, remotePort } = this.#socketOptions;
+    this[symbolState].state = SocketConnectionState.Connecting;
 
     if (this[symbolState].state === SocketConnectionState.Connected) {
       // TODO: figure out how to reuse a connected socket
@@ -280,6 +322,17 @@ export class UdpSocketImpl {
     } else {
       this.#socket.connect(remoteAddress, remotePort);
     }
+
+    this[symbolState].operationInProgress = false;
+    this[symbolState].state = SocketConnectionState.Connected;
+  }
+
+  /**
+   * Alias for startBind() and finishBind()
+   */
+  #connect(network, remoteAddress = undefined) {
+    this.#startConnect(network, remoteAddress);
+    this.#finishConnect();
   }
 
   /**
@@ -298,9 +351,8 @@ export class UdpSocketImpl {
   stream(remoteAddress = undefined) {
     assert(this[symbolState].isBound === false, "invalid-state");
 
-    this.#startConnect(this.network, remoteAddress);
-    this.#finishConnect();
-    return [this.incomingDatagramStreamCreate(), this.outgoingDatagramStreamCreate()];
+    this.#connect(this.network, remoteAddress);
+    return [incomingDatagramStreamCreate(this.#socket), outgoingDatagramStreamCreate(this.#socket)];
   }
 
   /**
@@ -327,13 +379,25 @@ export class UdpSocketImpl {
   /**
    *
    * @returns {IpSocketAddress}
-   * @throws {invalid-state} The socket is not connected to a remote address. (ENOTCONN)
+   * @throws {invalid-state} The socket is not streaming to a specific remote address. (ENOTCONN)
    */
   remoteAddress() {
-    assert(this[symbolState].state !== SocketConnectionState.Connected, "invalid-state");
+    assert(this[symbolState].state !== SocketConnectionState.Connected, "invalid-state", "The socket is not streaming to a specific remote address");
 
     const out = {};
     this.#socket.getpeername(out);
+
+    // Note: getpeername() returns undefined if family is ipv6
+    // TODO: investigate
+    if (out.address === undefined) {
+      return {
+        tag: "ipv6",
+        val: {
+          address: "",
+          port: 0,
+        },
+      };
+    }
 
     const { address, port, family } = out;
     return {
@@ -373,8 +437,8 @@ export class UdpSocketImpl {
    * @throws {not-supported} (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    */
   setIpv6Only(value) {
+    assert(value === true && this.#socketOptions.family.toLocaleLowerCase() === "ipv4", "not-supported", "Socket is an IPv4 socket.");
     assert(this[symbolState].isBound, "invalid-state", "The socket is already bound");
-    assert(this.#socketOptions.family.toLocaleLowerCase() === "ipv4", "not-supported", "Socket is an IPv4 socket.");
 
     this[symbolState].ipv6Only = value;
   }
@@ -384,7 +448,7 @@ export class UdpSocketImpl {
    * @returns {number}
    */
   unicastHopLimit() {
-    return this.#socketOptions.unicastHopLimit;
+    return this[symbolState].unicastHopLimit;
   }
 
   /**
@@ -396,7 +460,8 @@ export class UdpSocketImpl {
   setUnicastHopLimit(value) {
     assert(value < 1, "invalid-argument", "The TTL value must be 1 or higher");
 
-    this.#socketOptions.unicastHopLimit = value;
+    this.#socket.setTTL(value);
+    this[symbolState].unicastHopLimit = value;
   }
 
   /**
@@ -404,16 +469,33 @@ export class UdpSocketImpl {
    * @returns {bigint}
    */
   receiveBufferSize() {
-    throw new Error("Not implemented");
+    const exceptionInfo = {};
+    const value = this.#socket.bufferSize(0, bufferSizeFlags.SO_RCVBUF, exceptionInfo);
+
+    if (exceptionInfo.code === "EBADF") {
+      // TODO: handle the case where bad file descriptor is returned
+      // This happens when the socket is not bound
+      return this[symbolState].receiveBufferSize;
+    }
+
+    return value;
   }
 
   /**
    *
    * @param {bigint} value
    * @returns {void}
+   * @throws {invalid-argument} The provided value was 0.
    */
   setReceiveBufferSize(value) {
-    throw new Error("Not implemented");
+    assert(value === 0n, "invalid-argument", "The provided value was 0");
+
+    // Note: libuv expects a uint32. Passing a bigint will result in an assertion error in V8.
+    value = Number(value);
+    
+    const exceptionInfo = {};
+    this.#socket.bufferSize(Number(value), bufferSizeFlags.SO_RCVBUF, exceptionInfo);
+    this[symbolState].receiveBufferSize = value;
   }
 
   /**
@@ -421,16 +503,33 @@ export class UdpSocketImpl {
    * @returns {bigint}
    */
   sendBufferSize() {
-    throw new Error("Not implemented");
+    const exceptionInfo = {};
+    const value = this.#socket.bufferSize(0, bufferSizeFlags.SO_SNDBUF, exceptionInfo);
+    
+    if (exceptionInfo.code === "EBADF") {
+      // TODO: handle the case where bad file descriptor is returned
+      // This happens when the socket is not bound
+      return this[symbolState].sendBufferSize;
+    }
+
+    return value;
   }
 
   /**
    *
    * @param {bigint} value
    * @returns {void}
+   * @throws {invalid-argument} The provided value was 0.
    */
   setSendBufferSize(value) {
-    throw new Error("Not implemented");
+    assert(value === 0n, "invalid-argument", "The provided value was 0");
+
+    // Note: libuv expects a uint32. Passing a bigint will result in an assertion error in V8.
+    value = Number(value);
+
+    const exceptionInfo = {};
+    this.#socket.bufferSize(value, bufferSizeFlags.SO_SNDBUF, exceptionInfo);
+    this[symbolState].sendBufferSize = value;
   }
 
   /**
