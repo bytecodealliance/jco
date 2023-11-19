@@ -74,6 +74,7 @@ async function wasm2Js (source) {
  *   js?: bool,
  *   minify?: bool,
  *   optimize?: bool,
+ *   noNamespacedExports?: bool,
  *   optArgs?: string[],
  * }} opts 
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
@@ -112,7 +113,8 @@ export async function transpileComponent (component, opts = {}) {
     noNodejsCompat: !(opts.nodejsCompat ?? true),
     noTypescript: opts.noTypescript || false,
     tlaCompat: opts.tlaCompat ?? false,
-    base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000
+    base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000,
+    noNamespacedExports: !opts.namespacedExports,
   });
 
   let outDir = (opts.outDir ?? '').replace(/\\/g, '/');

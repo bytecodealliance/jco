@@ -14,14 +14,6 @@ pub(crate) fn run() -> Result<()> {
     )?;
 
     let sh = Shell::new()?;
-    //Typescript doesn't support arbitrary module namespace identifier names so
-    //we need to remove it from wasm-tools.js before compiling
-    //See: https://github.com/microsoft/TypeScript/issues/40594
-    cmd!(
-        sh,
-        "sed -i'' -e 's/tools as \"local:wasm-tools\\/tools\"//g' ./obj/wasm-tools.js"
-    )
-    .read()?;
     cmd!(sh, "npx tsc -p tsconfig.json").read()?;
 
     Ok(())
