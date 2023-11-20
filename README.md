@@ -103,6 +103,7 @@ Options include:
 * `--no-nodejs-compat`: Disables Node.js compat in the output to load core Wasm with FS methods.
 * `--instantiation`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports.
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
+* `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
 
 #### Bindgen Crate
 
