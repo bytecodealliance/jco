@@ -1,7 +1,5 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use std::{collections::HashMap, fs, io::Write, path::PathBuf};
-
-use anyhow::Result;
 use wit_component::ComponentEncoder;
 
 pub(crate) fn run() -> Result<()> {
@@ -67,6 +65,7 @@ fn transpile(component_path: &str, name: String) -> Result<()> {
         tla_compat: true,
         valid_lifting_optimization: false,
         tracing: false,
+        no_namespaced_exports: true,
     };
 
     let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;

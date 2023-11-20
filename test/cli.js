@@ -2,7 +2,7 @@ import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { mkdir, readFile, rm, symlink, writeFile, mkdtemp } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { exec, jcoPath } from './helpers.js';
-import { tmpdir } from 'node:os';
+import { tmpdir, EOL } from 'node:os';
 import { resolve, normalize, sep } from 'node:path';
 
 export async function cliTest (fixtures) {
@@ -87,6 +87,30 @@ export async function cliTest (fixtures) {
       ok(source.includes('testwasi'));
       ok(source.includes('FUNCTION_TABLE'));
       ok(source.includes('export const $init'));
+    });
+
+    test('Transpile without namespaced exports', async () => {
+      const name = 'flavorful';
+      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--no-namespaced-exports', '--no-wasi-shim', '--name', name, '-o', outDir);
+      strictEqual(stderr, '');
+      const source = await readFile(`${outDir}/${name}.js`);
+      const finalLine = source.toString().split("\n").at(-1)
+      //Check final line is the export statement
+      ok(finalLine.toString().includes("export {"));
+      //Check that it does not contain the namespaced export
+      ok(!finalLine.toString().includes("test:flavorful/test"));
+    });
+
+    test('Transpile with namespaced exports', async () => {
+      const name = 'flavorful';
+      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--no-wasi-shim', '--name', name, '-o', outDir);
+      strictEqual(stderr, '');
+      const source = await readFile(`${outDir}/${name}.js`);
+      const finalLine = source.toString().split("\n").at(-1)
+      //Check final line is the export statement
+      ok(finalLine.toString().includes("export {"));
+      //Check that it does contain the namespaced export
+      ok(finalLine.toString().includes("test as 'test:flavorful/test'"));
     });
 
     test('Optimize', async () => {

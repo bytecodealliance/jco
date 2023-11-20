@@ -2,7 +2,7 @@ use heck::ToLowerCamelCase;
 
 use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source::Source;
-use crate::{uwrite, uwriteln};
+use crate::{uwrite, uwriteln, TranspileOpts};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
@@ -131,6 +131,7 @@ impl EsmBindgen {
         output: &mut Source,
         instantiation: bool,
         local_names: &mut LocalNames,
+        opts: &TranspileOpts,
     ) {
         if self.exports.is_empty() {
             if instantiation {
@@ -165,8 +166,6 @@ impl EsmBindgen {
         for (alias, export_name) in &self.export_aliases {
             if first {
                 first = false
-            } else {
-                uwrite!(output, ", ");
             }
             let local_name = match &self.exports[export_name] {
                 Binding::Local(local_name) => local_name,
@@ -175,17 +174,18 @@ impl EsmBindgen {
             let alias_maybe_quoted = maybe_quote_id(alias);
             if local_name == alias_maybe_quoted {
                 output.push_str(local_name);
+                uwrite!(output, ", ");
             } else if instantiation {
                 uwrite!(output, "{alias_maybe_quoted}: {local_name}");
-            } else {
+                uwrite!(output, ", ");
+            } else if !self.contains_js_quote(&alias_maybe_quoted) || !opts.no_namespaced_exports {
                 uwrite!(output, "{local_name} as {alias_maybe_quoted}");
+                uwrite!(output, ", ");
             }
         }
         for (export_name, export) in &self.exports {
             if first {
                 first = false
-            } else {
-                uwrite!(output, ", ");
             }
             let local_name = match export {
                 Binding::Local(local_name) => local_name,
@@ -194,13 +194,22 @@ impl EsmBindgen {
             let export_name_maybe_quoted = maybe_quote_id(export_name);
             if local_name == export_name_maybe_quoted {
                 output.push_str(local_name);
+                uwrite!(output, ", ");
             } else if instantiation {
                 uwrite!(output, "{export_name_maybe_quoted}: {local_name}");
-            } else {
+                uwrite!(output, ", ");
+            } else if !self.contains_js_quote(&export_name_maybe_quoted)
+                || !opts.no_namespaced_exports
+            {
                 uwrite!(output, "{local_name} as {export_name_maybe_quoted}");
+                uwrite!(output, ", ");
             }
         }
         uwrite!(output, " }}");
+    }
+
+    fn contains_js_quote(&self, js_string: &String) -> bool {
+        js_string.contains("\"") || js_string.contains("'") || js_string.contains("`")
     }
 
     fn binding_has_used(&self, binding: &Binding) -> bool {

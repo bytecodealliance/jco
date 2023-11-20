@@ -47,6 +47,7 @@ program.command('transpile')
   .option('--js', 'output JS instead of core WebAssembly')
   .addOption(new Option('-I, --instantiation [mode]', 'output for custom module instantiation').choices(['async', 'sync']).preset('async'))
   .option('-q, --quiet', 'disable logging')
+  .option('--no-namespaced-exports', 'disable namespaced exports for typescript compatibility')
   .option('--', 'for --optimize, custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(transpile));
 

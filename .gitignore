@@ -6,3 +6,5 @@ package-lock.json
 /test/output
 /jco.sh
 /docs/book
+/src/**/*.d.ts
+/src/**/*.d.ts.map

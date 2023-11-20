@@ -66,6 +66,9 @@ pub struct TranspileOpts {
     pub valid_lifting_optimization: bool,
     /// Whether or not to emit `tracing` calls on function entry/exit.
     pub tracing: bool,
+    /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
+    /// These exports can break typescript builds.
+    pub no_namespaced_exports: bool,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -152,7 +155,7 @@ pub fn transpile_bindgen(
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
 
-    instantiator.gen.finish_component(name, files);
+    instantiator.gen.finish_component(name, files, &opts);
 
     let exports = instantiator
         .gen
@@ -173,7 +176,7 @@ pub fn transpile_bindgen(
 }
 
 impl<'a> JsBindgen<'a> {
-    fn finish_component(&mut self, name: &str, files: &mut Files) {
+    fn finish_component(&mut self, name: &str, files: &mut Files, opts: &TranspileOpts) {
         let mut output = source::Source::default();
         let mut compilation_promises = source::Source::default();
 
@@ -262,6 +265,7 @@ impl<'a> JsBindgen<'a> {
                 &mut self.src.js,
                 self.opts.instantiation.is_some(),
                 &mut self.local_names,
+                opts,
             );
             uwrite!(
                 output,
@@ -312,6 +316,7 @@ impl<'a> JsBindgen<'a> {
                 &mut output,
                 self.opts.instantiation.is_some(),
                 &mut self.local_names,
+                opts,
             );
         }
 
