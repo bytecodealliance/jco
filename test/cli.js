@@ -94,7 +94,7 @@ export async function cliTest (fixtures) {
       const { stderr, stdout } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--no-namespaced-exports', '--no-wasi-shim', '--name', name, '-o', outDir);
       strictEqual(stderr, '');
       const source = await readFile(`${outDir}/${name}.js`);
-      const finalLine = source.toString().split(EOL).at(-1)
+      const finalLine = source.toString().split("\n").at(-1)
       //Check final line is the export statement
       ok(finalLine.toString().includes("export {"));
       //Check that it does not contain the namespaced export

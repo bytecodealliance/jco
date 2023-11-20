@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use std::{collections::HashMap, fs, io::Write, path::PathBuf};
 use wit_component::ComponentEncoder;
-use xshell::{cmd, Shell};
 
 pub(crate) fn run() -> Result<()> {
     transpile(
@@ -12,9 +11,6 @@ pub(crate) fn run() -> Result<()> {
         "target/wasm32-wasi/release/wasm_tools_js.wasm",
         "wasm-tools".to_string(),
     )?;
-
-    let sh = Shell::new()?;
-    cmd!(sh, "npx tsc -p tsconfig.json").read()?;
 
     Ok(())
 }

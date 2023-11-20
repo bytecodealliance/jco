@@ -36,6 +36,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
+    - uses: actions/setup-node@v3
     - name: Install Rust
       run: rustup update stable --no-self-update && rustup default stable
     - name: Install wasm32-unknown-unknown target
