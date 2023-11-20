@@ -89,9 +89,9 @@ export async function cliTest (fixtures) {
       ok(source.includes('export const $init'));
     });
 
-    test('Transpile no namespaced exports', async () => {
+    test('Transpile without namespaced exports', async () => {
       const name = 'flavorful';
-      const { stderr, stdout } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--no-namespaced-exports', '--no-wasi-shim', '--name', name, '-o', outDir);
+      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--no-namespaced-exports', '--no-wasi-shim', '--name', name, '-o', outDir);
       strictEqual(stderr, '');
       const source = await readFile(`${outDir}/${name}.js`);
       const finalLine = source.toString().split("\n").at(-1)
@@ -99,6 +99,18 @@ export async function cliTest (fixtures) {
       ok(finalLine.toString().includes("export {"));
       //Check that it does not contain the namespaced export
       ok(!finalLine.toString().includes("test:flavorful/test"));
+    });
+
+    test('Transpile with namespaced exports', async () => {
+      const name = 'flavorful';
+      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--no-wasi-shim', '--name', name, '-o', outDir);
+      strictEqual(stderr, '');
+      const source = await readFile(`${outDir}/${name}.js`);
+      const finalLine = source.toString().split("\n").at(-1)
+      //Check final line is the export statement
+      ok(finalLine.toString().includes("export {"));
+      //Check that it does contain the namespaced export
+      ok(finalLine.toString().includes("test as 'test:flavorful/test'"));
     });
 
     test('Optimize', async () => {

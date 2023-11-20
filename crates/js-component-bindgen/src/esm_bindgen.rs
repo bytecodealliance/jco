@@ -209,7 +209,7 @@ impl EsmBindgen {
     }
 
     fn contains_js_quote(&self, js_string: &String) -> bool {
-        js_string.contains("\n") || js_string.contains("'") || js_string.contains("`")
+        js_string.contains("\"") || js_string.contains("'") || js_string.contains("`")
     }
 
     fn binding_has_used(&self, binding: &Binding) -> bool {
