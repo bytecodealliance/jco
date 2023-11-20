@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { program } from 'commander';
+import { program, Option } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile } from './cmd/transpile.js';
 import { run } from './cmd/run.js';
@@ -45,16 +45,19 @@ program.command('transpile')
   .option('-M, --map <mappings...>', 'specifier=./output custom mappings for the component imports')
   .option('--no-wasi-shim', 'disable automatic rewriting of WASI imports to use @bytecodealliance/preview2-shim')
   .option('--js', 'output JS instead of core WebAssembly')
-  .option('-I, --instantiation', 'output for custom module instantiation')
+  .addOption(new Option('-I, --instantiation [mode]', 'output for custom module instantiation').choices(['async', 'sync']).preset('async'))
   .option('-q, --quiet', 'disable logging')
   .option('--no-namespaced-exports', 'disable namespaced exports for typescript compatibility')
   .option('--', 'for --optimize, custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(transpile));
 
-  program.command('run')
+program.command('run')
   .description('Run a WebAssembly Command component')
   .usage('<command.wasm> <args...>')
+  .helpOption(false)
   .argument('<command>', 'Wasm command binary to run')
+  .option('--jco-debug', 'Enable call tracing debug output and retain output for debugging')
+  .option('--jco-import <module>', 'Custom module to import before the run executes to support custom environment setup')
   .argument('[args...]', 'Any CLI arguments to provide to the command')
   .action(asyncAction(run));
 

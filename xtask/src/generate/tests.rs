@@ -1,6 +1,8 @@
 use std::fs;
 use xshell::{cmd, Shell};
 
+const DEBUG: bool = false;
+
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
 
@@ -36,6 +38,8 @@ pub fn run() -> anyhow::Result<()> {
         fs::write(file_name, content)?;
     }
 
+    test_names.sort();
+
     let content = generate_mod(test_names.as_slice());
     let file_name = "tests/generated/mod.rs";
     fs::write(file_name, content)?;
@@ -45,6 +49,15 @@ pub fn run() -> anyhow::Result<()> {
 
 /// Generate an individual test
 fn generate_test(test_name: &str) -> String {
+    let virtual_env = match test_name {
+        "api_time" => "fakeclocks",
+        "preview1_stdio_not_isatty" => "notty",
+        _ => "base",
+    };
+    let should_error = match test_name {
+        "cli_exit_failure" | "cli_exit_panic" | "preview2_stream_pollable_traps" => true,
+        _ => false,
+    };
     format!(
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
@@ -58,10 +71,17 @@ fn {test_name}() -> anyhow::Result<()> {{
     let file_name = "{test_name}";
     let tempdir = TempDir::new("{{file_name}}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    cmd!(sh, "./src/jco.js run {{wasi_file}}").run()?;
+    cmd!(sh, "./src/jco.js run {} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'")
+        .run(){};
     Ok(())
 }}
-"##
+"##,
+        if DEBUG { "--jco-debug" } else { "" },
+        if !should_error {
+            "?"
+        } else {
+            ".expect_err(\"test should exit with code 1\")"
+        }
     )
 }
 

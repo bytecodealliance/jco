@@ -19,5 +19,5 @@ import type { RequestOptions } from '../interfaces/wasi-http-types.js';
 export { RequestOptions };
 import type { FutureIncomingResponse } from '../interfaces/wasi-http-types.js';
 export { FutureIncomingResponse };
-import type { Error } from '../interfaces/wasi-http-types.js';
-export { Error };
+import type { ErrorCode } from '../interfaces/wasi-http-types.js';
+export { ErrorCode };

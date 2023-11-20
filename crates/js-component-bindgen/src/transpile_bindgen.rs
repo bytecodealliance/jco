@@ -49,7 +49,7 @@ pub struct TranspileOpts {
     pub no_typescript: bool,
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
-    pub instantiation: bool,
+    pub instantiation: Option<InstantiationMode>,
     /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of
     /// component import specifiers to JS import specifiers.
     pub map: Option<HashMap<String, String>>,
@@ -69,6 +69,13 @@ pub struct TranspileOpts {
     /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
     /// These exports can break typescript builds.
     pub no_namespaced_exports: bool,
+}
+
+#[derive(Default, Clone, Debug)]
+pub enum InstantiationMode {
+    #[default]
+    Async,
+    Sync,
 }
 
 struct JsBindgen<'a> {
@@ -143,6 +150,7 @@ pub fn transpile_bindgen(
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
     instantiator.instantiate();
+    instantiator.ensure_resource_tables();
     instantiator.destructors();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
@@ -177,10 +185,10 @@ impl<'a> JsBindgen<'a> {
         for i in 0..self.core_module_cnt {
             let local_name = format!("module{}", i);
             let mut name_idx = core_file_name(name, i as u32);
-            if self.opts.instantiation {
+            if self.opts.instantiation.is_some() {
                 uwriteln!(
                     compilation_promises,
-                    "const {local_name} = compileCore('{name_idx}');"
+                    "const {local_name} = getCoreModule('{name_idx}');"
                 );
             } else if files.get_size(&name_idx).unwrap() < self.opts.base64_cutoff {
                 assert!(removed.insert(i));
@@ -211,23 +219,40 @@ impl<'a> JsBindgen<'a> {
         let js_intrinsics = render_intrinsics(
             &mut self.all_intrinsics,
             self.opts.no_nodejs_compat,
-            self.opts.instantiation,
+            self.opts.instantiation.clone(),
         );
 
-        if self.opts.instantiation {
-            uwrite!(
-                output,
-                "\
-                    {}
-                    export async function instantiate(compileCore, imports, instantiateCore = WebAssembly.instantiate) {{
+        match self.opts.instantiation {
+            Some(InstantiationMode::Async) => {
+                uwrite!(
+                    output,
+                    "\
                         {}
-                ",
-                &js_intrinsics as &str,
-                &compilation_promises as &str,
-            );
+                        export async function instantiate(getCoreModule, imports, instantiateCore = WebAssembly.instantiate) {{
+                            {}
+                    ",
+                    &js_intrinsics as &str,
+                    &compilation_promises as &str,
+                )
+            }
+
+            Some(InstantiationMode::Sync) => {
+                uwrite!(
+                    output,
+                    "\
+                        {}
+                        export function instantiate(getCoreModule, imports, instantiateCore = WebAssembly.Instance) {{
+                            {}
+                    ",
+                    &js_intrinsics as &str,
+                    &compilation_promises as &str,
+                )
+            }
+
+            None => {}
         }
 
-        let imports_object = if self.opts.instantiation {
+        let imports_object = if self.opts.instantiation.is_some() {
             Some("imports")
         } else {
             None
@@ -235,10 +260,10 @@ impl<'a> JsBindgen<'a> {
         self.esm_bindgen
             .render_imports(&mut output, imports_object, &mut self.local_names);
 
-        if self.opts.instantiation {
+        if self.opts.instantiation.is_some() {
             self.esm_bindgen.render_exports(
                 &mut self.src.js,
-                self.opts.instantiation,
+                self.opts.instantiation.is_some(),
                 &mut self.local_names,
                 opts,
             );
@@ -289,7 +314,7 @@ impl<'a> JsBindgen<'a> {
 
             self.esm_bindgen.render_exports(
                 &mut output,
-                self.opts.instantiation,
+                self.opts.instantiation.is_some(),
                 &mut self.local_names,
                 opts,
             );
@@ -467,17 +492,19 @@ impl<'a> Instantiator<'a, '_> {
             assert_eq!(i, *index);
         }
 
-        // To avoid uncaught promise rejection errors, we attach an intermediate
-        // Promise.all with a rejection handler, if there are multiple promises.
-        if self.modules.len() > 1 {
-            self.src.js_init.push_str("Promise.all([");
-            for i in 0..self.modules.len() {
-                if i > 0 {
-                    self.src.js_init.push_str(", ");
+        if let Some(InstantiationMode::Async) = self.gen.opts.instantiation {
+            // To avoid uncaught promise rejection errors, we attach an intermediate
+            // Promise.all with a rejection handler, if there are multiple promises.
+            if self.modules.len() > 1 {
+                self.src.js_init.push_str("Promise.all([");
+                for i in 0..self.modules.len() {
+                    if i > 0 {
+                        self.src.js_init.push_str(", ");
+                    }
+                    self.src.js_init.push_str(&format!("module{}", i));
                 }
-                self.src.js_init.push_str(&format!("module{}", i));
+                uwriteln!(self.src.js_init, "]).catch(() => {{}});");
             }
-            uwriteln!(self.src.js_init, "]).catch(() => {{}});");
         }
 
         for init in self.component.initializers.iter() {
@@ -489,7 +516,7 @@ impl<'a> Instantiator<'a, '_> {
             self.trampoline(i, trampoline);
         }
 
-        if self.gen.opts.instantiation {
+        if self.gen.opts.instantiation.is_some() {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
         }
@@ -497,26 +524,27 @@ impl<'a> Instantiator<'a, '_> {
         self.exports(&self.component.exports);
     }
 
-    fn destructors(&mut self) {
-        for (ty, dtor) in self.resource_dtors.iter() {
-            let dtor_name_str = self.core_def(dtor);
-            let Some(ResourceTable {
-                data: ResourceData::Host { dtor_name, .. },
-                ..
-            }) = self.exports_resource_map.get_mut(ty)
-            else {
-                panic!("Expected exports resource map entry for dtor")
+    fn ensure_resource_tables(&mut self) {
+        let mut ids_to_ensure = BTreeSet::new();
+        for (_, ResourceTable { data, .. }) in self.imports_resource_map.iter() {
+            let ResourceData::Host { id, .. } = &data else {
+                panic!("unexpected guest data")
             };
-            let _ = dtor_name.insert(dtor_name_str);
+            ids_to_ensure.insert(id.clone());
         }
-    }
-
-    fn ensure_resource_table(&mut self, idx: TypeResourceTableIndex) {
-        let rid = idx.as_u32();
-        if !self.resource_tables_initialized[rid as usize] {
-            let resource = self.types[idx].ty;
-            let (is_imported, dtor) =
-                if let Some(resource_idx) = self.component.defined_resource_index(resource) {
+        for (_, ResourceTable { data, .. }) in self.exports_resource_map.iter() {
+            let ResourceData::Host { id, .. } = &data else {
+                panic!("unexpected guest data")
+            };
+            ids_to_ensure.insert(id.clone());
+        }
+        for id in ids_to_ensure {
+            let rid = id.as_u32();
+            if !self.resource_tables_initialized[rid as usize] {
+                let resource = self.types[id].ty;
+                let (is_imported, dtor) = if let Some(resource_idx) =
+                    self.component.defined_resource_index(resource)
+                {
                     let resource_def = self
                         .component
                         .initializers
@@ -533,9 +561,9 @@ impl<'a> Instantiator<'a, '_> {
                             false,
                             format!(
                                 "
-                                if (handleEntry.own) {{
-                                    {}(handleEntry.rep);
-                                }}",
+                                    if (handleEntry.own) {{
+                                        {}(handleEntry.rep);
+                                    }}",
                                 self.core_def(dtor)
                             ),
                         )
@@ -546,27 +574,42 @@ impl<'a> Instantiator<'a, '_> {
                     (true, "".into())
                 };
 
-            uwriteln!(
-                self.src.js,
-                "const handleTable{rid} = new Map();
-                let handleCnt{rid} = 0;",
-            );
-
-            if !is_imported {
                 uwriteln!(
                     self.src.js,
-                    "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
-                        const handleEntry = handleTable{rid}.get(handle);
-                        if (handleEntry) {{
-                            handleTable{rid}.delete(handle);
-                            {}
-                        }}
-                    }});
-                    ",
-                    dtor
+                    "const handleTable{rid} = new Map();
+                    let handleCnt{rid} = 0;",
                 );
+
+                if !is_imported {
+                    uwriteln!(
+                        self.src.js,
+                        "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
+                            const handleEntry = handleTable{rid}.get(handle);
+                            if (handleEntry) {{
+                                handleTable{rid}.delete(handle);
+                                {}
+                            }}
+                        }});
+                        ",
+                        dtor
+                    );
+                }
+                self.resource_tables_initialized[rid as usize] = true;
             }
-            self.resource_tables_initialized[rid as usize] = true;
+        }
+    }
+
+    fn destructors(&mut self) {
+        for (ty, dtor) in self.resource_dtors.iter() {
+            let dtor_name_str = self.core_def(dtor);
+            let Some(ResourceTable {
+                data: ResourceData::Host { dtor_name, .. },
+                ..
+            }) = self.exports_resource_map.get_mut(ty)
+            else {
+                panic!("Expected exports resource map entry for dtor")
+            };
+            let _ = dtor_name.insert(dtor_name_str);
         }
     }
 
@@ -629,7 +672,6 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ResourceNew(resource) => {
-                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
                     self.src.js,
@@ -642,7 +684,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceRep(resource) => {
-                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
                     self.src.js,
@@ -657,7 +698,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceDrop(resource) => {
-                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 let resource = &self.types[*resource];
                 let dtor = if let Some(resource_idx) =
@@ -785,11 +825,24 @@ impl<'a> Instantiator<'a, '_> {
         let iu32 = i.as_u32();
         let instantiate = self.gen.intrinsic(Intrinsic::InstantiateCore);
         uwriteln!(self.src.js, "let exports{iu32};");
-        uwriteln!(
-            self.src.js_init,
-            "({{ exports: exports{iu32} }} = await {instantiate}(await module{}{imports}));",
-            idx.as_u32()
-        );
+
+        match self.gen.opts.instantiation {
+            Some(InstantiationMode::Async) | None => {
+                uwriteln!(
+                    self.src.js_init,
+                    "({{ exports: exports{iu32} }} = await {instantiate}(await module{}{imports}));",
+                    idx.as_u32()
+                )
+            }
+
+            Some(InstantiationMode::Sync) => {
+                uwriteln!(
+                    self.src.js_init,
+                    "({{ exports: exports{iu32} }} = {instantiate}(module{}{imports}));",
+                    idx.as_u32()
+                )
+            }
+        }
     }
 
     fn create_resource_fn_map(
@@ -1089,7 +1142,7 @@ impl<'a> Instantiator<'a, '_> {
         let entry = ResourceTable {
             imported,
             data: ResourceData::Host {
-                id: t2.as_u32(),
+                id: t2,
                 dtor_name: None,
                 local_name,
             },
@@ -1397,8 +1450,7 @@ impl<'a> Instantiator<'a, '_> {
                 module
                     .exports()
                     .iter()
-                    .filter_map(|(name, i)| if *i == idx { Some(name) } else { None })
-                    .next()
+                    .find_map(|(name, i)| if *i == idx { Some(name) } else { None })
                     .unwrap()
             }
             ExportItem::Name(s) => s,

@@ -2,7 +2,7 @@ use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
-use crate::transpile_bindgen::{parse_world_key, TranspileOpts};
+use crate::transpile_bindgen::{parse_world_key, InstantiationMode, TranspileOpts};
 use crate::{uwrite, uwriteln};
 use heck::*;
 use std::collections::btree_map::Entry;
@@ -153,8 +153,13 @@ pub fn ts_bindgen(
                     }
                 };
                 seen_names.insert(export_name.to_string());
-                let local_name =
-                    bindgen.export_interface(resolve, export_name, *id, files, opts.instantiation);
+                let local_name = bindgen.export_interface(
+                    resolve,
+                    export_name,
+                    *id,
+                    files,
+                    opts.instantiation.is_some(),
+                );
                 export_aliases.push((iface_name.to_lower_camel_case(), local_name));
             }
             WorldItem::Type(_) => unimplemented!("type exports"),
@@ -162,7 +167,7 @@ pub fn ts_bindgen(
     }
     for (alias, local_name) in export_aliases {
         if !seen_names.contains(&alias) {
-            if opts.instantiation {
+            if opts.instantiation.is_some() {
                 uwriteln!(
                     bindgen.export_object,
                     "{}: typeof {},",
@@ -180,7 +185,7 @@ pub fn ts_bindgen(
         }
     }
     if !funcs.is_empty() {
-        bindgen.export_funcs(resolve, id, &funcs, files, !opts.instantiation);
+        bindgen.export_funcs(resolve, id, &funcs, files, opts.instantiation.is_none());
     }
 
     let camel = world.name.to_upper_camel_case();
@@ -191,7 +196,7 @@ pub fn ts_bindgen(
     // With the current representation of a "world" this is an import object
     // per-imported-interface where the type of that field is defined by the
     // interface itbindgen.
-    if opts.instantiation {
+    if opts.instantiation.is_some() {
         uwriteln!(bindgen.src, "export interface ImportObject {{");
         bindgen.src.push_str(&bindgen.import_object);
         uwriteln!(bindgen.src, "}}");
@@ -199,7 +204,7 @@ pub fn ts_bindgen(
 
     // Generate a type definition for the export object from instantiating
     // the component.
-    if opts.instantiation {
+    if opts.instantiation.is_some() {
         uwriteln!(bindgen.src, "export interface {camel} {{",);
         bindgen.src.push_str(&bindgen.export_object);
         uwriteln!(bindgen.src, "}}");
@@ -217,36 +222,72 @@ pub fn ts_bindgen(
 
     // Generate the TypeScript definition of the `instantiate` function
     // which is the main workhorse of the generated bindings.
-    if opts.instantiation {
-        uwriteln!(
-            bindgen.src,
-            "
-            /**
-                * Instantiates this component with the provided imports and
-                * returns a map of all the exports of the component.
-                *
-                * This function is intended to be similar to the
-                * `WebAssembly.instantiate` function. The second `imports`
-                * argument is the \"import object\" for wasm, except here it
-                * uses component-model-layer types instead of core wasm
-                * integers/numbers/etc.
-                *
-                * The first argument to this function, `compileCore`, is
-                * used to compile core wasm modules within the component.
-                * Components are composed of core wasm modules and this callback
-                * will be invoked per core wasm module. The caller of this
-                * function is responsible for reading the core wasm module
-                * identified by `path` and returning its compiled
-                * WebAssembly.Module object. This would use `compileStreaming`
-                * on the web, for example.
-                */
-                export function instantiate(
-                    compileCore: (path: string, imports: Record<string, any>) => Promise<WebAssembly.Module>,
-                    imports: ImportObject,
-                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
-                ): Promise<{camel}>;
-            ",
-        );
+    match opts.instantiation {
+        Some(InstantiationMode::Async) => {
+            uwriteln!(
+                bindgen.src,
+                "
+                    /**
+                     * Instantiates this component with the provided imports and
+                     * returns a map of all the exports of the component.
+                     *
+                     * This function is intended to be similar to the
+                     * `WebAssembly.instantiate` function. The second `imports`
+                     * argument is the \"import object\" for wasm, except here it
+                     * uses component-model-layer types instead of core wasm
+                     * integers/numbers/etc.
+                     *
+                     * The first argument to this function, `getCoreModule`, is
+                     * used to compile core wasm modules within the component.
+                     * Components are composed of core wasm modules and this callback
+                     * will be invoked per core wasm module. The caller of this
+                     * function is responsible for reading the core wasm module
+                     * identified by `path` and returning its compiled
+                     * `WebAssembly.Module` object. This would use `compileStreaming`
+                     * on the web, for example.
+                     */
+                    export function instantiate(
+                        getCoreModule: (path: string) => Promise<WebAssembly.Module>,
+                        imports: ImportObject,
+                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
+                    ): Promise<{camel}>;
+                ",
+            )
+        }
+
+        Some(InstantiationMode::Sync) => {
+            uwriteln!(
+                bindgen.src,
+                "
+                    /**
+                     * Instantiates this component with the provided imports and
+                     * returns a map of all the exports of the component.
+                     *
+                     * This function is intended to be similar to the
+                     * `WebAssembly.Instantiate` constructor. The second `imports`
+                     * argument is the \"import object\" for wasm, except here it
+                     * uses component-model-layer types instead of core wasm
+                     * integers/numbers/etc.
+                     *
+                     * The first argument to this function, `getCoreModule`, is
+                     * used to compile core wasm modules within the component.
+                     * Components are composed of core wasm modules and this callback
+                     * will be invoked per core wasm module. The caller of this
+                     * function is responsible for reading the core wasm module
+                     * identified by `path` and returning its compiled
+                     * `WebAssembly.Module` object. This would use the
+                     * `WebAssembly.Module` constructor on the web, for example.
+                     */
+                    export function instantiate(
+                        getCoreModule: (path: string) => WebAssembly.Module,
+                        imports: ImportObject,
+                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
+                    ): {camel};
+                ",
+            )
+        }
+
+        None => {}
     }
 
     files.push(&format!("{name}.d.ts"), bindgen.src.as_bytes());

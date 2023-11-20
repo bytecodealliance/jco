@@ -1,4 +1,5 @@
 use crate::source::Source;
+use crate::transpile_bindgen::InstantiationMode;
 use crate::uwrite;
 use std::collections::BTreeSet;
 use std::fmt::Write;
@@ -9,6 +10,7 @@ pub enum Intrinsic {
     ClampGuest,
     ComponentError,
     DataView,
+    EmptyFunc,
     F32ToI32,
     F64ToI64,
     FetchCompile,
@@ -55,7 +57,7 @@ pub enum Intrinsic {
 pub fn render_intrinsics(
     intrinsics: &mut BTreeSet<Intrinsic>,
     no_nodejs_compat: bool,
-    instantiation: bool,
+    instantiation: Option<InstantiationMode>,
 ) -> Source {
     let mut output = Source::default();
 
@@ -119,6 +121,10 @@ pub fn render_intrinsics(
                 const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
             "),
 
+            Intrinsic::EmptyFunc => output.push_str("
+                const emptyFunc = () => {};
+            "),
+
             Intrinsic::F64ToI64 => output.push_str("
                 const f64ToI64 = f => (i64ToF64F[0] = f, i64ToF64I[0]);
             "),
@@ -165,10 +171,18 @@ pub fn render_intrinsics(
                 const i64ToF64 = i => (i64ToF64I[0] = i, i64ToF64F[0]);
             "),
 
-            Intrinsic::InstantiateCore => if !instantiation {
-                output.push_str("
-                    const instantiateCore = WebAssembly.instantiate;
-                ")
+            Intrinsic::InstantiateCore => match instantiation {
+                Some(InstantiationMode::Async) | None =>  {
+                    output.push_str("
+                        const instantiateCore = WebAssembly.instantiate;
+                    ")
+                }
+
+                Some(InstantiationMode::Sync) =>  {
+                    output.push_str("
+                        const instantiateCore = WebAssembly.Instance;
+                    ")
+                }
             },
 
             Intrinsic::IsLE => output.push_str("
@@ -196,11 +210,11 @@ pub fn render_intrinsics(
             "),
 
             Intrinsic::ToBigInt64 => output.push_str("
-                const toInt64 = val => BigInt.asIntN(64, val);
+                const toInt64 = val => BigInt.asIntN(64, BigInt(val));
             "),
 
             Intrinsic::ToBigUint64 => output.push_str("
-                const toUint64 = val => BigInt.asUintN(64, val);
+                const toUint64 = val => BigInt.asUintN(64, BigInt(val));
             "),
 
             Intrinsic::ToInt16 => output.push_str("
@@ -321,8 +335,7 @@ pub fn render_intrinsics(
                     let ptr = 0;
                     let writtenTotal = 0;
                     while (s.length > 0) {
-                        ptr = realloc(ptr, allocLen, 1, allocLen + s.length);
-                        allocLen += s.length;
+                        ptr = realloc(ptr, allocLen, 1, allocLen += s.length * 2);
                         const { read, written } = utf8Encoder.encodeInto(
                             s,
                             new Uint8Array(memory.buffer, ptr + writtenTotal, allocLen - writtenTotal),
@@ -330,8 +343,6 @@ pub fn render_intrinsics(
                         writtenTotal += written;
                         s = s.slice(read);
                     }
-                    if (allocLen > writtenTotal)
-                        ptr = realloc(ptr, allocLen, 1, writtenTotal);
                     utf8EncodedLen = writtenTotal;
                     return ptr;
                 }
@@ -371,6 +382,8 @@ impl Intrinsic {
             "ComponentError",
             "dataView",
             "DataView",
+            "dv",
+            "emptyFunc",
             "Error",
             "f32ToI32",
             "f64ToI64",
@@ -421,6 +434,7 @@ impl Intrinsic {
             Intrinsic::ClampGuest => "clampGuest",
             Intrinsic::ComponentError => "ComponentError",
             Intrinsic::DataView => "dataView",
+            Intrinsic::EmptyFunc => "emptyFunc",
             Intrinsic::F32ToI32 => "f32ToI32",
             Intrinsic::F64ToI64 => "f64ToI64",
             Intrinsic::FetchCompile => "fetchCompile",

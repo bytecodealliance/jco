@@ -1,11 +1,11 @@
-package local:wasm-tools
+package local:wasm-tools;
 
 interface tools {
   /// Translate the WebAssembly text format to binary
-  parse: func(wat: string) -> result<list<u8>, string>
+  parse: func(wat: string) -> result<list<u8>, string>;
 
   /// Translate the WebAssembly binary format to text
-  print: func(binary: list<u8>) -> result<string, string>
+  print: func(binary: list<u8>) -> result<string, string>;
 
   enum string-encoding {
     utf8,
@@ -14,12 +14,12 @@ interface tools {
   }
 
   /// Create a component from a core wasm binary that implements and embeds a component type
-  component-new: func(binary: list<u8>, adapters: option<list<tuple<string, list<u8>>>>) -> result<list<u8>, string>
+  component-new: func(binary: list<u8>, adapters: option<list<tuple<string, list<u8>>>>) -> result<list<u8>, string>;
 
   /// Extract a *.wit interface from a component, optionally providing a document name to extract
-  component-wit: func(binary: list<u8>) -> result<string, string>
+  component-wit: func(binary: list<u8>) -> result<string, string>;
 
-  type producers-fields = list<tuple<string, list<tuple<string, string>>>>
+  type producers-fields = list<tuple<string, list<tuple<string, string>>>>;
 
   /// Embed a WIT type into a component.
   /// Only a singular WIT document without use resolutions is supported for this API.
@@ -35,7 +35,7 @@ interface tools {
     metadata: option<producers-fields>
   }
 
-  component-embed: func(embed-opts: embed-opts) -> result<list<u8>, string>
+  component-embed: func(embed-opts: embed-opts) -> result<list<u8>, string>;
 
   variant module-meta-type {
     module,
@@ -51,12 +51,12 @@ interface tools {
   }
 
   /// Extract the metadata for a component
-  metadata-show: func(binary: list<u8>) -> result<list<module-metadata>, string>
+  metadata-show: func(binary: list<u8>) -> result<list<module-metadata>, string>;
 
   /// Append producer metadata to a component
-  metadata-add: func(binary: list<u8>, metadata: producers-fields) -> result<list<u8>, string>
+  metadata-add: func(binary: list<u8>, metadata: producers-fields) -> result<list<u8>, string>;
 }
 
 world wasm-tools {
-  export tools
+  export tools;
 }

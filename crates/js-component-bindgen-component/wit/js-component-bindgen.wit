@@ -1,8 +1,13 @@
-package local:js-component-bindgen
+package local:js-component-bindgen;
 
 world js-component-bindgen {
-  type files = list<tuple<string, list<u8>>>
-  type maps = list<tuple<string, string>>
+  type files = list<tuple<string, list<u8>>>;
+  type maps = list<tuple<string, string>>;
+
+  variant instantiation-mode {
+    async,
+    sync,
+  }
 
   record generate-options {
     /// Name to use for the generated component
@@ -14,7 +19,7 @@ world js-component-bindgen {
 
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
-    instantiation: option<bool>,
+    instantiation: option<instantiation-mode>,
 
     /// Mappings of component import specifiers to JS import specifiers.
     map: option<maps>,
@@ -60,7 +65,7 @@ world js-component-bindgen {
     /// world to generate typing for
     %world: option<string>,
     tla-compat: option<bool>,
-    instantiation: option<bool>,
+    instantiation: option<instantiation-mode>,
     map: option<maps>,
   }
 
@@ -78,7 +83,7 @@ world js-component-bindgen {
   /// Generate the file structure for the transpiled of a component
   /// into a JS embedding, returns the file list and imports and exports of the
   /// output JS generation component
-  export generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>
+  export generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>;
 
-  export generate-types: func(name: string, options: type-generation-options) -> result<files, string>
+  export generate-types: func(name: string, options: type-generation-options) -> result<files, string>;
 }

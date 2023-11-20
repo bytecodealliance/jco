@@ -11,10 +11,6 @@
       "node": "./lib/nodejs/index.js",
       "default": "./lib/browser/index.js"
     },
-    "./io": {
-      "types": "./types/io.d.ts",
-      "default": "./lib/common/io.js"
-    },
     "./*": {
       "types": "./types/*.d.ts",
       "node": "./lib/nodejs/*.js",

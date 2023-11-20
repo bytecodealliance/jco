@@ -40,6 +40,15 @@ wit_bindgen::generate!({
     }
 });
 
+impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
+    fn from(value: InstantiationMode) -> Self {
+        match value {
+            InstantiationMode::Async => js_component_bindgen::InstantiationMode::Async,
+            InstantiationMode::Sync => js_component_bindgen::InstantiationMode::Sync,
+        }
+    }
+}
+
 struct JsComponentBindgenComponent;
 
 impl Guest for JsComponentBindgenComponent {
@@ -48,7 +57,7 @@ impl Guest for JsComponentBindgenComponent {
         let opts = js_component_bindgen::TranspileOpts {
             name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),
-            instantiation: options.instantiation.unwrap_or(false),
+            instantiation: options.instantiation.map(Into::into),
             map: options.map.map(|map| map.into_iter().collect()),
             no_nodejs_compat: options.no_nodejs_compat.unwrap_or(false),
             base64_cutoff: options.base64_cutoff.unwrap_or(5000) as usize,
@@ -117,7 +126,7 @@ impl Guest for JsComponentBindgenComponent {
             name: "component".to_string(),
             no_typescript: false,
             no_nodejs_compat: false,
-            instantiation: opts.instantiation.unwrap_or(false),
+            instantiation: opts.instantiation.map(Into::into),
             map: opts.map.map(|map| map.into_iter().collect()),
             tla_compat: opts.tla_compat.unwrap_or(false),
             valid_lifting_optimization: false,

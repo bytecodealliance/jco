@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { readdirSync } from 'node:fs';
 import { exec, jcoPath } from './helpers.js';
 import { strictEqual } from 'node:assert';
 import { componentNew, componentEmbed, transpile } from '@bytecodealliance/jco';
@@ -26,19 +27,26 @@ export async function codegenTest (fixtures) {
   suite(`Transpiler codegen`, () => {
     for (const fixture of fixtures) {
       const name = fixture.replace(/(\.component)?\.(wasm|wat)$/, '');
-      test(`${fixture} transpile`, async () => {
-        const flags = await readFlags(`test/runtime/${name}.ts`);
-        var { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${fixture}`, '--name', name, ...flags, '-o', `test/output/${name}`);
-        strictEqual(stderr, '');
-      });
 
-      test(`${fixture} lint`, async () => {
-        const flags = await readFlags(`test/runtime/${name}.ts`);
-        if (flags.includes('--js'))
-          return;
-        var { stderr } = await exec(eslintPath, `test/output/${name}/${name}.js`, '-c', 'test/eslintrc.cjs');
-        strictEqual(stderr, '');
-      });
+      for (const testFile of (readdirSync('test/runtime/')).filter(testFile => testFile.startsWith(`${name}.`))) {
+        const testName= testFile.replace(/\.ts$/, '');
+
+        test(`${testName} transpile`, async () => {
+          const flags = await readFlags(`test/runtime/${testFile}`);
+          var { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${fixture}`, '--name', testName, ...flags, '-o', `test/output/${testName}`);
+          strictEqual(stderr, '');
+        });
+
+        test(`${testName} lint`, async () => {
+          const flags = await readFlags(`test/runtime/${testFile}`);
+
+          if (flags.includes('--js'))
+            return;
+
+          var { stderr } = await exec(eslintPath, `test/output/${testName}/${testName}.js`, '-c', 'test/eslintrc.cjs');
+          strictEqual(stderr, '');
+        });
+      }
     }
   });
 

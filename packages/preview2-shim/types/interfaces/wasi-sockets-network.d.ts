@@ -1,4 +1,5 @@
 export namespace WasiSocketsNetwork {
+  export { Network };
 }
 /**
  * Error codes.
@@ -135,4 +136,7 @@ export interface IpSocketAddressIpv4 {
 export interface IpSocketAddressIpv6 {
   tag: 'ipv6',
   val: Ipv6SocketAddress,
+}
+
+export class Network {
 }

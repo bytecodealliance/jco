@@ -1,34 +1,21 @@
-import { hrtime } from "node:process";
-
-let _hrStart = hrtime.bigint();
+import { ioCall, createPoll, resolvedPoll } from "../io/worker-io.js";
+import * as calls from "../io/calls.js";
 
 export const monotonicClock = {
-  resolution () {
+  resolution() {
     return 1n;
   },
-
-  now () {
-    return hrtime.bigint() - _hrStart;
+  now() {
+    return ioCall(calls.CLOCKS_NOW);
   },
-
-  subscribe (_when, _absolute) {
-    console.log(`[monotonic-clock] Subscribe`);
-  }
-};
-
-export const timezone = {
-  display (timezone, when) {
-    console.log(`[timezone] DISPLAY ${timezone} ${when}`);
+  subscribeInstant(instant) {
+    return createPoll(calls.CLOCKS_INSTANT_SUBSCRIBE, null, instant);
   },
-
-  utcOffset (timezone, when) {
-    console.log(`[timezone] UTC OFFSET ${timezone} ${when}`);
-    return 0;
+  subscribeDuration(duration) {
+    duration = BigInt(duration);
+    if (duration === 0n) return resolvedPoll();
+    return createPoll(calls.CLOCKS_DURATION_SUBSCRIBE, null, duration);
   },
-
-  dropTimezone (timezone) {
-    console.log(`[timezone] DROP ${timezone}`);
-  }
 };
 
 export const wallClock = {
@@ -37,8 +24,7 @@ export const wallClock = {
     const nanoseconds = (Date.now() % 1e3) * 1e6;
     return { seconds, nanoseconds };
   },
-
   resolution() {
-    console.log(`[wall-clock] Wall clock resolution`);
-  }
+    return { seconds: 0n, nanoseconds: 1e6 };
+  },
 };

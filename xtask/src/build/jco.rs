@@ -58,7 +58,7 @@ fn transpile(component_path: &str, name: String) -> Result<()> {
     let opts = js_component_bindgen::TranspileOpts {
         name,
         no_typescript: false,
-        instantiation: false,
+        instantiation: None,
         map: Some(import_map),
         no_nodejs_compat: false,
         base64_cutoff: 5000_usize,

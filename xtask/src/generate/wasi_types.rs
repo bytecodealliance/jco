@@ -29,7 +29,7 @@ pub(crate) fn run() -> Result<()> {
             name: "component".to_string(),
             no_typescript: false,
             no_nodejs_compat: false,
-            instantiation: false,
+            instantiation: None,
             map: None,
             tla_compat: false,
             valid_lifting_optimization: false,

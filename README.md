@@ -2,7 +2,7 @@
   <h1><code>jco</code></h1>
 
   <p>
-    <strong>JavaScript component toolchain for working with <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
+    <strong>JavaScript toolchain for working with <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
   </p>
 
   <strong>A <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project</strong>
@@ -14,18 +14,18 @@
 
 ## Overview
 
-`jco` is a fully native JS tool for working with the emerging [WebAssembly Components](https://github.com/WebAssembly/component-model) specification in JavaScript.
+`jco` is a fully native JS tool for working with [WebAssembly Components](https://github.com/WebAssembly/component-model) in JavaScript.
 
 Features include:
 
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-* Optimization helpers for Components via Binaryen.
-* Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments.
-* "Componentize" for WebAssembly Components from JavaScript sources and a WIT world
+* WASI Preview2 support in Node.js ([undergoing stabilization](https://github.com/bytecodealliance/jco/milestone/1)) & browsers (experimental).
+* Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments, as well as optimization helper for Components via Binaryen.
+* "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
 
 For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
-> **Note**: This is an experimental project, no guarantees are provided for stability or support and breaking changes may be made in future.
+> **Note**: This is an experimental project, no guarantees are provided for stability, security or support and breaking changes may be made without notice.
 
 ## Installation
 
@@ -33,7 +33,7 @@ For creating components in other languages, see the [Cargo Component](https://gi
 npm install @bytecodealliance/jco
 ```
 
-jco can be used as either a library or as a CLI via the `jco` CLI command.
+jco can be used as either a library or a CLI via the `jco` CLI command.
 
 ## Example
 
@@ -101,13 +101,26 @@ Options include:
 * `--no-wasi-shim`: Disable the WASI shim mapping to `@bytecodealliance/preview2-shim`.
 * `--map`: Provide custom mappings for world imports. Supports both wildcard mappings (`*` similarly as in the package.json "exports" field) as well as `#` mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like `--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*` to map `import as * filesystem from 'wasi:filesystem/types'` to `import { types } from '@bytecodealliance/preview2-shim/filesystem`.
 * `--no-nodejs-compat`: Disables Node.js compat in the output to load core Wasm with FS methods.
-* `--instantiation`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports.
+* `--instantiation [mode]`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports. The `instantiate` function can be async (with `--instantiation` or `--instantiation async`), or sync (with `--instantiation sync`).
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
+* `--tracing`: Emit tracing calls for all function entry and exits.
 * `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
 
 #### Bindgen Crate
 
 To directly call into the transpilation in Rust, the bindgen used in jco is also available on crates.io as [js-component-bindgen](https://crates.io/crates/js-component-bindgen).
+
+### Run
+
+For Wasm components that implement the WASI Command world, a `jco run` utility is provided to run these applications in Node.js:
+
+```
+jco run cowasy.component.wasm hello
+```
+
+Using the preview2-shim WASI implementation, full access to the underlying system primitives is provided, including filesystem and environment variable permissions.
+
+> [preview2-shim](packages/preview2-shim) is currently being stabilized in Node.js, tracking in https://github.com/bytecodealliance/jco/milestone/1.
 
 ### Componentize
 
@@ -123,19 +136,7 @@ Currently requires an explicit install of the componentize-js engine via `npm in
 
 See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
 
-> Additional engines may be supported in future via an `--engine` field or otherwise.
-
-### Run
-
-For Wasm components that implement the WASI Command world, a `jco run` utility is provided to run these applications in Node.js:
-
-```
-jco run cowasy.component.wasm hello
-```
-
-Using the preview2-shim WASI implementation, full access to the underlying system primitives is provided, including filesystem and environment variable permissions.
-
-> Since [preview2-shim](packages/preview2-shim) is an experimental work-in-progress implementation, there will likely be bugs.
+> Additional engines might be supported in future via an `--engine` field or otherwise.
 
 ## API
 

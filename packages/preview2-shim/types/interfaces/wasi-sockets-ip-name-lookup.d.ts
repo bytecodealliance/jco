@@ -2,28 +2,18 @@ export namespace WasiSocketsIpNameLookup {
   /**
    * Resolve an internet host name to a list of IP addresses.
    * 
+   * Unicode domain names are automatically converted to ASCII using IDNA encoding.
+   * If the input is an IP address string, the address is parsed and returned
+   * as-is without making any external requests.
+   * 
    * See the wasi-socket proposal README.md for a comparison with getaddrinfo.
    * 
-   * # Parameters
-   * - `name`: The name to look up. IP addresses are not allowed. Unicode domain names are automatically converted
-   * to ASCII using IDNA encoding.
-   * - `address-family`: If provided, limit the results to addresses of this specific address family.
-   * - `include-unavailable`: When set to true, this function will also return addresses of which the runtime
-   * thinks (or knows) can't be connected to at the moment. For example, this will return IPv6 addresses on
-   * systems without an active IPv6 interface. Notes:
-   * - Even when no public IPv6 interfaces are present or active, names like "localhost" can still resolve to an IPv6 address.
-   * - Whatever is "available" or "unavailable" is volatile and can change everytime a network cable is unplugged.
-   * 
-   * This function never blocks. It either immediately fails or immediately returns successfully with a `resolve-address-stream`
-   * that can be used to (asynchronously) fetch the results.
-   * 
-   * At the moment, the stream never completes successfully with 0 items. Ie. the first call
-   * to `resolve-next-address` never returns `ok(none)`. This may change in the future.
+   * This function never blocks. It either immediately fails or immediately
+   * returns successfully with a `resolve-address-stream` that can be used
+   * to (asynchronously) fetch the results.
    * 
    * # Typical errors
-   * - `invalid-argument`:     `name` is a syntactically invalid domain name.
-   * - `invalid-argument`:     `name` is an IP address.
-   * - `not-supported`:        The specified `address-family` is not supported. (EAI_FAMILY)
+   * - `invalid-argument`: `name` is a syntactically invalid domain name or IP address.
    * 
    * # References:
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
@@ -31,7 +21,7 @@ export namespace WasiSocketsIpNameLookup {
    * - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
    * - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
    */
-  export function resolveAddresses(network: Network, name: string, addressFamily: IpAddressFamily | undefined, includeUnavailable: boolean): ResolveAddressStream;
+  export function resolveAddresses(network: Network, name: string): ResolveAddressStream;
   /**
    * Returns the next address from the resolver.
    * 
@@ -63,8 +53,6 @@ import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
 export { ErrorCode };
 import type { IpAddress } from '../interfaces/wasi-sockets-network.js';
 export { IpAddress };
-import type { IpAddressFamily } from '../interfaces/wasi-sockets-network.js';
-export { IpAddressFamily };
 
 export class ResolveAddressStream {
   resolveNextAddress(): IpAddress | undefined;
