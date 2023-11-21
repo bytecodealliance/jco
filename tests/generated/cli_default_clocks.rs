@@ -11,7 +11,7 @@ fn cli_default_clocks() -> anyhow::Result<()> {
     let file_name = "cli_default_clocks";
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    fs::remove_dir_all("./tests/rundir/cli_default_clocks")?;
+    let _ = fs::remove_dir_all("./tests/rundir/cli_default_clocks");
     cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/cli_default_clocks --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }

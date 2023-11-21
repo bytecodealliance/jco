@@ -123,8 +123,8 @@ class Descriptor {
     }
     const mode = stats.mode;
     return {
-      read: ((mode & constants.O_RDWR) | (mode & constants.O_RDONLY)) > 0,
-      write: ((mode & constants.O_RDWR) | (mode & constants.O_WRONLY)) > 0,
+      read: ((mode & constants.S_IRUSR) | (mode & constants.S_IRGRP) | (mode & constants.S_IROTH)) > 0,
+      write: ((mode & constants.S_IWUSR) | (mode & constants.S_IWGRP) | (mode & constants.S_IWOTH)) > 0,
       // TODO:
       fileIntegritySync: false,
       dataIntegritySync: false,
@@ -269,7 +269,7 @@ class Descriptor {
   }
 
   setTimesAt() {
-    const fullPath = this.#getFullPath(path, false);
+    // const fullPath = this.#getFullPath(path, false);
   }
 
   linkAt() {

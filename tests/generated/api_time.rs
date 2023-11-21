@@ -11,7 +11,7 @@ fn api_time() -> anyhow::Result<()> {
     let file_name = "api_time";
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    fs::remove_dir_all("./tests/rundir/api_time")?;
+    let _ = fs::remove_dir_all("./tests/rundir/api_time");
     cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/api_time --jco-import ./tests/virtualenvs/fakeclocks.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }

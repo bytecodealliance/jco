@@ -11,7 +11,7 @@ fn preview2_random() -> anyhow::Result<()> {
     let file_name = "preview2_random";
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    fs::remove_dir_all("./tests/rundir/preview2_random")?;
+    let _ = fs::remove_dir_all("./tests/rundir/preview2_random");
     cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/preview2_random --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }

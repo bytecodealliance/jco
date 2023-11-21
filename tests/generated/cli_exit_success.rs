@@ -11,7 +11,7 @@ fn cli_exit_success() -> anyhow::Result<()> {
     let file_name = "cli_exit_success";
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    fs::remove_dir_all("./tests/rundir/cli_exit_success")?;
+    let _ = fs::remove_dir_all("./tests/rundir/cli_exit_success");
     cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/cli_exit_success --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }
