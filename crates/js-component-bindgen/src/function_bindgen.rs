@@ -1038,7 +1038,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     let to_result_string = self.intrinsic(Intrinsic::ToResultString);
                     uwriteln!(
                         self.src,
-                        "console.trace(`{prefix} return {}`);",
+                        "console.error(`{prefix} return {}`);",
                         if sig_results_length > 0 || !results.is_empty() {
                             format!("result=${{{to_result_string}(ret)}}")
                         } else {
@@ -1074,7 +1074,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     let to_result_string = self.intrinsic(Intrinsic::ToResultString);
                     uwriteln!(
                         self.src,
-                        "console.trace(`{prefix} return {}`);",
+                        "console.error(`{prefix} return {}`);",
                         if results_length > 0 || !results.is_empty() {
                             format!("result=${{{to_result_string}(ret)}}")
                         } else {

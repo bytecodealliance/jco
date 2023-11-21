@@ -10,7 +10,6 @@ fn preview2_tcp_sample_application() -> anyhow::Result<()> {
     let file_name = "preview2_tcp_sample_application";
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    cmd!(sh, "./src/jco.js run  --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'")
-        .run()?;
+    cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/preview2_tcp_sample_application --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }

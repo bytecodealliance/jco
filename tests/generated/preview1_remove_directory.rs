@@ -5,11 +5,11 @@ use tempdir::TempDir;
 use xshell::{cmd, Shell};
 
 #[test]
-fn preview2_tcp_states() -> anyhow::Result<()> {
+fn preview1_remove_directory() -> anyhow::Result<()> {
     let sh = Shell::new()?;
-    let file_name = "preview2_tcp_states";
+    let file_name = "preview1_remove_directory";
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/preview2_tcp_states --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
+    cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/preview1_remove_directory --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }

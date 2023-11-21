@@ -1269,7 +1269,7 @@ impl<'a> Instantiator<'a, '_> {
                 .collect::<Vec<String>>();
             uwriteln!(
                 self.src.js,
-                "console.trace(`{tracing_prefix} call {}`);",
+                "console.error(`{tracing_prefix} call {}`);",
                 event_fields.join(", ")
             );
         }

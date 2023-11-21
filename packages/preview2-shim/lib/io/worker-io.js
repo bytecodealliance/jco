@@ -48,7 +48,7 @@ if (DEBUG) {
       ret = e;
       throw ret;
     } finally {
-      console.trace(
+      process._rawDebug(
         (num & CALL_MASK) >> CALL_SHIFT,
         num & CALL_TYPE_MASK,
         id,

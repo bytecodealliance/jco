@@ -1,7 +1,7 @@
 use std::fs;
 use xshell::{cmd, Shell};
 
-const DEBUG: bool = false;
+const TRACE: bool = false;
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
@@ -52,31 +52,41 @@ fn generate_test(test_name: &str) -> String {
     let virtual_env = match test_name {
         "api_time" => "fakeclocks",
         "preview1_stdio_not_isatty" => "notty",
+        "cli_file_append" => "bar-jabberwock",
+        "preview1_close_preopen" | "preview1_dangling_fd" | "preview1_dangling_symlink" => {
+            "scratch"
+        }
         _ => "base",
     };
     let should_error = match test_name {
         "cli_exit_failure" | "cli_exit_panic" | "preview2_stream_pollable_traps" => true,
         _ => false,
     };
+    let skip = match test_name {
+        // this test currently stalls
+        "api_read_only" => true,
+        _ => false,
+    };
+    let skip_comment = if skip { "// " } else { "" };
     format!(
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
-use tempdir::TempDir;
-use xshell::{{cmd, Shell}};
+{skip_comment}use tempdir::TempDir;
+{skip_comment}use xshell::{{cmd, Shell}};
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
-    let sh = Shell::new()?;
-    let file_name = "{test_name}";
-    let tempdir = TempDir::new("{{file_name}}")?;
-    let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    cmd!(sh, "./src/jco.js run {} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'")
-        .run(){};
-    Ok(())
+    {skip_comment}let sh = Shell::new()?;
+    {skip_comment}let file_name = "{test_name}";
+    {skip_comment}let tempdir = TempDir::new("{{file_name}}")?;
+    {skip_comment}let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
+    {}cmd!(sh, "./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
+    {skip_comment}Ok(())
 }}
 "##,
-        if DEBUG { "--jco-debug" } else { "" },
+        if skip { "panic!(\"skipped\"); // " } else { "" },
+        if TRACE { "--jco-trace" } else { "" },
         if !should_error {
             "?"
         } else {
