@@ -10,7 +10,6 @@ fn cli_exit_panic() -> anyhow::Result<()> {
     let file_name = "cli_exit_panic";
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    cmd!(sh, "./src/jco.js run  --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'")
-        .run().expect_err("test should exit with code 1");
+    cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/cli_exit_panic --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run().expect_err("test should exit with code 1");
     Ok(())
 }

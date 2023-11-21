@@ -74,8 +74,8 @@ export async function cliTest (fixtures) {
       strictEqual(stderr, '');
       const source = await readFile(`${outDir}/${name}.js`, 'utf8');
       ok(source.includes('function toResultString('));
-      ok(source.includes('console.trace(`[module="test:flavorful/test", function="f-list-in-record1"] call a'));
-      ok(source.includes('console.trace(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);'));
+      ok(source.includes('console.error(`[module="test:flavorful/test", function="f-list-in-record1"] call a'));
+      ok(source.includes('console.error(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);'));
     });
 
     test('Transpile to JS', async () => {

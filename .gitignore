@@ -8,3 +8,4 @@ package-lock.json
 /docs/book
 /src/**/*.d.ts
 /src/**/*.d.ts.map
+/tests/rundir

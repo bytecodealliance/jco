@@ -1,6 +1,6 @@
 import { runAsWorker } from "../synckit/index.js";
 import { FILE, STDOUT, STDERR, STDIN } from "./stream-types.js";
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { Readable } from "node:stream";
 import { hrtime } from "node:process";
 import {
@@ -64,7 +64,6 @@ unfinishedStreams.set(++streamCnt, {
 });
 
 /**
- *
  * @param {number} streamId
  * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
  */
@@ -79,7 +78,6 @@ function streamError(streamId, stream, err) {
 }
 
 /**
- *
  * @param {number} streamId
  * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, flushPromise: Promise<void> | null }}
  */
@@ -153,9 +151,21 @@ function handle(call, id, payload) {
       stream.on("end", () => void stream.emit("readable"));
       return streamCnt;
     }
-    case OUTPUT_STREAM_CREATE | FILE:
-      throw new Error("todo: file write");
-
+    case OUTPUT_STREAM_CREATE | FILE: {
+      const { fd, offset } = payload;
+      const stream = createWriteStream(null, {
+        fd,
+        autoClose: false,
+        emitClose: false,
+        highWaterMark: 64 * 1024,
+        start: Number(offset)
+      });
+      unfinishedStreams.set(++streamCnt, {
+        flushPromise: null,
+        stream,
+      });
+      return streamCnt;
+    }
     // Generic call implementations (streams + polls)
     default:
       switch (call & CALL_MASK) {
@@ -246,13 +256,12 @@ function handle(call, id, payload) {
               new Error("Cannot write more than permitted writable length")
             );
           }
-
           return new Promise((resolve, reject) => {
-            stream.write(payload, (err) =>
-              err
-                ? reject(streamError(id, stream, err))
-                : resolve(BigInt(payload.byteLength))
-            );
+            stream.write(payload, err => {
+              if (err)
+               return void reject(streamError(id, stream, err));
+              resolve(BigInt(payload.byteLength));
+            });
           });
         }
         case OUTPUT_STREAM_FLUSH: {

@@ -4,7 +4,7 @@ import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { fork } from 'node:child_process';
 import process from 'node:process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import c from 'chalk-template';
 
 export async function run (componentPath, args, opts) {
@@ -14,7 +14,10 @@ export async function run (componentPath, args, opts) {
   const jcoImport = opts.jcoImport ? resolve(opts.jcoImport) : null;
 
   const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
-  const outDir = await getTmpDir();
+  const outDir = opts.jcoDir || await getTmpDir();
+  if (opts.jcoDir) {
+    await mkdir(outDir, { recursive: true });
+  }
   try {
     try {
       await transpile(componentPath, {
@@ -23,7 +26,7 @@ export async function run (componentPath, args, opts) {
         noTypescript: true,
         wasiShim: true,
         outDir,
-        tracing: opts.jcoDebug
+        tracing: opts.jcoTrace
       });
     }
     catch (e) {
@@ -49,7 +52,13 @@ export async function run (componentPath, args, opts) {
 
     const modulesDir = resolve(outDir, 'node_modules', '@bytecodealliance');
     await mkdir(modulesDir, { recursive: true });
-    await symlink(preview2ShimPath, resolve(modulesDir, 'preview2-shim'), 'dir');
+
+    try {
+      await symlink(preview2ShimPath, resolve(modulesDir, 'preview2-shim'), 'dir');
+    } catch (e) {
+      if (e.code !== 'EEXIST')
+        throw e;
+    }
 
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
@@ -89,7 +98,7 @@ export async function run (componentPath, args, opts) {
   }
   finally {
     try {
-      if (!opts.jcoDebug)
+      if (!opts.jcoDir)
         await rm(outDir, { recursive: true });
     } catch {}
   }

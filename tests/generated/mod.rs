@@ -69,6 +69,7 @@ mod preview1_poll_oneoff_files;
 mod preview1_poll_oneoff_stdio;
 mod preview1_readlink;
 mod preview1_regular_file_isatty;
+mod preview1_remove_directory;
 mod preview1_remove_directory_trailing_slashes;
 mod preview1_remove_nonempty_directory;
 mod preview1_renumber;
