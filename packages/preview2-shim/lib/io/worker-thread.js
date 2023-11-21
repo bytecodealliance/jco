@@ -1,3 +1,4 @@
+import { resolve } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { hrtime } from "node:process";
 import { Readable } from "node:stream";
@@ -35,8 +36,8 @@ import {
   POLL_POLLABLE_READY,
   POLL_POLL_LIST,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
-  SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
 } from "./calls.js";
 import { FILE, STDERR, STDIN, STDOUT } from "./stream-types.js";
 
