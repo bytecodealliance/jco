@@ -34,8 +34,9 @@ import {
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
   POLL_POLL_LIST,
-  SOCKET_CREATE_RESOLVE_ADDRESS_STREAM,
-  SOCKET_RESOLVE_NEXT_ADDRESS,
+  SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
 } from "./calls.js";
 import { FILE, STDERR, STDIN, STDOUT } from "./stream-types.js";
 
@@ -123,12 +124,21 @@ function handle(call, id, payload) {
     }
 
     // Sockets
-    case SOCKET_CREATE_RESOLVE_ADDRESS_STREAM: {
-      return createDnsResolvePoll(payload.hostname);
-    }
-    case SOCKET_RESOLVE_NEXT_ADDRESS: {
-      const future = unfinishedPolls.get(id);
-      return Promise.resolve(future);
+    case SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST:
+      return createFuture(resolve(payload.hostname));
+    case SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST:
+      return void unfinishedFutures.delete(id);
+    case SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST: {
+      const future = unfinishedFutures.get(id);
+      if (!future) {
+        // future not ready yet
+        if (unfinishedPolls.get(id)) {
+          throw 'would-block';
+        }
+        throw new Error("future already got and dropped");
+      }
+      unfinishedFutures.delete(id);
+      return future;
     }
 
     // Stdio
@@ -496,12 +506,6 @@ async function createHttpRequest(method, url, headers, body) {
     headers: Array.from(res.headers),
     bodyStreamId: streamCnt,
   };
-}
-
-async function createDnsResolvePoll(hostname) {
-  let future = resolve(hostname);
-  unfinishedPolls.set(++pollCnt, future);
-  return pollCnt;
 }
 
 runAsWorker(handle);
