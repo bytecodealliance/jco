@@ -1,6 +1,5 @@
 import {
   ioCall,
-  streams,
   inputStreamCreate,
   outputStreamCreate,
 } from "../io/worker-io.js";
