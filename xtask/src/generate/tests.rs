@@ -53,11 +53,15 @@ fn generate_test(test_name: &str) -> String {
         "api_time" => "fakeclocks",
         "preview1_stdio_not_isatty" => "notty",
         "cli_file_append" => "bar-jabberwock",
-        "preview1_close_preopen" | "preview1_dangling_fd" | "preview1_dangling_symlink" => {
-            "scratch"
+        _ => {
+            if test_name.starts_with("preview1") {
+                "scratch"
+            } else {
+                "base"
+            }
         }
-        _ => "base",
     };
+
     let should_error = match test_name {
         "cli_exit_failure" | "cli_exit_panic" | "preview2_stream_pollable_traps" => true,
         _ => false,
@@ -74,6 +78,7 @@ fn generate_test(test_name: &str) -> String {
 
 {skip_comment}use tempdir::TempDir;
 {skip_comment}use xshell::{{cmd, Shell}};
+use std::fs;
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
@@ -81,6 +86,7 @@ fn {test_name}() -> anyhow::Result<()> {{
     {skip_comment}let file_name = "{test_name}";
     {skip_comment}let tempdir = TempDir::new("{{file_name}}")?;
     {skip_comment}let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
+    fs::remove_dir_all("./tests/rundir/{test_name}")?;
     {skip_comment}cmd!(sh, "./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
     {}Ok(())
 }}

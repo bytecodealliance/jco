@@ -12,6 +12,8 @@ import {
   fdatasyncSync,
   fstatSync,
   fsyncSync,
+  ftruncateSync,
+  futimesSync,
   lstatSync,
   mkdirSync,
   opendirSync,
@@ -139,17 +141,45 @@ class Descriptor {
 
   setSize(size) {
     if (this.#hostPreopen) throw "is-directory";
-    console.log(`[filesystem] SET SIZE`, this._id, size);
+    try {
+      ftruncateSync(this.#fd, Number(size));
+    } catch (e) {
+      throw convertFsError(e);
+    }
   }
 
   setTimes(dataAccessTimestamp, dataModificationTimestamp) {
     if (this.#hostPreopen) throw "invalid";
-    console.log(
-      `[filesystem] SET TIMES`,
-      this._id,
+    let stats;
+    if (
+      dataAccessTimestamp.tag === "no-change" ||
+      dataModificationTimestamp.tag === "no-change"
+    )
+      stats = this.stat();
+    const atime = this.#getNewTimestamp(
       dataAccessTimestamp,
-      dataModificationTimestamp
+      dataAccessTimestamp.tag === "no-change" && stats.dataAccessTimestamp
     );
+    const mtime = this.#getNewTimestamp(
+      dataModificationTimestamp,
+      dataModificationTimestamp.tag === "no-change" && stats.dataModificationTimestamp
+    );
+    try {
+      futimesSync(this.#fd, atime, mtime);
+    } catch (e) {
+      throw convertFsError(e);
+    }
+  }
+
+  #getNewTimestamp(newTimestamp, maybeNow) {
+    switch (newTimestamp.tag) {
+      case "no-change":
+        return timestampToMs(maybeNow);
+      case "now":
+        return Math.floor(Date.now() / 1e3);
+      case "timestamp":
+        return timestampToMs(newTimestamp.val);
+    }
   }
 
   read(length, offset) {
@@ -239,7 +269,7 @@ class Descriptor {
   }
 
   setTimesAt() {
-    console.log(`[filesystem] SET TIMES AT`, this._id);
+    const fullPath = this.#getFullPath(path, false);
   }
 
   linkAt() {
@@ -365,7 +395,7 @@ class Descriptor {
         (descriptor.#hostPreopen.endsWith("/") ? "" : "/") +
         subpath
       );
-    return descriptor.#fullPath + (subpath.length > 0 ? "/" : '') + subpath;
+    return descriptor.#fullPath + (subpath.length > 0 ? "/" : "") + subpath;
   }
 
   [symbolDispose]() {
@@ -515,4 +545,13 @@ function convertFsError(e) {
     default:
       throw e;
   }
+}
+
+function timestampToMs(timestamp) {
+  let zeros = '';
+  while (timestamp.nanoseconds < 10 ** (8 - zeros.length)) {
+    zeros += '0';
+  }
+  const out = `${Number(timestamp.seconds) * 1000}.${zeros}${timestamp.nanoseconds}`;
+  return out;
 }
