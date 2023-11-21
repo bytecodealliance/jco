@@ -2,13 +2,17 @@
  * @typedef {import("../../../types/interfaces/wasi-sockets-network").Network} Network
  * @typedef {import("../../../types/interfaces/wasi-sockets-network").ErrorCode} ErrorCode
  * @typedef {import("../../../types/interfaces/wasi-sockets-network").IpAddressFamily} IpAddressFamily
+ * @typedef {import("../../../types/interfaces/wasi-sockets-network").IpAddress} IpAddress
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp").TcpSocket} TcpSocket
  * @typedef {import("../../../types/interfaces/wasi-sockets-udp").UdpSocket} UdpSocket
  */
 
-import { TcpSocketImpl } from "./tcp-socket-impl.js";
-import { UdpSocketImpl, OutgoingDatagramStream, IncomingDatagramStream } from "./udp-socket-impl.js";
 import { assert } from "../../common/assert.js";
+import { SOCKET_CREATE_RESOLVE_ADDRESS_STREAM } from "../../io/calls.js";
+import { ioCall } from "../../io/worker-io.js";
+import { ResolveAddressStreamImpl } from "./resolve-address-stream-impl.js";
+import { TcpSocketImpl } from "./tcp-socket-impl.js";
+import { IncomingDatagramStream, OutgoingDatagramStream, UdpSocketImpl } from "./udp-socket-impl.js";
 
 /** @type {ErrorCode} */
 export const errorCode = {
@@ -156,6 +160,7 @@ export class WasiSockets {
         net.tcpSockets.set(this.id, this);
       }
     }
+
     this.tcp = {
       TcpSocket,
     };
@@ -230,6 +235,34 @@ export class WasiSockets {
         } catch (err) {
           assert(true, errorCode.notSupported, err);
         }
+      },
+    };
+
+    class ResolveAddressStream extends ResolveAddressStreamImpl {
+      static _create(hostname) {
+        const res = new ResolveAddressStream();
+        res._pollId = ioCall(SOCKET_CREATE_RESOLVE_ADDRESS_STREAM, null, {
+          hostname,
+        });
+        return res;
+      }
+    }
+
+    const resolveAddressStreamCreate = ResolveAddressStream._create;
+    delete ResolveAddressStream._create;
+
+    this.ipNameLookup = {
+      ResolveAddressStream,
+
+      /**
+       *
+       * @param {Network} network
+       * @param {string} name
+       * @returns {ResolveAddressStream}
+       * @throws {invalid-argument} `name` is a syntactically invalid domain name or IP address.
+       */
+      resolveAddresses(network, name) {
+        return resolveAddressStreamCreate(name);
       },
     };
   }

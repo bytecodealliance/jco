@@ -4,6 +4,7 @@ import { WasiSockets } from "./sockets/wasi-sockets.js";
 
 const sockets = new WasiSockets();
 export const { 
+    ipNameLookup,
     instanceNetwork, 
     network, 
     tcpCreateSocket,

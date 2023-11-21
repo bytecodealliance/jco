@@ -1,8 +1,7 @@
-import { runAsWorker } from "../synckit/index.js";
-import { FILE, STDOUT, STDERR, STDIN } from "./stream-types.js";
 import { createReadStream, createWriteStream } from "node:fs";
-import { Readable } from "node:stream";
 import { hrtime } from "node:process";
+import { Readable } from "node:stream";
+import { runAsWorker } from "../synckit/index.js";
 import {
   CALL_MASK,
   CALL_SHIFT,
@@ -10,8 +9,8 @@ import {
   CLOCKS_DURATION_SUBSCRIBE,
   CLOCKS_INSTANT_SUBSCRIBE,
   CLOCKS_NOW,
-  FUTURE_DISPOSE_AND_GET_VALUE,
   FUTURE_DISPOSE,
+  FUTURE_DISPOSE_AND_GET_VALUE,
   HTTP_CREATE_REQUEST,
   INPUT_STREAM_BLOCKING_READ,
   INPUT_STREAM_BLOCKING_SKIP,
@@ -30,12 +29,15 @@ import {
   OUTPUT_STREAM_FLUSH,
   OUTPUT_STREAM_SPLICE,
   OUTPUT_STREAM_SUBSCRIBE,
-  OUTPUT_STREAM_WRITE_ZEROES,
   OUTPUT_STREAM_WRITE,
-  POLL_POLL_LIST,
+  OUTPUT_STREAM_WRITE_ZEROES,
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
+  POLL_POLL_LIST,
+  SOCKET_CREATE_RESOLVE_ADDRESS_STREAM,
+  SOCKET_RESOLVE_NEXT_ADDRESS,
 } from "./calls.js";
+import { FILE, STDERR, STDIN, STDOUT } from "./stream-types.js";
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -118,6 +120,15 @@ function handle(call, id, payload) {
     case HTTP_CREATE_REQUEST: {
       const { method, url, headers, body } = payload;
       return createFuture(createHttpRequest(method, url, headers, body));
+    }
+
+    // Sockets
+    case SOCKET_CREATE_RESOLVE_ADDRESS_STREAM: {
+      return createDnsResolvePoll(payload.hostname);
+    }
+    case SOCKET_RESOLVE_NEXT_ADDRESS: {
+      const future = unfinishedPolls.get(id);
+      return Promise.resolve(future);
     }
 
     // Stdio
@@ -434,14 +445,16 @@ function handle(call, id, payload) {
 }
 
 // poll promises must always resolve and never error
+// once the future is resolved, it is removed from unfinishedPolls
 function createPoll(promise) {
   const pollId = ++pollCnt;
   unfinishedPolls.set(
     pollId,
     promise.then(
       () => void unfinishedPolls.delete(pollId),
-      () => {
+      (err) => {
         process._rawDebug("Unexpected poll error");
+        process._rawDebug(err);
         process.exit(1);
       }
     )
@@ -483,6 +496,12 @@ async function createHttpRequest(method, url, headers, body) {
     headers: Array.from(res.headers),
     bodyStreamId: streamCnt,
   };
+}
+
+async function createDnsResolvePoll(hostname) {
+  let future = resolve(hostname);
+  unfinishedPolls.set(++pollCnt, future);
+  return pollCnt;
 }
 
 runAsWorker(handle);
