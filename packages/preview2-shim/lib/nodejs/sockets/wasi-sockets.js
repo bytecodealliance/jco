@@ -280,6 +280,16 @@ export class WasiSockets {
           res.#data = { tag: 'ipv4', val: [0, 0, 0, 0] };
           return res;
         }
+        else if (hostname === '::') {
+          res.#pollId = 0;
+          res.#data = { tag: 'ipv6', val: [0, 0, 0, 0, 0, 0, 0, 0] };
+          return res;
+        }
+        else if (hostname === '::1') {
+          res.#pollId = 0;
+          res.#data = { tag: 'ipv6', val: [0, 0, 0, 0, 0, 0, 0, 1] };
+          return res;
+        }
         res.#pollId = ioCall(SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, null, {
           hostname,
         });
@@ -301,6 +311,7 @@ export class WasiSockets {
        * @throws {invalid-argument} `name` is a syntactically invalid domain name or IP address.
        */
       resolveAddresses(network, name) {
+        // TODO: bind to network
         return resolveAddressStreamCreate(name);
       },
     };
