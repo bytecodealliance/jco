@@ -81,17 +81,17 @@ fn {test_name}() -> anyhow::Result<()> {{
     {skip_comment}let file_name = "{test_name}";
     {skip_comment}let tempdir = TempDir::new("{{file_name}}")?;
     {skip_comment}let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    {}cmd!(sh, "./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
-    {skip_comment}Ok(())
+    {skip_comment}cmd!(sh, "./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
+    {}Ok(())
 }}
 "##,
-        if skip { "panic!(\"skipped\"); // " } else { "" },
         if TRACE { "--jco-trace" } else { "" },
         if !should_error {
             "?"
         } else {
             ".expect_err(\"test should exit with code 1\")"
-        }
+        },
+        if skip { "panic!(\"skipped\"); // " } else { "" }
     )
 }
 
