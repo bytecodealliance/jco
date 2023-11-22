@@ -77,9 +77,9 @@ fn generate_test(test_name: &str) -> String {
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
+use std::fs;
 {skip_comment}use tempdir::TempDir;
 {skip_comment}use xshell::{{cmd, Shell}};
-use std::fs;
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
