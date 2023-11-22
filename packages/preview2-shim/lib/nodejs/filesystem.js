@@ -70,7 +70,7 @@ class Descriptor {
   static _createPreopen(hostPreopen) {
     const descriptor = new Descriptor();
     descriptor.#hostPreopen = hostPreopen.endsWith("/")
-      ? hostPreopen.slice(0, -1)
+      ? hostPreopen.slice(0, -1) || '/'
       : hostPreopen;
     return descriptor;
   }
