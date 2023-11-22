@@ -14,6 +14,7 @@ import {
   fsyncSync,
   ftruncateSync,
   futimesSync,
+  linkSync,
   lstatSync,
   lutimesSync,
   mkdirSync,
@@ -291,8 +292,14 @@ class Descriptor {
     }
   }
 
-  linkAt() {
-    console.log(`[filesystem] LINK AT`, this._id);
+  linkAt(oldPathFlags, oldPath, newDescriptor, newPath) {
+    const oldFullPath = this.#getFullPath(oldPath, oldPathFlags.symlinkFollow);
+    const newFullPath = newDescriptor.#getFullPath(newPath, false);
+    try {
+      linkSync(oldFullPath, newFullPath);
+    } catch (e) {
+      throw convertFsError(e);
+    }
   }
 
   openAt(pathFlags, path, openFlags, descriptorFlags) {
@@ -576,12 +583,5 @@ function convertFsError(e) {
 }
 
 function timestampToMs(timestamp) {
-  let zeros = "";
-  while (timestamp.nanoseconds < 10 ** (8 - zeros.length)) {
-    zeros += "0";
-  }
-  const out = `${Number(timestamp.seconds) * 1000}.${zeros}${
-    timestamp.nanoseconds
-  }`;
-  return out;
+  return Number(timestamp.seconds) * 1000 + timestamp.nanoseconds / 1e9;
 }

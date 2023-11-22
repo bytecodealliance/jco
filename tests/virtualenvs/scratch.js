@@ -5,7 +5,8 @@ import { rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 _setEnv({
-  NO_ACCURATE_TIME: "1"
+  NO_ACCURATE_TIME: "1",
+  NO_DANGLING_FILESYSTEM: "1"
 });
 
 _setArgs(['_', '/']);

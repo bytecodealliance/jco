@@ -1,9 +1,9 @@
 //! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
-use std::fs;
 use tempdir::TempDir;
 use xshell::{cmd, Shell};
+use std::fs;
 
 #[test]
 fn cli_directory_list() -> anyhow::Result<()> {
