@@ -1,8 +1,12 @@
-import { _setArgs } from "@bytecodealliance/preview2-shim/cli";
+import { _setArgs, _setEnv } from "@bytecodealliance/preview2-shim/cli";
 import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp } from 'node:fs/promises';
 import { rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+
+_setEnv({
+  NO_ACCURATE_TIME: "1"
+});
 
 _setArgs(['_', '/']);
 

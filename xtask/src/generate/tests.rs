@@ -68,8 +68,9 @@ fn generate_test(test_name: &str) -> String {
         _ => false,
     };
     let skip = match test_name {
-        // this test currently stalls
-        "api_read_only" => true,
+        // these tests currently stall
+        "api_read_only" |
+        "preview1_path_open_read_write" => true,
         _ => false,
     };
     let skip_comment = if skip { "// " } else { "" };

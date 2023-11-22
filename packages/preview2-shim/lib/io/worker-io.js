@@ -269,6 +269,9 @@ class Pollable {
       this.#ready = true;
     }
   }
+  static _getId(pollable) {
+    return pollable.#id;
+  }
   static _create(id) {
     const pollable = new Pollable();
     pollable.#id = id;
@@ -292,12 +295,15 @@ delete Pollable._listToIds;
 const pollableMarkReady = Pollable._markReady;
 delete Pollable._markReady;
 
+const pollableGetId = Pollable._getId;
+delete Pollable._getId;
+
 export const poll = {
   Pollable,
   poll(list) {
     const includeList = ioCall(POLL_POLL_LIST, null, pollableListToIds(list));
     return list.filter((pollable) => {
-      if (includeList.includes(pollable.id)) {
+      if (includeList.includes(pollableGetId(pollable))) {
         pollableMarkReady(pollable);
         return true;
       }
