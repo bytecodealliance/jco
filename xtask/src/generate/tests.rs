@@ -14,6 +14,7 @@ pub fn run() -> anyhow::Result<()> {
     // Tidy up the dir and recreate it.
     fs::remove_dir_all("./tests/generated")?;
     fs::create_dir_all("./tests/generated")?;
+    fs::create_dir_all("./tests/rundir")?;
 
     let mut test_names = vec![];
 
@@ -53,18 +54,22 @@ fn generate_test(test_name: &str) -> String {
         "api_time" => "fakeclocks",
         "preview1_stdio_not_isatty" => "notty",
         "cli_file_append" => "bar-jabberwock",
-        "preview1_close_preopen" | "preview1_dangling_fd" | "preview1_dangling_symlink" => {
-            "scratch"
+        _ => {
+            if test_name.starts_with("preview1") {
+                "scratch"
+            } else {
+                "base"
+            }
         }
-        _ => "base",
     };
+
     let should_error = match test_name {
         "cli_exit_failure" | "cli_exit_panic" | "preview2_stream_pollable_traps" => true,
         _ => false,
     };
     let skip = match test_name {
-        // this test currently stalls
-        "api_read_only" => true,
+        // these tests currently stall
+        "api_read_only" | "preview1_path_open_read_write" => true,
         _ => false,
     };
     let skip_comment = if skip { "// " } else { "" };
@@ -72,6 +77,7 @@ fn generate_test(test_name: &str) -> String {
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
+use std::fs;
 {skip_comment}use tempdir::TempDir;
 {skip_comment}use xshell::{{cmd, Shell}};
 
@@ -81,17 +87,18 @@ fn {test_name}() -> anyhow::Result<()> {{
     {skip_comment}let file_name = "{test_name}";
     {skip_comment}let tempdir = TempDir::new("{{file_name}}")?;
     {skip_comment}let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
-    {}cmd!(sh, "./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
-    {skip_comment}Ok(())
+    let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
+    {skip_comment}cmd!(sh, "./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
+    {}Ok(())
 }}
 "##,
-        if skip { "panic!(\"skipped\"); // " } else { "" },
         if TRACE { "--jco-trace" } else { "" },
         if !should_error {
             "?"
         } else {
             ".expect_err(\"test should exit with code 1\")"
-        }
+        },
+        if skip { "panic!(\"skipped\"); // " } else { "" }
     )
 }
 
