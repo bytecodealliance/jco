@@ -180,7 +180,7 @@ export async function transpileComponent (component, opts = {}) {
 
       const outSource = `${
         imports.map((impt, i) => `import * as import${i} from '${impt}';`).join('\n')}
-${source.replace('export async function instantiate', 'async function instantiate')}
+${source.replace(/export (async )?function instantiate/, '$1function instantiate')}
 
 let ${exports.filter(([, ty]) => ty === 'function').map(([name]) => '_' + name).join(', ')};
 
