@@ -68,13 +68,13 @@ async function wasm2Js (source) {
  *   map?: Record<string, string>,
  *   validLiftingOptimization?: bool,
  *   tracing?: bool,
- *   noNodejsCompat?: bool,
+ *   nodejsCompat?: bool,
  *   tlaCompat?: bool,
  *   base64Cutoff?: bool,
  *   js?: bool,
  *   minify?: bool,
  *   optimize?: bool,
- *   noNamespacedExports?: bool,
+ *   namespacedExports?: bool,
  *   optArgs?: string[],
  * }} opts 
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
