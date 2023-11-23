@@ -65,6 +65,7 @@ export class IncomingDatagramStream {
       return [];
     }
 
+    // TODO: not sure this is the right API to use!
     const socket = this.#socket;
     socket.onmessage = (...args) => console.log("recv onmessage", args[2].toString());
     socket.onerror = (err) => console.log("recv error", err);
@@ -253,6 +254,7 @@ export class UdpSocketImpl {
       assert(err === -22, "address-in-use");
       assert(err === -48, "address-in-use"); // macos
       assert(err === -49, "address-not-bindable");
+      assert(err === -98, "address-in-use"); // WSL
       assert(err === -99, "address-not-bindable"); // EADDRNOTAVAIL
       assert(true, "unknown", err);
     }
@@ -352,6 +354,7 @@ export class UdpSocketImpl {
 
   /**
    *
+   * Note: Concurrent invocations of this test can yield port to be 0 on Windows/WSL.
    * @returns {IpSocketAddress}
    * @throws {invalid-state} The socket is not bound to any local address.
    */
@@ -384,8 +387,7 @@ export class UdpSocketImpl {
     );
 
     const out = {};
-    const r = this.#socket.getpeername(out);
-
+    this.#socket.getpeername(out);
 
     assert(
       out.address === undefined,
