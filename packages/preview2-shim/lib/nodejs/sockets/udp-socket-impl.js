@@ -347,11 +347,6 @@ export class UdpSocketImpl {
   stream(remoteAddress = undefined) {
     assert(this[symbolState].isBound === false, "invalid-state");
     this.#connect(this.network, remoteAddress);
-
-    console.log({
-      state: this[symbolState],
-    })
-
     return [incomingDatagramStreamCreate(this.#socket), outgoingDatagramStreamCreate(this.#socket)];
   }
 
