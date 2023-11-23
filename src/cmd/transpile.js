@@ -139,11 +139,9 @@ export async function transpileComponent (component, opts = {}) {
     const source = Buffer.from(jsFile[1]).toString('utf8')
       // update imports manging to match emscripten asm
       .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`);
-    
+
     const wasmFiles = files.filter(([name]) => name.endsWith('.wasm'));
     files = files.filter(([name]) => !name.endsWith('.wasm'));
-
-    // TODO: imports as specifier list
 
     let completed = 0;
     const spinnerText = () => c`{cyan ${completed} / ${wasmFiles.length}} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
@@ -178,23 +176,24 @@ export async function transpileComponent (component, opts = {}) {
         .trim()
       }`).join(',\n');
 
-      const outSource = `${source.replace(/export (async )?function instantiate/, '$1function instantiate')}
+      let async_ = opts.instantiation == 'async' ? 'async ' : '';
+      let await_ = opts.instantiation == 'async' ? 'await ' : '';
 
-let ${exports.filter(([, ty]) => ty === 'function').map(([name]) => '_' + name).join(', ')};
-
-${exports.map(([name, ty]) => ty === 'function' ? `\nfunction ${asmMangle(name)} () {
-  return _${name}.apply(this, arguments);
-}` : `\nlet ${asmMangle(name)};`).join('\n')}
+      const outSource = `${source.replace(/export (async )?function instantiate/, '$1function _instantiate')}
 
 const asmInit = [${asms}];
 
-${opts.tlaCompat ? 'export ' : ''}const $init = (async () => {
-  let idx = 0;
-  ({ ${exports.map(([name, ty]) => asmMangle(name) === name ? name : `'${name}': ${asmMangle(name)}`).join(',\n')} } = await instantiate(n => idx++, {
-${imports.map((impt, i) => `    '${impt}': import${i},`).join('\n')}
-  }, (i, imports) => ({ exports: asmInit[i](imports) })));
-})();${exports.length > 0 ? `\nexport { ${exports.map(([name]) => name === asmMangle(name) ? `${name}` : `${asmMangle(name)} as "${name}"`).join(', ')} }` : ''}
-${opts.tlaCompat ? '' : '\nawait $init;\n'}`;
+${async_}function instantiate(imports) {
+  const wasm_file_to_asm_index = {
+    ${wasmFiles.map(([path], nth) => `'${basename(path)}': ${nth}`).join(',\n    ')}
+  };
+
+  return ${await_}_instantiate(
+      module_name => wasm_file_to_asm_index[module_name],
+      imports,
+      (module_index, imports) => ({ exports: asmInit[module_index](imports) })
+  );
+}`;
 
       jsFile[1] = Buffer.from(outSource);
     }
