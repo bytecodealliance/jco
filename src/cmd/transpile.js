@@ -106,9 +106,12 @@ export async function transpileComponent (component, opts = {}) {
 
   let instantiation = null;
 
+  // Let's define `instantiation` from `--instantiation` if it's present.
   if (opts.instantiation) {
     instantiation = { tag: opts.instantiation };
-  } else if (opts.js) {
+  }
+  // Otherwise, if `--js` is present, an `instantiate` function is required.
+  else if (opts.js) {
     instantiation = { tag: 'async' };
   }
 
