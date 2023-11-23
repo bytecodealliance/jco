@@ -86,7 +86,7 @@ export async function transpileComponent (component, opts = {}) {
   let spinner;
   const showSpinner = getShowSpinner();
   if (opts.optimize) {
-    if (showSpinner) setShowSpinner(true);
+    setShowSpinner(true);
     ({ component } = await optimizeComponent(component, opts));
   }
 
