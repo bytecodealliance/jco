@@ -12,7 +12,7 @@
 const { UDP, SendWrap } = process.binding("udp_wrap");
 import { isIP } from "node:net";
 import { assert } from "../../common/assert.js";
-import { deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
+import { deserializeIpAddress, cappedUint32, serializeIpAddress } from "./socket-common.js";
 import { pollableCreate } from "../../io/worker-io.js";
 
 const SocketConnectionState = {
@@ -26,16 +26,15 @@ const SocketConnectionState = {
 const symbolState = Symbol("SocketInternalState");
 
 // see https://github.com/libuv/libuv/blob/master/docs/src/udp.rst
-const flags = {
+const Flags = {
   UV_UDP_IPV6ONLY: 1,
   UV_UDP_REUSEADDR: 4,
 };
 
-const bufferSizeFlags = {
+const BufferSizeFlags = {
   SO_RCVBUF: true,
   SO_SNDBUF: false,
 };
-
 
 export class IncomingDatagramStream {
   static _create(socket) {
@@ -158,7 +157,6 @@ export class OutgoingDatagramStream {
 const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
 delete OutgoingDatagramStream._create;
 
-
 export class UdpSocketImpl {
   /** @type {UDP} */ #socket = null;
   /** @type {Network} */ network = null;
@@ -238,9 +236,8 @@ export class UdpSocketImpl {
     const { localAddress, localPort, family } = this.#socketOptions;
 
     let flags = 0;
-
     if (this[symbolState].ipv6Only) {
-      flags |= flags.UV_UDP_IPV6ONLY;
+      flags |= Flags.UV_UDP_IPV6ONLY;
     }
 
     let err = null;
@@ -285,17 +282,16 @@ export class UdpSocketImpl {
   #startConnect(network, remoteAddress = undefined) {
     this[symbolState].operationInProgress = false;
 
+    if (remoteAddress === undefined || this[symbolState].state === SocketConnectionState.Connected) {
+      // reusing a connected socket. See #finishConnect()
+      return;
+    }
+
     const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
     const ipFamily = `ipv${isIP(host)}`;
 
     assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
     assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "invalid-argument");
-
-    if (this[symbolState].state === SocketConnectionState.Connected) {
-      // reusing a connected socket. See #finishConnect()
-      return;
-    } else {
-    }
 
     const { port } = remoteAddress.val;
     this.#socketOptions.remoteAddress = host;
@@ -350,8 +346,12 @@ export class UdpSocketImpl {
    */
   stream(remoteAddress = undefined) {
     assert(this[symbolState].isBound === false, "invalid-state");
-
     this.#connect(this.network, remoteAddress);
+
+    console.log({
+      state: this[symbolState],
+    })
+
     return [incomingDatagramStreamCreate(this.#socket), outgoingDatagramStreamCreate(this.#socket)];
   }
 
@@ -382,23 +382,22 @@ export class UdpSocketImpl {
    * @throws {invalid-state} The socket is not streaming to a specific remote address. (ENOTCONN)
    */
   remoteAddress() {
-    assert(this[symbolState].state !== SocketConnectionState.Connected, "invalid-state", "The socket is not streaming to a specific remote address");
+    assert(
+      this[symbolState].state !== SocketConnectionState.Connected,
+      "invalid-state",
+      "The socket is not streaming to a specific remote address"
+    );
 
     const out = {};
-    this.#socket.getpeername(out);
+    const r = this.#socket.getpeername(out);
 
-    // Note: getpeername() returns undefined if family is ipv6
-    // TODO: investigate
-    if (out.address === undefined) {
-      return {
-        tag: "ipv6",
-        val: {
-          address: "",
-          port: 0,
-        },
-      };
-    }
 
+    assert(
+      out.address === undefined,
+      "invalid-state",
+      "The socket is not streaming to a specific remote address"
+    );
+    
     const { address, port, family } = out;
     return {
       tag: family.toLocaleLowerCase(),
@@ -437,7 +436,11 @@ export class UdpSocketImpl {
    * @throws {not-supported} (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    */
   setIpv6Only(value) {
-    assert(value === true && this.#socketOptions.family.toLocaleLowerCase() === "ipv4", "not-supported", "Socket is an IPv4 socket.");
+    assert(
+      value === true && this.#socketOptions.family.toLocaleLowerCase() === "ipv4",
+      "not-supported",
+      "Socket is an IPv4 socket."
+    );
     assert(this[symbolState].isBound, "invalid-state", "The socket is already bound");
 
     this[symbolState].ipv6Only = value;
@@ -470,13 +473,17 @@ export class UdpSocketImpl {
    */
   receiveBufferSize() {
     const exceptionInfo = {};
-    const value = this.#socket.bufferSize(0, bufferSizeFlags.SO_RCVBUF, exceptionInfo);
+    const value = this.#socket.bufferSize(0, BufferSizeFlags.SO_RCVBUF, exceptionInfo);
 
     if (exceptionInfo.code === "EBADF") {
       // TODO: handle the case where bad file descriptor is returned
       // This happens when the socket is not bound
       return this[symbolState].receiveBufferSize;
     }
+
+    console.log({
+      value
+    })
 
     return value;
   }
@@ -490,12 +497,10 @@ export class UdpSocketImpl {
   setReceiveBufferSize(value) {
     assert(value === 0n, "invalid-argument", "The provided value was 0");
 
-    // Note: libuv expects a uint32. Passing a bigint will result in an assertion error in V8.
-    value = Number(value);
-    
+    const cappedValue = cappedUint32(value);
     const exceptionInfo = {};
-    this.#socket.bufferSize(Number(value), bufferSizeFlags.SO_RCVBUF, exceptionInfo);
-    this[symbolState].receiveBufferSize = value;
+    this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_RCVBUF, exceptionInfo);
+    this[symbolState].receiveBufferSize = cappedValue;
   }
 
   /**
@@ -504,8 +509,8 @@ export class UdpSocketImpl {
    */
   sendBufferSize() {
     const exceptionInfo = {};
-    const value = this.#socket.bufferSize(0, bufferSizeFlags.SO_SNDBUF, exceptionInfo);
-    
+    const value = this.#socket.bufferSize(0, BufferSizeFlags.SO_SNDBUF, exceptionInfo);
+
     if (exceptionInfo.code === "EBADF") {
       // TODO: handle the case where bad file descriptor is returned
       // This happens when the socket is not bound
@@ -524,12 +529,10 @@ export class UdpSocketImpl {
   setSendBufferSize(value) {
     assert(value === 0n, "invalid-argument", "The provided value was 0");
 
-    // Note: libuv expects a uint32. Passing a bigint will result in an assertion error in V8.
-    value = Number(value);
-
+    const cappedValue = cappedUint32(value);
     const exceptionInfo = {};
-    this.#socket.bufferSize(value, bufferSizeFlags.SO_SNDBUF, exceptionInfo);
-    this[symbolState].sendBufferSize = value;
+    this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_SNDBUF, exceptionInfo);
+    this[symbolState].sendBufferSize = cappedValue;
   }
 
   /**

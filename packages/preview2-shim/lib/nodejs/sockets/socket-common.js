@@ -1,3 +1,10 @@
+export function cappedUint32(value) {
+  // Note: cap the value to the highest possible BigInt value that can be represented as a
+  // unsigned 32-bit integer.
+  const width = 32n;
+  return BigInt.asUintN(Number(width), value);
+}
+
 export function noop() {}
 
 function tupleToIPv6(arr) {
