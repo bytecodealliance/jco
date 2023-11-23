@@ -1,8 +1,9 @@
 import { resolve } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { hrtime } from "node:process";
-import { Readable } from "node:stream";
 import { runAsWorker } from "../synckit/index.js";
+import { createHttpRequest } from "./worker-http.js";
+import { Writable } from "node:stream";
 import {
   CALL_MASK,
   CALL_SHIFT,
@@ -11,8 +12,9 @@ import {
   CLOCKS_INSTANT_SUBSCRIBE,
   CLOCKS_NOW,
   FUTURE_DISPOSE,
-  FUTURE_DISPOSE_AND_GET_VALUE,
+  FUTURE_GET_VALUE_AND_DISPOSE,
   HTTP_CREATE_REQUEST,
+  HTTP_OUTPUT_STREAM_FINISH,
   INPUT_STREAM_BLOCKING_READ,
   INPUT_STREAM_BLOCKING_SKIP,
   INPUT_STREAM_CREATE,
@@ -30,42 +32,49 @@ import {
   OUTPUT_STREAM_FLUSH,
   OUTPUT_STREAM_SPLICE,
   OUTPUT_STREAM_SUBSCRIBE,
-  OUTPUT_STREAM_WRITE,
   OUTPUT_STREAM_WRITE_ZEROES,
+  OUTPUT_STREAM_WRITE,
+  POLL_POLL_LIST,
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
-  POLL_POLL_LIST,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+  FILE,
+  HTTP,
+  SOCKET,
+  STDERR,
+  STDIN,
+  STDOUT,
 } from "./calls.js";
-import { FILE, SOCKET, STDERR, STDIN, STDOUT } from "./stream-types.js";
 
 let streamCnt = 0,
   pollCnt = 0;
 
 /** @type {Map<number, Promise<void>>} */
-const unfinishedPolls = new Map();
+export const unfinishedPolls = new Map();
 
 /** @type {Map<number, { flushPromise: Promise<void> | null, stream: NodeJS.ReadableStream | NodeJS.WritableStream }>} */
-const unfinishedStreams = new Map();
+export const unfinishedStreams = new Map();
 
 /** @type {Map<number, { value: any, error: bool }>} */
-const unfinishedFutures = new Map();
+export const unfinishedFutures = new Map();
+
+/**
+ * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
+ */
+export function createStream(nodeStream, flushPromise) {
+  unfinishedStreams.set(++streamCnt, {
+    flushPromise,
+    stream: nodeStream,
+  });
+  return streamCnt;
+}
 
 // Stdio
-unfinishedStreams.set(++streamCnt, {
-  flushPromise: Promise.resolve(),
-  stream: process.stdin,
-});
-unfinishedStreams.set(++streamCnt, {
-  flushPromise: Promise.resolve(),
-  stream: process.stdout,
-});
-unfinishedStreams.set(++streamCnt, {
-  flushPromise: Promise.resolve(),
-  stream: process.stderr,
-});
+createStream(process.stdin, Promise.resolve());
+createStream(process.stdout, Promise.resolve());
+createStream(process.stderr, Promise.resolve());
 
 /**
  * @param {number} streamId
@@ -75,20 +84,17 @@ function streamError(streamId, stream, err) {
   if (stream.end) stream.end();
   // we delete the stream from unfinishedStreams as it is now "finished" (closed)
   unfinishedStreams.delete(streamId);
-  return {
-    tag: "stream-error",
-    val: { tag: "last-operation-failed", val: err },
-  };
+  return { tag: "last-operation-failed", val: err };
 }
 
 /**
  * @param {number} streamId
  * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, flushPromise: Promise<void> | null }}
  */
-function getStreamOrThrow(streamId) {
+export function getStreamOrThrow(streamId) {
   const stream = unfinishedStreams.get(streamId);
   // not in unfinished streams <=> closed
-  if (!stream) throw { tag: "stream-error", val: { tag: "closed" } };
+  if (!stream) throw { tag: "closed" };
   if (stream.stream.errored)
     throw streamError(streamId, stream, stream.stream.errored);
   if (stream.stream.closed) {
@@ -118,10 +124,69 @@ function subscribeInstant(instant) {
  */
 function handle(call, id, payload) {
   switch (call) {
-    // Specific call implementations
+    // Http
     case HTTP_CREATE_REQUEST: {
       const { method, url, headers, body } = payload;
       return createFuture(createHttpRequest(method, url, headers, body));
+    }
+    case OUTPUT_STREAM_CREATE | HTTP: {
+      const webTransformStream = new TransformStream();
+      const stream = Writable.fromWeb(webTransformStream.writable);
+      // content length is passed as payload
+      stream.bytesRemaining = payload;
+      stream.readableBodyStream = webTransformStream.readable;
+      return createStream(stream);
+    }
+    case OUTPUT_STREAM_SUBSCRIBE | HTTP:
+    case OUTPUT_STREAM_FLUSH | HTTP:
+    case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP: {
+      // http flush is a noop
+      const { stream } = getStreamOrThrow(id);
+      // this existing indicates it's still unattached
+      // therefore there is no subscribe or backpressure
+      if (stream.readableBodyStream) {
+        switch (call) {
+          case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP:
+            return handle(OUTPUT_STREAM_WRITE | HTTP, id, payload);
+          case OUTPUT_STREAM_FLUSH | HTTP:
+            return;
+          case OUTPUT_STREAM_SUBSCRIBE | HTTP:
+            return 0;
+        }
+      }
+      if (call === (OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP))
+        stream.bytesRemaining -= payload.byteLength;
+      // otherwise fall through to generic implementation
+      return handle(call & ~HTTP, id, payload);
+    }
+    case OUTPUT_STREAM_DISPOSE | HTTP:
+      throw new Error('Internal error: HTTP output stream dispose is bypassed for FINISH');
+    case OUTPUT_STREAM_WRITE | HTTP: {
+      const { stream } = getStreamOrThrow(id);
+      stream.bytesRemaining -= payload.byteLength;
+      if (stream.bytesRemaining < 0) {
+        throw {
+          tag: 'last-operation-failed',
+          val: 'too much written to output stream'
+        };
+      }
+      const output = handle(OUTPUT_STREAM_WRITE, id, payload);
+      return output;
+    }
+    case HTTP_OUTPUT_STREAM_FINISH: {
+      const { stream } = getStreamOrThrow(id);
+      if (stream.bytesRemaining > 0) {
+        throw {
+          tag: 'internal-error',
+          val: 'not enough written to body stream'
+        };
+      }
+      if (stream.bytesRemaining < 0) {
+        throw {
+          tag: 'internal-error',
+          val: 'too much written to body stream'
+        };
+      }
     }
 
     // Sockets
@@ -171,13 +236,9 @@ function handle(call, id, payload) {
         highWaterMark: 64 * 1024,
         start: Number(offset),
       });
-      unfinishedStreams.set(++streamCnt, {
-        flushPromise: null,
-        stream,
-      });
       // for some reason fs streams dont emit readable on end
       stream.on("end", () => void stream.emit("readable"));
-      return streamCnt;
+      return createStream(stream);
     }
     case OUTPUT_STREAM_CREATE | FILE: {
       const { fd, offset } = payload;
@@ -186,13 +247,9 @@ function handle(call, id, payload) {
         autoClose: false,
         emitClose: false,
         highWaterMark: 64 * 1024,
-        start: Number(offset)
+        start: Number(offset),
       });
-      unfinishedStreams.set(++streamCnt, {
-        flushPromise: null,
-        stream,
-      });
-      return streamCnt;
+      return createStream(stream);
     }
     // Generic call implementations (streams + polls)
     default:
@@ -285,9 +342,8 @@ function handle(call, id, payload) {
             );
           }
           return new Promise((resolve, reject) => {
-            stream.write(payload, err => {
-              if (err)
-               return void reject(streamError(id, stream, err));
+            stream.write(payload, (err) => {
+              if (err) return void reject(streamError(id, stream, err));
               resolve(BigInt(payload.byteLength));
             });
           });
@@ -317,9 +373,17 @@ function handle(call, id, payload) {
           });
         }
         case OUTPUT_STREAM_WRITE_ZEROES:
-          return handle(OUTPUT_STREAM_WRITE | (call & CALL_TYPE_MASK), id, new Uint8Array(Number(payload)));
+          return handle(
+            OUTPUT_STREAM_WRITE | (call & CALL_TYPE_MASK),
+            id,
+            new Uint8Array(Number(payload))
+          );
         case OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH:
-          return handle(OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | (call & CALL_TYPE_MASK), id, new Uint8Array(Number(payload)));
+          return handle(
+            OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | (call & CALL_TYPE_MASK),
+            id,
+            new Uint8Array(Number(payload))
+          );
         case OUTPUT_STREAM_SPLICE: {
           const { stream: outputStream } = getStreamOrThrow(id);
           const { stream: inputStream } = getStreamOrThrow(payload.src);
@@ -438,11 +502,15 @@ function handle(call, id, payload) {
           });
         }
 
-        case FUTURE_DISPOSE_AND_GET_VALUE: {
+        case FUTURE_GET_VALUE_AND_DISPOSE: {
           const future = unfinishedFutures.get(id);
           if (!future) {
             // future not ready yet
-            if (unfinishedPolls.get(id)) return undefined;
+            if (unfinishedPolls.get(id)) {
+              // if ((call & CALL_TYPE_MASK) ===
+              // http futures throw
+              throw undefined;
+            }
             throw new Error("future already got and dropped");
           }
           unfinishedFutures.delete(id);
@@ -462,8 +530,7 @@ function handle(call, id, payload) {
 }
 
 // poll promises must always resolve and never error
-// once the future is resolved, it is removed from unfinishedPolls
-function createPoll(promise) {
+export function createPoll(promise) {
   const pollId = ++pollCnt;
   unfinishedPolls.set(
     pollId,
@@ -479,7 +546,7 @@ function createPoll(promise) {
   return pollId;
 }
 
-function createFuture(promise) {
+export function createFuture(promise) {
   const pollId = ++pollCnt;
   unfinishedPolls.set(
     pollId,
@@ -495,24 +562,6 @@ function createFuture(promise) {
     )
   );
   return pollId;
-}
-
-async function createHttpRequest(method, url, headers, body) {
-  const res = await fetch(url, {
-    method,
-    headers: new Headers(headers),
-    body,
-    redirect: "manual",
-  });
-  unfinishedStreams.set(++streamCnt, {
-    flushPromise: null,
-    stream: Readable.fromWeb(res.body),
-  });
-  return {
-    status: res.status,
-    headers: Array.from(res.headers),
-    bodyStreamId: streamCnt,
-  };
 }
 
 runAsWorker(handle);

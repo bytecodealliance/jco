@@ -5,7 +5,7 @@ import { rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 _setEnv({
-  NO_ACCURATE_TIME: "1",
+  FS_TIME_PRECISION: "2000",
   NO_DANGLING_FILESYSTEM: "1"
 });
 

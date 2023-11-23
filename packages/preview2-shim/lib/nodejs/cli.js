@@ -4,7 +4,7 @@ import {
   inputStreamCreate,
   outputStreamCreate,
 } from "../io/worker-io.js";
-import { STDIN, STDOUT, STDERR } from "../io/stream-types.js";
+import { STDIN, STDOUT, STDERR } from "../io/calls.js";
 const { InputStream, OutputStream } = streams;
 
 export const _setEnv = env => void (_env = Object.entries(env));

@@ -1,8 +1,9 @@
 import {
   INPUT_STREAM_DISPOSE,
   HTTP_CREATE_REQUEST,
+  HTTP_OUTPUT_STREAM_FINISH,
   OUTPUT_STREAM_CREATE,
-  FUTURE_DISPOSE_AND_GET_VALUE,
+  FUTURE_GET_VALUE_AND_DISPOSE,
   FUTURE_DISPOSE,
 } from "../io/calls.js";
 import {
@@ -10,9 +11,10 @@ import {
   pollableCreate,
   inputStreamCreate,
   outputStreamCreate,
+  outputStreamId,
 } from "../io/worker-io.js";
 
-import { INCOMING_BODY, OUTGOING_BODY } from "../io/stream-types.js";
+import { HTTP } from "../io/calls.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -39,7 +41,7 @@ export class WasiHttp {
         if (!this.#streamId) throw undefined;
         const streamId = this.#streamId;
         this.#streamId = undefined;
-        return inputStreamCreate(INCOMING_BODY, streamId);
+        return inputStreamCreate(HTTP, streamId);
       }
       static finish(incomingBody) {
         if (incomingBody.#finished)
@@ -48,7 +50,10 @@ export class WasiHttp {
         return futureTrailersCreate(new Fields([]), false);
       }
       [symbolDispose]() {
-        if (!this.#finished) ioCall(INPUT_STREAM_DISPOSE, this.#streamId);
+        if (!this.#finished) {
+          ioCall(INPUT_STREAM_DISPOSE | HTTP, this.#streamId);
+          this.#streamId = undefined;
+        }
       }
       static _create(streamId) {
         const incomingBody = new IncomingBody();
@@ -93,6 +98,7 @@ export class WasiHttp {
        */
       constructor(statusCode, headers) {
         this.#statusCode = statusCode;
+        fieldsLock(headers);
         this.#headers = headers;
       }
     }
@@ -110,11 +116,23 @@ export class WasiHttp {
       /** @type {string | undefined} */ #pathWithQuery = undefined;
       /** @type {string | undefined} */ #authority = undefined;
       /** @type {Fields} */ #headers;
-      /** @type {OutgoingBody} */ #body = new OutgoingBody();
+      /** @type {OutgoingBody} */ #body;
+      #bodyRequested = false;
       constructor(headers) {
+        fieldsLock(headers);
         this.#headers = headers;
+        let contentLengthValues = this.#headers.get('content-length');
+        if (contentLengthValues.length === 0)
+          contentLengthValues = this.#headers.get('Content-Length');
+        let contentLength;
+        if (contentLengthValues.length > 0)
+          contentLength = Number(new TextDecoder().decode(contentLengthValues[0]));
+        this.#body = outgoingBodyCreate(contentLength);
       }
       body() {
+        if (this.#bodyRequested)
+          throw new Error('Body already requested');
+        this.#bodyRequested = true;
         return this.#body;
       }
       method() {
@@ -144,6 +162,8 @@ export class WasiHttp {
       headers() {
         return this.#headers;
       }
+      [symbolDispose] () {
+      }
       static _handle(request) {
         const scheme = request.#scheme.tag === "HTTP" ? "http://" : "https://";
         const url = scheme + request.#authority + request.#pathWithQuery;
@@ -158,7 +178,7 @@ export class WasiHttp {
           request.#method.val || request.#method.tag,
           url,
           Object.entries(headers),
-          null
+          outgoingBodyOutputStreamId(request.#body)
         );
       }
     }
@@ -167,24 +187,47 @@ export class WasiHttp {
     delete OutgoingRequest._handle;
 
     class OutgoingBody {
-      #finished = false;
-      #outputStream = null;
+      #outputStream = undefined;
+      #contentLength = undefined;
       write() {
         if (this.#outputStream)
           throw new Error("output stream already created for writing");
-        return (this.#outputStream = outputStreamCreate(
-          OUTGOING_BODY,
-          ioCall(OUTPUT_STREAM_CREATE | OUTGOING_BODY, null, null)
-        ));
+        this.#outputStream = outputStreamCreate(
+          HTTP,
+          ioCall(OUTPUT_STREAM_CREATE | HTTP, null, this.#contentLength)
+        );
+        this.#outputStream[symbolDispose] = () => {};
+        return this.#outputStream;
+      }
+      [symbolDispose] () {
+        this.#outputStream?.[symbolDispose]();
       }
       /**
        * @param {OutgoingBody} body
        * @param {Fields | undefined} trailers
        */
       static finish(body, _trailers) {
-        body.#finished = true;
+        // this will verify content length, and also verify not already finished
+        // throwing errors as appropriate
+        if (body.#outputStream)
+          ioCall(HTTP_OUTPUT_STREAM_FINISH, outputStreamId(body.#outputStream), null);
+        body.#outputStream?.[symbolDispose]();
+      }
+      static _outputStreamId (outgoingBody) {
+        if (outgoingBody.#outputStream)
+          return outputStreamId(outgoingBody.#outputStream);
+      }
+      static _create (contentLength) {
+        const outgoingBody = new OutgoingBody();
+        outgoingBody.#contentLength = contentLength;
+        return outgoingBody;
       }
     }
+    const outgoingBodyOutputStreamId = OutgoingBody._outputStreamId;
+    delete OutgoingBody._outputStreamId;
+
+    const outgoingBodyCreate = OutgoingBody._create;
+    delete OutgoingBody._create;
 
     class IncomingResponse {
       _id = http.responseCnt++;
@@ -198,13 +241,16 @@ export class WasiHttp {
         return this.#headers;
       }
       consume() {
-        if (this.#bodyStreamId === null) throw undefined;
+        if (this.#bodyStreamId === undefined) throw undefined;
         const bodyStreamId = this.#bodyStreamId;
-        this.#bodyStreamId = null;
+        this.#bodyStreamId = undefined;
         return incomingBodyCreate(bodyStreamId);
       }
       [symbolDispose]() {
-        if (this.#bodyStreamId) ioCall(INPUT_STREAM_DISPOSE, this.#bodyStreamId);
+        if (this.#bodyStreamId) {
+          ioCall(INPUT_STREAM_DISPOSE | HTTP, this.#bodyStreamId);
+          this.#bodyStreamId = undefined;
+        }
       }
       static _create(status, headers, bodyStreamId) {
         const res = new IncomingResponse();
@@ -229,7 +275,7 @@ export class WasiHttp {
       get() {
         // already taken
         if (!this.#pollId) return { tag: "err" };
-        const ret = ioCall(FUTURE_DISPOSE_AND_GET_VALUE, this.#pollId);
+        const ret = ioCall(FUTURE_GET_VALUE_AND_DISPOSE | HTTP, this.#pollId);
         if (!ret) return;
         this.#pollId = undefined;
         if (ret.error)
@@ -251,7 +297,7 @@ export class WasiHttp {
         };
       }
       [symbolDispose]() {
-        if (this.#pollId) ioCall(FUTURE_DISPOSE, this.#pollId);
+        if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId);
       }
       static _create(method, url, headers, body) {
         const res = new FutureIncomingResponse();
@@ -270,35 +316,50 @@ export class WasiHttp {
 
     class Fields {
       _id = http.fieldsCnt++;
+      #immutable = false;
       /** @type {Record<string, Uint8Array[]>} */ #fields = Object.create(null);
 
       /**
-       * @param {[string, Uint8Array[]][]} entries
+       * @param {[string, Uint8Array[][]][]} entries
        */
       static fromList(entries) {
         const fields = new Fields();
-        fields.#fields = Object.fromEntries(entries);
+        for (const [key, value] of entries) {
+          (fields.#fields[key] = fields.#fields[key] || []).push(value);
+        }
         return fields;
       }
       get(name) {
-        return this.#fields[name];
+        return this.#fields[name] || [];
       }
-      set(name, value) {
-        this.#fields[name] = value;
+      set(name, values) {
+        if (this.#immutable)
+          throw 'immutable';
+        this.#fields[name] = values;
       }
       delete(name) {
+        if (this.#immutable)
+          throw 'immutable';
         delete this.#fields[name];
       }
-      append(_name, _value) {
-        // TODO
+      append(name, values) {
+        if (this.#immutable)
+          throw 'immutable';
+        const existing = this.get(name);
+        this.set(existing.concat(values));
       }
       entries() {
-        return Object.entries(this.#fields);
+        return Object.entries(this.#fields).flatMap(([key, values]) => values.map(value => [key, value]));
       }
       clone() {
         return Fields.fromList(this.entries());
       }
+      static _lock (fields) {
+        fields.#immutable = true;
+      }
     }
+    const fieldsLock = Fields._lock;
+    delete Fields._lock;
 
     this.outgoingHandler = {
       /**
@@ -308,6 +369,13 @@ export class WasiHttp {
        */
       handle: outgoingRequestHandle,
     };
+
+    function httpErrorCode (err) {
+      return {
+        tag: 'internal-error',
+        val: err.message
+      };
+    }
 
     this.types = {
       Fields,
@@ -320,6 +388,7 @@ export class WasiHttp {
       OutgoingRequest,
       OutgoingResponse,
       ResponseOutparam,
+      httpErrorCode
     };
   }
 }

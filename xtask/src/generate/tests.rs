@@ -57,6 +57,8 @@ fn generate_test(test_name: &str) -> String {
         _ => {
             if test_name.starts_with("preview1") {
                 "scratch"
+            } else if test_name.starts_with("http_outbound") {
+                "http"
             } else {
                 "base"
             }
