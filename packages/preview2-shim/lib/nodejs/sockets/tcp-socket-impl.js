@@ -144,7 +144,7 @@ c
       throw new Error(err);
     }
 
-    this[symbolState].state = "connected";
+    this[symbolState].state = SocketConnectionState.Connected;
   }
 
   // TODO: is this needed?
@@ -244,8 +244,8 @@ c
       this.network !== null && this.network.id !== network.id,
       "already-attached"
     );
-    assert(this[symbolState].state === "connected", "already-connected");
-    assert(this[symbolState].state === "connection", "already-listening");
+    assert(this[symbolState].state === SocketConnectionState.Connected, "already-connected");
+    assert(this[symbolState].state === SocketConnectionState.Listening, "already-listening");
     assert(this[symbolState].operationInProgress, "concurrency-conflict");
 
     const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
