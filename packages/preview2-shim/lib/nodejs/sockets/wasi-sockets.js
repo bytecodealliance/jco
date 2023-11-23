@@ -7,15 +7,32 @@
  * @typedef {import("../../../types/interfaces/wasi-sockets-udp").UdpSocket} UdpSocket
  */
 
-import { assert } from "../../common/assert.js";
-import { SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST, SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST } from "../../io/calls.js";
-import { ioCall, pollableCreate } from "../../io/worker-io.js";
-import { TcpSocketImpl } from "./tcp-socket-impl.js";
-import { deserializeIpAddress } from "./socket-common.js";
 import { isIP } from "net";
-import { IncomingDatagramStream, OutgoingDatagramStream, UdpSocketImpl } from "./udp-socket-impl.js";
+import { assert } from "../../common/assert.js";
+import {
+  SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+} from "../../io/calls.js";
+import {
+  SOCKET_INPUT_STREAM,
+  SOCKET_OUTPUT_STREAM,
+} from "../../io/stream-types.js";
+import {
+  inputStreamCreate,
+  ioCall,
+  outputStreamCreate,
+  pollableCreate,
+} from "../../io/worker-io.js";
+import { deserializeIpAddress } from "./socket-common.js";
+import { TcpSocketImpl } from "./tcp-socket-impl.js";
+import {
+  IncomingDatagramStream,
+  OutgoingDatagramStream,
+  UdpSocketImpl,
+} from "./udp-socket-impl.js";
 
-const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 /** @type {ErrorCode} */
 export const errorCode = {
@@ -159,8 +176,8 @@ export class WasiSockets {
        * @param {IpAddressFamily} addressFamily
        * */
       constructor(addressFamily) {
-        super(addressFamily);
-        net.tcpSockets.set(this.id, this);
+        super(addressFamily, TcpSocket);
+        net.tcpSockets.set(this.id);
       }
     }
 
@@ -189,8 +206,6 @@ export class WasiSockets {
 
     this.udpCreateSocket = {
       createUdpSocket(addressFamily) {
-        net.socketCnt++;
-
         assert(
           supportedAddressFamilies.includes(addressFamily) === false,
           errorCode.notSupported,
@@ -236,7 +251,8 @@ export class WasiSockets {
           net.socketCnt++;
           return new TcpSocket(addressFamily);
         } catch (err) {
-          assert(true, errorCode.notSupported, err);
+          // assert(true, errorCode.unknown, err);
+          throw err;
         }
       },
     };
@@ -246,13 +262,14 @@ export class WasiSockets {
       #data;
       #curItem = 0;
       #error;
-      resolveNextAddress () {
-        if (this.#error)
-          throw this.#error;
+      resolveNextAddress() {
+        if (this.#error) throw this.#error;
         if (!this.#data) {
-          const { value: addresses, error } = ioCall(SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST, this.#pollId);
-          if (error)
-            throw (this.#error = convertResolveAddressError(error));
+          const { value: addresses, error } = ioCall(
+            SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+            this.#pollId
+          );
+          if (error) throw (this.#error = convertResolveAddressError(error));
           this.#data = addresses.map((address) => {
             const family = `ipv${isIP(address)}`;
             return {
@@ -265,29 +282,26 @@ export class WasiSockets {
           return this.#data[this.#curItem++];
         return undefined;
       }
-      subscribe () {
+      subscribe() {
         if (this.#data) return pollableCreate(0);
         return pollableCreate(this.#pollId);
       }
-      [symbolDispose] () {
-        if (!this.#data)
-          ioCall(SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST);
+      [symbolDispose]() {
+        if (!this.#data) ioCall(SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST);
       }
       static _create(hostname) {
         const res = new ResolveAddressStream();
-        if (hostname === '0.0.0.0') {
+        if (hostname === "0.0.0.0") {
           res.#pollId = 0;
-          res.#data = { tag: 'ipv4', val: [0, 0, 0, 0] };
+          res.#data = { tag: "ipv4", val: [0, 0, 0, 0] };
           return res;
-        }
-        else if (hostname === '::') {
+        } else if (hostname === "::") {
           res.#pollId = 0;
-          res.#data = { tag: 'ipv6', val: [0, 0, 0, 0, 0, 0, 0, 0] };
+          res.#data = { tag: "ipv6", val: [0, 0, 0, 0, 0, 0, 0, 0] };
           return res;
-        }
-        else if (hostname === '::1') {
+        } else if (hostname === "::1") {
           res.#pollId = 0;
-          res.#data = { tag: 'ipv6', val: [0, 0, 0, 0, 0, 0, 0, 1] };
+          res.#data = { tag: "ipv6", val: [0, 0, 0, 0, 0, 0, 0, 1] };
           return res;
         }
         res.#pollId = ioCall(SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, null, {
@@ -318,8 +332,9 @@ export class WasiSockets {
   }
 }
 
-function convertResolveAddressError (err) {
+function convertResolveAddressError(err) {
   switch (err.code) {
-    default: return 'unknown';
+    default:
+      return "unknown";
   }
 }

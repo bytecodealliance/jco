@@ -15,6 +15,9 @@ import { assert } from "../../common/assert.js";
 import { deserializeIpAddress, cappedUint32, serializeIpAddress } from "./socket-common.js";
 import { pollableCreate } from "../../io/worker-io.js";
 
+const symbolState = Symbol("SocketInternalState");
+
+// TODO: move to a common
 const SocketConnectionState = {
   Error: "Error",
   Closed: "Closed",
@@ -23,14 +26,14 @@ const SocketConnectionState = {
   Listening: "Listening",
 };
 
-const symbolState = Symbol("SocketInternalState");
-
 // see https://github.com/libuv/libuv/blob/master/docs/src/udp.rst
+// TODO: move to a common
 const Flags = {
   UV_UDP_IPV6ONLY: 1,
   UV_UDP_REUSEADDR: 4,
 };
 
+// TODO: move to a common
 const BufferSizeFlags = {
   SO_RCVBUF: true,
   SO_SNDBUF: false,
@@ -359,7 +362,7 @@ export class UdpSocketImpl {
    * @throws {invalid-state} The socket is not bound to any local address.
    */
   localAddress() {
-    assert(this[symbolState].isBound === false, "invalid-state");
+    // assert(this[symbolState].isBound === false, "invalid-state");
 
     const out = {};
     this.#socket.getsockname(out);
