@@ -27,7 +27,13 @@ const { ShutdownWrap } = process.binding("stream_wrap");
 
 import { SOCKET_INPUT_STREAM, SOCKET_OUTPUT_STREAM } from "../../io/stream-types.js";
 import { inputStreamCreate, outputStreamCreate, pollableCreate } from "../../io/worker-io.js";
-import { deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
+import {
+  deserializeIpAddress,
+  isIPv4MappedAddress,
+  isMulticastIpAddress,
+  isUnicastIpAddress,
+  serializeIpAddress,
+} from "./socket-common.js";
 
 // TODO: move to a common
 const ShutdownType = {
@@ -79,7 +85,6 @@ export class TcpSocketImpl {
 
   // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #backlog = 128;
-  c;
   // this is set by the TcpSocket child class
   tcpSocketChildClassType = null;
 
@@ -101,7 +106,7 @@ export class TcpSocketImpl {
 
   #handleConnection(err, newClientSocket) {
     if (err) {
-      assert(true, "", err);
+      assert(true, "unknown", err);
     }
 
     this[symbolState].acceptedClient = new NodeSocket({
@@ -185,6 +190,7 @@ export class TcpSocketImpl {
    **/
   finishBind() {
     // we reset the bound state to false, in case the last call to bind failed
+    // when this methods returns successfully, we set isBound=true again
     this[symbolState].isBound = false;
 
     assert(this[symbolState].operationInProgress === false, "not-in-progress");
@@ -226,6 +232,17 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already in the Listener state. (EOPNOTSUPP, EINVAL on Windows)
    */
   startConnect(network, remoteAddress) {
+    const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
+    const ipFamily = `ipv${isIP(host)}`;
+
+    assert(host === "0.0.0.0" || host === "0:0:0:0:0:0:0:0", "invalid-argument");
+    assert(remoteAddress.val.port === 0, "invalid-argument");
+    assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "invalid-argument");
+
+    assert(isUnicastIpAddress(remoteAddress) === false, "invalid-argument");
+    assert(isMulticastIpAddress(remoteAddress) === true, "invalid-argument");
+    assert(this.ipv6Only() && isIPv4MappedAddress(remoteAddress) === true, "invalid-argument");
+
     assert(
       this[symbolState].isBound === false ||
         this[symbolState].state === SocketConnectionState.Connected ||
@@ -233,12 +250,7 @@ export class TcpSocketImpl {
       "invalid-state"
     );
     assert(network !== this.network, "invalid-argument");
-
-    const host = serializeIpAddress(remoteAddress, this.#socketOptions.family);
-    const ipFamily = `ipv${isIP(host)}`;
-
     assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
-    assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "invalid-argument");
     assert(
       remoteAddress.val.port === 0 && platform() === "win32",
       "invalid-argument",
@@ -384,7 +396,10 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is not bound to any local address.
    */
   localAddress() {
-    assert(this[symbolState].isBound === false, "invalid-state");
+    if (this.isListening()) {
+      // we are running in server mode
+      assert(this[symbolState].isBound === false, "invalid-state");
+    }
 
     const { localAddress, localPort, family } = this.#socketOptions;
     return {

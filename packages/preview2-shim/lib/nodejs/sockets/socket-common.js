@@ -65,3 +65,24 @@ export function deserializeIpAddress(addr, family) {
   }
   return address;
 }
+
+export function isUnicastIpAddress(ipSocketAddress) {
+  return ipSocketAddress.val.address[0] !== 0xff; // 255
+}
+
+export function isMulticastIpAddress(ipSocketAddress) {
+  return ipSocketAddress.val.address[0] === 224 || ipSocketAddress.val.address[0] === 0xff00;
+}
+
+export function isBroadcastIpAddress(ipSocketAddress) {
+  return (
+    ipSocketAddress.val.address[0] === 0xff && // 255
+    ipSocketAddress.val.address[1] === 0xff && // 255
+    ipSocketAddress.val.address[2] === 0xff && // 255
+    ipSocketAddress.val.address[3] === 0xff // 255
+  );
+}
+
+export function isIPv4MappedAddress(ipSocketAddress) {
+  return ipSocketAddress.val.address[5] === 0xffff;
+}
