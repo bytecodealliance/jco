@@ -51,11 +51,16 @@ const SocketConnectionState = {
   Listening: "Listening",
 };
 
+// As a workaround, we store the bound address in a global map
+// this is needed because 'address-in-use' is not always thrown when binding
+// more than one socket to the same address
+// TODO: remove this workaround when we figure out why!
+const globalBoundAddresses = new Map();
+
 // TODO: implement would-block exceptions
 // TODO: implement concurrency-conflict exceptions
 export class TcpSocketImpl {
-  /** @type {TCP.TCPConstants.SERVER} */ #serverHandle = null;
-  /** @type {TCP.TCPConstants.SOCKET} */ #clientHandle = null;
+  /** @type {TCP.TCPConstants.SOCKET} */ #socket = null;
   /** @type {Network} */ network = null;
 
   #socketOptions = {};
@@ -91,15 +96,13 @@ export class TcpSocketImpl {
   /**
    * @param {IpAddressFamily} addressFamily
    * @param {TcpSocket} childClassType
-   * @returns
    */
   constructor(addressFamily, childClassType) {
     this.#socketOptions.family = addressFamily;
     this.tcpSocketChildClassType = childClassType;
 
-    this.#clientHandle = new TCP(TCPConstants.SOCKET);
-    this.#serverHandle = new TCP(TCPConstants.SERVER);
-    this._handle = this.#serverHandle;
+    this.#socket = new TCP(TCPConstants.SOCKET | TCPConstants.SERVER);
+    this._handle = this.#socket;
     this._handle.onconnection = this.#handleConnection.bind(this);
     this._handle.onclose = this.#handleDisconnect.bind(this);
   }
@@ -109,23 +112,30 @@ export class TcpSocketImpl {
       assert(true, "unknown", err);
     }
 
+    this.#connections++;
+
     this[symbolState].acceptedClient = new NodeSocket({
       handle: newClientSocket,
     });
-    this.#connections++;
-    // reserved
-    this[symbolState].acceptedClient.server = this.#serverHandle;
-    this[symbolState].acceptedClient._server = this.#serverHandle;
+    this[symbolState].acceptedClient.server = this.#socket;
+    this[symbolState].acceptedClient._server = this.#socket;
+    
+    // TODO: handle data received from the client
     this[symbolState].acceptedClient._handle.onread = (nread, buffer) => {
       if (nread > 0) {
-        // TODO: handle data received from the client
         const data = buffer.toString("utf8", 0, nread);
         console.log("accepted socket on read:", data);
       }
     };
   }
 
-  #handleDisconnect(err) {}
+  #handleDisconnect(err) {
+    if (err) {
+      assert(true, "unknown", err);
+    }
+
+    this.#connections--;
+  }
 
   #onClientConnectComplete(err) {
     if (err) {
@@ -166,12 +176,8 @@ export class TcpSocketImpl {
       "The `local-address` has the wrong address family"
     );
 
-    // TODO: assert localAddress is not an unicast address
-    // assert(
-    //   this.#socketOptions.family.toLocaleLowerCase() === "ipv4" && this.ipv6Only(),
-    //   "invalid-argument",
-    //   "`local-address` is an IPv4-mapped IPv6 address, but the socket has `ipv6-only` enabled."
-    // );
+    assert(isUnicastIpAddress(localAddress) === false, "invalid-argument");
+    assert(isIPv4MappedAddress(localAddress) && this.ipv6Only() === true, "invalid-argument");
 
     const { port } = localAddress.val;
     this.#socketOptions.localAddress = address;
@@ -192,21 +198,22 @@ export class TcpSocketImpl {
     // we reset the bound state to false, in case the last call to bind failed
     // when this methods returns successfully, we set isBound=true again
     this[symbolState].isBound = false;
-
+    
     assert(this[symbolState].operationInProgress === false, "not-in-progress");
-
+    
     const { localAddress, localPort, family } = this.#socketOptions;
     assert(isIP(localAddress) === 0, "address-not-bindable");
+    assert(globalBoundAddresses.has(localAddress), "address-in-use");
 
     let err = null;
     if (family.toLocaleLowerCase() === "ipv4") {
-      err = this.#serverHandle.bind(localAddress, localPort);
+      err = this.#socket.bind(localAddress, localPort);
     } else if (family.toLocaleLowerCase() === "ipv6") {
-      err = this.#serverHandle.bind6(localAddress, localPort);
+      err = this.#socket.bind6(localAddress, localPort);
     }
 
     if (err) {
-      this.#serverHandle.close();
+      this.#socket.close();
       assert(err === -22, "address-in-use");
       assert(err === -49, "address-not-bindable");
       assert(err === -99, "address-not-bindable"); // EADDRNOTAVAIL
@@ -215,6 +222,8 @@ export class TcpSocketImpl {
 
     this[symbolState].isBound = true;
     this[symbolState].operationInProgress = false;
+    
+    globalBoundAddresses.set(localAddress, this.#socket);
   }
 
   /**
@@ -241,7 +250,7 @@ export class TcpSocketImpl {
 
     assert(isUnicastIpAddress(remoteAddress) === false, "invalid-argument");
     assert(isMulticastIpAddress(remoteAddress) === true, "invalid-argument");
-    assert(this.ipv6Only() && isIPv4MappedAddress(remoteAddress) === true, "invalid-argument");
+    assert(isIPv4MappedAddress(remoteAddress) && this.ipv6Only() === true, "invalid-argument");
 
     assert(
       this[symbolState].isBound === false ||
@@ -288,7 +297,7 @@ export class TcpSocketImpl {
       connect = "connect6";
     }
 
-    err = this.#clientHandle[connect](connectReq, remoteAddress, remotePort);
+    err = this.#socket[connect](connectReq, remoteAddress, remotePort);
 
     if (err) {
       console.error(`[tcp] connect error on socket: ${err}`);
@@ -301,11 +310,11 @@ export class TcpSocketImpl {
     connectReq.localAddress = localAddress;
     connectReq.localPort = localPort;
 
-    this.#clientHandle.onread = (buffer) => {
+    this.#socket.onread = (buffer) => {
       // TODO: handle data received from the server
     };
 
-    this.#clientHandle.readStart();
+    this.#socket.readStart();
     this[symbolState].operationInProgress = false;
 
     const streamId = this.#connections++;
@@ -337,10 +346,10 @@ export class TcpSocketImpl {
   finishListen() {
     assert(this[symbolState].operationInProgress === false, "not-in-progress");
 
-    const err = this.#serverHandle.listen(this.#backlog);
+    const err = this.#socket.listen(this.#backlog);
     if (err) {
       console.error(`[tcp] listen error on socket: ${err}`);
-      this.#serverHandle.close();
+      this.#socket.close();
 
       // TODO: handle errors
       throw new Error(err);
@@ -396,17 +405,17 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is not bound to any local address.
    */
   localAddress() {
-    if (this.isListening()) {
-      // we are running in server mode
-      assert(this[symbolState].isBound === false, "invalid-state");
-    }
+    assert(this[symbolState].isBound === false, "invalid-state");
 
-    const { localAddress, localPort, family } = this.#socketOptions;
+    const out = {};
+    this.#socket.getsockname(out);
+
+    const { address, port, family } = out;
     return {
-      tag: family,
+      tag: family.toLocaleLowerCase(),
       val: {
-        address: deserializeIpAddress(localAddress, family),
-        port: localPort,
+        address: deserializeIpAddress(address, family),
+        port,
       },
     };
   }
@@ -482,7 +491,7 @@ export class TcpSocketImpl {
    * @returns {void}
    */
   setKeepAliveEnabled(value) {
-    this.#clientHandle.setKeepAlive(value);
+    this.#socket.setKeepAlive(value);
     this[symbolState].keepAlive = value;
 
     if (value) {
@@ -656,14 +665,14 @@ export class TcpSocketImpl {
   }
 
   [symbolDispose]() {
-    this.#serverHandle.close();
-    this.#clientHandle.close();
+    this.#socket.close();
+    globalBoundAddresses.delete(this.#socketOptions.localAddress);
   }
 
   server() {
-    return this.#serverHandle;
+    return this.#socket;
   }
   client() {
-    return this.#clientHandle;
+    return this.#socket;
   }
 }

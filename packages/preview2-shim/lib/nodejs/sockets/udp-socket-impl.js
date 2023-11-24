@@ -362,7 +362,7 @@ export class UdpSocketImpl {
    * @throws {invalid-state} The socket is not bound to any local address.
    */
   localAddress() {
-    // assert(this[symbolState].isBound === false, "invalid-state");
+    assert(this[symbolState].isBound === false, "invalid-state");
 
     const out = {};
     this.#socket.getsockname(out);
