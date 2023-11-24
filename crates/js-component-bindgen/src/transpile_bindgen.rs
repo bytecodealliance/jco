@@ -549,11 +549,10 @@ impl<'a> Instantiator<'a, '_> {
                         .component
                         .initializers
                         .iter()
-                        .filter_map(|i| match i {
+                        .find_map(|i| match i {
                             GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
                             _ => None,
                         })
-                        .next()
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
@@ -707,11 +706,10 @@ impl<'a> Instantiator<'a, '_> {
                         .component
                         .initializers
                         .iter()
-                        .filter_map(|i| match i {
+                        .find_map(|i| match i {
                             GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
                             _ => None,
                         })
-                        .next()
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
@@ -1054,11 +1052,10 @@ impl<'a> Instantiator<'a, '_> {
                 .component
                 .initializers
                 .iter()
-                .filter_map(|i| match i {
+                .find_map(|i| match i {
                     GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
                     _ => None,
                 })
-                .next()
                 .unwrap();
 
             if let Some(dtor) = &resource_def.dtor {
