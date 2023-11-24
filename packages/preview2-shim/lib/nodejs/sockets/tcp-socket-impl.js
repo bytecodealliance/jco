@@ -29,6 +29,7 @@ import { SOCKET_INPUT_STREAM, SOCKET_OUTPUT_STREAM } from "../../io/stream-types
 import { inputStreamCreate, outputStreamCreate, pollableCreate } from "../../io/worker-io.js";
 import {
   deserializeIpAddress,
+  findUnsuedLocalAddress,
   isIPv4MappedAddress,
   isMulticastIpAddress,
   isUnicastIpAddress,
@@ -155,6 +156,14 @@ export class TcpSocketImpl {
   // TODO: is this needed?
   #handleAfterShutdown() {}
 
+  #autoBind(network, ipFamily) {
+    const unsusedLocalAddress = findUnsuedLocalAddress(ipFamily);
+    this.#socketOptions.localAddress = serializeIpAddress(unsusedLocalAddress, this.#socketOptions.family);
+    this.#socketOptions.localPort = unsusedLocalAddress.val.port;
+    this.startBind(network, unsusedLocalAddress);
+    this.finishBind();
+  }
+
   /**
    * @param {Network} network
    * @param {IpSocketAddress} localAddress
@@ -177,7 +186,7 @@ export class TcpSocketImpl {
     );
 
     assert(isUnicastIpAddress(localAddress) === false, "invalid-argument");
-    assert(isIPv4MappedAddress(localAddress) && this.ipv6Only() === true, "invalid-argument");
+    assert(isIPv4MappedAddress(localAddress) && this.ipv6Only(), "invalid-argument");
 
     const { port } = localAddress.val;
     this.#socketOptions.localAddress = address;
@@ -198,9 +207,9 @@ export class TcpSocketImpl {
     // we reset the bound state to false, in case the last call to bind failed
     // when this methods returns successfully, we set isBound=true again
     this[symbolState].isBound = false;
-    
+
     assert(this[symbolState].operationInProgress === false, "not-in-progress");
-    
+
     const { localAddress, localPort, family } = this.#socketOptions;
     assert(isIP(localAddress) === 0, "address-not-bindable");
     assert(globalBoundAddresses.has(localAddress), "address-in-use");
@@ -222,7 +231,7 @@ export class TcpSocketImpl {
 
     this[symbolState].isBound = true;
     this[symbolState].operationInProgress = false;
-    
+
     globalBoundAddresses.set(localAddress, this.#socket);
   }
 
@@ -247,24 +256,23 @@ export class TcpSocketImpl {
     assert(host === "0.0.0.0" || host === "0:0:0:0:0:0:0:0", "invalid-argument");
     assert(remoteAddress.val.port === 0, "invalid-argument");
     assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "invalid-argument");
-
     assert(isUnicastIpAddress(remoteAddress) === false, "invalid-argument");
-    assert(isMulticastIpAddress(remoteAddress) === true, "invalid-argument");
-    assert(isIPv4MappedAddress(remoteAddress) && this.ipv6Only() === true, "invalid-argument");
+    assert(isMulticastIpAddress(remoteAddress), "invalid-argument");
+    assert(isIPv4MappedAddress(remoteAddress) && this.ipv6Only(), "invalid-argument");
+
+    if (this[symbolState].isBound === false) {
+      this.#autoBind(network, ipFamily);
+    }
 
     assert(
-      this[symbolState].isBound === false ||
-        this[symbolState].state === SocketConnectionState.Connected ||
+      this[symbolState].state === SocketConnectionState.Connected ||
         this[symbolState].state === SocketConnectionState.Listener,
       "invalid-state"
     );
+
     assert(network !== this.network, "invalid-argument");
     assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
-    assert(
-      remoteAddress.val.port === 0 && platform() === "win32",
-      "invalid-argument",
-      "The port in `remote-address` is set to 0."
-    );
+    assert(remoteAddress.val.port === 0 && platform() === "win32", "invalid-argument");
 
     this.#socketOptions.remoteAddress = host;
     this.#socketOptions.remotePort = remoteAddress.val.port;
@@ -290,10 +298,8 @@ export class TcpSocketImpl {
     const connectReq = new TCPConnectWrap();
 
     let err = null;
-    let connect = "connect";
-    if (family.toLocaleLowerCase() === "ipv4") {
-      connect = "connect";
-    } else if (family.toLocaleLowerCase() === "ipv6") {
+    let connect = "connect"; // ipv4
+    if (family.toLocaleLowerCase() === "ipv6") {
       connect = "connect6";
     }
 
@@ -367,6 +373,10 @@ export class TcpSocketImpl {
    * @throws {new-socket-limit} The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
    */
   accept() {
+    if (this[symbolState].isBound === false) {
+      this.#autoBind(this.network, ipFamily);
+    }
+
     assert(this[symbolState].state !== SocketConnectionState.Listener, "invalid-state");
 
     const inputStream = inputStreamCreate(SOCKET_INPUT_STREAM, this.id);
@@ -375,7 +385,7 @@ export class TcpSocketImpl {
     // Because we have to return a valid TcpSocket resrouces type,
     // we need to instantiate the correct child class
     //
-    const socket = new this.tcpSocketChildClassType(this.addressFamily);
+    const socket = new this.tcpSocketChildClassType(this.addressFamily());
 
     // The returned socket is bound and in the Connection state.
     // The following properties are inherited from the listener socket:

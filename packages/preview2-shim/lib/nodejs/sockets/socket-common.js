@@ -66,6 +66,20 @@ export function deserializeIpAddress(addr, family) {
   return address;
 }
 
+export function findUnsuedLocalAddress(family) {
+  let address = [127, 0, 0, 1];
+  if (family.toLocaleLowerCase() === "ipv6") {
+    address = [0, 0, 0, 0, 0, 0, 0, 1];
+  }
+  return {
+    tag: family,
+    val: {
+      address,
+      port: 0,
+    },
+  };
+}
+
 export function isUnicastIpAddress(ipSocketAddress) {
   return !isMulticastIpAddress(ipSocketAddress) && !isBroadcastIpAddress(ipSocketAddress);
 }
