@@ -39,6 +39,23 @@ impl Source {
         }
     }
 
+    pub fn prepend_str(&mut self, src: &str) {
+        // Infer the indent at start: it's the difference between the size of the first line, and
+        // its size if trimmed at the left. That raw difference is in number of spaces, not in
+        // units of indent; since each indent is 2 spaces, divide by 2 at the end.
+        let indent = self
+            .s
+            .lines()
+            .next()
+            .map_or(0, |line| (line.len() - line.trim_start().len()) / 2);
+        let mut new_start = Source {
+            s: String::new(),
+            indent,
+        };
+        new_start.push_str(src);
+        self.s = new_start.s + &self.s;
+    }
+
     pub fn indent(&mut self, amt: usize) {
         self.indent += amt;
     }
