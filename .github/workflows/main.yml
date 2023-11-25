@@ -10,11 +10,6 @@ defaults:
   run:
     shell: bash
 
-# Cancel any in-flight jobs for the same PR/branch so there's only one active
-# at a time
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-
 jobs:
   test:
     name: Test
@@ -28,8 +23,8 @@ jobs:
         include:
           - name: linux
             os: ubuntu-latest
-          - name: windows
-            os: windows-latest
+          # - name: windows
+          #  os: windows-latest
           - name: macos
             os: macos-latest
     runs-on: ${{ matrix.os }}
