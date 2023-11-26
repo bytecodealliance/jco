@@ -39,7 +39,7 @@ import {
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
 } from "./calls.js";
-import { FILE, STDERR, STDIN, STDOUT } from "./stream-types.js";
+import { FILE, SOCKET, STDERR, STDIN, STDOUT } from "./stream-types.js";
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -140,6 +140,12 @@ function handle(call, id, payload) {
       }
       unfinishedFutures.delete(id);
       return future;
+    }
+    case OUTPUT_STREAM_CREATE | SOCKET: {
+      throw new Error("not implemented");
+    }
+    case INPUT_STREAM_CREATE | SOCKET: {
+      throw new Error("not implemented");
     }
 
     // Stdio

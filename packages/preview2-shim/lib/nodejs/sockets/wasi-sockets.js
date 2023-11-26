@@ -14,23 +14,10 @@ import {
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
 } from "../../io/calls.js";
-import {
-  SOCKET_INPUT_STREAM,
-  SOCKET_OUTPUT_STREAM,
-} from "../../io/stream-types.js";
-import {
-  inputStreamCreate,
-  ioCall,
-  outputStreamCreate,
-  pollableCreate,
-} from "../../io/worker-io.js";
+import { ioCall, pollableCreate } from "../../io/worker-io.js";
 import { deserializeIpAddress } from "./socket-common.js";
 import { TcpSocketImpl } from "./tcp-socket-impl.js";
-import {
-  IncomingDatagramStream,
-  OutgoingDatagramStream,
-  UdpSocketImpl,
-} from "./udp-socket-impl.js";
+import { IncomingDatagramStream, OutgoingDatagramStream, UdpSocketImpl } from "./udp-socket-impl.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -262,10 +249,7 @@ export class WasiSockets {
       resolveNextAddress() {
         if (this.#error) throw this.#error;
         if (!this.#data) {
-          const { value: addresses, error } = ioCall(
-            SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
-            this.#pollId
-          );
+          const { value: addresses, error } = ioCall(SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST, this.#pollId);
           if (error) throw (this.#error = convertResolveAddressError(error));
           this.#data = addresses.map((address) => {
             const family = `ipv${isIP(address)}`;
@@ -275,8 +259,7 @@ export class WasiSockets {
             };
           });
         }
-        if (this.#curItem < this.#data.length)
-          return this.#data[this.#curItem++];
+        if (this.#curItem < this.#data.length) return this.#data[this.#curItem++];
         return undefined;
       }
       subscribe() {

@@ -26,8 +26,9 @@ const symbolOperations = Symbol("SocketOperationsState");
 const { TCP, TCPConnectWrap, constants: TCPConstants } = process.binding("tcp_wrap");
 const { ShutdownWrap } = process.binding("stream_wrap");
 
-import { SOCKET_INPUT_STREAM, SOCKET_OUTPUT_STREAM } from "../../io/stream-types.js";
-import { inputStreamCreate, outputStreamCreate, pollableCreate } from "../../io/worker-io.js";
+import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE } from "../../io/calls.js";
+import { SOCKET } from "../../io/stream-types.js";
+import { inputStreamCreate, ioCall, outputStreamCreate, pollableCreate } from "../../io/worker-io.js";
 import {
   deserializeIpAddress,
   findUnsuedLocalAddress,
@@ -36,6 +37,7 @@ import {
   isUnicastIpAddress,
   serializeIpAddress,
 } from "./socket-common.js";
+import { _setPreopens } from "../filesystem.js";
 
 // TODO: move to a common
 const ShutdownType = {
@@ -374,9 +376,8 @@ export class TcpSocketImpl {
 
     this.#socket.readStart();
 
-    const streamId = this.#connections++;
-    const inputStream = inputStreamCreate(SOCKET_INPUT_STREAM, streamId);
-    const outputStream = outputStreamCreate(SOCKET_OUTPUT_STREAM, streamId);
+    const inputStream = inputStreamCreate(SOCKET, ioCall(INPUT_STREAM_CREATE | SOCKET, null, {}));
+    const outputStream = outputStreamCreate(SOCKET, ioCall(OUTPUT_STREAM_CREATE | SOCKET, null, {}));
 
     this[symbolOperations].connect--;
     this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
@@ -586,7 +587,7 @@ export class TcpSocketImpl {
     assert(value === 0n, "invalid-argument", "The provided value was 0.");
     assert(this[symbolSocketState].connectionState === SocketConnectionState.Connected, "invalid-state");
 
-    this[symbolSocketState].backlogSize = value;
+    this[symbolSocketState].backlogSize = Number(value);
   }
 
   /**
