@@ -162,6 +162,7 @@ const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
 delete OutgoingDatagramStream._create;
 
 export class UdpSocketImpl {
+  id = 1;
   /** @type {UDP} */ #socket = null;
   /** @type {Network} */ network = null;
 
@@ -189,7 +190,8 @@ export class UdpSocketImpl {
    * @param {IpAddressFamily} addressFamily
    * @returns {void}
    */
-  constructor(addressFamily) {
+  constructor(addressFamily, id) {
+    this.id = id;
     this.#socketOptions.family = addressFamily;
 
     this.#socket = new UDP();
@@ -371,7 +373,7 @@ export class UdpSocketImpl {
     return {
       tag: family.toLocaleLowerCase(),
       val: {
-        address: deserializeIpAddress(address, family),
+        address: deserializeIpAddress(address),
         port,
       },
     };
@@ -402,7 +404,7 @@ export class UdpSocketImpl {
     return {
       tag: family.toLocaleLowerCase(),
       val: {
-        address: deserializeIpAddress(address, family),
+        address: deserializeIpAddress(address),
         port,
       },
     };

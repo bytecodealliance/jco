@@ -42,10 +42,12 @@ function ipv4ToTuple(ipv4) {
   return ipv4.split(".").map((segment) => parseInt(segment, 10));
 }
 
-export function serializeIpAddress(addr = undefined, family) {
+export function serializeIpAddress(addr = undefined, includePort = false) {
   if (addr === undefined) {
     addr = { val: { address: [] } };
   }
+
+  const family = addr.tag;
 
   let { address } = addr.val;
   if (family.toLocaleLowerCase() === "ipv4") {
@@ -53,6 +55,11 @@ export function serializeIpAddress(addr = undefined, family) {
   } else if (family.toLocaleLowerCase() === "ipv6") {
     address = tupleToIPv6(address);
   }
+
+  if (includePort) {
+    address = `${address}:${addr.val.port}`;
+  }
+
   return address;
 }
 
@@ -101,5 +108,9 @@ export function isBroadcastIpAddress(ipSocketAddress) {
 }
 
 export function isIPv4MappedAddress(ipSocketAddress) {
+  // ipv6: [0, 0, 0, 0, 0, 0xffff, 0, 0]
+  if (ipSocketAddress.val.address.length !== 8) {
+    return false;
+  }
   return ipSocketAddress.val.address[5] === 0xffff;
 }

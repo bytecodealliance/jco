@@ -148,7 +148,6 @@ export class WasiSockets {
     const net = this;
 
     class Network {
-      id = 1;
       constructor() {
         this.id = net.networkCnt++;
         net.networks.set(this.id, this);
@@ -160,7 +159,7 @@ export class WasiSockets {
        * @param {IpAddressFamily} addressFamily
        * */
       constructor(addressFamily) {
-        super(addressFamily);
+        super(addressFamily, net.socketCnt++);
         net.udpSockets.set(this.id, this);
       }
     }
@@ -176,8 +175,8 @@ export class WasiSockets {
        * @param {IpAddressFamily} addressFamily
        * */
       constructor(addressFamily) {
-        super(addressFamily, TcpSocket);
-        net.tcpSockets.set(this.id);
+        super(addressFamily, TcpSocket, net.socketCnt++);
+        net.tcpSockets.set(this.id, this);
       }
     }
 
@@ -219,7 +218,6 @@ export class WasiSockets {
         );
 
         try {
-          net.socketCnt++;
           return new UdpSocket(addressFamily);
         } catch (err) {
           assert(true, errorCode.notSupported, err);
@@ -248,7 +246,6 @@ export class WasiSockets {
         );
 
         try {
-          net.socketCnt++;
           return new TcpSocket(addressFamily);
         } catch (err) {
           // assert(true, errorCode.unknown, err);
@@ -274,7 +271,7 @@ export class WasiSockets {
             const family = `ipv${isIP(address)}`;
             return {
               tag: family,
-              val: deserializeIpAddress(address, family),
+              val: deserializeIpAddress(address),
             };
           });
         }
