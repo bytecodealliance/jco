@@ -19,8 +19,8 @@ import { streams } from "../io.js";
 const { InputStream, OutputStream } = streams;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
-const symbolSocketState = Symbol("SocketInternalState");
-const symbolOperations = Symbol("SocketOperationsState");
+const symbolSocketState = Symbol.SocketInternalState || Symbol.for("SocketInternalState");
+const symbolOperations = Symbol.SocketOperationsState || Symbol.for("SocketOperationsState");
 
 // See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
 const { TCP, TCPConnectWrap, constants: TCPConstants } = process.binding("tcp_wrap");
@@ -37,7 +37,6 @@ import {
   isUnicastIpAddress,
   serializeIpAddress,
 } from "./socket-common.js";
-import { _setPreopens } from "../filesystem.js";
 
 // TODO: move to a common
 const ShutdownType = {
@@ -68,7 +67,6 @@ export class TcpSocketImpl {
   /** @type {TCP.TCPConstants.SOCKET} */ #socket = null;
   /** @type {Network} */ network = null;
 
-  #socketOptions = {};
   #connections = 0;
 
   #pollId = null;
@@ -106,12 +104,21 @@ export class TcpSocketImpl {
     sendBufferSize: 1,
   };
 
+  #socketOptions = {
+    family: "ipv4",
+    localAddress: "",
+    localPort: 0,
+    remoteAddress: "",
+    remotePort: 0,
+  };
+
   // this is set by the TcpSocket child class
   #tcpSocketChildClassType = null;
 
   /**
    * @param {IpAddressFamily} addressFamily
    * @param {TcpSocket} childClassType
+   * @param {number} id
    */
   constructor(addressFamily, childClassType, id) {
     this.id = id;
@@ -260,16 +267,16 @@ export class TcpSocketImpl {
         assert(err === -99, "address-not-bindable"); // EADDRNOTAVAIL
         assert(true, "unknown", err);
       }
+
+      this[symbolSocketState].errorState = null;
+      this[symbolSocketState].isBound = true;
+      this[symbolOperations].bind--;
+
+      this.#cacheBoundAddress();
     } catch (err) {
       this[symbolSocketState].errorState = err;
       throw err;
     }
-
-    this[symbolSocketState].errorState = null;
-    this[symbolSocketState].isBound = true;
-    this[symbolOperations].bind--;
-
-    this.#cacheBoundAddress();
   }
 
   /**
@@ -502,7 +509,6 @@ export class TcpSocketImpl {
     this.#socket.getsockname(out);
 
     const { address, port, family } = out;
-
     this.#socketOptions.localAddress = address;
     this.#socketOptions.localPort = port;
     this.#socketOptions.family = family.toLocaleLowerCase();

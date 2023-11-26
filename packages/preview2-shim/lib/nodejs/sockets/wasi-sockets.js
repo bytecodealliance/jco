@@ -157,12 +157,11 @@ export class WasiSockets {
       IncomingDatagramStream,
     };
 
-    class TcpSocket extends TcpSocketImpl {
+    class TcpSocket {
       /**
        * @param {IpAddressFamily} addressFamily
        * */
       constructor(addressFamily) {
-        super(addressFamily, TcpSocket, net.socketCnt++);
         net.tcpSockets.set(this.id, this);
       }
     }
