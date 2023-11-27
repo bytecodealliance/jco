@@ -1,4 +1,4 @@
-# Contributing
+# Contributing to the Codebase
 
 Development is based on a standard `npm install && npm run build && npm run test` workflow.
 
@@ -10,7 +10,7 @@ Specific tests can be run adding the mocha `--grep` / `-g` flag, for example: `n
 
 Required prerequisites for building jco include:
 
-* Latest stable Rust with the `wasm32-wasi` target
+* [Latest stable Rust](https://www.rust-lang.org/tools/install) with the `wasm32-wasi` target
 * Node.js 18+ & npm (https://nodejs.org/en)
 
 ### Rust Toolchain
@@ -19,10 +19,12 @@ The latest Rust stable toolchain can be installed using [rustup](https://rustup.
 
 Specifically:
 
-```
+```shell
 rustup toolchain install stable
 rustup target add wasm32-wasi
 ```
+
+In case you do not have `rustup` installed on your system, please follow the installation instructions on the [official Rust website](https://www.rust-lang.org/tools/install) based on your operating system
 
 ## Project Structure
 
