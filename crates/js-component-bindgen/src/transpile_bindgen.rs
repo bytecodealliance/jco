@@ -11,11 +11,13 @@ use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
 use heck::*;
 use indexmap::IndexMap;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
 use wasmtime_environ::component::{
-    ComponentTypes, InterfaceType, TypeDef, TypeFuncIndex, TypeResourceTableIndex,
+    ComponentTypes, InterfaceType, RuntimeComponentInstanceIndex, TypeDef, TypeFuncIndex,
+    TypeResourceTableIndex,
 };
 use wasmtime_environ::{
     component,
@@ -141,6 +143,7 @@ pub fn transpile_bindgen(
         lowering_options: Default::default(),
         imports_resource_map: Default::default(),
         exports_resource_map: Default::default(),
+        used_instance_flags: Default::default(),
         defined_resource_classes: Default::default(),
         resource_dtors: Default::default(),
         resource_tables_initialized: (0..component.component.num_resource_tables)
@@ -152,6 +155,7 @@ pub fn transpile_bindgen(
     instantiator.instantiate();
     instantiator.ensure_resource_tables();
     instantiator.destructors();
+    instantiator.instance_flags();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
 
@@ -353,6 +357,8 @@ struct Instantiator<'a, 'b> {
     imports: BTreeMap<String, WorldKey>,
     imports_resource_map: ResourceMap,
     exports_resource_map: ResourceMap,
+    /// Instance flags which references have been emitted externally at least once.
+    used_instance_flags: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
     defined_resource_classes: BTreeSet<String>,
     resource_dtors: BTreeMap<TypeId, CoreDef>,
     lowering_options:
@@ -475,10 +481,6 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn instantiate(&mut self) {
-        for i in 0..self.component.num_runtime_component_instances {
-            uwriteln!(self.src.js_init, "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, {});", wasmtime_environ::component::FLAG_MAY_LEAVE | wasmtime_environ::component::FLAG_MAY_ENTER);
-        }
-
         for (i, trampoline) in self.translation.trampolines.iter() {
             let Trampoline::LowerImport {
                 index,
@@ -549,11 +551,10 @@ impl<'a> Instantiator<'a, '_> {
                         .component
                         .initializers
                         .iter()
-                        .filter_map(|i| match i {
+                        .find_map(|i| match i {
                             GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
                             _ => None,
                         })
-                        .next()
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
@@ -597,6 +598,20 @@ impl<'a> Instantiator<'a, '_> {
                 self.resource_tables_initialized[rid as usize] = true;
             }
         }
+    }
+
+    fn instance_flags(&mut self) {
+        // SAFETY: short-lived borrow, and the refcell isn't mutably borrowed in the loop's body.
+        let mut instance_flag_defs = String::new();
+        for used in self.used_instance_flags.borrow().iter() {
+            let i = used.as_u32();
+            uwriteln!(
+                &mut instance_flag_defs,
+                "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, {});",
+                wasmtime_environ::component::FLAG_MAY_LEAVE
+                | wasmtime_environ::component::FLAG_MAY_ENTER);
+        }
+        self.src.js_init.prepend_str(&instance_flag_defs);
     }
 
     fn destructors(&mut self) {
@@ -707,11 +722,10 @@ impl<'a> Instantiator<'a, '_> {
                         .component
                         .initializers
                         .iter()
-                        .filter_map(|i| match i {
+                        .find_map(|i| match i {
                             GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
                             _ => None,
                         })
-                        .next()
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
@@ -1054,11 +1068,10 @@ impl<'a> Instantiator<'a, '_> {
                 .component
                 .initializers
                 .iter()
-                .filter_map(|i| match i {
+                .find_map(|i| match i {
                     GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
                     _ => None,
                 })
-                .next()
                 .unwrap();
 
             if let Some(dtor) = &resource_def.dtor {
@@ -1435,7 +1448,11 @@ impl<'a> Instantiator<'a, '_> {
         match def {
             CoreDef::Export(e) => self.core_export(e),
             CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
-            CoreDef::InstanceFlags(i) => format!("instanceFlags{}", i.as_u32()),
+            CoreDef::InstanceFlags(i) => {
+                // SAFETY: short-lived borrow-mut.
+                self.used_instance_flags.borrow_mut().insert(*i);
+                format!("instanceFlags{}", i.as_u32())
+            }
         }
     }
 
