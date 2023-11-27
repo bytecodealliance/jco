@@ -142,10 +142,10 @@ function handle(call, id, payload) {
       return future;
     }
     case OUTPUT_STREAM_CREATE | SOCKET: {
-      throw new Error("not implemented");
+      // TODO: implement
     }
     case INPUT_STREAM_CREATE | SOCKET: {
-      throw new Error("not implemented");
+      // TODO: implement
     }
 
     // Stdio

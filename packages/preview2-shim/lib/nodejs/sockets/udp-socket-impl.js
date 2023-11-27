@@ -94,7 +94,7 @@ export class IncomingDatagramStream {
   }
 
   [symbolDispose]() {
-    throw new Error("Not implemented");
+    // TODO: stop receiving
   }
 }
 const incomingDatagramStreamCreate = IncomingDatagramStream._create;
@@ -171,7 +171,7 @@ export class OutgoingDatagramStream {
   }
 
   [symbolDispose]() {
-    throw new Error("Not implemented");
+    // TODO: stop sending
   }
 }
 const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
@@ -209,9 +209,9 @@ export class UdpSocketImpl {
 
   #socketOptions = {
     family: "ipv4",
-    localAddress: "",
+    localAddress: undefined,
     localPort: 0,
-    remoteAddress: "",
+    remoteAddress: undefined,
     remotePort: 0,
   };
 
@@ -343,10 +343,11 @@ export class UdpSocketImpl {
    * @throws {invalid-argument} The socket is already bound to a different network. The `network` passed to `connect` must be identical to the one passed to `bind`.
    */
   #startConnect(network, remoteAddress = undefined) {
-    this[symbolSocketState].operationInProgress = false;
+    this[symbolOperations].connect++;
 
-    if (remoteAddress === undefined || this[symbolSocketState].state === SocketConnectionState.Connected) {
-      // reusing a connected socket. See #finishConnect()
+    if (remoteAddress === undefined || this[symbolSocketState].connectionState === SocketConnectionState.Connected) {
+      // TODO: should we reuse a connected socket if remoteAddress is undefined?
+      // See #finishConnect()
       return;
     }
 
@@ -357,11 +358,10 @@ export class UdpSocketImpl {
     assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "invalid-argument");
 
     const { port } = remoteAddress.val;
-    this.#socketOptions.remoteAddress = host;
+    this.#socketOptions.remoteAddress = host; // can be undefined
     this.#socketOptions.remotePort = port;
 
     this.network = network;
-    this[symbolSocketState].operationInProgress = true;
   }
 
   /**
@@ -372,18 +372,26 @@ export class UdpSocketImpl {
    * @throws {would-block} Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    */
   #finishConnect() {
+    // Note: remoteAddress can be undefined
     const { remoteAddress, remotePort } = this.#socketOptions;
-    this[symbolSocketState].state = SocketConnectionState.Connecting;
+    this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
 
-    if (this[symbolSocketState].state === SocketConnectionState.Connected) {
-      // TODO: figure out how to reuse a connected socket
-      this.#socket.connect();
+    // TODO: figure out how to reuse a connected socket
+    console.log("connecing ", remoteAddress, remotePort);
+    const err = this.#socket.connect(remoteAddress ?? null, remotePort);
+
+    console.log({
+      err,
+    });
+
+    if (err === 0) {
+      this[symbolSocketState].connectionState = SocketConnectionState.Connected;
     } else {
-      this.#socket.connect(remoteAddress, remotePort);
+      assert(err === -22, "invalid-argument");
+      assert(true, "unknown", err);
     }
 
-    this[symbolSocketState].operationInProgress = false;
-    this[symbolSocketState].state = SocketConnectionState.Connected;
+    this[symbolOperations].connect--;
   }
 
   /**
@@ -445,8 +453,9 @@ export class UdpSocketImpl {
    * @throws {invalid-state} The socket is not streaming to a specific remote address. (ENOTCONN)
    */
   remoteAddress() {
+    console.log("remoteAddress", this[symbolSocketState]);
     assert(
-      this[symbolSocketState].state !== SocketConnectionState.Connected,
+      this[symbolSocketState].connectionState !== SocketConnectionState.Connected,
       "invalid-state",
       "The socket is not streaming to a specific remote address"
     );
@@ -457,6 +466,10 @@ export class UdpSocketImpl {
     assert(out.address === undefined, "invalid-state", "The socket is not streaming to a specific remote address");
 
     const { address, port, family } = out;
+    this.#socketOptions.remoteAddress = address;
+    this.#socketOptions.remotePort = port;
+    this.#socketOptions.family = family.toLocaleLowerCase();
+
     return {
       tag: family.toLocaleLowerCase(),
       val: {

@@ -44,7 +44,7 @@ function ipv4ToTuple(ipv4) {
 
 export function serializeIpAddress(addr = undefined, includePort = false) {
   if (addr === undefined) {
-    addr = { val: { address: [] } };
+    return undefined;
   }
 
   const family = addr.tag;
