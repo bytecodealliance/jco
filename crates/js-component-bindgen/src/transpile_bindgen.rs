@@ -155,7 +155,7 @@ pub fn transpile_bindgen(
     instantiator.instantiate();
     instantiator.ensure_resource_tables();
     instantiator.destructors();
-    instantiator.ensure_instance_flags();
+    instantiator.instance_flags();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
 
@@ -600,7 +600,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn ensure_instance_flags(&mut self) {
+    fn instance_flags(&mut self) {
         // SAFETY: short-lived borrow, and the refcell isn't mutably borrowed in the loop's body.
         let mut instance_flag_defs = String::new();
         for used in self.used_instance_flags.borrow().iter() {
