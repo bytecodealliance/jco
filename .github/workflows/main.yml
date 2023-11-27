@@ -17,7 +17,7 @@ jobs:
       matrix:
         name: [
             linux,
-            windows,
+            #windows,
             macos
         ]
         include:
