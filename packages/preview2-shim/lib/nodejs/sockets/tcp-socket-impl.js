@@ -83,7 +83,7 @@ export class TcpSocketImpl {
   };
 
   [symbolSocketState] = {
-    errorState: null,
+    lastErrorState: null,
     isBound: false,
     ipv6Only: false,
     connectionState: SocketConnectionState.Closed,
@@ -229,9 +229,9 @@ export class TcpSocketImpl {
       this.#socketOptions.localPort = port;
       this.network = network;
       this[symbolOperations].bind++;
-      this[symbolSocketState].errorState = null;
+      this[symbolSocketState].lastErrorState = null;
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
   }
@@ -268,13 +268,13 @@ export class TcpSocketImpl {
         assert(true, "unknown", err);
       }
 
-      this[symbolSocketState].errorState = null;
+      this[symbolSocketState].lastErrorState = null;
       this[symbolSocketState].isBound = true;
       this[symbolOperations].bind--;
 
       this.#cacheBoundAddress();
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
   }
@@ -316,11 +316,11 @@ export class TcpSocketImpl {
       assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
       assert(remoteAddress.val.port === 0 && platform() === "win32", "invalid-argument");
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
 
-    this[symbolSocketState].errorState = null;
+    this[symbolSocketState].lastErrorState = null;
 
     this.#socketOptions.remoteIpSocketAddress = remoteAddress;
     this.#socketOptions.remoteAddress = host;
@@ -344,11 +344,11 @@ export class TcpSocketImpl {
     try {
       assert(this[symbolOperations].connect === 0, "not-in-progress");
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
 
-    this[symbolSocketState].errorState = null;
+    this[symbolSocketState].lastErrorState = null;
 
     const { localAddress, localPort, remoteAddress, remotePort, family } = this.#socketOptions;
     const connectReq = new TCPConnectWrap();
@@ -383,7 +383,7 @@ export class TcpSocketImpl {
 
     this[symbolOperations].connect--;
     this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
-    
+
     // TODO: this is a temporary workaround, move this to the connection callback
     // when the connection is actually established
     this[symbolSocketState].connectionState = SocketConnectionState.Connected;
@@ -399,16 +399,16 @@ export class TcpSocketImpl {
    */
   startListen() {
     try {
-      assert(this[symbolSocketState].errorState !== null, "invalid-state");
+      assert(this[symbolSocketState].lastErrorState !== null, "invalid-state");
       assert(this[symbolSocketState].isBound === false, "invalid-state");
       assert(this[symbolSocketState].connectionState === SocketConnectionState.Connected, "invalid-state");
       assert(this[symbolSocketState].connectionState === SocketConnectionState.Listening, "invalid-state");
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
 
-    this[symbolSocketState].errorState = null;
+    this[symbolSocketState].lastErrorState = null;
     this[symbolOperations].listen++;
   }
 
@@ -422,11 +422,11 @@ export class TcpSocketImpl {
     try {
       assert(this[symbolOperations].listen === 0, "not-in-progress");
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
 
-    this[symbolSocketState].errorState = null;
+    this[symbolSocketState].lastErrorState = null;
 
     const err = this.#socket.listen(this[symbolSocketState].backlogSize);
     if (err) {
@@ -454,11 +454,11 @@ export class TcpSocketImpl {
     try {
       assert(this[symbolSocketState].connectionState !== SocketConnectionState.Listening, "invalid-state");
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
 
-    this[symbolSocketState].errorState = null;
+    this[symbolSocketState].lastErrorState = null;
 
     if (this[symbolSocketState].isBound === false) {
       this.#autoBind(this.network, this.addressFamily());
@@ -679,6 +679,7 @@ export class TcpSocketImpl {
 
   /**
    * @returns {number}
+   * @description Not available on Node.js (see https://github.com/WebAssembly/wasi-sockets/blob/main/Posix-compatibility.md#socket-options)
    */
   hopLimit() {
     return this[symbolSocketState].hopLimit;
@@ -690,20 +691,11 @@ export class TcpSocketImpl {
    * @throws {invalid-argument} (set) The TTL value must be 1 or higher.
    * @throws {invalid-state} (set) The socket is already in the Connection state.
    * @throws {invalid-state} (set) The socket is already in the Listener state.
+   * @description Not available on Node.js (see https://github.com/WebAssembly/wasi-sockets/blob/main/Posix-compatibility.md#socket-options)
    */
   setHopLimit(value) {
-    assert(!value || value < 1, "invalid-argument", "The TTL value must be 1 or higher.");
-    console.log("setHopLimit", {
-      s: this[symbolSocketState],
-      o: this[symbolSocketState].errorState,
-      value
-    });
+    assert(value < 1, "invalid-argument", "The TTL value must be 1 or higher.");
 
-    // assert(this[symbolSocketState].connectionState === SocketConnectionState.Connected, "invalid-state");
-    // assert(this[symbolSocketState].connectionState === SocketConnectionState.Connecting, "invalid-state");
-    // assert(this[symbolSocketState].connectionState === SocketConnectionState.Listening, "invalid-state");
-    
-    // TODO: set this on the client socket as well
     this[symbolSocketState].hopLimit = value;
   }
 
@@ -722,8 +714,9 @@ export class TcpSocketImpl {
    * @throws {invalid-state} (set) The socket is already in the Connection state.
    */
   setReceiveBufferSize(value) {
+    // TODO: review these assertions based on WIT specs
+    // assert(this[symbolSocketState].connectionState === SocketConnectionState.Connected, "invalid-state");
     assert(value === 0n, "invalid-argument", "The provided value was 0.");
-    assert(this[symbolSocketState].connectionState === SocketConnectionState.Connected, "invalid-state");
 
     // TODO: set this on the client socket as well
     this[symbolSocketState].receiveBufferSize = value;
@@ -744,8 +737,9 @@ export class TcpSocketImpl {
    * @throws {invalid-state} (set) The socket is already in the Listener state.
    */
   setSendBufferSize(value) {
+    // TODO: review these assertions based on WIT specs
+    // assert(this[symbolSocketState].connectionState === SocketConnectionState.Connected, "invalid-state");
     assert(value === 0n, "invalid-argument", "The provided value was 0.");
-    assert(this[symbolSocketState].connectionState === SocketConnectionState.Connected, "invalid-state");
 
     // TODO: set this on the client socket as well
     this[symbolSocketState].sendBufferSize = value;
