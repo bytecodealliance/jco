@@ -196,7 +196,7 @@ export class UdpSocketImpl {
   };
 
   [symbolSocketState] = {
-    errorState: null,
+    lastErrorState: null,
     isBound: false,
     ipv6Only: false,
     connectionState: SocketConnectionState.Closed,
@@ -264,9 +264,9 @@ export class UdpSocketImpl {
       this.#socketOptions.localPort = port;
       this.network = network;
       this[symbolOperations].bind++;
-      this[symbolSocketState].errorState = null;
+      this[symbolSocketState].lastErrorState = null;
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
   }
@@ -312,13 +312,13 @@ export class UdpSocketImpl {
         assert(true, "unknown", err);
       }
 
-      this[symbolSocketState].errorState = null;
+      this[symbolSocketState].lastErrorState = null;
       this[symbolSocketState].isBound = true;
       this[symbolOperations].bind--;
 
       this.#cacheBoundAddress();
     } catch (err) {
-      this[symbolSocketState].errorState = err;
+      this[symbolSocketState].lastErrorState = err;
       throw err;
     }
   }
