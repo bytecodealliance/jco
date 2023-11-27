@@ -1,13 +1,13 @@
-// Flags: --instantiation sync --js
+// Flags: --instantiation --js
 
 import * as helpers from './helpers.js';
-import { instantiate } from '../output/strings.sync+js/strings.sync+js.js';
+import { instantiate } from '../output/strings.async+js/strings.async+js.js';
 
 // @ts-ignore
 import * as assert from 'assert';
 
-function run() {
-  const wasm = instantiate(helpers.loadWasmSync, {
+async function run() {
+  const wasm = await instantiate(helpers.loadWasm, {
     testwasi: helpers,
     'test:strings/imports': {
       takeBasic(s: string) {
@@ -24,4 +24,4 @@ function run() {
   assert.strictEqual(wasm.roundtrip('🚀🚀🚀 𠈄𓀀'), '🚀🚀🚀 𠈄𓀀');
 }
 
-run()
+await run()
