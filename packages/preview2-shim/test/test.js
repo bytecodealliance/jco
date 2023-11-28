@@ -1,16 +1,13 @@
-import { ok, strictEqual } from "node:assert";
+import { deepEqual, deepStrictEqual, equal, notEqual, ok, strictEqual, throws } from "node:assert";
+import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
 suite("Node.js Preview2", () => {
   test("Stdio", async () => {
     const { cli } = await import("@bytecodealliance/preview2-shim");
     // todo: wrap in a process call to not spill to test output
-    cli.stdout
-      .getStdout()
-      .blockingWriteAndFlush(new TextEncoder().encode("test stdout"));
-    cli.stderr
-      .getStderr()
-      .blockingWriteAndFlush(new TextEncoder().encode("test stderr"));
+    cli.stdout.getStdout().blockingWriteAndFlush(new TextEncoder().encode("test stdout"));
+    cli.stderr.getStderr().blockingWriteAndFlush(new TextEncoder().encode("test stderr"));
   });
 
   suite("Clocks", () => {
@@ -94,17 +91,11 @@ suite("Node.js Preview2", () => {
   test("FS read", async () => {
     const { filesystem } = await import("@bytecodealliance/preview2-shim");
     const [[rootDescriptor]] = filesystem.preopens.getDirectories();
-    const childDescriptor = rootDescriptor.openAt(
-      {},
-      fileURLToPath(import.meta.url),
-      {},
-      {}
-    );
+    const childDescriptor = rootDescriptor.openAt({}, fileURLToPath(import.meta.url), {}, {});
     const stream = childDescriptor.readViaStream(0);
     stream.subscribe().block();
     let buf = stream.read(10000n);
-    while (buf.byteLength === 0)
-      buf = stream.read(10000n);
+    while (buf.byteLength === 0) buf = stream.read(10000n);
     const source = new TextDecoder().decode(buf);
     ok(source.includes("UNIQUE STRING"));
     stream[Symbol.dispose]();
@@ -139,9 +130,7 @@ suite("Node.js Preview2", () => {
     const responseHeaders = incomingResponse.headers().entries();
 
     const decoder = new TextDecoder();
-    const headers = Object.fromEntries(
-      responseHeaders.map(([k, v]) => [k, decoder.decode(v)])
-    );
+    const headers = Object.fromEntries(responseHeaders.map(([k, v]) => [k, decoder.decode(v)]));
 
     let responseBody;
     const incomingBody = incomingResponse.consume();
@@ -149,13 +138,373 @@ suite("Node.js Preview2", () => {
       const bodyStream = incomingBody.stream();
       bodyStream.subscribe().block();
       let buf = bodyStream.read(5000n);
-      while (buf.byteLength === 0)
-        buf = bodyStream.read(5000n);
+      while (buf.byteLength === 0) buf = bodyStream.read(5000n);
       responseBody = new TextDecoder().decode(buf);
     }
 
     strictEqual(status, 200);
     ok(headers["content-type"].startsWith("text/html"));
     ok(responseBody.includes("WebAssembly"));
+  });
+
+  suite("WASI Sockets (TCP)", async () => {
+    test("sockets.instanceNetwork() should be a singleton", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network1 = sockets.instanceNetwork.instanceNetwork();
+      equal(network1.id, 1);
+      const network2 = sockets.instanceNetwork.instanceNetwork();
+      equal(network2.id, 1);
+    });
+
+    test("sockets.tcpCreateSocket() should throw not-supported", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const socket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+      notEqual(socket, null);
+
+      throws(
+        () => {
+          sockets.tcpCreateSocket.createTcpSocket("abc");
+        },
+        (err) => err === sockets.network.errorCode.notSupported
+      );
+    });
+    test("tcp.bind(): should bind to a valid ipv4 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 1337,
+        },
+      };
+      tcpSocket.startBind(network, localAddress);
+      tcpSocket.finishBind();
+
+      equal(tcpSocket.network.id, network.id);
+      deepEqual(tcpSocket.localAddress(), {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 1337,
+        },
+      });
+      equal(tcpSocket.addressFamily(), "ipv4");
+    });
+
+    test("tcp.bind(): should bind to a valid ipv6 address and port=0", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv6);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      tcpSocket.startBind(network, localAddress);
+      tcpSocket.finishBind();
+
+      equal(tcpSocket.network.id, network.id);
+      equal(tcpSocket.addressFamily(), "ipv6");
+
+      const boundAddress = tcpSocket.localAddress();
+      const expectedAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          // port will be assigned by the OS, so it should be > 0
+          // port: 0,
+        },
+      };
+
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
+    });
+
+    test("tcp.bind(): should throw invalid-argument when invalid address family", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        // invalid address family
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0001],
+          port: 0,
+        },
+      };
+      throws(
+        () => {
+          tcpSocket.startBind(network, localAddress);
+        },
+        (err) => err === sockets.network.errorCode.invalidArgument
+      );
+    });
+
+    test("tcp.bind(): should throw invalid-state when already bound", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      throws(
+        () => {
+          tcpSocket.startBind(network, localAddress);
+          tcpSocket.finishBind();
+          // already bound
+          tcpSocket.startBind(network, localAddress);
+        },
+        (err) => err === sockets.network.errorCode.invalidState
+      );
+    });
+
+    test("tcp.listen(): should listen to an ipv4 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+
+      mock.method(tcpSocket.handle(), "listen", () => {
+        // mock listen
+      });
+
+      tcpSocket.startBind(network, localAddress);
+      tcpSocket.finishBind();
+      tcpSocket.startListen();
+      tcpSocket.finishListen();
+
+      strictEqual(tcpSocket.handle().listen.mock.calls.length, 1);
+
+      mock.reset();
+    });
+
+    test("tcp.connect(): should connect to a valid ipv4 address and port=0", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
+
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      const remoteAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [192, 168, 0, 1],
+          port: 80,
+        },
+      };
+
+      mock.method(tcpSocket.handle(), "connect", () => {
+        // mock connect
+      });
+
+      tcpSocket.startBind(network, localAddress);
+      tcpSocket.finishBind();
+      tcpSocket.startConnect(network, remoteAddress);
+      tcpSocket.finishConnect();
+
+      strictEqual(tcpSocket.handle().connect.mock.calls.length, 1);
+
+      equal(tcpSocket.network.id, network.id);
+      equal(tcpSocket.addressFamily(), "ipv4");
+
+      const boundAddress = tcpSocket.localAddress();
+      const expectedAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
+    });
+  });
+
+  suite("WASI Sockets (UDP)", async () => {
+    test("sockets.udpCreateSocket() should be a singleton", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const socket1 = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
+      notEqual(socket1.id, 1);
+      const socket2 = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
+      notEqual(socket2.id, 1);
+    });
+    test("sockets.udpCreateSocket() should not-support on invalid ip family", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+      throws(
+        () => {
+          sockets.udpCreateSocket.createUdpSocket("xyz");
+        },
+        (err) => err === sockets.network.errorCode.notSupported
+      );
+    });
+    test("udp.bind(): should bind to a valid ipv4 address and port=0", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      socket.startBind(network, localAddress);
+      socket.finishBind();
+
+      equal(socket.network.id, network.id);
+
+      const boundAddress = socket.localAddress();
+      const expectedAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
+      equal(socket.addressFamily(), "ipv4");
+    });
+    test("udp.bind(): should bind to a valid ipv6 address and port=0", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv6);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      socket.startBind(network, localAddress);
+      socket.finishBind();
+
+      equal(socket.network.id, network.id);
+
+      const boundAddress = socket.localAddress();
+      const expectedAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          // port will be assigned by the OS, so it should be > 0
+          // port: 0,
+        },
+      };
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
+      equal(socket.addressFamily(), "ipv6");
+    });
+    test("udp.stream(): should connect to a valid ipv4 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          port: 0,
+        },
+      };
+      const remoteAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [192, 168, 0, 1],
+          port: 80,
+        },
+      };
+
+      mock.method(socket.handle(), "connect", () => {
+        // mock connect
+      });
+
+      socket.startBind(network, localAddress);
+      socket.finishBind();
+      socket.stream(remoteAddress);
+
+      strictEqual(socket.handle().connect.mock.calls.length, 1);
+
+      strictEqual(socket.network.id, network.id);
+      strictEqual(socket.addressFamily(), "ipv4");
+
+      const boundAddress = socket.localAddress();
+      const expectedAddress = {
+        tag: sockets.network.IpAddressFamily.ipv4,
+        val: {
+          address: [0, 0, 0, 0],
+          // port will be assigned by the OS, so it should be > 0
+          // port: 0,
+        },
+      };
+
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
+    });
+    test("udp.stream(): should connect to a valid ipv6 address", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
+      const network = sockets.instanceNetwork.instanceNetwork();
+      const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv6);
+      const localAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 1337,
+        },
+      };
+      const remoteAddress = {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 1336,
+        },
+      };
+
+      mock.method(socket.handle(), "connect", () => {
+        // mock connect
+      });
+
+      socket.startBind(network, localAddress);
+      socket.finishBind();
+      socket.stream(remoteAddress);
+
+      strictEqual(socket.handle().connect.mock.calls.length, 1);
+
+      strictEqual(socket.network.id, network.id);
+      strictEqual(socket.addressFamily(), "ipv6");
+      deepEqual(socket.localAddress(), {
+        tag: sockets.network.IpAddressFamily.ipv6,
+        val: {
+          address: [0, 0, 0, 0, 0, 0, 0, 0],
+          port: 1337,
+        },
+      });
+    });
   });
 });

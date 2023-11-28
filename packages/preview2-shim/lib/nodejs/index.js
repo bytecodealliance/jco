@@ -15,3 +15,6 @@ export {
   sockets,
   cli
 }
+
+export { WasiSockets } from "./sockets/wasi-sockets.js";
+

@@ -45,3 +45,8 @@ export const HTTP_CREATE_REQUEST = ++call_id << 24;
 export const CLOCKS_NOW = ++call_id << 24;
 export const CLOCKS_DURATION_SUBSCRIBE = ++call_id << 24;
 export const CLOCKS_INSTANT_SUBSCRIBE = ++call_id << 24;
+
+// Sockets
+export const SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST = ++call_id << 24;
+export const SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST = ++call_id << 24;
+export const SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST = ++call_id << 24;
