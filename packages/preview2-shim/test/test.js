@@ -1,4 +1,4 @@
-import { deepEqual, equal, ok, throws, strictEqual, notEqual } from "node:assert";
+import { deepEqual, deepStrictEqual, equal, notEqual, ok, strictEqual, throws } from "node:assert";
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -156,7 +156,7 @@ suite("Node.js Preview2", () => {
       equal(network2.id, 1);
     });
 
-    test("sockets.tcpCreateSocket() should throw no-supported", async () => {
+    test("sockets.tcpCreateSocket() should throw not-supported", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const socket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
       notEqual(socket, null);
@@ -165,10 +165,7 @@ suite("Node.js Preview2", () => {
         () => {
           sockets.tcpCreateSocket.createTcpSocket("abc");
         },
-        {
-          name: "Error",
-          code: sockets.network.errorCode.notSupported,
-        }
+        (err) => err === sockets.network.errorCode.notSupported
       );
     });
     test("tcp.bind(): should bind to a valid ipv4 address", async () => {
@@ -179,7 +176,7 @@ suite("Node.js Preview2", () => {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
           address: [0, 0, 0, 0],
-          port: 0,
+          port: 1337,
         },
       };
       tcpSocket.startBind(network, localAddress);
@@ -190,13 +187,13 @@ suite("Node.js Preview2", () => {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
           address: [0, 0, 0, 0],
-          port: 0,
+          port: 1337,
         },
       });
       equal(tcpSocket.addressFamily(), "ipv4");
     });
 
-    test("tcp.bind(): should bind to a valid ipv6 address", async () => {
+    test("tcp.bind(): should bind to a valid ipv6 address and port=0", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv6);
@@ -212,13 +209,20 @@ suite("Node.js Preview2", () => {
 
       equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.addressFamily(), "ipv6");
-      deepEqual(tcpSocket.localAddress(), {
+
+      const boundAddress = tcpSocket.localAddress();
+      const expectedAddress = {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
           address: [0, 0, 0, 0, 0, 0, 0, 0],
-          port: 0,
+          // port will be assigned by the OS, so it should be > 0
+          // port: 0,
         },
-      });
+      };
+
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
     });
 
     test("tcp.bind(): should throw invalid-argument when invalid address family", async () => {
@@ -238,9 +242,7 @@ suite("Node.js Preview2", () => {
         () => {
           tcpSocket.startBind(network, localAddress);
         },
-        {
-          code: "invalid-argument",
-        }
+        (err) => err === sockets.network.errorCode.invalidArgument
       );
     });
 
@@ -263,9 +265,7 @@ suite("Node.js Preview2", () => {
           // already bound
           tcpSocket.startBind(network, localAddress);
         },
-        {
-          code: "invalid-state",
-        }
+        (err) => err === sockets.network.errorCode.invalidState
       );
     });
 
@@ -281,7 +281,7 @@ suite("Node.js Preview2", () => {
         },
       };
 
-      mock.method(tcpSocket.server(), "listen", () => {
+      mock.method(tcpSocket.handle(), "listen", () => {
         // mock listen
       });
 
@@ -290,12 +290,12 @@ suite("Node.js Preview2", () => {
       tcpSocket.startListen();
       tcpSocket.finishListen();
 
-      strictEqual(tcpSocket.server().listen.mock.calls.length, 1);
+      strictEqual(tcpSocket.handle().listen.mock.calls.length, 1);
 
       mock.reset();
     });
 
-    test("tcp.connect(): should connect to a valid ipv4 address", async () => {
+    test("tcp.connect(): should connect to a valid ipv4 address and port=0", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(sockets.network.IpAddressFamily.ipv4);
@@ -315,7 +315,7 @@ suite("Node.js Preview2", () => {
         },
       };
 
-      mock.method(tcpSocket.client(), "connect", () => {
+      mock.method(tcpSocket.handle(), "connect", () => {
         // mock connect
       });
 
@@ -324,17 +324,23 @@ suite("Node.js Preview2", () => {
       tcpSocket.startConnect(network, remoteAddress);
       tcpSocket.finishConnect();
 
-      strictEqual(tcpSocket.client().connect.mock.calls.length, 1);
+      strictEqual(tcpSocket.handle().connect.mock.calls.length, 1);
 
       equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.addressFamily(), "ipv4");
-      deepEqual(tcpSocket.localAddress(), {
+
+      const boundAddress = tcpSocket.localAddress();
+      const expectedAddress = {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
           address: [0, 0, 0, 0],
           port: 0,
         },
-      });
+      };
+
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
     });
   });
 
@@ -345,18 +351,18 @@ suite("Node.js Preview2", () => {
       notEqual(socket1.id, 1);
       const socket2 = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
       notEqual(socket2.id, 1);
+    });
+    test("sockets.udpCreateSocket() should not-support on invalid ip family", async () => {
+      const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       throws(
         () => {
           sockets.udpCreateSocket.createUdpSocket("xyz");
         },
-        {
-          name: "Error",
-          code: sockets.network.errorCode.notSupported,
-        }
+        (err) => err === sockets.network.errorCode.notSupported
       );
     });
-    test("udp.bind(): should bind to a valid ipv4 address", async () => {
+    test("udp.bind(): should bind to a valid ipv4 address and port=0", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv4);
@@ -371,16 +377,21 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
 
       equal(socket.network.id, network.id);
-      deepEqual(socket.localAddress(), {
+
+      const boundAddress = socket.localAddress();
+      const expectedAddress = {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
           address: [0, 0, 0, 0],
           port: 0,
         },
-      });
+      };
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
       equal(socket.addressFamily(), "ipv4");
     });
-    test("udp.bind(): should bind to a valid ipv6 address", async () => {
+    test("udp.bind(): should bind to a valid ipv6 address and port=0", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket(sockets.network.IpAddressFamily.ipv6);
@@ -395,13 +406,19 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
 
       equal(socket.network.id, network.id);
-      deepEqual(socket.localAddress(), {
+
+      const boundAddress = socket.localAddress();
+      const expectedAddress = {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
           address: [0, 0, 0, 0, 0, 0, 0, 0],
-          port: 0,
+          // port will be assigned by the OS, so it should be > 0
+          // port: 0,
         },
-      });
+      };
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
       equal(socket.addressFamily(), "ipv6");
     });
     test("udp.stream(): should connect to a valid ipv4 address", async () => {
@@ -423,7 +440,7 @@ suite("Node.js Preview2", () => {
         },
       };
 
-      mock.method(socket.client(), "connect", () => {
+      mock.method(socket.handle(), "connect", () => {
         // mock connect
       });
 
@@ -431,17 +448,24 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
       socket.stream(remoteAddress);
 
-      strictEqual(socket.client().connect.mock.calls.length, 1);
+      strictEqual(socket.handle().connect.mock.calls.length, 1);
 
       strictEqual(socket.network.id, network.id);
       strictEqual(socket.addressFamily(), "ipv4");
-      deepEqual(socket.localAddress(), {
+
+      const boundAddress = socket.localAddress();
+      const expectedAddress = {
         tag: sockets.network.IpAddressFamily.ipv4,
         val: {
           address: [0, 0, 0, 0],
-          port: 0,
+          // port will be assigned by the OS, so it should be > 0
+          // port: 0,
         },
-      });
+      };
+
+      strictEqual(boundAddress.tag, expectedAddress.tag);
+      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      strictEqual(boundAddress.val.port > 0, true);
     });
     test("udp.stream(): should connect to a valid ipv6 address", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
@@ -451,18 +475,18 @@ suite("Node.js Preview2", () => {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
           address: [0, 0, 0, 0, 0, 0, 0, 0],
-          port: 0,
+          port: 1337,
         },
       };
       const remoteAddress = {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
           address: [0, 0, 0, 0, 0, 0, 0, 0],
-          port: 80,
+          port: 1336,
         },
       };
 
-      mock.method(socket.client(), "connect", () => {
+      mock.method(socket.handle(), "connect", () => {
         // mock connect
       });
 
@@ -470,7 +494,7 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
       socket.stream(remoteAddress);
 
-      strictEqual(socket.client().connect.mock.calls.length, 1);
+      strictEqual(socket.handle().connect.mock.calls.length, 1);
 
       strictEqual(socket.network.id, network.id);
       strictEqual(socket.addressFamily(), "ipv6");
@@ -478,7 +502,7 @@ suite("Node.js Preview2", () => {
         tag: sockets.network.IpAddressFamily.ipv6,
         val: {
           address: [0, 0, 0, 0, 0, 0, 0, 0],
-          port: 0,
+          port: 1337,
         },
       });
     });

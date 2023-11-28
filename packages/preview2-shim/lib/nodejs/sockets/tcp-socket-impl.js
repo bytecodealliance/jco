@@ -791,10 +791,7 @@ export class TcpSocketImpl {
     }
   }
 
-  server() {
-    return this.#socket;
-  }
-  client() {
+  handle() {
     return this.#socket;
   }
 }

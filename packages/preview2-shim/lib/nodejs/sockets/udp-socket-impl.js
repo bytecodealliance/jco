@@ -377,14 +377,9 @@ export class UdpSocketImpl {
     this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
 
     // TODO: figure out how to reuse a connected socket
-    console.log("connecing ", remoteAddress, remotePort);
     const err = this.#socket.connect(remoteAddress ?? null, remotePort);
 
-    console.log({
-      err,
-    });
-
-    if (err === 0) {
+    if (!err) {
       this[symbolSocketState].connectionState = SocketConnectionState.Connected;
     } else {
       assert(err === -22, "invalid-argument");
@@ -629,7 +624,7 @@ export class UdpSocketImpl {
     this.#socket.close();
   }
 
-  client() {
+  handle() {
     return this.#socket;
   }
 }
