@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network").Network} Network
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpSocketAddress} IpSocketAddress

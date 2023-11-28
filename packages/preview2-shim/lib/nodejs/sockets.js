@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-
 import { WasiSockets } from "./sockets/wasi-sockets.js";
 
 export const { 
@@ -10,4 +8,4 @@ export const {
     udpCreateSocket,
     tcp,
     udp,
-} = new WasiSockets();;
+} = new WasiSockets();
