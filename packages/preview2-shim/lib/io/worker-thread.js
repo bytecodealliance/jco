@@ -187,6 +187,8 @@ function handle(call, id, payload) {
           val: 'too much written to body stream'
         };
       }
+      stream.end();
+      break;
     }
 
     // Sockets

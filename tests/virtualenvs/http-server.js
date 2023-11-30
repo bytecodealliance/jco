@@ -9,7 +9,7 @@ const server = createServer((req, res) => {
     'x-wasmtime-test-uri': `http://localhost:${PORT}${req.url}`,
     'content-type': 'text/html'
   });
-  res.end('');
+  req.pipe(res);
 });
 
 let retry = false;
