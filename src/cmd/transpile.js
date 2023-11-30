@@ -46,7 +46,7 @@ try {
 }
 
 /**
- * @param {Uint8Array} source 
+ * @param {Uint8Array} source
  * @returns {Promise<Uint8Array>}
  */
 async function wasm2Js (source) {
@@ -60,8 +60,8 @@ async function wasm2Js (source) {
 }
 
 /**
- * 
- * @param {Uint8Array} component 
+ *
+ * @param {Uint8Array} component
  * @param {{
  *   name: string,
  *   instantiation?: 'async' | 'sync',
@@ -76,7 +76,7 @@ async function wasm2Js (source) {
  *   optimize?: bool,
  *   namespacedExports?: bool,
  *   optArgs?: string[],
- * }} opts 
+ * }} opts
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
 export async function transpileComponent (component, opts = {}) {
@@ -106,9 +106,12 @@ export async function transpileComponent (component, opts = {}) {
 
   let instantiation = null;
 
+  // Let's define `instantiation` from `--instantiation` if it's present.
   if (opts.instantiation) {
     instantiation = { tag: opts.instantiation };
-  } else if (opts.js) {
+  }
+  // Otherwise, if `--js` is present, an `instantiate` function is required.
+  else if (opts.js) {
     instantiation = { tag: 'async' };
   }
 
@@ -132,16 +135,67 @@ export async function transpileComponent (component, opts = {}) {
 
   const jsFile = files.find(([name]) => name.endsWith('.js'));
 
+  // Generate code for the `--js` option.
+  //
+  // `--js` can be called with or without `--instantiation`. The generated code
+  // isn't exactly the same!
+  //
+  // `--js` needs an `instantiate` function to work, so it might look like
+  // `--instantiation` is always implied, but actually no. It is correct
+  // that when `--js` is present, an `instantiate` function _is_ generated,
+  // but it doesn't mean that we expect the function to be used, it's simply
+  // not exported, plus `instantiate` is automatically called (if `--tla-compat`
+  // is `false`). When `--instantiation` is missing, functions are exported
+  // with the `export` directive, and imports are imported with the `import`
+  // directive. When `--instantiation` is present, there is no `export` and no
+  // `import`: only a single exported `instantiate` function.
+  //
+  // Basically, we get this:
+  //
+  // * `--js` only:
+  //   * `instantiate` is renamed to `_instantiate`,
+  //   * A new `instantiate` function is created, that calls `_instantiate` with
+  //     the correct imports (which are ASM.js code) and returns the exports,
+  //   * A new `$init` function is created, that calls `instantiate` and maps
+  //     the returned exports to their respective trampolines,
+  //   * Trampolines are exported,
+  //   * `$init` is called automatically.
+  //
+  // * `--js` with `--tla-compat`:
+  //   * Same as with `--js` only, except that `$init` is exported instead of
+  //     being called immediately.
+  //
+  // * `--js` with `--instantiation[=async]`:
+  //   * `instantiate` is renamed to `_instantiate`,
+  //   * A new `instantiate` function is created, that calls `_instantiate` with
+  //     the correct imports (which are ASM.js code) and returns the exports,
+  //   * `instantiate` is exported.
+  //
+  // * `--js` with `--instantiation=sync`:
+  //   * Same as `--js` with `--instantiation[=async]`, except that
+  //     `_instantiate` and `instantiate` are non-async.
+  //
+  // Be careful with the variables: `opts.instantiation` reflects the presence
+  // or the absence of the `--instantiation` flag, whilst `instantiation`
+  // reflects how the `instantiate` function must be generated. We also use
+  // `instantiation` to know whether the generated code must be async or
+  // non-async.
   if (opts.js) {
+    const withInstantiation = opts.instantiation !== undefined;
+    const async_ = instantiation.tag == 'async' ? 'async ' : '';
+    const await_ = instantiation.tag == 'async' ? 'await ' : '';
+
+    // Format the previously generated code.
     const source = Buffer.from(jsFile[1]).toString('utf8')
       // update imports manging to match emscripten asm
-      .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`);
-    
+      .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`)
+      .replace(/export (async )?function instantiate/, '$1function _instantiate') ;
+
+    // Collect all Wasm files.
     const wasmFiles = files.filter(([name]) => name.endsWith('.wasm'));
     files = files.filter(([name]) => !name.endsWith('.wasm'));
 
-    // TODO: imports as specifier list
-
+    // Configure the spinner.
     let completed = 0;
     const spinnerText = () => c`{cyan ${completed} / ${wasmFiles.length}} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
     if (showSpinner) {
@@ -152,6 +206,7 @@ export async function transpileComponent (component, opts = {}) {
       spinner.text = spinnerText();
     }
 
+    // Compile all Wasm modules into ASM.js codes.
     try {
       const asmFiles = await Promise.all(wasmFiles.map(async ([, source]) => {
         const output = (await wasm2Js(source)).toString('utf8');
@@ -162,44 +217,140 @@ export async function transpileComponent (component, opts = {}) {
         return output;
       }));
 
-      const asms = asmFiles.map((asm, i) =>`function asm${i}(imports) {
+      const asms = asmFiles.map((asm, nth) => `function asm${nth}(imports) {
   ${
-      // strip and replace the asm instantiation wrapper
-        asm
-        .replace(/import \* as [^ ]+ from '[^']*';/g, '')
-        .replace('function asmFunc(imports) {', '')
-        .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
-        .replace(/var retasmFunc = [\s\S]*$/, '')
-        .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
-        .replace('memory.grow = __wasm_memory_grow;', '')
-        .trim()
-      }`).join(',\n');
+    // strip and replace the asm instantiation wrapper
+    asm
+      .replace(/import \* as [^ ]+ from '[^']*';/g, '')
+      .replace('function asmFunc(imports) {', '')
+      .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
+      .replace(/var retasmFunc = [\s\S]*$/, '')
+      .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
+      .replace('memory.grow = __wasm_memory_grow;', '')
+      .trim()
+  }`)
+        .join(',\n');
 
-      const outSource = `${
-        imports.map((impt, i) => `import * as import${i} from '${impt}';`).join('\n')}
-${source.replace('export async function instantiate', 'async function instantiate')}
+      // The `instantiate` function.
+      const instantiateFunction =
+        `${
+        withInstantiation ? 'export ' : ''
+}${async_}function instantiate(imports) {
+  const wasm_file_to_asm_index = {
+    ${wasmFiles.map(([path], nth) => `'${basename(path)}': ${nth}`).join(',\n    ')}
+  };
 
-let ${exports.filter(([, ty]) => ty === 'function').map(([name]) => '_' + name).join(', ')};
+  return ${await_}_instantiate(
+      module_name => wasm_file_to_asm_index[module_name],
+      imports,
+      (module_index, imports) => ({ exports: asmInit[module_index](imports) })
+  );
+}`;
 
-${exports.map(([name, ty]) => ty === 'function' ? `\nfunction ${asmMangle(name)} () {
-  return _${name}.apply(this, arguments);
-}` : `\nlet ${asmMangle(name)};`).join('\n')}
+      // If `--js` is used without `--instantiation`.
+      let importDirectives = '';
+      let exportDirectives = '';
+      let exportTrampolines = '';
+      let autoInstantiate = '';
+
+      if (!withInstantiation) {
+        importDirectives = imports
+          .map((import_file, nth) => `import * as import${nth} from '${import_file}';`)
+          .join('\n');
+
+        if (exports.length > 0 || opts.tlaCompat) {
+          exportDirectives =
+            `export {
+${
+            // Exporting `$init` must come first to not break the transpiling tests.
+            (opts.tlaCompat) ? '  $init,\n' : ''
+}${
+            exports
+              .map(([name]) => {
+                if (name === asmMangle(name)) {
+                  return `  ${name},`;
+                } else {
+                  return `  ${asmMangle(name)} as '${name}',`;
+                }
+              })
+              .join('\n')
+}
+}`
+        }
+
+        exportTrampolines =
+          `let ${
+          exports
+            .filter(([, ty]) => ty === 'function')
+            .map(([name]) => `_${asmMangle(name)}`)
+            .join(', ')
+          };
+${
+          exports
+            .map(([name, ty]) => {
+              if (ty === 'function') {
+                return `\nfunction ${asmMangle(name)} () {
+  return _${asmMangle(name)}.apply(this, arguments);
+}`;
+              } else {
+                return `\nlet ${asmMangle(name)};`;
+              }
+            })
+            .join('\n')
+          }`;
+
+        autoInstantiate =
+          `${async_}function $init() {
+  ( {
+${
+          exports
+            .map( ([name, ty]) => {
+              if (ty === 'function') {
+                return `    '${ name }': _${ asmMangle(name) },`;
+              } else if (asmMangle(name) === name) {
+                return `    ${ name },`;
+              } else {
+                return `    '${ name }': ${ asmMangle(name) },`;
+              }
+            })
+            .join('\n')
+          }
+  } = ${await_}instantiate(
+    {
+${
+          imports
+            .map((import_file, nth) => `      '${import_file}': import${ nth },`)
+            .join('\n')
+          }
+    }
+  ) )
+}
+
+${ opts.tlaCompat ? '' : `${await_}$init();`}`;
+      }
+
+      // Prepare the final generated code.
+      const outSource = `${importDirectives}
+
+${source}
 
 const asmInit = [${asms}];
 
-${opts.tlaCompat ? 'export ' : ''}const $init = (async () => {
-  let idx = 0;
-  ({ ${exports.map(([name, ty]) => asmMangle(name) === name ? name : `'${name}': ${asmMangle(name)}`).join(',\n')} } = await instantiate(n => idx++, {
-${imports.map((impt, i) => `    '${impt}': import${i},`).join('\n')}
-  }, (i, imports) => ({ exports: asmInit[i](imports) })));
-})();${exports.length > 0 ? `\nexport { ${exports.map(([name]) => name === asmMangle(name) ? `${name}` : `${asmMangle(name)} as "${name}"`).join(', ')} }` : ''}
-${opts.tlaCompat ? '' : '\nawait $init;\n'}`;
+${exportTrampolines}
 
+${instantiateFunction}
+
+${exportDirectives}
+
+${autoInstantiate}`;
+
+      // Save the final generated code.
       jsFile[1] = Buffer.from(outSource);
     }
     finally {
-      if (spinner)
+      if (spinner) {
         spinner.stop();
+      }
     }
   }
 
@@ -225,10 +376,10 @@ ${opts.tlaCompat ? '' : '\nawait $init;\n'}`;
 function asmMangle (name) {
   if (name === '')
     return '$';
-  
+
   let mightBeKeyword = true;
   let i = 1;
-  
+
   // Names must start with a character, $ or _
   switch (name[0]) {
     case '0':
@@ -258,7 +409,7 @@ function asmMangle (name) {
       }
     }
   }
-  
+
   // Names must contain only characters, digits, $ or _
   let len = name.length;
   for (; i < len; ++i) {
@@ -287,7 +438,7 @@ function asmMangle (name) {
       }
     }
   }
-  
+
   // Names must not collide with keywords
   if (mightBeKeyword && len >= 2 && len <= 10) {
     switch (name[0]) {

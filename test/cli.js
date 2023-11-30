@@ -86,7 +86,7 @@ export async function cliTest (fixtures) {
       ok(source.includes('./wasi.js'));
       ok(source.includes('testwasi'));
       ok(source.includes('FUNCTION_TABLE'));
-      ok(source.includes('export const $init'));
+      ok(source.includes('export {\n  $init'));
     });
 
     test('Transpile without namespaced exports', async () => {

@@ -171,18 +171,10 @@ pub fn render_intrinsics(
                 const i64ToF64 = i => (i64ToF64I[0] = i, i64ToF64F[0]);
             "),
 
-            Intrinsic::InstantiateCore => match instantiation {
-                Some(InstantiationMode::Async) | None =>  {
-                    output.push_str("
-                        const instantiateCore = WebAssembly.instantiate;
-                    ")
-                }
-
-                Some(InstantiationMode::Sync) =>  {
-                    output.push_str("
-                        const instantiateCore = WebAssembly.Instance;
-                    ")
-                }
+            Intrinsic::InstantiateCore => if instantiation.is_none() {
+                output.push_str("
+                    const instantiateCore = WebAssembly.instantiate;
+                ")
             },
 
             Intrinsic::IsLE => output.push_str("
