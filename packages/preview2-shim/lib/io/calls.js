@@ -29,17 +29,20 @@ export const OUTPUT_STREAM_BLOCKING_SPLICE = ++call_id << CALL_SHIFT;
 export const OUTPUT_STREAM_SUBSCRIBE = ++call_id << CALL_SHIFT;
 export const OUTPUT_STREAM_DISPOSE = ++call_id << CALL_SHIFT;
 
+export const OUTPUT_STREAM_GET_TOTAL_BYTES = ++call_id << CALL_SHIFT;
+
 // Io Poll
 export const POLL_POLLABLE_READY = ++call_id << CALL_SHIFT;
 export const POLL_POLLABLE_BLOCK = ++call_id << CALL_SHIFT;
 export const POLL_POLL_LIST = ++call_id << CALL_SHIFT;
 
 // Futures
-export const FUTURE_DISPOSE_AND_GET_VALUE = ++call_id << CALL_SHIFT;
+export const FUTURE_GET_VALUE_AND_DISPOSE = ++call_id << CALL_SHIFT;
 export const FUTURE_DISPOSE = ++call_id << CALL_SHIFT;
 
 // Http
 export const HTTP_CREATE_REQUEST = ++call_id << 24;
+export const HTTP_OUTPUT_STREAM_FINISH = ++call_id << CALL_SHIFT;
 
 // Clocks
 export const CLOCKS_NOW = ++call_id << 24;
@@ -50,3 +53,12 @@ export const CLOCKS_INSTANT_SUBSCRIBE = ++call_id << 24;
 export const SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST = ++call_id << 24;
 export const SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST = ++call_id << 24;
 export const SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST = ++call_id << 24;
+
+// Type indiciator for generic Stream, Future, and Poll calls
+let cnt = 0;
+export const STDIN = ++cnt;
+export const STDOUT = ++cnt;
+export const STDERR = ++cnt;
+export const FILE = ++cnt;
+export const HTTP = ++cnt;
+export const SOCKET = ++cnt;

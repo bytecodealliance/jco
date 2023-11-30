@@ -25,7 +25,7 @@ import {
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
 } from "./calls.js";
-import { STDERR } from "./stream-types.js";
+import { STDERR } from "./calls.js";
 
 const DEBUG = false;
 
@@ -42,33 +42,24 @@ if (DEBUG) {
   ioCall = function ioCall(num, id, payload) {
     let ret;
     try {
+      process._rawDebug(
+        (num & CALL_MASK) >> CALL_SHIFT,
+        num & CALL_TYPE_MASK,
+        id,
+        payload
+      );
       ret = _ioCall(num, id, payload);
       return ret;
     } catch (e) {
       ret = e;
       throw ret;
     } finally {
-      process._rawDebug(
-        (num & CALL_MASK) >> CALL_SHIFT,
-        num & CALL_TYPE_MASK,
-        id,
-        payload,
-        "->",
-        ret
-      );
+      process._rawDebug("->", ret);
     }
   };
 }
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
-
-class ComponentError extends Error {
-  constructor(name, msg, payload) {
-    super(msg);
-    this.name = name;
-    this.payload = payload;
-  }
-}
 
 const _Error = Error;
 const IoError = class Error extends _Error {
@@ -81,17 +72,15 @@ function streamIoErrorCall(call, id, payload) {
   try {
     return ioCall(call, id, payload);
   } catch (e) {
+    if (e.tag === 'closed')
+      throw e;
+    if (e.tag === "last-operation-failed") {
+      e.val = new IoError(e.val);
+      throw e;
+    }
     // any invalid error is a trap
-    if (e.tag !== "stream-error") {
-      console.error(e);
-      process.exit(1);
-    }
-    if (e.val.tag === "last-operation-failed") {
-      const msg = e.val.val.message;
-      e.val.val = Object.assign(new IoError(), e.val);
-      throw new ComponentError("StreamError", msg, e);
-    }
-    throw new ComponentError("StreamError", "stream closed", e);
+    console.trace(e);
+    process.exit(1);
   }
 }
 
@@ -137,6 +126,9 @@ class InputStream {
   [symbolDispose]() {
     ioCall(INPUT_STREAM_DISPOSE | this.#streamType, this.#id);
   }
+  static _id(stream) {
+    return stream.#id;
+  }
   /**
    * @param {InputStreamType} streamType
    */
@@ -150,6 +142,9 @@ class InputStream {
 
 export const inputStreamCreate = InputStream._create;
 delete InputStream._create;
+
+export const inputStreamId = InputStream._id;
+delete InputStream._id;
 
 class OutputStream {
   #id;
@@ -229,9 +224,12 @@ class OutputStream {
     );
   }
   [symbolDispose]() {
-    ioCall(OUTPUT_STREAM_DISPOSE, this.#id);
+    ioCall(OUTPUT_STREAM_DISPOSE | this.#streamType, this.#id);
   }
 
+  static _id(outputStream) {
+    return outputStream.#id;
+  }
   /**
    * @param {OutputStreamType} streamType
    * @param {any} createPayload
@@ -246,6 +244,9 @@ class OutputStream {
 
 export const outputStreamCreate = OutputStream._create;
 delete OutputStream._create;
+
+export const outputStreamId = OutputStream._id;
+delete OutputStream._id;
 
 export const error = { Error: IoError };
 

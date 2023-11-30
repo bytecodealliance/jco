@@ -203,6 +203,14 @@ export namespace WasiIoStreams {
       tag: 'closed',
     }
     
+    export class InputStream {
+      read(len: bigint): Uint8Array;
+      blockingRead(len: bigint): Uint8Array;
+      skip(len: bigint): bigint;
+      blockingSkip(len: bigint): bigint;
+      subscribe(): Pollable;
+    }
+    
     export class OutputStream {
       checkWrite(): bigint;
       write(contents: Uint8Array): void;
@@ -214,13 +222,5 @@ export namespace WasiIoStreams {
       blockingWriteZeroesAndFlush(len: bigint): void;
       splice(src: InputStream, len: bigint): bigint;
       blockingSplice(src: InputStream, len: bigint): bigint;
-    }
-    
-    export class InputStream {
-      read(len: bigint): Uint8Array;
-      blockingRead(len: bigint): Uint8Array;
-      skip(len: bigint): bigint;
-      blockingSkip(len: bigint): bigint;
-      subscribe(): Pollable;
     }
     

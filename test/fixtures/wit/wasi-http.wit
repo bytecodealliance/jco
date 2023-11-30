@@ -1,15 +1,15 @@
-package test:jco
+package test:jco;
 interface commands {
   resource error {
-    to-string: func() -> string
+    to-string: func() -> string;
   }
 
-  get-example: func() -> result<string, error>
-  post-example: func() -> result<string, error>
+  get-example: func() -> result<string, error>;
+  post-example: func() -> result<string, error>;
 }
 
 world command-extended {
-  include wasi:http/proxy@0.2.0-rc-2023-11-10
+  include wasi:http/proxy@0.2.0-rc-2023-11-10;
   
-  export commands
+  export commands;
 }

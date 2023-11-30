@@ -4,7 +4,7 @@ import {
   outputStreamCreate,
 } from "../io/worker-io.js";
 import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE } from "../io/calls.js";
-import { FILE } from "../io/stream-types.js";
+import { FILE } from "../io/calls.js";
 // import { environment } from "./cli.js";
 import {
   closeSync,

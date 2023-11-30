@@ -2,6 +2,8 @@ import { deepEqual, deepStrictEqual, equal, notEqual, ok, strictEqual, throws } 
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
+const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+
 suite("Node.js Preview2", () => {
   test("Stdio", async () => {
     const { cli } = await import("@bytecodealliance/preview2-shim");
@@ -118,8 +120,7 @@ suite("Node.js Preview2", () => {
     request.setScheme({ tag: "HTTPS" });
 
     const outgoingBody = request.body();
-    // TODO: we should explicitly drop the bodyStream here
-    //       when we have support for Symbol.dispose
+    outgoingBody[symbolDispose]();
     OutgoingBody.finish(outgoingBody);
 
     const futureIncomingResponse = handle(request);
@@ -138,7 +139,15 @@ suite("Node.js Preview2", () => {
       const bodyStream = incomingBody.stream();
       bodyStream.subscribe().block();
       let buf = bodyStream.read(5000n);
-      while (buf.byteLength === 0) buf = bodyStream.read(5000n);
+      while (buf.byteLength === 0) {
+        try {
+          buf = bodyStream.read(5000n);
+        } catch (e) {
+          if (e.tag === 'closed')
+            break;
+          throw e.val || e;
+        }
+      }
       responseBody = new TextDecoder().decode(buf);
     }
 

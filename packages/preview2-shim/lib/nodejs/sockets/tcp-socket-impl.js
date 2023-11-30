@@ -24,8 +24,7 @@ const symbolOperations = Symbol.SocketOperationsState || Symbol.for("SocketOpera
 const { TCP, TCPConnectWrap, constants: TCPConstants } = process.binding("tcp_wrap");
 const { ShutdownWrap } = process.binding("stream_wrap");
 
-import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE } from "../../io/calls.js";
-import { SOCKET } from "../../io/stream-types.js";
+import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE, SOCKET } from "../../io/calls.js";
 import { inputStreamCreate, ioCall, outputStreamCreate, pollableCreate } from "../../io/worker-io.js";
 import {
   deserializeIpAddress,

@@ -618,15 +618,6 @@ export type Trailers = Fields;
 export type StatusCode = number;
 export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
-export class IncomingRequest {
-  method(): Method;
-  pathWithQuery(): string | undefined;
-  scheme(): Scheme | undefined;
-  authority(): string | undefined;
-  headers(): Headers;
-  consume(): IncomingBody;
-}
-
 export class FutureIncomingResponse {
   subscribe(): Pollable;
   get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
@@ -646,14 +637,6 @@ export class Fields {
 export class FutureTrailers {
   subscribe(): Pollable;
   get(): Result<Trailers | undefined, ErrorCode> | undefined;
-}
-
-export class OutgoingResponse {
-  constructor(headers: Headers)
-  statusCode(): StatusCode;
-  setStatusCode(statusCode: StatusCode): void;
-  headers(): Headers;
-  body(): OutgoingBody;
 }
 
 export class OutgoingRequest {
@@ -680,19 +663,36 @@ export class RequestOptions {
   setBetweenBytesTimeoutMs(ms: Duration | undefined): void;
 }
 
-export class IncomingResponse {
-  status(): StatusCode;
-  headers(): Headers;
-  consume(): IncomingBody;
+export class IncomingBody {
+  stream(): InputStream;
+  static finish(this_: IncomingBody): FutureTrailers;
 }
 
 export class ResponseOutparam {
   static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
 }
 
-export class IncomingBody {
-  stream(): InputStream;
-  static finish(this_: IncomingBody): FutureTrailers;
+export class IncomingRequest {
+  method(): Method;
+  pathWithQuery(): string | undefined;
+  scheme(): Scheme | undefined;
+  authority(): string | undefined;
+  headers(): Headers;
+  consume(): IncomingBody;
+}
+
+export class OutgoingResponse {
+  constructor(headers: Headers)
+  statusCode(): StatusCode;
+  setStatusCode(statusCode: StatusCode): void;
+  headers(): Headers;
+  body(): OutgoingBody;
+}
+
+export class IncomingResponse {
+  status(): StatusCode;
+  headers(): Headers;
+  consume(): IncomingBody;
 }
 
 export class OutgoingBody {
