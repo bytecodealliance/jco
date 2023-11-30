@@ -65,8 +65,43 @@ export class WasiHttp {
     const incomingBodyCreate = IncomingBody._create;
     delete IncomingBody._create;
 
-    // TODO
-    class IncomingRequest {}
+    class IncomingRequest {
+      #method;
+      #pathWithQuery;
+      #scheme;
+      #authority;
+      #headers;
+      #streamId;
+      method () {
+        return this.#method;
+      }
+      pathWithQuery () {
+        return this.#pathWithQuery;
+      }
+      scheme () {
+        return this.#scheme;
+      }
+      authority () {
+        return this.#authority;
+      }
+      headers () {
+        return this.#headers;
+      }
+      consume () {
+        return incomingBodyCreate(this.#streamId);
+      }
+      static _create(method, pathWithQuery, scheme, authority, streamId) {
+        const incomingRequest = new IncomingRequest();
+        incomingRequest.#method = method;
+        incomingRequest.#pathWithQuery = pathWithQuery;
+        incomingRequest.#scheme = scheme;
+        incomingRequest.#authority = authority;
+        incomingRequest.#streamId = streamId;
+        return incomingRequest;
+      }
+    }
+    const incomingRequestCreate = IncomingRequest._create;
+    delete IncomingRequest._create;
 
     class FutureTrailers {
       _id = http.futureCnt++;
@@ -128,8 +163,9 @@ export class WasiHttp {
     }
 
     class ResponseOutparam {
-      static set(_param, _response) {
-        // TODO
+      #response;
+      static set(param, response) {
+        param.#response = response;
       }
     }
 
@@ -499,6 +535,8 @@ export class WasiHttp {
        */
       handle: outgoingRequestHandle,
     };
+
+    this._incomingRequestCreate = incomingRequestCreate;
 
     function httpErrorCode(err) {
       return {
