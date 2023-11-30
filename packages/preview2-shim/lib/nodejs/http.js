@@ -22,7 +22,6 @@ export const _forbiddenHeaders = new Set(["connection", "keep-alive"]);
 
 /**
  * @typedef {import("../../types/interfaces/wasi-http-types").Method} Method
- * @typedef {import("../../types/interfaces/wasi-http-types").RequestOptions} RequestOptions
  * @typedef {import("../../types/interfaces/wasi-http-types").Scheme} Scheme
  * @typedef {import("../../types/interfaces/wasi-http-types").Error} HttpError
  */
@@ -134,6 +133,30 @@ export class WasiHttp {
       }
     }
 
+    class RequestOptions {
+      #connectTimeoutMs;
+      #firstByteTimeoutMs;
+      #betweenBytesTimeoutMs;
+      connectTimeoutMs () {
+        return this.#connectTimeoutMs;
+      }
+      setConnectTimeoutMs (duration) {
+        this.#connectTimeoutMs = duration;
+      }
+      firstByteTimeoutMs () {
+        return this.#firstByteTimeoutMs;
+      }
+      setFirstByteTimeoutMs (duration) {
+        this.#firstByteTimeoutMs = duration;
+      }
+      betweenBytesTimeoutMs () {
+        return this.#betweenBytesTimeoutMs;
+      }
+      setBetweenBytesTimeoutMs (duration) {
+        this.#betweenBytesTimeoutMs = duration;
+      }
+    }
+
     class OutgoingRequest {
       _id = http.requestCnt++;
       /** @type {Method} */ #method = { tag: "get" };
@@ -201,7 +224,8 @@ export class WasiHttp {
         return this.#headers;
       }
       [symbolDispose]() {}
-      static _handle(request) {
+      static _handle(request, _options) {
+        // TODO: handle options timeouts
         const scheme = schemeString(request.#scheme);
         const url = scheme + request.#authority + (request.#pathWithQuery || '');
         const headers = [["host", request.#authority]];
@@ -470,7 +494,7 @@ export class WasiHttp {
     this.outgoingHandler = {
       /**
        * @param {OutgoingRequest} request
-       * @param {RequestOptions | undefined} _options
+       * @param {RequestOptions | undefined} options
        * @returns {FutureIncomingResponse}
        */
       handle: outgoingRequestHandle,
@@ -494,6 +518,7 @@ export class WasiHttp {
       OutgoingRequest,
       OutgoingResponse,
       ResponseOutparam,
+      RequestOptions,
       httpErrorCode,
     };
   }
