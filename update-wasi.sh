@@ -40,5 +40,5 @@ mv ../../test/fixtures/wit/flavorful ../../test/fixtures/wit/deps/
 
 # note the WASI version for reference
 cd ../..
-cat .git/modules/wasmtime/refs/heads/main | head -c 16 > wasi-version
+cat .git/modules/submodules/wasmtime/HEAD | head -c 16 > wasi-version
 echo "WASI Updated to $(cat wasi-version)"

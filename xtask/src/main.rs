@@ -3,7 +3,6 @@ use structopt::StructOpt;
 mod build;
 mod generate;
 mod test;
-mod update;
 
 #[derive(StructOpt)]
 enum Opts {
@@ -11,16 +10,8 @@ enum Opts {
     Build(Build),
     /// Run cargo tests
     Test,
-    /// Update the various dependencies in the project
-    Update(Update),
     /// Generate code
     Generate(Generate),
-}
-
-#[derive(StructOpt)]
-enum Update {
-    /// Update preview 2
-    Preview2,
 }
 
 #[derive(StructOpt)]
@@ -48,7 +39,6 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Opts::Test => test::run(),
-        Opts::Update(Update::Preview2) => update::preview2::run(),
         Opts::Generate(Generate::Tests) => generate::tests::run(),
         Opts::Generate(Generate::WasiTypes) => generate::wasi_types::run(),
     }
