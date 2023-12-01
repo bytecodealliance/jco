@@ -90,7 +90,7 @@ fn {test_name}() -> anyhow::Result<()> {{
     {skip_comment}let tempdir = TempDir::new("{{file_name}}")?;
     {skip_comment}let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
     let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
-    {skip_comment}cmd!(sh, "./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
+    {skip_comment}cmd!(sh, "node ./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
     {}Ok(())
 }}
 "##,

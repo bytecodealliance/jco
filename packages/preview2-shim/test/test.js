@@ -93,7 +93,7 @@ suite("Node.js Preview2", () => {
   test("FS read", async () => {
     const { filesystem } = await import("@bytecodealliance/preview2-shim");
     const [[rootDescriptor]] = filesystem.preopens.getDirectories();
-    const childDescriptor = rootDescriptor.openAt({}, fileURLToPath(import.meta.url), {}, {});
+    const childDescriptor = rootDescriptor.openAt({}, '//?/' + fileURLToPath(import.meta.url), {}, {});
     const stream = childDescriptor.readViaStream(0);
     stream.subscribe().block();
     let buf = stream.read(10000n);

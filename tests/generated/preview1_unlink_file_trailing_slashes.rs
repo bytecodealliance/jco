@@ -12,6 +12,6 @@ fn preview1_unlink_file_trailing_slashes() -> anyhow::Result<()> {
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
     let _ = fs::remove_dir_all("./tests/rundir/preview1_unlink_file_trailing_slashes");
-    cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/preview1_unlink_file_trailing_slashes --jco-import ./tests/virtualenvs/scratch.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
+    cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/preview1_unlink_file_trailing_slashes --jco-import ./tests/virtualenvs/scratch.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }

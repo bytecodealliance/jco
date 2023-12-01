@@ -12,6 +12,6 @@ fn http_outbound_request_invalid_port() -> anyhow::Result<()> {
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
     let _ = fs::remove_dir_all("./tests/rundir/http_outbound_request_invalid_port");
-    cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/http_outbound_request_invalid_port --jco-import ./tests/virtualenvs/http.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
+    cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/http_outbound_request_invalid_port --jco-import ./tests/virtualenvs/http.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }

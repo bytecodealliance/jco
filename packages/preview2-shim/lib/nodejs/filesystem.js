@@ -72,6 +72,12 @@ class Descriptor {
     descriptor.#hostPreopen = hostPreopen.endsWith("/")
       ? hostPreopen.slice(0, -1) || '/'
       : hostPreopen;
+    // Windows requires UNC paths at minimum
+    if (isWindows) {
+      descriptor.#hostPreopen = descriptor.#hostPreopen.replace(/\\/g, '/');
+      if (descriptor.#hostPreopen === '/')
+        descriptor.#hostPreopen = '//';
+    }
     return descriptor;
   }
 
@@ -112,7 +118,7 @@ class Descriptor {
     return this.writeViaStream(this.stat().size);
   }
 
-  advise(_offset, _length, _advice) {}
+  advise(_offset, _length, _advice) { }
 
   syncData() {
     if (this.#hostPreopen) throw "invalid";
@@ -158,7 +164,7 @@ class Descriptor {
     const mtime = this.#getNewTimestamp(
       dataModificationTimestamp,
       dataModificationTimestamp.tag === "no-change" &&
-        stats.dataModificationTimestamp
+      stats.dataModificationTimestamp
     );
     try {
       futimesSync(this.#fd, atime, mtime);
@@ -196,9 +202,7 @@ class Descriptor {
   readDirectory() {
     if (!this.#fullPath) throw "bad-descriptor";
     try {
-      const dir = opendirSync(
-        isWindows ? this.#fullPath.slice(1) : this.#fullPath
-      );
+      const dir = opendirSync(this.#fullPath);
       return directoryEntryStreamCreate(dir);
     } catch (e) {
       throw convertFsError(e);
@@ -246,10 +250,7 @@ class Descriptor {
     const fullPath = this.#getFullPath(path, false);
     let stats;
     try {
-      stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(
-        isWindows ? fullPath.slice(1) : fullPath,
-        { bigint: true }
-      );
+      stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
     } catch (e) {
       throw convertFsError(e);
     }
@@ -279,7 +280,7 @@ class Descriptor {
     const mtime = this.#getNewTimestamp(
       dataModificationTimestamp,
       dataModificationTimestamp.tag === "no-change" &&
-        stats.dataModificationTimestamp
+      stats.dataModificationTimestamp
     );
     try {
       (pathFlags.symlinkFollow ? utimesSync : lutimesSync)(
@@ -295,6 +296,9 @@ class Descriptor {
   linkAt(oldPathFlags, oldPath, newDescriptor, newPath) {
     const oldFullPath = this.#getFullPath(oldPath, oldPathFlags.symlinkFollow);
     const newFullPath = newDescriptor.#getFullPath(newPath, false);
+    // Windows doesn't automatically fail on trailing slashes
+    if (isWindows && newFullPath.endsWith('/'))
+      throw 'no-entry';
     try {
       linkSync(oldFullPath, newFullPath);
     } catch (e) {
@@ -314,17 +318,14 @@ class Descriptor {
       fsOpenFlags |= constants.O_RDWR;
     else if (descriptorFlags.write) fsOpenFlags |= constants.O_WRONLY;
     else if (descriptorFlags.read) fsOpenFlags |= constants.O_RDONLY;
-    // TODO:
-    // if (descriptorFlags.fileIntegritySync)
-    // if (descriptorFlags.dataIntegritySync)
+    if (descriptorFlags.fileIntegritySync) fsOpenFlags |= constants.O_SYNC;
+    if (descriptorFlags.dataIntegritySync) fsOpenFlags |= constants.O_DSYNC;
+    // Unsupported:
     // if (descriptorFlags.requestedWriteSync)
     // if (descriptorFlags.mutateDirectory)
 
     try {
-      const fd = openSync(
-        isWindows ? fullPath.slice(1) : fullPath,
-        fsOpenFlags
-      );
+      const fd = openSync(fullPath, fsOpenFlags);
       return descriptorCreate(fd, descriptorFlags, fullPath, preopenEntries);
     } catch (e) {
       throw convertFsError(e);
@@ -345,6 +346,8 @@ class Descriptor {
     try {
       rmdirSync(fullPath);
     } catch (e) {
+      if (isWindows && e.code === 'ENOENT')
+        throw 'not-directory';
       throw convertFsError(e);
     }
   }
@@ -355,6 +358,8 @@ class Descriptor {
     try {
       renameSync(oldFullPath, newFullPath);
     } catch (e) {
+      if (isWindows && e.code === 'EPERM')
+        throw 'access';
       throw convertFsError(e);
     }
   }
@@ -364,6 +369,8 @@ class Descriptor {
     try {
       symlinkSync(target, fullPath);
     } catch (e) {
+      if (isWindows && (e.code === 'EPERM' || e.code === 'EEXIST'))
+        throw 'no-entry'
       throw convertFsError(e);
     }
   }
@@ -394,10 +401,7 @@ class Descriptor {
   metadataHashAt(pathFlags, path) {
     const fullPath = this.#getFullPath(path, false);
     try {
-      const stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(
-        isWindows ? fullPath.slice(1) : fullPath,
-        { bigint: true }
-      );
+      const stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
       return { upper: stats.mtimeNs, lower: stats.ino };
     } catch (e) {
       throw convertFsError(e);
@@ -408,7 +412,7 @@ class Descriptor {
   #getFullPath(subpath, _followSymlinks) {
     let descriptor = this;
     if (subpath.indexOf("\\") !== -1) subpath = subpath.replace(/\\/g, "/");
-    if (subpath[0] === "/") {
+    if (subpath[0] === '/') {
       let bestPreopenMatch = "";
       for (const preopenEntry of preopenEntries) {
         if (
@@ -428,7 +432,7 @@ class Descriptor {
       subpath = subpath.slice(subpath[1] === "/" ? 2 : 1);
     if (descriptor.#hostPreopen)
       return (
-        descriptor.#hostPreopen + (subpath.length > 0 ? "/" : "") + subpath
+        descriptor.#hostPreopen + (descriptor.#hostPreopen.endsWith('/') ? '' : (subpath.length > 0 ? "/" : "")) + subpath
       );
     return descriptor.#fullPath + (subpath.length > 0 ? "/" : "") + subpath;
   }
@@ -472,7 +476,6 @@ const directoryEntryStreamCreate = DirectoryEntryStream._create;
 delete DirectoryEntryStream._create;
 
 let preopenEntries = [];
-// let cwd = environment.initialCwd();
 
 export const preopens = {
   Descriptor,
@@ -481,7 +484,7 @@ export const preopens = {
   },
 };
 
-_addPreopen("/", "/");
+_addPreopen("/", isWindows ? "//" : "/");
 
 export const types = {
   Descriptor,

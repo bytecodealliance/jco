@@ -17,7 +17,7 @@ pub fn compile(sh: &Shell, tmpdir: &TempDir, file_name: &str) -> anyhow::Result<
 
     cmd!(
         sh,
-        "./src/jco.js new {src_file} --wasi-command -o {dest_file}"
+        "node ./src/jco.js new {src_file} --wasi-command -o {dest_file}"
     )
     .run()?;
 

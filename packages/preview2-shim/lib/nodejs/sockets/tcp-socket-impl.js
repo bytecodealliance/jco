@@ -13,8 +13,8 @@
 import { isIP, Socket as NodeSocket } from "node:net";
 import { platform } from "node:os";
 import { assert } from "../../common/assert.js";
-import { streams } from "../io.js";
-const { InputStream, OutputStream } = streams;
+// import { streams } from "../io.js";
+// const { InputStream, OutputStream } = streams;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 const symbolSocketState = Symbol.SocketInternalState || Symbol.for("SocketInternalState");
@@ -369,7 +369,7 @@ export class TcpSocketImpl {
     connectReq.localAddress = localAddress;
     connectReq.localPort = localPort;
 
-    this.#socket.onread = (buffer) => {
+    this.#socket.onread = (_buffer) => {
       // TODO: handle data received from the server
     };
 

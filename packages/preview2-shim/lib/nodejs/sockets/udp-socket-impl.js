@@ -152,7 +152,7 @@ export class OutgoingDatagramStream {
     datagrams.forEach((datagram) => {
       const { data, remoteAddress } = datagram;
       const { tag: family, val } = remoteAddress;
-      const { address, port } = val;
+      const { /*address, */port } = val;
       const err = doSend(data, port, serializeIpAddress(remoteAddress), family);
       console.error({
         err,
