@@ -1,9 +1,6 @@
 #!/bin/bash
 set -ex
 
-# update dependencies
-git submodule update --init --recursive
-git submodule foreach git pull origin main
 cd submodules/wasmtime
 
 # build the preview1 component adapter reactor
