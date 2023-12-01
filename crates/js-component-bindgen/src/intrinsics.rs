@@ -1,5 +1,4 @@
 use crate::source::Source;
-use crate::transpile_bindgen::InstantiationMode;
 use crate::uwrite;
 use std::collections::BTreeSet;
 use std::fmt::Write;
@@ -57,7 +56,7 @@ pub enum Intrinsic {
 pub fn render_intrinsics(
     intrinsics: &mut BTreeSet<Intrinsic>,
     no_nodejs_compat: bool,
-    instantiation: Option<InstantiationMode>,
+    instantiation: bool,
 ) -> Source {
     let mut output = Source::default();
 
@@ -171,7 +170,7 @@ pub fn render_intrinsics(
                 const i64ToF64 = i => (i64ToF64I[0] = i, i64ToF64F[0]);
             "),
 
-            Intrinsic::InstantiateCore => if instantiation.is_none() {
+            Intrinsic::InstantiateCore => if !instantiation {
                 output.push_str("
                     const instantiateCore = WebAssembly.instantiate;
                 ")
