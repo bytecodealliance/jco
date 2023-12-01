@@ -1,9 +1,9 @@
-import { handle } from 'wasi:http/outgoing-handler@0.2.0-rc-2023-11-05';
+import { handle } from 'wasi:http/outgoing-handler@0.2.0-rc-2023-11-10';
 import {
   Fields,
   OutgoingRequest,
   OutgoingBody,
-} from 'wasi:http/types@0.2.0-rc-2023-11-05';
+} from 'wasi:http/types@0.2.0-rc-2023-11-10';
 
 const sendRequest = (
   method,
@@ -17,19 +17,19 @@ const sendRequest = (
     {
       let encoder = new TextEncoder();
 
-      const request = new OutgoingRequest(
-        method,
-        pathWithQuery,
-        scheme,
-        authority,
+      const req = new OutgoingRequest(
         new Fields([
           ['User-agent', encoder.encode('WASI-HTTP/0.0.1')],
           ['Content-type', encoder.encode('application/json')],
         ])
       );
+      req.setScheme(scheme);
+      req.setMethod(method);
+      req.setPathWithQuery(pathWithQuery);
+      req.setAuthority(authority);
 
       if (body) {
-        const outgoingBody = request.write();
+        const outgoingBody = req.body();
         {
           const bodyStream = outgoingBody.write();
           bodyStream.blockingWriteAndFlush(encoder.encode(body));
@@ -39,7 +39,8 @@ const sendRequest = (
         OutgoingBody.finish(outgoingBody);
       }
 
-      const futureIncomingResponse = handle(request);
+      const futureIncomingResponse = handle(req);
+      futureIncomingResponse.subscribe().block();
       incomingResponse = futureIncomingResponse.get().val.val;
     }
 
@@ -53,10 +54,8 @@ const sendRequest = (
     const incomingBody = incomingResponse.consume();
     {
       const bodyStream = incomingBody.stream();
-      // const bodyStreamPollable = bodyStream.subscribe();
+      bodyStream.subscribe().block();
       const buf = bodyStream.read(50n);
-      // TODO: actual streaming
-      // TODO: explicit drops
       responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
     }
 
