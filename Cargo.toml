@@ -30,15 +30,15 @@ indexmap = "2.0"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 structopt = "0.3.26"
 tempdir = "0.3.7"
-wasm-encoder = "0.36.2"
-wasm-metadata = "0.10.11"
-wasmparser = "0.116.1"
-wasmprinter = "0.2.72"
-wasmtime-environ = { version = "14.0.4", features = ["component-model"] }
-wat = "1.0.79"
-wit-bindgen = { version = "0.14.0" }
-wit-bindgen-core = { version = "0.14.0" }
-wit-component = { version = "0.18.0", features = ["dummy-module"] }
+wasm-encoder = "0.38.1"
+wasm-metadata = "0.10.14"
+wasmparser = "0.118.1"
+wasmprinter = "0.2.75"
+wasmtime-environ = { version = "15.0.0", features = ["component-model"] }
+wat = "1.0.82"
+wit-bindgen = "0.15.0"
+wit-bindgen-core = "0.15.0"
+wit-component = { version = "0.19.0", features = ["dummy-module"] }
 wit-parser = "0.13.0"
 xshell = "0.2.5"
 

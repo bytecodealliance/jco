@@ -1,9 +1,6 @@
 #!/bin/bash
 set -ex
 
-# update dependencies
-git submodule update --init --recursive
-git submodule foreach git pull origin main
 cd submodules/wasmtime
 
 # build the preview1 component adapter reactor
@@ -43,5 +40,5 @@ mv ../../test/fixtures/wit/flavorful ../../test/fixtures/wit/deps/
 
 # note the WASI version for reference
 cd ../..
-cat .git/modules/wasmtime/refs/heads/main | head -c 16 > wasi-version
+cat .git/modules/submodules/wasmtime/HEAD | head -c 16 > wasi-version
 echo "WASI Updated to $(cat wasi-version)"

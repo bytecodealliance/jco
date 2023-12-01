@@ -223,7 +223,7 @@ impl<'a> JsBindgen<'a> {
         let js_intrinsics = render_intrinsics(
             &mut self.all_intrinsics,
             self.opts.no_nodejs_compat,
-            self.opts.instantiation.clone(),
+            self.opts.instantiation.is_some(),
         );
 
         match self.opts.instantiation {
