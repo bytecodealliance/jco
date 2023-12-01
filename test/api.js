@@ -2,6 +2,9 @@ import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadataShow, preview1AdapterReactorPath } from '../src/api.js';
 import { fileURLToPath } from 'node:url';
+import { platform } from 'node:process';
+
+const isWindows = platform === "win32";
 
 export async function apiTest (fixtures) {
   suite('API', () => {
@@ -103,7 +106,7 @@ export async function apiTest (fixtures) {
     test('Multi-file WIT', async () => {
       const generatedComponent = await componentEmbed({
         dummy: true,
-        witPath: fileURLToPath(new URL('./fixtures/componentize/source.wit', import.meta.url)),
+        witPath: (isWindows ? '//?/' : '') + fileURLToPath(new URL('./fixtures/componentize/source.wit', import.meta.url)),
         metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
       });
       {

@@ -4,7 +4,7 @@ import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { fork } from 'node:child_process';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import c from 'chalk-template';
 
 export async function run (componentPath, args, opts) {
@@ -62,7 +62,7 @@ export async function run (componentPath, args, opts) {
 
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
-      ${jcoImport ? `import ${JSON.stringify(jcoImport)}` : ''}
+      ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ''}
       function logInvalidCommand () {
         console.error('Not a valid command component to execute, make sure it was built to a command adapter and with the same version.');
       }

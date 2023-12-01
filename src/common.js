@@ -4,6 +4,9 @@ import { readFile, writeFile, rm, mkdtemp } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { argv0 } from 'node:process';
 import c from 'chalk-template';
+import { platform } from 'node:process';
+
+export const isWindows = platform === 'win32';
 
 let _showSpinner = false;
 export function setShowSpinner (val) {

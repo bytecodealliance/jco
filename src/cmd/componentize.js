@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import c from 'chalk-template';
+import { isWindows } from '../common.js';
 
 export async function componentize (jsSource, opts) {
   let componentizeFn;

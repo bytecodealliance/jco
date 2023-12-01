@@ -12,6 +12,6 @@ fn cli_file_read() -> anyhow::Result<()> {
     let tempdir = TempDir::new("{file_name}")?;
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
     let _ = fs::remove_dir_all("./tests/rundir/cli_file_read");
-    cmd!(sh, "./src/jco.js run  --jco-dir ./tests/rundir/cli_file_read --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
+    cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/cli_file_read --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'").run()?;
     Ok(())
 }

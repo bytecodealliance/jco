@@ -232,12 +232,12 @@ export class WasiSockets {
           "The new socket resource could not be created because of a system limit"
         );
 
-        try {
+        // try {
           return new TcpSocket(addressFamily);
-        } catch (err) {
-          // assert(true, errorCode.unknown, err);
-          throw err;
-        }
+        // } catch (err) {
+        //   // assert(true, errorCode.unknown, err);
+        //   throw err;
+        // }
       },
     };
 

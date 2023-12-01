@@ -17,14 +17,14 @@ jobs:
       matrix:
         name: [
             linux,
-            #windows,
+            windows,
             macos
         ]
         include:
           - name: linux
             os: ubuntu-latest
-          # - name: windows
-          #  os: windows-latest
+          - name: windows
+            os: windows-latest
           - name: macos
             os: macos-latest
     runs-on: ${{ matrix.os }}

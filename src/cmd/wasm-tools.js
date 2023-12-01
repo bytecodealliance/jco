@@ -1,9 +1,10 @@
 import { writeFile } from "node:fs/promises";
-import { readFile } from '../common.js';
+import { readFile, isWindows } from '../common.js';
 import { $init, tools } from "../../obj/wasm-tools.js";
 const { print: printFn, parse: parseFn, componentWit: componentWitFn, componentNew: componentNewFn, componentEmbed: componentEmbedFn, metadataAdd: metadataAddFn, metadataShow: metadataShowFn } = tools;
 import { resolve, basename, extname } from 'node:path';
 import c from 'chalk-template';
+import { platform } from 'node:process';
 
 export async function parse(file, opts) {
   await $init;
@@ -68,7 +69,7 @@ export async function componentEmbed(file, opts) {
     });
   const source = file ? await readFile(file) : null;
   opts.binary = source;
-  opts.witPath = resolve(opts.wit);
+  opts.witPath = (isWindows ? '//?/' : '') + resolve(opts.wit);
   const output = componentEmbedFn(opts);
   await writeFile(opts.output, output);
 }
