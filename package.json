@@ -51,7 +51,7 @@
   },
   "homepage": "https://github.com/bytecodealliance/jco#readme",
   "scripts": {
-    "build": "cargo xtask build workspace ; npm run build:typescript",
+    "build": "cargo xtask build workspace",
     "build:typescript": "tsc -p tsconfig.json",
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
     "lint": "eslint -c eslintrc.cjs lib/**/*.js packages/*/lib/**/*.js",
