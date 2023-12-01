@@ -20,7 +20,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "0.13.2"
+version = "0.14.0"
 
 [workspace.dependencies]
 anyhow = "1.0.75"

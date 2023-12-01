@@ -125,7 +125,7 @@ export async function transpileComponent (component, opts = {}) {
     noTypescript: opts.noTypescript || false,
     tlaCompat: opts.tlaCompat ?? false,
     base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000,
-    noNamespacedExports: opts.noNamespacedExports,
+    noNamespacedExports: opts.namespacedExports === false,
   });
 
   let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
