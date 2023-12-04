@@ -1,5 +1,3 @@
-import { UnexpectedError } from "../http/error.js";
-
 /**
  * @param {import("../../types/interfaces/wasi-http-types").Request} req
  * @returns {string}
@@ -30,7 +28,7 @@ export function send(req) {
       body,
     };
   } catch (err) {
-    throw new UnexpectedError(err.message);
+    throw new Error(err.message);
   }
 }
 
