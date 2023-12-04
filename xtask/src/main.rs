@@ -16,10 +16,8 @@ enum Opts {
 
 #[derive(StructOpt)]
 enum Build {
-    /// Build and transpile the `jco` tools
-    Jco,
     /// Build the project and copy the binaries
-    Workspace,
+    Debug,
     /// Build the project for release and copy the binaries
     Release,
 }
@@ -34,15 +32,14 @@ enum Generate {
 
 fn main() -> anyhow::Result<()> {
     match Opts::from_args() {
-        Opts::Build(Build::Jco) => build::jco::run(),
-        Opts::Build(Build::Workspace) => {
+        Opts::Build(Build::Debug) => {
             build::workspace::run(false)?;
-            build::jco::run()?;
+            build::jco::run(false)?;
             Ok(())
         }
         Opts::Build(Build::Release) => {
             build::workspace::run(true)?;
-            build::jco::run()?;
+            build::jco::run(true)?;
             Ok(())
         }
         Opts::Test => test::run(),
