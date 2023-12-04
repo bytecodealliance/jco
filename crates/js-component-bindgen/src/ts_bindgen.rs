@@ -3,7 +3,7 @@ use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, InstantiationMode, TranspileOpts};
-use crate::{uwrite, uwriteln};
+use crate::{dealias, uwrite, uwriteln};
 use heck::*;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -516,18 +516,17 @@ impl<'a> TsInterface<'a> {
     fn types(&mut self, iface_id: InterfaceId) {
         let iface = &self.resolve().interfaces[iface_id];
         for (name, id) in iface.types.iter() {
-            let id = *id;
-            let ty = &self.resolve().types[id];
+            let ty = &self.resolve().types[*id];
             match &ty.kind {
-                TypeDefKind::Record(record) => self.type_record(id, name, record, &ty.docs),
-                TypeDefKind::Flags(flags) => self.type_flags(id, name, flags, &ty.docs),
-                TypeDefKind::Tuple(tuple) => self.type_tuple(id, name, tuple, &ty.docs),
-                TypeDefKind::Enum(enum_) => self.type_enum(id, name, enum_, &ty.docs),
-                TypeDefKind::Variant(variant) => self.type_variant(id, name, variant, &ty.docs),
-                TypeDefKind::Option(t) => self.type_option(id, name, t, &ty.docs),
-                TypeDefKind::Result(r) => self.type_result(id, name, r, &ty.docs),
-                TypeDefKind::List(t) => self.type_list(id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => self.type_alias(id, name, t, Some(iface_id), &ty.docs),
+                TypeDefKind::Record(record) => self.type_record(*id, name, record, &ty.docs),
+                TypeDefKind::Flags(flags) => self.type_flags(*id, name, flags, &ty.docs),
+                TypeDefKind::Tuple(tuple) => self.type_tuple(*id, name, tuple, &ty.docs),
+                TypeDefKind::Enum(enum_) => self.type_enum(*id, name, enum_, &ty.docs),
+                TypeDefKind::Variant(variant) => self.type_variant(*id, name, variant, &ty.docs),
+                TypeDefKind::Option(t) => self.type_option(*id, name, t, &ty.docs),
+                TypeDefKind::Result(r) => self.type_result(*id, name, r, &ty.docs),
+                TypeDefKind::List(t) => self.type_list(*id, name, t, &ty.docs),
+                TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
@@ -878,7 +877,7 @@ impl<'a> TsInterface<'a> {
 
     fn type_alias(
         &mut self,
-        _id: TypeId,
+        id: TypeId,
         name: &str,
         ty: &Type,
         parent_id: Option<InterfaceId>,
@@ -907,10 +906,23 @@ impl<'a> TsInterface<'a> {
         let type_name = name.to_upper_camel_case();
         match owner_not_parent {
             Some(owned_interface_name) => {
-                uwriteln!(
-                    self.src,
-                    "import type {{ {type_name} }} from '../interfaces/{owned_interface_name}.js';",
-                );
+                let orig_id = dealias(&self.resolve, id);
+                let orig_name = self.resolve.types[orig_id]
+                    .name
+                    .as_ref()
+                    .unwrap()
+                    .to_upper_camel_case();
+                if orig_name == type_name {
+                    uwriteln!(
+                        self.src,
+                        "import type {{ {type_name} }} from '../interfaces/{owned_interface_name}.js';",
+                    );
+                } else {
+                    uwriteln!(
+                        self.src,
+                        "import type {{ {orig_name} as {type_name} }} from '../interfaces/{owned_interface_name}.js';",
+                    );
+                }
                 self.src.push_str(&format!("export {{ {} }};\n", type_name));
             }
             _ => {
