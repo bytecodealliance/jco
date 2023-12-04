@@ -2,13 +2,14 @@ use anyhow::{Context, Result};
 use std::{collections::HashMap, fs, io::Write, path::PathBuf};
 use wit_component::ComponentEncoder;
 
-pub(crate) fn run() -> Result<()> {
+pub(crate) fn run(release: bool) -> Result<()> {
+    let build = if release { "release" } else { "debug" };
     transpile(
-        "target/wasm32-wasi/release/js_component_bindgen_component.wasm",
+        &format!("target/wasm32-wasi/{build}/js_component_bindgen_component.wasm"),
         "js-component-bindgen-component".to_string(),
     )?;
     transpile(
-        "target/wasm32-wasi/release/wasm_tools_js.wasm",
+        &format!("target/wasm32-wasi/{build}/wasm_tools_js.wasm"),
         "wasm-tools".to_string(),
     )?;
 
