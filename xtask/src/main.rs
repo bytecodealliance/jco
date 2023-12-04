@@ -39,12 +39,12 @@ fn main() -> anyhow::Result<()> {
             build::workspace::run(false)?;
             build::jco::run()?;
             Ok(())
-        },
+        }
         Opts::Build(Build::Release) => {
             build::workspace::run(true)?;
             build::jco::run()?;
             Ok(())
-        },
+        }
         Opts::Test => test::run(),
         Opts::Generate(Generate::Tests) => generate::tests::run(),
         Opts::Generate(Generate::WasiTypes) => generate::wasi_types::run(),
