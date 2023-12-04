@@ -20,6 +20,8 @@ enum Build {
     Jco,
     /// Build the project and copy the binaries
     Workspace,
+    /// Build the project for release and copy the binaries
+    Release,
 }
 
 #[derive(StructOpt)]
@@ -34,10 +36,15 @@ fn main() -> anyhow::Result<()> {
     match Opts::from_args() {
         Opts::Build(Build::Jco) => build::jco::run(),
         Opts::Build(Build::Workspace) => {
-            build::workspace::run()?;
+            build::workspace::run(false)?;
             build::jco::run()?;
             Ok(())
-        }
+        },
+        Opts::Build(Build::Release) => {
+            build::workspace::run(true)?;
+            build::jco::run()?;
+            Ok(())
+        },
         Opts::Test => test::run(),
         Opts::Generate(Generate::Tests) => generate::tests::run(),
         Opts::Generate(Generate::WasiTypes) => generate::wasi_types::run(),
