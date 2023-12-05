@@ -130,7 +130,6 @@ class Descriptor {
   }
 
   getFlags() {
-    if (this.#hostPreopen) throw "invalid";
     return this.#mode;
   }
 
