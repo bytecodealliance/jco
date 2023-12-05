@@ -63,6 +63,7 @@ export async function run (componentPath, args, opts) {
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
       ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ''}
+
       function logInvalidCommand () {
         console.error('Not a valid command component to execute, make sure it was built to a command adapter and with the same version.');
       }

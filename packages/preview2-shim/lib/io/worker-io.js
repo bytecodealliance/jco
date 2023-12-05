@@ -63,6 +63,10 @@ const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 const _Error = Error;
 const IoError = class Error extends _Error {
+  constructor (payload) {
+    super(payload);
+    this.payload = payload;
+  }
   toDebugString() {
     return this.message;
   }
@@ -72,8 +76,7 @@ function streamIoErrorCall(call, id, payload) {
   try {
     return ioCall(call, id, payload);
   } catch (e) {
-    if (e.tag === 'closed')
-      throw e;
+    if (e.tag === "closed") throw e;
     if (e.tag === "last-operation-failed") {
       e.val = new IoError(e.val);
       throw e;
@@ -214,7 +217,7 @@ class OutputStream {
     return streamIoErrorCall(
       OUTPUT_STREAM_BLOCKING_SPLICE | this.#streamType,
       this.#id,
-      src.#id,
+      inputStreamId(src),
       len
     );
   }
@@ -279,9 +282,6 @@ class Pollable {
     if (id === 0) pollable.#ready = true;
     return pollable;
   }
-  static _listToIds(list) {
-    return list.map((pollable) => pollable.#id);
-  }
   static _markReady(pollable) {
     pollable.#ready = true;
   }
@@ -289,9 +289,6 @@ class Pollable {
 
 export const pollableCreate = Pollable._create;
 delete Pollable._create;
-
-const pollableListToIds = Pollable._listToIds;
-delete Pollable._listToIds;
 
 const pollableMarkReady = Pollable._markReady;
 delete Pollable._markReady;
@@ -302,14 +299,11 @@ delete Pollable._getId;
 export const poll = {
   Pollable,
   poll(list) {
-    const includeList = ioCall(POLL_POLL_LIST, null, pollableListToIds(list));
-    return list.filter((pollable) => {
-      if (includeList.includes(pollableGetId(pollable))) {
-        pollableMarkReady(pollable);
-        return true;
-      }
-      return false;
-    });
+    const doneList = ioCall(POLL_POLL_LIST, null, list.map(pollableGetId));
+    for (const idx of doneList) {
+      pollableMarkReady(list[idx]);
+    }
+    return doneList;
   },
 };
 

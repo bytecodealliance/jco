@@ -65,10 +65,16 @@ fn generate_test(test_name: &str) -> String {
         }
     };
 
+    let stdin = match test_name {
+        "cli_stdin" => Some("So rested he by the Tumtum tree"),
+        _ => None,
+    };
+
     let should_error = match test_name {
         "cli_exit_failure" | "cli_exit_panic" | "preview2_stream_pollable_traps" => true,
         _ => false,
     };
+
     let skip = match test_name {
         // these tests currently stall
         "api_read_only" | "preview1_path_open_read_write" => true,
@@ -90,11 +96,18 @@ fn {test_name}() -> anyhow::Result<()> {{
     {skip_comment}let tempdir = TempDir::new("{{file_name}}")?;
     {skip_comment}let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
     let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
-    {skip_comment}cmd!(sh, "node ./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'").run(){};
+
+    {skip_comment}let cmd = cmd!(sh, "node ./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'");
+{}
+    {skip_comment}cmd.run(){};
     {}Ok(())
 }}
 "##,
         if TRACE { "--jco-trace" } else { "" },
+        match stdin {
+            Some(stdin) => format!("{skip_comment}let cmd = cmd.stdin(b\"{}\");", stdin),
+            None => "".into(),
+        },
         if !should_error {
             "?"
         } else {

@@ -489,6 +489,9 @@ _addPreopen("/", isWindows ? "//" : "/");
 export const types = {
   Descriptor,
   DirectoryEntryStream,
+  filesystemErrorCode (err) {
+    return convertFsError(err);
+  },
 };
 
 export function _setPreopens(preopens) {

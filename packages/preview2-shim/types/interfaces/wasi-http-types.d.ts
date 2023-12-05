@@ -37,7 +37,14 @@ export namespace WasiHttpTypes {
    * syntactically invalid, or if a header was forbidden.
    */
   /**
-   * Get all of the values corresponding to a key.
+   * Get all of the values corresponding to a key. If the key is not present
+   * in this `fields`, an empty list is returned. However, if the key is
+   * present but empty, this is represented by a list with one or more
+   * empty field-values present.
+   */
+  /**
+   * Returns `true` when the key is present in this `fields`. If the key is
+   * syntactically invalid, `false` is returned.
    */
   /**
    * Set all of the values for a key. Clears any existing values for that
@@ -255,10 +262,14 @@ export namespace WasiHttpTypes {
    * The outer `option` represents future readiness. Users can wait on this
    * `option` to become `some` using the `subscribe` method.
    * 
-   * The `result` represents that either the HTTP Request or Response body,
-   * as well as any trailers, were received successfully, or that an error
-   * occured receiving them. The optional `trailers` indicates whether or not
-   * trailers were present in the body.
+   * The outer `result` is used to retrieve the trailers or error at most
+   * once. It will be success on the first call in which the outer option
+   * is `some`, and error on subsequent calls.
+   * 
+   * The inner `result` represents that either the HTTP Request or Response
+   * body, as well as any trailers, were received successfully, or that an
+   * error occured receiving them. The optional `trailers` indicates whether
+   * or not trailers were present in the body.
    * 
    * When some `trailers` are returned by this method, the `trailers`
    * resource is immutable, and a child. Use of the `set`, `append`, or
@@ -349,7 +360,7 @@ import type { InputStream } from '../interfaces/wasi-io-streams.js';
 export { InputStream };
 import type { OutputStream } from '../interfaces/wasi-io-streams.js';
 export { OutputStream };
-import type { IoError } from '../interfaces/wasi-io-error.js';
+import type { Error as IoError } from '../interfaces/wasi-io-error.js';
 export { IoError };
 import type { Pollable } from '../interfaces/wasi-io-poll.js';
 export { Pollable };
@@ -618,15 +629,26 @@ export type Trailers = Fields;
 export type StatusCode = number;
 export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
-export class FutureIncomingResponse {
-  subscribe(): Pollable;
-  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
+export class RequestOptions {
+  constructor()
+  connectTimeout(): Duration | undefined;
+  setConnectTimeout(duration: Duration | undefined): void;
+  firstByteTimeout(): Duration | undefined;
+  setFirstByteTimeout(duration: Duration | undefined): void;
+  betweenBytesTimeout(): Duration | undefined;
+  setBetweenBytesTimeout(duration: Duration | undefined): void;
+}
+
+export class IncomingBody {
+  stream(): InputStream;
+  static finish(this_: IncomingBody): FutureTrailers;
 }
 
 export class Fields {
   constructor()
   static fromList(entries: [FieldKey, FieldValue][]): Fields;
   get(name: FieldKey): FieldValue[];
+  has(name: FieldKey): boolean;
   set(name: FieldKey, value: FieldValue[]): void;
   delete(name: FieldKey): void;
   append(name: FieldKey, value: FieldValue): void;
@@ -634,9 +656,10 @@ export class Fields {
   clone(): Fields;
 }
 
-export class FutureTrailers {
-  subscribe(): Pollable;
-  get(): Result<Trailers | undefined, ErrorCode> | undefined;
+export class IncomingResponse {
+  status(): StatusCode;
+  headers(): Headers;
+  consume(): IncomingBody;
 }
 
 export class OutgoingRequest {
@@ -653,23 +676,27 @@ export class OutgoingRequest {
   headers(): Headers;
 }
 
-export class RequestOptions {
-  constructor()
-  connectTimeoutMs(): Duration | undefined;
-  setConnectTimeoutMs(ms: Duration | undefined): void;
-  firstByteTimeoutMs(): Duration | undefined;
-  setFirstByteTimeoutMs(ms: Duration | undefined): void;
-  betweenBytesTimeoutMs(): Duration | undefined;
-  setBetweenBytesTimeoutMs(ms: Duration | undefined): void;
+export class OutgoingResponse {
+  constructor(headers: Headers)
+  statusCode(): StatusCode;
+  setStatusCode(statusCode: StatusCode): void;
+  headers(): Headers;
+  body(): OutgoingBody;
 }
 
-export class IncomingBody {
-  stream(): InputStream;
-  static finish(this_: IncomingBody): FutureTrailers;
+export class OutgoingBody {
+  write(): OutputStream;
+  static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
 }
 
-export class ResponseOutparam {
-  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
+export class FutureIncomingResponse {
+  subscribe(): Pollable;
+  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
+}
+
+export class FutureTrailers {
+  subscribe(): Pollable;
+  get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
 }
 
 export class IncomingRequest {
@@ -681,21 +708,6 @@ export class IncomingRequest {
   consume(): IncomingBody;
 }
 
-export class OutgoingResponse {
-  constructor(headers: Headers)
-  statusCode(): StatusCode;
-  setStatusCode(statusCode: StatusCode): void;
-  headers(): Headers;
-  body(): OutgoingBody;
-}
-
-export class IncomingResponse {
-  status(): StatusCode;
-  headers(): Headers;
-  consume(): IncomingBody;
-}
-
-export class OutgoingBody {
-  write(): OutputStream;
-  static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
+export class ResponseOutparam {
+  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
 }

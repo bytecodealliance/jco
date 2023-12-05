@@ -1,21 +1,25 @@
 import { argv, env, cwd } from "node:process";
 import {
+  ioCall,
   streams,
   inputStreamCreate,
   outputStreamCreate,
 } from "../io/worker-io.js";
-import { STDIN, STDOUT, STDERR } from "../io/calls.js";
+import { INPUT_STREAM_CREATE, STDERR, STDIN, STDOUT } from "../io/calls.js";
 const { InputStream, OutputStream } = streams;
 
-export const _setEnv = env => void (_env = Object.entries(env));
-export const _setArgs = args => void (_args = args);
-export const _setCwd = cwd => void (_cwd = cwd);
-export const _setStdin = stdin => void (stdinStream = stdin);
-export const _setStdout = stdout => void (stdoutStream = stdout);
-export const _setStderr = stderr => void (stderrStream = stderr);
-export const _setTerminalStdin = terminalStdin => void (terminalStdinInstance = terminalStdin);
-export const _setTerminalStdout = terminalStdout => void (terminalStdoutInstance = terminalStdout);
-export const _setTerminalStderr = terminalStderr => void (terminalStderrInstance = terminalStderr);
+export const _setEnv = (env) => void (_env = Object.entries(env));
+export const _setArgs = (args) => void (_args = args);
+export const _setCwd = (cwd) => void (_cwd = cwd);
+export const _setStdin = (stdin) => void (stdinStream = stdin);
+export const _setStdout = (stdout) => void (stdoutStream = stdout);
+export const _setStderr = (stderr) => void (stderrStream = stderr);
+export const _setTerminalStdin = (terminalStdin) =>
+  void (terminalStdinInstance = terminalStdin);
+export const _setTerminalStdout = (terminalStdout) =>
+  void (terminalStdoutInstance = terminalStdout);
+export const _setTerminalStderr = (terminalStderr) =>
+  void (terminalStderrInstance = terminalStderr);
 
 let _env = Object.entries(env),
   _args = argv.slice(1),
@@ -39,13 +43,19 @@ export const exit = {
   },
 };
 
-let stdinStream = inputStreamCreate(STDIN, 1);
+// Stdin is created as a FILE descriptor
+let stdinStream;
 let stdoutStream = outputStreamCreate(STDOUT, 2);
 let stderrStream = outputStreamCreate(STDERR, 3);
 
 export const stdin = {
   InputStream,
   getStdin() {
+    if (!stdinStream)
+      stdinStream = inputStreamCreate(
+        STDIN,
+        ioCall(INPUT_STREAM_CREATE | STDIN, null, null)
+      );
     return stdinStream;
   },
 };
