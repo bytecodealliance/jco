@@ -539,6 +539,8 @@ export class WasiHttp {
     this._incomingRequestCreate = incomingRequestCreate;
 
     function httpErrorCode(err) {
+      if (err.payload)
+        return err.payload;
       return {
         tag: "internal-error",
         val: err.message,

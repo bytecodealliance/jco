@@ -7,11 +7,16 @@ import { platform } from 'node:process';
 
 const isWindows = platform === 'win32';
 
-_setEnv({
+const env = {
   FS_TIME_PRECISION: "2000",
   NO_DANGLING_FILESYSTEM: "1",
-  NO_RENAME_DIR_TO_EMPTY_DIR: isWindows ? "1" : "0"
-});
+};
+
+if (isWindows) {
+  env.NO_RENAME_DIR_TO_EMPTY_DIR = "1";
+}
+
+_setEnv(env);
 
 _setArgs(['_', '/']);
 

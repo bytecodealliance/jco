@@ -98,8 +98,7 @@ function startWorkerThread(
       throw new Error(`Internal error: Expected id ${id} but got id ${id2}`);
     }
     if (error) {
-      if (error instanceof Error)
-        throw Object.assign(error, properties);
+      if (error instanceof Error) throw Object.assign(error, properties);
       throw error;
     }
     return result;

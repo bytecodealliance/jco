@@ -130,7 +130,6 @@ class Descriptor {
   }
 
   getFlags() {
-    if (this.#hostPreopen) throw "invalid";
     return this.#mode;
   }
 
@@ -489,6 +488,9 @@ _addPreopen("/", isWindows ? "//" : "/");
 export const types = {
   Descriptor,
   DirectoryEntryStream,
+  filesystemErrorCode (err) {
+    return convertFsError(err);
+  },
 };
 
 export function _setPreopens(preopens) {
