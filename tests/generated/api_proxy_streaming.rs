@@ -13,7 +13,7 @@ fn api_proxy_streaming() -> anyhow::Result<()> {
     let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
     let _ = fs::remove_dir_all("./tests/rundir/api_proxy_streaming");
 
-    let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/api_proxy_streaming --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
+    let cmd = cmd!(sh, "node ./src/jco.js serve  --jco-dir ./tests/rundir/api_proxy_streaming --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
 
     cmd.run()?;
     Ok(())

@@ -2,7 +2,7 @@
 import { program, Option } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile } from './cmd/transpile.js';
-import { run as runCmd } from './cmd/run.js';
+import { run as runCmd, serve as serveCmd } from './cmd/run.js';
 import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
 import { componentize } from './cmd/componentize.js';
 import c from 'chalk-template';
@@ -52,22 +52,42 @@ program.command('transpile')
   .action(asyncAction(transpile));
 
 program.command('run')
-  .description('Run a WebAssembly Command component')
+  .description('Run a WASI Command component')
   .usage('<command.wasm> <args...>')
   .helpOption(false)
   .allowUnknownOption(true)
   .allowExcessArguments(true)
-  .argument('<command>', 'Wasm command binary to run')
+  .argument('<command>', 'WASI command binary to run')
   .option('--jco-dir <dir>', 'Instead of using a temporary dir, set the output directory for the run command')
   .option('--jco-trace', 'Enable call tracing')
   .option('--jco-import <module>', 'Custom module to import before the run executes to support custom environment setup')
-  .argument('[args...]', 'Any CLI arguments to provide to the command')
+  .argument('[args...]', 'Any CLI arguments for the component')
   .action(asyncAction(async function run (cmd, args, opts, command) {
     // specially only allow help option in first position
     if (cmd === '--help' || cmd === '-h') {
       command.help();
     } else {
       return runCmd(cmd, args, opts);
+    }
+  }));
+
+program.command('serve')
+  .description('Serve a WASI HTTP component')
+  .usage('<server.wasm> <args...>')
+  .helpOption(false)
+  .allowUnknownOption(true)
+  .allowExcessArguments(true)
+  .argument('<command>', 'WASI server binary to run')
+  .option('--jco-dir <dir>', 'Instead of using a temporary dir, set the output directory for the transpiled code')
+  .option('--jco-trace', 'Enable call tracing')
+  .option('--jco-import <module>', 'Custom module to import before the server executes to support custom environment setup')
+  .argument('[args...]', 'Any CLI arguments for the component')
+  .action(asyncAction(async function serve (cmd, args, opts, command) {
+    // specially only allow help option in first position
+    if (cmd === '--help' || cmd === '-h') {
+      command.help();
+    } else {
+      return serveCmd(cmd, args, opts);
     }
   }));
 

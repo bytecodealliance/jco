@@ -33,7 +33,6 @@ import {
 } from "node:worker_threads";
 
 const DEFAULT_WORKER_BUFFER_SIZE = 1024;
-const syncFnCache = new Map();
 
 function extractProperties(object) {
   if (object && typeof object === "object") {
@@ -45,57 +44,42 @@ function extractProperties(object) {
   }
 }
 
-export function createSyncFn(workerPath, bufferSizeOrOptions, timeout) {
+const CALL_TIMEOUT = undefined;
+
+export function createSyncFn(workerPath, callbackHandler) {
   if (!path.isAbsolute(workerPath)) {
     throw new Error("`workerPath` must be absolute");
   }
-  const cachedSyncFn = syncFnCache.get(workerPath);
-  if (cachedSyncFn) {
-    return cachedSyncFn;
-  }
-  const syncFn = startWorkerThread(
-    workerPath,
-    typeof bufferSizeOrOptions === "number"
-      ? { bufferSize: bufferSizeOrOptions, timeout }
-      : bufferSizeOrOptions
-  );
-  syncFnCache.set(workerPath, syncFn);
-  return syncFn;
-}
-
-function startWorkerThread(
-  workerPath,
-  {
-    bufferSize = DEFAULT_WORKER_BUFFER_SIZE,
-    timeout = undefined,
-    execArgv = [],
-  } = {}
-) {
   const { port1: mainPort, port2: workerPort } = new MessageChannel();
   const worker = new Worker(workerPath, {
     workerData: { workerPort },
     transferList: [workerPort],
-    execArgv: execArgv
+    execArgv: []
+  });
+  worker.on('message', ({ type, id, payload }) => {
+    if (!type)
+      throw new Error('Internal error: Expected a type of a worker callback');
+    callbackHandler(type, id, payload);
   });
   let nextID = 0;
   const syncFn = (...args) => {
-    const id = nextID++;
-    const sharedBuffer = new SharedArrayBuffer(bufferSize);
+    const cid = nextID++;
+    const sharedBuffer = new SharedArrayBuffer(DEFAULT_WORKER_BUFFER_SIZE);
     const sharedBufferView = new Int32Array(sharedBuffer);
-    const msg = { sharedBuffer, id, args };
+    const msg = { sharedBuffer, cid, args };
     worker.postMessage(msg);
-    const status = Atomics.wait(sharedBufferView, 0, 0, timeout);
+    const status = Atomics.wait(sharedBufferView, 0, 0, CALL_TIMEOUT);
     if (!["ok", "not-equal"].includes(status)) {
       throw new Error("Internal error: Atomics.wait() failed: " + status);
     }
     const {
-      id: id2,
+      cid: cid2,
       result,
       error,
       properties,
     } = receiveMessageOnPort(mainPort).message;
-    if (id !== id2) {
-      throw new Error(`Internal error: Expected id ${id} but got id ${id2}`);
+    if (cid !== cid2) {
+      throw new Error(`Internal error: Expected id ${cid} but got id ${cid2}`);
     }
     if (error) {
       if (error instanceof Error) throw Object.assign(error, properties);
@@ -113,14 +97,14 @@ export function runAsWorker(fn) {
   }
   const { workerPort } = workerData;
   try {
-    parentPort.on("message", ({ sharedBuffer, id, args }) => {
+    parentPort.on("message", ({ sharedBuffer, cid, args }) => {
       (async () => {
         const sharedBufferView = new Int32Array(sharedBuffer);
         let msg;
         try {
-          msg = { id, result: await fn(...args) };
+          msg = { cid, result: await fn(...args) };
         } catch (error) {
-          msg = { id, error, properties: extractProperties(error) };
+          msg = { cid, error, properties: extractProperties(error) };
         }
         workerPort.postMessage(msg);
         Atomics.add(sharedBufferView, 0, 1);
@@ -128,10 +112,10 @@ export function runAsWorker(fn) {
       })();
     });
   } catch (error) {
-    parentPort.on("message", ({ sharedBuffer, id }) => {
+    parentPort.on("message", ({ sharedBuffer, cid }) => {
       const sharedBufferView = new Int32Array(sharedBuffer);
       workerPort.postMessage({
-        id,
+        cid,
         error,
         properties: extractProperties(error),
       });

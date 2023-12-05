@@ -54,6 +54,7 @@ fn generate_test(test_name: &str) -> String {
         "api_time" => "fakeclocks",
         "preview1_stdio_not_isatty" => "notty",
         "cli_file_append" => "bar-jabberwock",
+        "api_proxy" | "api_proxy_streaming" => "http",
         _ => {
             if test_name.starts_with("preview1") {
                 "scratch"
@@ -80,6 +81,12 @@ fn generate_test(test_name: &str) -> String {
         "api_read_only" | "preview1_path_open_read_write" => true,
         _ => false,
     };
+
+    let run_or_serve = match test_name {
+        "api_proxy" | "api_proxy_streaming" => "serve",
+        _ => "run",
+    };
+
     let skip_comment = if skip { "// " } else { "" };
     format!(
         r##"//! This file has been auto-generated, please do not modify manually
@@ -97,7 +104,7 @@ fn {test_name}() -> anyhow::Result<()> {{
     {skip_comment}let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
     let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
 
-    {skip_comment}let cmd = cmd!(sh, "node ./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'");
+    {skip_comment}let cmd = cmd!(sh, "node ./src/jco.js {run_or_serve} {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'");
 {}
     {skip_comment}cmd.run(){};
     {}Ok(())

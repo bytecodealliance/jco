@@ -43,6 +43,12 @@ export const FUTURE_DISPOSE = ++call_id << CALL_SHIFT;
 // Http
 export const HTTP_CREATE_REQUEST = ++call_id << 24;
 export const HTTP_OUTPUT_STREAM_FINISH = ++call_id << CALL_SHIFT;
+// Http server
+export const HTTP_SERVER_START = ++call_id << CALL_SHIFT;
+export const HTTP_SERVER_STOP = ++call_id << CALL_SHIFT;
+export const HTTP_SERVER_INCOMING_HANDLER = ++call_id << CALL_SHIFT;
+export const HTTP_SERVER_SET_OUTGOING_RESPONSE = ++call_id << CALL_SHIFT;
+export const HTTP_SERVER_CLEAR_OUTGOING_RESPONSE = ++call_id << CALL_SHIFT;
 
 // Clocks
 export const CLOCKS_NOW = ++call_id << 24;

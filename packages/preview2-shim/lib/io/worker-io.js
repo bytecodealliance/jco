@@ -24,6 +24,7 @@ import {
   POLL_POLL_LIST,
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
+  HTTP_SERVER_INCOMING_HANDLER,
 } from "./calls.js";
 import { STDERR } from "./calls.js";
 
@@ -33,10 +34,25 @@ const workerPath = fileURLToPath(
   new URL("./worker-thread.js", import.meta.url)
 );
 
+
+const httpIncomingHandlers = new Map();
+export function registerIncomingHttpHandler (id, handler) {
+  httpIncomingHandlers.set(id, handler);
+}
+
 /**
  * @type {(call: number, id: number | null, payload: any) -> any}
  */
-export let ioCall = createSyncFn(workerPath);
+export let ioCall = createSyncFn(workerPath, (type, id, payload) => {
+  // 'callbacks' from the worker
+  // ONLY happens for an http server incoming handler, and NOTHING else (not even sockets, since accept is sync!)
+  if (type !== HTTP_SERVER_INCOMING_HANDLER)
+    throw new Error('Internal error: only incoming handler callback is permitted');
+  const handler = httpIncomingHandlers.get(id);
+  if (!handler)
+    throw new Error(`Internal error: no incoming handler registered for server ${id}`);
+  handler(payload);
+});
 if (DEBUG) {
   const _ioCall = ioCall;
   ioCall = function ioCall(num, id, payload) {

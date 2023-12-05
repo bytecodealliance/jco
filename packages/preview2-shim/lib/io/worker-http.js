@@ -1,5 +1,63 @@
 import { Readable } from "node:stream";
 import { createStream, getStreamOrThrow } from "./worker-thread.js";
+import { createServer } from "node:http";
+import { parentPort } from "node:worker_threads";
+import { HTTP_SERVER_INCOMING_HANDLER } from "./calls.js";
+
+const servers = new Map();
+
+let responseCnt = 0;
+const responses = new Map();
+
+export async function stopHttpServer(id) {
+  await new Promise((resolve) => servers.get(id).close(resolve));
+}
+
+export function clearOutgoingResponse(id) {
+  responses.delete(id);
+}
+
+export async function setOutgoingResponse(
+  id,
+  { statusCode, headers, streamId }
+) {
+  const response = responses.get(id);
+  const textDecoder = new TextDecoder();
+  response.writeHead(
+    statusCode,
+    Object.fromEntries(
+      headers.map(([key, val]) => [key, textDecoder.decode(val)])
+    )
+  );
+  const { stream } = getStreamOrThrow(streamId);
+  stream.pipe(response);
+  responses.delete(id);
+}
+
+export async function startHttpServer(id, { port, host }) {
+  const server = createServer((req, res) => {
+    // create the streams and their ids
+    const streamId = createStream(req);
+    const responseId = ++responseCnt;
+    parentPort.postMessage({
+      type: HTTP_SERVER_INCOMING_HANDLER,
+      id,
+      payload: {
+        responseId,
+        method: req.method,
+        pathWithQuery: req.url,
+        headers: Object.entries(req.headers),
+        streamId,
+      },
+    });
+    responses.set(responseId, res);
+  });
+  await new Promise((resolve, reject) => {
+    server.listen(port, host, resolve);
+    server.on("error", reject);
+  });
+  servers.set(id, server);
+}
 
 export async function createHttpRequest(method, url, headers, bodyId) {
   let body = null;
