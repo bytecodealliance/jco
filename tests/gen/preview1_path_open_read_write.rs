@@ -12,7 +12,6 @@ fn preview1_path_open_read_write() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/preview1_path_open_read_write");
         cmd1.arg("--jco-import");

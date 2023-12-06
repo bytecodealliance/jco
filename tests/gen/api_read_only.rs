@@ -13,7 +13,6 @@ fn api_read_only() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/api_read_only");
         cmd1.arg("--jco-import");

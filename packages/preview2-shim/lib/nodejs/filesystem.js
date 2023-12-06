@@ -7,7 +7,7 @@ import {
 } from "../io/worker-io.js";
 import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE } from "../io/calls.js";
 import { FILE } from "../io/calls.js";
-import {
+import nodeFs, {
   closeSync,
   constants,
   fdatasyncSync,
@@ -32,7 +32,6 @@ import {
 } from "node:fs";
 import { platform } from "node:process";
 
-import * as nodeFs from 'node:fs';
 const lutimesSync = nodeFs.lutimesSync;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");

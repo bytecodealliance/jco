@@ -1,4 +1,4 @@
-import { argv, env, cwd } from "node:process";
+import process, { argv, env, cwd } from "node:process";
 import {
   ioCall,
   streams,

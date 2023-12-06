@@ -4,6 +4,7 @@ import { readFileSync, rmdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { $init, generate } from "../../obj/js-component-bindgen-component.js";
 import { fork } from "node:child_process";
+import process from "node:process";
 
 export const testDir = await mkdtemp('tests/output/server');
 

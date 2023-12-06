@@ -12,7 +12,6 @@ fn cli_file_dir_sync() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/cli_file_dir_sync");
         cmd1.arg("--jco-import");

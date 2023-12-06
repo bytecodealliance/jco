@@ -12,7 +12,6 @@ fn preview1_stdio_not_isatty() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/preview1_stdio_not_isatty");
         cmd1.arg("--jco-import");

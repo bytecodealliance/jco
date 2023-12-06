@@ -1,0 +1,11 @@
+{
+  "imports": {
+    "@bytecodealliance/preview2-shim/filesystem": "../node_modules/@bytecodealliance/preview2-shim/lib/nodejs/filesystem.js",
+    "@bytecodealliance/preview2-shim/sockets": "../node_modules/@bytecodealliance/preview2-shim/lib/nodejs/sockets.js",
+    "@bytecodealliance/preview2-shim/clocks": "../node_modules/@bytecodealliance/preview2-shim/lib/nodejs/clocks.js",
+    "@bytecodealliance/preview2-shim/io": "../node_modules/@bytecodealliance/preview2-shim/lib/nodejs/io.js",
+    "@bytecodealliance/preview2-shim/http": "../node_modules/@bytecodealliance/preview2-shim/lib/nodejs/http.js",
+    "@bytecodealliance/preview2-shim/cli": "../node_modules/@bytecodealliance/preview2-shim/lib/nodejs/cli.js",
+    "@bytecodealliance/preview2-shim/random": "../node_modules/@bytecodealliance/preview2-shim/lib/nodejs/random.js"
+  }
+}

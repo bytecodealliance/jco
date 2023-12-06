@@ -12,7 +12,6 @@ fn preview2_stream_pollable_correct() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/preview2_stream_pollable_correct");
         cmd1.arg("--jco-import");

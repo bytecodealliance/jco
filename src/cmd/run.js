@@ -2,7 +2,7 @@ import { getTmpDir } from '../common.js';
 import { transpile } from './transpile.js';
 import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
-import { fork } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import c from 'chalk-template';
@@ -112,6 +112,7 @@ async function runComponent (componentPath, args, opts, executor) {
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
       ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ''}
+      import process from 'node:process';
       try {
         process.argv[1] = "${name}";
       } catch {}
@@ -119,8 +120,10 @@ async function runComponent (componentPath, args, opts, executor) {
       ${executor}
     `);
 
+    const nodePath = process.env.JCO_RUN_PATH || process.argv[0];
+
     process.exitCode = await new Promise((resolve, reject) => {
-      const cp = fork(runPath, args, { stdio: 'inherit' });
+      const cp = spawn(nodePath, [...process.env.JCO_RUN_ARGS ? process.env.JCO_RUN_ARGS.split(' ') : [], runPath, ...args], { stdio: 'inherit' });
 
       cp.on('error', reject);
       cp.on('exit', resolve);
