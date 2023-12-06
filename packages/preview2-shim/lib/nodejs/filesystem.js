@@ -85,7 +85,6 @@ class Descriptor {
     const descriptor = new Descriptor();
     descriptor.#fd = fd;
     descriptor.#mode = mode;
-    if (fullPath.endsWith("/")) throw new Error("bad full path");
     descriptor.#fullPath = fullPath;
     return descriptor;
   }
@@ -185,8 +184,8 @@ class Descriptor {
 
   read(length, offset) {
     if (!this.#fullPath) throw "bad-descriptor";
-    const buf = new Uint8Array(length);
-    const bytesRead = readSync(this.#fd, buf, Number(offset), length, 0);
+    const buf = new Uint8Array(Number(length));
+    const bytesRead = readSync(this.#fd, buf, 0, Number(length), Number(offset));
     const out = new Uint8Array(buf.buffer, 0, bytesRead);
     return [out, bytesRead === 0 ? "ended" : "open"];
   }
@@ -194,7 +193,7 @@ class Descriptor {
   write(buffer, offset) {
     if (!this.#fullPath) throw "bad-descriptor";
     return BigInt(
-      writeSync(this.#fd, buffer, Number(offset), buffer.byteLength - offset, 0)
+      writeSync(this.#fd, buffer, 0, buffer.byteLength, Number(offset))
     );
   }
 
@@ -319,14 +318,23 @@ class Descriptor {
     else if (descriptorFlags.read) fsOpenFlags |= constants.O_RDONLY;
     if (descriptorFlags.fileIntegritySync) fsOpenFlags |= constants.O_SYNC;
     if (descriptorFlags.dataIntegritySync) fsOpenFlags |= constants.O_DSYNC;
+    if (!pathFlags.symlinkFollow) fsOpenFlags |= constants.O_NOFOLLOW;
+
     // Unsupported:
     // if (descriptorFlags.requestedWriteSync)
     // if (descriptorFlags.mutateDirectory)
-
     try {
       const fd = openSync(fullPath, fsOpenFlags);
-      return descriptorCreate(fd, descriptorFlags, fullPath, preopenEntries);
+      const descriptor = descriptorCreate(fd, descriptorFlags, fullPath, preopenEntries);
+      if (fullPath.endsWith('/')) {
+        // check if its a directory
+        if (!descriptor.getType() === 'directory')
+          throw 'not-directory';
+      }
+      return descriptor;
     } catch (e) {
+      if (e.code === 'ERR_INVALID_ARG_VALUE')
+        throw 'invalid';
       throw convertFsError(e);
     }
   }
@@ -365,6 +373,8 @@ class Descriptor {
 
   symlinkAt(target, path) {
     const fullPath = this.#getFullPath(path, false);
+    if (target.startsWith('/'))
+      throw 'not-permitted';
     try {
       symlinkSync(target, fullPath);
     } catch (e) {
@@ -411,24 +421,47 @@ class Descriptor {
   #getFullPath(subpath, _followSymlinks) {
     let descriptor = this;
     if (subpath.indexOf("\\") !== -1) subpath = subpath.replace(/\\/g, "/");
-    if (subpath[0] === '/') {
-      let bestPreopenMatch = "";
-      for (const preopenEntry of preopenEntries) {
-        if (
-          subpath.startsWith(preopenEntry[1]) &&
-          (!bestPreopenMatch ||
-            bestPreopenMatch.length < preopenEntry[1].length)
-        ) {
-          bestPreopenMatch = preopenEntry;
+    if (subpath.indexOf("//") !== -1) subpath = subpath.replace(/\/\/+/g, '/');
+    if (subpath[0] === '/')
+      throw 'not-permitted';
+
+    // segment resolution
+    const segments = [];
+    let segmentIndex = -1;
+    for (let i = 0; i < subpath.length; i++) {
+      // busy reading a segment - only terminate on '/'
+      if (segmentIndex !== -1) {
+        if (subpath[i] === '/') {
+          segments.push(subpath.slice(segmentIndex, i + 1));
+          segmentIndex = -1;
+        }
+        continue;
+      }
+      // new segment - check if it is relative
+      else if (subpath[i] === '.') {
+        // ../ segment
+        if (subpath[i + 1] === '.' && (subpath[i + 2] === '/' || i + 2 === subpath.length)) {
+          if (segments.pop() === undefined)
+            throw 'not-permitted';
+          i += 2;
+          continue;
+        }
+        // ./ segment
+        else if (subpath[i + 1] === '/' || i + 1 === subpath.length) {
+          i += 1;
+          continue;
         }
       }
-      if (!bestPreopenMatch) throw "no-entry";
-      descriptor = bestPreopenMatch[0];
-      subpath = subpath.slice(bestPreopenMatch[1]);
-      if (subpath[0] === "/") subpath = subpath.slice(1);
+      // it is the start of a new segment
+      while (subpath[i] === '/') i++;
+      segmentIndex = i; 
     }
-    if (subpath.startsWith("."))
-      subpath = subpath.slice(subpath[1] === "/" ? 2 : 1);
+    // finish reading out the last segment
+    if (segmentIndex !== -1)
+      segments.push(subpath.slice(segmentIndex));
+
+    subpath = segments.join('');
+
     if (descriptor.#hostPreopen)
       return (
         descriptor.#hostPreopen + (descriptor.#hostPreopen.endsWith('/') ? '' : (subpath.length > 0 ? "/" : "")) + subpath
