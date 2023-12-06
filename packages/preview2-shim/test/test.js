@@ -110,7 +110,7 @@ suite("Node.js Preview2", () => {
     const [[rootDescriptor]] = filesystem.preopens.getDirectories();
     const childDescriptor = rootDescriptor.openAt(
       {},
-      (isWindows ? "//?/" : "") + fileURLToPath(import.meta.url),
+      fileURLToPath(import.meta.url).slice(1),
       {},
       {}
     );
