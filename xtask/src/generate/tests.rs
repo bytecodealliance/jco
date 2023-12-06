@@ -105,7 +105,7 @@ fn {test_name}() -> anyhow::Result<()> {{
 "##,
         if TRACE { "--jco-trace" } else { "" },
         match stdin {
-            Some(stdin) => format!("{skip_comment}let cmd = cmd.stdin(b\"{}\");", stdin),
+            Some(stdin) => format!("    {skip_comment}let cmd = cmd.stdin(b\"{}\");", stdin),
             None => "".into(),
         },
         if !should_error {

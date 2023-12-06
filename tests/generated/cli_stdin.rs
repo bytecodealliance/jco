@@ -14,7 +14,7 @@ fn cli_stdin() -> anyhow::Result<()> {
     let _ = fs::remove_dir_all("./tests/rundir/cli_stdin");
 
     let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/cli_stdin --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
-let cmd = cmd.stdin(b"So rested he by the Tumtum tree");
+    let cmd = cmd.stdin(b"So rested he by the Tumtum tree");
     cmd.run()?;
     Ok(())
 }
