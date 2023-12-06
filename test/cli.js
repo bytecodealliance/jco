@@ -139,6 +139,13 @@ export async function cliTest (fixtures) {
       }
     });
 
+    test('Wit shadowing stub test', async () => {
+      const { stderr, stdout } = await exec(jcoPath, 'transpile', `test/fixtures/wit/deps/app/app.wit`, '-o', outDir, '--stub');
+      strictEqual(stderr, '');
+      const source = await readFile(`${outDir}/app.js`);
+      ok(source.includes('class PString$1{'));
+    });
+
     test('Wit & New', async () => {
       const { stderr, stdout } = await exec(jcoPath, 'wit', `test/fixtures/components/flavorful.component.wasm`);
       strictEqual(stderr, '');

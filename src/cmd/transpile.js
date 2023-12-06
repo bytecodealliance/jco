@@ -1,19 +1,31 @@
 import { $init, generate } from '../../obj/js-component-bindgen-component.js';
 import { writeFile } from 'fs/promises';
 import { mkdir } from 'fs/promises';
-import { dirname, extname, basename } from 'path';
+import { dirname, extname, basename, resolve } from 'path';
 import c from 'chalk-template';
 import { readFile, sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import { optimizeComponent } from './opt.js';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
+import { $init as wasmToolsInit, tools } from "../../obj/wasm-tools.js";
+const { componentEmbed, componentNew } = tools;
 import ora from '#ora';
 
 export async function transpile (componentPath, opts, program) {
   const varIdx = program?.parent.rawArgs.indexOf('--');
   if (varIdx !== undefined && varIdx !== -1)
     opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
-  const component = await readFile(componentPath);
+
+  let component;
+  if (!opts.stub) {
+    component = await readFile(componentPath);
+  } else {
+    await wasmToolsInit;
+    component = componentNew(componentEmbed({
+      dummy: true,
+      witPath: resolve(componentPath)
+    }), []);
+  }
 
   if (!opts.quiet)
     setShowSpinner(true);
