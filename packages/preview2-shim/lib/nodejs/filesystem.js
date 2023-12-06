@@ -70,13 +70,12 @@ class Descriptor {
   static _createPreopen(hostPreopen) {
     const descriptor = new Descriptor();
     descriptor.#hostPreopen = hostPreopen.endsWith("/")
-      ? hostPreopen.slice(0, -1) || '/'
+      ? hostPreopen.slice(0, -1) || "/"
       : hostPreopen;
     // Windows requires UNC paths at minimum
     if (isWindows) {
-      descriptor.#hostPreopen = descriptor.#hostPreopen.replace(/\\/g, '/');
-      if (descriptor.#hostPreopen === '/')
-        descriptor.#hostPreopen = '//';
+      descriptor.#hostPreopen = descriptor.#hostPreopen.replace(/\\/g, "/");
+      if (descriptor.#hostPreopen === "/") descriptor.#hostPreopen = "//";
     }
     return descriptor;
   }
@@ -117,7 +116,9 @@ class Descriptor {
     return this.writeViaStream(this.stat().size);
   }
 
-  advise(_offset, _length, _advice) { }
+  advise(_offset, _length, _advice) {
+    if (this.getType() === "directory") throw "bad-descriptor";
+  }
 
   syncData() {
     if (this.#hostPreopen) throw "invalid";
@@ -162,7 +163,7 @@ class Descriptor {
     const mtime = this.#getNewTimestamp(
       dataModificationTimestamp,
       dataModificationTimestamp.tag === "no-change" &&
-      stats.dataModificationTimestamp
+        stats.dataModificationTimestamp
     );
     try {
       futimesSync(this.#fd, atime, mtime);
@@ -185,7 +186,13 @@ class Descriptor {
   read(length, offset) {
     if (!this.#fullPath) throw "bad-descriptor";
     const buf = new Uint8Array(Number(length));
-    const bytesRead = readSync(this.#fd, buf, 0, Number(length), Number(offset));
+    const bytesRead = readSync(
+      this.#fd,
+      buf,
+      0,
+      Number(length),
+      Number(offset)
+    );
     const out = new Uint8Array(buf.buffer, 0, bytesRead);
     return [out, bytesRead === 0 ? "ended" : "open"];
   }
@@ -248,7 +255,9 @@ class Descriptor {
     const fullPath = this.#getFullPath(path, false);
     let stats;
     try {
-      stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
+      stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, {
+        bigint: true,
+      });
     } catch (e) {
       throw convertFsError(e);
     }
@@ -278,7 +287,7 @@ class Descriptor {
     const mtime = this.#getNewTimestamp(
       dataModificationTimestamp,
       dataModificationTimestamp.tag === "no-change" &&
-      stats.dataModificationTimestamp
+        stats.dataModificationTimestamp
     );
     try {
       (pathFlags.symlinkFollow ? utimesSync : lutimesSync)(
@@ -295,8 +304,7 @@ class Descriptor {
     const oldFullPath = this.#getFullPath(oldPath, oldPathFlags.symlinkFollow);
     const newFullPath = newDescriptor.#getFullPath(newPath, false);
     // Windows doesn't automatically fail on trailing slashes
-    if (isWindows && newFullPath.endsWith('/'))
-      throw 'no-entry';
+    if (isWindows && newFullPath.endsWith("/")) throw "no-entry";
     try {
       linkSync(oldFullPath, newFullPath);
     } catch (e) {
@@ -325,16 +333,19 @@ class Descriptor {
     // if (descriptorFlags.mutateDirectory)
     try {
       const fd = openSync(fullPath, fsOpenFlags);
-      const descriptor = descriptorCreate(fd, descriptorFlags, fullPath, preopenEntries);
-      if (fullPath.endsWith('/')) {
+      const descriptor = descriptorCreate(
+        fd,
+        descriptorFlags,
+        fullPath,
+        preopenEntries
+      );
+      if (fullPath.endsWith("/")) {
         // check if its a directory
-        if (!descriptor.getType() === 'directory')
-          throw 'not-directory';
+        if (!descriptor.getType() === "directory") throw "not-directory";
       }
       return descriptor;
     } catch (e) {
-      if (e.code === 'ERR_INVALID_ARG_VALUE')
-        throw 'invalid';
+      if (e.code === "ERR_INVALID_ARG_VALUE") throw "invalid";
       throw convertFsError(e);
     }
   }
@@ -353,8 +364,7 @@ class Descriptor {
     try {
       rmdirSync(fullPath);
     } catch (e) {
-      if (isWindows && e.code === 'ENOENT')
-        throw 'not-directory';
+      if (isWindows && e.code === "ENOENT") throw "not-directory";
       throw convertFsError(e);
     }
   }
@@ -365,21 +375,19 @@ class Descriptor {
     try {
       renameSync(oldFullPath, newFullPath);
     } catch (e) {
-      if (isWindows && e.code === 'EPERM')
-        throw 'access';
+      if (isWindows && e.code === "EPERM") throw "access";
       throw convertFsError(e);
     }
   }
 
   symlinkAt(target, path) {
     const fullPath = this.#getFullPath(path, false);
-    if (target.startsWith('/'))
-      throw 'not-permitted';
+    if (target.startsWith("/")) throw "not-permitted";
     try {
       symlinkSync(target, fullPath);
     } catch (e) {
-      if (isWindows && (e.code === 'EPERM' || e.code === 'EEXIST'))
-        throw 'no-entry'
+      if (isWindows && (e.code === "EPERM" || e.code === "EEXIST"))
+        throw "no-entry";
       throw convertFsError(e);
     }
   }
@@ -410,7 +418,9 @@ class Descriptor {
   metadataHashAt(pathFlags, path) {
     const fullPath = this.#getFullPath(path, false);
     try {
-      const stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, { bigint: true });
+      const stats = (pathFlags.symlinkFollow ? statSync : lstatSync)(fullPath, {
+        bigint: true,
+      });
       return { upper: stats.mtimeNs, lower: stats.ino };
     } catch (e) {
       throw convertFsError(e);
@@ -421,9 +431,8 @@ class Descriptor {
   #getFullPath(subpath, _followSymlinks) {
     let descriptor = this;
     if (subpath.indexOf("\\") !== -1) subpath = subpath.replace(/\\/g, "/");
-    if (subpath.indexOf("//") !== -1) subpath = subpath.replace(/\/\/+/g, '/');
-    if (subpath[0] === '/')
-      throw 'not-permitted';
+    if (subpath.indexOf("//") !== -1) subpath = subpath.replace(/\/\/+/g, "/");
+    if (subpath[0] === "/") throw "not-permitted";
 
     // segment resolution
     const segments = [];
@@ -431,40 +440,47 @@ class Descriptor {
     for (let i = 0; i < subpath.length; i++) {
       // busy reading a segment - only terminate on '/'
       if (segmentIndex !== -1) {
-        if (subpath[i] === '/') {
+        if (subpath[i] === "/") {
           segments.push(subpath.slice(segmentIndex, i + 1));
           segmentIndex = -1;
         }
         continue;
       }
       // new segment - check if it is relative
-      else if (subpath[i] === '.') {
+      else if (subpath[i] === ".") {
         // ../ segment
-        if (subpath[i + 1] === '.' && (subpath[i + 2] === '/' || i + 2 === subpath.length)) {
-          if (segments.pop() === undefined)
-            throw 'not-permitted';
+        if (
+          subpath[i + 1] === "." &&
+          (subpath[i + 2] === "/" || i + 2 === subpath.length)
+        ) {
+          if (segments.pop() === undefined) throw "not-permitted";
           i += 2;
           continue;
         }
         // ./ segment
-        else if (subpath[i + 1] === '/' || i + 1 === subpath.length) {
+        else if (subpath[i + 1] === "/" || i + 1 === subpath.length) {
           i += 1;
           continue;
         }
       }
       // it is the start of a new segment
-      while (subpath[i] === '/') i++;
-      segmentIndex = i; 
+      while (subpath[i] === "/") i++;
+      segmentIndex = i;
     }
     // finish reading out the last segment
-    if (segmentIndex !== -1)
-      segments.push(subpath.slice(segmentIndex));
+    if (segmentIndex !== -1) segments.push(subpath.slice(segmentIndex));
 
-    subpath = segments.join('');
+    subpath = segments.join("");
 
     if (descriptor.#hostPreopen)
       return (
-        descriptor.#hostPreopen + (descriptor.#hostPreopen.endsWith('/') ? '' : (subpath.length > 0 ? "/" : "")) + subpath
+        descriptor.#hostPreopen +
+        (descriptor.#hostPreopen.endsWith("/")
+          ? ""
+          : subpath.length > 0
+          ? "/"
+          : "") +
+        subpath
       );
     return descriptor.#fullPath + (subpath.length > 0 ? "/" : "") + subpath;
   }
@@ -521,7 +537,7 @@ _addPreopen("/", isWindows ? "//" : "/");
 export const types = {
   Descriptor,
   DirectoryEntryStream,
-  filesystemErrorCode (err) {
+  filesystemErrorCode(err) {
     return convertFsError(err);
   },
 };
