@@ -10,7 +10,7 @@
  * @typedef {import("../../../types/interfaces/wasi-clocks-monotonic-clock.js").Duration} Duration
  */
 
-import { isIP, Socket as NodeSocket } from "node:net";
+import { isIP, Socket as NodeSocket, _createServerHandle, createConnection } from "node:net";
 import { platform } from "node:os";
 import { assert } from "../../common/assert.js";
 // import { streams } from "../io.js";
@@ -19,10 +19,6 @@ import { assert } from "../../common/assert.js";
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 const symbolSocketState = Symbol.SocketInternalState || Symbol.for("SocketInternalState");
 const symbolOperations = Symbol.SocketOperationsState || Symbol.for("SocketOperationsState");
-
-// See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
-const { TCP, TCPConnectWrap, constants: TCPConstants } = process.binding("tcp_wrap");
-const { ShutdownWrap } = process.binding("stream_wrap");
 
 import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE, SOCKET } from "../../io/calls.js";
 import { inputStreamCreate, ioCall, outputStreamCreate, pollableCreate } from "../../io/worker-io.js";
@@ -61,7 +57,7 @@ const globalBoundAddresses = new Map();
 // TODO: implement concurrency-conflict exceptions
 export class TcpSocketImpl {
   id = 1;
-  /** @type {TCP.TCPConstants.SOCKET} */ #socket = null;
+  /** @type {Node.Socket} */ #socket = null;
   /** @type {Network} */ network = null;
 
   #connections = 0;
@@ -122,8 +118,6 @@ export class TcpSocketImpl {
 
     this.#socketOptions.family = addressFamily.toLocaleLowerCase();
     this.#tcpSocketChildClassType = childClassType;
-
-    this.#socket = new TCP(TCPConstants.SOCKET | TCPConstants.SERVER);
   }
 
   #handleConnection(err, newClientSocket) {
@@ -157,6 +151,7 @@ export class TcpSocketImpl {
   }
 
   #onClientConnectComplete(err) {
+    console.log("client connect complete", err);
     if (err) {
       // TODO: figure out what theis error mean and why it is thrown
       assert(err === -89, "-89"); // on macos
@@ -205,6 +200,8 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already bound. (EINVAL)
    */
   startBind(network, localAddress) {
+    console.log("startBind", localAddress);
+
     try {
       assert(this[symbolSocketState].isBound, "invalid-state", "The socket is already bound");
 
@@ -249,20 +246,19 @@ export class TcpSocketImpl {
       assert(isIP(localAddress) === 0, "address-not-bindable");
       assert(globalBoundAddresses.has(serializeIpAddress(localIpSocketAddress, true)), "address-in-use");
 
-      let err = null;
-      let bind = "bind"; // ipv4
-      if (family.toLocaleLowerCase() === "ipv6") {
-        bind = "bind6";
-      }
+      const addressType = family.toLocaleLowerCase() === "ipv4" ? 4 : 6;
+      const handleOrError = _createServerHandle(localAddress, localPort, addressType);
 
-      err = this.#socket[bind](localAddress, localPort);
+      console.log("finishBind", handleOrError);
 
-      if (err) {
-        this.#socket.close();
-        assert(err === -22, "address-in-use");
-        assert(err === -49, "address-not-bindable");
-        assert(err === -99, "address-not-bindable"); // EADDRNOTAVAIL
-        assert(true, "unknown", err);
+      if (typeof handleOrError === "number") {
+        // we got an error code
+        assert(handleOrError === -22, "address-in-use");
+        assert(handleOrError === -49, "address-not-bindable");
+        assert(handleOrError === -99, "address-not-bindable"); // EADDRNOTAVAIL
+      } else if (handleOrError?.constructor?.name === "TCP") {
+        this.#socket = handleOrError;
+        this.#socket._handle = handleOrError;
       }
 
       this[symbolSocketState].lastErrorState = null;
@@ -291,6 +287,7 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already in the Listener state. (EOPNOTSUPP, EINVAL on Windows)
    */
   startConnect(network, remoteAddress) {
+    console.log("startConnect", remoteAddress);
     const host = serializeIpAddress(remoteAddress);
     const ipFamily = `ipv${isIP(host)}`;
     try {
@@ -305,13 +302,13 @@ export class TcpSocketImpl {
       assert(isIPv4MappedAddress(remoteAddress) && this.ipv6Only(), "invalid-argument");
       assert(remoteAddress.val.port === 0, "invalid-argument");
 
-      if (this[symbolSocketState].isBound === false) {
-        this.#autoBind(network, ipFamily);
-      }
+      // if (this[symbolSocketState].isBound === false) {
+      //   this.#autoBind(network, ipFamily);
+      // }
 
-      assert(network !== this.network, "invalid-argument");
-      assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
-      assert(remoteAddress.val.port === 0 && platform() === "win32", "invalid-argument");
+      // assert(network !== this.network, "invalid-argument");
+      // assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
+      // assert(remoteAddress.val.port === 0 && platform() === "win32", "invalid-argument");
     } catch (err) {
       this[symbolSocketState].lastErrorState = err;
       throw err;
@@ -347,45 +344,43 @@ export class TcpSocketImpl {
 
     this[symbolSocketState].lastErrorState = null;
 
-    const { localAddress, localPort, remoteAddress, remotePort, family } = this.#socketOptions;
-    const connectReq = new TCPConnectWrap();
+    // this.#socket._handle = this.#socket;
 
-    let err = null;
-    let connect = "connect"; // ipv4
-    if (family.toLocaleLowerCase() === "ipv6") {
-      connect = "connect6";
-    }
+    const { remoteAddress, remotePort, localAddress, localPort } = this.#socketOptions;
+    const handleOrError = createConnection(
+      {
+        // handle: this.#socket, // reuse 
+        localAddress,
+        localPort,
+        port: remotePort,
+        host: remoteAddress,
+        // Stop the handle from reading and pause the stream
+        pauseOnCreate: true,
+      },
+      this.#onClientConnectComplete
+    );
 
-    err = this.#socket[connect](connectReq, remoteAddress, remotePort);
-
-    if (err) {
+    if (typeof handleOrError === "number") {
       console.error(`[tcp] connect error on socket: ${err}`);
       this[symbolSocketState].connectionState = SocketConnectionState.Error;
+      return [null, null];
+    } else {
+      // handleOrError.on("error", (err) => {
+      //   console.log("error", err);
+      // });
+
+      const inputStream = inputStreamCreate(SOCKET, ioCall(INPUT_STREAM_CREATE | SOCKET, null, {}));
+      const outputStream = outputStreamCreate(SOCKET, ioCall(OUTPUT_STREAM_CREATE | SOCKET, null, {}));
+
+      this[symbolOperations].connect--;
+      this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
+
+      // TODO: this is a temporary workaround, move this to the connection callback
+      // when the connection is actually established
+      this[symbolSocketState].connectionState = SocketConnectionState.Connected;
+
+      return [inputStream, outputStream];
     }
-
-    connectReq.oncomplete = this.#onClientConnectComplete.bind(this);
-    connectReq.address = remoteAddress;
-    connectReq.port = remotePort;
-    connectReq.localAddress = localAddress;
-    connectReq.localPort = localPort;
-
-    this.#socket.onread = (_buffer) => {
-      // TODO: handle data received from the server
-    };
-
-    this.#socket.readStart();
-
-    const inputStream = inputStreamCreate(SOCKET, ioCall(INPUT_STREAM_CREATE | SOCKET, null, {}));
-    const outputStream = outputStreamCreate(SOCKET, ioCall(OUTPUT_STREAM_CREATE | SOCKET, null, {}));
-
-    this[symbolOperations].connect--;
-    this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
-
-    // TODO: this is a temporary workaround, move this to the connection callback
-    // when the connection is actually established
-    this[symbolSocketState].connectionState = SocketConnectionState.Connected;
-
-    return [inputStream, outputStream];
   }
 
   /**
@@ -508,6 +503,8 @@ export class TcpSocketImpl {
     this.#socketOptions.localAddress = address;
     this.#socketOptions.localPort = port;
     this.#socketOptions.family = family.toLocaleLowerCase();
+
+    console.log("localAddress", out);
 
     return {
       tag: family.toLocaleLowerCase(),
@@ -771,15 +768,15 @@ export class TcpSocketImpl {
 
     const req = new ShutdownWrap();
     req.oncomplete = this.#handleAfterShutdown.bind(this);
-    req.handle = this._handle;
+    req.handle = this.#socket;
     req.callback = () => {};
-    const err = this._handle.shutdown(req);
+    const err = this.#socket.shutdown(req);
 
     assert(err === 1, "invalid-state");
   }
 
   [symbolDispose]() {
-    this.#socket.close();
+    if (this.#socket) this.#socket.close();
 
     // we only need to remove the bound address from the global map
     // if the socket was already bound
