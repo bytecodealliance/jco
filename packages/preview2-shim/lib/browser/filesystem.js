@@ -40,7 +40,7 @@ function getChildEntry (parentEntry, subpath, openFlags) {
     segmentIdx = subpath.indexOf('/', segmentIdx);
     const segment = segmentIdx === -1 ? subpath : subpath.slice(0, segmentIdx);
     if (segment === '.' || segment === '')
-      entry = entry;
+      /* continue traversing */;
     else if (segment === '..')
       throw 'no-entry';
     else if (!entry.dir[segment] && openFlags.create)
