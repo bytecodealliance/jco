@@ -47,7 +47,10 @@ import {
   STDERR,
   STDIN,
   STDOUT,
+  SOCKET_UDP_CREATE_HANDLE,
+  SOCKET_UDP_BIND,
 } from "./calls.js";
+import { createUdpSocket } from "./worker-socket-udp.js";
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -57,6 +60,9 @@ export const unfinishedPolls = new Map();
 
 /** @type {Map<number, { flushPromise: Promise<void> | null, stream: NodeJS.ReadableStream | NodeJS.WritableStream }>} */
 export const unfinishedStreams = new Map();
+
+/** @type {Map<number, NodeJS.Socket>} */
+export const unfinishedSockets = new Map();
 
 /** @type {Map<number, { value: any, error: bool }>} */
 export const unfinishedFutures = new Map();
@@ -82,7 +88,7 @@ createStream(stderr);
  * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
  */
 function streamError(streamId, stream, err) {
-  if (typeof stream.end === 'function') stream.end();
+  if (typeof stream.end === "function") stream.end();
   // we delete the stream from unfinishedStreams as it is now "finished" (closed)
   unfinishedStreams.delete(streamId);
   return { tag: "last-operation-failed", val: err };
@@ -103,6 +109,17 @@ export function getStreamOrThrow(streamId) {
     throw { tag: "closed" };
   }
   return stream;
+}
+
+export function getSocketOrThrow(socketId) {
+  const socket = unfinishedSockets.get(socketId);
+  if (!socket) throw { tag: "closed" };
+  if (socket.errored) throw socket.errored;
+  if (socket.closed) {
+    unfinishedSockets.delete(socketId);
+    throw { tag: "closed" };
+  }
+  return socket;
 }
 
 function subscribeInstant(instant) {
@@ -162,17 +179,19 @@ function handle(call, id, payload) {
       return handle(call & ~HTTP, id, payload);
     }
     case OUTPUT_STREAM_DISPOSE | HTTP:
-      throw new Error('Internal error: HTTP output stream dispose is bypassed for FINISH');
+      throw new Error(
+        "Internal error: HTTP output stream dispose is bypassed for FINISH"
+      );
     case OUTPUT_STREAM_WRITE | HTTP: {
       const { stream } = getStreamOrThrow(id);
       stream.bytesRemaining -= payload.byteLength;
       if (stream.bytesRemaining < 0) {
         throw {
-          tag: 'last-operation-failed',
+          tag: "last-operation-failed",
           val: {
-            tag: 'HTTP-request-body-size',
-            val: stream.contentLength - stream.bytesRemaining
-          }
+            tag: "HTTP-request-body-size",
+            val: stream.contentLength - stream.bytesRemaining,
+          },
         };
       }
       const output = handle(OUTPUT_STREAM_WRITE, id, payload);
@@ -182,14 +201,14 @@ function handle(call, id, payload) {
       const { stream } = getStreamOrThrow(id);
       if (stream.bytesRemaining > 0) {
         throw {
-          tag: 'HTTP-request-body-size',
-          val: stream.contentLength - stream.bytesRemaining
+          tag: "HTTP-request-body-size",
+          val: stream.contentLength - stream.bytesRemaining,
         };
       }
       if (stream.bytesRemaining < 0) {
         throw {
-          tag: 'HTTP-request-body-size',
-          val: stream.contentLength - stream.bytesRemaining
+          tag: "HTTP-request-body-size",
+          val: stream.contentLength - stream.bytesRemaining,
         };
       }
       stream.end();
@@ -197,16 +216,39 @@ function handle(call, id, payload) {
     }
 
     // Sockets
+
+    case SOCKET_UDP_CREATE_HANDLE:
+      const { addressFamily } = payload;
+      return createFuture(createUdpSocket(addressFamily));
+
+    case SOCKET_UDP_BIND: {
+      const socket = unfinishedSockets.get(id);
+      if (!socket) throw new Error("Socket not found");
+      const {
+        localAddress,
+        localPort,
+        family,
+        flags,
+      } = payload;
+
+      let bind = socket.bind;
+      if (family.toLocaleLowerCase() === "ipv6") bind = socket.bind6;
+
+      return bind.call(socket, localAddress, localPort, flags);
+    }
+
     case SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST:
       return createFuture(resolve(payload.hostname));
+
     case SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST:
       return void unfinishedFutures.delete(id);
+
     case SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST: {
       const future = unfinishedFutures.get(id);
       if (!future) {
         // future not ready yet
         if (unfinishedPolls.get(id)) {
-          throw 'would-block';
+          throw "would-block";
         }
         throw new Error("future already got and dropped");
       }
@@ -278,7 +320,9 @@ function handle(call, id, payload) {
       switch (call & CALL_MASK) {
         case INPUT_STREAM_READ: {
           const { stream } = getStreamOrThrow(id);
-          const res = stream.read(Math.min(stream.readableLength, Number(payload)));
+          const res = stream.read(
+            Math.min(stream.readableLength, Number(payload))
+          );
           return res ?? new Uint8Array();
         }
         case INPUT_STREAM_BLOCKING_READ:
@@ -321,7 +365,7 @@ function handle(call, id, payload) {
             }).then(
               () => void stream.off("error", reject),
               // error is read of stream itself when later accessed
-              (_err) => void stream.off("readable", resolve),
+              (_err) => void stream.off("readable", resolve)
             )
           );
         }
@@ -430,10 +474,9 @@ function handle(call, id, payload) {
           if (flushPromise)
             return flushPromise.then(() => handle(call, id, payload));
           // not added to unfinishedPolls => it's an immediately resolved poll
-          if (!stream || stream.closed || stream.errored)
-            return 0;
+          if (!stream || stream.closed || stream.errored) return 0;
           if (!stream.writableNeedDrain)
-            return createPoll(new Promise(resolve => setTimeout(resolve)));
+            return createPoll(new Promise((resolve) => setTimeout(resolve)));
           let resolve, reject;
           return createPoll(
             new Promise((_resolve, _reject) => {
@@ -442,7 +485,7 @@ function handle(call, id, payload) {
                 .once("error", (reject = _reject));
             }).then(() => void stream.off("error", reject)),
             // error is read off stream itself when later accessed
-            (_err) => void stream.off("drain", resolve),
+            (_err) => void stream.off("drain", resolve)
           );
         }
         case OUTPUT_STREAM_BLOCKING_SPLICE: {
@@ -501,8 +544,7 @@ function handle(call, id, payload) {
         case POLL_POLL_LIST: {
           const doneList = [];
           for (const [idx, id] of payload.entries()) {
-            if (!unfinishedPolls.has(id))
-                doneList.push(idx);
+            if (!unfinishedPolls.has(id)) doneList.push(idx);
           }
           if (doneList.length > 0) return doneList;
           // if all polls are promise type, we just race them
@@ -510,8 +552,7 @@ function handle(call, id, payload) {
             payload.map((id) => unfinishedPolls.get(id))
           ).then(() => {
             for (const [idx, id] of payload.entries()) {
-              if (!unfinishedPolls.has(id))
-                doneList.push(idx);
+              if (!unfinishedPolls.has(id)) doneList.push(idx);
             }
             if (doneList.length === 0)
               throw new Error("poll promise did not unregister poll");
@@ -523,8 +564,7 @@ function handle(call, id, payload) {
           const future = unfinishedFutures.get(id);
           if (!future) {
             // future not ready yet
-            if (unfinishedPolls.get(id))
-              throw undefined;
+            if (unfinishedPolls.get(id)) throw undefined;
             throw new Error("future already got and dropped");
           }
           unfinishedFutures.delete(id);

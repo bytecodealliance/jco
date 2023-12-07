@@ -50,6 +50,11 @@ export const CLOCKS_DURATION_SUBSCRIBE = ++call_id << 24;
 export const CLOCKS_INSTANT_SUBSCRIBE = ++call_id << 24;
 
 // Sockets
+export const SOCKET_UDP_CREATE_HANDLE = ++call_id << 24;
+export const SOCKET_UDP_BIND = ++call_id << 24;
+export const SOCKET_UDP_CONNECT = ++call_id << 24;
+export const SOCKET_UDP_SEND = ++call_id << 24;
+export const SOCKET_UDP_RECEIVE = ++call_id << 24;
 export const SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST = ++call_id << 24;
 export const SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST = ++call_id << 24;
 export const SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST = ++call_id << 24;

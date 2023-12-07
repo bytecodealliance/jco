@@ -7,11 +7,12 @@
  */
 
 // See: https://github.com/nodejs/node/blob/main/src/udp_wrap.cc
-const { UDP, SendWrap } = process.binding("udp_wrap");
+const { SendWrap } = process.binding("udp_wrap");
 import { isIP } from "node:net";
 import { assert } from "../../common/assert.js";
-import { pollableCreate } from "../../io/worker-io.js";
+import { ioCall, pollableCreate } from "../../io/worker-io.js";
 import { cappedUint32, deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
+import { SOCKET_UDP_CREATE_HANDLE, SOCKET_UDP_BIND } from "../../io/calls.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 const symbolSocketState = Symbol.SocketInternalState || Symbol.for("SocketInternalState");
@@ -175,9 +176,9 @@ export class OutgoingDatagramStream {
 const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
 delete OutgoingDatagramStream._create;
 
-export class UdpSocketImpl {
+export class UdpSocket {
   id = 1;
-  /** @type {UDP} */ #socket = null;
+  #pollId = 0;
   /** @type {Network} */ network = null;
 
   // track in-progress operations
@@ -217,11 +218,12 @@ export class UdpSocketImpl {
    * @param {IpAddressFamily} addressFamily
    * @returns {void}
    */
-  constructor(addressFamily, id) {
-    this.id = id;
-    this.#socketOptions.family = addressFamily;
-
-    this.#socket = new UDP();
+  static _create(addressFamily, id) {
+    const socket = new UdpSocket();
+    socket.id = id;
+    socket.#socketOptions.family = addressFamily;
+    socket.#pollId = ioCall(SOCKET_UDP_CREATE_HANDLE, null, addressFamily);
+    return socket;
   }
 
   #cacheBoundAddress() {
@@ -231,7 +233,7 @@ export class UdpSocketImpl {
     if (localPort === 0) {
       boundAddress = this.localAddress();
     }
-    globalBoundAddresses.set(serializeIpAddress(boundAddress, true), this.#socket);
+    globalBoundAddresses.set(serializeIpAddress(boundAddress, true), this.id);
   }
 
   /**
@@ -291,13 +293,21 @@ export class UdpSocketImpl {
         flags |= Flags.UV_UDP_IPV6ONLY;
       }
 
-      let err = null;
-      let bind = "bind"; // ipv4
-      if (family.toLocaleLowerCase() === "ipv6") {
-        bind = "bind6";
-      }
+      // let err = null;
+      // let bind = "bind"; // ipv4
+      // if (family.toLocaleLowerCase() === "ipv6") {
+      //   bind = "bind6";
+      // }
 
-      err = this.#socket[bind](localAddress, localPort, flags);
+      const ret = ioCall(SOCKET_UDP_BIND, this.#pollId, {
+        localAddress,
+        localPort,
+        family,
+        flags,
+      });
+      console.log(ret);
+      return;
+      // err = this.#socket[bind](localAddress, localPort, flags);
 
       if (err === 0) {
         this[symbolSocketState].isBound = true;
@@ -375,7 +385,7 @@ export class UdpSocketImpl {
     this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
 
     // TODO: figure out how to reuse a connected socket
-    const err = this.#socket.connect(remoteAddress ?? null, remotePort);
+    // const err = this.#socket.connect(remoteAddress ?? null, remotePort);
 
     if (!err) {
       this[symbolSocketState].connectionState = SocketConnectionState.Connected;
@@ -411,7 +421,7 @@ export class UdpSocketImpl {
   stream(remoteAddress = undefined) {
     assert(this[symbolSocketState].isBound === false, "invalid-state");
     this.#connect(this.network, remoteAddress);
-    return [incomingDatagramStreamCreate(this.#socket), outgoingDatagramStreamCreate(this.#socket)];
+    return [incomingDatagramStreamCreate(this.id), outgoingDatagramStreamCreate(this.id)];
   }
 
   /**
@@ -424,7 +434,7 @@ export class UdpSocketImpl {
     assert(this[symbolSocketState].isBound === false, "invalid-state");
 
     const out = {};
-    this.#socket.getsockname(out);
+    // this.#socket.getsockname(out);
 
     const { address, port, family } = out;
     this.#socketOptions.localAddress = address;
@@ -454,7 +464,7 @@ export class UdpSocketImpl {
     );
 
     const out = {};
-    this.#socket.getpeername(out);
+    // this.#socket.getpeername(out);
 
     assert(out.address === undefined, "invalid-state", "The socket is not streaming to a specific remote address");
 
@@ -527,7 +537,7 @@ export class UdpSocketImpl {
   setUnicastHopLimit(value) {
     assert(value < 1, "invalid-argument", "The TTL value must be 1 or higher");
 
-    this.#socket.setTTL(value);
+    // this.#socket.setTTL(value);
     this[symbolSocketState].unicastHopLimit = value;
   }
 
@@ -537,7 +547,7 @@ export class UdpSocketImpl {
    */
   receiveBufferSize() {
     const exceptionInfo = {};
-    const value = this.#socket.bufferSize(0, BufferSizeFlags.SO_RCVBUF, exceptionInfo);
+    // const value = this.#socket.bufferSize(0, BufferSizeFlags.SO_RCVBUF, exceptionInfo);
 
     if (exceptionInfo.code === "EBADF") {
       // TODO: handle the case where bad file descriptor is returned
@@ -563,7 +573,7 @@ export class UdpSocketImpl {
 
     const cappedValue = cappedUint32(value);
     const exceptionInfo = {};
-    this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_RCVBUF, exceptionInfo);
+    // this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_RCVBUF, exceptionInfo);
     this[symbolSocketState].receiveBufferSize = cappedValue;
   }
 
@@ -573,7 +583,7 @@ export class UdpSocketImpl {
    */
   sendBufferSize() {
     const exceptionInfo = {};
-    const value = this.#socket.bufferSize(0, BufferSizeFlags.SO_SNDBUF, exceptionInfo);
+    // const value = this.#socket.bufferSize(0, BufferSizeFlags.SO_SNDBUF, exceptionInfo);
 
     if (exceptionInfo.code === "EBADF") {
       // TODO: handle the case where bad file descriptor is returned
@@ -595,7 +605,7 @@ export class UdpSocketImpl {
 
     const cappedValue = cappedUint32(value);
     const exceptionInfo = {};
-    this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_SNDBUF, exceptionInfo);
+    // this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_SNDBUF, exceptionInfo);
     this[symbolSocketState].sendBufferSize = cappedValue;
   }
 
@@ -609,9 +619,9 @@ export class UdpSocketImpl {
 
   [symbolDispose]() {
     let err = null;
-    err = this.#socket.recvStop((...args) => {
-      console.log("stop recv", args);
-    });
+    // err = this.#socket.recvStop((...args) => {
+    //   console.log("stop recv", args);
+    // });
 
     if (err) {
       assert(err === -9, "invalid-state", "Interface is not currently Up");
@@ -619,10 +629,13 @@ export class UdpSocketImpl {
       assert(true, "", err);
     }
 
-    this.#socket.close();
+    // this.#socket.close();
   }
 
   handle() {
-    return this.#socket;
+    // return this.#socket;
   }
 }
+
+export const udpSocketImplCreate = UdpSocket._create;
+delete UdpSocket._create;

@@ -17,7 +17,7 @@ import {
 import { ioCall, pollableCreate } from "../../io/worker-io.js";
 import { deserializeIpAddress } from "./socket-common.js";
 import { TcpSocketImpl } from "./tcp-socket-impl.js";
-import { IncomingDatagramStream, OutgoingDatagramStream, UdpSocketImpl } from "./udp-socket-impl.js";
+import { IncomingDatagramStream, OutgoingDatagramStream, UdpSocket, udpSocketImplCreate } from "./udp-socket-impl.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -124,7 +124,7 @@ export class WasiSockets {
   socketCnt = 1;
 
   // TODO: figure out what the max number of sockets should be
-  maxSockets = 100;
+  MAX_SOCKET_INSTANCES = 100;
 
   /** @type {Network} */ networkInstance = null;
   /** @type {Map<number,Network>} */ networks = new Map();
@@ -138,16 +138,6 @@ export class WasiSockets {
       constructor() {
         this.id = net.networkCnt++;
         net.networks.set(this.id, this);
-      }
-    }
-
-    class UdpSocket extends UdpSocketImpl {
-      /**
-       * @param {IpAddressFamily} addressFamily
-       * */
-      constructor(addressFamily) {
-        super(addressFamily, net.socketCnt++);
-        net.udpSockets.set(this.id, this);
       }
     }
 
@@ -199,14 +189,20 @@ export class WasiSockets {
         );
 
         assert(
-          net.socketCnt + 1 > net.maxSockets,
+          net.socketCnt + 1 > net.MAX_SOCKET_INSTANCES,
           errorCode.newSocketLimit,
           "The new socket resource could not be created because of a system limit"
         );
 
         try {
-          return new UdpSocket(addressFamily);
+          const id = net.socketCnt++;
+          const updSocket = udpSocketImplCreate(addressFamily, id);
+          net.udpSockets.set(id, updSocket);
+          return updSocket;
         } catch (err) {
+          console.log("udp socket create error", {
+            err,
+          });
           assert(true, errorCode.notSupported, err);
         }
       },
@@ -227,7 +223,7 @@ export class WasiSockets {
         );
 
         assert(
-          net.socketCnt + 1 > net.maxSockets,
+          net.socketCnt + 1 > net.MAX_SOCKET_INSTANCES,
           errorCode.newSocketLimit,
           "The new socket resource could not be created because of a system limit"
         );
