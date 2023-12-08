@@ -49,6 +49,9 @@ import {
   STDOUT,
   SOCKET_UDP_CREATE_HANDLE,
   SOCKET_UDP_BIND,
+  SOCKET_UDP_GET_LOCAL_ADDRESS,
+  SOCKET_UDP_GET_REMOTE_ADDRESS,
+  SOCKET_UDP_DISPOSE,
 } from "./calls.js";
 import { createUdpSocket } from "./worker-socket-udp.js";
 
@@ -222,19 +225,38 @@ function handle(call, id, payload) {
       return createFuture(createUdpSocket(addressFamily));
 
     case SOCKET_UDP_BIND: {
-      const socket = unfinishedSockets.get(id);
-      if (!socket) throw new Error("Socket not found");
-      const {
-        localAddress,
-        localPort,
-        family,
-        flags,
-      } = payload;
+      const socket = getSocketOrThrow(id);
+      if (!socket) throw new Error("socket already got and dropped");
+      const { localAddress, localPort } = payload;
+      return new Promise((resolve) => {
+        const ret = socket.bind(
+          {
+            address: localAddress,
+            port: localPort,
+          },
+          () => {
+            unfinishedSockets.set(id, socket);
+            resolve(0);
+          }
+        );
 
-      let bind = socket.bind;
-      if (family.toLocaleLowerCase() === "ipv6") bind = socket.bind6;
+        // catch all errors
+        ret.once("error", (err) => {
+          resolve(err.errno);
+        });
+      });
+    }
 
-      return bind.call(socket, localAddress, localPort, flags);
+    case SOCKET_UDP_GET_LOCAL_ADDRESS: {
+      const socket = getSocketOrThrow(id);
+      if (!socket) throw new Error("socket already got and dropped");
+      return Promise.resolve(socket.address());
+    }
+
+    case SOCKET_UDP_GET_REMOTE_ADDRESS: {
+      const socket = getSocketOrThrow(id);
+      if (!socket) throw new Error("socket already got and dropped");
+      return Promise.resolve(socket.remoteAddress());
     }
 
     case SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST:
@@ -262,6 +284,15 @@ function handle(call, id, payload) {
     case INPUT_STREAM_CREATE | SOCKET: {
       // TODO: implement
       break;
+    }
+
+    case SOCKET_UDP_DISPOSE: {
+      const socket = unfinishedSockets.get(id);
+      if (socket) {
+        socket.close();
+        unfinishedSockets.delete(id);
+      }
+      return;
     }
 
     // Stdio

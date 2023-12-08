@@ -10,9 +10,15 @@
 const { SendWrap } = process.binding("udp_wrap");
 import { isIP } from "node:net";
 import { assert } from "../../common/assert.js";
+import {
+  SOCKET_UDP_BIND,
+  SOCKET_UDP_CREATE_HANDLE,
+  SOCKET_UDP_DISPOSE,
+  SOCKET_UDP_GET_LOCAL_ADDRESS,
+  SOCKET_UDP_GET_REMOTE_ADDRESS,
+} from "../../io/calls.js";
 import { ioCall, pollableCreate } from "../../io/worker-io.js";
 import { cappedUint32, deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
-import { SOCKET_UDP_CREATE_HANDLE, SOCKET_UDP_BIND } from "../../io/calls.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 const symbolSocketState = Symbol.SocketInternalState || Symbol.for("SocketInternalState");
@@ -44,6 +50,7 @@ const BufferSizeFlags = {
 // this is needed because 'address-in-use' is not always thrown when binding
 // more than one socket to the same address
 // TODO: remove this workaround when we figure out why!
+/** @type {Map<string, number>} */
 const globalBoundAddresses = new Map();
 
 export class IncomingDatagramStream {
@@ -153,7 +160,7 @@ export class OutgoingDatagramStream {
     datagrams.forEach((datagram) => {
       const { data, remoteAddress } = datagram;
       const { tag: family, val } = remoteAddress;
-      const { /*address, */port } = val;
+      const { /*address, */ port } = val;
       const err = doSend(data, port, serializeIpAddress(remoteAddress), family);
       console.error({
         err,
@@ -222,7 +229,7 @@ export class UdpSocket {
     const socket = new UdpSocket();
     socket.id = id;
     socket.#socketOptions.family = addressFamily;
-    socket.#pollId = ioCall(SOCKET_UDP_CREATE_HANDLE, null, addressFamily);
+    socket.#pollId = ioCall(SOCKET_UDP_CREATE_HANDLE, null, { addressFamily });
     return socket;
   }
 
@@ -293,21 +300,10 @@ export class UdpSocket {
         flags |= Flags.UV_UDP_IPV6ONLY;
       }
 
-      // let err = null;
-      // let bind = "bind"; // ipv4
-      // if (family.toLocaleLowerCase() === "ipv6") {
-      //   bind = "bind6";
-      // }
-
-      const ret = ioCall(SOCKET_UDP_BIND, this.#pollId, {
+      const err = ioCall(SOCKET_UDP_BIND, this.#pollId, {
         localAddress,
         localPort,
-        family,
-        flags,
       });
-      console.log(ret);
-      return;
-      // err = this.#socket[bind](localAddress, localPort, flags);
 
       if (err === 0) {
         this[symbolSocketState].isBound = true;
@@ -433,8 +429,7 @@ export class UdpSocket {
   localAddress() {
     assert(this[symbolSocketState].isBound === false, "invalid-state");
 
-    const out = {};
-    // this.#socket.getsockname(out);
+    const out = ioCall(SOCKET_UDP_GET_LOCAL_ADDRESS, this.#pollId);
 
     const { address, port, family } = out;
     this.#socketOptions.localAddress = address;
@@ -463,8 +458,7 @@ export class UdpSocket {
       "The socket is not streaming to a specific remote address"
     );
 
-    const out = {};
-    // this.#socket.getpeername(out);
+    const out = ioCall(SOCKET_UDP_GET_REMOTE_ADDRESS, this.#pollId);
 
     assert(out.address === undefined, "invalid-state", "The socket is not streaming to a specific remote address");
 
@@ -618,18 +612,18 @@ export class UdpSocket {
   }
 
   [symbolDispose]() {
-    let err = null;
+    // let err = null;
     // err = this.#socket.recvStop((...args) => {
     //   console.log("stop recv", args);
     // });
 
-    if (err) {
-      assert(err === -9, "invalid-state", "Interface is not currently Up");
-      assert(err === -11, "not-in-progress");
-      assert(true, "", err);
-    }
+    // if (err) {
+    //   assert(err === -9, "invalid-state", "Interface is not currently Up");
+    //   assert(err === -11, "not-in-progress");
+    //   assert(true, "", err);
+    // }
 
-    // this.#socket.close();
+    ioCall(SOCKET_UDP_DISPOSE, this.#pollId);
   }
 
   handle() {

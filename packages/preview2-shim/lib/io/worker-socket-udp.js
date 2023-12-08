@@ -12,7 +12,7 @@ let socketCnt = 0;
  */
 export function createUdpSocket(addressFamily) {
   return new Promise((resolve, reject) => {
-    const type = addressFamily === "ipv4" ? "udp4" : "udp6";
+    const type = addressFamily === "ipv6" ? "udp6" : "udp4";
     try {
       const socket = createSocket(type);
       unfinishedSockets.set(++socketCnt, socket);
