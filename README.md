@@ -10,6 +10,12 @@
   <p>
     <a href="https://github.com/bytecodealliance/jco/actions?query=workflow%3ACI"><img src="https://github.com/bytecodealliance/jco/workflows/CI/badge.svg" alt="build status" /></a>
   </p>
+
+  <h3>
+    <a href="https://bytecodealliance.github.io/jco/">Gitbook</a>
+    <span> | </span>
+    <a href="https://bytecodealliance.zulipchat.com/#narrow/stream/409526-jco">Chat on Zulip</a>
+  </h3>
 </div>
 
 ## Overview
