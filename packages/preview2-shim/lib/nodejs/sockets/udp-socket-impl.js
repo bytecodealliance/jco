@@ -12,10 +12,14 @@ import { isIP } from "node:net";
 import { assert } from "../../common/assert.js";
 import {
   SOCKET_UDP_BIND,
+  SOCKET_UDP_CONNECT,
   SOCKET_UDP_CREATE_HANDLE,
   SOCKET_UDP_DISPOSE,
   SOCKET_UDP_GET_LOCAL_ADDRESS,
+  SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE,
   SOCKET_UDP_GET_REMOTE_ADDRESS,
+  SOCKET_UDP_GET_SEND_BUFFER_SIZE,
+  SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
 } from "../../io/calls.js";
 import { ioCall, pollableCreate } from "../../io/worker-io.js";
 import { cappedUint32, deserializeIpAddress, serializeIpAddress } from "./socket-common.js";
@@ -208,7 +212,7 @@ export class UdpSocket {
     connectionState: SocketConnectionState.Closed,
 
     // TODO: what these default values should be?
-    unicastHopLimit: 1,
+    unicastHopLimit: 1, // 1-255
     receiveBufferSize: 1,
     sendBufferSize: 1,
   };
@@ -381,7 +385,10 @@ export class UdpSocket {
     this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
 
     // TODO: figure out how to reuse a connected socket
-    // const err = this.#socket.connect(remoteAddress ?? null, remotePort);
+    const err = ioCall(SOCKET_UDP_CONNECT, this.#pollId, {
+      remoteAddress,
+      remotePort,
+    });
 
     if (!err) {
       this[symbolSocketState].connectionState = SocketConnectionState.Connected;
@@ -451,7 +458,6 @@ export class UdpSocket {
    * @throws {invalid-state} The socket is not streaming to a specific remote address. (ENOTCONN)
    */
   remoteAddress() {
-    console.log("remoteAddress", this[symbolSocketState]);
     assert(
       this[symbolSocketState].connectionState !== SocketConnectionState.Connected,
       "invalid-state",
@@ -470,7 +476,7 @@ export class UdpSocket {
     return {
       tag: family.toLocaleLowerCase(),
       val: {
-        address: deserializeIpAddress(address),
+        address: deserializeIpAddress(address, family),
         port,
       },
     };
@@ -531,7 +537,7 @@ export class UdpSocket {
   setUnicastHopLimit(value) {
     assert(value < 1, "invalid-argument", "The TTL value must be 1 or higher");
 
-    // this.#socket.setTTL(value);
+    ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.#pollId, { value });
     this[symbolSocketState].unicastHopLimit = value;
   }
 
@@ -540,20 +546,18 @@ export class UdpSocket {
    * @returns {bigint}
    */
   receiveBufferSize() {
-    const exceptionInfo = {};
-    // const value = this.#socket.bufferSize(0, BufferSizeFlags.SO_RCVBUF, exceptionInfo);
+    // TODO: should we throw if the socket is not bound?
+    // assert(this[symbolSocketState].isBound === false, "invalid-state");
 
-    if (exceptionInfo.code === "EBADF") {
-      // TODO: handle the case where bad file descriptor is returned
+    const ret = ioCall(SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE, this.#pollId);
+
+    if (ret === -9) {
+      // TODO: handle the case where bad file descriptor (EBADF) is returned
       // This happens when the socket is not bound
       return this[symbolSocketState].receiveBufferSize;
     }
 
-    console.log({
-      value,
-    });
-
-    return value;
+    return ret;
   }
 
   /**
@@ -576,16 +580,18 @@ export class UdpSocket {
    * @returns {bigint}
    */
   sendBufferSize() {
-    const exceptionInfo = {};
-    // const value = this.#socket.bufferSize(0, BufferSizeFlags.SO_SNDBUF, exceptionInfo);
+    // TODO: should we throw if the socket is not bound?
+    // assert(this[symbolSocketState].isBound === false, "invalid-state");
 
-    if (exceptionInfo.code === "EBADF") {
-      // TODO: handle the case where bad file descriptor is returned
+    const ret = ioCall(SOCKET_UDP_GET_SEND_BUFFER_SIZE, this.#pollId);
+
+    if (ret === -9) {
+      // TODO: handle the case where bad file descriptor (EBADF) is returned
       // This happens when the socket is not bound
       return this[symbolSocketState].sendBufferSize;
     }
 
-    return value;
+    return ret;
   }
 
   /**

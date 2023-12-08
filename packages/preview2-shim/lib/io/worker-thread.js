@@ -1,9 +1,9 @@
 import { resolve } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
-import { stdout, stderr, hrtime, _rawDebug, exit } from "node:process";
+import { _rawDebug, exit, hrtime, stderr, stdout } from "node:process";
+import { Writable } from "node:stream";
 import { runAsWorker } from "../synckit/index.js";
 import { createHttpRequest } from "./worker-http.js";
-import { Writable } from "node:stream";
 
 import {
   CALL_MASK,
@@ -12,8 +12,10 @@ import {
   CLOCKS_DURATION_SUBSCRIBE,
   CLOCKS_INSTANT_SUBSCRIBE,
   CLOCKS_NOW,
+  FILE,
   FUTURE_DISPOSE,
   FUTURE_GET_VALUE_AND_DISPOSE,
+  HTTP,
   HTTP_CREATE_REQUEST,
   HTTP_OUTPUT_STREAM_FINISH,
   INPUT_STREAM_BLOCKING_READ,
@@ -33,25 +35,27 @@ import {
   OUTPUT_STREAM_FLUSH,
   OUTPUT_STREAM_SPLICE,
   OUTPUT_STREAM_SUBSCRIBE,
-  OUTPUT_STREAM_WRITE_ZEROES,
   OUTPUT_STREAM_WRITE,
-  POLL_POLL_LIST,
+  OUTPUT_STREAM_WRITE_ZEROES,
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
+  POLL_POLL_LIST,
+  SOCKET,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
-  FILE,
-  HTTP,
-  SOCKET,
+  SOCKET_UDP_BIND,
+  SOCKET_UDP_CONNECT,
+  SOCKET_UDP_CREATE_HANDLE,
+  SOCKET_UDP_DISPOSE,
+  SOCKET_UDP_GET_LOCAL_ADDRESS,
+  SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE,
+  SOCKET_UDP_GET_REMOTE_ADDRESS,
+  SOCKET_UDP_GET_SEND_BUFFER_SIZE,
+  SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
   STDERR,
   STDIN,
   STDOUT,
-  SOCKET_UDP_CREATE_HANDLE,
-  SOCKET_UDP_BIND,
-  SOCKET_UDP_GET_LOCAL_ADDRESS,
-  SOCKET_UDP_GET_REMOTE_ADDRESS,
-  SOCKET_UDP_DISPOSE,
 } from "./calls.js";
 import { createUdpSocket } from "./worker-socket-udp.js";
 
@@ -226,7 +230,6 @@ function handle(call, id, payload) {
 
     case SOCKET_UDP_BIND: {
       const socket = getSocketOrThrow(id);
-      if (!socket) throw new Error("socket already got and dropped");
       const { localAddress, localPort } = payload;
       return new Promise((resolve) => {
         const ret = socket.bind(
@@ -247,15 +250,27 @@ function handle(call, id, payload) {
       });
     }
 
+    case SOCKET_UDP_CONNECT: {
+      const socket = getSocketOrThrow(id);
+      const { remoteAddress, remotePort } = payload;
+      return new Promise((resolve) => {
+        socket.connect(remotePort, remoteAddress, () => {
+          unfinishedSockets.set(id, socket);
+          resolve(0);
+        });
+        socket.once("error", (err) => {
+          resolve(err.errno);
+        });
+      });
+    }
+
     case SOCKET_UDP_GET_LOCAL_ADDRESS: {
       const socket = getSocketOrThrow(id);
-      if (!socket) throw new Error("socket already got and dropped");
       return Promise.resolve(socket.address());
     }
 
     case SOCKET_UDP_GET_REMOTE_ADDRESS: {
       const socket = getSocketOrThrow(id);
-      if (!socket) throw new Error("socket already got and dropped");
       return Promise.resolve(socket.remoteAddress());
     }
 
@@ -277,6 +292,37 @@ function handle(call, id, payload) {
       unfinishedFutures.delete(id);
       return future;
     }
+
+    case SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.getRecvBufferSize();
+      } catch (err) {
+        // we are only interested in the errno
+        return err.errno;
+      }
+    }
+
+    case SOCKET_UDP_GET_SEND_BUFFER_SIZE: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.getSendBufferSize();
+      } catch (err) {
+        // we are only interested in the errno
+        return err.errno;
+      }
+    }
+
+    case SOCKET_UDP_SET_UNICAST_HOP_LIMIT: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.setTTL(payload.value);
+      } catch (err) {
+        // we are only interested in the errno
+        return err.errno;
+      }
+    }
+
     case OUTPUT_STREAM_CREATE | SOCKET: {
       // TODO: implement
       break;
