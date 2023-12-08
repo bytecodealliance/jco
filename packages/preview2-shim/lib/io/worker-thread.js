@@ -224,9 +224,10 @@ function handle(call, id, payload) {
 
     // Sockets
 
-    case SOCKET_UDP_CREATE_HANDLE:
+    case SOCKET_UDP_CREATE_HANDLE: {
       const { addressFamily } = payload;
       return createFuture(createUdpSocket(addressFamily));
+    }
 
     case SOCKET_UDP_BIND: {
       const socket = getSocketOrThrow(id);
