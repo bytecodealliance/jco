@@ -179,12 +179,12 @@ class Descriptor {
   stat() {
     let type = 'unknown', size = BigInt(0);
     if (this.#entry.source) {
-      type = 'directory';
-    }
-    else if (this.#entry.dir) {
       type = 'regular-file';
       const source = getSource(this.#entry);
       size = BigInt(source.byteLength);
+    }
+    else if (this.#entry.dir) {
+      type = 'directory';
     }
     return {
       type,
