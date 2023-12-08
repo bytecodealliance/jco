@@ -12,7 +12,7 @@
   </p>
 
   <h3>
-    <a href="https://bytecodealliance.github.io/jco/">Gitbook</a>
+    <a href="https://bytecodealliance.github.io/jco/">Contributing</a>
     <span> | </span>
     <a href="https://bytecodealliance.zulipchat.com/#narrow/stream/409526-jco">Chat on Zulip</a>
   </h3>
