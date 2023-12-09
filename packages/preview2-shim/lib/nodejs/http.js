@@ -15,7 +15,6 @@ import {
   pollableCreate,
   inputStreamCreate,
   outputStreamCreate,
-  outputStreamId,
   registerIncomingHttpHandler,
 } from "../io/worker-io.js";
 import { validateHeaderName, validateHeaderValue } from "node:http";
@@ -152,7 +151,8 @@ class OutgoingResponse {
     let contentLength;
     if (contentLengthValues.length > 0)
       contentLength = Number(new TextDecoder().decode(contentLengthValues[0]));
-    return (this.#body = outgoingBodyCreate(contentLength));
+    this.#body = outgoingBodyCreate(contentLength, true);
+    return this.#body;
   }
 
   static _body(outgoingResponse) {
@@ -219,7 +219,7 @@ class OutgoingRequest {
     let contentLength;
     if (contentLengthValues.length > 0)
       contentLength = Number(new TextDecoder().decode(contentLengthValues[0]));
-    this.#body = outgoingBodyCreate(contentLength);
+    this.#body = outgoingBodyCreate(contentLength, false);
   }
   body() {
     if (this.#bodyRequested) throw new Error("Body already requested");
@@ -296,20 +296,27 @@ const outgoingRequestHandle = OutgoingRequest._handle;
 delete OutgoingRequest._handle;
 
 class OutgoingBody {
-  #outputStream = undefined;
+  #outputStream = null;
+  #outputStreamId = null;
   #contentLength = undefined;
-  constructor() {
+  write() {
+    if (!this.#outputStreamId) this.#createOutputStream();
+    // can only call write once
+    const outputStream = this.#outputStream;
+    if (outputStream === null) throw undefined;
+    this.#outputStream = null;
+    return outputStream;
+  }
+  #createOutputStream() {
     this.#outputStream = outputStreamCreate(
       HTTP,
-      ioCall(OUTPUT_STREAM_CREATE | HTTP, null, this.#contentLength)
+      (this.#outputStreamId = ioCall(
+        OUTPUT_STREAM_CREATE | HTTP,
+        null,
+        this.#contentLength
+      ))
     );
     this.#outputStream[symbolDispose] = () => {};
-  }
-  write() {
-    return this.#outputStream;
-  }
-  [symbolDispose]() {
-    this.#outputStream?.[symbolDispose]();
   }
   /**
    * @param {OutgoingBody} body
@@ -319,21 +326,16 @@ class OutgoingBody {
     if (trailers) throw new Error("Internal error: Trailers TODO");
     // this will verify content length, and also verify not already finished
     // throwing errors as appropriate
-    if (body.#outputStream)
-      ioCall(
-        HTTP_OUTPUT_STREAM_FINISH,
-        outputStreamId(body.#outputStream),
-        null
-      );
-    body.#outputStream?.[symbolDispose]();
+    if (body.#outputStreamId)
+      ioCall(HTTP_OUTPUT_STREAM_FINISH, body.#outputStreamId, null);
   }
   static _outputStreamId(outgoingBody) {
-    if (outgoingBody.#outputStream)
-      return outputStreamId(outgoingBody.#outputStream);
+    return outgoingBody.#outputStreamId;
   }
-  static _create(contentLength) {
+  static _create(contentLength, createBodyStream) {
     const outgoingBody = new OutgoingBody();
     outgoingBody.#contentLength = contentLength;
+    if (createBodyStream) outgoingBody.#createOutputStream();
     return outgoingBody;
   }
 }

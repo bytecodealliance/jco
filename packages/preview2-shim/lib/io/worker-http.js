@@ -60,13 +60,10 @@ export async function startHttpServer(id, { port, host }) {
 }
 
 export async function createHttpRequest(method, url, headers, bodyId) {
-  let body = null;
+  let stream = null;
   if (bodyId) {
     try {
-      const { stream } = getStreamOrThrow(bodyId);
-      body = stream.readableBodyStream;
-      // this indicates we're attached
-      stream.readableBodyStream = null;
+      ({ stream } = getStreamOrThrow(bodyId));
     } catch (e) {
       if (e.tag === "closed")
         throw { tag: "internal-error", val: "Unexpected closed body stream" };
@@ -86,7 +83,7 @@ export async function createHttpRequest(method, url, headers, bodyId) {
     const res = await fetch(url, {
       method,
       headers: new Headers(headers),
-      body,
+      body: stream ? Readable.toWeb(stream) : null,
       redirect: "manual",
       duplex: "half",
     });

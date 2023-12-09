@@ -1,9 +1,15 @@
 import { resolve } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { _rawDebug, exit, hrtime, stderr, stdout } from "node:process";
-import { Writable } from "node:stream";
 import { runAsWorker } from "../synckit/index.js";
-import { createHttpRequest, startHttpServer, stopHttpServer, setOutgoingResponse, clearOutgoingResponse } from "./worker-http.js";
+import {
+  createHttpRequest,
+  startHttpServer,
+  stopHttpServer,
+  setOutgoingResponse,
+  clearOutgoingResponse,
+} from "./worker-http.js";
+import { PassThrough } from "node:stream";
 
 import {
   CALL_MASK,
@@ -121,6 +127,8 @@ function streamError(streamId, stream, err) {
  * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, flushPromise: Promise<void> | null }}
  */
 export function getStreamOrThrow(streamId) {
+  if (!streamId)
+    throw new Error('Internal error: no stream id provided');
   const stream = unfinishedStreams.get(streamId);
   // not in unfinished streams <=> closed
   if (!stream) throw { tag: "closed" };
@@ -197,12 +205,10 @@ function handle(call, id, payload) {
       return createFuture(createHttpRequest(method, url, headers, body));
     }
     case OUTPUT_STREAM_CREATE | HTTP: {
-      const webTransformStream = new TransformStream();
-      const stream = Writable.fromWeb(webTransformStream.writable);
+      const stream = new PassThrough();
       // content length is passed as payload
       stream.contentLength = payload;
       stream.bytesRemaining = payload;
-      stream.readableBodyStream = webTransformStream.readable;
       return createStream(stream);
     }
     case OUTPUT_STREAM_SUBSCRIBE | HTTP:
@@ -210,18 +216,6 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP: {
       // http flush is a noop
       const { stream } = getStreamOrThrow(id);
-      // this existing indicates it's still unattached
-      // therefore there is no subscribe or backpressure
-      if (stream.readableBodyStream) {
-        switch (call) {
-          case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP:
-            return handle(OUTPUT_STREAM_WRITE | HTTP, id, payload);
-          case OUTPUT_STREAM_FLUSH | HTTP:
-            return;
-          case OUTPUT_STREAM_SUBSCRIBE | HTTP:
-            return 0;
-        }
-      }
       if (call === (OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP))
         stream.bytesRemaining -= payload.byteLength;
       // otherwise fall through to generic implementation
