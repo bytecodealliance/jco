@@ -659,7 +659,7 @@ export class HTTPServer {
     );
   }
   listen(port, host) {
-    // set a dummy interval, to keep the process alive since the server is off thread
+    // set a dummy interval, to keep the process alive since the server is off-thread
     this.#liveEventLoopInterval = setInterval(() => {}, 10_000);
     ioCall(HTTP_SERVER_START, this.#id, { port, host });
   }
