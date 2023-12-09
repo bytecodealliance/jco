@@ -216,8 +216,18 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP: {
       // http flush is a noop
       const { stream } = getStreamOrThrow(id);
-      if (call === (OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP))
+      if (call === (OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP)) {
         stream.bytesRemaining -= payload.byteLength;
+        if (stream.bytesRemaining < 0) {
+          throw {
+            tag: "last-operation-failed",
+            val: {
+              tag: "HTTP-request-body-size",
+              val: stream.contentLength - stream.bytesRemaining,
+            },
+          };
+        }
+      }
       // otherwise fall through to generic implementation
       return handle(call & ~HTTP, id, payload);
     }

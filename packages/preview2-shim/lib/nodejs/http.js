@@ -146,8 +146,6 @@ class OutgoingResponse {
 
   body() {
     let contentLengthValues = this.#headers.get("content-length");
-    if (contentLengthValues.length === 0)
-      contentLengthValues = this.#headers.get("Content-Length");
     let contentLength;
     if (contentLengthValues.length > 0)
       contentLength = Number(new TextDecoder().decode(contentLengthValues[0]));
