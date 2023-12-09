@@ -28,15 +28,22 @@ export async function run (componentPath, args, opts) {
 }
 
 export async function serve (componentPath, args, opts) {
+  let tryFindPort = false;
+  let { port, host } = opts;
+  if (port === undefined) {
+    tryFindPort = true;
+    port = '8000';
+  }
   // Ensure that `args` is an array
   args = [...args];
   return runComponent(componentPath, args, opts, `
     import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
     const server = new HTTPServer(mod.incomingHandler);
-    let port = 8000;
+    ${tryFindPort ? `
+    let port = ${port};
     while (true) {
       try {
-        server.listen(port);
+        server.listen(port, ${JSON.stringify(host)});
         break;
       } catch (e) {
         if (e.code !== 'EADDRINUSE')
@@ -44,11 +51,8 @@ export async function serve (componentPath, args, opts) {
       }
       port++;
     }
-    setTimeout(() => {
-      console.error('stopping server');
-      server.stop();
-    }, 5000);
-    console.error(\`Listening on \${port}...\`);
+    ` : `server.listen(${port}, ${JSON.stringify(host)})`}
+    console.error(\`Server listening on \${port}...\`);
   `);
 }
 

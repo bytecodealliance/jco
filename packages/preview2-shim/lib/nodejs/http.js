@@ -611,6 +611,7 @@ const httpServers = new Map();
 let httpServerCnt = 0;
 export class HTTPServer {
   #id = ++httpServerCnt;
+  #liveEventLoopInterval;
   constructor(incomingHandler) {
     httpServers.set(this.#id, this);
     if (typeof incomingHandler?.handle !== "function") {
@@ -658,9 +659,12 @@ export class HTTPServer {
     );
   }
   listen(port, host) {
+    // set a dummy interval, to keep the process alive since the server is off thread
+    this.#liveEventLoopInterval = setInterval(() => {}, 10_000);
     ioCall(HTTP_SERVER_START, this.#id, { port, host });
   }
   stop() {
+    clearInterval(this.#liveEventLoopInterval);
     ioCall(HTTP_SERVER_STOP, this.#id);
   }
 }
