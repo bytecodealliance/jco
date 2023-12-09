@@ -114,3 +114,9 @@ export function isIPv4MappedAddress(ipSocketAddress) {
   }
   return ipSocketAddress.val.address[5] === 0xffff;
 }
+
+export function isWildcardAddress(ipSocketAddress) {
+  // ipv6: [0, 0, 0, 0, 0, 0, 0, 0]
+  // ipv4: [0, 0, 0, 0]
+  return ipSocketAddress.val.address.every((segment) => segment === 0);
+}

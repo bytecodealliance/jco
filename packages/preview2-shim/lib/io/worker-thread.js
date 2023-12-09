@@ -47,6 +47,7 @@ import {
   SOCKET_UDP_BIND,
   SOCKET_UDP_CONNECT,
   SOCKET_UDP_CREATE_HANDLE,
+  SOCKET_UDP_DISCONNECT,
   SOCKET_UDP_DISPOSE,
   SOCKET_UDP_GET_LOCAL_ADDRESS,
   SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE,
@@ -225,8 +226,8 @@ function handle(call, id, payload) {
     // Sockets
 
     case SOCKET_UDP_CREATE_HANDLE: {
-      const { addressFamily } = payload;
-      return createFuture(createUdpSocket(addressFamily));
+      const { addressFamily, reuseAddr } = payload;
+      return createFuture(createUdpSocket(addressFamily, reuseAddr));
     }
 
     case SOCKET_UDP_BIND: {
@@ -263,6 +264,14 @@ function handle(call, id, payload) {
           resolve(err.errno);
         });
       });
+    }
+
+    case SOCKET_UDP_DISCONNECT: {
+      const socket = getSocketOrThrow(id);
+      return new Promise((resolve) => {
+        socket.disconnect();
+        resolve(0);
+      }).catch((err) => resolve(err.errno));
     }
 
     case SOCKET_UDP_GET_LOCAL_ADDRESS: {
@@ -334,12 +343,13 @@ function handle(call, id, payload) {
     }
 
     case SOCKET_UDP_DISPOSE: {
-      const socket = unfinishedSockets.get(id);
-      if (socket) {
-        socket.close();
-        unfinishedSockets.delete(id);
-      }
-      return;
+      const socket = getSocketOrThrow(id);
+      return new Promise((resolve) => {
+        socket.close(() => {
+          unfinishedSockets.delete(id);
+          resolve();
+        });
+      });
     }
 
     // Stdio
