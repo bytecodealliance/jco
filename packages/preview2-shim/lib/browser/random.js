@@ -33,7 +33,7 @@ export const random = {
       for (var generated = 0; generated < len; generated += MAX_BYTES) {
         // buffer.slice automatically checks if the end is past the end of
         // the buffer so we don't have to here
-        crypto.getRandomValues(bytes.slice(generated, generated + MAX_BYTES));
+        crypto.getRandomValues(bytes.subarray(generated, generated + MAX_BYTES));
       }
     } else {
       crypto.getRandomValues(bytes);
