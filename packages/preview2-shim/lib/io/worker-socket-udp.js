@@ -2,7 +2,7 @@
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpAddressFamily} IpAddressFamily
  */
 import { createSocket } from "node:dgram";
-import { unfinishedSockets } from "./worker-thread.js";
+import { openedSockets } from "./worker-thread.js";
 
 let socketCnt = 0;
 
@@ -18,7 +18,7 @@ export function createUdpSocket(addressFamily, reuseAddr) {
         type,
         reuseAddr,
       });
-      unfinishedSockets.set(++socketCnt, socket);
+      openedSockets.set(++socketCnt, socket);
       resolve({
         id: socketCnt,
         socket,

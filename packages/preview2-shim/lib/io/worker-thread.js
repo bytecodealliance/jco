@@ -53,6 +53,10 @@ import {
   SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE,
   SOCKET_UDP_GET_REMOTE_ADDRESS,
   SOCKET_UDP_GET_SEND_BUFFER_SIZE,
+  SOCKET_UDP_RECEIVE,
+  SOCKET_UDP_SEND,
+  SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE,
+  SOCKET_UDP_SET_SEND_BUFFER_SIZE,
   SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
   STDERR,
   STDIN,
@@ -70,7 +74,10 @@ export const unfinishedPolls = new Map();
 export const unfinishedStreams = new Map();
 
 /** @type {Map<number, NodeJS.Socket>} */
-export const unfinishedSockets = new Map();
+export const openedSockets = new Map();
+
+/** @type {Map<number, Array<{ data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>} */
+const queuedReceivedSocketDatagrams = [];
 
 /** @type {Map<number, { value: any, error: bool }>} */
 export const unfinishedFutures = new Map();
@@ -120,14 +127,21 @@ export function getStreamOrThrow(streamId) {
 }
 
 export function getSocketOrThrow(socketId) {
-  const socket = unfinishedSockets.get(socketId);
-  if (!socket) throw { tag: "closed" };
-  if (socket.errored) throw socket.errored;
-  if (socket.closed) {
-    unfinishedSockets.delete(socketId);
-    throw { tag: "closed" };
-  }
+  const socket = openedSockets.get(socketId);
+  if (!socket) throw "closed";
   return socket;
+}
+
+// TODO: should we filter by socketId?
+export function dequeueReceivedSocketDatagram(maxResults, _socketId) {
+  const dgrams = queuedReceivedSocketDatagrams.slice(0, Number(maxResults));
+  return dgrams;
+}
+export function enqueueReceivedSocketDatagram(socketId, dgram) {
+  queuedReceivedSocketDatagrams.unshift({
+    ...dgram,
+    socketId,
+  });
 }
 
 function subscribeInstant(instant) {
@@ -234,22 +248,57 @@ function handle(call, id, payload) {
       const socket = getSocketOrThrow(id);
       const { localAddress, localPort } = payload;
       return new Promise((resolve) => {
-        const ret = socket.bind(
+        socket.bind(
           {
             address: localAddress,
             port: localPort,
           },
           () => {
-            unfinishedSockets.set(id, socket);
+            openedSockets.set(id, socket);
             resolve(0);
           }
         );
 
+        socket.on("message", (data, rinfo) => {
+          enqueueReceivedSocketDatagram(id, { data, rinfo });
+        });
+
         // catch all errors
-        ret.once("error", (err) => {
+        socket.once("error", (err) => {
           resolve(err.errno);
         });
       });
+    }
+
+    case SOCKET_UDP_SEND: {
+      let { remoteHost, remotePort, data, socketId } = payload;
+      const socket = getSocketOrThrow(socketId);
+
+      return new Promise((resolve) => {
+        const _callback = (err, byteLength) => {
+          if (err) return resolve(err.errno);
+          resolve(byteLength);
+        };
+
+        // TODO: figure out how to handle the case when remoteHost is None
+        if (remotePort === undefined || remoteHost === undefined) {
+          const { address, port, family } = socket.address();
+          const dgram = { data, rinfo: { address, family, port, size: data.byteLength } };
+          enqueueReceivedSocketDatagram(socketId, dgram);
+          resolve(0); // resolve immediately
+        } else {
+          socket.send(data, remotePort, remoteHost, _callback);
+        }
+        socket.once("error", (err) => {
+          resolve(err.errno);
+        });
+      });
+    }
+
+    case SOCKET_UDP_RECEIVE: {
+      const { maxResults, socketId } = payload;
+      const dgrams = dequeueReceivedSocketDatagram(maxResults, socketId);
+      return Promise.resolve(dgrams);
     }
 
     case SOCKET_UDP_CONNECT: {
@@ -257,7 +306,7 @@ function handle(call, id, payload) {
       const { remoteAddress, remotePort } = payload;
       return new Promise((resolve) => {
         socket.connect(remotePort, remoteAddress, () => {
-          unfinishedSockets.set(id, socket);
+          openedSockets.set(id, socket);
           resolve(0);
         });
         socket.once("error", (err) => {
@@ -271,7 +320,7 @@ function handle(call, id, payload) {
       return new Promise((resolve) => {
         socket.disconnect();
         resolve(0);
-      }).catch((err) => resolve(err.errno));
+      });
     }
 
     case SOCKET_UDP_GET_LOCAL_ADDRESS: {
@@ -313,12 +362,29 @@ function handle(call, id, payload) {
       }
     }
 
+    case SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.setRecvBufferSize(payload.value);
+      } catch (err) {
+        return err.errno;
+      }
+    }
+
     case SOCKET_UDP_GET_SEND_BUFFER_SIZE: {
       const socket = getSocketOrThrow(id);
       try {
         return socket.getSendBufferSize();
       } catch (err) {
-        // we are only interested in the errno
+        return err.errno;
+      }
+    }
+
+    case SOCKET_UDP_SET_SEND_BUFFER_SIZE: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.setSendBufferSize(payload.value);
+      } catch (err) {
         return err.errno;
       }
     }
@@ -328,7 +394,6 @@ function handle(call, id, payload) {
       try {
         return socket.setTTL(payload.value);
       } catch (err) {
-        // we are only interested in the errno
         return err.errno;
       }
     }
@@ -346,8 +411,8 @@ function handle(call, id, payload) {
       const socket = getSocketOrThrow(id);
       return new Promise((resolve) => {
         socket.close(() => {
-          unfinishedSockets.delete(id);
-          resolve();
+          openedSockets.delete(id);
+          resolve(0);
         });
       });
     }

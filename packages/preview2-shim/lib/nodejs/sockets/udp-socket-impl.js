@@ -6,8 +6,6 @@
  * @typedef {import("../../types/interfaces/wasi-io-poll-poll").Pollable} Pollable
  */
 
-// See: https://github.com/nodejs/node/blob/main/src/udp_wrap.cc
-const { SendWrap } = process.binding("udp_wrap");
 import { isIP } from "node:net";
 import { assert } from "../../common/assert.js";
 import {
@@ -20,16 +18,14 @@ import {
   SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE,
   SOCKET_UDP_GET_REMOTE_ADDRESS,
   SOCKET_UDP_GET_SEND_BUFFER_SIZE,
+  SOCKET_UDP_RECEIVE,
+  SOCKET_UDP_SEND,
+  SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE,
+  SOCKET_UDP_SET_SEND_BUFFER_SIZE,
   SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
 } from "../../io/calls.js";
 import { ioCall, pollableCreate } from "../../io/worker-io.js";
-import {
-  cappedUint32,
-  deserializeIpAddress,
-  isIPv4MappedAddress,
-  isWildcardAddress,
-  serializeIpAddress,
-} from "./socket-common.js";
+import { deserializeIpAddress, isIPv4MappedAddress, isWildcardAddress, serializeIpAddress } from "./socket-common.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 const symbolSocketState = Symbol.SocketInternalState || Symbol.for("SocketInternalState");
@@ -44,12 +40,6 @@ const SocketConnectionState = {
   Listening: "Listening",
 };
 
-// TODO: move to a common
-const BufferSizeFlags = {
-  SO_RCVBUF: true,
-  SO_SNDBUF: false,
-};
-
 // As a workaround, we store the bound address in a global map
 // this is needed because 'address-in-use' is not always thrown when binding
 // more than one socket to the same address
@@ -58,14 +48,12 @@ const BufferSizeFlags = {
 const globalBoundAddresses = new Map();
 
 export class IncomingDatagramStream {
-  static _create(socket) {
-    const stream = new IncomingDatagramStream(socket);
+  #pollId = 0;
+  #socketId = 0;
+  static _create(socketId) {
+    const stream = new IncomingDatagramStream();
+    stream.#socketId = socketId;
     return stream;
-  }
-
-  #socket = null;
-  constructor(socket) {
-    this.#socket = socket;
   }
 
   /**
@@ -79,20 +67,27 @@ export class IncomingDatagramStream {
    * @throws {would-block} There is no pending data available to be read at the moment. (EWOULDBLOCK, EAGAIN)
    */
   receive(maxResults) {
-    assert(self[symbolSocketState].isBound === false, "invalid-state");
-    assert(self[symbolOperations].receive === 0, "not-in-progress");
-
     if (maxResults === 0n) {
       return [];
     }
 
-    // TODO: not sure this is the right API to use!
-    const socket = this.#socket;
-    socket.onmessage = (...args) => console.log("recv onmessage", args[2].toString());
-    socket.onerror = (err) => console.log("recv error", err);
-    socket.recvStart();
-    const datagrams = [];
-    return datagrams;
+    const datagrams = ioCall(SOCKET_UDP_RECEIVE, this.#pollId, {
+      maxResults,
+      socketId: this.#socketId,
+    });
+
+    return datagrams.map(({ data, rinfo }) => {
+      return {
+        data,
+        remoteAddress: {
+          tag: rinfo.family.toLocaleLowerCase(),
+          val: {
+            address: deserializeIpAddress(rinfo.address, rinfo.family),
+            port: rinfo.port,
+          },
+        },
+      };
+    });
   }
 
   /**
@@ -100,7 +95,8 @@ export class IncomingDatagramStream {
    * @returns {Pollable} A pollable which will resolve once the stream is ready to receive again.
    */
   subscribe() {
-    throw new Error("Not implemented");
+    if (this.#pollId) return pollableCreate(this.#pollId);
+    return pollableCreate(0);
   }
 
   [symbolDispose]() {
@@ -111,14 +107,13 @@ const incomingDatagramStreamCreate = IncomingDatagramStream._create;
 delete IncomingDatagramStream._create;
 
 export class OutgoingDatagramStream {
-  static _create(socket) {
-    const stream = new OutgoingDatagramStream(socket);
-    return stream;
-  }
+  #pollId = 0;
+  #socketId = 0;
 
-  #socket = null;
-  constructor(socket) {
-    this.#socket = socket;
+  static _create(socketId) {
+    const stream = new OutgoingDatagramStream(socketId);
+    stream.#socketId = socketId;
+    return stream;
   }
 
   /**
@@ -127,7 +122,8 @@ export class OutgoingDatagramStream {
    * @throws {invalid-state} The socket is not bound to any local address. (EINVAL)
    */
   checkSend() {
-    throw new Error("Not implemented");
+    // TODO: implement the actual check
+    return 1024n;
   }
 
   /**
@@ -145,31 +141,32 @@ export class OutgoingDatagramStream {
    * @throws {datagram-too-large} The datagram is too large. (EMSGSIZE)
    */
   send(datagrams) {
-    const req = new SendWrap();
-    const doSend = (data, port, host, family) => {
-      // setting hasCallback to false will make send() synchronous
-      // TODO: handle async send
-      const hasCallback = false;
-      const socket = this.#socket;
+    if (datagrams.length === 0) {
+      return 0n;
+    }
 
-      let err = null;
-      if (family.toLocaleLowerCase() === "ipv4") {
-        err = socket.send(req, data, data.length, port, host, hasCallback);
-      } else if (family.toLocaleLowerCase() === "ipv6") {
-        err = socket.send6(req, data, data.length, port, host, hasCallback);
-      }
-      return err;
-    };
+    let datagramsSent = 0n;
 
-    datagrams.forEach((datagram) => {
+    for (const datagram of datagrams) {
       const { data, remoteAddress } = datagram;
-      const { tag: family, val } = remoteAddress;
-      const { /*address, */ port } = val;
-      const err = doSend(data, port, serializeIpAddress(remoteAddress), family);
-      console.error({
-        err,
+      const remotePort = remoteAddress?.val?.port || undefined;
+      const host = serializeIpAddress(remoteAddress, false);
+
+      assert(this.checkSend() < data.length, "datagram-too-large");
+      // TODO: add the other assertions
+
+      const ret = ioCall(SOCKET_UDP_SEND, this.#pollId, {
+        socketId: this.#socketId,
+        data,
+        remotePort,
+        remoteHost: host,
       });
-    });
+      if (ret > 0) {
+        datagramsSent++;
+      }
+    }
+
+    return datagramsSent;
   }
 
   /**
@@ -177,7 +174,8 @@ export class OutgoingDatagramStream {
    * @returns {Pollable} A pollable which will resolve once the stream is ready to send again.
    */
   subscribe() {
-    throw new Error("Not implemented");
+    if (this.#pollId) return pollableCreate(this.#pollId);
+    return pollableCreate(0);
   }
 
   [symbolDispose]() {
@@ -212,9 +210,7 @@ export class UdpSocket {
     connectionState: SocketConnectionState.Closed,
 
     // TODO: what these default values should be?
-    unicastHopLimit: 1, // 1-255
-    receiveBufferSize: 1,
-    sendBufferSize: 1,
+    unicastHopLimit: 255, // 1-255
   };
 
   #socketOptions = {
@@ -226,6 +222,10 @@ export class UdpSocket {
     reuseAddr: true,
     localIpSocketAddress: null,
   };
+
+  get _pollId() {
+    return this.#pollId;
+  }
 
   /**
    * @param {IpAddressFamily} addressFamily
@@ -464,11 +464,11 @@ export class UdpSocket {
     // Note: remoteAddress can be undefined
     const host = serializeIpAddress(remoteAddress);
     const { port } = remoteAddress?.val || { port: 0 };
-    this.#socketOptions.remoteAddress = host; // can be undefined
+    this.#socketOptions.remoteAddress = host; // host can be undefined
     this.#socketOptions.remotePort = port;
 
-    // reconnect to the (new) remote host
-    this.#connect(this.network, remoteAddress);
+    // reconnect to the remote host
+    // this.#connect(this.network, remoteAddress);
     return [incomingDatagramStreamCreate(this.id), outgoingDatagramStreamCreate(this.id)];
   }
 
@@ -595,11 +595,13 @@ export class UdpSocket {
 
     const ret = ioCall(SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE, this.#pollId);
 
-    if (ret === -9) {
-      // TODO: handle the case where bad file descriptor (EBADF) is returned
-      // This happens when the socket is not bound
-      return this[symbolSocketState].receiveBufferSize;
-    }
+    // if (ret === -9) {
+    //   // TODO: handle the case where bad file descriptor (EBADF) is returned
+    //   // This happens when the socket is not bound
+    //   return this[symbolSocketState].receiveBufferSize;
+    // }
+
+    console.log("receiveBufferSize", ret);
 
     return ret;
   }
@@ -613,9 +615,8 @@ export class UdpSocket {
   setReceiveBufferSize(value) {
     assert(value === 0n, "invalid-argument", "The provided value was 0");
 
-    const cappedValue = cappedUint32(value);
-    // this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_RCVBUF, exceptionInfo);
-    this[symbolSocketState].receiveBufferSize = cappedValue;
+    // value = cappedUint32(value);
+    ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.#pollId, { value });
   }
 
   /**
@@ -628,11 +629,13 @@ export class UdpSocket {
 
     const ret = ioCall(SOCKET_UDP_GET_SEND_BUFFER_SIZE, this.#pollId);
 
-    if (ret === -9) {
-      // TODO: handle the case where bad file descriptor (EBADF) is returned
-      // This happens when the socket is not bound
-      return this[symbolSocketState].sendBufferSize;
-    }
+    // if (ret === -9) {
+    //   // TODO: handle the case where bad file descriptor (EBADF) is returned
+    //   // This happens when the socket is not bound
+    //   return this[symbolSocketState].sendBufferSize;
+    // }
+
+    console.log("sendBufferSize", ret);
 
     return ret;
   }
@@ -646,10 +649,10 @@ export class UdpSocket {
   setSendBufferSize(value) {
     assert(value === 0n, "invalid-argument", "The provided value was 0");
 
-    const cappedValue = cappedUint32(value);
-    const exceptionInfo = {};
+    // value = cappedUint32(value);
+    ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.#pollId, { value });
+
     // this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_SNDBUF, exceptionInfo);
-    this[symbolSocketState].sendBufferSize = cappedValue;
   }
 
   /**
@@ -657,6 +660,7 @@ export class UdpSocket {
    * @returns {Pollable}
    */
   subscribe() {
+    if (this.#pollId) return pollableCreate(this.#pollId);
     return pollableCreate(0);
   }
 
