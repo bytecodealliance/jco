@@ -39,12 +39,13 @@ function getChildEntry (parentEntry, subpath, openFlags) {
     if (!entry || !entry.dir) throw 'not-directory';
     segmentIdx = subpath.indexOf('/');
     const segment = segmentIdx === -1 ? subpath : subpath.slice(0, segmentIdx);
-    if (segment === '.' || segment === '') return entry;
     if (segment === '..') throw 'no-entry';
-    if (!entry.dir[segment] && openFlags.create)
+    if (segment === '.' || segment === '');
+    else if (!entry.dir[segment] && openFlags.create)
       entry = entry.dir[segment] = openFlags.directory ? { dir: {} } : { source: new Uint8Array([]) };
     else
       entry = entry.dir[segment];
+    subpath = subpath.slice(segmentIdx + 1);
   } while (segmentIdx !== -1)
   if (!entry) throw 'no-entry';
   return entry;
