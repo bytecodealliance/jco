@@ -45,6 +45,7 @@ import {
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
   SOCKET_UDP_BIND,
+  SOCKET_UDP_CHECK_SEND,
   SOCKET_UDP_CONNECT,
   SOCKET_UDP_CREATE_HANDLE,
   SOCKET_UDP_DISCONNECT,
@@ -314,6 +315,15 @@ function handle(call, id, payload) {
           resolve(err.errno);
         });
       });
+    }
+
+    case SOCKET_UDP_CHECK_SEND: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.getSendBufferSize() - socket.getSendQueueSize();
+      } catch (err) {
+        return err.errno;
+      }
     }
 
     case SOCKET_UDP_SEND: {

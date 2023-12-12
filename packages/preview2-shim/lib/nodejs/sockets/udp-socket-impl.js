@@ -10,6 +10,7 @@ import { isIP } from "node:net";
 import { assert } from "../../common/assert.js";
 import {
   SOCKET_UDP_BIND,
+  SOCKET_UDP_CHECK_SEND,
   SOCKET_UDP_CONNECT,
   SOCKET_UDP_CREATE_HANDLE,
   SOCKET_UDP_DISCONNECT,
@@ -129,14 +130,13 @@ export class OutgoingDatagramStream {
   /**
    *
    * @returns {bigint}
-   * @throws {invalid-state} The socket is not bound to any local address. (EINVAL)
    */
   checkSend() {
-    // TODO: implement the actual check
-    // socket.getSendBufferSize() - socket.getSendQueueSize() <= 0 --> throw
-    // attach an event listener to the socket to listen for the drain event
-    // untill the next sent completes
-    return 1024n;
+    const ret = ioCall(SOCKET_UDP_CHECK_SEND, this.#socketId);
+    // TODO: When this function returns ok(0), the `subscribe` pollable will
+    // become ready when this function will report at least ok(1), or an
+    // error.
+    return ret;
   }
 
   /**
@@ -179,8 +179,7 @@ export class OutgoingDatagramStream {
       );
       if (ret === 0) {
         datagramsSent++;
-      }
-      else {
+      } else {
         assert(ret === -65, "remote-unreachable");
       }
     }

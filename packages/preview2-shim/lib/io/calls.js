@@ -54,6 +54,7 @@ export const SOCKET_UDP_CREATE_HANDLE = ++call_id << 24;
 export const SOCKET_UDP_BIND = ++call_id << 24;
 export const SOCKET_UDP_CONNECT = ++call_id << 24;
 export const SOCKET_UDP_DISCONNECT = ++call_id << 24;
+export const SOCKET_UDP_CHECK_SEND = ++call_id << 24;
 export const SOCKET_UDP_SEND = ++call_id << 24;
 export const SOCKET_UDP_RECEIVE = ++call_id << 24;
 export const SOCKET_UDP_DISPOSE = ++call_id << 24;
