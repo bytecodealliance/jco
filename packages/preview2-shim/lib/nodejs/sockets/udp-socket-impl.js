@@ -71,21 +71,31 @@ export class IncomingDatagramStream {
       return [];
     }
 
-    const datagrams = ioCall(SOCKET_UDP_RECEIVE, this.#pollId, {
-      maxResults,
-      socketId: this.#socketId,
-    });
+    const datagrams = ioCall(
+      SOCKET_UDP_RECEIVE,
+      // socket that's receiving the datagrams
+      this.#socketId,
+      {
+        maxResults,
+      }
+    );
 
     return datagrams.map(({ data, rinfo }) => {
+      let address = rinfo.address;
+      if (rinfo._address) {
+        // set the original address that the socket was bound to
+        address = rinfo._address;
+      }
+      const remoteAddress = {
+        tag: rinfo.family.toLocaleLowerCase(),
+        val: {
+          address: deserializeIpAddress(address, rinfo.family),
+          port: rinfo.port,
+        },
+      };
       return {
         data,
-        remoteAddress: {
-          tag: rinfo.family.toLocaleLowerCase(),
-          val: {
-            address: deserializeIpAddress(rinfo.address, rinfo.family),
-            port: rinfo.port,
-          },
-        },
+        remoteAddress,
       };
     });
   }
@@ -123,6 +133,9 @@ export class OutgoingDatagramStream {
    */
   checkSend() {
     // TODO: implement the actual check
+    // socket.getSendBufferSize() - socket.getSendQueueSize() <= 0 --> throw
+    // attach an event listener to the socket to listen for the drain event
+    // untill the next sent completes
     return 1024n;
   }
 
@@ -155,14 +168,20 @@ export class OutgoingDatagramStream {
       assert(this.checkSend() < data.length, "datagram-too-large");
       // TODO: add the other assertions
 
-      const ret = ioCall(SOCKET_UDP_SEND, this.#pollId, {
-        socketId: this.#socketId,
-        data,
-        remotePort,
-        remoteHost: host,
-      });
-      if (ret > 0) {
+      const ret = ioCall(
+        SOCKET_UDP_SEND,
+        this.#socketId, // socket that's sending the datagrams
+        {
+          data,
+          remotePort,
+          remoteHost: host,
+        }
+      );
+      if (ret === 0) {
         datagramsSent++;
+      }
+      else {
+        assert(ret === -65, "remote-unreachable");
       }
     }
 
@@ -304,7 +323,7 @@ export class UdpSocket {
       assert(isIP(localAddress) === 0, "address-not-bindable");
       assert(globalBoundAddresses.has(serializeIpAddress(localIpSocketAddress, true)), "address-in-use");
 
-      const err = ioCall(SOCKET_UDP_BIND, this.#pollId, {
+      const err = ioCall(SOCKET_UDP_BIND, this.id, {
         localAddress,
         localPort,
       });
@@ -402,7 +421,7 @@ export class UdpSocket {
       // this.bind(this.network, this.#socketOptions.localIpSocketAddress);
     }
 
-    const err = ioCall(SOCKET_UDP_CONNECT, this.#pollId, {
+    const err = ioCall(SOCKET_UDP_CONNECT, this.id, {
       remoteAddress,
       remotePort,
     });
@@ -426,7 +445,7 @@ export class UdpSocket {
   }
 
   #disconnect() {
-    const ret = ioCall(SOCKET_UDP_DISCONNECT, this.#pollId);
+    const ret = ioCall(SOCKET_UDP_DISCONNECT, this.id);
 
     if (ret === 0) {
       this[symbolSocketState].connectionState = SocketConnectionState.Closed;
@@ -480,7 +499,7 @@ export class UdpSocket {
   localAddress() {
     assert(this[symbolSocketState].isBound === false, "invalid-state");
 
-    const out = ioCall(SOCKET_UDP_GET_LOCAL_ADDRESS, this.#pollId);
+    const out = ioCall(SOCKET_UDP_GET_LOCAL_ADDRESS, this.id);
 
     const { address, port, family } = out;
     this.#socketOptions.localAddress = address;
@@ -508,7 +527,7 @@ export class UdpSocket {
       "The socket is not streaming to a specific remote address"
     );
 
-    const out = ioCall(SOCKET_UDP_GET_REMOTE_ADDRESS, this.#pollId);
+    const out = ioCall(SOCKET_UDP_GET_REMOTE_ADDRESS, this.id);
 
     assert(out.address === undefined, "invalid-state", "The socket is not streaming to a specific remote address");
 
@@ -581,7 +600,7 @@ export class UdpSocket {
   setUnicastHopLimit(value) {
     assert(value < 1, "invalid-argument", "The TTL value must be 1 or higher");
 
-    ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.#pollId, { value });
+    ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.id, { value });
     this[symbolSocketState].unicastHopLimit = value;
   }
 
@@ -593,15 +612,13 @@ export class UdpSocket {
     // TODO: should we throw if the socket is not bound?
     // assert(this[symbolSocketState].isBound === false, "invalid-state");
 
-    const ret = ioCall(SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE, this.#pollId);
+    const ret = ioCall(SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE, this.id);
 
     // if (ret === -9) {
     //   // TODO: handle the case where bad file descriptor (EBADF) is returned
     //   // This happens when the socket is not bound
     //   return this[symbolSocketState].receiveBufferSize;
     // }
-
-    console.log("receiveBufferSize", ret);
 
     return ret;
   }
@@ -616,7 +633,7 @@ export class UdpSocket {
     assert(value === 0n, "invalid-argument", "The provided value was 0");
 
     // value = cappedUint32(value);
-    ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.#pollId, { value });
+    ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.id, { value });
   }
 
   /**
@@ -627,15 +644,13 @@ export class UdpSocket {
     // TODO: should we throw if the socket is not bound?
     // assert(this[symbolSocketState].isBound === false, "invalid-state");
 
-    const ret = ioCall(SOCKET_UDP_GET_SEND_BUFFER_SIZE, this.#pollId);
+    const ret = ioCall(SOCKET_UDP_GET_SEND_BUFFER_SIZE, this.id);
 
     // if (ret === -9) {
     //   // TODO: handle the case where bad file descriptor (EBADF) is returned
     //   // This happens when the socket is not bound
     //   return this[symbolSocketState].sendBufferSize;
     // }
-
-    console.log("sendBufferSize", ret);
 
     return ret;
   }
@@ -650,7 +665,7 @@ export class UdpSocket {
     assert(value === 0n, "invalid-argument", "The provided value was 0");
 
     // value = cappedUint32(value);
-    ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.#pollId, { value });
+    ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.id, { value });
 
     // this.#socket.bufferSize(Number(cappedValue), BufferSizeFlags.SO_SNDBUF, exceptionInfo);
   }
@@ -665,7 +680,7 @@ export class UdpSocket {
   }
 
   [symbolDispose]() {
-    ioCall(SOCKET_UDP_DISPOSE, this.#pollId);
+    ioCall(SOCKET_UDP_DISPOSE, this.id);
   }
 }
 

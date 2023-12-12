@@ -64,6 +64,8 @@ import {
 } from "./calls.js";
 import { createUdpSocket } from "./worker-socket-udp.js";
 
+const symbolSocketUdpIpUnspecified = Symbol.symbolSocketUdpIpUnspecified ?? Symbol.for("symbolSocketUdpIpUnspecified");
+
 let streamCnt = 0,
   pollCnt = 0;
 
@@ -76,8 +78,8 @@ export const unfinishedStreams = new Map();
 /** @type {Map<number, NodeJS.Socket>} */
 export const openedSockets = new Map();
 
-/** @type {Map<number, Array<{ data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>} */
-const queuedReceivedSocketDatagrams = [];
+/** @type {Map<number, Map<string, { data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>} */
+const queuedReceivedSocketDatagrams = new Map();
 
 /** @type {Map<number, { value: any, error: bool }>} */
 export const unfinishedFutures = new Map();
@@ -128,20 +130,40 @@ export function getStreamOrThrow(streamId) {
 
 export function getSocketOrThrow(socketId) {
   const socket = openedSockets.get(socketId);
-  if (!socket) throw "closed";
+  if (!socket) throw "invalid-state";
   return socket;
 }
 
-// TODO: should we filter by socketId?
-export function dequeueReceivedSocketDatagram(maxResults, _socketId) {
-  const dgrams = queuedReceivedSocketDatagrams.slice(0, Number(maxResults));
+export function getSocketByPort(port) {
+  return Array.from(openedSockets.values()).find((socket) => socket.address().port === port);
+}
+
+export function getBoundSockets(socketId) {
+  return Array.from(openedSockets.entries())
+    .filter(([id, _socket]) => id !== socketId) // exclude source socket
+    .map(([_id, socket]) => socket.address());
+}
+
+export function dequeueReceivedSocketDatagram(socketInfo, maxResults) {
+  const dgrams = queuedReceivedSocketDatagrams.get(`PORT:${socketInfo.port}`).splice(0, Number(maxResults));
   return dgrams;
 }
-export function enqueueReceivedSocketDatagram(socketId, dgram) {
-  queuedReceivedSocketDatagrams.unshift({
-    ...dgram,
-    socketId,
-  });
+export function enqueueReceivedSocketDatagram(socketInfo, { data, rinfo }) {
+  const key = `PORT:${socketInfo.port}`;
+  const chunk = {
+    data,
+    rinfo, // sender/remote socket info (source)
+    socketInfo, // receiver socket info (targeted socket)
+  };
+
+  // create new queue if not exists
+  if (!queuedReceivedSocketDatagrams.has(key)) {
+    queuedReceivedSocketDatagrams.set(key, []);
+  }
+
+  // append to queue
+  const queue = queuedReceivedSocketDatagrams.get(key);
+  queue.push(chunk);
 }
 
 function subscribeInstant(instant) {
@@ -245,8 +267,18 @@ function handle(call, id, payload) {
     }
 
     case SOCKET_UDP_BIND: {
-      const socket = getSocketOrThrow(id);
       const { localAddress, localPort } = payload;
+      const socket = getSocketOrThrow(id);
+
+      // Note: even if the client has bound to IPV4_UNSPECIFIED/IPV6_UNSPECIFIED (0.0.0.0 // ::),
+      // rinfo.address is resolved to IPV4_LOOPBACK/IPV6_LOOPBACK.
+      // We need to cache the original bound IP type and fix rinfo.address when receiving datagrams (see below)
+      // See https://github.com/WebAssembly/wasi-sockets/issues/86
+      socket[symbolSocketUdpIpUnspecified] = {
+        isUnspecified: localAddress === "0.0.0.0" || localAddress === "0:0:0:0:0:0:0:0",
+        localAddress,
+      };
+
       return new Promise((resolve) => {
         socket.bind(
           {
@@ -260,7 +292,21 @@ function handle(call, id, payload) {
         );
 
         socket.on("message", (data, rinfo) => {
-          enqueueReceivedSocketDatagram(id, { data, rinfo });
+          const remoteSocket = getSocketByPort(rinfo.port);
+          let { address, port } = socket.address();
+
+          if (remoteSocket[symbolSocketUdpIpUnspecified].isUnspecified) {
+            // cache original bound address
+            rinfo._address = remoteSocket[symbolSocketUdpIpUnspecified].localAddress;
+          }
+
+          const receiverSocket = {
+            address,
+            port,
+            id,
+          };
+
+          enqueueReceivedSocketDatagram(receiverSocket, { data, rinfo });
         });
 
         // catch all errors
@@ -271,24 +317,25 @@ function handle(call, id, payload) {
     }
 
     case SOCKET_UDP_SEND: {
-      let { remoteHost, remotePort, data, socketId } = payload;
-      const socket = getSocketOrThrow(socketId);
+      let { remoteHost, remotePort, data } = payload;
+      const socket = getSocketOrThrow(id);
 
       return new Promise((resolve) => {
-        const _callback = (err, byteLength) => {
+        const _callback = (err, _byteLength) => {
           if (err) return resolve(err.errno);
-          resolve(byteLength);
+          resolve(0); // success
         };
 
-        // TODO: figure out how to handle the case when remoteHost is None
+        // Note: when remoteHost/remotePort is None, we broadcast to all bound sockets
+        // except the source socket
         if (remotePort === undefined || remoteHost === undefined) {
-          const { address, port, family } = socket.address();
-          const dgram = { data, rinfo: { address, family, port, size: data.byteLength } };
-          enqueueReceivedSocketDatagram(socketId, dgram);
-          resolve(0); // resolve immediately
+          getBoundSockets(id).forEach((adr) => {
+            socket.send(data, adr.port, adr.address, _callback);
+          });
         } else {
           socket.send(data, remotePort, remoteHost, _callback);
         }
+
         socket.once("error", (err) => {
           resolve(err.errno);
         });
@@ -296,8 +343,18 @@ function handle(call, id, payload) {
     }
 
     case SOCKET_UDP_RECEIVE: {
-      const { maxResults, socketId } = payload;
-      const dgrams = dequeueReceivedSocketDatagram(maxResults, socketId);
+      const { maxResults } = payload;
+      const socket = getSocketOrThrow(id);
+      const { address, port } = socket.address();
+
+      // set target socket info
+      // we use this to filter out datagrams that are were sent to this socket
+      const targetSocket = {
+        address,
+        port,
+      };
+
+      const dgrams = dequeueReceivedSocketDatagram(targetSocket, maxResults);
       return Promise.resolve(dgrams);
     }
 

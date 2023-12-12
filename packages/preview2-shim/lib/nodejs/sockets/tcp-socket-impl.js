@@ -107,6 +107,7 @@ export class TcpSocketImpl {
     localPort: 0,
     remoteAddress: "",
     remotePort: 0,
+    localIpSocketAddress: null,
   };
 
   // this is set by the TcpSocket child class
