@@ -81,7 +81,7 @@ async function wasm2Js (source) {
  */
 export async function transpileComponent (component, opts = {}) {
   await $init;
-  if (opts.noWasiShim || opts.instantiation) opts.wasiShim = false;
+  if (opts.instantiation) opts.wasiShim = false;
 
   let spinner;
   const showSpinner = getShowSpinner();
@@ -119,8 +119,8 @@ export async function transpileComponent (component, opts = {}) {
     instantiation,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     tracing: opts.tracing ?? false,
-    noNodejsCompat: !(opts.nodejsCompat ?? true),
-    noTypescript: opts.noTypescript || false,
+    noNodejsCompat: opts.nodejsCompat === false,
+    noTypescript: opts.typescript === false,
     tlaCompat: opts.tlaCompat ?? false,
     base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000,
     noNamespacedExports: opts.namespacedExports === false,

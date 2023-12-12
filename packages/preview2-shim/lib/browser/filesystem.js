@@ -37,15 +37,18 @@ function getChildEntry (parentEntry, subpath, openFlags) {
   let segmentIdx;
   do {
     if (!entry || !entry.dir) throw 'not-directory';
-    segmentIdx = subpath.indexOf('/');
+    segmentIdx = subpath.indexOf('/', segmentIdx);
     const segment = segmentIdx === -1 ? subpath : subpath.slice(0, segmentIdx);
-    if (segment === '.' || segment === '') return entry;
-    if (segment === '..') throw 'no-entry';
-    if (!entry.dir[segment] && openFlags.create)
+    if (segment === '.' || segment === '')
+      /* continue traversing */;
+    else if (segment === '..')
+      throw 'no-entry';
+    else if (!entry.dir[segment] && openFlags.create)
       entry = entry.dir[segment] = openFlags.directory ? { dir: {} } : { source: new Uint8Array([]) };
     else
       entry = entry.dir[segment];
-  } while (segmentIdx !== -1)
+    subpath = subpath.substring(segmentIdx + 1);
+  } while (segmentIdx !== -1);
   if (!entry) throw 'no-entry';
   return entry;
 }
@@ -179,12 +182,12 @@ class Descriptor {
   stat() {
     let type = 'unknown', size = BigInt(0);
     if (this.#entry.source) {
-      type = 'directory';
-    }
-    else if (this.#entry.dir) {
       type = 'regular-file';
       const source = getSource(this.#entry);
       size = BigInt(source.byteLength);
+    }
+    else if (this.#entry.dir) {
+      type = 'directory';
     }
     return {
       type,
