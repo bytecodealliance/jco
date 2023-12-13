@@ -1,4 +1,4 @@
-import { _appendEnv } from "@bytecodealliance/preview2-shim/cli";
+import { _setEnv } from "@bytecodealliance/preview2-shim/cli";
 import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { rmdirSync } from 'node:fs';
@@ -22,7 +22,7 @@ await Promise.all([
   writeFile(resolve(testDir, 'sub/yay.txt'), `yay`),
 ]);
 
-_appendEnv({
+_setEnv({
   callooh: "callay",
   frabjous: "day",
 });

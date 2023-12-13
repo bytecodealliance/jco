@@ -251,7 +251,7 @@ export class WasiSockets {
             const family = `ipv${isIP(address)}`;
             return {
               tag: family,
-              val: deserializeIpAddress(address),
+              val: deserializeIpAddress(address, family),
             };
           });
         }

@@ -2,16 +2,16 @@
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-// use xshell::{cmd, Shell};
+use xshell::{cmd, Shell};
 
 #[test]
 fn proxy_echo() -> anyhow::Result<()> {
-    // let sh = Shell::new()?;
-    // let wasi_file = "./tests/rundir/proxy_echo.component.wasm";
+    let sh = Shell::new()?;
+    let wasi_file = "./tests/rundir/proxy_echo.component.wasm";
     let _ = fs::remove_dir_all("./tests/rundir/proxy_echo");
 
-    // let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/proxy_echo --jco-import ./tests/virtualenvs/server-api-proxy-streaming.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
+    let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/proxy_echo --jco-import ./tests/virtualenvs/server-api-proxy-streaming.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
 
-    // cmd.run()?;
-    panic!("skipped"); // Ok(())
+    cmd.run()?;
+    Ok(())
 }

@@ -629,7 +629,9 @@ export class HTTPServer {
           "authority.org",
           fieldsLock(
             fieldsFromEntriesChecked(
-              headers.map(([key, val]) => [key, textEncoder.encode(val)])
+              headers
+                .filter(([key]) => !_forbiddenHeaders.has(key))
+                .map(([key, val]) => [key, textEncoder.encode(val)])
             )
           ),
           headers,
