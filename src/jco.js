@@ -61,6 +61,7 @@ program.command('run')
   .option('--jco-dir <dir>', 'Instead of using a temporary dir, set the output directory for the run command')
   .option('--jco-trace', 'Enable call tracing')
   .option('--jco-import <module>', 'Custom module to import before the run executes to support custom environment setup')
+  .option('--jco-map <mappings...>', 'specifier=./output custom mappings for the component imports')
   .argument('[args...]', 'Any CLI arguments for the component')
   .action(asyncAction(async function run (cmd, args, opts, command) {
     // specially only allow help option in first position
@@ -83,6 +84,7 @@ program.command('serve')
   .option('--jco-dir <dir>', 'Instead of using a temporary dir, set the output directory for the transpiled code')
   .option('--jco-trace', 'Enable call tracing')
   .option('--jco-import <module>', 'Custom module to import before the server executes to support custom environment setup')
+  .option('--jco-map <mappings...>', 'specifier=./output custom mappings for the component imports')
   .argument('[args...]', 'Any CLI arguments for the component')
   .action(asyncAction(async function serve (cmd, args, opts, command) {
     // specially only allow help option in first position

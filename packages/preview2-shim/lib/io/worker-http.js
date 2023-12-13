@@ -1,6 +1,6 @@
-import { Readable } from "node:stream";
 import { createStream, getStreamOrThrow } from "./worker-thread.js";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { parentPort } from "node:worker_threads";
 import { HTTP_SERVER_INCOMING_HANDLER } from "./calls.js";
 
@@ -50,6 +50,9 @@ export async function startHttpServer(id, { port, host }) {
         streamId,
       },
     });
+    res.on('data', chunk => {
+      process._rawDebug(chunk);
+    });
     responses.set(responseId, res);
   });
   await new Promise((resolve, reject) => {
@@ -80,71 +83,81 @@ export async function createHttpRequest(method, url, headers, bodyId) {
     }
   }
   try {
-    const res = await fetch(url, {
-      method,
-      headers: new Headers(headers),
-      body: stream ? Readable.toWeb(stream) : null,
-      redirect: "manual",
-      duplex: "half",
+    // Make a request
+    const parsedUrl = new URL(url);
+    let req;
+    switch (parsedUrl.protocol) {
+      case 'http:':
+        req = httpRequest({
+          method,
+          host: parsedUrl.hostname,
+          port: parsedUrl.port,
+          path: parsedUrl.pathname + parsedUrl.search,
+          headers
+        });
+        break;
+      case 'https:':
+        req = httpsRequest({
+          method,
+          host: parsedUrl.hostname,
+          port: parsedUrl.port,
+          path: parsedUrl.pathname + parsedUrl.search,
+          headers
+        });
+        break;
+      default:
+        throw { tag: 'HTTP-protocol-error' };
+    }
+    if (stream) {
+      stream.pipe(req);
+    } else {
+      req.end();
+    }
+    const res = await new Promise((resolve, reject) => {
+      req.on('response', resolve);
+      req.on('close', () => reject);
+      req.on('error', reject);
     });
-    const bodyStreamId = createStream(Readable.fromWeb(res.body));
+    res.on('end', () => void res.emit("readable"));
+    const bodyStreamId = createStream(res);
     return {
-      status: res.status,
-      headers: Array.from(res.headers),
+      status: res.statusCode,
+      headers: Array.from(Object.entries(res.headers)),
       bodyStreamId: bodyStreamId,
     };
   } catch (e) {
-    if (e?.cause) {
-      let err = e.cause;
-      if (e.cause instanceof AggregateError) err = e.cause.errors[0];
-      if (err.message === "unknown scheme")
+    if (e?.tag)
+      throw e;
+    const err = getFirstError(e);
+    switch (err.code) {
+      case "ECONNRESET":
+        throw { tag: "HTTP-protocol-error" };
+      case "ENOTFOUND":
         throw {
-          tag: "HTTP-protocol-error",
+          tag: "DNS-error",
+          val: {
+            rcode: err.code,
+            infoCode: err.errno,
+          },
         };
-      switch (err.syscall) {
-        case "connect": {
-          if (err.code === "ECONNREFUSED")
-            throw {
-              tag: "connection-refused",
-            };
-          break;
-        }
-        case "getaddrinfo": {
-          const { errno, code } = err;
-          throw {
-            tag: "DNS-error",
-            val: {
-              rcode: code,
-              infoCode: errno,
-            },
-          };
-        }
-      }
+      case "ECONNREFUSED":
+        throw {
+          tag: "connection-refused",
+        };
     }
-    if (e?.message?.includes("Failed to parse URL")) {
-      throw {
-        tag: "HTTP-request-URI-invalid",
-        val: undefined,
-      };
-    }
-    if (e?.message?.includes("HTTP")) {
-      switch (e?.message.replace(/'[^']+'/, "'{}'")) {
-        case "'{}' HTTP method is unsupported.":
-          throw {
-            tag: "HTTP-protocol-error",
-            val: undefined,
-          };
-        case "'{}' is not a valid HTTP method.":
-          throw {
-            tag: "HTTP-request-method-invalid",
-            val: undefined,
-          };
-      }
-      throw {
-        tag: "internal-error",
-        val: e.toString(),
-      };
-    }
-    throw e;
+    throw {
+      tag: "internal-error",
+      val: err.toString(),
+    };
   }
+}
+
+function getFirstError (e) {
+  if (typeof e !== 'object' || e === null)
+    return e;
+  if (e.cause)
+    return getFirstError(e.cause);
+  if (e instanceof AggregateError)
+    return getFirstError(e.errors[0]);
+  return e;
 }

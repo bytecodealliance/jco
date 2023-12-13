@@ -8,6 +8,12 @@ import {
 import { INPUT_STREAM_CREATE, STDERR, STDIN, STDOUT } from "../io/calls.js";
 const { InputStream, OutputStream } = streams;
 
+export const _appendEnv = (env) => {
+  void (_env = [
+    ..._env.filter(([curKey]) => !(curKey in env)),
+    ...Object.entries(env),
+  ]);
+}
 export const _setEnv = (env) => void (_env = Object.entries(env));
 export const _setArgs = (args) => void (_args = args);
 export const _setCwd = (cwd) => void (_cwd = cwd);

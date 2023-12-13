@@ -18,7 +18,8 @@ export async function run (componentPath, args, opts) {
     try {
       mod.run.run();
       // for stdout flushing
-      setTimeout(() => {});
+      await new Promise(resolve => setTimeout(resolve));
+      process.exit(0);
     }
     catch (e) {
       console.error(e);
@@ -64,6 +65,7 @@ async function runComponent (componentPath, args, opts, executor) {
   if (opts.jcoDir) {
     await mkdir(outDir, { recursive: true });
   }
+
   try {
     try {
       await transpile(componentPath, {
@@ -72,7 +74,8 @@ async function runComponent (componentPath, args, opts, executor) {
         noTypescript: true,
         wasiShim: true,
         outDir,
-        tracing: opts.jcoTrace
+        tracing: opts.jcoTrace,
+        map: opts.jcoMap
       });
     }
     catch (e) {

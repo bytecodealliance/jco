@@ -238,7 +238,7 @@ class OutgoingRequest {
   setPathWithQuery(pathWithQuery) {
     if (
       pathWithQuery &&
-      !pathWithQuery.match(/^[a-zA-Z0-9.-_~!$&'()*+,;=:@%/]+$/)
+      !pathWithQuery.match(/^[a-zA-Z0-9.\-_~!$&'()*+,;=:@%?/]+$/)
     )
       throw undefined;
     this.#pathWithQuery = pathWithQuery;
@@ -284,7 +284,7 @@ class OutgoingRequest {
     return futureIncomingResponseCreate(
       request.#method.val || request.#method.tag,
       url,
-      Object.entries(headers),
+      headers,
       outgoingBodyOutputStreamId(request.#body)
     );
   }
