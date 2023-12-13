@@ -1,9 +1,9 @@
 import { resolve } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
-import { stdout, stderr, hrtime, _rawDebug, exit } from "node:process";
+import { _rawDebug, exit, hrtime, stderr, stdout } from "node:process";
+import { Writable } from "node:stream";
 import { runAsWorker } from "../synckit/index.js";
 import { createHttpRequest } from "./worker-http.js";
-import { Writable } from "node:stream";
 
 import {
   CALL_MASK,
@@ -12,8 +12,10 @@ import {
   CLOCKS_DURATION_SUBSCRIBE,
   CLOCKS_INSTANT_SUBSCRIBE,
   CLOCKS_NOW,
+  FILE,
   FUTURE_DISPOSE,
   FUTURE_GET_VALUE_AND_DISPOSE,
+  HTTP,
   HTTP_CREATE_REQUEST,
   HTTP_OUTPUT_STREAM_FINISH,
   INPUT_STREAM_BLOCKING_READ,
@@ -33,21 +35,37 @@ import {
   OUTPUT_STREAM_FLUSH,
   OUTPUT_STREAM_SPLICE,
   OUTPUT_STREAM_SUBSCRIBE,
-  OUTPUT_STREAM_WRITE_ZEROES,
   OUTPUT_STREAM_WRITE,
-  POLL_POLL_LIST,
+  OUTPUT_STREAM_WRITE_ZEROES,
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
+  POLL_POLL_LIST,
+  SOCKET,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
-  FILE,
-  HTTP,
-  SOCKET,
+  SOCKET_UDP_BIND,
+  SOCKET_UDP_CHECK_SEND,
+  SOCKET_UDP_CONNECT,
+  SOCKET_UDP_CREATE_HANDLE,
+  SOCKET_UDP_DISCONNECT,
+  SOCKET_UDP_DISPOSE,
+  SOCKET_UDP_GET_LOCAL_ADDRESS,
+  SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE,
+  SOCKET_UDP_GET_REMOTE_ADDRESS,
+  SOCKET_UDP_GET_SEND_BUFFER_SIZE,
+  SOCKET_UDP_RECEIVE,
+  SOCKET_UDP_SEND,
+  SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE,
+  SOCKET_UDP_SET_SEND_BUFFER_SIZE,
+  SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
   STDERR,
   STDIN,
   STDOUT,
 } from "./calls.js";
+import { createUdpSocket } from "./worker-socket-udp.js";
+
+const symbolSocketUdpIpUnspecified = Symbol.symbolSocketUdpIpUnspecified ?? Symbol.for("symbolSocketUdpIpUnspecified");
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -57,6 +75,12 @@ export const unfinishedPolls = new Map();
 
 /** @type {Map<number, { flushPromise: Promise<void> | null, stream: NodeJS.ReadableStream | NodeJS.WritableStream }>} */
 export const unfinishedStreams = new Map();
+
+/** @type {Map<number, NodeJS.Socket>} */
+export const openedSockets = new Map();
+
+/** @type {Map<number, Map<string, { data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>} */
+const queuedReceivedSocketDatagrams = new Map();
 
 /** @type {Map<number, { value: any, error: bool }>} */
 export const unfinishedFutures = new Map();
@@ -82,7 +106,7 @@ createStream(stderr);
  * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
  */
 function streamError(streamId, stream, err) {
-  if (typeof stream.end === 'function') stream.end();
+  if (typeof stream.end === "function") stream.end();
   // we delete the stream from unfinishedStreams as it is now "finished" (closed)
   unfinishedStreams.delete(streamId);
   return { tag: "last-operation-failed", val: err };
@@ -103,6 +127,44 @@ export function getStreamOrThrow(streamId) {
     throw { tag: "closed" };
   }
   return stream;
+}
+
+export function getSocketOrThrow(socketId) {
+  const socket = openedSockets.get(socketId);
+  if (!socket) throw "invalid-state";
+  return socket;
+}
+
+export function getSocketByPort(port) {
+  return Array.from(openedSockets.values()).find((socket) => socket.address().port === port);
+}
+
+export function getBoundSockets(socketId) {
+  return Array.from(openedSockets.entries())
+    .filter(([id, _socket]) => id !== socketId) // exclude source socket
+    .map(([_id, socket]) => socket.address());
+}
+
+export function dequeueReceivedSocketDatagram(socketInfo, maxResults) {
+  const dgrams = queuedReceivedSocketDatagrams.get(`PORT:${socketInfo.port}`).splice(0, Number(maxResults));
+  return dgrams;
+}
+export function enqueueReceivedSocketDatagram(socketInfo, { data, rinfo }) {
+  const key = `PORT:${socketInfo.port}`;
+  const chunk = {
+    data,
+    rinfo, // sender/remote socket info (source)
+    socketInfo, // receiver socket info (targeted socket)
+  };
+
+  // create new queue if not exists
+  if (!queuedReceivedSocketDatagrams.has(key)) {
+    queuedReceivedSocketDatagrams.set(key, []);
+  }
+
+  // append to queue
+  const queue = queuedReceivedSocketDatagrams.get(key);
+  queue.push(chunk);
 }
 
 function subscribeInstant(instant) {
@@ -162,17 +224,19 @@ function handle(call, id, payload) {
       return handle(call & ~HTTP, id, payload);
     }
     case OUTPUT_STREAM_DISPOSE | HTTP:
-      throw new Error('Internal error: HTTP output stream dispose is bypassed for FINISH');
+      throw new Error(
+        "Internal error: HTTP output stream dispose is bypassed for FINISH"
+      );
     case OUTPUT_STREAM_WRITE | HTTP: {
       const { stream } = getStreamOrThrow(id);
       stream.bytesRemaining -= payload.byteLength;
       if (stream.bytesRemaining < 0) {
         throw {
-          tag: 'last-operation-failed',
+          tag: "last-operation-failed",
           val: {
-            tag: 'HTTP-request-body-size',
-            val: stream.contentLength - stream.bytesRemaining
-          }
+            tag: "HTTP-request-body-size",
+            val: stream.contentLength - stream.bytesRemaining,
+          },
         };
       }
       const output = handle(OUTPUT_STREAM_WRITE, id, payload);
@@ -182,14 +246,14 @@ function handle(call, id, payload) {
       const { stream } = getStreamOrThrow(id);
       if (stream.bytesRemaining > 0) {
         throw {
-          tag: 'HTTP-request-body-size',
-          val: stream.contentLength - stream.bytesRemaining
+          tag: "HTTP-request-body-size",
+          val: stream.contentLength - stream.bytesRemaining,
         };
       }
       if (stream.bytesRemaining < 0) {
         throw {
-          tag: 'HTTP-request-body-size',
-          val: stream.contentLength - stream.bytesRemaining
+          tag: "HTTP-request-body-size",
+          val: stream.contentLength - stream.bytesRemaining,
         };
       }
       stream.end();
@@ -197,22 +261,210 @@ function handle(call, id, payload) {
     }
 
     // Sockets
+
+    case SOCKET_UDP_CREATE_HANDLE: {
+      const { addressFamily, reuseAddr } = payload;
+      return createFuture(createUdpSocket(addressFamily, reuseAddr));
+    }
+
+    case SOCKET_UDP_BIND: {
+      const { localAddress, localPort } = payload;
+      const socket = getSocketOrThrow(id);
+
+      // Note: even if the client has bound to IPV4_UNSPECIFIED/IPV6_UNSPECIFIED (0.0.0.0 // ::),
+      // rinfo.address is resolved to IPV4_LOOPBACK/IPV6_LOOPBACK.
+      // We need to cache the original bound IP type and fix rinfo.address when receiving datagrams (see below)
+      // See https://github.com/WebAssembly/wasi-sockets/issues/86
+      socket[symbolSocketUdpIpUnspecified] = {
+        isUnspecified: localAddress === "0.0.0.0" || localAddress === "0:0:0:0:0:0:0:0",
+        localAddress,
+      };
+
+      return new Promise((resolve) => {
+        socket.bind(
+          {
+            address: localAddress,
+            port: localPort,
+          },
+          () => {
+            openedSockets.set(id, socket);
+            resolve(0);
+          }
+        );
+
+        socket.on("message", (data, rinfo) => {
+          const remoteSocket = getSocketByPort(rinfo.port);
+          let { address, port } = socket.address();
+
+          if (remoteSocket[symbolSocketUdpIpUnspecified].isUnspecified) {
+            // cache original bound address
+            rinfo._address = remoteSocket[symbolSocketUdpIpUnspecified].localAddress;
+          }
+
+          const receiverSocket = {
+            address,
+            port,
+            id,
+          };
+
+          enqueueReceivedSocketDatagram(receiverSocket, { data, rinfo });
+        });
+
+        // catch all errors
+        socket.once("error", (err) => {
+          resolve(err.errno);
+        });
+      });
+    }
+
+    case SOCKET_UDP_CHECK_SEND: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.getSendBufferSize() - socket.getSendQueueSize();
+      } catch (err) {
+        return err.errno;
+      }
+    }
+
+    case SOCKET_UDP_SEND: {
+      let { remoteHost, remotePort, data } = payload;
+      const socket = getSocketOrThrow(id);
+
+      return new Promise((resolve) => {
+        const _callback = (err, _byteLength) => {
+          if (err) return resolve(err.errno);
+          resolve(0); // success
+        };
+
+        // Note: when remoteHost/remotePort is None, we broadcast to all bound sockets
+        // except the source socket
+        if (remotePort === undefined || remoteHost === undefined) {
+          getBoundSockets(id).forEach((adr) => {
+            socket.send(data, adr.port, adr.address, _callback);
+          });
+        } else {
+          socket.send(data, remotePort, remoteHost, _callback);
+        }
+
+        socket.once("error", (err) => {
+          resolve(err.errno);
+        });
+      });
+    }
+
+    case SOCKET_UDP_RECEIVE: {
+      const { maxResults } = payload;
+      const socket = getSocketOrThrow(id);
+      const { address, port } = socket.address();
+
+      // set target socket info
+      // we use this to filter out datagrams that are were sent to this socket
+      const targetSocket = {
+        address,
+        port,
+      };
+
+      const dgrams = dequeueReceivedSocketDatagram(targetSocket, maxResults);
+      return Promise.resolve(dgrams);
+    }
+
+    case SOCKET_UDP_CONNECT: {
+      const socket = getSocketOrThrow(id);
+      const { remoteAddress, remotePort } = payload;
+      return new Promise((resolve) => {
+        socket.connect(remotePort, remoteAddress, () => {
+          openedSockets.set(id, socket);
+          resolve(0);
+        });
+        socket.once("error", (err) => {
+          resolve(err.errno);
+        });
+      });
+    }
+
+    case SOCKET_UDP_DISCONNECT: {
+      const socket = getSocketOrThrow(id);
+      return new Promise((resolve) => {
+        socket.disconnect();
+        resolve(0);
+      });
+    }
+
+    case SOCKET_UDP_GET_LOCAL_ADDRESS: {
+      const socket = getSocketOrThrow(id);
+      return Promise.resolve(socket.address());
+    }
+
+    case SOCKET_UDP_GET_REMOTE_ADDRESS: {
+      const socket = getSocketOrThrow(id);
+      return Promise.resolve(socket.remoteAddress());
+    }
+
     case SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST:
       return createFuture(resolve(payload.hostname));
+
     case SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST:
       return void unfinishedFutures.delete(id);
+
     case SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST: {
       const future = unfinishedFutures.get(id);
       if (!future) {
         // future not ready yet
         if (unfinishedPolls.get(id)) {
-          throw 'would-block';
+          throw "would-block";
         }
         throw new Error("future already got and dropped");
       }
       unfinishedFutures.delete(id);
       return future;
     }
+
+    case SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.getRecvBufferSize();
+      } catch (err) {
+        // we are only interested in the errno
+        return err.errno;
+      }
+    }
+
+    case SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.setRecvBufferSize(payload.value);
+      } catch (err) {
+        return err.errno;
+      }
+    }
+
+    case SOCKET_UDP_GET_SEND_BUFFER_SIZE: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.getSendBufferSize();
+      } catch (err) {
+        return err.errno;
+      }
+    }
+
+    case SOCKET_UDP_SET_SEND_BUFFER_SIZE: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.setSendBufferSize(payload.value);
+      } catch (err) {
+        return err.errno;
+      }
+    }
+
+    case SOCKET_UDP_SET_UNICAST_HOP_LIMIT: {
+      const socket = getSocketOrThrow(id);
+      try {
+        return socket.setTTL(payload.value);
+      } catch (err) {
+        return err.errno;
+      }
+    }
+
     case OUTPUT_STREAM_CREATE | SOCKET: {
       // TODO: implement
       break;
@@ -220,6 +472,16 @@ function handle(call, id, payload) {
     case INPUT_STREAM_CREATE | SOCKET: {
       // TODO: implement
       break;
+    }
+
+    case SOCKET_UDP_DISPOSE: {
+      const socket = getSocketOrThrow(id);
+      return new Promise((resolve) => {
+        socket.close(() => {
+          openedSockets.delete(id);
+          resolve(0);
+        });
+      });
     }
 
     // Stdio
@@ -278,7 +540,9 @@ function handle(call, id, payload) {
       switch (call & CALL_MASK) {
         case INPUT_STREAM_READ: {
           const { stream } = getStreamOrThrow(id);
-          const res = stream.read(Math.min(stream.readableLength, Number(payload)));
+          const res = stream.read(
+            Math.min(stream.readableLength, Number(payload))
+          );
           return res ?? new Uint8Array();
         }
         case INPUT_STREAM_BLOCKING_READ:
@@ -321,7 +585,7 @@ function handle(call, id, payload) {
             }).then(
               () => void stream.off("error", reject),
               // error is read of stream itself when later accessed
-              (_err) => void stream.off("readable", resolve),
+              (_err) => void stream.off("readable", resolve)
             )
           );
         }
@@ -430,10 +694,9 @@ function handle(call, id, payload) {
           if (flushPromise)
             return flushPromise.then(() => handle(call, id, payload));
           // not added to unfinishedPolls => it's an immediately resolved poll
-          if (!stream || stream.closed || stream.errored)
-            return 0;
+          if (!stream || stream.closed || stream.errored) return 0;
           if (!stream.writableNeedDrain)
-            return createPoll(new Promise(resolve => setTimeout(resolve)));
+            return createPoll(new Promise((resolve) => setTimeout(resolve)));
           let resolve, reject;
           return createPoll(
             new Promise((_resolve, _reject) => {
@@ -442,7 +705,7 @@ function handle(call, id, payload) {
                 .once("error", (reject = _reject));
             }).then(() => void stream.off("error", reject)),
             // error is read off stream itself when later accessed
-            (_err) => void stream.off("drain", resolve),
+            (_err) => void stream.off("drain", resolve)
           );
         }
         case OUTPUT_STREAM_BLOCKING_SPLICE: {
@@ -501,8 +764,7 @@ function handle(call, id, payload) {
         case POLL_POLL_LIST: {
           const doneList = [];
           for (const [idx, id] of payload.entries()) {
-            if (!unfinishedPolls.has(id))
-                doneList.push(idx);
+            if (!unfinishedPolls.has(id)) doneList.push(idx);
           }
           if (doneList.length > 0) return doneList;
           // if all polls are promise type, we just race them
@@ -510,8 +772,7 @@ function handle(call, id, payload) {
             payload.map((id) => unfinishedPolls.get(id))
           ).then(() => {
             for (const [idx, id] of payload.entries()) {
-              if (!unfinishedPolls.has(id))
-                doneList.push(idx);
+              if (!unfinishedPolls.has(id)) doneList.push(idx);
             }
             if (doneList.length === 0)
               throw new Error("poll promise did not unregister poll");
@@ -523,8 +784,7 @@ function handle(call, id, payload) {
           const future = unfinishedFutures.get(id);
           if (!future) {
             // future not ready yet
-            if (unfinishedPolls.get(id))
-              throw undefined;
+            if (unfinishedPolls.get(id)) throw undefined;
             throw new Error("future already got and dropped");
           }
           unfinishedFutures.delete(id);
