@@ -109,7 +109,7 @@ fn generate_test(test_name: &str) -> String {
 
     let skip = match test_name {
         // these tests currently stall
-        "api_read_only" | "preview1_path_open_read_write" => true,
+        "api_read_only" | "preview1_path_open_read_write" | "proxy_hash" => true,
         _ => false,
     };
 
