@@ -10,7 +10,7 @@ fn cli_no_ip_name_lookup() -> anyhow::Result<()> {
     let wasi_file = "./tests/rundir/cli_no_ip_name_lookup.component.wasm";
     let _ = fs::remove_dir_all("./tests/rundir/cli_no_ip_name_lookup");
 
-    let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/cli_no_ip_name_lookup --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
+    let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/cli_no_ip_name_lookup --jco-import ./tests/virtualenvs/deny-dns.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
 
     cmd.run()?;
     Ok(())

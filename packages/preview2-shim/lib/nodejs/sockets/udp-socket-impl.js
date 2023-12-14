@@ -280,6 +280,8 @@ export class UdpSocket {
    * @throws {invalid-state} The socket is already bound. (EINVAL)
    */
   startBind(network, localAddress) {
+    if (!this.allowed())
+      throw 'access-denied';
     try {
       assert(this[symbolSocketState].isBound, "invalid-state", "The socket is already bound");
 

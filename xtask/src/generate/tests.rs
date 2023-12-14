@@ -86,6 +86,9 @@ fn generate_test(test_name: &str) -> String {
         "cli_file_append" => "bar-jabberwock",
         "proxy_handler" => "server-api-proxy",
         "proxy_echo" | "proxy_hash" => "server-api-proxy-streaming",
+        "cli_no_ip_name_lookup" => "deny-dns",
+        "cli_no_tcp" => "deny-tcp",
+        "cli_no_udp" => "deny-udp",
         _ => {
             if test_name.starts_with("preview1") {
                 "scratch"
