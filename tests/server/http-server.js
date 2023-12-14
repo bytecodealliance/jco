@@ -16,7 +16,7 @@ process.on('message', async msg => {
     const component = await import(msg);
     server = new HTTPServer(component.incomingHandler);
 
-    let port = 4999;
+    let port = Math.round(Math.random() * 5000 + 5000);
     let retry = false;
     do {
       try {
