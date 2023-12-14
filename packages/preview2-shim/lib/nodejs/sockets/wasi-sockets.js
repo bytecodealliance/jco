@@ -120,6 +120,9 @@ export const IpAddressFamily = {
 };
 
 export class WasiSockets {
+  #allowDnsLookup = true;
+  #allowTcp = true;
+  #allowUdp = true;
   networkCnt = 1;
   socketCnt = 1;
 
@@ -154,6 +157,9 @@ export class WasiSockets {
       constructor(addressFamily) {
         super(addressFamily, TcpSocket, net.socketCnt++);
         net.tcpSockets.set(this.id, this);
+      }
+      allowed () {
+        return net.#allowTcp;
       }
     }
 
@@ -196,9 +202,12 @@ export class WasiSockets {
 
         try {
           const id = net.socketCnt++;
-          const updSocket = udpSocketImplCreate(addressFamily, id);
-          net.udpSockets.set(id, updSocket);
-          return updSocket;
+          const udpSocket = udpSocketImplCreate(addressFamily, id);
+          udpSocket.allowed = () => {
+            return net.#allowUdp;
+          };
+          net.udpSockets.set(id, udpSocket);
+          return udpSocket;
         } catch (err) {
           console.log("udp socket create error", {
             err,
@@ -301,12 +310,33 @@ export class WasiSockets {
        * @throws {invalid-argument} `name` is a syntactically invalid domain name or IP address.
        */
       resolveAddresses(network, name) {
+        if (!net.#allowDnsLookup)
+          throw 'permanent-resolver-failure';
         // TODO: bind to network
         return resolveAddressStreamCreate(name);
       },
     };
   }
+
+  static _denyDnsLookup (sockets) {
+    sockets.#allowDnsLookup = false;
+  }
+  static _denyTcp (sockets) {
+    sockets.#allowTcp = false;
+  }
+  static _denyUdp (sockets) {
+    sockets.#allowUdp = false;
+  }
 }
+
+export const denyDnsLookup = WasiSockets._denyDnsLookup;
+delete WasiSockets._denyDnsLookup;
+
+export const denyTcp = WasiSockets._denyTcp;
+delete WasiSockets._denyTcp;
+
+export const denyUdp = WasiSockets._denyUdp;
+delete WasiSockets._denyUdp;
 
 function convertResolveAddressError(err) {
   switch (err.code) {

@@ -75,7 +75,9 @@ import {
 } from "./calls.js";
 import { createUdpSocket } from "./worker-socket-udp.js";
 
-const symbolSocketUdpIpUnspecified = Symbol.symbolSocketUdpIpUnspecified ?? Symbol.for("symbolSocketUdpIpUnspecified");
+const symbolSocketUdpIpUnspecified =
+  Symbol.symbolSocketUdpIpUnspecified ??
+  Symbol.for("symbolSocketUdpIpUnspecified");
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -127,8 +129,7 @@ function streamError(streamId, stream, err) {
  * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, flushPromise: Promise<void> | null }}
  */
 export function getStreamOrThrow(streamId) {
-  if (!streamId)
-    throw new Error('Internal error: no stream id provided');
+  if (!streamId) throw new Error("Internal error: no stream id provided");
   const stream = unfinishedStreams.get(streamId);
   // not in unfinished streams <=> closed
   if (!stream) throw { tag: "closed" };
@@ -148,7 +149,9 @@ export function getSocketOrThrow(socketId) {
 }
 
 export function getSocketByPort(port) {
-  return Array.from(openedSockets.values()).find((socket) => socket.address().port === port);
+  return Array.from(openedSockets.values()).find(
+    (socket) => socket.address().port === port
+  );
 }
 
 export function getBoundSockets(socketId) {
@@ -158,7 +161,9 @@ export function getBoundSockets(socketId) {
 }
 
 export function dequeueReceivedSocketDatagram(socketInfo, maxResults) {
-  const dgrams = queuedReceivedSocketDatagrams.get(`PORT:${socketInfo.port}`).splice(0, Number(maxResults));
+  const dgrams = queuedReceivedSocketDatagrams
+    .get(`PORT:${socketInfo.port}`)
+    .splice(0, Number(maxResults));
   return dgrams;
 }
 export function enqueueReceivedSocketDatagram(socketInfo, { data, rinfo }) {
@@ -292,7 +297,8 @@ function handle(call, id, payload) {
       // We need to cache the original bound IP type and fix rinfo.address when receiving datagrams (see below)
       // See https://github.com/WebAssembly/wasi-sockets/issues/86
       socket[symbolSocketUdpIpUnspecified] = {
-        isUnspecified: localAddress === "0.0.0.0" || localAddress === "0:0:0:0:0:0:0:0",
+        isUnspecified:
+          localAddress === "0.0.0.0" || localAddress === "0:0:0:0:0:0:0:0",
         localAddress,
       };
 
@@ -314,7 +320,8 @@ function handle(call, id, payload) {
 
           if (remoteSocket[symbolSocketUdpIpUnspecified].isUnspecified) {
             // cache original bound address
-            rinfo._address = remoteSocket[symbolSocketUdpIpUnspecified].localAddress;
+            rinfo._address =
+              remoteSocket[symbolSocketUdpIpUnspecified].localAddress;
           }
 
           const receiverSocket = {

@@ -60,6 +60,7 @@ const globalBoundAddresses = new Map();
 // TODO: implement would-block exceptions
 // TODO: implement concurrency-conflict exceptions
 export class TcpSocketImpl {
+  #allowed;
   id = 1;
   /** @type {TCP.TCPConstants.SOCKET} */ #socket = null;
   /** @type {Network} */ network = null;
@@ -206,6 +207,8 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already bound. (EINVAL)
    */
   startBind(network, localAddress) {
+    if (!this.allowed())
+      throw 'access-denied';
     try {
       assert(this[symbolSocketState].isBound, "invalid-state", "The socket is already bound");
 
@@ -292,6 +295,8 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already in the Listener state. (EOPNOTSUPP, EINVAL on Windows)
    */
   startConnect(network, remoteAddress) {
+    if (!this.allowed())
+      throw 'access-denied';
     const host = serializeIpAddress(remoteAddress);
     const ipFamily = `ipv${isIP(host)}`;
     try {
@@ -396,6 +401,8 @@ export class TcpSocketImpl {
    * @throws {invalid-state} The socket is already in the Listener state.
    */
   startListen() {
+    if (!this.allowed())
+      throw 'access-denied';
     try {
       assert(this[symbolSocketState].lastErrorState !== null, "invalid-state");
       assert(this[symbolSocketState].isBound === false, "invalid-state");
@@ -447,6 +454,8 @@ export class TcpSocketImpl {
    * @throws {new-socket-limit} The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
    */
   accept() {
+    if (!this.allowed())
+      throw 'access-denied';
     this[symbolOperations].accept++;
 
     try {

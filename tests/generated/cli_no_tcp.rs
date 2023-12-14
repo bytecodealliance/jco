@@ -10,7 +10,7 @@ fn cli_no_tcp() -> anyhow::Result<()> {
     let wasi_file = "./tests/rundir/cli_no_tcp.component.wasm";
     let _ = fs::remove_dir_all("./tests/rundir/cli_no_tcp");
 
-    let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/cli_no_tcp --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
+    let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/cli_no_tcp --jco-import ./tests/virtualenvs/deny-tcp.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
 
     cmd.run()?;
     Ok(())
