@@ -56,7 +56,7 @@ jobs:
 
     - uses: actions/setup-node@v3
       with:
-        node-version: 'lts/*'
+        node-version: ${{ matrix.node }}
     - name: Install NPM packages
       run: npm install
 
