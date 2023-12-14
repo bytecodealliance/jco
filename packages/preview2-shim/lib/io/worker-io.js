@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 import { createSyncFn } from "../synckit/index.js";
 import {
   CALL_MASK,
-  CALL_SHIFT,
   CALL_TYPE_MASK,
   INPUT_STREAM_BLOCKING_READ,
   INPUT_STREAM_BLOCKING_SKIP,
@@ -24,6 +23,9 @@ import {
   POLL_POLL_LIST,
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
+  HTTP_SERVER_INCOMING_HANDLER,
+  callTypeMap,
+  callMap
 } from "./calls.js";
 import { STDERR } from "./calls.js";
 
@@ -33,18 +35,38 @@ const workerPath = fileURLToPath(
   new URL("./worker-thread.js", import.meta.url)
 );
 
+
+const httpIncomingHandlers = new Map();
+export function registerIncomingHttpHandler (id, handler) {
+  httpIncomingHandlers.set(id, handler);
+}
+
+const instanceId = Math.round(Math.random() * 1000).toString();
+
 /**
  * @type {(call: number, id: number | null, payload: any) -> any}
  */
-export let ioCall = createSyncFn(workerPath);
+export let ioCall = createSyncFn(workerPath, (type, id, payload) => {
+  // 'callbacks' from the worker
+  // ONLY happens for an http server incoming handler, and NOTHING else (not even sockets, since accept is sync!)
+  if (type !== HTTP_SERVER_INCOMING_HANDLER)
+    throw new Error('Internal error: only incoming handler callback is permitted');
+  const handler = httpIncomingHandlers.get(id);
+  if (!handler)
+    throw new Error(`Internal error: no incoming handler registered for server ${id}`);
+  handler(payload);
+});
 if (DEBUG) {
   const _ioCall = ioCall;
   ioCall = function ioCall(num, id, payload) {
+    if (typeof id !== 'number' && id !== null)
+      throw new Error('id must be a number or null');
     let ret;
     try {
-      process._rawDebug(
-        (num & CALL_MASK) >> CALL_SHIFT,
-        num & CALL_TYPE_MASK,
+      console.error(
+        instanceId,
+        callMap[(num & CALL_MASK)],
+        callTypeMap[num & CALL_TYPE_MASK],
         id,
         payload
       );
@@ -54,7 +76,7 @@ if (DEBUG) {
       ret = e;
       throw ret;
     } finally {
-      process._rawDebug("->", ret);
+      console.error(instanceId, "->", ret);
     }
   };
 }

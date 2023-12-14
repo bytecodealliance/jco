@@ -1,14 +1,69 @@
-import { Readable } from "node:stream";
 import { createStream, getStreamOrThrow } from "./worker-thread.js";
+import { createServer, request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { parentPort } from "node:worker_threads";
+import { HTTP_SERVER_INCOMING_HANDLER } from "./calls.js";
+
+const servers = new Map();
+
+let responseCnt = 0;
+const responses = new Map();
+
+export async function stopHttpServer(id) {
+  await new Promise((resolve) => servers.get(id).close(resolve));
+}
+
+export function clearOutgoingResponse(id) {
+  responses.delete(id);
+}
+
+export async function setOutgoingResponse(
+  id,
+  { statusCode, headers, streamId }
+) {
+  const response = responses.get(id);
+  const textDecoder = new TextDecoder();
+  response.writeHead(
+    statusCode,
+    Object.fromEntries(
+      headers.map(([key, val]) => [key, textDecoder.decode(val)])
+    )
+  );
+  const { stream } = getStreamOrThrow(streamId);
+  stream.pipe(response);
+  responses.delete(id);
+}
+
+export async function startHttpServer(id, { port, host }) {
+  const server = createServer((req, res) => {
+    // create the streams and their ids
+    const streamId = createStream(req);
+    const responseId = ++responseCnt;
+    parentPort.postMessage({
+      type: HTTP_SERVER_INCOMING_HANDLER,
+      id,
+      payload: {
+        responseId,
+        method: req.method,
+        pathWithQuery: req.url,
+        headers: Object.entries(req.headers),
+        streamId,
+      },
+    });
+    responses.set(responseId, res);
+  });
+  await new Promise((resolve, reject) => {
+    server.listen(port, host, resolve);
+    server.on("error", reject);
+  });
+  servers.set(id, server);
+}
 
 export async function createHttpRequest(method, url, headers, bodyId) {
-  let body = null;
+  let stream = null;
   if (bodyId) {
     try {
-      const { stream } = getStreamOrThrow(bodyId);
-      body = stream.readableBodyStream;
-      // this indicates we're attached
-      stream.readableBodyStream = null;
+      ({ stream } = getStreamOrThrow(bodyId));
     } catch (e) {
       if (e.tag === "closed")
         throw { tag: "internal-error", val: "Unexpected closed body stream" };
@@ -25,71 +80,81 @@ export async function createHttpRequest(method, url, headers, bodyId) {
     }
   }
   try {
-    const res = await fetch(url, {
-      method,
-      headers: new Headers(headers),
-      body,
-      redirect: "manual",
-      duplex: "half",
+    // Make a request
+    const parsedUrl = new URL(url);
+    let req;
+    switch (parsedUrl.protocol) {
+      case 'http:':
+        req = httpRequest({
+          method,
+          host: parsedUrl.hostname,
+          port: parsedUrl.port,
+          path: parsedUrl.pathname + parsedUrl.search,
+          headers
+        });
+        break;
+      case 'https:':
+        req = httpsRequest({
+          method,
+          host: parsedUrl.hostname,
+          port: parsedUrl.port,
+          path: parsedUrl.pathname + parsedUrl.search,
+          headers
+        });
+        break;
+      default:
+        throw { tag: 'HTTP-protocol-error' };
+    }
+    if (stream) {
+      stream.pipe(req);
+    } else {
+      req.end();
+    }
+    const res = await new Promise((resolve, reject) => {
+      req.on('response', resolve);
+      req.on('close', () => reject);
+      req.on('error', reject);
     });
-    const bodyStreamId = createStream(Readable.fromWeb(res.body));
+    res.on('end', () => void res.emit("readable"));
+    const bodyStreamId = createStream(res);
     return {
-      status: res.status,
-      headers: Array.from(res.headers),
+      status: res.statusCode,
+      headers: Array.from(Object.entries(res.headers)),
       bodyStreamId: bodyStreamId,
     };
   } catch (e) {
-    if (e?.cause) {
-      let err = e.cause;
-      if (e.cause instanceof AggregateError) err = e.cause.errors[0];
-      if (err.message === "unknown scheme")
+    if (e?.tag)
+      throw e;
+    const err = getFirstError(e);
+    switch (err.code) {
+      case "ECONNRESET":
+        throw { tag: "HTTP-protocol-error" };
+      case "ENOTFOUND":
         throw {
-          tag: "HTTP-protocol-error",
+          tag: "DNS-error",
+          val: {
+            rcode: err.code,
+            infoCode: err.errno,
+          },
         };
-      switch (err.syscall) {
-        case "connect": {
-          if (err.code === "ECONNREFUSED")
-            throw {
-              tag: "connection-refused",
-            };
-          break;
-        }
-        case "getaddrinfo": {
-          const { errno, code } = err;
-          throw {
-            tag: "DNS-error",
-            val: {
-              rcode: code,
-              infoCode: errno,
-            },
-          };
-        }
-      }
+      case "ECONNREFUSED":
+        throw {
+          tag: "connection-refused",
+        };
     }
-    if (e?.message?.includes("Failed to parse URL")) {
-      throw {
-        tag: "HTTP-request-URI-invalid",
-        val: undefined,
-      };
-    }
-    if (e?.message?.includes("HTTP")) {
-      switch (e?.message.replace(/'[^']+'/, "'{}'")) {
-        case "'{}' HTTP method is unsupported.":
-          throw {
-            tag: "HTTP-protocol-error",
-            val: undefined,
-          };
-        case "'{}' is not a valid HTTP method.":
-          throw {
-            tag: "HTTP-request-method-invalid",
-            val: undefined,
-          };
-      }
-      throw {
-        tag: "internal-error",
-        val: e.toString(),
-      };
-    }
-    throw e;
+    throw {
+      tag: "internal-error",
+      val: err.toString(),
+    };
   }
+}
+
+function getFirstError (e) {
+  if (typeof e !== 'object' || e === null)
+    return e;
+  if (e.cause)
+    return getFirstError(e.cause);
+  if (e instanceof AggregateError)
+    return getFirstError(e.errors[0]);
+  return e;
 }

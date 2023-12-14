@@ -20,13 +20,14 @@
 
 ## Overview
 
-`jco` is a fully native JS tool for working with [WebAssembly Components](https://github.com/WebAssembly/component-model) in JavaScript.
+JCO provides a fully native JS toolchain for working with [WebAssembly Components](https://github.com/WebAssembly/component-model) in JavaScript.
 
 Features include:
 
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
 * WASI Preview2 support in Node.js ([undergoing stabilization](https://github.com/bytecodealliance/jco/milestone/1)) & browsers (experimental).
 * Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments, as well as optimization helper for Components via Binaryen.
+* Run and serve commands like Wasmtime, as JS implementations of the Command and HTTP Proxy worlds.
 * "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
 
 For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
@@ -39,7 +40,7 @@ For creating components in other languages, see the [Cargo Component](https://gi
 npm install @bytecodealliance/jco
 ```
 
-jco can be used as either a library or a CLI via the `jco` CLI command.
+JCO can be used as either a library import or as a CLI via the `jco` command.
 
 ## Example
 
@@ -60,7 +61,8 @@ Options:
 Commands:
   componentize [options] <js-source>    Create a component from a JavaScript module
   transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
-  run <command> [args...]               Run a WebAssembly Command component
+  run [options] <command> [args...]     Run a WASI Command component
+  serve [options] <command> [args...]   Serve a WASI HTTP component
   opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations
   wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
   print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]
@@ -116,9 +118,9 @@ Options include:
 
 To directly call into the transpilation in Rust, the bindgen used in jco is also available on crates.io as [js-component-bindgen](https://crates.io/crates/js-component-bindgen).
 
-### Run
+### Run & Serve
 
-For Wasm components that implement the WASI Command world, a `jco run` utility is provided to run these applications in Node.js:
+For Wasm components that implement the WASI Command world, a `jco run` utility is provided to run these applications in Node.js.
 
 ```
 jco run cowasy.component.wasm hello
@@ -126,7 +128,13 @@ jco run cowasy.component.wasm hello
 
 Using the preview2-shim WASI implementation, full access to the underlying system primitives is provided, including filesystem and environment variable permissions.
 
-> [preview2-shim](packages/preview2-shim) is currently being stabilized in Node.js, tracking in https://github.com/bytecodealliance/jco/milestone/1.
+For HTTP Proxy components, `jco serve` provides a JS server implementation:
+
+```
+jco serve --port 8080 server.wasm
+```
+
+> [Wasmtime](https://github.com/bytecodealliance/wasmtime) generally provides the most performant implementation for executing command and proxy worlds to use. These implementations are rather for when JS virtualization is required or the most convenient approach.
 
 ### Componentize
 

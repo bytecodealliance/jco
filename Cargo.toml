@@ -13,7 +13,6 @@ members = [
     "crates/js-component-bindgen",
     "crates/js-component-bindgen-component",
     "crates/wasm-tools-component",
-    "crates/test-utils",
     "xtask",
 ]
 resolver = "2"
@@ -58,4 +57,3 @@ xshell = "0.2.5"
 anyhow = { workspace = true }
 tempdir = { workspace = true }
 xshell = { workspace = true }
-test-utils = { path = "./crates/test-utils" }

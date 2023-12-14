@@ -2,7 +2,7 @@
   "include": ["runtime/*.ts"],
   "compilerOptions": {
     "outDir": "output",
-    "module": "esnext",
+    "module": "nodenext",
     "moduleResolution": "nodenext",
     "target": "es2020",
     "strict": true,

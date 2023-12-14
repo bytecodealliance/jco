@@ -1,9 +1,15 @@
 import { resolve } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { _rawDebug, exit, hrtime, stderr, stdout } from "node:process";
-import { Writable } from "node:stream";
 import { runAsWorker } from "../synckit/index.js";
-import { createHttpRequest } from "./worker-http.js";
+import {
+  createHttpRequest,
+  startHttpServer,
+  stopHttpServer,
+  setOutgoingResponse,
+  clearOutgoingResponse,
+} from "./worker-http.js";
+import { PassThrough } from "node:stream";
 
 import {
   CALL_MASK,
@@ -18,6 +24,8 @@ import {
   HTTP,
   HTTP_CREATE_REQUEST,
   HTTP_OUTPUT_STREAM_FINISH,
+  HTTP_SERVER_START,
+  HTTP_SERVER_STOP,
   INPUT_STREAM_BLOCKING_READ,
   INPUT_STREAM_BLOCKING_SKIP,
   INPUT_STREAM_CREATE,
@@ -62,6 +70,8 @@ import {
   STDERR,
   STDIN,
   STDOUT,
+  HTTP_SERVER_SET_OUTGOING_RESPONSE,
+  HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
 } from "./calls.js";
 import { createUdpSocket } from "./worker-socket-udp.js";
 
@@ -117,6 +127,8 @@ function streamError(streamId, stream, err) {
  * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, flushPromise: Promise<void> | null }}
  */
 export function getStreamOrThrow(streamId) {
+  if (!streamId)
+    throw new Error('Internal error: no stream id provided');
   const stream = unfinishedStreams.get(streamId);
   // not in unfinished streams <=> closed
   if (!stream) throw { tag: "closed" };
@@ -193,12 +205,10 @@ function handle(call, id, payload) {
       return createFuture(createHttpRequest(method, url, headers, body));
     }
     case OUTPUT_STREAM_CREATE | HTTP: {
-      const webTransformStream = new TransformStream();
-      const stream = Writable.fromWeb(webTransformStream.writable);
+      const stream = new PassThrough();
       // content length is passed as payload
       stream.contentLength = payload;
       stream.bytesRemaining = payload;
-      stream.readableBodyStream = webTransformStream.readable;
       return createStream(stream);
     }
     case OUTPUT_STREAM_SUBSCRIBE | HTTP:
@@ -206,20 +216,18 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP: {
       // http flush is a noop
       const { stream } = getStreamOrThrow(id);
-      // this existing indicates it's still unattached
-      // therefore there is no subscribe or backpressure
-      if (stream.readableBodyStream) {
-        switch (call) {
-          case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP:
-            return handle(OUTPUT_STREAM_WRITE | HTTP, id, payload);
-          case OUTPUT_STREAM_FLUSH | HTTP:
-            return;
-          case OUTPUT_STREAM_SUBSCRIBE | HTTP:
-            return 0;
+      if (call === (OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP)) {
+        stream.bytesRemaining -= payload.byteLength;
+        if (stream.bytesRemaining < 0) {
+          throw {
+            tag: "last-operation-failed",
+            val: {
+              tag: "HTTP-request-body-size",
+              val: stream.contentLength - stream.bytesRemaining,
+            },
+          };
         }
       }
-      if (call === (OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH | HTTP))
-        stream.bytesRemaining -= payload.byteLength;
       // otherwise fall through to generic implementation
       return handle(call & ~HTTP, id, payload);
     }
@@ -259,6 +267,14 @@ function handle(call, id, payload) {
       stream.end();
       break;
     }
+    case HTTP_SERVER_START:
+      return startHttpServer(id, payload);
+    case HTTP_SERVER_STOP:
+      return stopHttpServer(id);
+    case HTTP_SERVER_SET_OUTGOING_RESPONSE:
+      return setOutgoingResponse(id, payload);
+    case HTTP_SERVER_CLEAR_OUTGOING_RESPONSE:
+      return clearOutgoingResponse(id);
 
     // Sockets
 

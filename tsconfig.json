@@ -2,6 +2,8 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules", "src/cmd/**", "src/*.d.ts"],
   "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "allowJs": true,
     "declaration": true,
     "emitDeclarationOnly": true,

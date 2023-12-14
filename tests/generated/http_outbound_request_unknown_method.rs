@@ -2,15 +2,12 @@
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-use tempdir::TempDir;
 use xshell::{cmd, Shell};
 
 #[test]
 fn http_outbound_request_unknown_method() -> anyhow::Result<()> {
     let sh = Shell::new()?;
-    let file_name = "http_outbound_request_unknown_method";
-    let tempdir = TempDir::new("{file_name}")?;
-    let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
+    let wasi_file = "./tests/rundir/http_outbound_request_unknown_method.component.wasm";
     let _ = fs::remove_dir_all("./tests/rundir/http_outbound_request_unknown_method");
 
     let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/http_outbound_request_unknown_method --jco-import ./tests/virtualenvs/http.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");

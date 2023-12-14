@@ -140,7 +140,6 @@ suite("Node.js Preview2", () => {
     request.setScheme({ tag: "HTTPS" });
 
     const outgoingBody = request.body();
-    outgoingBody[symbolDispose]();
     OutgoingBody.finish(outgoingBody);
 
     const futureIncomingResponse = handle(request);

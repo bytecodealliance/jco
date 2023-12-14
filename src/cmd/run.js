@@ -10,7 +10,54 @@ import c from 'chalk-template';
 export async function run (componentPath, args, opts) {
   // Ensure that `args` is an array
   args = [...args];
+  return runComponent(componentPath, args, opts, `
+    if (!mod.run || !mod.run.run) {
+      console.error('Not a valid command component to execute.');
+      process.exit(1);
+    }
+    try {
+      mod.run.run();
+      // for stdout flushing
+      await new Promise(resolve => setTimeout(resolve));
+      process.exit(0);
+    }
+    catch (e) {
+      console.error(e);
+      process.exit(1);
+    }
+  `);
+}
 
+export async function serve (componentPath, args, opts) {
+  let tryFindPort = false;
+  let { port, host } = opts;
+  if (port === undefined) {
+    tryFindPort = true;
+    port = '8000';
+  }
+  // Ensure that `args` is an array
+  args = [...args];
+  return runComponent(componentPath, args, opts, `
+    import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
+    const server = new HTTPServer(mod.incomingHandler);
+    ${tryFindPort ? `
+    let port = ${port};
+    while (true) {
+      try {
+        server.listen(port, ${JSON.stringify(host)});
+        break;
+      } catch (e) {
+        if (e.code !== 'EADDRINUSE')
+          throw e;
+      }
+      port++;
+    }
+    ` : `server.listen(${port}, ${JSON.stringify(host)})`}
+    console.error(\`Server listening on \${port}...\`);
+  `);
+}
+
+async function runComponent (componentPath, args, opts, executor) {
   const jcoImport = opts.jcoImport ? resolve(opts.jcoImport) : null;
 
   const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
@@ -18,6 +65,7 @@ export async function run (componentPath, args, opts) {
   if (opts.jcoDir) {
     await mkdir(outDir, { recursive: true });
   }
+
   try {
     try {
       await transpile(componentPath, {
@@ -26,7 +74,8 @@ export async function run (componentPath, args, opts) {
         noTypescript: true,
         wasiShim: true,
         outDir,
-        tracing: opts.jcoTrace
+        tracing: opts.jcoTrace,
+        map: opts.jcoMap
       });
     }
     catch (e) {
@@ -63,31 +112,11 @@ export async function run (componentPath, args, opts) {
     const runPath = resolve(outDir, '_run.js');
     await writeFile(runPath, `
       ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ''}
-
-      function logInvalidCommand () {
-        console.error('Not a valid command component to execute, make sure it was built to a command adapter and with the same version.');
-      }
       try {
         process.argv[1] = "${name}";
-        const mod = await import('./${name}.js');
-        if (!mod.run || !mod.run.run) {
-          logInvalidCommand();
-          process.exit(1);
-        }
-        try {
-          mod.run.run();
-          // TODO: figure out stdout flush!
-          setTimeout(() => {});
-        }
-        catch (e) {
-          console.error(e);
-          process.exit(1);
-        }
-      }
-      catch (e) {
-        logInvalidCommand();
-        throw e;
-      }
+      } catch {}
+      const mod = await import('./${name}.js');
+      ${executor}
     `);
 
     process.exitCode = await new Promise((resolve, reject) => {

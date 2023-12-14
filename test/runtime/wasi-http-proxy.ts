@@ -1,16 +1,14 @@
 import * as assert from 'node:assert';
 // @ts-ignore
-import { commands, incomingHandler } from '../output/wasi-http-proxy/wasi-http-proxy.js';
-// import { types } from '@bytecodealliance/preview2-shim/http';
-// const { IncomingRequest, ResponseOutparam } = types;
+import { commands } from '../output/wasi-http-proxy/wasi-http-proxy.js';
 
 const defaultHeaders: [string, string][] = [
-  ['connection', 'keep-alive'],
   ['content-type', 'text/plain'],
+  ['x-wasi', 'mock-server'],
   ['date', 'null'],
+  ['connection', 'keep-alive'],
   ['keep-alive', 'timeout=5'],
   ['transfer-encoding', 'chunked'],
-  ['x-wasi', 'mock-server'],
 ];
 
 assert.equal(
@@ -29,6 +27,3 @@ assert.equal(
     body: '{"key":"value"}',
   })
 );
-
-// const handle = () => incomingHandler.handle(new IncomingRequest(), new ResponseOutparam());
-// assert.throws(handle, WebAssembly.RuntimeError('unreachable'));

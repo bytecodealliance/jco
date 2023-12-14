@@ -2,15 +2,12 @@
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-use tempdir::TempDir;
 use xshell::{cmd, Shell};
 
 #[test]
 fn preview2_tcp_bind() -> anyhow::Result<()> {
     let sh = Shell::new()?;
-    let file_name = "preview2_tcp_bind";
-    let tempdir = TempDir::new("{file_name}")?;
-    let wasi_file = test_utils::compile(&sh, &tempdir, &file_name)?;
+    let wasi_file = "./tests/rundir/preview2_tcp_bind.component.wasm";
     let _ = fs::remove_dir_all("./tests/rundir/preview2_tcp_bind");
 
     let cmd = cmd!(sh, "node ./src/jco.js run  --jco-dir ./tests/rundir/preview2_tcp_bind --jco-import ./tests/virtualenvs/base.js {wasi_file} hello this '' 'is an argument' 'with 🚩 emoji'");
