@@ -26,11 +26,19 @@ import {
   SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
 } from "../../io/calls.js";
 import { ioCall, pollableCreate } from "../../io/worker-io.js";
-import { deserializeIpAddress, isIPv4MappedAddress, isWildcardAddress, serializeIpAddress } from "./socket-common.js";
+import {
+  deserializeIpAddress,
+  findUnsuedLocalAddress,
+  isIPv4MappedAddress,
+  isWildcardAddress,
+  serializeIpAddress,
+} from "./socket-common.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
-const symbolSocketState = Symbol.SocketInternalState || Symbol.for("SocketInternalState");
-const symbolOperations = Symbol.SocketOperationsState || Symbol.for("SocketOperationsState");
+const symbolSocketState =
+  Symbol.SocketInternalState || Symbol.for("SocketInternalState");
+const symbolOperations =
+  Symbol.SocketOperationsState || Symbol.for("SocketOperationsState");
 
 // TODO: move to a common
 const SocketConnectionState = {
@@ -261,6 +269,17 @@ export class UdpSocket {
     return socket;
   }
 
+  #autoBind(network, ipFamily) {
+    const localAddress = findUnsuedLocalAddress(ipFamily);
+    this.#socketOptions.localAddress = serializeIpAddress(
+      localAddress,
+      this.#socketOptions.family
+    );
+    this.#socketOptions.localPort = localAddress.val.port;
+    this.startBind(network, localAddress);
+    this.finishBind();
+  }
+
   #cacheBoundAddress() {
     let { localIpSocketAddress: boundAddress, localPort } = this.#socketOptions;
     // when port is 0, the OS will assign an ephemeral port
@@ -280,18 +299,27 @@ export class UdpSocket {
    * @throws {invalid-state} The socket is already bound. (EINVAL)
    */
   startBind(network, localAddress) {
-    if (!this.allowed())
-      throw 'access-denied';
+    if (!this.allowed()) throw "access-denied";
     try {
-      assert(this[symbolSocketState].isBound, "invalid-state", "The socket is already bound");
+      assert(
+        this[symbolSocketState].isBound,
+        "invalid-state",
+        "The socket is already bound"
+      );
 
       const address = serializeIpAddress(localAddress);
       const ipFamily = `ipv${isIP(address)}`;
 
       assert(
-        this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(),
+        this.#socketOptions.family.toLocaleLowerCase() !==
+          ipFamily.toLocaleLowerCase(),
         "invalid-argument",
         "The `local-address` has the wrong address family"
+      );
+
+      assert(
+        isIPv4MappedAddress(localAddress) && this.ipv6Only(),
+        "invalid-argument"
       );
 
       const { port } = localAddress.val;
@@ -320,9 +348,15 @@ export class UdpSocket {
     try {
       assert(this[symbolOperations].bind === 0, "not-in-progress");
 
-      const { localAddress, localIpSocketAddress, localPort } = this.#socketOptions;
+      const { localAddress, localIpSocketAddress, localPort } =
+        this.#socketOptions;
       assert(isIP(localAddress) === 0, "address-not-bindable");
-      assert(globalBoundAddresses.has(serializeIpAddress(localIpSocketAddress, true)), "address-in-use");
+      assert(
+        globalBoundAddresses.has(
+          serializeIpAddress(localIpSocketAddress, true)
+        ),
+        "address-in-use"
+      );
 
       const err = ioCall(SOCKET_UDP_BIND, this.id, {
         localAddress,
@@ -376,7 +410,11 @@ export class UdpSocket {
   #startConnect(network, remoteAddress = undefined) {
     this[symbolOperations].connect++;
 
-    if (remoteAddress === undefined || this[symbolSocketState].connectionState === SocketConnectionState.Connected) {
+    if (
+      remoteAddress === undefined ||
+      this[symbolSocketState].connectionState ===
+        SocketConnectionState.Connected
+    ) {
       this.#socketOptions.remoteAddress = undefined;
       this.#socketOptions.remotePort = 0;
       return;
@@ -387,14 +425,25 @@ export class UdpSocket {
       "invalid-argument",
       "The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`)"
     );
-    assert(isIPv4MappedAddress(remoteAddress) && this.ipv6Only(), "invalid-argument");
-    assert(remoteAddress.val.port === 0, "invalid-argument", "The port in `remote-address` is set to 0");
+    assert(
+      isIPv4MappedAddress(remoteAddress) && this.ipv6Only(),
+      "invalid-argument"
+    );
+    assert(
+      remoteAddress.val.port === 0,
+      "invalid-argument",
+      "The port in `remote-address` is set to 0"
+    );
 
     const host = serializeIpAddress(remoteAddress);
     const ipFamily = `ipv${isIP(host)}`;
 
     assert(ipFamily.toLocaleLowerCase() === "ipv0", "invalid-argument");
-    assert(this.#socketOptions.family.toLocaleLowerCase() !== ipFamily.toLocaleLowerCase(), "invalid-argument");
+    assert(
+      this.#socketOptions.family.toLocaleLowerCase() !==
+        ipFamily.toLocaleLowerCase(),
+      "invalid-argument"
+    );
 
     const { port } = remoteAddress.val;
     this.#socketOptions.remoteAddress = host; // can be undefined
@@ -414,7 +463,11 @@ export class UdpSocket {
     const { remoteAddress, remotePort } = this.#socketOptions;
     this[symbolSocketState].connectionState = SocketConnectionState.Connecting;
 
-    if (remoteAddress === undefined || this[symbolSocketState].connectionState === SocketConnectionState.Connected) {
+    if (
+      remoteAddress === undefined ||
+      this[symbolSocketState].connectionState ===
+        SocketConnectionState.Connected
+    ) {
       return;
     }
 
@@ -471,13 +524,22 @@ export class UdpSocket {
    * @throws {connection-refused} The connection was refused. (ECONNREFUSED)
    */
   stream(remoteAddress = undefined) {
+    assert(this[symbolSocketState].lastErrorState !== null, "invalid-state");
+
     // Note: to comply with test programs, we cannot throw if the socket is not bound (as required by the spec - see udp.wit)
     // assert(this[symbolSocketState].isBound === false, "invalid-state");
 
-    if (this[symbolSocketState].connectionState === SocketConnectionState.Connected) {
+    if (
+      this[symbolSocketState].connectionState ===
+      SocketConnectionState.Connected
+    ) {
       // stream() can be called multiple times, so we need to disconnect first if we are already connected
       // Note: disconnect() will also reset the connection state but does not close the socket handle!
       this.#disconnect();
+    }
+
+    if (remoteAddress) {
+      this.#connect(this.network, remoteAddress);
     }
 
     // reconfigure remote host and port.
@@ -487,9 +549,10 @@ export class UdpSocket {
     this.#socketOptions.remoteAddress = host; // host can be undefined
     this.#socketOptions.remotePort = port;
 
-    // reconnect to the remote host
-    // this.#connect(this.network, remoteAddress);
-    return [incomingDatagramStreamCreate(this.id), outgoingDatagramStreamCreate(this.id)];
+    return [
+      incomingDatagramStreamCreate(this.id),
+      outgoingDatagramStreamCreate(this.id),
+    ];
   }
 
   /**
@@ -523,14 +586,19 @@ export class UdpSocket {
    */
   remoteAddress() {
     assert(
-      this[symbolSocketState].connectionState !== SocketConnectionState.Connected,
+      this[symbolSocketState].connectionState !==
+        SocketConnectionState.Connected,
       "invalid-state",
       "The socket is not streaming to a specific remote address"
     );
 
     const out = ioCall(SOCKET_UDP_GET_REMOTE_ADDRESS, this.id);
 
-    assert(out.address === undefined, "invalid-state", "The socket is not streaming to a specific remote address");
+    assert(
+      out.address === undefined,
+      "invalid-state",
+      "The socket is not streaming to a specific remote address"
+    );
 
     const { address, port, family } = out;
     this.#socketOptions.remoteAddress = address;
@@ -560,7 +628,11 @@ export class UdpSocket {
    * @throws {not-supported} (get/set) `this` socket is an IPv4 socket.
    */
   ipv6Only() {
-    assert(this.#socketOptions.family.toLocaleLowerCase() === "ipv4", "not-supported", "Socket is an IPv4 socket.");
+    assert(
+      this.#socketOptions.family.toLocaleLowerCase() === "ipv4",
+      "not-supported",
+      "Socket is an IPv4 socket."
+    );
 
     return this[symbolSocketState].ipv6Only;
   }
@@ -575,11 +647,16 @@ export class UdpSocket {
    */
   setIpv6Only(value) {
     assert(
-      value === true && this.#socketOptions.family.toLocaleLowerCase() === "ipv4",
+      value === true &&
+        this.#socketOptions.family.toLocaleLowerCase() === "ipv4",
       "not-supported",
       "Socket is an IPv4 socket."
     );
-    assert(this[symbolSocketState].isBound, "invalid-state", "The socket is already bound");
+    assert(
+      this[symbolSocketState].isBound,
+      "invalid-state",
+      "The socket is already bound"
+    );
 
     this[symbolSocketState].ipv6Only = value;
   }
@@ -610,16 +687,19 @@ export class UdpSocket {
    * @returns {bigint}
    */
   receiveBufferSize() {
+    // `receiveBufferSize()` would throws EBADF if called on an unbound socket.
     // TODO: should we throw if the socket is not bound?
     // assert(this[symbolSocketState].isBound === false, "invalid-state");
 
+    // or we can auto-bind the socket if it's not bound?
+    if (this[symbolSocketState].isBound === false) {
+      this.#autoBind(this.network, this.#socketOptions.family);
+    }
+
+    // Note: on WSL, this may report a different value than the one set!
     const ret = ioCall(SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE, this.id);
 
-    // if (ret === -9) {
-    //   // TODO: handle the case where bad file descriptor (EBADF) is returned
-    //   // This happens when the socket is not bound
-    //   return this[symbolSocketState].receiveBufferSize;
-    // }
+    assert(ret === -9, "invalid-state"); // EBADF
 
     return ret;
   }
@@ -633,7 +713,7 @@ export class UdpSocket {
   setReceiveBufferSize(value) {
     assert(value === 0n, "invalid-argument", "The provided value was 0");
 
-    // value = cappedUint32(value);
+    value = Number(value);
     ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.id, { value });
   }
 
@@ -646,7 +726,6 @@ export class UdpSocket {
     // assert(this[symbolSocketState].isBound === false, "invalid-state");
 
     const ret = ioCall(SOCKET_UDP_GET_SEND_BUFFER_SIZE, this.id);
-
     // if (ret === -9) {
     //   // TODO: handle the case where bad file descriptor (EBADF) is returned
     //   // This happens when the socket is not bound

@@ -73,11 +73,7 @@ import {
   HTTP_SERVER_SET_OUTGOING_RESPONSE,
   HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
 } from "./calls.js";
-import { createUdpSocket } from "./worker-socket-udp.js";
-
-const symbolSocketUdpIpUnspecified =
-  Symbol.symbolSocketUdpIpUnspecified ??
-  Symbol.for("symbolSocketUdpIpUnspecified");
+import { SocketUdpReceive, createUdpSocket, getSocketOrThrow, socketUdpBind, socketUdpCheckSend, socketUdpConnect, socketUdpDisconnect, socketUdpDispose, socketUdpSend } from "./worker-socket-udp.js";
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -87,12 +83,6 @@ export const unfinishedPolls = new Map();
 
 /** @type {Map<number, { flushPromise: Promise<void> | null, stream: NodeJS.ReadableStream | NodeJS.WritableStream }>} */
 export const unfinishedStreams = new Map();
-
-/** @type {Map<number, NodeJS.Socket>} */
-export const openedSockets = new Map();
-
-/** @type {Map<number, Map<string, { data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>} */
-const queuedReceivedSocketDatagrams = new Map();
 
 /** @type {Map<number, { value: any, error: bool }>} */
 export const unfinishedFutures = new Map();
@@ -140,48 +130,6 @@ export function getStreamOrThrow(streamId) {
     throw { tag: "closed" };
   }
   return stream;
-}
-
-export function getSocketOrThrow(socketId) {
-  const socket = openedSockets.get(socketId);
-  if (!socket) throw "invalid-state";
-  return socket;
-}
-
-export function getSocketByPort(port) {
-  return Array.from(openedSockets.values()).find(
-    (socket) => socket.address().port === port
-  );
-}
-
-export function getBoundSockets(socketId) {
-  return Array.from(openedSockets.entries())
-    .filter(([id, _socket]) => id !== socketId) // exclude source socket
-    .map(([_id, socket]) => socket.address());
-}
-
-export function dequeueReceivedSocketDatagram(socketInfo, maxResults) {
-  const dgrams = queuedReceivedSocketDatagrams
-    .get(`PORT:${socketInfo.port}`)
-    .splice(0, Number(maxResults));
-  return dgrams;
-}
-export function enqueueReceivedSocketDatagram(socketInfo, { data, rinfo }) {
-  const key = `PORT:${socketInfo.port}`;
-  const chunk = {
-    data,
-    rinfo, // sender/remote socket info (source)
-    socketInfo, // receiver socket info (targeted socket)
-  };
-
-  // create new queue if not exists
-  if (!queuedReceivedSocketDatagrams.has(key)) {
-    queuedReceivedSocketDatagrams.set(key, []);
-  }
-
-  // append to queue
-  const queue = queuedReceivedSocketDatagrams.get(key);
-  queue.push(chunk);
 }
 
 function subscribeInstant(instant) {
@@ -306,130 +254,23 @@ function handle(call, id, payload) {
       return createFuture(createUdpSocket(addressFamily, reuseAddr));
     }
 
-    case SOCKET_UDP_BIND: {
-      const { localAddress, localPort } = payload;
-      const socket = getSocketOrThrow(id);
+    case SOCKET_UDP_BIND: 
+      return socketUdpBind(id, payload);
 
-      // Note: even if the client has bound to IPV4_UNSPECIFIED/IPV6_UNSPECIFIED (0.0.0.0 // ::),
-      // rinfo.address is resolved to IPV4_LOOPBACK/IPV6_LOOPBACK.
-      // We need to cache the original bound IP type and fix rinfo.address when receiving datagrams (see below)
-      // See https://github.com/WebAssembly/wasi-sockets/issues/86
-      socket[symbolSocketUdpIpUnspecified] = {
-        isUnspecified:
-          localAddress === "0.0.0.0" || localAddress === "0:0:0:0:0:0:0:0",
-        localAddress,
-      };
+    case SOCKET_UDP_CHECK_SEND: 
+      return socketUdpCheckSend(id);
 
-      return new Promise((resolve) => {
-        socket.bind(
-          {
-            address: localAddress,
-            port: localPort,
-          },
-          () => {
-            openedSockets.set(id, socket);
-            resolve(0);
-          }
-        );
+    case SOCKET_UDP_SEND: 
+      return socketUdpSend(id, payload);
 
-        socket.on("message", (data, rinfo) => {
-          const remoteSocket = getSocketByPort(rinfo.port);
-          let { address, port } = socket.address();
+    case SOCKET_UDP_RECEIVE: 
+      return SocketUdpReceive(id, payload);
 
-          if (remoteSocket[symbolSocketUdpIpUnspecified].isUnspecified) {
-            // cache original bound address
-            rinfo._address =
-              remoteSocket[symbolSocketUdpIpUnspecified].localAddress;
-          }
+    case SOCKET_UDP_CONNECT: 
+      return socketUdpConnect(id, payload);
 
-          const receiverSocket = {
-            address,
-            port,
-            id,
-          };
-
-          enqueueReceivedSocketDatagram(receiverSocket, { data, rinfo });
-        });
-
-        // catch all errors
-        socket.once("error", (err) => {
-          resolve(err.errno);
-        });
-      });
-    }
-
-    case SOCKET_UDP_CHECK_SEND: {
-      const socket = getSocketOrThrow(id);
-      try {
-        return socket.getSendBufferSize() - socket.getSendQueueSize();
-      } catch (err) {
-        return err.errno;
-      }
-    }
-
-    case SOCKET_UDP_SEND: {
-      let { remoteHost, remotePort, data } = payload;
-      const socket = getSocketOrThrow(id);
-
-      return new Promise((resolve) => {
-        const _callback = (err, _byteLength) => {
-          if (err) return resolve(err.errno);
-          resolve(0); // success
-        };
-
-        // Note: when remoteHost/remotePort is None, we broadcast to all bound sockets
-        // except the source socket
-        if (remotePort === undefined || remoteHost === undefined) {
-          getBoundSockets(id).forEach((adr) => {
-            socket.send(data, adr.port, adr.address, _callback);
-          });
-        } else {
-          socket.send(data, remotePort, remoteHost, _callback);
-        }
-
-        socket.once("error", (err) => {
-          resolve(err.errno);
-        });
-      });
-    }
-
-    case SOCKET_UDP_RECEIVE: {
-      const { maxResults } = payload;
-      const socket = getSocketOrThrow(id);
-      const { address, port } = socket.address();
-
-      // set target socket info
-      // we use this to filter out datagrams that are were sent to this socket
-      const targetSocket = {
-        address,
-        port,
-      };
-
-      const dgrams = dequeueReceivedSocketDatagram(targetSocket, maxResults);
-      return Promise.resolve(dgrams);
-    }
-
-    case SOCKET_UDP_CONNECT: {
-      const socket = getSocketOrThrow(id);
-      const { remoteAddress, remotePort } = payload;
-      return new Promise((resolve) => {
-        socket.connect(remotePort, remoteAddress, () => {
-          openedSockets.set(id, socket);
-          resolve(0);
-        });
-        socket.once("error", (err) => {
-          resolve(err.errno);
-        });
-      });
-    }
-
-    case SOCKET_UDP_DISCONNECT: {
-      const socket = getSocketOrThrow(id);
-      return new Promise((resolve) => {
-        socket.disconnect();
-        resolve(0);
-      });
-    }
+    case SOCKET_UDP_DISCONNECT: 
+      return socketUdpDisconnect(id);
 
     case SOCKET_UDP_GET_LOCAL_ADDRESS: {
       const socket = getSocketOrThrow(id);
@@ -465,7 +306,6 @@ function handle(call, id, payload) {
       try {
         return socket.getRecvBufferSize();
       } catch (err) {
-        // we are only interested in the errno
         return err.errno;
       }
     }
@@ -473,7 +313,7 @@ function handle(call, id, payload) {
     case SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE: {
       const socket = getSocketOrThrow(id);
       try {
-        return socket.setRecvBufferSize(payload.value);
+        return socket.setRecvBufferSize(65537);
       } catch (err) {
         return err.errno;
       }
@@ -515,15 +355,8 @@ function handle(call, id, payload) {
       break;
     }
 
-    case SOCKET_UDP_DISPOSE: {
-      const socket = getSocketOrThrow(id);
-      return new Promise((resolve) => {
-        socket.close(() => {
-          openedSockets.delete(id);
-          resolve(0);
-        });
-      });
-    }
+    case SOCKET_UDP_DISPOSE: 
+      return socketUdpDispose(id);
 
     // Stdio
     case OUTPUT_STREAM_BLOCKING_FLUSH | STDOUT:
