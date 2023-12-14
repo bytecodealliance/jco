@@ -914,7 +914,12 @@ impl<'a> Instantiator<'a, '_> {
                     .gen
                     .local_names
                     .get_or_create(
-                        &format!("import:{}-{}", import_name, &func.name),
+                        &format!(
+                            "import:{}-{}-{}",
+                            import_specifier,
+                            maybe_iface_member.as_deref().unwrap_or(""),
+                            &func.name
+                        ),
                         &func.name,
                     )
                     .0
