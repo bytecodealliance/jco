@@ -50,9 +50,6 @@ export async function startHttpServer(id, { port, host }) {
         streamId,
       },
     });
-    res.on('data', chunk => {
-      process._rawDebug(chunk);
-    });
     responses.set(responseId, res);
   });
   await new Promise((resolve, reject) => {

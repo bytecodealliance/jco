@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 import { createSyncFn } from "../synckit/index.js";
 import {
   CALL_MASK,
-  CALL_SHIFT,
   CALL_TYPE_MASK,
   INPUT_STREAM_BLOCKING_READ,
   INPUT_STREAM_BLOCKING_SKIP,
@@ -25,6 +24,8 @@ import {
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
   HTTP_SERVER_INCOMING_HANDLER,
+  callTypeMap,
+  callMap
 } from "./calls.js";
 import { STDERR } from "./calls.js";
 
@@ -39,6 +40,8 @@ const httpIncomingHandlers = new Map();
 export function registerIncomingHttpHandler (id, handler) {
   httpIncomingHandlers.set(id, handler);
 }
+
+const instanceId = Math.round(Math.random() * 1000).toString();
 
 /**
  * @type {(call: number, id: number | null, payload: any) -> any}
@@ -56,11 +59,14 @@ export let ioCall = createSyncFn(workerPath, (type, id, payload) => {
 if (DEBUG) {
   const _ioCall = ioCall;
   ioCall = function ioCall(num, id, payload) {
+    if (typeof id !== 'number' && id !== null)
+      throw new Error('id must be a number or null');
     let ret;
     try {
-      process._rawDebug(
-        (num & CALL_MASK) >> CALL_SHIFT,
-        num & CALL_TYPE_MASK,
+      console.error(
+        instanceId,
+        callMap[(num & CALL_MASK)],
+        callTypeMap[num & CALL_TYPE_MASK],
         id,
         payload
       );
@@ -70,7 +76,7 @@ if (DEBUG) {
       ret = e;
       throw ret;
     } finally {
-      process._rawDebug("->", ret);
+      console.error(instanceId, "->", ret);
     }
   };
 }

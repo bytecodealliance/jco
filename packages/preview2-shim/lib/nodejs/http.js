@@ -30,12 +30,12 @@ let futureCnt = 1;
 
 class IncomingBody {
   #finished = false;
+  #calledStream = false;
   #streamId = undefined;
   stream() {
-    if (!this.#streamId) throw undefined;
-    const streamId = this.#streamId;
-    this.#streamId = undefined;
-    return inputStreamCreate(HTTP, streamId);
+    if (this.#calledStream) throw undefined;
+    this.#calledStream = true;
+    return inputStreamCreate(HTTP, this.#streamId);
   }
   static finish(incomingBody) {
     if (incomingBody.#finished)
@@ -634,7 +634,6 @@ export class HTTPServer {
                 .map(([key, val]) => [key, textEncoder.encode(val)])
             )
           ),
-          headers,
           streamId
         );
         const responseOutparam = responseOutparamCreate((response) => {

@@ -12,6 +12,7 @@ process.on('message', async msg => {
     return;
   }
   try {
+    console.error('Importing handler', msg);
     const component = await import(msg);
     server = new HTTPServer(component.incomingHandler);
 
