@@ -272,8 +272,10 @@ class OutgoingRequest {
     return this.#headers;
   }
   [symbolDispose]() {}
-  static _handle(request, _options) {
-    // TODO: handle options timeouts
+  static _handle(request, options) {
+    const connectTimeout = options?.connectTimeoutMs();
+    const betweenBytesTimeout = options?.betweenBytesTimeoutMs();
+    const firstByteTimeout = options?.firstByteTimeoutMs();
     const scheme = schemeString(request.#scheme);
     const url = scheme + request.#authority + (request.#pathWithQuery || "");
     const headers = [["host", request.#authority]];
@@ -285,7 +287,10 @@ class OutgoingRequest {
       request.#method.val || request.#method.tag,
       url,
       headers,
-      outgoingBodyOutputStreamId(request.#body)
+      outgoingBodyOutputStreamId(request.#body),
+      connectTimeout,
+      betweenBytesTimeout,
+      firstByteTimeout
     );
   }
 }
@@ -412,13 +417,16 @@ class FutureIncomingResponse {
   [symbolDispose]() {
     if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId);
   }
-  static _create(method, url, headers, body) {
+  static _create(method, url, headers, body, connectTimeout, betweenBytesTimeout, firstByteTimeout) {
     const res = new FutureIncomingResponse();
     res.#pollId = ioCall(HTTP_CREATE_REQUEST, null, {
       method,
       url,
       headers,
       body,
+      connectTimeout,
+      betweenBytesTimeout,
+      firstByteTimeout
     });
     return res;
   }
