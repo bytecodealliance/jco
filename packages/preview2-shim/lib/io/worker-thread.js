@@ -154,8 +154,26 @@ function handle(call, id, payload) {
   switch (call) {
     // Http
     case HTTP_CREATE_REQUEST: {
-      const { method, url, headers, body } = payload;
-      return createFuture(createHttpRequest(method, url, headers, body));
+      const {
+        method,
+        url,
+        headers,
+        body,
+        connectTimeout,
+        betweenBytesTimeout,
+        firstByteTimeout,
+      } = payload;
+      return createFuture(
+        createHttpRequest(
+          method,
+          url,
+          headers,
+          body,
+          connectTimeout,
+          betweenBytesTimeout,
+          firstByteTimeout
+        )
+      );
     }
     case OUTPUT_STREAM_CREATE | HTTP: {
       const stream = new PassThrough();
@@ -351,7 +369,6 @@ function handle(call, id, payload) {
     case INPUT_STREAM_CREATE | STDIN: {
       const stream = createReadStream(null, {
         fd: 0,
-        autoClose: false,
         highWaterMark: 64 * 1024,
       });
       // for some reason fs streams dont emit readable on end
@@ -622,7 +639,7 @@ function handle(call, id, payload) {
           for (const [idx, id] of payload.entries()) {
             if (!unfinishedPolls.has(id)) doneList.push(idx);
           }
-          if (doneList.length > 0) return doneList;
+          if (doneList.length > 0) return new Uint32Array(doneList);
           // if all polls are promise type, we just race them
           return Promise.race(
             payload.map((id) => unfinishedPolls.get(id))
@@ -632,7 +649,7 @@ function handle(call, id, payload) {
             }
             if (doneList.length === 0)
               throw new Error("poll promise did not unregister poll");
-            return doneList;
+            return new Uint32Array(doneList);
           });
         }
 

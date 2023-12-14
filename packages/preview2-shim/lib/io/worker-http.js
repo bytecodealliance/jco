@@ -1,8 +1,18 @@
 import { createStream, getStreamOrThrow } from "./worker-thread.js";
-import { createServer, request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import {
+  createServer,
+  request as httpRequest,
+  Agent as HttpAgent,
+} from "node:http";
+import { request as httpsRequest, Agent as HttpsAgent } from "node:https";
 import { parentPort } from "node:worker_threads";
 import { HTTP_SERVER_INCOMING_HANDLER } from "./calls.js";
+
+const agentOptions = {
+  keepAlive: true,
+};
+const httpAgent = new HttpAgent(agentOptions);
+const httpsAgent = new HttpsAgent(agentOptions);
 
 const servers = new Map();
 
@@ -59,7 +69,15 @@ export async function startHttpServer(id, { port, host }) {
   servers.set(id, server);
 }
 
-export async function createHttpRequest(method, url, headers, bodyId) {
+export async function createHttpRequest(
+  method,
+  url,
+  headers,
+  bodyId,
+  connectTimeout,
+  betweenBytesTimeout,
+  firstByteTimeout
+) {
   let stream = null;
   if (bodyId) {
     try {
@@ -84,26 +102,30 @@ export async function createHttpRequest(method, url, headers, bodyId) {
     const parsedUrl = new URL(url);
     let req;
     switch (parsedUrl.protocol) {
-      case 'http:':
+      case "http:":
         req = httpRequest({
+          agent: httpAgent,
           method,
           host: parsedUrl.hostname,
           port: parsedUrl.port,
           path: parsedUrl.pathname + parsedUrl.search,
-          headers
+          headers,
+          timeout: connectTimeout && Number(connectTimeout)
         });
         break;
-      case 'https:':
+      case "https:":
         req = httpsRequest({
+          agent: httpsAgent,
           method,
           host: parsedUrl.hostname,
           port: parsedUrl.port,
           path: parsedUrl.pathname + parsedUrl.search,
-          headers
+          headers,
+          timeout: connectTimeout && Number(connectTimeout)
         });
         break;
       default:
-        throw { tag: 'HTTP-protocol-error' };
+        throw { tag: "HTTP-protocol-error" };
     }
     if (stream) {
       stream.pipe(req);
@@ -111,11 +133,17 @@ export async function createHttpRequest(method, url, headers, bodyId) {
       req.end();
     }
     const res = await new Promise((resolve, reject) => {
-      req.on('response', resolve);
-      req.on('close', () => reject);
-      req.on('error', reject);
+      req.on("response", resolve);
+      req.on("close", () => reject);
+      req.on("error", reject);
     });
-    res.on('end', () => void res.emit("readable"));
+    if (firstByteTimeout)
+      res.setTimeout(Number(firstByteTimeout));
+    if (betweenBytesTimeout)
+      res.on("readable", () => {
+        res.setTimeout(Number(betweenBytesTimeout));
+      });
+    res.on("end", () => void res.emit("readable"));
     const bodyStreamId = createStream(res);
     return {
       status: res.statusCode,
@@ -123,8 +151,7 @@ export async function createHttpRequest(method, url, headers, bodyId) {
       bodyStreamId: bodyStreamId,
     };
   } catch (e) {
-    if (e?.tag)
-      throw e;
+    if (e?.tag) throw e;
     const err = getFirstError(e);
     switch (err.code) {
       case "ECONNRESET":
@@ -149,12 +176,9 @@ export async function createHttpRequest(method, url, headers, bodyId) {
   }
 }
 
-function getFirstError (e) {
-  if (typeof e !== 'object' || e === null)
-    return e;
-  if (e.cause)
-    return getFirstError(e.cause);
-  if (e instanceof AggregateError)
-    return getFirstError(e.errors[0]);
+function getFirstError(e) {
+  if (typeof e !== "object" || e === null) return e;
+  if (e.cause) return getFirstError(e.cause);
+  if (e instanceof AggregateError) return getFirstError(e.errors[0]);
   return e;
 }
