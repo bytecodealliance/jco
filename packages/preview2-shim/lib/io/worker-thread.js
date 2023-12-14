@@ -206,8 +206,26 @@ function handle(call, id, payload) {
   switch (call) {
     // Http
     case HTTP_CREATE_REQUEST: {
-      const { method, url, headers, body } = payload;
-      return createFuture(createHttpRequest(method, url, headers, body));
+      const {
+        method,
+        url,
+        headers,
+        body,
+        connectTimeout,
+        betweenBytesTimeout,
+        firstByteTimeout,
+      } = payload;
+      return createFuture(
+        createHttpRequest(
+          method,
+          url,
+          headers,
+          body,
+          connectTimeout,
+          betweenBytesTimeout,
+          firstByteTimeout
+        )
+      );
     }
     case OUTPUT_STREAM_CREATE | HTTP: {
       const stream = new PassThrough();
