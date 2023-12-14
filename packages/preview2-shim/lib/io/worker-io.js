@@ -231,16 +231,14 @@ class OutputStream {
     return streamIoErrorCall(
       OUTPUT_STREAM_SPLICE | this.#streamType,
       this.#id,
-      src.#id,
-      len
+      { src: src.#id, len }
     );
   }
   blockingSplice(src, len) {
     return streamIoErrorCall(
       OUTPUT_STREAM_BLOCKING_SPLICE | this.#streamType,
       this.#id,
-      inputStreamId(src),
-      len
+      { src: inputStreamId(src), len }
     );
   }
   subscribe() {
@@ -279,21 +277,16 @@ export const streams = { InputStream, OutputStream };
 
 class Pollable {
   #id;
-  #ready = false;
   get _id() {
     return this.#id;
   }
   ready() {
-    if (this.#ready) return true;
-    const ready = ioCall(POLL_POLLABLE_READY, this.#id);
-    if (ready) this.#ready = true;
-    return ready;
+    if (this.#id === 0) return true;
+    return ioCall(POLL_POLLABLE_READY, this.#id);
   }
   block() {
-    if (!this.#ready) {
-      ioCall(POLL_POLLABLE_BLOCK, this.#id);
-      this.#ready = true;
-    }
+    if (this.#id === 0) return;
+    ioCall(POLL_POLLABLE_BLOCK, this.#id);
   }
   static _getId(pollable) {
     return pollable.#id;
@@ -301,19 +294,12 @@ class Pollable {
   static _create(id) {
     const pollable = new Pollable();
     pollable.#id = id;
-    if (id === 0) pollable.#ready = true;
     return pollable;
-  }
-  static _markReady(pollable) {
-    pollable.#ready = true;
   }
 }
 
 export const pollableCreate = Pollable._create;
 delete Pollable._create;
-
-const pollableMarkReady = Pollable._markReady;
-delete Pollable._markReady;
 
 const pollableGetId = Pollable._getId;
 delete Pollable._getId;
@@ -321,11 +307,7 @@ delete Pollable._getId;
 export const poll = {
   Pollable,
   poll(list) {
-    const doneList = ioCall(POLL_POLL_LIST, null, list.map(pollableGetId));
-    for (const idx of doneList) {
-      pollableMarkReady(list[idx]);
-    }
-    return doneList;
+    return ioCall(POLL_POLL_LIST, null, list.map(pollableGetId));
   },
 };
 
