@@ -110,7 +110,7 @@ export async function createHttpRequest(
           port: parsedUrl.port,
           path: parsedUrl.pathname + parsedUrl.search,
           headers,
-          timeout: connectTimeout
+          timeout: connectTimeout && Number(connectTimeout)
         });
         break;
       case "https:":
@@ -121,7 +121,7 @@ export async function createHttpRequest(
           port: parsedUrl.port,
           path: parsedUrl.pathname + parsedUrl.search,
           headers,
-          timeout: connectTimeout
+          timeout: connectTimeout && Number(connectTimeout)
         });
         break;
       default:
@@ -137,10 +137,12 @@ export async function createHttpRequest(
       req.on("close", () => reject);
       req.on("error", reject);
     });
-    res.setTimeout(firstByteTimeout);
-    res.on("readable", () => {
-      res.setTimeout(betweenBytesTimeout);
-    });
+    if (firstByteTimeout)
+      res.setTimeout(Number(firstByteTimeout));
+    if (betweenBytesTimeout)
+      res.on("readable", () => {
+        res.setTimeout(Number(betweenBytesTimeout));
+      });
     res.on("end", () => void res.emit("readable"));
     const bodyStreamId = createStream(res);
     return {

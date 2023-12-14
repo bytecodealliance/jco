@@ -273,9 +273,9 @@ class OutgoingRequest {
   }
   [symbolDispose]() {}
   static _handle(request, options) {
-    const connectTimeout = options.connectTimeoutMs();
-    const betweenBytesTimeout = options.betweenBytesTimeoutMs();
-    const firstByteTimeout = options.firstByteTimeoutMs();
+    const connectTimeout = options?.connectTimeoutMs();
+    const betweenBytesTimeout = options?.betweenBytesTimeoutMs();
+    const firstByteTimeout = options?.firstByteTimeoutMs();
     const scheme = schemeString(request.#scheme);
     const url = scheme + request.#authority + (request.#pathWithQuery || "");
     const headers = [["host", request.#authority]];
