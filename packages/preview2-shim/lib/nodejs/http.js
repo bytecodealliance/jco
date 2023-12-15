@@ -277,7 +277,8 @@ class OutgoingRequest {
     const betweenBytesTimeout = options?.betweenBytesTimeoutMs();
     const firstByteTimeout = options?.firstByteTimeoutMs();
     const scheme = schemeString(request.#scheme);
-    const headers = [["host", request.#authority]];
+    // note: host header is automatically added by Node.js
+    const headers = [];
     const decoder = new TextDecoder();
     for (const [key, value] of request.#headers.entries()) {
       headers.push([key, decoder.decode(value)]);
@@ -631,13 +632,13 @@ export class HTTPServer {
     }
     registerIncomingHttpHandler(
       this.#id,
-      ({ method, pathWithQuery, headers, responseId, streamId }) => {
+      ({ method, pathWithQuery, host, headers, responseId, streamId }) => {
         const textEncoder = new TextEncoder();
         const request = incomingRequestCreate(
           parseMethod(method),
           pathWithQuery,
           { tag: "HTTP" },
-          "authority.org",
+          host,
           fieldsLock(
             fieldsFromEntriesChecked(
               headers

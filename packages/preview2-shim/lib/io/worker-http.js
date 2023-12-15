@@ -39,6 +39,7 @@ export async function setOutgoingResponse(
       headers.map(([key, val]) => [key, textDecoder.decode(val)])
     )
   );
+  response.flushHeaders();
   const { stream } = getStreamOrThrow(streamId);
   stream.pipe(response);
   responses.delete(id);
@@ -46,6 +47,7 @@ export async function setOutgoingResponse(
 
 export async function startHttpServer(id, { port, host }) {
   const server = createServer((req, res) => {
+    try {
     // create the streams and their ids
     const streamId = createStream(req);
     const responseId = ++responseCnt;
@@ -55,12 +57,18 @@ export async function startHttpServer(id, { port, host }) {
       payload: {
         responseId,
         method: req.method,
+        host: req.headers.host || host || 'localhost',
         pathWithQuery: req.url,
-        headers: Object.entries(req.headers),
+        headers: Object.entries(req.headersDistinct).flatMap(([key, val]) => val.map(val => [key, val])),
         streamId,
       },
     });
     responses.set(responseId, res);
+  } catch (e) {
+    process._rawDebug('SERVE RHANDLER ERR');
+    process._rawDebug(e);
+    throw e;
+  }
   });
   await new Promise((resolve, reject) => {
     server.listen(port, host, resolve);
@@ -110,8 +118,7 @@ export async function createHttpRequest(
           host: authority.split(':')[0],
           port: authority.split(':')[1],
           path: pathWithQuery,
-          headers,
-          timeout: connectTimeout && Number(connectTimeout)
+          timeout: connectTimeout && Number(connectTimeout),
         });
         break;
       case "https:":
@@ -121,13 +128,16 @@ export async function createHttpRequest(
           host: authority.split(':')[0],
           port: authority.split(':')[1],
           path: pathWithQuery,
-          headers,
-          timeout: connectTimeout && Number(connectTimeout)
+          timeout: connectTimeout && Number(connectTimeout),
         });
         break;
       default:
         throw { tag: "HTTP-protocol-error" };
     }
+    for (const [key, value] of headers) {
+      req.appendHeader(key, value);
+    }
+    req.flushHeaders();
     if (stream) {
       stream.pipe(req);
     } else {

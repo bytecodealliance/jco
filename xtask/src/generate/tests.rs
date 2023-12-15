@@ -3,13 +3,13 @@ use xshell::{cmd, Shell};
 
 // for debugging
 const TRACE: bool = false;
-const TEST_FILTER: &[&str] = &[
-    "proxy_handler",
-    "proxy_echo",
-    "proxy_hash",
-    "api_proxy",
-    "api_proxy_streaming",
-];
+const TEST_FILTER: &[&str] = &[]; /*&[
+                                      "proxy_handler",
+                                      "proxy_echo",
+                                      "proxy_hash",
+                                      "api_proxy",
+                                      "api_proxy_streaming",
+                                  ];*/
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;

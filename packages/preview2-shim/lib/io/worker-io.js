@@ -35,7 +35,6 @@ const workerPath = fileURLToPath(
   new URL("./worker-thread.js", import.meta.url)
 );
 
-
 const httpIncomingHandlers = new Map();
 export function registerIncomingHttpHandler (id, handler) {
   httpIncomingHandlers.set(id, handler);
