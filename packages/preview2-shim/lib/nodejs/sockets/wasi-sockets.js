@@ -16,7 +16,7 @@ import {
 } from "../../io/calls.js";
 import { ioCall, pollableCreate } from "../../io/worker-io.js";
 import { deserializeIpAddress } from "./socket-common.js";
-import { TcpSocketImpl } from "./tcp-socket-impl.js";
+import { TcpSocket, tcpSocketImplCreate } from "./tcp-socket-impl.js";
 import { IncomingDatagramStream, OutgoingDatagramStream, UdpSocket, udpSocketImplCreate } from "./udp-socket-impl.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
@@ -150,19 +150,6 @@ export class WasiSockets {
       IncomingDatagramStream,
     };
 
-    class TcpSocket extends TcpSocketImpl {
-      /**
-       * @param {IpAddressFamily} addressFamily
-       * */
-      constructor(addressFamily) {
-        super(addressFamily, TcpSocket, net.socketCnt++);
-        net.tcpSockets.set(this.id, this);
-      }
-      allowed () {
-        return net.#allowTcp;
-      }
-    }
-
     this.tcp = {
       TcpSocket,
     };
@@ -237,12 +224,17 @@ export class WasiSockets {
           "The new socket resource could not be created because of a system limit"
         );
 
-        // try {
-          return new TcpSocket(addressFamily);
-        // } catch (err) {
-        //   // assert(true, errorCode.unknown, err);
-        //   throw err;
-        // }
+        try {
+          const id = net.socketCnt++;
+          const tcpSocket = tcpSocketImplCreate(addressFamily, id);
+          net.tcpSockets.set(id, tcpSocket);
+          return tcpSocket;
+        } catch (err) {
+          console.log("tcp socket create error", {
+            err,
+          });
+          assert(true, errorCode.notSupported, err);
+        }
       },
     };
 

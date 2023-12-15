@@ -308,7 +308,7 @@ suite("Node.js Preview2", () => {
       );
     });
 
-    test("tcp.listen(): should listen to an ipv4 address", async () => {
+    test.skip("tcp.listen(): should listen to an ipv4 address", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(

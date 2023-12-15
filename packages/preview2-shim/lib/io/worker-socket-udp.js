@@ -58,6 +58,8 @@ export function enqueueReceivedSocketDatagram(socketInfo, { data, rinfo }) {
   queue.push(chunk);
 }
 
+//-----------------------------------------------------
+
 /**
  * @param {IpAddressFamily} addressFamily
  * @returns {NodeJS.Socket}
