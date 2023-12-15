@@ -47,7 +47,6 @@ export async function setOutgoingResponse(
 
 export async function startHttpServer(id, { port, host }) {
   const server = createServer((req, res) => {
-    try {
     // create the streams and their ids
     const streamId = createStream(req);
     const responseId = ++responseCnt;
@@ -64,11 +63,6 @@ export async function startHttpServer(id, { port, host }) {
       },
     });
     responses.set(responseId, res);
-  } catch (e) {
-    process._rawDebug('SERVE RHANDLER ERR');
-    process._rawDebug(e);
-    throw e;
-  }
   });
   await new Promise((resolve, reject) => {
     server.listen(port, host, resolve);
