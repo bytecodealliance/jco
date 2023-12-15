@@ -277,7 +277,6 @@ class OutgoingRequest {
     const betweenBytesTimeout = options?.betweenBytesTimeoutMs();
     const firstByteTimeout = options?.firstByteTimeoutMs();
     const scheme = schemeString(request.#scheme);
-    const url = scheme + request.#authority + (request.#pathWithQuery || "");
     const headers = [["host", request.#authority]];
     const decoder = new TextDecoder();
     for (const [key, value] of request.#headers.entries()) {
@@ -285,7 +284,9 @@ class OutgoingRequest {
     }
     return futureIncomingResponseCreate(
       request.#method.val || request.#method.tag,
-      url,
+      scheme,
+      request.#authority,
+      request.#pathWithQuery,
       headers,
       outgoingBodyOutputStreamId(request.#body),
       connectTimeout,
@@ -417,11 +418,13 @@ class FutureIncomingResponse {
   [symbolDispose]() {
     if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId);
   }
-  static _create(method, url, headers, body, connectTimeout, betweenBytesTimeout, firstByteTimeout) {
+  static _create(method, scheme, authority, pathWithQuery, headers, body, connectTimeout, betweenBytesTimeout, firstByteTimeout) {
     const res = new FutureIncomingResponse();
     res.#pollId = ioCall(HTTP_CREATE_REQUEST, null, {
       method,
-      url,
+      scheme,
+      authority,
+      pathWithQuery,
       headers,
       body,
       connectTimeout,

@@ -71,7 +71,9 @@ export async function startHttpServer(id, { port, host }) {
 
 export async function createHttpRequest(
   method,
-  url,
+  scheme,
+  authority,
+  pathWithQuery,
   headers,
   bodyId,
   connectTimeout,
@@ -99,16 +101,15 @@ export async function createHttpRequest(
   }
   try {
     // Make a request
-    const parsedUrl = new URL(url);
     let req;
-    switch (parsedUrl.protocol) {
+    switch (scheme) {
       case "http:":
         req = httpRequest({
           agent: httpAgent,
           method,
-          host: parsedUrl.hostname,
-          port: parsedUrl.port,
-          path: parsedUrl.pathname + parsedUrl.search,
+          host: authority.split(':')[0],
+          port: authority.split(':')[1],
+          path: pathWithQuery,
           headers,
           timeout: connectTimeout && Number(connectTimeout)
         });
@@ -117,9 +118,9 @@ export async function createHttpRequest(
         req = httpsRequest({
           agent: httpsAgent,
           method,
-          host: parsedUrl.hostname,
-          port: parsedUrl.port,
-          path: parsedUrl.pathname + parsedUrl.search,
+          host: authority.split(':')[0],
+          port: authority.split(':')[1],
+          path: pathWithQuery,
           headers,
           timeout: connectTimeout && Number(connectTimeout)
         });

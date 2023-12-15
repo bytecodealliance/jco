@@ -12,23 +12,35 @@ export const testDir = await mkdtemp(tmpdir());
 await $init;
 
 process.on("exit", () => {
-  // send stop message to server process
-  serverProcess.send(null);
+  // send stop message to server processes
+  for (const server of servers) {
+    server.send(null);
+  }
   rmdirSync(testDir, { recursive: true });
 });
 
-const serverProcess = fork(
-  fileURLToPath(import.meta.url.split("/").slice(0, -1).join("/")) +
-    "/http-server.js"
+symlinkSync(
+  fileURLToPath(
+    import.meta.url.split("/").slice(0, -3).join("/") + "/node_modules"
+  ),
+  testDir + "/node_modules"
 );
-serverProcess.on("error", (err) => {
-  console.error("server process error", err);
-});
-const runningPromise = new Promise((resolve) =>
-  serverProcess.on("message", resolve)
-);
+writeFileSync(testDir + "/package.json", '{"type":"module"}');
+
+const servers = [];
 
 export async function createIncomingServer(serverName) {
+  const serverProcess = fork(
+    fileURLToPath(import.meta.url.split("/").slice(0, -1).join("/")) +
+      "/http-server.js"
+  );
+  servers.push(serverProcess);
+  serverProcess.on("error", (err) => {
+    console.error("server process error", err);
+  });
+  const runningPromise = new Promise((resolve) =>
+    serverProcess.on("message", resolve)
+  );
   const componentPath = fileURLToPath(import.meta.url.split("/").slice(0, -2).join("/")) + `/rundir/${serverName}.component.wasm`;
   console.error("loading component " + componentPath);
   try {
@@ -46,13 +58,6 @@ export async function createIncomingServer(serverName) {
         "wasi:sockets/*": "@bytecodealliance/preview2-shim/sockets#*",
       }),
     });
-    symlinkSync(
-      fileURLToPath(
-        import.meta.url.split("/").slice(0, -3).join("/") + "/node_modules"
-      ),
-      testDir + "/node_modules"
-    );
-    writeFileSync(testDir + "/package.json", '{"type":"module"}');
     for (const [name, contents] of files) {
       writeFileSync(testDir + "/" + name, contents);
     }
