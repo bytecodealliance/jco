@@ -10,7 +10,7 @@
  * @typedef {import("../../../types/interfaces/wasi-clocks-monotonic-clock.js").Duration} Duration
  */
 
-import { isIP, Socket as NodeSocket } from "node:net";
+import { isIP } from "node:net";
 import { platform } from "node:os";
 import { assert } from "../../common/assert.js";
 // import { streams } from "../io.js";
@@ -23,8 +23,6 @@ const symbolOperations =
   Symbol.SocketOperationsState || Symbol.for("SocketOperationsState");
 
 import {
-  INPUT_STREAM_CREATE,
-  OUTPUT_STREAM_CREATE,
   SOCKET,
   SOCKET_TCP_BIND,
   SOCKET_TCP_CONNECT,
@@ -82,10 +80,7 @@ export class TcpSocket {
   id = 1;
 
   #allowTcp = true;
-  #connections = 0;
   #pollId = null;
-  #inputStreamId = this.id++;
-  #outputStreamId = this.id++;
 
   // track in-progress operations
   // counter must be 0 for the operation to be considered complete
@@ -128,7 +123,7 @@ export class TcpSocket {
     remotePort: 0,
     localIpSocketAddress: null,
   };
-  
+
   /**
    * @param {IpAddressFamily} addressFamily
    * @param {number} id
@@ -174,7 +169,6 @@ export class TcpSocket {
    * @throws {invalid-state} The socket is already bound. (EINVAL)
    */
   startBind(network, localAddress) {
-    console.log("startBind");
 
     if (!this.allowed()) throw "access-denied";
     try {
@@ -274,7 +268,6 @@ export class TcpSocket {
    * @throws {invalid-state} The socket is already in the Listener state. (EOPNOTSUPP, EINVAL on Windows)
    */
   startConnect(network, remoteAddress) {
-    console.log("startConnect");
 
     if (!this.allowed()) throw "access-denied";
     const host = serializeIpAddress(remoteAddress);
@@ -386,9 +379,10 @@ export class TcpSocket {
       throw new Error(err);
     }
 
-    const inputStream = this.#inputStreamId = ioCall(SOCKET_TCP_CREATE_INPUT_STREAM, null, {});
-
-    const outputStream = this.#outputStreamId = ioCall(SOCKET_TCP_CREATE_OUTPUT_STREAM, null, {});
+    const inputStreamId = ioCall(SOCKET_TCP_CREATE_INPUT_STREAM);
+    const outputStreamId = ioCall(SOCKET_TCP_CREATE_OUTPUT_STREAM);
+    const inputStream = inputStreamCreate(SOCKET, inputStreamId);
+    const outputStream = outputStreamCreate(SOCKET, outputStreamId);
 
     this[symbolSocketState].connectionState = SocketConnectionState.Connected;
     this[symbolOperations].connect--;
@@ -403,7 +397,6 @@ export class TcpSocket {
    * @throws {invalid-state} The socket is already in the Listener state.
    */
   startListen() {
-    console.log("startListen");
 
     if (!this.allowed()) throw "access-denied";
     try {
@@ -466,10 +459,6 @@ export class TcpSocket {
    * @throws {new-socket-limit} The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
    */
   accept() {
-    console.log("accept", {
-      s: this[symbolSocketState],
-    });
-
     if (!this.allowed()) throw "access-denied";
     this[symbolOperations].accept++;
 
@@ -489,16 +478,17 @@ export class TcpSocket {
     if (this[symbolSocketState].isBound === false) {
       this.#autoBind(this.network, this.addressFamily());
     }
-    const inputStream = inputStreamCreate(
-      SOCKET,
-      ioCall(INPUT_STREAM_CREATE | SOCKET, this.#inputStreamId, {})
-    );
-    const outputStream = outputStreamCreate(
-      SOCKET,
-      ioCall(OUTPUT_STREAM_CREATE | SOCKET, this.#inputStreamId, {})
-    );
 
-    const socket = tcpSocketImplCreate(this.addressFamily(), this.id + 1, this.allowed());
+    const inputStreamId = ioCall(SOCKET_TCP_CREATE_INPUT_STREAM);
+    const outputStreamId = ioCall(SOCKET_TCP_CREATE_OUTPUT_STREAM);
+    const inputStream = inputStreamCreate(SOCKET, inputStreamId);
+    const outputStream = outputStreamCreate(SOCKET, outputStreamId);
+
+    const socket = tcpSocketImplCreate(
+      this.addressFamily(),
+      this.id + 1,
+      this.allowed()
+    );
     this.#cloneSocketState(socket);
 
     this[symbolOperations].accept--;
@@ -507,14 +497,45 @@ export class TcpSocket {
   }
 
   #cloneSocketState(socket) {
-    socket.setIpv6Only(this.ipv6Only());
-    socket.setKeepAliveEnabled(this.keepAliveEnabled());
-    socket.setKeepAliveIdleTime(this.keepAliveIdleTime());
-    socket.setKeepAliveInterval(this.keepAliveInterval());
-    socket.setKeepAliveCount(this.keepAliveCount());
-    socket.setHopLimit(this.hopLimit());
-    socket.setReceiveBufferSize(this.receiveBufferSize());
-    socket.setSendBufferSize(this.sendBufferSize());
+    // Copy the socket state:
+    // The returned socket is bound and in the Connection state. The following properties are inherited from the listener socket:
+    // - `address-family`
+    // - `ipv6-only`
+    // - `keep-alive-enabled`
+    // - `keep-alive-idle-time`
+    // - `keep-alive-interval`
+    // - `keep-alive-count`
+    // - `hop-limit`
+    // - `receive-buffer-size`
+    // - `send-buffer-size`
+
+    
+    // Note: don't call getter/setters methods here, they will throw
+    socket.#socketOptions.family = this.#socketOptions.family;
+    
+    // Note: don't call getter/setters methods here, they will throw
+    const {
+      ipv6Only,
+      keepAlive,
+      keepAliveIdleTime,
+      keepAliveInterval,
+      keepAliveCount,
+      hopLimit,
+      receiveBufferSize,
+      sendBufferSize,
+    } = this[symbolSocketState];
+
+    socket[symbolSocketState] = {
+      ...socket[symbolSocketState],
+      ipv6Only,
+      keepAlive,
+      keepAliveIdleTime,
+      keepAliveInterval,
+      keepAliveCount,
+      hopLimit,
+      receiveBufferSize,
+      sendBufferSize,
+    };
   }
 
   /**
@@ -522,7 +543,6 @@ export class TcpSocket {
    * @throws {invalid-state} The socket is not bound to any local address.
    */
   localAddress() {
-    console.log("localAddress");
     assert(this[symbolSocketState].isBound === false, "invalid-state");
 
     const { address, port, family } = ioCall(
@@ -547,7 +567,6 @@ export class TcpSocket {
    * @throws {invalid-state} The socket is not connected to a remote address. (ENOTCONN)
    */
   remoteAddress() {
-    console.log("remoteAddress");
 
     assert(
       this[symbolSocketState].connectionState !==
@@ -591,6 +610,7 @@ export class TcpSocket {
    * @throws {not-supported} (get/set) `this` socket is an IPv4 socket.
    */
   ipv6Only() {
+
     assert(
       this.#socketOptions.family.toLocaleLowerCase() === "ipv4",
       "not-supported"
@@ -607,7 +627,6 @@ export class TcpSocket {
    * @throws {not-supported} (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    */
   setIpv6Only(value) {
-    console.log("setIpv6Only");
     assert(
       this.#socketOptions.family.toLocaleLowerCase() === "ipv4",
       "not-supported"
@@ -625,7 +644,6 @@ export class TcpSocket {
    * @throws {invalid-state} (set) The socket is already in the Connection state.
    */
   setListenBacklogSize(value) {
-    console.log("setListenBacklogSize");
 
     assert(value === 0n, "invalid-argument", "The provided value was 0.");
     assert(
@@ -814,7 +832,6 @@ export class TcpSocket {
    * @throws {invalid-state} The socket is not in the Connection state. (ENOTCONN)
    */
   shutdown(shutdownType) {
-    console.log("shutdown");
     assert(
       this[symbolSocketState].connectionState !==
         SocketConnectionState.Connected,
