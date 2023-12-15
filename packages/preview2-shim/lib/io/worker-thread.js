@@ -156,7 +156,9 @@ function handle(call, id, payload) {
     case HTTP_CREATE_REQUEST: {
       const {
         method,
-        url,
+        scheme,
+        authority,
+        pathWithQuery,
         headers,
         body,
         connectTimeout,
@@ -166,7 +168,9 @@ function handle(call, id, payload) {
       return createFuture(
         createHttpRequest(
           method,
-          url,
+          scheme,
+          authority,
+          pathWithQuery,
           headers,
           body,
           connectTimeout,

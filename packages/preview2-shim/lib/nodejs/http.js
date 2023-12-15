@@ -277,15 +277,17 @@ class OutgoingRequest {
     const betweenBytesTimeout = options?.betweenBytesTimeoutMs();
     const firstByteTimeout = options?.firstByteTimeoutMs();
     const scheme = schemeString(request.#scheme);
-    const url = scheme + request.#authority + (request.#pathWithQuery || "");
-    const headers = [["host", request.#authority]];
+    // note: host header is automatically added by Node.js
+    const headers = [];
     const decoder = new TextDecoder();
     for (const [key, value] of request.#headers.entries()) {
       headers.push([key, decoder.decode(value)]);
     }
     return futureIncomingResponseCreate(
       request.#method.val || request.#method.tag,
-      url,
+      scheme,
+      request.#authority,
+      request.#pathWithQuery,
       headers,
       outgoingBodyOutputStreamId(request.#body),
       connectTimeout,
@@ -417,11 +419,13 @@ class FutureIncomingResponse {
   [symbolDispose]() {
     if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId);
   }
-  static _create(method, url, headers, body, connectTimeout, betweenBytesTimeout, firstByteTimeout) {
+  static _create(method, scheme, authority, pathWithQuery, headers, body, connectTimeout, betweenBytesTimeout, firstByteTimeout) {
     const res = new FutureIncomingResponse();
     res.#pollId = ioCall(HTTP_CREATE_REQUEST, null, {
       method,
-      url,
+      scheme,
+      authority,
+      pathWithQuery,
       headers,
       body,
       connectTimeout,
@@ -628,13 +632,13 @@ export class HTTPServer {
     }
     registerIncomingHttpHandler(
       this.#id,
-      ({ method, pathWithQuery, headers, responseId, streamId }) => {
+      ({ method, pathWithQuery, host, headers, responseId, streamId }) => {
         const textEncoder = new TextEncoder();
         const request = incomingRequestCreate(
           parseMethod(method),
           pathWithQuery,
           { tag: "HTTP" },
-          "authority.org",
+          host,
           fieldsLock(
             fieldsFromEntriesChecked(
               headers

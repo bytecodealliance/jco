@@ -3,14 +3,13 @@ use xshell::{cmd, Shell};
 
 // for debugging
 const TRACE: bool = false;
-const TEST_FILTER: &[&str] = &[];
-/* &[
-    "proxy_handler",
-    "proxy_echo",
-    "proxy_hash",
-    "api_proxy",
-    "api_proxy_streaming",
-]; */
+const TEST_FILTER: &[&str] = &[]; /*&[
+                                      "proxy_handler",
+                                      "proxy_echo",
+                                      "proxy_hash",
+                                      "api_proxy",
+                                      "api_proxy_streaming",
+                                  ];*/
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
@@ -112,7 +111,7 @@ fn generate_test(test_name: &str) -> String {
 
     let skip = match test_name {
         // these tests currently stall
-        "api_read_only" | "preview1_path_open_read_write" | "proxy_hash" => true,
+        "api_read_only" | "preview1_path_open_read_write" => true,
         _ => false,
     };
 

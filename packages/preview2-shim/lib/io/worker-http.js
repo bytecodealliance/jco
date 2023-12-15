@@ -39,6 +39,7 @@ export async function setOutgoingResponse(
       headers.map(([key, val]) => [key, textDecoder.decode(val)])
     )
   );
+  response.flushHeaders();
   const { stream } = getStreamOrThrow(streamId);
   stream.pipe(response);
   responses.delete(id);
@@ -55,8 +56,9 @@ export async function startHttpServer(id, { port, host }) {
       payload: {
         responseId,
         method: req.method,
+        host: req.headers.host || host || 'localhost',
         pathWithQuery: req.url,
-        headers: Object.entries(req.headers),
+        headers: Object.entries(req.headersDistinct).flatMap(([key, val]) => val.map(val => [key, val])),
         streamId,
       },
     });
@@ -71,7 +73,9 @@ export async function startHttpServer(id, { port, host }) {
 
 export async function createHttpRequest(
   method,
-  url,
+  scheme,
+  authority,
+  pathWithQuery,
   headers,
   bodyId,
   connectTimeout,
@@ -99,34 +103,35 @@ export async function createHttpRequest(
   }
   try {
     // Make a request
-    const parsedUrl = new URL(url);
     let req;
-    switch (parsedUrl.protocol) {
+    switch (scheme) {
       case "http:":
         req = httpRequest({
           agent: httpAgent,
           method,
-          host: parsedUrl.hostname,
-          port: parsedUrl.port,
-          path: parsedUrl.pathname + parsedUrl.search,
-          headers,
-          timeout: connectTimeout && Number(connectTimeout)
+          host: authority.split(':')[0],
+          port: authority.split(':')[1],
+          path: pathWithQuery,
+          timeout: connectTimeout && Number(connectTimeout),
         });
         break;
       case "https:":
         req = httpsRequest({
           agent: httpsAgent,
           method,
-          host: parsedUrl.hostname,
-          port: parsedUrl.port,
-          path: parsedUrl.pathname + parsedUrl.search,
-          headers,
-          timeout: connectTimeout && Number(connectTimeout)
+          host: authority.split(':')[0],
+          port: authority.split(':')[1],
+          path: pathWithQuery,
+          timeout: connectTimeout && Number(connectTimeout),
         });
         break;
       default:
         throw { tag: "HTTP-protocol-error" };
     }
+    for (const [key, value] of headers) {
+      req.appendHeader(key, value);
+    }
+    req.flushHeaders();
     if (stream) {
       stream.pipe(req);
     } else {
