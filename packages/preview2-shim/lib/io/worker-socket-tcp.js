@@ -93,8 +93,6 @@ export function socketTcpListen(id, payload) {
   return socket.listen(backlogSize);
 }
 
-export function socketTcpAccept(_id, _payload) {}
-
 export function socketTcpGetLocalAddress(id) {
   const socket = getSocketOrThrow(id);
   const out = {};
@@ -109,9 +107,11 @@ export function socketTcpGetRemoteAddress(id) {
   return out;
 }
 
-export function socketTcpShutdown(id, _payload) {
+export function socketTcpShutdown(id, payload) {
   const socket = getSocketOrThrow(id);
-  // const { shutdownType } = payload;
+  
+  // eslint-disable-next-line no-unused-vars
+  const { shutdownType } = payload;
 
   return new Promise((resolve) => {
     const req = new ShutdownWrap();

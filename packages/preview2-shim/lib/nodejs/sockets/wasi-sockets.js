@@ -227,6 +227,9 @@ export class WasiSockets {
         try {
           const id = net.socketCnt++;
           const tcpSocket = tcpSocketImplCreate(addressFamily, id);
+          tcpSocket.allowed = () => {
+            return net.#allowTcp;
+          };
           net.tcpSockets.set(id, tcpSocket);
           return tcpSocket;
         } catch (err) {

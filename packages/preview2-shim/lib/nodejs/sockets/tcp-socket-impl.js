@@ -128,11 +128,7 @@ export class TcpSocket {
     remotePort: 0,
     localIpSocketAddress: null,
   };
-
-  allowed = () => {
-    return this.#allowTcp;
-  };
-
+  
   /**
    * @param {IpAddressFamily} addressFamily
    * @param {number} id
