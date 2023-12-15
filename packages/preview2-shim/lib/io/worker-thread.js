@@ -72,8 +72,42 @@ import {
   STDOUT,
   HTTP_SERVER_SET_OUTGOING_RESPONSE,
   HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
+  SOCKET_TCP_CREATE_HANDLE,
+  SOCKET_TCP_BIND,
+  SOCKET_TCP_CONNECT,
+  SOCKET_TCP_LISTEN,
+  SOCKET_TCP_GET_LOCAL_ADDRESS,
+  SOCKET_TCP_GET_REMOTE_ADDRESS,
+  SOCKET_TCP_DISPOSE,
+  SOCKET_TCP_ACCEPT,
+  SOCKET_TCP_SHUTDOWN,
+  SOCKET_TCP_SET_KEEP_ALIVE,
+  SOCKET_TCP_CREATE_OUTPUT_STREAM,
+  SOCKET_TCP_CREATE_INPUT_STREAM,
 } from "./calls.js";
-import { SocketUdpReceive, createUdpSocket, getSocketOrThrow, socketUdpBind, socketUdpCheckSend, socketUdpConnect, socketUdpDisconnect, socketUdpDispose, socketUdpSend } from "./worker-socket-udp.js";
+import {
+  SocketUdpReceive,
+  createUdpSocket,
+  getSocketOrThrow,
+  socketUdpBind,
+  socketUdpCheckSend,
+  socketUdpConnect,
+  socketUdpDisconnect,
+  socketUdpDispose,
+  socketUdpSend,
+} from "./worker-socket-udp.js";
+import {
+  createTcpSocket,
+  socketTcpAccept,
+  socketTcpBind,
+  socketTcpConnect,
+  socketTcpDispose,
+  socketTcpGetLocalAddress,
+  socketTcpGetRemoteAddress,
+  socketTcpListen,
+  socketTcpSetKeepAlive,
+  socketTcpShutdown,
+} from "./worker-socket-tcp.js";
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -247,29 +281,67 @@ function handle(call, id, payload) {
     case HTTP_SERVER_CLEAR_OUTGOING_RESPONSE:
       return clearOutgoingResponse(id);
 
-    // Sockets
+    // Sockets TCP
+    case SOCKET_TCP_CREATE_HANDLE:
+      return createFuture(createTcpSocket());
 
+    case SOCKET_TCP_BIND:
+      return socketTcpBind(id, payload);
+
+    case SOCKET_TCP_CONNECT:
+      return socketTcpConnect(id, payload);
+
+    case SOCKET_TCP_LISTEN:
+      return socketTcpListen(id, payload);
+
+    case SOCKET_TCP_ACCEPT:
+      return socketTcpAccept(id, payload);
+
+    case SOCKET_TCP_GET_LOCAL_ADDRESS:
+      return socketTcpGetLocalAddress(id);
+
+    case SOCKET_TCP_GET_REMOTE_ADDRESS:
+      return socketTcpGetRemoteAddress(id);
+    
+    case SOCKET_TCP_SHUTDOWN:
+      return socketTcpShutdown(id, payload);
+
+    case SOCKET_TCP_SET_KEEP_ALIVE:
+      return socketTcpSetKeepAlive(id, payload);
+
+    case SOCKET_TCP_DISPOSE:
+      return socketTcpDispose(id);
+
+    case SOCKET_TCP_CREATE_INPUT_STREAM:
+      // TODO: implement a proper input stream
+      return createStream(new PassThrough());
+
+    case SOCKET_TCP_CREATE_OUTPUT_STREAM: 
+      // TODO: implement a proper output stream
+      return createStream(new PassThrough());
+  
+    // Sockets UDP
     case SOCKET_UDP_CREATE_HANDLE: {
       const { addressFamily, reuseAddr } = payload;
       return createFuture(createUdpSocket(addressFamily, reuseAddr));
     }
 
-    case SOCKET_UDP_BIND: 
+    case SOCKET_UDP_BIND:
       return socketUdpBind(id, payload);
 
-    case SOCKET_UDP_CHECK_SEND: 
+    case SOCKET_UDP_CHECK_SEND:
       return socketUdpCheckSend(id);
 
-    case SOCKET_UDP_SEND: 
+    case SOCKET_UDP_SEND:
       return socketUdpSend(id, payload);
 
-    case SOCKET_UDP_RECEIVE: 
+    case SOCKET_UDP_RECEIVE:
       return SocketUdpReceive(id, payload);
 
-    case SOCKET_UDP_CONNECT: 
+    case SOCKET_UDP_CONNECT:
       return socketUdpConnect(id, payload);
 
-    case SOCKET_UDP_DISCONNECT: 
+    case SOCKET_UDP_DISCONNECT:
       return socketUdpDisconnect(id);
 
     case SOCKET_UDP_GET_LOCAL_ADDRESS: {
@@ -346,16 +418,7 @@ function handle(call, id, payload) {
       }
     }
 
-    case OUTPUT_STREAM_CREATE | SOCKET: {
-      // TODO: implement
-      break;
-    }
-    case INPUT_STREAM_CREATE | SOCKET: {
-      // TODO: implement
-      break;
-    }
-
-    case SOCKET_UDP_DISPOSE: 
+    case SOCKET_UDP_DISPOSE:
       return socketUdpDispose(id);
 
     // Stdio
