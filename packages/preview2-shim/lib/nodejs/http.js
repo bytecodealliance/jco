@@ -41,7 +41,7 @@ class IncomingBody {
     if (incomingBody.#finished)
       throw new Error("incoming body already finished");
     incomingBody.#finished = true;
-    return futureTrailersCreate(new Fields([]), false);
+    return futureTrailersCreate();
   }
   [symbolDispose]() {
     if (!this.#finished) {
@@ -99,18 +99,24 @@ delete IncomingRequest._create;
 
 class FutureTrailers {
   _id = futureCnt++;
-  #value;
-  #isError;
+  #requested = false;
   subscribe() {
-    // TODO
+    return pollableCreate(0);
   }
   get() {
-    return { tag: this.#isError ? "err" : "ok", val: this.#value };
+    if (this.#requested)
+      return { tag: "err" };
+    this.#requested = true;
+    return {
+      tag: "ok",
+      val: {
+        tag: "ok",
+        val: undefined,
+      }
+    };
   }
-  static _create(value, isError) {
+  static _create() {
     const res = new FutureTrailers();
-    res.#value = value;
-    res.#isError = isError;
     return res;
   }
 }
@@ -277,15 +283,17 @@ class OutgoingRequest {
     const betweenBytesTimeout = options?.betweenBytesTimeoutMs();
     const firstByteTimeout = options?.firstByteTimeoutMs();
     const scheme = schemeString(request.#scheme);
-    const url = scheme + request.#authority + (request.#pathWithQuery || "");
-    const headers = [["host", request.#authority]];
+    // note: host header is automatically added by Node.js
+    const headers = [];
     const decoder = new TextDecoder();
     for (const [key, value] of request.#headers.entries()) {
       headers.push([key, decoder.decode(value)]);
     }
     return futureIncomingResponseCreate(
       request.#method.val || request.#method.tag,
-      url,
+      scheme,
+      request.#authority,
+      request.#pathWithQuery,
       headers,
       outgoingBodyOutputStreamId(request.#body),
       connectTimeout,
@@ -326,7 +334,7 @@ class OutgoingBody {
    * @param {Fields | undefined} trailers
    */
   static finish(body, trailers) {
-    if (trailers) throw new Error("Internal error: Trailers TODO");
+    if (trailers) throw { tag: "internal-error", val: "trailers unsupported" };
     // this will verify content length, and also verify not already finished
     // throwing errors as appropriate
     if (body.#outputStreamId)
@@ -417,16 +425,28 @@ class FutureIncomingResponse {
   [symbolDispose]() {
     if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId);
   }
-  static _create(method, url, headers, body, connectTimeout, betweenBytesTimeout, firstByteTimeout) {
+  static _create(
+    method,
+    scheme,
+    authority,
+    pathWithQuery,
+    headers,
+    body,
+    connectTimeout,
+    betweenBytesTimeout,
+    firstByteTimeout
+  ) {
     const res = new FutureIncomingResponse();
     res.#pollId = ioCall(HTTP_CREATE_REQUEST, null, {
       method,
-      url,
+      scheme,
+      authority,
+      pathWithQuery,
       headers,
       body,
       connectTimeout,
       betweenBytesTimeout,
-      firstByteTimeout
+      firstByteTimeout,
     });
     return res;
   }
@@ -628,13 +648,13 @@ export class HTTPServer {
     }
     registerIncomingHttpHandler(
       this.#id,
-      ({ method, pathWithQuery, headers, responseId, streamId }) => {
+      ({ method, pathWithQuery, host, headers, responseId, streamId }) => {
         const textEncoder = new TextEncoder();
         const request = incomingRequestCreate(
           parseMethod(method),
           pathWithQuery,
           { tag: "HTTP" },
-          "authority.org",
+          host,
           fieldsLock(
             fieldsFromEntriesChecked(
               headers
