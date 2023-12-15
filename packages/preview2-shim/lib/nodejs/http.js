@@ -41,7 +41,7 @@ class IncomingBody {
     if (incomingBody.#finished)
       throw new Error("incoming body already finished");
     incomingBody.#finished = true;
-    return futureTrailersCreate(new Fields([]), false);
+    return futureTrailersCreate();
   }
   [symbolDispose]() {
     if (!this.#finished) {
@@ -99,18 +99,24 @@ delete IncomingRequest._create;
 
 class FutureTrailers {
   _id = futureCnt++;
-  #value;
-  #isError;
+  #requested = false;
   subscribe() {
-    // TODO
+    return pollableCreate(0);
   }
   get() {
-    return { tag: this.#isError ? "err" : "ok", val: this.#value };
+    if (this.#requested)
+      return { tag: "err" };
+    this.#requested = true;
+    return {
+      tag: "ok",
+      val: {
+        tag: "ok",
+        val: undefined,
+      }
+    };
   }
-  static _create(value, isError) {
+  static _create() {
     const res = new FutureTrailers();
-    res.#value = value;
-    res.#isError = isError;
     return res;
   }
 }
@@ -328,7 +334,7 @@ class OutgoingBody {
    * @param {Fields | undefined} trailers
    */
   static finish(body, trailers) {
-    if (trailers) throw new Error("Internal error: Trailers TODO");
+    if (trailers) throw { tag: "internal-error", val: "trailers unsupported" };
     // this will verify content length, and also verify not already finished
     // throwing errors as appropriate
     if (body.#outputStreamId)
@@ -419,7 +425,17 @@ class FutureIncomingResponse {
   [symbolDispose]() {
     if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId);
   }
-  static _create(method, scheme, authority, pathWithQuery, headers, body, connectTimeout, betweenBytesTimeout, firstByteTimeout) {
+  static _create(
+    method,
+    scheme,
+    authority,
+    pathWithQuery,
+    headers,
+    body,
+    connectTimeout,
+    betweenBytesTimeout,
+    firstByteTimeout
+  ) {
     const res = new FutureIncomingResponse();
     res.#pollId = ioCall(HTTP_CREATE_REQUEST, null, {
       method,
@@ -430,7 +446,7 @@ class FutureIncomingResponse {
       body,
       connectTimeout,
       betweenBytesTimeout,
-      firstByteTimeout
+      firstByteTimeout,
     });
     return res;
   }
