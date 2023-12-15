@@ -4,7 +4,7 @@ const {
   constants: TCPConstants,
   TCPConnectWrap,
 } = process.binding("tcp_wrap");
-const { ShutdownWrap } = process.binding('stream_wrap');
+const { ShutdownWrap } = process.binding("stream_wrap");
 
 /** @type {Map<number, NodeJS.Socket>} */
 export const openedSockets = new Map();
@@ -13,7 +13,7 @@ let socketCnt = 0;
 
 export function getSocketOrThrow(socketId) {
   const socket = openedSockets.get(socketId);
-  if (!socket) throw "invalid-state";
+  if (!socket) throw "invalid-socket";
   return socket;
 }
 
@@ -31,10 +31,6 @@ export function createTcpSocket() {
 
 export function socketTcpBind(id, payload) {
   const { localAddress, localPort, family } = payload;
-  process._rawDebug("socketTcpBind", {
-    localAddress, localPort, family
-});
-
   const socket = getSocketOrThrow(id);
 
   let bind = "bind"; // ipv4
@@ -49,14 +45,6 @@ export function socketTcpConnect(id, payload) {
   const socket = getSocketOrThrow(id);
   const { remoteAddress, remotePort, localAddress, localPort, family } =
     payload;
-
-    process._rawDebug("socketTcpConnect", {
-        remoteAddress,
-        remotePort,
-        localAddress,
-        localPort,
-        family
-    });
 
   return new Promise((resolve) => {
     const _onClientConnectComplete = (err) => {
@@ -85,11 +73,8 @@ export function socketTcpConnect(id, payload) {
 }
 
 export function socketTcpListen(id, payload) {
-    const socket = getSocketOrThrow(id);
-    const { backlogSize } = payload;
-    process._rawDebug("socketTcpListen", {
-        backlogSize
-    });
+  const socket = getSocketOrThrow(id);
+  const { backlogSize } = payload;
   return socket.listen(backlogSize);
 }
 
@@ -109,19 +94,17 @@ export function socketTcpGetRemoteAddress(id) {
 
 export function socketTcpShutdown(id, payload) {
   const socket = getSocketOrThrow(id);
-  
+
   // eslint-disable-next-line no-unused-vars
   const { shutdownType } = payload;
 
   return new Promise((resolve) => {
     const req = new ShutdownWrap();
     req.oncomplete = () => {
-      process._rawDebug("shutdown complete");
       resolve(0);
     };
     req.handle = socket;
     req.callback = () => {
-      process._rawDebug("shutdown callback");
       resolve(0);
     };
     const err = socket.shutdown(req);
@@ -139,6 +122,5 @@ export function socketTcpSetKeepAlive(id, payload) {
 export function socketTcpDispose(id) {
   const socket = getSocketOrThrow(id);
   socket.close();
-  openedSockets.delete(id);
   return 0;
 }

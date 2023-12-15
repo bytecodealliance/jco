@@ -311,11 +311,7 @@ function handle(call, id, payload) {
       return socketTcpDispose(id);
 
     case SOCKET_TCP_CREATE_INPUT_STREAM:
-      // TODO: implement a proper input stream
-      return createStream(new PassThrough());
-
-    case SOCKET_TCP_CREATE_OUTPUT_STREAM: 
-      // TODO: implement a proper output stream
+    case SOCKET_TCP_CREATE_OUTPUT_STREAM:
       return createStream(new PassThrough());
   
     // Sockets UDP
