@@ -1,15 +1,15 @@
 import { resolve } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { _rawDebug, exit, hrtime, stderr, stdout } from "node:process";
+import { PassThrough } from "node:stream";
 import { runAsWorker } from "../synckit/index.js";
 import {
+  clearOutgoingResponse,
   createHttpRequest,
+  setOutgoingResponse,
   startHttpServer,
   stopHttpServer,
-  setOutgoingResponse,
-  clearOutgoingResponse,
 } from "./worker-http.js";
-import { PassThrough } from "node:stream";
 
 import {
   CALL_MASK,
@@ -24,6 +24,8 @@ import {
   HTTP,
   HTTP_CREATE_REQUEST,
   HTTP_OUTPUT_STREAM_FINISH,
+  HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
+  HTTP_SERVER_SET_OUTGOING_RESPONSE,
   HTTP_SERVER_START,
   HTTP_SERVER_STOP,
   INPUT_STREAM_BLOCKING_READ,
@@ -51,6 +53,17 @@ import {
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+  SOCKET_TCP_BIND,
+  SOCKET_TCP_CONNECT,
+  SOCKET_TCP_CREATE_HANDLE,
+  SOCKET_TCP_CREATE_INPUT_STREAM,
+  SOCKET_TCP_CREATE_OUTPUT_STREAM,
+  SOCKET_TCP_DISPOSE,
+  SOCKET_TCP_GET_LOCAL_ADDRESS,
+  SOCKET_TCP_GET_REMOTE_ADDRESS,
+  SOCKET_TCP_LISTEN,
+  SOCKET_TCP_SET_KEEP_ALIVE,
+  SOCKET_TCP_SHUTDOWN,
   SOCKET_UDP_BIND,
   SOCKET_UDP_CHECK_SEND,
   SOCKET_UDP_CONNECT,
@@ -68,22 +81,19 @@ import {
   SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
   STDERR,
   STDIN,
-  STDOUT,
-  HTTP_SERVER_SET_OUTGOING_RESPONSE,
-  HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
-  SOCKET_TCP_CREATE_HANDLE,
-  SOCKET_TCP_BIND,
-  SOCKET_TCP_CONNECT,
-  SOCKET_TCP_LISTEN,
-  SOCKET_TCP_GET_LOCAL_ADDRESS,
-  SOCKET_TCP_GET_REMOTE_ADDRESS,
-  SOCKET_TCP_DISPOSE,
-  SOCKET_TCP_ACCEPT,
-  SOCKET_TCP_SHUTDOWN,
-  SOCKET_TCP_SET_KEEP_ALIVE,
-  SOCKET_TCP_CREATE_OUTPUT_STREAM,
-  SOCKET_TCP_CREATE_INPUT_STREAM,
+  STDOUT
 } from "./calls.js";
+import {
+  createTcpSocket,
+  socketTcpBind,
+  socketTcpConnect,
+  socketTcpDispose,
+  socketTcpGetLocalAddress,
+  socketTcpGetRemoteAddress,
+  socketTcpListen,
+  socketTcpSetKeepAlive,
+  socketTcpShutdown
+} from "./worker-socket-tcp.js";
 import {
   SocketUdpReceive,
   createUdpSocket,
@@ -95,18 +105,6 @@ import {
   socketUdpDispose,
   socketUdpSend,
 } from "./worker-socket-udp.js";
-import {
-  createTcpSocket,
-  socketTcpAccept,
-  socketTcpBind,
-  socketTcpConnect,
-  socketTcpDispose,
-  socketTcpGetLocalAddress,
-  socketTcpGetRemoteAddress,
-  socketTcpListen,
-  socketTcpSetKeepAlive,
-  socketTcpShutdown,
-} from "./worker-socket-tcp.js";
 
 let streamCnt = 0,
   pollCnt = 0;
@@ -296,9 +294,6 @@ function handle(call, id, payload) {
 
     case SOCKET_TCP_LISTEN:
       return socketTcpListen(id, payload);
-
-    case SOCKET_TCP_ACCEPT:
-      return socketTcpAccept(id, payload);
 
     case SOCKET_TCP_GET_LOCAL_ADDRESS:
       return socketTcpGetLocalAddress(id);
