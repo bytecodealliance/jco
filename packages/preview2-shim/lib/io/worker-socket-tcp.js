@@ -30,15 +30,20 @@ export function createTcpSocket() {
 }
 
 export function socketTcpBind(id, payload) {
-  const { localAddress, localPort, family } = payload;
+  const { localAddress, localPort, family, isIpV6Only } = payload;
   const socket = getSocketOrThrow(id);
 
   let bind = "bind"; // ipv4
   if (family.toLocaleLowerCase() === "ipv6") {
-    bind = "bind6";
+    bind = "bind6"; // ipv6
   }
 
-  return socket[bind](localAddress, localPort);
+  let flags = 0;
+  if (isIpV6Only) {
+    flags |= TCPConstants.UV_TCP_IPV6ONLY;
+  }
+
+  return socket[bind](localAddress, localPort, flags);
 }
 
 export function socketTcpConnect(id, payload) {

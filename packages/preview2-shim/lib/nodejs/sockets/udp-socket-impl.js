@@ -28,7 +28,7 @@ import {
 import { ioCall, pollableCreate } from "../../io/worker-io.js";
 import {
   deserializeIpAddress,
-  findUnsuedLocalAddress,
+  findUnusedLocalAddress,
   isIPv4MappedAddress,
   isWildcardAddress,
   serializeIpAddress,
@@ -270,7 +270,7 @@ export class UdpSocket {
   }
 
   #autoBind(network, ipFamily) {
-    const localAddress = findUnsuedLocalAddress(ipFamily);
+    const localAddress = findUnusedLocalAddress(ipFamily);
     this.#socketOptions.localAddress = serializeIpAddress(
       localAddress,
       this.#socketOptions.family
