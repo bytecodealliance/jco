@@ -365,8 +365,13 @@ export class TcpSocket {
     });
 
     if (err) {
-      // TODO: figure out what these error mean and why it is thrown
-      assert(err === -89, "-89"); // on macos
+      // The remote address has changed.
+      // TODO: what error should be thrown for EREMCHG?
+      assert(err === -89, "unknown"); // on macos
+
+      // The calling host cannot reach the specified destination.
+      // TODO: what error should be thrown for EADDRNOTAVAIL?
+      assert(err === -49, "unknown"); // on macos
 
       assert(err === -99, "ephemeral-ports-exhausted");
       assert(err === -101, "remote-unreachable");
