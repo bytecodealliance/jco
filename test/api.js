@@ -61,6 +61,21 @@ export async function apiTest (fixtures) {
         ok(source.includes(exports[i][0]));
     });
 
+    test('Transpile map into package imports', async () => {
+      const name = 'flavorful';
+      const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
+      const { files, imports } = await transpile(component, {
+        name,
+        map: {
+          'testwasi': '#testimport'
+        },
+      });
+      strictEqual(imports.length, 2);
+      strictEqual(imports[0], '#testimport');
+      const source = Buffer.from(files[name + '.js']).toString();
+      ok(source.includes('\'#testimport\''));
+    });
+
     test('Optimize', async () => {
       const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
       const { component: optimizedComponent } = await opt(component);
