@@ -73,10 +73,17 @@ export function deserializeIpAddress(addr, family) {
   return address;
 }
 
-export function findUnsuedLocalAddress(family) {
+export function findUnusedLocalAddress(
+  family,
+  { iPv4MappedAddress = false } = {}
+) {
   let address = [127, 0, 0, 1];
   if (family.toLocaleLowerCase() === "ipv6") {
-    address = [0, 0, 0, 0, 0, 0, 0, 1];
+    if (iPv4MappedAddress) {
+      address = [0, 0, 0, 0, 0, 0xffff, 0x7f00, 0x0001];
+    } else {
+      address = [0, 0, 0, 0, 0, 0, 0, 1];
+    }
   }
   return {
     tag: family,

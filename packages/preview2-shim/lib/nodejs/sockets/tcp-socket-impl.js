@@ -43,10 +43,11 @@ import {
 } from "../../io/worker-io.js";
 import {
   deserializeIpAddress,
-  findUnsuedLocalAddress,
+  findUnusedLocalAddress,
   isIPv4MappedAddress,
   isMulticastIpAddress,
   isUnicastIpAddress,
+  isWildcardAddress,
   serializeIpAddress,
 } from "./socket-common.js";
 
@@ -138,14 +139,17 @@ export class TcpSocket {
     return socket;
   }
 
-  #autoBind(network, ipFamily) {
-    const unsusedLocalAddress = findUnsuedLocalAddress(ipFamily);
+  #autoBind(network, ipFamily, { iPv4MappedAddress = false } = {}) {
+    const localAddress = findUnusedLocalAddress(ipFamily, {
+      iPv4MappedAddress,
+    });
     this.#socketOptions.localAddress = serializeIpAddress(
-      unsusedLocalAddress,
+      localAddress,
       this.#socketOptions.family
     );
-    this.#socketOptions.localPort = unsusedLocalAddress.val.port;
-    this.startBind(network, unsusedLocalAddress);
+    this.#socketOptions.localPort = localAddress.val.port;
+    this.#socketOptions.localIpSocketAddress = localAddress;
+    this.startBind(network, localAddress);
     this.finishBind();
   }
 
@@ -233,6 +237,8 @@ export class TcpSocket {
         localAddress,
         localPort,
         family,
+        // Note: don't call getter method here, it will throw because of the assertion
+        isIpV6Only: this[symbolSocketState].ipv6Only,
       });
 
       if (err) {
@@ -290,8 +296,9 @@ export class TcpSocket {
       );
 
       assert(
-        host === "0.0.0.0" || host === "0:0:0:0:0:0:0:0",
-        "invalid-argument"
+        isWildcardAddress(remoteAddress),
+        "invalid-argument",
+        "The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`)"
       );
       assert(
         this.#socketOptions.family.toLocaleLowerCase() !==
@@ -300,14 +307,14 @@ export class TcpSocket {
       );
       assert(isUnicastIpAddress(remoteAddress) === false, "invalid-argument");
       assert(isMulticastIpAddress(remoteAddress), "invalid-argument");
-      assert(
-        isIPv4MappedAddress(remoteAddress) && this.ipv6Only(),
-        "invalid-argument"
-      );
+      const iPv4MappedAddress = isIPv4MappedAddress(remoteAddress);
+      assert(iPv4MappedAddress && this.ipv6Only(), "invalid-argument");
       assert(remoteAddress.val.port === 0, "invalid-argument");
 
       if (this[symbolSocketState].isBound === false) {
-        this.#autoBind(network, ipFamily);
+        this.#autoBind(network, ipFamily, {
+          iPv4MappedAddress,
+        });
       }
 
       assert(network !== this.network, "invalid-argument");
@@ -369,7 +376,7 @@ export class TcpSocket {
       assert(err === -89, "-89"); // on macos
 
       assert(err === -99, "ephemeral-ports-exhausted");
-      assert(err === -101, "remote-unreachable");
+      assert(err === -101, "remote-unreachable"); // wsl ubuntu
       assert(err === -104, "connection-reset");
       assert(err === -110, "timeout");
       assert(err === -111, "connection-refused");
@@ -441,10 +448,7 @@ export class TcpSocket {
       backlogSize: this[symbolSocketState].backlogSize,
     });
     if (err) {
-      console.error(`[tcp] listen error on socket: ${err}`);
-
-      // TODO: handle errors
-      throw new Error(err);
+      assert(true, "unknown", err);
     }
 
     this[symbolSocketState].connectionState = SocketConnectionState.Listening;
