@@ -1696,20 +1696,20 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
     };
     if let Some(map) = map.as_ref() {
         if let Some(mapping) = map.get(impt) {
-            return if let Some(hash_idx) = mapping.find('#') {
+            return if let Some(hash_idx) = mapping[1..].find('#') {
                 (
-                    mapping[0..hash_idx].to_string(),
-                    Some(mapping[hash_idx + 1..].into()),
+                    mapping[0..hash_idx + 1].to_string(),
+                    Some(mapping[hash_idx + 2..].into()),
                 )
             } else {
                 (mapping.into(), None)
             };
         }
         if let Some(mapping) = map.get(impt_sans_version) {
-            return if let Some(hash_idx) = mapping.find('#') {
+            return if let Some(hash_idx) = mapping[1..].find('#') {
                 (
-                    mapping[0..hash_idx].to_string(),
-                    Some(mapping[hash_idx + 1..].into()),
+                    mapping[0..hash_idx + 1].to_string(),
+                    Some(mapping[hash_idx + 2..].into()),
                 )
             } else {
                 (mapping.into(), None)
@@ -1723,10 +1723,10 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                     let matched = &impt_sans_version[wildcard_idx
                         ..wildcard_idx + impt_sans_version.len() - lhs.len() - rhs.len()];
                     let mapping = mapping.replace('*', matched);
-                    return if let Some(hash_idx) = mapping.find('#') {
+                    return if let Some(hash_idx) = mapping[1..].find('#') {
                         (
-                            mapping[0..hash_idx].to_string(),
-                            Some(mapping[hash_idx + 1..].into()),
+                            mapping[0..hash_idx + 1].to_string(),
+                            Some(mapping[hash_idx + 2..].into()),
                         )
                     } else {
                         (mapping, None)
@@ -1736,10 +1736,10 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                     let matched =
                         &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
                     let mapping = mapping.replace('*', matched);
-                    return if let Some(hash_idx) = mapping.find('#') {
+                    return if let Some(hash_idx) = mapping[1..].find('#') {
                         (
-                            mapping[0..hash_idx].to_string(),
-                            Some(mapping[hash_idx + 1..].into()),
+                            mapping[0..hash_idx + 1].to_string(),
+                            Some(mapping[hash_idx + 2..].into()),
                         )
                     } else {
                         (mapping, None)
