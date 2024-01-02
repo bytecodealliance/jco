@@ -2,9 +2,9 @@
 
 WASI Preview2 implementations for Node.js & browsers.
 
-Browser support is considered experimental, and not currently suitable for production applications.
+Node.js support is fully tested and conformant against the Wasmtime test suite.
 
-Node.js support is currently being stabilized, which can be tracked in https://github.com/bytecodealliance/jco/milestone/1.
+Browser support is considered experimental, and not currently suitable for production applications.
 
 # License
 
