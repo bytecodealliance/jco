@@ -1,17 +1,11 @@
-import { handle } from 'wasi:http/outgoing-handler@0.2.0-rc-2023-11-10';
+import { handle } from "wasi:http/outgoing-handler@0.2.0-rc-2023-12-05";
 import {
   Fields,
   OutgoingRequest,
   OutgoingBody,
-} from 'wasi:http/types@0.2.0-rc-2023-11-10';
+} from "wasi:http/types@0.2.0-rc-2023-12-05";
 
-const sendRequest = (
-  method,
-  scheme,
-  authority,
-  pathWithQuery,
-  body,
-) => {
+const sendRequest = (method, scheme, authority, pathWithQuery, body) => {
   try {
     let incomingResponse;
     {
@@ -19,8 +13,8 @@ const sendRequest = (
 
       const req = new OutgoingRequest(
         new Fields([
-          ['User-agent', encoder.encode('WASI-HTTP/0.0.1')],
-          ['Content-type', encoder.encode('application/json')],
+          ["User-agent", encoder.encode("WASI-HTTP/0.0.1")],
+          ["Content-type", encoder.encode("application/json")],
         ])
       );
       req.setScheme(scheme);
@@ -67,39 +61,39 @@ const sendRequest = (
   } catch (err) {
     throw new Error(err);
   }
-}
+};
 
 export const commands = {
   Error,
   getExample: () => {
     return sendRequest(
       {
-        tag: 'get',
+        tag: "get",
       },
       {
-        tag: 'HTTP',
+        tag: "HTTP",
       },
-      'localhost:8080',
-      '/api/examples',
+      "localhost:8080",
+      "/api/examples"
     );
   },
   postExample: () => {
     return sendRequest(
       {
-        tag: 'post',
+        tag: "post",
       },
       {
-        tag: 'HTTP',
+        tag: "HTTP",
       },
-      'localhost:8080',
-      '/api/examples',
-      JSON.stringify({ key: 'value' }),
+      "localhost:8080",
+      "/api/examples",
+      JSON.stringify({ key: "value" })
     );
   },
 };
 
 export const incomingHandler = {
   handle(_request, _response) {
-    throw new Error('not implemented');
+    throw new Error("not implemented");
   },
 };
