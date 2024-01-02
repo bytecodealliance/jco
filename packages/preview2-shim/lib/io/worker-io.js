@@ -99,7 +99,7 @@ function streamIoErrorCall(call, id, payload) {
   } catch (e) {
     if (e.tag === "closed") throw e;
     if (e.tag === "last-operation-failed") {
-      e.val = new IoError(e.val);
+      e.val = new IoError(Object.assign(new Error(e.val.message), e.val));
       throw e;
     }
     // any invalid error is a trap

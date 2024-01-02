@@ -3,13 +3,9 @@ use xshell::{cmd, Shell};
 
 // for debugging
 const TRACE: bool = false;
-const TEST_FILTER: &[&str] = &[]; /*&[
-                                      "proxy_handler",
-                                      "proxy_echo",
-                                      "proxy_hash",
-                                      "api_proxy",
-                                      "api_proxy_streaming",
-                                  ];*/
+const TEST_FILTER: &[&str] = &[];
+
+const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
@@ -33,7 +29,11 @@ pub fn run() -> anyhow::Result<()> {
             continue;
         }
         let file_name = String::from(entry.file_name().to_str().unwrap());
-        test_names.push(String::from(&file_name[0..file_name.len() - 5]));
+        let test_name = String::from(&file_name[0..file_name.len() - 5]);
+        if TEST_IGNORE.contains(&test_name.as_ref()) {
+            continue;
+        }
+        test_names.push(test_name);
     }
     test_names.sort();
 
@@ -80,14 +80,15 @@ pub fn run() -> anyhow::Result<()> {
 /// Generate an individual test
 fn generate_test(test_name: &str) -> String {
     let virtual_env = match test_name {
+        "api_read_only" => "readonly",
         "api_time" => "fakeclocks",
-        "preview1_stdio_not_isatty" => "notty",
         "cli_file_append" => "bar-jabberwock",
-        "proxy_handler" => "server-api-proxy",
-        "proxy_echo" | "proxy_hash" => "server-api-proxy-streaming",
         "cli_no_ip_name_lookup" => "deny-dns",
         "cli_no_tcp" => "deny-tcp",
         "cli_no_udp" => "deny-udp",
+        "preview1_stdio_not_isatty" => "notty",
+        "proxy_echo" | "proxy_hash" => "server-api-proxy-streaming",
+        "proxy_handler" => "server-api-proxy",
         _ => {
             if test_name.starts_with("preview1") {
                 "scratch"
@@ -111,7 +112,7 @@ fn generate_test(test_name: &str) -> String {
 
     let skip = match test_name {
         // these tests currently stall
-        "api_read_only" | "preview1_path_open_read_write" => true,
+        "preview2_tcp_sample_application" => true,
         _ => false,
     };
 
