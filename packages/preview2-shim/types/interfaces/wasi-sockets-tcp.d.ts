@@ -24,6 +24,11 @@ export namespace WasiSocketsTcp {
    * - `not-in-progress`:           A `bind` operation is not in progress.
    * - `would-block`:               Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
    * 
+   * # Implementors note
+   * When binding to a non-zero port, this bind operation shouldn't be affected by the TIME_WAIT
+   * state of a recently closed socket on the same local address (i.e. the SO_REUSEADDR socket
+   * option should be set implicitly on platforms that require it).
+   * 
    * # References
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
    * - <https://man7.org/linux/man-pages/man2/bind.2.html>

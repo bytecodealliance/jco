@@ -639,10 +639,6 @@ export interface MetadataHashValue {
   upper: bigint,
 }
 
-export class DirectoryEntryStream {
-  readDirectoryEntry(): DirectoryEntry | undefined;
-}
-
 export class Descriptor {
   readViaStream(offset: Filesize): InputStream;
   writeViaStream(offset: Filesize): OutputStream;
@@ -671,4 +667,8 @@ export class Descriptor {
   isSameObject(other: Descriptor): boolean;
   metadataHash(): MetadataHashValue;
   metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;
+}
+
+export class DirectoryEntryStream {
+  readDirectoryEntry(): DirectoryEntry | undefined;
 }
