@@ -11,6 +11,8 @@ import {
   stopHttpServer,
 } from "./worker-http.js";
 
+const noop = () => {};
+
 import {
   CALL_MASK,
   CALL_SHIFT,
@@ -81,7 +83,7 @@ import {
   SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
   STDERR,
   STDIN,
-  STDOUT
+  STDOUT,
 } from "./calls.js";
 import {
   createTcpSocket,
@@ -92,7 +94,7 @@ import {
   socketTcpGetRemoteAddress,
   socketTcpListen,
   socketTcpSetKeepAlive,
-  socketTcpShutdown
+  socketTcpShutdown,
 } from "./worker-socket-tcp.js";
 import {
   SocketUdpReceive,
@@ -142,7 +144,7 @@ function streamError(streamId, stream, err) {
   if (typeof stream.end === "function") stream.end();
   // we delete the stream from unfinishedStreams as it is now "finished" (closed)
   unfinishedStreams.delete(streamId);
-  return { tag: "last-operation-failed", val: err };
+  return { tag: "last-operation-failed", val: { code: err.code, message: err.message, stack: err.stack } };
 }
 
 /**
@@ -300,7 +302,7 @@ function handle(call, id, payload) {
 
     case SOCKET_TCP_GET_REMOTE_ADDRESS:
       return socketTcpGetRemoteAddress(id);
-    
+
     case SOCKET_TCP_SHUTDOWN:
       return socketTcpShutdown(id, payload);
 
@@ -313,7 +315,7 @@ function handle(call, id, payload) {
     case SOCKET_TCP_CREATE_INPUT_STREAM:
     case SOCKET_TCP_CREATE_OUTPUT_STREAM:
       return createStream(new PassThrough());
-  
+
     // Sockets UDP
     case SOCKET_UDP_CREATE_HANDLE: {
       const { addressFamily, reuseAddr } = payload;
@@ -552,8 +554,10 @@ function handle(call, id, payload) {
             );
           }
           return new Promise((resolve, reject) => {
+            stream.once("error", noop);
             stream.write(payload, (err) => {
               if (err) return void reject(streamError(id, stream, err));
+              stream.off("error", noop);
               resolve(BigInt(payload.byteLength));
             });
           });

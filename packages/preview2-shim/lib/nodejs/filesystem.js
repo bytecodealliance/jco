@@ -538,7 +538,7 @@ export const types = {
   Descriptor,
   DirectoryEntryStream,
   filesystemErrorCode(err) {
-    return convertFsError(err);
+    return convertFsError(err.payload);
   },
 };
 
