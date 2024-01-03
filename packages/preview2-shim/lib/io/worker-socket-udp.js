@@ -8,27 +8,27 @@ const symbolSocketUdpIpUnspecified =
   Symbol.for("symbolSocketUdpIpUnspecified");
 
 /** @type {Map<number, NodeJS.Socket>} */
-export const openedSockets = new Map();
+export const openUdpSockets = new Map();
 
 /** @type {Map<number, Map<string, { data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>} */
 const queuedReceivedSocketDatagrams = new Map();
 
-let socketCnt = 0;
+let udpSocketCnt = 0;
 
-export function getSocketOrThrow(socketId) {
-  const socket = openedSockets.get(socketId);
+export function getUdpSocketOrThrow(socketId) {
+  const socket = openUdpSockets.get(socketId);
   if (!socket) throw "invalid-state";
   return socket;
 }
 
-export function getSocketByPort(port) {
-  return Array.from(openedSockets.values()).find(
+export function getUdpSocketByPort(port) {
+  return Array.from(openUdpSockets.values()).find(
     (socket) => socket.address().port === port
   );
 }
 
-export function getBoundSockets(socketId) {
-  return Array.from(openedSockets.entries())
+export function getBoundUdpSockets(socketId) {
+  return Array.from(openUdpSockets.entries())
     .filter(([id, _socket]) => id !== socketId) // exclude source socket
     .map(([_id, socket]) => socket.address());
 }
@@ -65,27 +65,15 @@ export function enqueueReceivedSocketDatagram(socketInfo, { data, rinfo }) {
  * @returns {NodeJS.Socket}
  */
 export function createUdpSocket(addressFamily, reuseAddr) {
-  return new Promise((resolve, reject) => {
-    const type = addressFamily === "ipv6" ? "udp6" : "udp4";
-    try {
-      const socket = createSocket({
-        type,
-        reuseAddr,
-      });
-      openedSockets.set(++socketCnt, socket);
-      resolve({
-        id: socketCnt,
-        socket,
-      });
-    } catch (e) {
-      reject(e);
-    }
-  });
+  const type = addressFamily === "ipv6" ? "udp6" : "udp4";
+  const socket = createSocket({ type, reuseAddr });
+  openUdpSockets.set(++udpSocketCnt, socket);
+  return udpSocketCnt;
 }
 
 export function socketUdpBind(id, payload) {
   const { localAddress, localPort } = payload;
-  const socket = getSocketOrThrow(id);
+  const socket = getUdpSocketOrThrow(id);
 
   // Note: even if the client has bound to IPV4_UNSPECIFIED/IPV6_UNSPECIFIED (0.0.0.0 // ::),
   // rinfo.address is resolved to IPV4_LOOPBACK/IPV6_LOOPBACK.
@@ -104,13 +92,13 @@ export function socketUdpBind(id, payload) {
         port: localPort,
       },
       () => {
-        openedSockets.set(id, socket);
+        openUdpSockets.set(id, socket);
         resolve(0);
       }
     );
 
     socket.on("message", (data, rinfo) => {
-      const remoteSocket = getSocketByPort(rinfo.port);
+      const remoteSocket = getUdpSocketByPort(rinfo.port);
       let { address, port } = socket.address();
 
       if (remoteSocket[symbolSocketUdpIpUnspecified].isUnspecified) {
@@ -136,7 +124,7 @@ export function socketUdpBind(id, payload) {
 }
 
 export function socketUdpCheckSend(id) {
-  const socket = getSocketOrThrow(id);
+  const socket = getUdpSocketOrThrow(id);
   try {
     return socket.getSendBufferSize() - socket.getSendQueueSize();
   } catch (err) {
@@ -146,7 +134,7 @@ export function socketUdpCheckSend(id) {
 
 export function socketUdpSend(id, payload) {
   let { remoteHost, remotePort, data } = payload;
-  const socket = getSocketOrThrow(id);
+  const socket = getUdpSocketOrThrow(id);
 
   return new Promise((resolve) => {
     const _callback = (err, _byteLength) => {
@@ -157,7 +145,7 @@ export function socketUdpSend(id, payload) {
     // Note: when remoteHost/remotePort is None, we broadcast to all bound sockets
     // except the source socket
     if (remotePort === undefined || remoteHost === undefined) {
-      getBoundSockets(id).forEach((adr) => {
+      getBoundUdpSockets(id).forEach((adr) => {
         socket.send(data, adr.port, adr.address, _callback);
       });
     } else {
@@ -172,7 +160,7 @@ export function socketUdpSend(id, payload) {
 
 export function SocketUdpReceive(id, payload) {
   const { maxResults } = payload;
-  const socket = getSocketOrThrow(id);
+  const socket = getUdpSocketOrThrow(id);
   const { address, port } = socket.address();
 
   // set target socket info
@@ -187,11 +175,11 @@ export function SocketUdpReceive(id, payload) {
 }
 
 export function socketUdpConnect(id, payload) {
-  const socket = getSocketOrThrow(id);
+  const socket = getUdpSocketOrThrow(id);
   const { remoteAddress, remotePort } = payload;
   return new Promise((resolve) => {
     socket.connect(remotePort, remoteAddress, () => {
-      openedSockets.set(id, socket);
+      openUdpSockets.set(id, socket);
       resolve(0);
     });
     socket.once("error", (err) => {
@@ -201,7 +189,7 @@ export function socketUdpConnect(id, payload) {
 }
 
 export function socketUdpDisconnect(id) {
-  const socket = getSocketOrThrow(id);
+  const socket = getUdpSocketOrThrow(id);
   return new Promise((resolve) => {
     socket.disconnect();
     resolve(0);
@@ -209,10 +197,10 @@ export function socketUdpDisconnect(id) {
 }
 
 export function socketUdpDispose(id) {
-  const socket = getSocketOrThrow(id);
+  const socket = getUdpSocketOrThrow(id);
   return new Promise((resolve) => {
     socket.close(() => {
-      openedSockets.delete(id);
+      openUdpSockets.delete(id);
       resolve(0);
     });
   });

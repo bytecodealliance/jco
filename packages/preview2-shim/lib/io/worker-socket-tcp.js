@@ -7,12 +7,12 @@ const {
 const { ShutdownWrap } = process.binding("stream_wrap");
 
 /** @type {Map<number, NodeJS.Socket>} */
-export const openedSockets = new Map();
+export const openTcpSockets = new Map();
 
-let socketCnt = 0;
+let tcpSocketCnt = 0;
 
 export function getSocketOrThrow(socketId) {
-  const socket = openedSockets.get(socketId);
+  const socket = openTcpSockets.get(socketId);
   if (!socket) throw "invalid-socket";
   return socket;
 }
@@ -25,8 +25,8 @@ export function getSocketOrThrow(socketId) {
  */
 export function createTcpSocket() {
   const socket = new TCP(TCPConstants.SOCKET | TCPConstants.SERVER);
-  openedSockets.set(++socketCnt, socket);
-  return Promise.resolve(socketCnt);
+  openTcpSockets.set(++tcpSocketCnt, socket);
+  return tcpSocketCnt;
 }
 
 export function socketTcpBind(id, payload) {
@@ -34,7 +34,7 @@ export function socketTcpBind(id, payload) {
   const socket = getSocketOrThrow(id);
 
   let bind = "bind"; // ipv4
-  if (family.toLocaleLowerCase() === "ipv6") {
+  if (family === "ipv6") {
     bind = "bind6"; // ipv6
   }
 
@@ -63,10 +63,9 @@ export function socketTcpConnect(id, payload) {
     connectReq.localAddress = localAddress;
     connectReq.localPort = localPort;
     let connect = "connect"; // ipv4
-    if (family.toLocaleLowerCase() === "ipv6") {
+    if (family === "ipv6") {
       connect = "connect6";
     }
-
     socket.onread = (_buffer) => {
       // TODO: handle data received from the server
     };
@@ -87,6 +86,7 @@ export function socketTcpGetLocalAddress(id) {
   const socket = getSocketOrThrow(id);
   const out = {};
   socket.getsockname(out);
+  out.family = out.family.toLowerCase();
   return out;
 }
 
@@ -94,6 +94,7 @@ export function socketTcpGetRemoteAddress(id) {
   const socket = getSocketOrThrow(id);
   const out = {};
   socket.getpeername(out);
+  out.family = out.family.toLowerCase();
   return out;
 }
 

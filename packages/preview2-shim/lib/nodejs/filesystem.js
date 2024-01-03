@@ -5,7 +5,6 @@ import {
 } from "../io/worker-io.js";
 import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE } from "../io/calls.js";
 import { FILE } from "../io/calls.js";
-// import { environment } from "./cli.js";
 import {
   closeSync,
   constants,
@@ -60,7 +59,6 @@ function lookupType(obj) {
 /**
  * @implements {DescriptorProps}
  */
-let descriptorCnt = 3;
 class Descriptor {
   #hostPreopen;
   #fd;
@@ -86,11 +84,6 @@ class Descriptor {
     descriptor.#mode = mode;
     descriptor.#fullPath = fullPath;
     return descriptor;
-  }
-
-  constructor() {
-    // this id is purely for debugging purposes
-    this._id = descriptorCnt++;
   }
 
   readViaStream(offset) {

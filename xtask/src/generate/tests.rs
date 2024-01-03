@@ -156,9 +156,7 @@ fn generate_mod(test_names: &[String]) -> String {
 
     test_names
         .iter()
-        .filter(|&name| {
-            name != "api_proxy" && name != "api_proxy_streaming" && name != "preview2_adapter_badfd"
-        })
+        .filter(|&name| name != "api_proxy" && name != "api_proxy_streaming")
         .fold(String::new(), |mut output, test_name| {
             let _ = write!(output, "mod {test_name};\n");
             output
