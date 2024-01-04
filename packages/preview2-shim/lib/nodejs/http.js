@@ -23,11 +23,6 @@ import { HTTP } from "../io/calls.js";
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 export const _forbiddenHeaders = new Set(["connection", "keep-alive"]);
 
-let requestCnt = 1;
-let responseCnt = 1;
-let fieldsCnt = 1;
-let futureCnt = 1;
-
 class IncomingBody {
   #finished = false;
   #calledStream = false;
@@ -98,7 +93,6 @@ const incomingRequestCreate = IncomingRequest._create;
 delete IncomingRequest._create;
 
 class FutureTrailers {
-  _id = futureCnt++;
   #requested = false;
   subscribe() {
     return pollableCreate(0);
@@ -124,7 +118,6 @@ const futureTrailersCreate = FutureTrailers._create;
 delete FutureTrailers._create;
 
 class OutgoingResponse {
-  _id = responseCnt++;
   #body;
   /** @type {number} */ #statusCode = 200;
   /** @type {Fields} */ #headers;
@@ -206,7 +199,6 @@ class RequestOptions {
 }
 
 class OutgoingRequest {
-  _id = requestCnt++;
   /** @type {Method} */ #method = { tag: "get" };
   /** @type {Scheme | undefined} */ #scheme = undefined;
   /** @type {string | undefined} */ #pathWithQuery = undefined;
@@ -357,7 +349,6 @@ const outgoingBodyCreate = OutgoingBody._create;
 delete OutgoingBody._create;
 
 class IncomingResponse {
-  _id = responseCnt++;
   /** @type {Fields} */ #headers = undefined;
   #status = 0;
   /** @type {number} */ #bodyStreamId;
@@ -375,7 +366,7 @@ class IncomingResponse {
   }
   [symbolDispose]() {
     if (this.#bodyStreamId) {
-      ioCall(INPUT_STREAM_DISPOSE | HTTP, this.#bodyStreamId);
+      ioCall(INPUT_STREAM_DISPOSE | HTTP, this.#bodyStreamId, null);
       this.#bodyStreamId = undefined;
     }
   }
@@ -392,7 +383,6 @@ const incomingResponseCreate = IncomingResponse._create;
 delete IncomingResponse._create;
 
 class FutureIncomingResponse {
-  _id = futureCnt++;
   #pollId;
   subscribe() {
     if (this.#pollId) return pollableCreate(this.#pollId);
@@ -402,7 +392,7 @@ class FutureIncomingResponse {
   get() {
     // already taken
     if (!this.#pollId) return { tag: "err" };
-    const ret = ioCall(FUTURE_GET_VALUE_AND_DISPOSE | HTTP, this.#pollId);
+    const ret = ioCall(FUTURE_GET_VALUE_AND_DISPOSE | HTTP, this.#pollId, null);
     if (!ret) return;
     this.#pollId = undefined;
     if (ret.error) return { tag: "ok", val: { tag: "err", val: ret.value } };
@@ -423,7 +413,7 @@ class FutureIncomingResponse {
     };
   }
   [symbolDispose]() {
-    if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId);
+    if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId, null);
   }
   static _create(
     method,
@@ -456,7 +446,6 @@ const futureIncomingResponseCreate = FutureIncomingResponse._create;
 delete FutureIncomingResponse._create;
 
 class Fields {
-  _id = fieldsCnt++;
   #immutable = false;
   /** @type {[string, Uint8Array[]][]} */ #entries = [];
   /** @type {Map<string, [string, Uint8Array[]][]>} */ #table = new Map();
@@ -677,7 +666,7 @@ export class HTTPServer {
               streamId,
             });
           } else {
-            ioCall(HTTP_SERVER_CLEAR_OUTGOING_RESPONSE, responseId);
+            ioCall(HTTP_SERVER_CLEAR_OUTGOING_RESPONSE, responseId, null);
             console.error("TODO: handle outparam error");
             console.error(response);
             process.exit(1);
@@ -694,6 +683,6 @@ export class HTTPServer {
   }
   stop() {
     clearInterval(this.#liveEventLoopInterval);
-    ioCall(HTTP_SERVER_STOP, this.#id);
+    ioCall(HTTP_SERVER_STOP, this.#id, null);
   }
 }

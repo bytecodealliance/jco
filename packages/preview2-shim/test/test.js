@@ -180,33 +180,28 @@ suite("Node.js Preview2", () => {
     test("sockets.instanceNetwork() should be a singleton", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network1 = sockets.instanceNetwork.instanceNetwork();
-      equal(network1.id, 1);
       const network2 = sockets.instanceNetwork.instanceNetwork();
-      equal(network2.id, 1);
+      equal(network1, network2);
     });
 
     test("sockets.tcpCreateSocket() should throw not-supported", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const socket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const socket = sockets.tcpCreateSocket.createTcpSocket('ipv4');
       notEqual(socket, null);
 
       throws(
         () => {
           sockets.tcpCreateSocket.createTcpSocket("abc");
         },
-        (err) => err === sockets.network.errorCode.notSupported
+        (err) => err === 'not-supported'
       );
     });
     test("tcp.bind(): should bind to a valid ipv4 address", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket('ipv4');
       const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [0, 0, 0, 0],
           port: 1337,
@@ -215,9 +210,8 @@ suite("Node.js Preview2", () => {
       tcpSocket.startBind(network, localAddress);
       tcpSocket.finishBind();
 
-      equal(tcpSocket.network.id, network.id);
       deepEqual(tcpSocket.localAddress(), {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [0, 0, 0, 0],
           port: 1337,
@@ -229,11 +223,9 @@ suite("Node.js Preview2", () => {
     test("tcp.bind(): should bind to a valid ipv6 address and port=0", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv6
-      );
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket('ipv6');
       const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv6,
+        tag: 'ipv6',
         val: {
           address: [0, 0, 0, 0, 0, 0, 0, 0],
           port: 0,
@@ -242,12 +234,11 @@ suite("Node.js Preview2", () => {
       tcpSocket.startBind(network, localAddress);
       tcpSocket.finishBind();
 
-      equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.addressFamily(), "ipv6");
 
       const boundAddress = tcpSocket.localAddress();
       const expectedAddress = {
-        tag: sockets.network.IpAddressFamily.ipv6,
+        tag: 'ipv6',
         val: {
           address: [0, 0, 0, 0, 0, 0, 0, 0],
           // port will be assigned by the OS, so it should be > 0
@@ -264,12 +255,10 @@ suite("Node.js Preview2", () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket('ipv4');
       const localAddress = {
         // invalid address family
-        tag: sockets.network.IpAddressFamily.ipv6,
+        tag: 'ipv6',
         val: {
           address: [0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0001],
           port: 0,
@@ -279,7 +268,7 @@ suite("Node.js Preview2", () => {
         () => {
           tcpSocket.startBind(network, localAddress);
         },
-        (err) => err === sockets.network.errorCode.invalidArgument
+        (err) => err === 'invalid-argument'
       );
     });
 
@@ -287,11 +276,9 @@ suite("Node.js Preview2", () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
 
       const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket('ipv4');
       const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [0, 0, 0, 0],
           port: 0,
@@ -304,7 +291,7 @@ suite("Node.js Preview2", () => {
           // already bound
           tcpSocket.startBind(network, localAddress);
         },
-        (err) => err === sockets.network.errorCode.invalidState
+        (err) => err === 'invalid-state'
       );
     });
 
@@ -387,13 +374,9 @@ suite("Node.js Preview2", () => {
   suite("WASI Sockets (UDP)", async () => {
     test("sockets.udpCreateSocket() should be a singleton", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const socket1 = sockets.udpCreateSocket.createUdpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const socket1 = sockets.udpCreateSocket.createUdpSocket('ipv4');
       notEqual(socket1.id, 1);
-      const socket2 = sockets.udpCreateSocket.createUdpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const socket2 = sockets.udpCreateSocket.createUdpSocket('ipv4');
       notEqual(socket2.id, 1);
     });
     test("sockets.udpCreateSocket() should not-support on invalid ip family", async () => {
@@ -403,7 +386,7 @@ suite("Node.js Preview2", () => {
         () => {
           sockets.udpCreateSocket.createUdpSocket("xyz");
         },
-        (err) => err === sockets.network.errorCode.notSupported
+        (err) => err === 'not-supported'
       );
     });
 

@@ -6,7 +6,7 @@ export const monotonicClock = {
     return 1n;
   },
   now() {
-    return ioCall(calls.CLOCKS_NOW);
+    return ioCall(calls.CLOCKS_NOW, null, null);
   },
   subscribeInstant(instant) {
     return createPoll(calls.CLOCKS_INSTANT_SUBSCRIBE, null, instant);

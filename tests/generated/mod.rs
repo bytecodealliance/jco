@@ -81,6 +81,7 @@ mod preview1_symlink_filestat;
 mod preview1_symlink_loop;
 mod preview1_unicode_output;
 mod preview1_unlink_file_trailing_slashes;
+mod preview2_adapter_badfd;
 mod preview2_ip_name_lookup;
 mod preview2_random;
 mod preview2_sleep;

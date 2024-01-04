@@ -1,4 +1,3 @@
-import { resolve } from "node:dns/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { _rawDebug, exit, hrtime, stderr, stdout } from "node:process";
 import { PassThrough } from "node:stream";
@@ -10,6 +9,7 @@ import {
   startHttpServer,
   stopHttpServer,
 } from "./worker-http.js";
+import { convertSocketError, socketResolveAddress } from './worker-sockets.js';
 
 const noop = () => {};
 
@@ -99,7 +99,7 @@ import {
 import {
   SocketUdpReceive,
   createUdpSocket,
-  getSocketOrThrow,
+  getUdpSocketOrThrow,
   socketUdpBind,
   socketUdpCheckSend,
   socketUdpConnect,
@@ -286,7 +286,7 @@ function handle(call, id, payload) {
 
     // Sockets TCP
     case SOCKET_TCP_CREATE_HANDLE:
-      return createFuture(createTcpSocket());
+      return createTcpSocket();
 
     case SOCKET_TCP_BIND:
       return socketTcpBind(id, payload);
@@ -319,7 +319,7 @@ function handle(call, id, payload) {
     // Sockets UDP
     case SOCKET_UDP_CREATE_HANDLE: {
       const { addressFamily, reuseAddr } = payload;
-      return createFuture(createUdpSocket(addressFamily, reuseAddr));
+      return createUdpSocket(addressFamily, reuseAddr);
     }
 
     case SOCKET_UDP_BIND:
@@ -341,17 +341,21 @@ function handle(call, id, payload) {
       return socketUdpDisconnect(id);
 
     case SOCKET_UDP_GET_LOCAL_ADDRESS: {
-      const socket = getSocketOrThrow(id);
-      return Promise.resolve(socket.address());
+      const socket = getUdpSocketOrThrow(id);
+      const addr = socket.address();
+      addr.family = addr.family.toLowerCase();
+      return addr;
     }
 
     case SOCKET_UDP_GET_REMOTE_ADDRESS: {
-      const socket = getSocketOrThrow(id);
-      return Promise.resolve(socket.remoteAddress());
+      const socket = getUdpSocketOrThrow(id);
+      const addr = socket.remoteAddress();
+      addr.family = addr.family.toLowerCase();
+      return addr;
     }
 
     case SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST:
-      return createFuture(resolve(payload.hostname));
+      return createFuture(socketResolveAddress(payload));
 
     case SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST:
       return void unfinishedFutures.delete(id);
@@ -360,57 +364,56 @@ function handle(call, id, payload) {
       const future = unfinishedFutures.get(id);
       if (!future) {
         // future not ready yet
-        if (unfinishedPolls.get(id)) {
+        if (unfinishedPolls.get(id))
           throw "would-block";
-        }
-        throw new Error("future already got and dropped");
+        throw new Error("internal error: future already got and dropped");
       }
       unfinishedFutures.delete(id);
       return future;
     }
 
     case SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE: {
-      const socket = getSocketOrThrow(id);
+      const socket = getUdpSocketOrThrow(id);
       try {
-        return socket.getRecvBufferSize();
+        return BigInt(socket.getRecvBufferSize());
       } catch (err) {
-        return err.errno;
+        throw convertSocketError(err);
       }
     }
 
     case SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE: {
-      const socket = getSocketOrThrow(id);
+      const socket = getUdpSocketOrThrow(id);
       try {
-        return socket.setRecvBufferSize(65537);
+        socket.setRecvBufferSize(Number(payload));
       } catch (err) {
-        return err.errno;
+        throw convertSocketError(err);
       }
     }
 
     case SOCKET_UDP_GET_SEND_BUFFER_SIZE: {
-      const socket = getSocketOrThrow(id);
+      const socket = getUdpSocketOrThrow(id);
       try {
-        return socket.getSendBufferSize();
+        return BigInt(socket.getSendBufferSize());
       } catch (err) {
-        return err.errno;
+        throw convertSocketError(err);
       }
     }
 
     case SOCKET_UDP_SET_SEND_BUFFER_SIZE: {
-      const socket = getSocketOrThrow(id);
+      const socket = getUdpSocketOrThrow(id);
       try {
-        return socket.setSendBufferSize(payload.value);
+        return socket.setSendBufferSize(Number(payload));
       } catch (err) {
-        return err.errno;
+        throw convertSocketError(err);
       }
     }
 
     case SOCKET_UDP_SET_UNICAST_HOP_LIMIT: {
-      const socket = getSocketOrThrow(id);
+      const socket = getUdpSocketOrThrow(id);
       try {
-        return socket.setTTL(payload.value);
+        return socket.setTTL(payload);
       } catch (err) {
-        return err.errno;
+        throw convertSocketError(err);
       }
     }
 
