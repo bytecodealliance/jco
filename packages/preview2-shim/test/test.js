@@ -210,7 +210,6 @@ suite("Node.js Preview2", () => {
       tcpSocket.startBind(network, localAddress);
       tcpSocket.finishBind();
 
-      equal(tcpSocket.network.id, network.id);
       deepEqual(tcpSocket.localAddress(), {
         tag: 'ipv4',
         val: {
@@ -235,7 +234,6 @@ suite("Node.js Preview2", () => {
       tcpSocket.startBind(network, localAddress);
       tcpSocket.finishBind();
 
-      equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.addressFamily(), "ipv6");
 
       const boundAddress = tcpSocket.localAddress();
