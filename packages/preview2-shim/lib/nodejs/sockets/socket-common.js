@@ -8,10 +8,6 @@ export class Network {
   #allowDnsLookup = true;
   #allowTcp = true;
   #allowUdp = true;
-  /** @type {Map<number, TcpSocket} */
-  #tcpSockets = new Map();
-  /** @type {Map<number, UdpSocket} */
-  #udpSockets = new Map();
 
   static _denyDnsLookup (network = defaultNetwork) {
     network.#allowDnsLookup = false;
@@ -127,13 +123,10 @@ export function deserializeIpAddress(addr, family) {
   return address;
 }
 
-export function findUnusedLocalAddress(
-  family,
-  { iPv4MappedAddress = false } = {}
-) {
+export function findUnusedLocalAddress(family, ipv4MappedAddress) {
   let address = [127, 0, 0, 1];
   if (family === "ipv6") {
-    if (iPv4MappedAddress) {
+    if (ipv4MappedAddress) {
       address = [0, 0, 0, 0, 0, 0xffff, 0x7f00, 0x0001];
     } else {
       address = [0, 0, 0, 0, 0, 0, 0, 1];
@@ -154,8 +147,8 @@ export function isUnicastIpAddress(ipSocketAddress) {
 
 export function isMulticastIpAddress(ipSocketAddress) {
   // ipv6: [0xff00, 0, 0, 0, 0, 0, 0, 0]
-  // ipv4: [224, 0, 0, 0]
-  return ipSocketAddress.val.address[0] === 224 || ipSocketAddress.val.address[0] === 0xff00;
+  // ipv4: [0xe0, 0, 0, 0]
+  return ipSocketAddress.val.address[0] === 0xe0 || ipSocketAddress.val.address[0] === 0xff00;
 }
 
 export function isBroadcastIpAddress(ipSocketAddress) {

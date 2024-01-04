@@ -110,43 +110,35 @@ fn generate_test(test_name: &str) -> String {
         _ => false,
     };
 
-    let skip = match test_name {
-        // these tests currently stall
-        "preview2_tcp_sample_application" => true,
-        _ => false,
-    };
-
-    let skip_comment = if skip { "// " } else { "" };
     format!(
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-{skip_comment}use xshell::{{cmd, Shell}};
+use xshell::{{cmd, Shell}};
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
-    {skip_comment}let sh = Shell::new()?;
-    {skip_comment}let wasi_file = "./tests/rundir/{test_name}.component.wasm";
+    let sh = Shell::new()?;
+    let wasi_file = "./tests/rundir/{test_name}.component.wasm";
     let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
 
-    {skip_comment}let cmd = cmd!(sh, "node ./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'");
+    let cmd = cmd!(sh, "node ./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'");
 {}
-    {skip_comment}cmd.run(){};
-    {}Ok(())
+    cmd.run(){};
+    Ok(())
 }}
 "##,
         if TRACE { "--jco-trace" } else { "" },
         match stdin {
-            Some(stdin) => format!("    {skip_comment}let cmd = cmd.stdin(b\"{}\");", stdin),
+            Some(stdin) => format!("    let cmd = cmd.stdin(b\"{}\");", stdin),
             None => "".into(),
         },
         if !should_error {
             "?"
         } else {
             ".expect_err(\"test should exit with code 1\")"
-        },
-        if skip { "panic!(\"skipped\"); // " } else { "" }
+        }
     )
 }
 
