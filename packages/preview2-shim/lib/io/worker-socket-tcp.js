@@ -1,3 +1,8 @@
+/**
+ * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
+ * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
+ */
+
 // See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
 const {
   TCP,
@@ -5,6 +10,10 @@ const {
   TCPConnectWrap,
 } = process.binding("tcp_wrap");
 const { ShutdownWrap } = process.binding("stream_wrap");
+import {
+  deserializeIpAddress,
+  serializeIpAddress,
+} from "../nodejs/sockets/socket-common.js";
 
 /** @type {Map<number, NodeJS.Socket>} */
 export const openTcpSockets = new Map();
@@ -29,19 +38,23 @@ export function createTcpSocket() {
   return tcpSocketCnt;
 }
 
-export function socketTcpBind(id, payload) {
-  const { localAddress, localPort, family, isIpV6Only } = payload;
+/**
+ *
+ * @param {number} id
+ * @param {{ localAddress: IpSocketAddress, family: IpAddressFamily, isIpV6Only: boolean }} options
+ * @returns
+ */
+export function socketTcpBind(id, { localAddress, family, isIpV6Only }) {
   const socket = getSocketOrThrow(id);
-
-  let flags = 0;
-  if (isIpV6Only) {
-    flags |= TCPConstants.UV_TCP_IPV6ONLY;
-  }
-
-  if (family === 'ipv6')
-    return socket.bind6(localAddress, localPort, flags);
-  else
-    return socket.bind(localAddress, localPort, flags);
+  const address = serializeIpAddress(localAddress, false);
+  const port = localAddress.val.port;
+  if (family === "ipv6")
+    return socket.bind6(
+      address,
+      port,
+      isIpV6Only ? TCPConstants.UV_TCP_IPV6ONLY : 0
+    );
+  return socket.bind(address, port, 0);
 }
 
 export function socketTcpConnect(id, payload) {
@@ -74,33 +87,49 @@ export function socketTcpConnect(id, payload) {
   });
 }
 
-export function socketTcpListen(id, payload) {
+export function socketTcpListen(id, backlogSize) {
   const socket = getSocketOrThrow(id);
-  const { backlogSize } = payload;
+  // todo: error handling?
   return socket.listen(backlogSize);
 }
 
 export function socketTcpGetLocalAddress(id) {
   const socket = getSocketOrThrow(id);
   const out = {};
-  socket.getsockname(out);
-  out.family = out.family.toLowerCase();
-  return out;
+  try {
+    socket.getsockname(out);
+  } catch (err) {
+    process._rawDebug(err);
+    throw "unknown";
+  }
+  const family = out.family.toLowerCase();
+  const { address, port } = out;
+  return {
+    tag: family,
+    val: {
+      address: deserializeIpAddress(address, family),
+      port,
+    },
+  };
 }
 
 export function socketTcpGetRemoteAddress(id) {
   const socket = getSocketOrThrow(id);
   const out = {};
   socket.getpeername(out);
-  out.family = out.family.toLowerCase();
-  return out;
+  const family = out.family.toLowerCase();
+  const { address, port } = out;
+  return {
+    tag: family,
+    val: {
+      address: deserializeIpAddress(address, family),
+      port,
+    },
+  };
 }
 
-export function socketTcpShutdown(id, payload) {
+export function socketTcpShutdown(id, _shutdownType) {
   const socket = getSocketOrThrow(id);
-
-  // eslint-disable-next-line no-unused-vars
-  const { shutdownType } = payload;
 
   return new Promise((resolve) => {
     const req = new ShutdownWrap();
@@ -116,10 +145,8 @@ export function socketTcpShutdown(id, payload) {
   });
 }
 
-export function socketTcpSetKeepAlive(id, payload) {
+export function socketTcpSetKeepAlive(id, enable) {
   const socket = getSocketOrThrow(id);
-  const { enable } = payload;
-
   return socket.setKeepAlive(enable);
 }
 

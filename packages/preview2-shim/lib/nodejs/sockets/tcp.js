@@ -10,7 +10,6 @@
  * @typedef {import("../../../types/interfaces/wasi-clocks-monotonic-clock.js").Duration} Duration
  */
 
-import { isIP } from "node:net";
 import { platform } from "node:os";
 import { mayTcp } from "./socket-common.js";
 
@@ -37,7 +36,6 @@ import {
   pollableCreate,
 } from "../../io/worker-io.js";
 import {
-  deserializeIpAddress,
   findUnusedLocalAddress,
   isIPv4MappedAddress,
   isMulticastIpAddress,
@@ -76,8 +74,7 @@ export class TcpSocket {
   #state = SOCKET_STATE_INIT;
   #error = null;
 
-  #localAddress = null;
-  #remoteAddress = null;
+  #bindOrConnectAddress = null;
 
   // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #listenBacklogSize = 128;
@@ -137,7 +134,7 @@ export class TcpSocket {
       (isIPv4MappedAddress(localAddress) && this.ipv6Only())
     )
       throw "invalid-argument";
-    this.#localAddress = localAddress;
+    this.#bindOrConnectAddress = localAddress;
     this.#network = network;
     this.#state = SOCKET_STATE_BIND;
   }
@@ -153,14 +150,16 @@ export class TcpSocket {
   finishBind() {
     try {
       if (this.#state !== SOCKET_STATE_BIND) throw "not-in-progress";
-      let { localAddress, family } = this.#options;
-      if (isIP(localAddress) === 0) throw "address-not-bindable";
-      if (globalBoundAddresses.has(serializeIpAddress(localAddress, true)))
+      if (
+        globalBoundAddresses.has(
+          serializeIpAddress(this.#bindOrConnectAddress, true)
+        )
+      )
         throw "address-in-use";
 
       const err = ioCall(SOCKET_TCP_BIND, this.#id, {
-        localAddress,
-        family,
+        localAddress: this.#bindOrConnectAddress,
+        family: this.#options.family,
         isIpV6Only: this.#options.ipv6Only,
       });
 
@@ -180,10 +179,8 @@ export class TcpSocket {
 
       // when port is 0, the OS will assign an ephemeral IP
       // we need to get the actual IP assigned by the OS
-      if (this.#localAddress.val.port === 0)
-        this.#localAddress = this.localAddress();
       globalBoundAddresses.set(
-        serializeIpAddress(this.#localAddress, true),
+        serializeIpAddress(this.localAddress(), true),
         this.#id
       );
     } catch (err) {
@@ -230,13 +227,12 @@ export class TcpSocket {
         ipFamily,
         isIpv4MappedAddress
       );
-      this.#localAddress = serializeIpAddress(localAddress, this.#options.family);
       this.#options.localPort = localAddress.val.port;
       this.#options.localIpSocketAddress = localAddress;
       this.startBind(network, localAddress);
       this.finishBind();
     }
-    this.#options.remoteAddress = remoteAddress;
+    this.#bindOrConnectAddress = remoteAddress;
     this.#network = network;
     this.#state = SOCKET_STATE_CONNECT;
   }
@@ -255,15 +251,8 @@ export class TcpSocket {
   finishConnect() {
     if (this.#state !== SOCKET_STATE_CONNECT) throw "not-in-progress";
 
-    const { localAddress, localPort, remoteAddress, remotePort, family } =
-      this.#options;
-
     const err = ioCall(SOCKET_TCP_CONNECT, this.#id, {
-      remoteAddress,
-      remotePort,
-      localAddress,
-      localPort,
-      family,
+      remoteAddress: this.#bindOrConnectAddress
     });
 
     if (err) {
@@ -325,11 +314,7 @@ export class TcpSocket {
    */
   finishListen() {
     if (this.#state !== SOCKET_STATE_LISTEN) throw "not-in-progress";
-
-    ioCall(SOCKET_TCP_LISTEN, this.#id, {
-      backlogSize: this.#listenBacklogSize,
-    });
-
+    ioCall(SOCKET_TCP_LISTEN, this.#id, this.#listenBacklogSize);
     this.#state = SOCKET_STATE_LISTENER;
   }
 
@@ -364,22 +349,7 @@ export class TcpSocket {
    */
   localAddress() {
     if (!this.#isBound()) throw "invalid-state";
-
-    const { address, port, family } = ioCall(
-      SOCKET_TCP_GET_LOCAL_ADDRESS,
-      this.#id
-    );
-    this.#options.localAddress = address;
-    this.#options.localPort = port;
-    this.#options.family = family;
-
-    return {
-      tag: family,
-      val: {
-        address: deserializeIpAddress(address, family),
-        port,
-      },
-    };
+    return ioCall(SOCKET_TCP_GET_LOCAL_ADDRESS, this.#id);
   }
 
   /**
@@ -389,22 +359,7 @@ export class TcpSocket {
   remoteAddress() {
     if ((this.#state & STATE_MASK) !== SOCKET_STATE_CONNECTION)
       throw "invalid-state";
-
-    const { address, port, family } = ioCall(
-      SOCKET_TCP_GET_REMOTE_ADDRESS,
-      this.#id
-    );
-    this.#options.remoteAddress = address;
-    this.#options.remotePort = port;
-    this.#options.family = family;
-
-    return {
-      tag: family,
-      val: {
-        address: deserializeIpAddress(address, family),
-        port,
-      },
-    };
+    return ioCall(SOCKET_TCP_GET_REMOTE_ADDRESS, this.#id);
   }
 
   isListening() {
@@ -436,7 +391,7 @@ export class TcpSocket {
    */
   setIpv6Only(value) {
     if (this.#options.family === "ipv4") throw "not-supported";
-    if (this.#isBound()) throw "invalid-state";
+    if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
     this.#options.ipv6Only = value;
   }
 
@@ -475,12 +430,8 @@ export class TcpSocket {
    * @returns {void}
    */
   setKeepAliveEnabled(value) {
-    ioCall(SOCKET_TCP_SET_KEEP_ALIVE, this.#id, {
-      keepAlive: value,
-    });
-
+    ioCall(SOCKET_TCP_SET_KEEP_ALIVE, this.#id, value);
     this.#options.keepAlive = value;
-
     if (value === true) {
       this.setKeepAliveIdleTime(this.keepAliveIdleTime());
       this.setKeepAliveInterval(this.keepAliveInterval());
@@ -640,9 +591,7 @@ export class TcpSocket {
   shutdown(shutdownType) {
     if (this.#state & (SOCKET_STATE_OPEN === 0)) throw "invalid-state";
 
-    const err = ioCall(SOCKET_TCP_SHUTDOWN, this.#id, {
-      shutdownType,
-    });
+    const err = ioCall(SOCKET_TCP_SHUTDOWN, this.#id, shutdownType);
 
     if (err === 1) throw "invalid-state";
 
@@ -659,7 +608,6 @@ export class TcpSocket {
 
   [symbolDispose]() {
     ioCall(SOCKET_TCP_DISPOSE, this.#id, null);
-
     // we only need to remove the bound address from the global map
     // if the socket was already bound
     if (this.#isBound()) {
