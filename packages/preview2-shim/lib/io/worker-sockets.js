@@ -126,8 +126,8 @@ export function convertSocketErrorCode(code) {
     case EWOULDBLOCK:
       return "would-block";
     // TODO: return "new-socket-limit";
-    // TODO: return "address-not-bindable";
     case EADDRNOTAVAIL:
+      return "address-not-bindable";
     case EADDRINUSE:
       return "address-in-use";
     // TODO: return "remote-unreachable";

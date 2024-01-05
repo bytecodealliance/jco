@@ -1,20 +1,21 @@
 import { isIP } from "node:net";
 import {
+  OUTPUT_STREAM_CREATE,
+  INPUT_STREAM_CREATE,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
   SOCKET_TCP_BIND,
   SOCKET_TCP_CONNECT,
   SOCKET_TCP_CREATE_HANDLE,
-  SOCKET_TCP_CREATE_INPUT_STREAM,
-  SOCKET_TCP_CREATE_OUTPUT_STREAM,
   SOCKET_TCP_DISPOSE,
   SOCKET_TCP_GET_LOCAL_ADDRESS,
   SOCKET_TCP_GET_REMOTE_ADDRESS,
   SOCKET_TCP_LISTEN,
   SOCKET_TCP_SET_KEEP_ALIVE,
   SOCKET_TCP_SHUTDOWN,
-  SOCKET,
+  SOCKET_TCP_SUBSCRIBE,
+  SOCKET_TCP,
 } from "../io/calls.js";
 import {
   inputStreamCreate,
@@ -24,7 +25,6 @@ import {
 } from "../io/worker-io.js";
 import {
   defaultNetwork,
-  findUnusedLocalAddress,
   ipv4ToTuple,
   ipv6ToTuple,
   isIPv4MappedAddress,
@@ -145,7 +145,7 @@ export const ipNameLookup = {
 
 let stateCnt = 0;
 const SOCKET_STATE_INIT = ++stateCnt;
-const SOCKET_STATE_ERROR = ++stateCnt;
+// const SOCKET_STATE_ERROR = ++stateCnt;
 const SOCKET_STATE_BIND = ++stateCnt;
 const SOCKET_STATE_BOUND = ++stateCnt;
 const SOCKET_STATE_LISTEN = ++stateCnt;
@@ -176,14 +176,13 @@ class TcpSocket {
   #bindOrConnectAddress = null;
   #serializedLocalAddress = null;
 
-  // See: https://github.com/torvalds/linux/blob/fe3cfe869d5e0453754cf2b4c75110276b5e8527/net/core/request_sock.c#L19-L31
   #listenBacklogSize = 128;
+
+  #family;
 
   // these options are exactly the ones which copy on accept
   #options = {
-    family: "ipv4",
     ipv6Only: false,
-    // TODO: what these default values should be?
     keepAlive: false,
     keepAliveCount: 1,
     keepAliveIdleTime: 1,
@@ -212,7 +211,7 @@ class TcpSocket {
       throw "not-supported";
     const socket = new TcpSocket();
     socket.#id = ioCall(SOCKET_TCP_CREATE_HANDLE, null, null);
-    socket.#options.family = addressFamily;
+    socket.#family = addressFamily;
     return socket;
   }
 
@@ -220,7 +219,7 @@ class TcpSocket {
     if (!mayTcp(network)) throw "access-denied";
     if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
     if (
-      this.#options.family !== localAddress.tag ||
+      this.#family !== localAddress.tag ||
       !isUnicastIpAddress(localAddress) ||
       (isIPv4MappedAddress(localAddress) && this.ipv6Only())
     )
@@ -265,7 +264,7 @@ class TcpSocket {
     const isIpv4MappedAddress = isIPv4MappedAddress(remoteAddress);
     if (
       isWildcardAddress(remoteAddress) ||
-      this.#options.family !== remoteAddress.tag ||
+      this.#family !== remoteAddress.tag ||
       !isUnicastIpAddress(remoteAddress) ||
       isMulticastIpAddress(remoteAddress) ||
       remoteAddress.val.port === 0 ||
@@ -274,17 +273,6 @@ class TcpSocket {
       throw "invalid-argument";
     }
 
-    if (this.#state !== SOCKET_STATE_BOUND) {
-      console.error('LATE BIND');
-      const localAddress = findUnusedLocalAddress(
-        this.#options.family,
-        isIpv4MappedAddress
-      );
-      this.#options.localPort = localAddress.val.port;
-      this.#options.localIpSocketAddress = localAddress;
-      this.startBind(network, localAddress);
-      this.finishBind();
-    }
     this.#bindOrConnectAddress = remoteAddress;
     this.#network = network;
     this.#state = SOCKET_STATE_CONNECT;
@@ -292,18 +280,16 @@ class TcpSocket {
 
   finishConnect() {
     if (this.#state !== SOCKET_STATE_CONNECT) throw "not-in-progress";
-
-    // todo: check error persistence
-    const socketId = ioCall(SOCKET_TCP_CONNECT, this.#id, { remoteAddress: this.#bindOrConnectAddress, localAddress: this.#serializedLocalAddress });
-
-    const inputStreamId = ioCall(SOCKET_TCP_CREATE_INPUT_STREAM, null, null);
-    const outputStreamId = ioCall(SOCKET_TCP_CREATE_OUTPUT_STREAM, null, null);
-    const inputStream = inputStreamCreate(SOCKET, inputStreamId);
-    const outputStream = outputStreamCreate(SOCKET, outputStreamId);
-
+    const [inputStreamId, outputStreamId] = ioCall(
+      SOCKET_TCP_CONNECT,
+      this.#id,
+      this.#bindOrConnectAddress
+    );
     this.#state = SOCKET_STATE_CONNECTION;
-
-    return [inputStream, outputStream];
+    return [
+      inputStreamCreate(SOCKET_TCP, outputStreamId),
+      outputStreamCreate(SOCKET_TCP, inputStreamId),
+    ];
   }
 
   startListen() {
@@ -323,12 +309,16 @@ class TcpSocket {
 
     if (this.#state !== SOCKET_STATE_LISTENER) throw "invalid-state";
 
-    const inputStreamId = ioCall(SOCKET_TCP_CREATE_INPUT_STREAM, null, null);
-    const outputStreamId = ioCall(SOCKET_TCP_CREATE_OUTPUT_STREAM, null, null);
-    const inputStream = inputStreamCreate(SOCKET, inputStreamId);
-    const outputStream = outputStreamCreate(SOCKET, outputStreamId);
+    const inputStreamId = ioCall(INPUT_STREAM_CREATE | SOCKET_TCP, null, null);
+    const outputStreamId = ioCall(
+      OUTPUT_STREAM_CREATE | SOCKET_TCP,
+      null,
+      null
+    );
+    const inputStream = inputStreamCreate(SOCKET_TCP, inputStreamId);
+    const outputStream = outputStreamCreate(SOCKET_TCP, outputStreamId);
 
-    const socket = createTcpSocket(this.addressFamily());
+    const socket = createTcpSocket(this.#family);
 
     // copy the necessary socket options
     Object.assign(socket.#options, this.#options);
@@ -352,16 +342,16 @@ class TcpSocket {
   }
 
   addressFamily() {
-    return this.#options.family;
+    return this.#family;
   }
 
   ipv6Only() {
-    if (this.#options.family === "ipv4") throw "not-supported";
+    if (this.#family === "ipv4") throw "not-supported";
     return this.#options.ipv6Only;
   }
 
   setIpv6Only(value) {
-    if (this.#options.family === "ipv4") throw "not-supported";
+    if (this.#family === "ipv4") throw "not-supported";
     if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
     this.#options.ipv6Only = value;
   }
@@ -388,12 +378,6 @@ class TcpSocket {
 
   setKeepAliveEnabled(value) {
     ioCall(SOCKET_TCP_SET_KEEP_ALIVE, this.#id, value);
-    this.#options.keepAlive = value;
-    if (value === true) {
-      this.setKeepAliveIdleTime(this.keepAliveIdleTime());
-      this.setKeepAliveInterval(this.keepAliveInterval());
-      this.setKeepAliveCount(this.keepAliveCount());
-    }
   }
 
   keepAliveIdleTime() {
@@ -470,9 +454,7 @@ class TcpSocket {
   }
 
   subscribe() {
-    if (this.#id) return pollableCreate(this.#id);
-    // 0 poll is immediately resolving
-    return pollableCreate(0);
+    return pollableCreate(ioCall(SOCKET_TCP_SUBSCRIBE, this.#id, null));
   }
 
   shutdown(shutdownType) {

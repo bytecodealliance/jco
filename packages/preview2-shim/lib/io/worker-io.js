@@ -24,12 +24,11 @@ import {
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
   HTTP_SERVER_INCOMING_HANDLER,
-  callTypeMap,
-  callMap
+  reverseMap
 } from "./calls.js";
 import { STDERR } from "./calls.js";
 
-const DEBUG = true;
+const DEBUG = false;
 
 const workerPath = fileURLToPath(
   new URL("./worker-thread.js", import.meta.url)
@@ -64,8 +63,8 @@ if (DEBUG) {
     try {
       console.error(
         instanceId,
-        callMap[(num & CALL_MASK)],
-        callTypeMap[num & CALL_TYPE_MASK],
+        reverseMap[(num & CALL_MASK)],
+        reverseMap[num & CALL_TYPE_MASK],
         id,
         payload
       );
