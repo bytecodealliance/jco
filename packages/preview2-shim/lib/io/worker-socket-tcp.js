@@ -68,17 +68,17 @@ export function socketTcpSubscribe(id) {
  * @returns
  */
 export function socketTcpBind(id, { localAddress, isIpV6Only }) {
-  const tcpSocket = getTcpSocketOrThrow(id);
+  const { handle } = getTcpSocketOrThrow(id);
   const address = serializeIpAddress(localAddress, false);
   const port = localAddress.val.port;
   const code =
     localAddress.tag === "ipv6"
-      ? tcpSocket.bind6(
+      ? handle.bind6(
           address,
           port,
           isIpV6Only ? TCPConstants.UV_TCP_IPV6ONLY : 0
         )
-      : tcpSocket.bind(address, port);
+      : handle.bind(address, port);
   if (code !== 0) throw convertSocketErrorCode(-code);
 }
 
@@ -119,9 +119,9 @@ export function socketTcpListen(id, backlogSize) {
 }
 
 export function socketTcpGetLocalAddress(id) {
-  const socket = getTcpSocketOrThrow(id);
+  const { handle } = getTcpSocketOrThrow(id);
   const out = {};
-  const code = socket.getsockname(out);
+  const code = handle.getsockname(out);
   if (code !== 0) throw convertSocketErrorCode(-code);
   const family = out.family.toLowerCase();
   const { address, port } = out;
@@ -157,8 +157,8 @@ export function socketTcpShutdown(id, _shutdownType) {
 }
 
 export function socketTcpSetKeepAlive(id, enable) {
-  const socket = getTcpSocketOrThrow(id);
-  const code = socket.setKeepAlive(enable);
+  const { handle } = getTcpSocketOrThrow(id);
+  const code = handle.setKeepAlive(enable);
   if (code !== 0) throw convertSocketErrorCode(-code);
 }
 
