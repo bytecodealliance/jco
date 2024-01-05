@@ -29,7 +29,7 @@ import {
 } from "./calls.js";
 import { STDERR } from "./calls.js";
 
-const DEBUG = false;
+const DEBUG = true;
 
 const workerPath = fileURLToPath(
   new URL("./worker-thread.js", import.meta.url)

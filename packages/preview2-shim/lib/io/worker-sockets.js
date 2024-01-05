@@ -13,6 +13,22 @@ import {
   TIMEOUT,
   V4MAPPED,
 } from "node:dns";
+import {
+  EACCES,
+  EADDRINUSE,
+  EADDRNOTAVAIL,
+  EALREADY,
+  EBADF,
+  ECONNABORTED,
+  ECONNREFUSED,
+  ECONNRESET,
+  EINVAL,
+  ENOBUFS,
+  ENOMEM,
+  ENOTSUP,
+  EPERM,
+  EWOULDBLOCK,
+} from "node:constants";
 import { ipv4ToTuple, ipv6ToTuple } from "../nodejs/sockets/socket-common.js";
 
 const dnsLookupOptions = {
@@ -59,7 +75,73 @@ export function convertSocketError(err) {
   switch (err?.code) {
     case "EBADF":
       return "invalid-state";
+    case "EACCES":
+    case "EPERM":
+      return "access-denied";
+    case "ENOTSUP":
+      return "not-supported";
+    case "EINVAL":
+      return "invalid-argument";
+    case "ENOMEM":
+    case "ENOBUFS":
+      return "out-of-memory";
+    case "EALREADY":
+      return "concurrency-conflict";
+    case "EWOULDBLOCK":
+      return "would-block";
+    // TODO: return "new-socket-limit";
+    // TODO: return "address-not-bindable";
+    case "EADDRNOTAVAIL":
+    case "EADDRINUSE":
+      return "address-in-use";
+    // TODO: return "remote-unreachable";
+    case "ECONNREFUSED":
+      return "connection-refused";
+    case "ECONNRESET":
+      return "connection-reset";
+    case "ECONNABORTED":
+      return "connection-aborted";
+    default:
+      process._rawDebug(err);
+      return "unknown";
   }
-  process._rawDebug(err);
-  return "unknown";
+}
+
+export function convertSocketErrorCode(code) {
+  switch (code) {
+    case EBADF:
+      return "invalid-state";
+    case EACCES:
+    case EPERM:
+      return "access-denied";
+    case ENOTSUP:
+      return "not-supported";
+    case EINVAL:
+      return "invalid-argument";
+    case ENOMEM:
+    case ENOBUFS:
+      return "out-of-memory";
+    case EALREADY:
+      return "concurrency-conflict";
+    case EWOULDBLOCK:
+      return "would-block";
+    // TODO: return "new-socket-limit";
+    // TODO: return "address-not-bindable";
+    case EADDRNOTAVAIL:
+    case EADDRINUSE:
+      return "address-in-use";
+    // TODO: return "remote-unreachable";
+    case ECONNREFUSED:
+      return "connection-refused";
+    case ECONNRESET:
+      return "connection-reset";
+    case ECONNABORTED:
+      return "connection-aborted";
+    // TODO: return "datagram-too-large";
+    // TODO: return "name-unresolvable";
+    // TODO: return "temporary-resolver-failure";
+    default:
+      process._rawDebug("ERR: " + code);
+      return "unknown";
+  }
 }

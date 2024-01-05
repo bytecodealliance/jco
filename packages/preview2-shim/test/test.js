@@ -298,11 +298,9 @@ suite("Node.js Preview2", () => {
     test.skip("tcp.listen(): should listen to an ipv4 address", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket('ipv4');
       const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [0, 0, 0, 0],
           port: 0,
@@ -323,41 +321,40 @@ suite("Node.js Preview2", () => {
       mock.reset();
     });
 
-    // test passing but blocked on socket.connect().
-    // TODO: figure out how to mock handle.connect()
-    test.skip("tcp.connect(): should connect to a valid ipv4 address and port=0", async () => {
+    test("tcp.connect(): should connect to a valid ipv4 address and port=0", async () => {
+      const { lookup } = await import("node:dns");
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket(
-        sockets.network.IpAddressFamily.ipv4
-      );
+      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket('ipv4');
+
+      const googleIp = await new Promise(resolve => lookup('google.com', (_err, result) => resolve(result)));
 
       const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [127, 0, 0, 1],
           port: 0,
         },
       };
       const remoteAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
-          address: [192, 168, 0, 1],
+          address: googleIp.split('.'),
           port: 80,
         },
       };
 
       tcpSocket.startBind(network, localAddress);
       tcpSocket.finishBind();
+
       tcpSocket.startConnect(network, remoteAddress);
       tcpSocket.finishConnect();
 
-      equal(tcpSocket.network.id, network.id);
       equal(tcpSocket.addressFamily(), "ipv4");
 
       const boundAddress = tcpSocket.localAddress();
       const expectedAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [127, 0, 0, 1],
           port: 0,
@@ -395,10 +392,10 @@ suite("Node.js Preview2", () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket(
-        sockets.network.IpAddressFamily.ipv4
+        'ipv4'
       );
       const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [0, 0, 0, 0],
           port: 0,
@@ -411,7 +408,7 @@ suite("Node.js Preview2", () => {
 
       const boundAddress = socket.localAddress();
       const expectedAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [0, 0, 0, 0],
           port: 0,
@@ -462,17 +459,17 @@ suite("Node.js Preview2", () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket(
-        sockets.network.IpAddressFamily.ipv4
+        'ipv4'
       );
       const localAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [0, 0, 0, 0],
           port: 0,
         },
       };
       const remoteAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [192, 168, 0, 1],
           port: 80,
@@ -490,7 +487,7 @@ suite("Node.js Preview2", () => {
 
       const boundAddress = socket.localAddress();
       const expectedAddress = {
-        tag: sockets.network.IpAddressFamily.ipv4,
+        tag: 'ipv4',
         val: {
           address: [0, 0, 0, 0],
           // port will be assigned by the OS, so it should be > 0

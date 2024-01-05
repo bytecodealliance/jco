@@ -14,6 +14,8 @@ import {
   deserializeIpAddress,
   serializeIpAddress,
 } from "../nodejs/sockets/socket-common.js";
+import { } from "node:constants";
+import { convertSocketErrorCode } from "./worker-sockets.js";
 
 /** @type {Map<number, NodeJS.Socket>} */
 export const openTcpSockets = new Map();
@@ -44,46 +46,56 @@ export function createTcpSocket() {
  * @param {{ localAddress: IpSocketAddress, family: IpAddressFamily, isIpV6Only: boolean }} options
  * @returns
  */
-export function socketTcpBind(id, { localAddress, family, isIpV6Only }) {
+export function socketTcpBind(id, { localAddress, isIpV6Only }) {
   const socket = getSocketOrThrow(id);
   const address = serializeIpAddress(localAddress, false);
   const port = localAddress.val.port;
-  if (family === "ipv6")
-    return socket.bind6(
+  let code;
+  if (localAddress.tag === "ipv6")
+    code = socket.bind6(
       address,
       port,
       isIpV6Only ? TCPConstants.UV_TCP_IPV6ONLY : 0
     );
-  return socket.bind(address, port, 0);
+  else
+    code = socket.bind(address, port);
+  if (code !== 0)
+    throw convertSocketErrorCode(-code);
 }
 
-export function socketTcpConnect(id, payload) {
+export function socketTcpConnect(id, { remoteAddress, localAddress }) {
   const socket = getSocketOrThrow(id);
-  const { remoteAddress, remotePort, localAddress, localPort, family } =
-    payload;
-
-  return new Promise((resolve) => {
+  const connectReq = new TCPConnectWrap();
+  const address = serializeIpAddress(remoteAddress, false);
+  const port = remoteAddress.val.port;
+  const [localAddr, localPort] = localAddress.split(':');
+  process._rawDebug(':::::', localAddr, localPort);
+  connectReq.address = address;
+  connectReq.port = port;
+  connectReq.localAddress = localAddr;
+  connectReq.localPort = Number(localPort);
+  connectReq.addressType = remoteAddress.tag === 'ipv6' ? 6 : 4;
+  return new Promise((resolve, reject) => {
     const _onClientConnectComplete = (err) => {
-      if (err) resolve(err);
-      resolve(0);
+      process._rawDebug('connect compete');
+      if (err) {
+        // err number is negative
+        return reject(convertSocketErrorCode(-err));
+      }
+      resolve(123);
     };
-    const connectReq = new TCPConnectWrap();
     connectReq.oncomplete = _onClientConnectComplete;
-    connectReq.address = remoteAddress;
-    connectReq.port = remotePort;
-    connectReq.localAddress = localAddress;
-    connectReq.localPort = localPort;
-    let connect = "connect"; // ipv4
-    if (family === "ipv6") {
-      connect = "connect6";
+    // socket.onread = (_buffer) => {
+    //   // TODO: handle data received from the server
+    // };
+    // socket.readStart();
+    let code;
+    if (remoteAddress.tag === "ipv6") {
+      code = socket.connect6(connectReq, address, port);
     }
-    socket.onread = (_buffer) => {
-      // TODO: handle data received from the server
-    };
-    socket.readStart();
-
-    const err = socket[connect](connectReq, remoteAddress, remotePort);
-    resolve(err);
+    code = socket.connect(connectReq, address, port);
+    process._rawDebug(connectReq, address, port, '->', code);
+    return reject(convertSocketErrorCode(-code));
   });
 }
 
