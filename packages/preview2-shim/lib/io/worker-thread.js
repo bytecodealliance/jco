@@ -15,7 +15,6 @@ const noop = () => {};
 
 import {
   CALL_MASK,
-  CALL_SHIFT,
   CALL_TYPE_MASK,
   CLOCKS_DURATION_SUBSCRIBE,
   CLOCKS_INSTANT_SUBSCRIBE,
@@ -56,6 +55,7 @@ import {
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
   SOCKET_TCP,
+  SOCKET_TCP_ACCEPT,
   SOCKET_TCP_BIND,
   SOCKET_TCP_CONNECT,
   SOCKET_TCP_CREATE_HANDLE,
@@ -84,9 +84,11 @@ import {
   STDERR,
   STDIN,
   STDOUT,
+  reverseMap,
 } from "./calls.js";
 import {
   createTcpSocket,
+  socketTcpAccept,
   socketTcpBind,
   socketTcpConnect,
   socketTcpDispose,
@@ -277,7 +279,7 @@ function handle(call, id, payload) {
         };
       }
       stream.end();
-      break;
+      return;
     }
     case HTTP_SERVER_START:
       return startHttpServer(id, payload);
@@ -305,6 +307,8 @@ function handle(call, id, payload) {
     }
 
     // Sockets TCP
+    case SOCKET_TCP_ACCEPT:
+      return socketTcpAccept(id);
     case SOCKET_TCP_CREATE_HANDLE:
       return createTcpSocket();
     case SOCKET_TCP_BIND:
@@ -666,7 +670,9 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_DISPOSE: {
       const stream = unfinishedStreams.get(id);
       if (stream) {
-        stream.stream.end();
+        // TODO: WHY?
+        if (typeof stream.stream.end === 'function')
+          stream.stream.end();
         unfinishedStreams.delete(id);
       }
       return;
@@ -711,9 +717,7 @@ function handle(call, id, payload) {
 
     default:
       throw new Error(
-        `Unknown call ${(call & CALL_MASK) >> CALL_SHIFT} with type ${
-          call & CALL_TYPE_MASK
-        }`
+        `Unknown call ${call} (${reverseMap[call]}) with type ${reverseMap[call & CALL_TYPE_MASK]}`
       );
   }
 }

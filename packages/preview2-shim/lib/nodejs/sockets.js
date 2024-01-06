@@ -1,10 +1,9 @@
 import { isIP } from "node:net";
 import {
-  OUTPUT_STREAM_CREATE,
-  INPUT_STREAM_CREATE,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+  SOCKET_TCP_ACCEPT,
   SOCKET_TCP_BIND,
   SOCKET_TCP_CONNECT,
   SOCKET_TCP_CREATE_HANDLE,
@@ -171,7 +170,6 @@ class TcpSocket {
   #id;
 
   #state = SOCKET_STATE_INIT;
-  #error = null;
 
   #bindOrConnectAddress = null;
   #serializedLocalAddress = null;
@@ -204,13 +202,14 @@ class TcpSocket {
 
   /**
    * @param {IpAddressFamily} addressFamily
+   * @param {number} id
    * @returns {TcpSocket}
    */
-  static _create(addressFamily) {
+  static _create(addressFamily, id) {
     if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
       throw "not-supported";
     const socket = new TcpSocket();
-    socket.#id = ioCall(SOCKET_TCP_CREATE_HANDLE, null, null);
+    socket.#id = id;
     socket.#family = addressFamily;
     return socket;
   }
@@ -238,7 +237,6 @@ class TcpSocket {
     )
       throw "address-in-use";
 
-    // todo: persist errors?
     ioCall(SOCKET_TCP_BIND, this.#id, {
       localAddress: this.#bindOrConnectAddress,
       isIpV6Only: this.#options.ipv6Only,
@@ -287,8 +285,8 @@ class TcpSocket {
     );
     this.#state = SOCKET_STATE_CONNECTION;
     return [
-      inputStreamCreate(SOCKET_TCP, outputStreamId),
-      outputStreamCreate(SOCKET_TCP, inputStreamId),
+      inputStreamCreate(SOCKET_TCP, inputStreamId),
+      outputStreamCreate(SOCKET_TCP, outputStreamId),
     ];
   }
 
@@ -309,21 +307,21 @@ class TcpSocket {
 
     if (this.#state !== SOCKET_STATE_LISTENER) throw "invalid-state";
 
-    const inputStreamId = ioCall(INPUT_STREAM_CREATE | SOCKET_TCP, null, null);
-    const outputStreamId = ioCall(
-      OUTPUT_STREAM_CREATE | SOCKET_TCP,
-      null,
+    const [socketId, inputStreamId, outputStreamId] = ioCall(
+      SOCKET_TCP_ACCEPT,
+      this.#id,
       null
     );
-    const inputStream = inputStreamCreate(SOCKET_TCP, inputStreamId);
-    const outputStream = outputStreamCreate(SOCKET_TCP, outputStreamId);
 
-    const socket = createTcpSocket(this.#family);
+    const socket = tcpSocketCreate(this.#family, socketId);
 
-    // copy the necessary socket options
     Object.assign(socket.#options, this.#options);
 
-    return [socket, inputStream, outputStream];
+    return [
+      socket,
+      inputStreamCreate(SOCKET_TCP, inputStreamId),
+      outputStreamCreate(SOCKET_TCP, outputStreamId),
+    ];
   }
 
   localAddress() {
@@ -484,10 +482,17 @@ class TcpSocket {
   }
 }
 
-const createTcpSocket = TcpSocket._create;
+const tcpSocketCreate = TcpSocket._create;
 delete TcpSocket._create;
 
-export const tcpCreateSocket = { createTcpSocket };
+export const tcpCreateSocket = {
+  createTcpSocket(addressFamily) {
+    return tcpSocketCreate(
+      addressFamily,
+      ioCall(SOCKET_TCP_CREATE_HANDLE, null, null)
+    );
+  },
+};
 
 export const tcp = {
   TcpSocket,

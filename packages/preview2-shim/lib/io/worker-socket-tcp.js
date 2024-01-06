@@ -5,14 +5,20 @@ import {
   deserializeIpAddress,
   serializeIpAddress,
 } from "../nodejs/sockets/socket-common.js";
-import { convertSocketErrorCode } from "./worker-sockets.js";
-import { Socket } from "node:net";
+import { convertSocketError, convertSocketErrorCode } from "./worker-sockets.js";
+import { Socket, Server } from "node:net";
 
 const noop = () => {};
 
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
+ *
+ * @typedef {{
+ *   next: PendingAccept | null,
+ *   err: Error | null,
+ *   socket: number | null
+ * }} PendingAccept
  */
 
 /**
@@ -20,7 +26,9 @@ const noop = () => {};
  *  subscribePromise: null | Promise<void>,
  *  subscribeResolve: null | () => {},
  *  handle: TCP,
- *  socket: NodeJS.Socket
+ *  pendingAccept: PendingAccept | null,
+ *  lastPendingAccept: PendingAccept | null,
+ *  acceptPromise: null | Promise<void>,
  * }>}
  */
 export const openTcpSockets = new Map();
@@ -40,9 +48,11 @@ export function createTcpSocket() {
   const handle = new TCP(TCPConstants.SOCKET);
   openTcpSockets.set(++tcpSocketCnt, {
     handle,
-    socket: null,
     subscribePromise: null,
     subscribeResolve: null,
+    pendingAccept: null,
+    lastPendingAccept: null,
+    acceptListener: null,
   });
   return tcpSocketCnt;
 }
@@ -50,8 +60,7 @@ export function createTcpSocket() {
 export function socketTcpSubscribe(id) {
   const socket = getTcpSocketOrThrow(id);
   if (socket.subscribePromise) {
-    if (socket.subscribeResolve === noop)
-      return 0;
+    if (socket.subscribeResolve === noop) return 0;
     return createPoll(socket.subscribePromise);
   }
   return createPoll(
@@ -84,9 +93,7 @@ export function socketTcpBind(id, { localAddress, isIpV6Only }) {
 
 export function socketTcpConnect(id, remoteAddress) {
   const tcpSocket = getTcpSocketOrThrow(id);
-  if (!tcpSocket.socket)
-    tcpSocket.socket = new Socket({ handle: tcpSocket.handle, pauseOnCreate: true });
-  const { socket } = tcpSocket;
+  const socket = new Socket({ handle: tcpSocket.handle, pauseOnCreate: true });
   return new Promise((resolve, reject) => {
     function handleErr(err) {
       socket.off("connect", handleConnect);
@@ -112,10 +119,93 @@ export function socketTcpConnect(id, remoteAddress) {
   });
 }
 
+export function socketTcpAccept(id) {
+  const tcpSocket = getTcpSocketOrThrow(id);
+  if (tcpSocket.pendingAccept) {
+    const accept = tcpSocket.pendingAccept;
+    if (accept.next) {
+      tcpSocket.pendingAccept = accept.next;
+    } else {
+      tcpSocket.pendingAccept = tcpSocket.lastPendingAccept = null;
+    }
+    if (accept.err)
+      throw convertSocketError(accept.err);
+    
+    openTcpSockets.set(++tcpSocketCnt, {
+      handle: accept.socket._handle,
+      subscribePromise: null,
+      subscribeResolve: null,
+      pendingAccept: null,
+      lastPendingAccept: null,
+      acceptListener: null
+    });
+    return [createStream(accept.socket), createStream(accept.socket), tcpSocketCnt];
+  }
+  return new Promise((resolve, reject) => {
+    tcpSocket.acceptListener = (err, socket) => {
+      tcpSocket.acceptListener = null;
+      if (err) return reject(convertSocketError(err));
+      openTcpSockets.set(++tcpSocketCnt, {
+        handle: socket._handle,
+        subscribePromise: null,
+        subscribeResolve: null,
+        pendingAccept: null,
+        lastPendingAccept: null,
+        acceptListener: null
+      });
+      resolve([createStream(socket), createStream(socket), tcpSocketCnt]);
+    };
+  });
+}
+
 export function socketTcpListen(id, backlogSize) {
-  const socket = getTcpSocketOrThrow(id);
-  // todo: error handling?
-  return socket.listen(backlogSize);
+  const tcpSocket = getTcpSocketOrThrow(id);
+  const { handle } = tcpSocket;
+  const server = new Server();
+  return new Promise((resolve, reject) => {
+    function handleErr(err) {
+      server.off("listening", handleListen);
+      reject(err);
+    }
+    function handleListen() {
+      server.off("error", handleErr);
+      if (tcpSocket.subscribeResolve) {
+        tcpSocket.subscribeResolve();
+        tcpSocket.subscribeResolve = noop;
+      }
+
+      server.on("connection", (socket) => {
+        if (tcpSocket.acceptListener)
+          return tcpSocket.acceptListener(null, socket);
+        const pendingAccept = {
+          next: null,
+          err: null,
+          socket,
+        };
+        if (tcpSocket.lastPendingAccept)
+          tcpSocket.lastPendingAccept.next = pendingAccept;
+        else tcpSocket.pendingAccept = pendingAccept;
+        tcpSocket.lastPendingAccept = pendingAccept;
+      });
+      server.on("error", (err) => {
+        if (tcpSocket.acceptListener)
+          return tcpSocket.acceptListener(err, null);
+        const pendingAccept = {
+          next: null,
+          err,
+          socket: null,
+        };
+        if (tcpSocket.lastPendingAccept)
+          tcpSocket.lastPendingAccept.next = pendingAccept;
+        else tcpSocket.pendingAccept = pendingAccept;
+        tcpSocket.lastPendingAccept = pendingAccept;
+      });
+      resolve();
+    }
+    server.once("listening", handleListen);
+    server.once("error", handleErr);
+    server.listen(handle, backlogSize);
+  });
 }
 
 export function socketTcpGetLocalAddress(id) {
@@ -152,8 +242,7 @@ export function socketTcpGetRemoteAddress(id) {
 
 export function socketTcpShutdown(id, _shutdownType) {
   const socket = getTcpSocketOrThrow(id);
-  if (socket.socket)
-    socket.socket.end();
+  if (socket.socket) socket.socket.end();
 }
 
 export function socketTcpSetKeepAlive(id, enable) {
