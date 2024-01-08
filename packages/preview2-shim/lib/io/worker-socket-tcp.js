@@ -252,5 +252,7 @@ export function socketTcpSetKeepAlive(id, enable) {
 }
 
 export function socketTcpDispose(id) {
+  const { handle } = getTcpSocketOrThrow(id);
+  handle.close();
   openTcpSockets.delete(id);
 }
