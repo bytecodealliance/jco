@@ -139,7 +139,7 @@ export function socketTcpAccept(id) {
       lastPendingAccept: null,
       acceptListener: null
     });
-    return [createStream(accept.socket), createStream(accept.socket), tcpSocketCnt];
+    return [tcpSocketCnt, createStream(accept.socket), createStream(accept.socket)];
   }
   return new Promise((resolve, reject) => {
     tcpSocket.acceptListener = (err, socket) => {
@@ -153,7 +153,7 @@ export function socketTcpAccept(id) {
         lastPendingAccept: null,
         acceptListener: null
       });
-      resolve([createStream(socket), createStream(socket), tcpSocketCnt]);
+      resolve([tcpSocketCnt, createStream(socket), createStream(socket)]);
     };
   });
 }

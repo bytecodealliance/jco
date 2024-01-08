@@ -54,7 +54,6 @@ import {
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
-  SOCKET_TCP,
   SOCKET_TCP_ACCEPT,
   SOCKET_TCP_BIND,
   SOCKET_TCP_CONNECT,
@@ -329,9 +328,6 @@ function handle(call, id, payload) {
       return socketTcpSetKeepAlive(id, payload);
     case SOCKET_TCP_DISPOSE:
       return socketTcpDispose(id);
-    case OUTPUT_STREAM_CREATE | SOCKET_TCP:
-    case INPUT_STREAM_CREATE | SOCKET_TCP:
-      return createStream(new PassThrough());
 
     // Sockets UDP
     case SOCKET_UDP_CREATE_HANDLE: {
@@ -670,9 +666,7 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_DISPOSE: {
       const stream = unfinishedStreams.get(id);
       if (stream) {
-        // TODO: WHY?
-        if (typeof stream.stream.end === 'function')
-          stream.stream.end();
+        stream.stream.end();
         unfinishedStreams.delete(id);
       }
       return;
