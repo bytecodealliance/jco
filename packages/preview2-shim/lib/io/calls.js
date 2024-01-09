@@ -90,9 +90,7 @@ export const SOCKET_UDP_RECEIVE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_DISPOSE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_GET_LOCAL_ADDRESS = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_GET_REMOTE_ADDRESS = ++call_id << CALL_SHIFT;
-export const SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE = ++call_id << CALL_SHIFT;
-export const SOCKET_UDP_GET_SEND_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_SEND_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_UNICAST_HOP_LIMIT = ++call_id << CALL_SHIFT;
 // Name lookup
