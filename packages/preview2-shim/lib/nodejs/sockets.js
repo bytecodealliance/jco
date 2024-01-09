@@ -144,14 +144,12 @@ export const ipNameLookup = {
 
 let stateCnt = 0;
 const SOCKET_STATE_INIT = ++stateCnt;
-// const SOCKET_STATE_ERROR = ++stateCnt;
 const SOCKET_STATE_BIND = ++stateCnt;
 const SOCKET_STATE_BOUND = ++stateCnt;
 const SOCKET_STATE_LISTEN = ++stateCnt;
 const SOCKET_STATE_LISTENER = ++stateCnt;
 const SOCKET_STATE_CONNECT = ++stateCnt;
 const SOCKET_STATE_CONNECTION = ++stateCnt;
-const SOCKET_STATE_SHUTDOWN = ++stateCnt;
 
 // As a workaround, we store the bound address in a global map
 // this is needed because 'address-in-use' is not always thrown when binding
@@ -418,7 +416,6 @@ class TcpSocket {
   }
 
   setHopLimit(value) {
-    value = Number(value);
     if (value < 1) throw "invalid-argument";
     this.#options.hopLimit = value;
   }
