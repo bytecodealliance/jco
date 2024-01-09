@@ -711,7 +711,9 @@ function handle(call, id, payload) {
 
     default:
       throw new Error(
-        `Unknown call ${call} (${reverseMap[call]}) with type ${reverseMap[call & CALL_TYPE_MASK]}`
+        `Unknown call ${call} (${reverseMap[call]}) with type ${
+          reverseMap[call & CALL_TYPE_MASK]
+        }`
       );
   }
 }

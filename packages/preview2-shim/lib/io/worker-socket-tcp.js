@@ -5,7 +5,10 @@ import {
   deserializeIpAddress,
   serializeIpAddress,
 } from "../nodejs/sockets/socket-common.js";
-import { convertSocketError, convertSocketErrorCode } from "./worker-sockets.js";
+import {
+  convertSocketError,
+  convertSocketErrorCode,
+} from "./worker-sockets.js";
 import { Socket, Server } from "node:net";
 
 const noop = () => {};
@@ -89,9 +92,10 @@ export function socketTcpBind(id, { localAddress, isIpV6Only }) {
         )
       : handle.bind(address, port);
   if (code !== 0) throw convertSocketErrorCode(-code);
+  return socketTcpGetLocalAddress(id);
 }
 
-export function socketTcpConnect(id, remoteAddress) {
+export function socketTcpConnect(id, remoteAddress, needLocalAddress) {
   const tcpSocket = getTcpSocketOrThrow(id);
   const socket = new Socket({ handle: tcpSocket.handle, pauseOnCreate: true });
   return new Promise((resolve, reject) => {
@@ -105,7 +109,8 @@ export function socketTcpConnect(id, remoteAddress) {
         tcpSocket.subscribeResolve();
         tcpSocket.subscribeResolve = noop;
       }
-      resolve([createStream(socket), createStream(socket)]);
+      const localAddress = needLocalAddress ? socketTcpGetLocalAddress(id) : null;
+      resolve([createStream(socket), createStream(socket), localAddress]);
     }
     socket.once("connect", handleConnect);
     socket.once("error", handleErr);
@@ -128,18 +133,20 @@ export function socketTcpAccept(id) {
     } else {
       tcpSocket.pendingAccept = tcpSocket.lastPendingAccept = null;
     }
-    if (accept.err)
-      throw convertSocketError(accept.err);
-    
+    if (accept.err) throw convertSocketError(accept.err);
     openTcpSockets.set(++tcpSocketCnt, {
       handle: accept.socket._handle,
       subscribePromise: null,
       subscribeResolve: null,
       pendingAccept: null,
       lastPendingAccept: null,
-      acceptListener: null
+      acceptListener: null,
     });
-    return [tcpSocketCnt, createStream(accept.socket), createStream(accept.socket)];
+    return [
+      tcpSocketCnt,
+      createStream(accept.socket),
+      createStream(accept.socket),
+    ];
   }
   return new Promise((resolve, reject) => {
     tcpSocket.acceptListener = (err, socket) => {
@@ -151,7 +158,7 @@ export function socketTcpAccept(id) {
         subscribeResolve: null,
         pendingAccept: null,
         lastPendingAccept: null,
-        acceptListener: null
+        acceptListener: null,
       });
       resolve([tcpSocketCnt, createStream(socket), createStream(socket)]);
     };
@@ -161,7 +168,7 @@ export function socketTcpAccept(id) {
 export function socketTcpListen(id, backlogSize) {
   const tcpSocket = getTcpSocketOrThrow(id);
   const { handle } = tcpSocket;
-  const server = new Server();
+  const server = new Server({ allowHalfOpen: true });
   return new Promise((resolve, reject) => {
     function handleErr(err) {
       server.off("listening", handleListen);
@@ -245,9 +252,12 @@ export function socketTcpShutdown(id, _shutdownType) {
   if (socket.socket) socket.socket.end();
 }
 
-export function socketTcpSetKeepAlive(id, enable) {
+export function socketTcpSetKeepAlive(id, { keepAlive, keepAliveIdleTime }) {
   const { handle } = getTcpSocketOrThrow(id);
-  const code = handle.setKeepAlive(enable);
+  const code = handle.setKeepAlive(
+    keepAlive,
+    Number(keepAliveIdleTime / 1_000_000_000n)
+  );
   if (code !== 0) throw convertSocketErrorCode(-code);
 }
 
