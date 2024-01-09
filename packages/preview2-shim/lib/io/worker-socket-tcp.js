@@ -247,6 +247,8 @@ export function socketTcpGetRemoteAddress(id) {
   };
 }
 
+// Node.js only supports a write shutdown
+// so we don't actually check the shutdown type
 export function socketTcpShutdown(id, _shutdownType) {
   const socket = getTcpSocketOrThrow(id);
   if (socket.socket) socket.socket.end();

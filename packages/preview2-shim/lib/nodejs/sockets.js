@@ -151,13 +151,7 @@ const SOCKET_STATE_LISTEN = ++stateCnt;
 const SOCKET_STATE_LISTENER = ++stateCnt;
 const SOCKET_STATE_CONNECT = ++stateCnt;
 const SOCKET_STATE_CONNECTION = ++stateCnt;
-
-const STATE_MASK = 0xff;
-
-const SOCKET_STATE_OPEN = 3 << 8; // = READABLE | WRITABLE
-const SOCKET_STATE_READABLE = 1 << 8;
-const SOCKET_STATE_WRITABLE = 2 << 8;
-const SOCKET_STATE_CLOSED = 4 << 8;
+const SOCKET_STATE_SHUTDOWN = ++stateCnt;
 
 // As a workaround, we store the bound address in a global map
 // this is needed because 'address-in-use' is not always thrown when binding
@@ -294,7 +288,8 @@ class TcpSocket {
 
   startListen() {
     if (!mayTcp(this.#network)) throw "access-denied";
-    if (this.#state !== SOCKET_STATE_BOUND) throw "invalid-state";
+    if (this.#state !== SOCKET_STATE_BOUND)
+      throw "invalid-state";
     this.#state = SOCKET_STATE_LISTEN;
   }
 
@@ -328,18 +323,10 @@ class TcpSocket {
   }
 
   localAddress() {
-    if (
-      this.#state !== SOCKET_STATE_BOUND &&
-      this.#state !== SOCKET_STATE_CONNECTION &&
-      this.#state !== SOCKET_STATE_LISTENER
-    )
-      throw "invalid-state";
     return ioCall(SOCKET_TCP_GET_LOCAL_ADDRESS, this.#id);
   }
 
   remoteAddress() {
-    if ((this.#state & STATE_MASK) !== SOCKET_STATE_CONNECTION)
-      throw "invalid-state";
     return ioCall(SOCKET_TCP_GET_REMOTE_ADDRESS, this.#id);
   }
 
@@ -459,27 +446,11 @@ class TcpSocket {
   }
 
   shutdown(shutdownType) {
-    if ((this.#state & (SOCKET_STATE_OPEN === 0)) === 0) throw "invalid-state";
-
-    const err = ioCall(SOCKET_TCP_SHUTDOWN, this.#id, shutdownType);
-
-    if (err === 1) throw "invalid-state";
-
-    console.log(shutdownType);
-
-    // TODO: figure out how to handle shutdownTypes
-    if (shutdownType === "receive") {
-      this.#state &= ~SOCKET_STATE_READABLE;
-    } else if (shutdownType === "send") {
-      this.#state &= ~SOCKET_STATE_WRITABLE;
-    } else if (shutdownType === "both") {
-      this.#state &= ~SOCKET_STATE_OPEN;
-      this.#state |= SOCKET_STATE_CLOSED;
-    }
+    if (this.#state !== SOCKET_STATE_CONNECTION) throw "invalid-state";
+    ioCall(SOCKET_TCP_SHUTDOWN, this.#id, shutdownType);
   }
 
   [symbolDispose]() {
-    this.#state = SOCKET_STATE_CLOSED;
     ioCall(SOCKET_TCP_DISPOSE, this.#id, null);
     if (this.#serializedLocalAddress)
       globalBoundAddresses.delete(this.#serializedLocalAddress);

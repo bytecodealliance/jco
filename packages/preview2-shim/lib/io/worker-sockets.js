@@ -25,6 +25,7 @@ import {
   EINVAL,
   ENOBUFS,
   ENOMEM,
+  ENOTCONN,
   ENOTSUP,
   EPERM,
   EWOULDBLOCK,
@@ -74,6 +75,7 @@ export function socketResolveAddress(hostname) {
 export function convertSocketError(err) {
   switch (err?.code) {
     case "EBADF":
+    case "ENOTCONN":
       return "invalid-state";
     case "EACCES":
     case "EPERM":
@@ -109,6 +111,7 @@ export function convertSocketError(err) {
 
 export function convertSocketErrorCode(code) {
   switch (code) {
+    case ENOTCONN:
     case EBADF:
       return "invalid-state";
     case EACCES:
