@@ -5,7 +5,7 @@ use crate::function_bindgen::{
     ErrHandling, FunctionBindgen, ResourceData, ResourceMap, ResourceTable,
 };
 use crate::intrinsics::{render_intrinsics, Intrinsic};
-use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
+use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source;
 use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
@@ -1612,7 +1612,12 @@ impl<'a> Instantiator<'a, '_> {
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.prototype.{method_name} = function {method_name}",
+                    "\n{local_name}.prototype.{method_name} = function {}",
+                    if !is_js_reserved_word(&method_name) {
+                        method_name.to_string()
+                    } else {
+                        format!("${method_name}")
+                    }
                 );
             }
             FunctionKind::Static(_) => {
@@ -1623,7 +1628,12 @@ impl<'a> Instantiator<'a, '_> {
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.{method_name} = function {method_name}",
+                    "\n{local_name}.{method_name} = function {}",
+                    if !is_js_reserved_word(&method_name) {
+                        method_name.to_string()
+                    } else {
+                        format!("${method_name}")
+                    }
                 );
             }
             FunctionKind::Constructor(ty) => {

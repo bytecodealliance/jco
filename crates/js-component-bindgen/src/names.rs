@@ -113,7 +113,11 @@ pub fn is_js_identifier(s: &str) -> bool {
             return false;
         }
     }
-    RESERVED_KEYWORDS.binary_search(&s).is_err()
+    !is_js_reserved_word(&s)
+}
+
+pub fn is_js_reserved_word(s: &str) -> bool {
+    RESERVED_KEYWORDS.binary_search(&s).is_ok()
 }
 
 // https://tc39.es/ecma262/#prod-IdentifierStartChar
