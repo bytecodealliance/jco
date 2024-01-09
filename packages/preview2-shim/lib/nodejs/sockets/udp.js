@@ -27,7 +27,6 @@ import {
 import { ioCall, pollableCreate } from "../../io/worker-io.js";
 import {
   deserializeIpAddress,
-  findUnusedLocalAddress,
   isIPv4MappedAddress,
   isWildcardAddress,
   serializeIpAddress,
@@ -421,15 +420,9 @@ export class UdpSocket {
       const { port } = remoteAddress.val;
       this.#options.remoteAddress = host; // can be undefined
       this.#options.remotePort = port;
-      this.network = network;
-      // Note: remoteAddress can be undefined
-      const { remoteAddress, remotePort } = this.#options;
       this.#state.connectionState = SocketConnectionState.Connecting;
 
-      if (
-        remoteAddress === undefined ||
-        this.#state.connectionState === SocketConnectionState.Connected
-      ) {
+      if (host === undefined) {
         return;
       }
 
@@ -438,8 +431,8 @@ export class UdpSocket {
       }
 
       const err = ioCall(SOCKET_UDP_CONNECT, this.#id, {
-        remoteAddress,
-        remotePort,
+        remoteAddress: host,
+        remotePort: port,
       });
 
       if (!err) {

@@ -51,8 +51,8 @@ export const exit = {
 
 // Stdin is created as a FILE descriptor
 let stdinStream;
-let stdoutStream = outputStreamCreate(STDOUT, 2);
-let stderrStream = outputStreamCreate(STDERR, 3);
+let stdoutStream = outputStreamCreate(STDOUT, 1);
+let stderrStream = outputStreamCreate(STDERR, 2);
 
 export const stdin = {
   InputStream,
@@ -60,7 +60,7 @@ export const stdin = {
     if (!stdinStream)
       stdinStream = inputStreamCreate(
         STDIN,
-        ioCall(INPUT_STREAM_CREATE | STDIN, null, null)
+        ioCall(INPUT_STREAM_CREATE | STDIN, null, null),
       );
     return stdinStream;
   },

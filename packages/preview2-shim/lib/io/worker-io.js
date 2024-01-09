@@ -24,8 +24,7 @@ import {
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_READY,
   HTTP_SERVER_INCOMING_HANDLER,
-  callTypeMap,
-  callMap
+  reverseMap,
 } from "./calls.js";
 import { STDERR } from "./calls.js";
 
@@ -36,7 +35,7 @@ const workerPath = fileURLToPath(
 );
 
 const httpIncomingHandlers = new Map();
-export function registerIncomingHttpHandler (id, handler) {
+export function registerIncomingHttpHandler(id, handler) {
   httpIncomingHandlers.set(id, handler);
 }
 
@@ -49,23 +48,27 @@ export let ioCall = createSyncFn(workerPath, (type, id, payload) => {
   // 'callbacks' from the worker
   // ONLY happens for an http server incoming handler, and NOTHING else (not even sockets, since accept is sync!)
   if (type !== HTTP_SERVER_INCOMING_HANDLER)
-    throw new Error('Internal error: only incoming handler callback is permitted');
+    throw new Error(
+      "Internal error: only incoming handler callback is permitted"
+    );
   const handler = httpIncomingHandlers.get(id);
   if (!handler)
-    throw new Error(`Internal error: no incoming handler registered for server ${id}`);
+    throw new Error(
+      `Internal error: no incoming handler registered for server ${id}`
+    );
   handler(payload);
 });
 if (DEBUG) {
   const _ioCall = ioCall;
   ioCall = function ioCall(num, id, payload) {
-    if (typeof id !== 'number' && id !== null)
-      throw new Error('id must be a number or null');
+    if (typeof id !== "number" && id !== null)
+      throw new Error("id must be a number or null");
     let ret;
     try {
       console.error(
         instanceId,
-        callMap[(num & CALL_MASK)],
-        callTypeMap[num & CALL_TYPE_MASK],
+        reverseMap[num & CALL_MASK],
+        reverseMap[num & CALL_TYPE_MASK],
         id,
         payload
       );
@@ -84,7 +87,7 @@ const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 const _Error = Error;
 const IoError = class Error extends _Error {
-  constructor (payload) {
+  constructor(payload) {
     super(payload);
     this.payload = payload;
   }

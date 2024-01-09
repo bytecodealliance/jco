@@ -1,4 +1,6 @@
 /**
+ * @typedef {import("../../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
+ * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp").TcpSocket} TcpSocket
  * @typedef {import("../../../types/interfaces/wasi-sockets-udp").UdpSocket} UdpSocket
  */
@@ -8,10 +10,6 @@ export class Network {
   #allowDnsLookup = true;
   #allowTcp = true;
   #allowUdp = true;
-  /** @type {Map<number, TcpSocket} */
-  #tcpSockets = new Map();
-  /** @type {Map<number, UdpSocket} */
-  #udpSockets = new Map();
 
   static _denyDnsLookup (network = defaultNetwork) {
     network.#allowDnsLookup = false;
@@ -96,44 +94,36 @@ export function ipv4ToTuple(ipv4) {
   return ipv4.split(".").map((segment) => parseInt(segment, 10));
 }
 
-export function serializeIpAddress(addr = undefined, includePort = false) {
-  if (addr === undefined) {
-    return undefined;
-  }
-
-  const family = addr.tag;
-
-  let { address } = addr.val;
-  if (family === "ipv4") {
-    address = tupleToIpv4(address);
-  } else if (family === "ipv6") {
-    address = tupleToIPv6(address);
-  }
-
-  if (includePort) {
-    address = `${address}:${addr.val.port}`;
-  }
-
-  return address;
+/**
+ * 
+ * @param {IpSocketAddress} addr 
+ * @param {boolean} includePort 
+ * @returns {string}
+ */
+export function serializeIpAddress(addr, includePort) {
+  if (includePort)
+    return `${serializeIpAddress(addr, false)}:${addr.val.port}`;
+  if (addr.tag === "ipv4")
+    return tupleToIpv4(addr.val.address);
+  return tupleToIPv6(addr.val.address);
 }
 
+/**
+ * 
+ * @param {string} addr 
+ * @param {IpAddressFamily} family 
+ * @returns {IpSocketAddress}
+ */
 export function deserializeIpAddress(addr, family) {
-  let address = [];
-  if (family === "ipv4") {
-    address = ipv4ToTuple(addr);
-  } else if (family === "ipv6") {
-    address = ipv6ToTuple(addr);
-  }
-  return address;
+  if (family === "ipv4")
+    return ipv4ToTuple(addr);
+  return ipv6ToTuple(addr);
 }
 
-export function findUnusedLocalAddress(
-  family,
-  { iPv4MappedAddress = false } = {}
-) {
+export function findUnusedLocalAddress(family, ipv4MappedAddress) {
   let address = [127, 0, 0, 1];
   if (family === "ipv6") {
-    if (iPv4MappedAddress) {
+    if (ipv4MappedAddress) {
       address = [0, 0, 0, 0, 0, 0xffff, 0x7f00, 0x0001];
     } else {
       address = [0, 0, 0, 0, 0, 0, 0, 1];
@@ -154,8 +144,8 @@ export function isUnicastIpAddress(ipSocketAddress) {
 
 export function isMulticastIpAddress(ipSocketAddress) {
   // ipv6: [0xff00, 0, 0, 0, 0, 0, 0, 0]
-  // ipv4: [224, 0, 0, 0]
-  return ipSocketAddress.val.address[0] === 224 || ipSocketAddress.val.address[0] === 0xff00;
+  // ipv4: [0xe0, 0, 0, 0]
+  return ipSocketAddress.val.address[0] === 0xe0 || ipSocketAddress.val.address[0] === 0xff00;
 }
 
 export function isBroadcastIpAddress(ipSocketAddress) {
