@@ -481,6 +481,42 @@ function handle(call, id, payload) {
       // stream.on("end", () => void stream.emit("readable"));
       return createReadableStream(stream);
     }
+    case INPUT_STREAM_SUBSCRIBE | STDIN: {
+      const stream = streams.get(id)?.stream;
+      // already closed or errored -> immediately return poll
+      // (poll 0 is immediately resolved)
+      if (
+        !stream ||
+        stream.closed ||
+        stream.errored ||
+        stream.readableLength > 0
+      )
+        return 0;
+      let resolve, reject;
+      return createPoll(
+        new Promise((_resolve, _reject) => {
+          stream
+            .once("readable", (resolve = _resolve))
+            .once("error", (reject = _reject))
+        }).then(
+          () => void stream.off("error", reject),
+          // error is read off of stream itself when later accessed
+          (err) => {
+            void stream.off("readable", resolve);
+            if (err.code === "EAGAIN") {
+              streams.set(id, {
+                flushPromise: null,
+                stream: createReadStream(null, {
+                  fd: 0,
+                  highWaterMark: 64 * 1024
+                })
+              });
+              return handle(INPUT_STREAM_SUBSCRIBE | STDIN, id, payload);
+            }
+          }
+        )
+      );
+    }
 
     // Clocks
     case CLOCKS_NOW:
