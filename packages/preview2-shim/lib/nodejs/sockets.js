@@ -3,15 +3,21 @@ import {
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
   SOCKET_TCP_ACCEPT,
-  SOCKET_TCP_BIND,
-  SOCKET_TCP_CONNECT,
+  SOCKET_TCP_BIND_FINISH,
+  SOCKET_TCP_BIND_START,
+  SOCKET_TCP_CONNECT_FINISH,
+  SOCKET_TCP_CONNECT_START,
   SOCKET_TCP_CREATE_HANDLE,
   SOCKET_TCP_DISPOSE,
   SOCKET_TCP_GET_LOCAL_ADDRESS,
   SOCKET_TCP_GET_REMOTE_ADDRESS,
-  SOCKET_TCP_LISTEN,
+  SOCKET_TCP_IS_LISTENING,
+  SOCKET_TCP_LISTEN_FINISH,
+  SOCKET_TCP_LISTEN_START,
   SOCKET_TCP_SET_KEEP_ALIVE,
+  SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE,
   SOCKET_TCP_SHUTDOWN,
   SOCKET_TCP_SUBSCRIBE,
   SOCKET_TCP,
@@ -34,13 +40,16 @@ import {
   ioCall,
   outputStreamCreate,
   pollableCreate,
+  resolvedPoll,
 } from "../io/worker-io.js";
-import { platform } from "node:os";
 import {
   deserializeIpAddress,
   ipv4ToTuple,
   ipv6ToTuple,
   serializeIpAddress,
+  isUnicastIpAddress,
+  isIPv4MappedAddress,
+  isWildcardAddress,
 } from "./sockets/socket-common.js";
 
 /**
@@ -48,67 +57,6 @@ import {
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpAddressFamily} IpAddressFamily
  */
 
-/**
- * @param {IpSocketAddress} ipSocketAddress
- * @returns {boolean}
- */
-function isIPv4MappedAddress(ipSocketAddress) {
-  // ipv6: [0, 0, 0, 0, 0, 0xffff, 0, 0]
-  if (ipSocketAddress.val.address.length !== 8) {
-    return false;
-  }
-  return ipSocketAddress.val.address[5] === 0xffff;
-}
-
-/**
- * @param {IpSocketAddress} ipSocketAddress
- * @returns {boolean}
- */
-function isMulticastIpAddress(ipSocketAddress) {
-  // ipv6: [0xff00, 0, 0, 0, 0, 0, 0, 0]
-  // ipv4: [0xe0, 0, 0, 0]
-  return (
-    ipSocketAddress.val.address[0] === 0xe0 ||
-    ipSocketAddress.val.address[0] === 0xff00
-  );
-}
-
-/**
- * @param {IpSocketAddress} ipSocketAddress
- * @returns {boolean}
- */
-function isUnicastIpAddress(ipSocketAddress) {
-  return (
-    !isMulticastIpAddress(ipSocketAddress) &&
-    !isBroadcastIpAddress(ipSocketAddress)
-  );
-}
-
-/**
- * @param {IpSocketAddress} isWildcardAddress
- * @returns {boolean}
- */
-function isWildcardAddress(ipSocketAddress) {
-  // ipv6: [0, 0, 0, 0, 0, 0, 0, 0]
-  // ipv4: [0, 0, 0, 0]
-  return ipSocketAddress.val.address.every((segment) => segment === 0);
-}
-
-/**
- * @param {IpSocketAddress} isWildcardAddress
- * @returns {boolean}
- */
-export function isBroadcastIpAddress(ipSocketAddress) {
-  // ipv4: [255, 255, 255, 255]
-  return (
-    ipSocketAddress.val.address[0] === 0xff && // 255
-    ipSocketAddress.val.address[1] === 0xff && // 255
-    ipSocketAddress.val.address[2] === 0xff && // 255
-    ipSocketAddress.val.address[3] === 0xff // 255
-  );
-}
-
-const isWindows = platform() === "win32";
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 // Network class privately stores capabilities
@@ -166,7 +114,7 @@ export const instanceNetwork = {
 export const network = { Network };
 
 class ResolveAddressStream {
-  #pollId;
+  #id;
   #data;
   #curItem = 0;
   #error = false;
@@ -174,7 +122,7 @@ class ResolveAddressStream {
     if (!this.#data) {
       ({ value: this.#data, error: this.#error } = ioCall(
         SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
-        this.#pollId,
+        this.#id,
         null
       ));
     }
@@ -183,8 +131,10 @@ class ResolveAddressStream {
     return undefined;
   }
   subscribe() {
-    if (this.#data) return pollableCreate(0);
-    return pollableCreate(this.#pollId);
+    if (this.#data) return resolvedPoll;
+    return pollableCreate(
+      ioCall(SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST, this.#id, null)
+    );
   }
   [symbolDispose]() {
     if (!this.#data) ioCall(SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST, null, null);
@@ -198,7 +148,6 @@ class ResolveAddressStream {
         : name
     );
     if (isIpNum > 0) {
-      res.#pollId = 0;
       res.#data = [
         {
           tag: "ipv" + isIpNum,
@@ -225,7 +174,7 @@ class ResolveAddressStream {
       if (!parsedUrl) {
         throw "invalid-argument";
       }
-      res.#pollId = ioCall(SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, null, name);
+      res.#id = ioCall(SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, null, name);
     }
     return res;
   }
@@ -239,15 +188,6 @@ export const ipNameLookup = {
   resolveAddresses,
 };
 
-let stateCnt = 0;
-const SOCKET_STATE_INIT = ++stateCnt;
-const SOCKET_STATE_BIND = ++stateCnt;
-const SOCKET_STATE_BOUND = ++stateCnt;
-const SOCKET_STATE_LISTEN = ++stateCnt; // tcp only
-const SOCKET_STATE_LISTENER = ++stateCnt; // tcp only
-const SOCKET_STATE_CONNECT = ++stateCnt; // tcp only
-const SOCKET_STATE_CONNECTION = ++stateCnt;
-
 // As a workaround, we store the bound address in a global map
 // this is needed because 'address-in-use' is not always thrown when binding
 // more than one socket to the same address
@@ -257,207 +197,129 @@ const globalBoundAddresses = new Set();
 class TcpSocket {
   #id;
   #network;
-  #state = SOCKET_STATE_INIT;
-  #bindOrConnectAddress = null;
-  #serializedLocalAddress = null;
-  #listenBacklogSize = 128;
   #family;
-
+  #initialized = false;
   #options = {
     ipv6Only: false,
 
     // defaults per https://nodejs.org/docs/latest/api/net.html#socketsetkeepaliveenable-initialdelay
     keepAlive: false,
-    // Node.js doesn't give us the ability to alter keepAliveCount, instead
-    // if will always be 10 regardless of configuration.
-    keepAliveCount: 10,
     // Node.js doesn't give us the ability to detect the OS default,
     // therefore we hardcode the default value instead of using the OS default,
     // since we would never be able to report it as a return value otherwise.
-    // We could make this configurable as a local configuration instead.
+    // We could make this configurable as a glboal JCO implementation configuration
+    // instead.
     keepAliveIdleTime: 7200_000_000_000n,
-    // Node.js doesn't give us the ability to alter keepAliveInterval, instead
-    // it will always be 1 second regardless of configuration.
+
+    // ALL of the following options are NOT configurable in Node.js!
+    // Any configurations set will respond correctly, but underneath retain
+    // system / Node.js defaults.
     keepAliveInterval: 1_000_000_000n,
-
+    keepAliveCount: 10,
     hopLimit: 1,
-
-    // Node.js does not allow customizing these for TCP, so while we
-    // support configuration, it will underneath retain the OS default
     receiveBufferSize: 8192n,
     sendBufferSize: 8192n,
   };
-
   /**
    * @param {IpAddressFamily} addressFamily
    * @param {number} id
    * @returns {TcpSocket}
    */
   static _create(addressFamily, id) {
-    if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
-      throw "not-supported";
     const socket = new TcpSocket();
     socket.#id = id;
     socket.#family = addressFamily;
     return socket;
   }
-
   startBind(network, localAddress) {
     if (!mayTcp(network)) throw "access-denied";
-    if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
     if (
       this.#family !== localAddress.tag ||
       !isUnicastIpAddress(localAddress) ||
       (isIPv4MappedAddress(localAddress) && this.ipv6Only())
     )
       throw "invalid-argument";
-    this.#bindOrConnectAddress = localAddress;
+    ioCall(SOCKET_TCP_BIND_START, this.#id, localAddress);
+    this.#initialized = true;
     this.#network = network;
-    this.#state = SOCKET_STATE_BIND;
   }
-
   finishBind() {
-    if (this.#state !== SOCKET_STATE_BIND) throw "not-in-progress";
-    if (
-      globalBoundAddresses.has(
-        serializeIpAddress(this.#bindOrConnectAddress, true)
-      )
-    )
-      throw "address-in-use";
-
-    globalBoundAddresses.add(
-      (this.#serializedLocalAddress = ioCall(SOCKET_TCP_BIND, this.#id, {
-        localAddress: this.#bindOrConnectAddress,
-        isIpV6Only: this.#options.ipv6Only,
-      }))
-    );
-
-    this.#state = SOCKET_STATE_BOUND;
+    ioCall(SOCKET_TCP_BIND_FINISH, this.#id, this.#options.ipv6Only);
   }
-
   startConnect(network, remoteAddress) {
-    if (!mayTcp(network)) throw "access-denied";
     if (this.#network && network !== this.#network) throw "invalid-argument";
-    if (remoteAddress.val.port === 0 && isWindows) throw "invalid-argument";
-    if (this.#state !== SOCKET_STATE_INIT && this.#state !== SOCKET_STATE_BOUND)
-      throw "invalid-state";
-    const ipv4MappedAddress = isIPv4MappedAddress(remoteAddress);
-    if (
-      isWildcardAddress(remoteAddress) ||
-      this.#family !== remoteAddress.tag ||
-      !isUnicastIpAddress(remoteAddress) ||
-      isMulticastIpAddress(remoteAddress) ||
-      remoteAddress.val.port === 0 ||
-      (this.#options.ipv6Only && ipv4MappedAddress)
-    ) {
-      throw "invalid-argument";
-    }
-
-    this.#bindOrConnectAddress = remoteAddress;
+    if (!mayTcp(network)) throw "access-denied";
+    ioCall(SOCKET_TCP_CONNECT_START, this.#id, {
+      remoteAddress,
+      family: this.#family,
+      ipv6Only: this.#options.ipv6Only,
+    });
+    this.#initialized = true;
     this.#network = network;
-    this.#state = SOCKET_STATE_CONNECT;
   }
-
   finishConnect() {
-    if (this.#state !== SOCKET_STATE_CONNECT) throw "not-in-progress";
-    const needLocalAddress = this.#serializedLocalAddress === null;
-    const [inputStreamId, outputStreamId, localAddress] = ioCall(
-      SOCKET_TCP_CONNECT,
+    const [inputStreamId, outputStreamId] = ioCall(
+      SOCKET_TCP_CONNECT_FINISH,
       this.#id,
-      this.#bindOrConnectAddress,
-      this.#serializedLocalAddress === null
+      null
     );
-    if (needLocalAddress)
-      globalBoundAddresses.add((this.#serializedLocalAddress = localAddress));
-    this.#state = SOCKET_STATE_CONNECTION;
     return [
       inputStreamCreate(SOCKET_TCP, inputStreamId),
       outputStreamCreate(SOCKET_TCP, outputStreamId),
     ];
   }
-
   startListen() {
     if (!mayTcp(this.#network)) throw "access-denied";
-    if (this.#state !== SOCKET_STATE_BOUND) throw "invalid-state";
-    this.#state = SOCKET_STATE_LISTEN;
+    ioCall(SOCKET_TCP_LISTEN_START, this.#id, null);
+    this.#initialized = true;
   }
-
   finishListen() {
-    if (this.#state !== SOCKET_STATE_LISTEN) throw "not-in-progress";
-    ioCall(SOCKET_TCP_LISTEN, this.#id, this.#listenBacklogSize);
-    this.#state = SOCKET_STATE_LISTENER;
+    ioCall(SOCKET_TCP_LISTEN_FINISH, this.#id, null);
   }
-
   accept() {
     if (!mayTcp(this.#network)) throw "access-denied";
-
-    if (this.#state !== SOCKET_STATE_LISTENER) throw "invalid-state";
-
     const [socketId, inputStreamId, outputStreamId] = ioCall(
       SOCKET_TCP_ACCEPT,
       this.#id,
       null
     );
-
+    this.#initialized = true;
     const socket = tcpSocketCreate(this.#family, socketId);
-    socket.#state = SOCKET_STATE_CONNECTION;
-
     Object.assign(socket.#options, this.#options);
-
     return [
       socket,
       inputStreamCreate(SOCKET_TCP, inputStreamId),
       outputStreamCreate(SOCKET_TCP, outputStreamId),
     ];
   }
-
   localAddress() {
-    return ioCall(SOCKET_TCP_GET_LOCAL_ADDRESS, this.#id);
+    return ioCall(SOCKET_TCP_GET_LOCAL_ADDRESS, this.#id, null);
   }
-
   remoteAddress() {
-    return ioCall(SOCKET_TCP_GET_REMOTE_ADDRESS, this.#id);
+    return ioCall(SOCKET_TCP_GET_REMOTE_ADDRESS, this.#id, null);
   }
-
   isListening() {
-    return this.#state === SOCKET_STATE_LISTENER;
+    return ioCall(SOCKET_TCP_IS_LISTENING, this.#id, null);
   }
-
   addressFamily() {
     return this.#family;
   }
-
   ipv6Only() {
     if (this.#family === "ipv4") throw "not-supported";
     return this.#options.ipv6Only;
   }
-
   setIpv6Only(value) {
     if (this.#family === "ipv4") throw "not-supported";
-    if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
+    if (this.#initialized) throw "invalid-state";
     this.#options.ipv6Only = value;
   }
-
   setListenBacklogSize(value) {
     if (value === 0n) throw "invalid-argument";
-    if (
-      this.#state === SOCKET_STATE_LISTEN ||
-      this.#state === SOCKET_STATE_LISTENER
-    )
-      throw "not-supported";
-    if (
-      this.#state !== SOCKET_STATE_INIT &&
-      this.#state !== SOCKET_STATE_BIND &&
-      this.#state !== SOCKET_STATE_BOUND
-    )
-      throw "invalid-state";
-    this.#listenBacklogSize = Number(value);
+    ioCall(SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE, this.#id, value);
   }
-
   keepAliveEnabled() {
     return this.#options.keepAlive;
   }
-
   setKeepAliveEnabled(value) {
     this.#options.keepAlive = value;
     ioCall(SOCKET_TCP_SET_KEEP_ALIVE, this.#id, {
@@ -465,11 +327,9 @@ class TcpSocket {
       keepAliveIdleTime: this.#options.keepAliveIdleTime,
     });
   }
-
   keepAliveIdleTime() {
     return this.#options.keepAliveIdleTime;
   }
-
   setKeepAliveIdleTime(value) {
     if (value < 1n) throw "invalid-argument";
     if (value < 1_000_000_000n) value = 1_000_000_000n;
@@ -483,65 +343,49 @@ class TcpSocket {
       }
     }
   }
-
   keepAliveInterval() {
     return this.#options.keepAliveInterval;
   }
-
   setKeepAliveInterval(value) {
     if (value < 1n) throw "invalid-argument";
     this.#options.keepAliveInterval = value;
   }
-
   keepAliveCount() {
     return this.#options.keepAliveCount;
   }
-
   setKeepAliveCount(value) {
     if (value < 1) throw "invalid-argument";
     this.#options.keepAliveCount = value;
   }
-
   hopLimit() {
     return this.#options.hopLimit;
   }
-
   setHopLimit(value) {
     if (value < 1) throw "invalid-argument";
     this.#options.hopLimit = value;
   }
-
   receiveBufferSize() {
     return this.#options.receiveBufferSize;
   }
-
   setReceiveBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
     this.#options.receiveBufferSize = value;
   }
-
   sendBufferSize() {
     return this.#options.sendBufferSize;
   }
-
   setSendBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
     this.#options.sendBufferSize = value;
   }
-
   subscribe() {
     return pollableCreate(ioCall(SOCKET_TCP_SUBSCRIBE, this.#id, null));
   }
-
   shutdown(shutdownType) {
-    if (this.#state !== SOCKET_STATE_CONNECTION) throw "invalid-state";
     ioCall(SOCKET_TCP_SHUTDOWN, this.#id, shutdownType);
   }
-
   [symbolDispose]() {
     ioCall(SOCKET_TCP_DISPOSE, this.#id, null);
-    if (this.#serializedLocalAddress)
-      globalBoundAddresses.delete(this.#serializedLocalAddress);
   }
 }
 
@@ -550,6 +394,8 @@ delete TcpSocket._create;
 
 export const tcpCreateSocket = {
   createTcpSocket(addressFamily) {
+    if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
+      throw "not-supported";
     return tcpSocketCreate(
       addressFamily,
       ioCall(SOCKET_TCP_CREATE_HANDLE, null, null)
@@ -568,7 +414,6 @@ class IncomingDatagramStream {
     stream.#socketId = socketId;
     return stream;
   }
-
   receive(maxResults) {
     if (maxResults === 0n) {
       return [];
@@ -602,12 +447,10 @@ class IncomingDatagramStream {
       };
     });
   }
-
   subscribe() {
     if (this.#socketId) return pollableCreate(this.#socketId);
-    return pollableCreate(0);
+    return resolvedPoll;
   }
-
   [symbolDispose]() {
     // TODO: stop receiving
   }
@@ -618,13 +461,11 @@ delete IncomingDatagramStream._create;
 class OutgoingDatagramStream {
   pollId = 0;
   #socketId = 0;
-
   static _create(socketId) {
     const stream = new OutgoingDatagramStream(socketId);
     stream.#socketId = socketId;
     return stream;
   }
-
   /**
    *
    * @returns {bigint}
@@ -636,7 +477,6 @@ class OutgoingDatagramStream {
     // error.
     return ret;
   }
-
   send(datagrams) {
     if (datagrams.length === 0) {
       return 0n;
@@ -647,7 +487,7 @@ class OutgoingDatagramStream {
     for (const datagram of datagrams) {
       const { data, remoteAddress } = datagram;
       const remotePort = remoteAddress?.val?.port || undefined;
-      const host = serializeIpAddress(remoteAddress, false);
+      const host = serializeIpAddress(remoteAddress);
 
       if (this.checkSend() < data.length) throw "datagram-too-large";
       // TODO: add the other assertions
@@ -670,18 +510,22 @@ class OutgoingDatagramStream {
 
     return datagramsSent;
   }
-
   subscribe() {
     if (this.pollId) return pollableCreate(this.pollId);
-    return pollableCreate(0);
+    return resolvedPoll;
   }
-
   [symbolDispose]() {
     // TODO: stop sending
   }
 }
 const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
 delete OutgoingDatagramStream._create;
+
+let stateCnt = 0;
+const SOCKET_STATE_INIT = ++stateCnt;
+const SOCKET_STATE_BIND = ++stateCnt;
+const SOCKET_STATE_BOUND = ++stateCnt;
+const SOCKET_STATE_CONNECTION = ++stateCnt;
 
 class UdpSocket {
   #id;
@@ -690,7 +534,6 @@ class UdpSocket {
   #bindOrConnectAddress = null;
   #serializedLocalAddress = null;
   #family;
-
   #options = {
     ipv6Only: false,
     // These default configurations will override the default
@@ -709,14 +552,11 @@ class UdpSocket {
    * @returns {TcpSocket}
    */
   static _create(addressFamily, id) {
-    if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
-      throw "not-supported";
     const socket = new UdpSocket();
     socket.#id = id;
     socket.#family = addressFamily;
     return socket;
   }
-
   startBind(network, localAddress) {
     if (!mayUdp(network)) throw "access-denied";
     if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
@@ -729,7 +569,6 @@ class UdpSocket {
     this.#network = network;
     this.#state = SOCKET_STATE_BIND;
   }
-
   finishBind() {
     if (this.#state !== SOCKET_STATE_BIND) throw "not-in-progress";
     if (
@@ -749,10 +588,12 @@ class UdpSocket {
     );
     this.#state = SOCKET_STATE_BOUND;
   }
-
   stream(remoteAddress = undefined) {
     if (!mayUdp(this.#network)) throw "access-denied";
-    if (this.#state !== SOCKET_STATE_BOUND && this.#state !== SOCKET_STATE_CONNECTION)
+    if (
+      this.#state !== SOCKET_STATE_BOUND &&
+      this.#state !== SOCKET_STATE_CONNECTION
+    )
       throw "invalid-state";
 
     if (this.#state === SOCKET_STATE_CONNECTION) {
@@ -830,34 +671,27 @@ class UdpSocket {
       outgoingDatagramStreamCreate(this.#id),
     ];
   }
-
   localAddress() {
     return ioCall(SOCKET_UDP_GET_LOCAL_ADDRESS, this.#id);
   }
-
   remoteAddress() {
     return ioCall(SOCKET_UDP_GET_REMOTE_ADDRESS, this.#id);
   }
-
   addressFamily() {
     return this.#family;
   }
-
   ipv6Only() {
     if (this.#family === "ipv4") throw "not-supported";
     return this.#options.ipv6Only;
   }
-
   setIpv6Only(value) {
     if (this.#family === "ipv4") throw "not-supported";
     if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
     this.#options.ipv6Only = value;
   }
-
   unicastHopLimit() {
     return this.#options.unicastHopLimit;
   }
-
   setUnicastHopLimit(value) {
     if (value < 1) throw "invalid-argument";
     this.#options.unicastHopLimit = value;
@@ -865,11 +699,9 @@ class UdpSocket {
       ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.#id, value);
     }
   }
-
   receiveBufferSize() {
     return this.#options.receiveBufferSize;
   }
-
   setReceiveBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
     this.#options.receiveBufferSize = value;
@@ -877,11 +709,9 @@ class UdpSocket {
       ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.#id, value);
     }
   }
-
   sendBufferSize() {
     return this.#options.sendBufferSize;
   }
-
   setSendBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
     this.#options.sendBufferSize = value;
@@ -889,12 +719,9 @@ class UdpSocket {
       ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.#id, value);
     }
   }
-
   subscribe() {
-    if (this.#id) return pollableCreate(this.#id);
-    return pollableCreate(0);
+    return resolvedPoll;
   }
-
   [symbolDispose]() {
     ioCall(SOCKET_UDP_DISPOSE, this.#id, null);
     if (this.#serializedLocalAddress)
@@ -907,6 +734,8 @@ delete UdpSocket._create;
 
 export const udpCreateSocket = {
   createUdpSocket(addressFamily) {
+    if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
+      throw "not-supported";
     return udpSocketCreate(
       addressFamily,
       ioCall(SOCKET_UDP_CREATE_HANDLE, null, null)

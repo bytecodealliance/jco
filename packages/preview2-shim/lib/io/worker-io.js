@@ -3,6 +3,7 @@ import { createSyncFn } from "../synckit/index.js";
 import {
   CALL_MASK,
   CALL_TYPE_MASK,
+  HTTP_SERVER_INCOMING_HANDLER,
   INPUT_STREAM_BLOCKING_READ,
   INPUT_STREAM_BLOCKING_SKIP,
   INPUT_STREAM_DISPOSE,
@@ -22,11 +23,12 @@ import {
   OUTPUT_STREAM_WRITE,
   POLL_POLL_LIST,
   POLL_POLLABLE_BLOCK,
+  POLL_POLLABLE_DISPOSE,
   POLL_POLLABLE_READY,
-  HTTP_SERVER_INCOMING_HANDLER,
   reverseMap,
 } from "./calls.js";
 import { STDERR } from "./calls.js";
+import { _rawDebug, exit, stderr, stdout } from "node:process";
 
 const DEBUG = false;
 
@@ -65,7 +67,7 @@ if (DEBUG) {
       throw new Error("id must be a number or null");
     let ret;
     try {
-      console.error(
+      _rawDebug(
         instanceId,
         reverseMap[num & CALL_MASK],
         reverseMap[num & CALL_TYPE_MASK],
@@ -78,7 +80,7 @@ if (DEBUG) {
       ret = e;
       throw ret;
     } finally {
-      console.error(instanceId, "->", ret);
+      _rawDebug(instanceId, "->", ret);
     }
   };
 }
@@ -107,16 +109,13 @@ function streamIoErrorCall(call, id, payload) {
     }
     // any invalid error is a trap
     console.trace(e);
-    process.exit(1);
+    exit(1);
   }
 }
 
 class InputStream {
   #id;
   #streamType;
-  get _id() {
-    return this.#id;
-  }
   read(len) {
     return streamIoErrorCall(
       INPUT_STREAM_READ | this.#streamType,
@@ -176,9 +175,6 @@ delete InputStream._id;
 class OutputStream {
   #id;
   #streamType;
-  get _id() {
-    return this.#id;
-  }
   checkWrite(len) {
     return streamIoErrorCall(
       OUTPUT_STREAM_CHECK_WRITE | this.#streamType,
@@ -196,8 +192,7 @@ class OutputStream {
   }
   blockingWriteAndFlush(buf) {
     if (this.#streamType <= STDERR) {
-      const stream =
-        this.#streamType === STDERR ? process.stderr : process.stdout;
+      const stream = this.#streamType === STDERR ? stderr : stdout;
       return void stream.write(buf);
     }
     return streamIoErrorCall(
@@ -279,16 +274,20 @@ export const streams = { InputStream, OutputStream };
 
 class Pollable {
   #id;
-  get _id() {
-    return this.#id;
-  }
   ready() {
     if (this.#id === 0) return true;
     return ioCall(POLL_POLLABLE_READY, this.#id);
   }
   block() {
-    if (this.#id === 0) return;
-    ioCall(POLL_POLLABLE_BLOCK, this.#id);
+    if (this.#id !== 0) {
+      ioCall(POLL_POLLABLE_BLOCK, this.#id);
+    }
+  }
+  [symbolDispose]() {
+    if (this.#id !== 0) {
+      ioCall(POLL_POLLABLE_DISPOSE, this.#id);
+      this.#id = 0;
+    }
   }
   static _getId(pollable) {
     return pollable.#id;
@@ -303,6 +302,8 @@ class Pollable {
 export const pollableCreate = Pollable._create;
 delete Pollable._create;
 
+export const resolvedPoll = pollableCreate(0);
+
 const pollableGetId = Pollable._getId;
 delete Pollable._getId;
 
@@ -312,10 +313,6 @@ export const poll = {
     return ioCall(POLL_POLL_LIST, null, list.map(pollableGetId));
   },
 };
-
-export function resolvedPoll() {
-  return pollableCreate(0);
-}
 
 export function createPoll(call, id, initPayload) {
   return pollableCreate(ioCall(call, id, initPayload));

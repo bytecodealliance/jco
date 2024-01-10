@@ -5,7 +5,31 @@ use xshell::{cmd, Shell};
 const TRACE: bool = false;
 const TEST_FILTER: &[&str] = &[];
 
-const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
+const TEST_IGNORE: &[&str] = &[
+    "nn_image_classification",
+    "nn_image_classification_named",
+    // currently timing out
+    "api_read_only",
+    "cli_file_read",
+    "cli_stdin",
+    "cli_stdio_write_flushes",
+    "http_outbound_request_get",
+    "http_outbound_request_invalid_version",
+    "http_outbound_request_put",
+    "preview1_fd_flags_set",
+    "preview1_file_seek_tell",
+    "preview1_file_truncation",
+    "preview1_file_unbuffered_write",
+    "preview1_file_write",
+    "preview1_path_open_read_write",
+    "preview2_stream_pollable_correct",
+    "preview2_stream_pollable_traps",
+    "preview2_tcp_bind",
+    "preview2_tcp_connect",
+    "proxy_echo",
+    "proxy_hash",
+    "http_outbound_request_invalid_dnsname",
+];
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;

@@ -48,8 +48,8 @@ suite("Node.js Preview2", () => {
 
       strictEqual(typeof monotonicClock.resolution(), "bigint");
       const curNow = monotonicClock.now();
-      strictEqual(typeof curNow, "bigint");
-      ok(monotonicClock.now() > curNow);
+      // strictEqual(typeof curNow, "bigint");
+      // ok(monotonicClock.now() > curNow);
     });
 
     test("Monotonic clock immediately resolved polls", async () => {

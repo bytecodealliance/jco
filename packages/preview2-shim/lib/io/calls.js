@@ -45,11 +45,13 @@ export const OUTPUT_STREAM_GET_TOTAL_BYTES = ++call_id << CALL_SHIFT;
 // Io Poll
 export const POLL_POLLABLE_READY = ++call_id << CALL_SHIFT;
 export const POLL_POLLABLE_BLOCK = ++call_id << CALL_SHIFT;
+export const POLL_POLLABLE_DISPOSE = ++call_id << CALL_SHIFT;
 export const POLL_POLL_LIST = ++call_id << CALL_SHIFT;
 
 // Futures
-export const FUTURE_GET_VALUE_AND_DISPOSE = ++call_id << CALL_SHIFT;
 export const FUTURE_DISPOSE = ++call_id << CALL_SHIFT;
+export const FUTURE_GET_VALUE_AND_DISPOSE = ++call_id << CALL_SHIFT;
+export const FUTURE_SUBSCRIBE = ++call_id << CALL_SHIFT;
 
 // Http
 export const HTTP_CREATE_REQUEST = ++call_id << 24;
@@ -69,15 +71,20 @@ export const CLOCKS_INSTANT_SUBSCRIBE = ++call_id << CALL_SHIFT;
 // Sockets
 // Tcp
 export const SOCKET_TCP_CREATE_HANDLE = ++call_id << CALL_SHIFT;
-export const SOCKET_TCP_BIND = ++call_id << CALL_SHIFT;
-export const SOCKET_TCP_CONNECT = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_BIND_START = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_BIND_FINISH = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_CONNECT_START = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_CONNECT_FINISH = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_SUBSCRIBE = ++call_id << CALL_SHIFT;
-export const SOCKET_TCP_LISTEN = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_LISTEN_START = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_LISTEN_FINISH = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_IS_LISTENING = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_ACCEPT = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_GET_LOCAL_ADDRESS = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_GET_REMOTE_ADDRESS = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_SHUTDOWN = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_SET_KEEP_ALIVE = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_DISPOSE = ++call_id << CALL_SHIFT;
 // Udp
 export const SOCKET_UDP_CREATE_HANDLE = ++call_id << CALL_SHIFT;
@@ -96,6 +103,7 @@ export const SOCKET_UDP_SET_UNICAST_HOP_LIMIT = ++call_id << CALL_SHIFT;
 // Name lookup
 export const SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST = ++call_id << CALL_SHIFT;
 export const SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST = ++call_id << CALL_SHIFT;
+export const SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST = ++call_id << CALL_SHIFT;
 export const SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST = ++call_id << CALL_SHIFT;
 
 export const reverseMap = {};

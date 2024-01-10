@@ -1,4 +1,8 @@
-import { createStream, getStreamOrThrow } from "./worker-thread.js";
+import {
+  createReadableStream,
+  createWritableStream,
+  getStreamOrThrow,
+} from "./worker-thread.js";
 import {
   createServer,
   request as httpRequest,
@@ -48,7 +52,7 @@ export async function setOutgoingResponse(
 export async function startHttpServer(id, { port, host }) {
   const server = createServer((req, res) => {
     // create the streams and their ids
-    const streamId = createStream(req);
+    const streamId = createReadableStream(req);
     const responseId = ++responseCnt;
     parentPort.postMessage({
       type: HTTP_SERVER_INCOMING_HANDLER,
@@ -56,9 +60,11 @@ export async function startHttpServer(id, { port, host }) {
       payload: {
         responseId,
         method: req.method,
-        host: req.headers.host || host || 'localhost',
+        host: req.headers.host || host || "localhost",
         pathWithQuery: req.url,
-        headers: Object.entries(req.headersDistinct).flatMap(([key, val]) => val.map(val => [key, val])),
+        headers: Object.entries(req.headersDistinct).flatMap(([key, val]) =>
+          val.map((val) => [key, val])
+        ),
         streamId,
       },
     });
@@ -109,8 +115,8 @@ export async function createHttpRequest(
         req = httpRequest({
           agent: httpAgent,
           method,
-          host: authority.split(':')[0],
-          port: authority.split(':')[1],
+          host: authority.split(":")[0],
+          port: authority.split(":")[1],
           path: pathWithQuery,
           timeout: connectTimeout && Number(connectTimeout),
         });
@@ -119,8 +125,8 @@ export async function createHttpRequest(
         req = httpsRequest({
           agent: httpsAgent,
           method,
-          host: authority.split(':')[0],
-          port: authority.split(':')[1],
+          host: authority.split(":")[0],
+          port: authority.split(":")[1],
           path: pathWithQuery,
           timeout: connectTimeout && Number(connectTimeout),
         });
@@ -142,14 +148,13 @@ export async function createHttpRequest(
       req.on("close", () => reject);
       req.on("error", reject);
     });
-    if (firstByteTimeout)
-      res.setTimeout(Number(firstByteTimeout));
+    if (firstByteTimeout) res.setTimeout(Number(firstByteTimeout));
     if (betweenBytesTimeout)
       res.on("readable", () => {
         res.setTimeout(Number(betweenBytesTimeout));
       });
     res.on("end", () => void res.emit("readable"));
-    const bodyStreamId = createStream(res);
+    const bodyStreamId = createWritableStream(res);
     return {
       status: res.statusCode,
       headers: Array.from(Object.entries(res.headers)),
