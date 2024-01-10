@@ -372,13 +372,10 @@ function handle(call, id, payload) {
       }
     }
     case SOCKET_UDP_SET_UNICAST_HOP_LIMIT: {
-      process._rawDebug('udp hop limit', payload);
       const socket = getUdpSocketOrThrow(id);
-      process._rawDebug(socket);
       try {
         return socket.setTTL(payload);
       } catch (err) {
-        process._rawDebug(err);
         throw convertSocketError(err);
       }
     }
