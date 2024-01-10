@@ -490,8 +490,10 @@ function handle(call, id, payload) {
         stream.closed ||
         stream.errored ||
         stream.readableLength > 0
-      )
+      ) {
+        process._rawDebug('stdin already ready');
         return 0;
+      }
       let resolve, reject;
       return createPoll(
         new Promise((_resolve, _reject) => {
@@ -499,9 +501,14 @@ function handle(call, id, payload) {
             .once("readable", (resolve = _resolve))
             .once("error", (reject = _reject))
         }).then(
-          () => void stream.off("error", reject),
+          () => {
+            process._rawDebug('STDIN IS READABLE');
+            stream.off("error", reject);
+          },
           // error is read off of stream itself when later accessed
           (err) => {
+            process._rawDebug("STDIN ERROR");
+            process._rawDebug(err);
             void stream.off("readable", resolve);
             if (err.code === "EAGAIN") {
               streams.set(id, {
@@ -513,6 +520,7 @@ function handle(call, id, payload) {
               });
               return handle(INPUT_STREAM_SUBSCRIBE | STDIN, id, payload);
             }
+            process._rawDebug('ERROR PASSTHROUGH RESOLVE');
           }
         )
       );
@@ -755,7 +763,10 @@ function handle(call, id, payload) {
       for (const [idx, poll] of pollList.entries()) {
         if (poll.state !== POLL_STATE_WAIT) doneList.push(idx);
       }
-      if (doneList.length > 0) return new Uint32Array(doneList);
+      if (doneList.length > 0) {
+        process._rawDebug('early return');
+        return new Uint32Array(doneList);
+      }
       let readyPromiseResolve;
       const readyPromise = new Promise(
         (resolve) => void (readyPromiseResolve = resolve)
@@ -810,6 +821,7 @@ export function createPoll(pollState) {
   const pollId = ++pollCnt;
   pollState.polls.push(pollId);
   polls.set(pollId, pollState);
+  process._rawDebug('create poll ' + pollId);
   return pollId;
 }
 
