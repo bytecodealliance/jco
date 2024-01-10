@@ -375,16 +375,6 @@ suite("Node.js Preview2", () => {
       const socket2 = sockets.udpCreateSocket.createUdpSocket("ipv4");
       notEqual(socket2.id, 1);
     });
-    test("sockets.udpCreateSocket() should not-support on invalid ip family", async () => {
-      const { sockets } = await import("@bytecodealliance/preview2-shim");
-
-      throws(
-        () => {
-          sockets.udpCreateSocket.createUdpSocket("xyz");
-        },
-        (err) => err === "not-supported"
-      );
-    });
 
     // TODO: figure out how to mock handle.on("message", ...)
     test.skip("udp.bind(): should bind to a valid ipv4 address and port=0", async () => {

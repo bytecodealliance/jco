@@ -72,9 +72,7 @@ import {
   SOCKET_UDP_DISCONNECT,
   SOCKET_UDP_DISPOSE,
   SOCKET_UDP_GET_LOCAL_ADDRESS,
-  SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE,
   SOCKET_UDP_GET_REMOTE_ADDRESS,
-  SOCKET_UDP_GET_SEND_BUFFER_SIZE,
   SOCKET_UDP_RECEIVE,
   SOCKET_UDP_SEND,
   SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE,
@@ -331,8 +329,7 @@ function handle(call, id, payload) {
 
     // Sockets UDP
     case SOCKET_UDP_CREATE_HANDLE: {
-      const { addressFamily, reuseAddr } = payload;
-      return createUdpSocket(addressFamily, reuseAddr);
+      return createUdpSocket(payload, null);
     }
     case SOCKET_UDP_BIND:
       return socketUdpBind(id, payload);
@@ -358,26 +355,10 @@ function handle(call, id, payload) {
       addr.family = addr.family.toLowerCase();
       return addr;
     }
-    case SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE: {
-      const socket = getUdpSocketOrThrow(id);
-      try {
-        return BigInt(socket.getRecvBufferSize());
-      } catch (err) {
-        throw convertSocketError(err);
-      }
-    }
     case SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE: {
       const socket = getUdpSocketOrThrow(id);
       try {
         socket.setRecvBufferSize(Number(payload));
-      } catch (err) {
-        throw convertSocketError(err);
-      }
-    }
-    case SOCKET_UDP_GET_SEND_BUFFER_SIZE: {
-      const socket = getUdpSocketOrThrow(id);
-      try {
-        return BigInt(socket.getSendBufferSize());
       } catch (err) {
         throw convertSocketError(err);
       }
