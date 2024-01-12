@@ -28,9 +28,7 @@ import {
   reverseMap,
 } from "./calls.js";
 import { STDERR } from "./calls.js";
-import { _rawDebug, exit, stderr, stdout } from "node:process";
-
-const DEBUG = false;
+import { _rawDebug, exit, stderr, stdout, env } from "node:process";
 
 const workerPath = fileURLToPath(
   new URL("./worker-thread.js", import.meta.url)
@@ -42,11 +40,13 @@ export function registerIncomingHttpHandler(id, handler) {
 }
 
 const instanceId = Math.round(Math.random() * 1000).toString();
+const DEBUG_DEFAULT = false;
+const DEBUG = env.JCO_DEBUG === '0' ? false : env.JCO_DEBUG === '1' ? true : DEBUG_DEFAULT;
 
 /**
  * @type {(call: number, id: number | null, payload: any) -> any}
  */
-export let ioCall = createSyncFn(workerPath, (type, id, payload) => {
+export let ioCall = createSyncFn(workerPath, DEBUG, (type, id, payload) => {
   // 'callbacks' from the worker
   // ONLY happens for an http server incoming handler, and NOTHING else (not even sockets, since accept is sync!)
   if (type !== HTTP_SERVER_INCOMING_HANDLER)

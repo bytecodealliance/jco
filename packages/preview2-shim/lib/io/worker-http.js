@@ -1,6 +1,5 @@
 import {
   createReadableStream,
-  createWritableStream,
   getStreamOrThrow,
 } from "./worker-thread.js";
 import {
@@ -52,7 +51,7 @@ export async function setOutgoingResponse(
 export async function startHttpServer(id, { port, host }) {
   const server = createServer((req, res) => {
     // create the streams and their ids
-    const streamId = createWritableStream(req);
+    const streamId = createReadableStream(req);
     const responseId = ++responseCnt;
     parentPort.postMessage({
       type: HTTP_SERVER_INCOMING_HANDLER,
@@ -153,7 +152,6 @@ export async function createHttpRequest(
       res.once("readable", () => {
         res.setTimeout(Number(betweenBytesTimeout));
       });
-    // res.on("end", () => void res.emit("readable"));
     const bodyStreamId = createReadableStream(res);
     return {
       status: res.statusCode,

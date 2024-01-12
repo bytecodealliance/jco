@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from "node:fs";
-import { _rawDebug, hrtime, stderr, stdout } from "node:process";
+import { hrtime, stderr, stdout } from "node:process";
 import { PassThrough } from "node:stream";
 import { format } from "node:util";
 import { runAsWorker } from "../synckit/index.js";
@@ -120,14 +120,34 @@ import {
   socketUdpSend,
 } from "./worker-socket-udp.js";
 
+function log (msg) {
+  if (debug)
+    process._rawDebug(msg);
+}
+
 let pollCnt = 0,
   streamCnt = 0,
   futureCnt = 0;
 
 /**
- * @typedef {{ ready: bool, listener: () => void | null, polls: number[] }} PollState
- * @typedef {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, flushPromise: Promise<void> | null, pollState }} Stream
- * @typedef {{ value: any, error: bool, pollState }} Future
+ * @typedef {{
+ *   ready: bool,
+ *   listener: () => void | null,
+ *   polls: number[]
+ * }} PollState
+ * 
+ * @typedef {{
+ *   stream: NodeJS.ReadableStream | NodeJS.WritableStream,
+ *   flushPromise: Promise<void> | null,
+ *   finished: bool,
+ *   pollState
+ * }} Stream
+ * 
+ * @typedef {{
+ *   value: any,
+ *   error: bool,
+ *   pollState
+ * }} Future
  */
 
 /** @type {Map<number, PollState>} */
@@ -147,6 +167,7 @@ export function createReadableStream(nodeStream) {
   const stream = {
     stream: nodeStream,
     flushPromise: null,
+    finished: false,
     pollState,
   };
   streams.set(++streamCnt, stream);
@@ -155,12 +176,16 @@ export function createReadableStream(nodeStream) {
   }
   function pollDone() {
     pollStateReady(stream.pollState);
+    stream.finished = true;
     nodeStream.off("readable", pollReady);
     nodeStream.off("end", pollDone);
+    nodeStream.off("close", pollDone);
     nodeStream.off("error", pollDone);
   }
+  nodeStream.resume();
   nodeStream.on("readable", pollReady);
   nodeStream.on("end", pollDone);
+  nodeStream.on("close", pollDone);
   nodeStream.on("error", pollDone);
   return streamCnt;
 }
@@ -170,6 +195,7 @@ export function createWritableStream(nodeStream) {
   const stream = {
     stream: nodeStream,
     flushPromise: null,
+    finished: false,
     pollState,
   };
   streams.set(++streamCnt, stream);
@@ -178,13 +204,16 @@ export function createWritableStream(nodeStream) {
   }
   function pollDone() {
     pollStateReady(pollState);
+    stream.finished = true;
     nodeStream.off("drain", pollReady);
     nodeStream.off("finish", pollDone);
     nodeStream.off("error", pollDone);
+    nodeStream.off("close", pollDone);
   }
   nodeStream.on("drain", pollReady);
   nodeStream.on("finish", pollDone);
   nodeStream.on("error", pollDone);
+  nodeStream.on("close", pollDone);
   return streamCnt;
 }
 
@@ -488,10 +517,15 @@ function handle(call, id, payload) {
   // Generic call implementations (streams + polls)
   switch (call & CALL_MASK) {
     case INPUT_STREAM_READ: {
-      const { stream, pollState } = getStreamOrThrow(id);
-      if (!pollState.ready) return new Uint8Array();
-      const res = stream.read(Math.min(stream.readableLength, Number(payload)));
-      if (res === null) return { tag: "closed" };
+      const stream = getStreamOrThrow(id);
+      if (!stream.pollState.ready) return new Uint8Array();
+      const res = stream.stream.read(Math.min(stream.stream.readableLength, Number(payload)));
+      if (res === null) {
+        if (stream.finished)
+          return { tag: "closed" };
+        pollStateWait(stream.pollState, id);
+        return new Uint8Array();
+      }
       return res;
     }
     case INPUT_STREAM_BLOCKING_READ: {
@@ -527,7 +561,7 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_CHECK_WRITE: {
       const { stream, pollState } = getStreamOrThrow(id);
       const bytes = stream.writableHighWaterMark - stream.writableLength;
-      if (bytes === 0) pollStateWait(pollState);
+      if (bytes === 0) pollStateWait(pollState, id);
       return BigInt(bytes);
     }
     case OUTPUT_STREAM_WRITE: {
@@ -552,7 +586,7 @@ function handle(call, id, payload) {
           "wasi-io trap: Cannot write more than permitted writable length"
         );
       }
-      pollStateWait(stream.pollState);
+      pollStateWait(stream.pollState, id);
       return (stream.flushPromise = new Promise((resolve, reject) => {
         stream.stream.write(payload, (err) => {
           stream.flushPromise = null;
@@ -565,7 +599,7 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_FLUSH: {
       const stream = getStreamOrThrow(id);
       if (stream.flushPromise) return;
-      pollStateWait(stream.pollState);
+      pollStateWait(stream.pollState, id);
       return (stream.flushPromise = new Promise((resolve, reject) => {
         stream.stream.write(new Uint8Array([]), (err) => {
           stream.flushPromise = null;
@@ -765,7 +799,7 @@ export function verifyPollsDroppedForDrop(pollState, polledResourceDebugName) {
 /**
  * @param {PollState} pollState
  */
-export function pollStateWait(pollState) {
+export function pollStateWait(pollState, id) {
   pollState.ready = false;
   if (pollState.listener)
     throw new Error(
@@ -813,10 +847,10 @@ export function createFuture(promise) {
 let uncaughtException;
 process.on("uncaughtException", (err) => (uncaughtException = err));
 
-runAsWorker(handle);
-
 // eslint-disable-next-line no-unused-vars
 function trace(msg) {
   const tmpErr = new Error(format(msg));
-  _rawDebug(tmpErr.stack);
+  log(tmpErr.stack);
 }
+
+const debug = runAsWorker(handle);

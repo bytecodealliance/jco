@@ -32,7 +32,10 @@ const servers = [];
 export async function createIncomingServer(serverName) {
   const serverProcess = fork(
     fileURLToPath(import.meta.url.split("/").slice(0, -1).join("/")) +
-      "/http-server.js"
+      "/http-server.js",
+    {
+      env: Object.assign(process.env, { JCO_DEBUG: "0" }),
+    }
   );
   servers.push(serverProcess);
   serverProcess.on("error", (err) => {
@@ -41,7 +44,9 @@ export async function createIncomingServer(serverName) {
   const runningPromise = new Promise((resolve) =>
     serverProcess.on("message", resolve)
   );
-  const componentPath = fileURLToPath(import.meta.url.split("/").slice(0, -2).join("/")) + `/rundir/${serverName}.component.wasm`;
+  const componentPath =
+    fileURLToPath(import.meta.url.split("/").slice(0, -2).join("/")) +
+    `/rundir/${serverName}.component.wasm`;
   console.error("loading component " + componentPath);
   try {
     const component = readFileSync(componentPath);

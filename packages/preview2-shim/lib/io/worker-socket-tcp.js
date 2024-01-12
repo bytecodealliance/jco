@@ -57,7 +57,6 @@ const SOCKET_STATE_ERROR = ++stateCnt;
  *   listenBacklogSize: number,
  *   handle: TCP,
  *   pendingAccepts: PendingAccept[],
- *   acceptListener: null | () => void,
  *   pollState: PollState,
  * }} SocketRecord
  */
@@ -81,7 +80,6 @@ export function createTcpSocket() {
     listenBacklogSize: 128,
     handle,
     pendingAccepts: [],
-    acceptListener: null,
     pollState: { ready: false, listener: null, polls: [] },
   });
   return tcpSocketCnt;
@@ -97,7 +95,7 @@ export function socketTcpBindStart(id, localAddress) {
   if (socket.state !== SOCKET_STATE_INIT) throw "invalid-state";
   socket.state = SOCKET_STATE_BIND;
   socket.bindOrConnectAddress = localAddress;
-  pollStateWait(socket.pollState);
+  pollStateWait(socket.pollState, id);
 }
 
 export function socketTcpBindFinish(id, isIpV6Only) {
@@ -147,13 +145,13 @@ export function socketTcpConnectStart(id, { remoteAddress, family, ipv6Only }) {
   }
   socket.state = SOCKET_STATE_CONNECT;
   socket.bindOrConnectAddress = remoteAddress;
-  pollStateWait(socket.pollState);
+  pollStateWait(socket.pollState, id);
 }
 
 export function socketTcpConnectFinish(id) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_CONNECT) throw "not-in-progress";
-  const tcpSocket = new Socket({ handle: socket.handle, pauseOnCreate: true });
+  const tcpSocket = new Socket({ handle: socket.handle, pauseOnCreate: true, allowHalfOpen: true });
   const remoteAddress = socket.bindOrConnectAddress;
   return new Promise((resolve, reject) => {
     function handleErr(err) {
@@ -195,46 +193,23 @@ export function socketTcpConnectFinish(id) {
 export function socketTcpAccept(id) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_LISTENER) throw "invalid-state";
-  if (socket.pendingAccepts.length) {
-    const accept = socket.pendingAccepts.shift();
-    if (accept.err) throw convertSocketError(accept.err);
-    tcpSockets.set(++tcpSocketCnt, {
-      state: SOCKET_STATE_CONNECTION,
-      bindOrConnectAddress: null,
-      serializedLocalAddress: null,
-      listenBacklogSize: 128,
-      handle: accept.tcpSocket._handle,
-      pendingAccepts: [],
-      acceptListener: null,
-      pollState: { ready: false, listener: null, polls: [] },
-    });
-    return [
-      tcpSocketCnt,
-      createReadableStream(accept.tcpSocket),
-      createWritableStream(accept.tcpSocket),
-    ];
-  }
-  return new Promise((resolve, reject) => {
-    socket.acceptListener = (err, tcpSocket) => {
-      socket.acceptListener = null;
-      if (err) return reject(convertSocketError(err));
-      tcpSockets.set(++tcpSocketCnt, {
-        state: SOCKET_STATE_CONNECTION,
-        bindOrConnectAddress: null,
-        serializedLocalAddress: null,
-        listenBacklogSize: 128,
-        handle: socket._handle,
-        pendingAccepts: [],
-        acceptListener: null,
-        pollState: { ready: false, listener: null, polls: [] },
-      });
-      resolve([
-        tcpSocketCnt,
-        createReadableStream(tcpSocket),
-        createWritableStream(tcpSocket),
-      ]);
-    };
+  if (socket.pendingAccepts.length === 0) throw "would-block";
+  const accept = socket.pendingAccepts.shift();
+  if (accept.err) throw convertSocketError(accept.err);
+  tcpSockets.set(++tcpSocketCnt, {
+    state: SOCKET_STATE_CONNECTION,
+    bindOrConnectAddress: null,
+    serializedLocalAddress: null,
+    listenBacklogSize: 128,
+    handle: accept.tcpSocket._handle,
+    pendingAccepts: [],
+    pollState: { ready: false, listener: null, polls: [] },
   });
+  return [
+    tcpSocketCnt,
+    createReadableStream(accept.tcpSocket),
+    createWritableStream(accept.tcpSocket),
+  ];
 }
 
 export function socketTcpListenStart(id) {
@@ -247,7 +222,7 @@ export function socketTcpListenFinish(id, backlogSize) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_LISTEN) throw "not-in-progress";
   const { handle } = socket;
-  const server = new Server({ allowHalfOpen: true });
+  const server = new Server({ pauseOnConnect: true, allowHalfOpen: true });
   return new Promise((resolve, reject) => {
     function handleErr(err) {
       server.off("listening", handleListen);
@@ -256,19 +231,27 @@ export function socketTcpListenFinish(id, backlogSize) {
     }
     function handleListen() {
       server.off("error", handleErr);
-      // if (socket.subscribeResolve) {
-      //   socket.subscribeResolve();
-      //   socket.subscribeResolve = noop;
-      // }
-
       server.on("connection", (tcpSocket) => {
-        if (socket.acceptListener)
-          return socket.acceptListener(null, tcpSocket);
+        process._rawDebug(">>> GOT CONNECTION FOR ACCEPT");
+        tcpSocket.on('ready', () => {
+          process._rawDebug('--- TCP READY ---');
+        })
+        tcpSocket.on('end', () => {
+          process._rawDebug(' --- TCP END --- ');
+        });
+        tcpSocket.on('close', () => {
+          process._rawDebug(' --- TCP CLOSE --- ');
+        });
+        tcpSocket.on('error', () => {
+          process._rawDebug(' --- TCP ERROR --- ');
+        });
+        tcpSocket.on('readable', () => {
+          process._rawDebug(' --- TCP READABLE --- ');
+        });
         socket.pendingAccepts.push({ tcpSocket, err: null });
       });
       server.on("error", (err) => {
-        if (socket.acceptListener) return socket.acceptListener(err, null);
-        socket.pendingAccepts.push({ socket: null, err });
+        socket.pendingAccepts.push({ tcpSocket: null, err });
       });
       socket.state = SOCKET_STATE_LISTENER;
       resolve();
