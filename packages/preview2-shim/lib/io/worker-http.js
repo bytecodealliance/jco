@@ -52,7 +52,7 @@ export async function setOutgoingResponse(
 export async function startHttpServer(id, { port, host }) {
   const server = createServer((req, res) => {
     // create the streams and their ids
-    const streamId = createReadableStream(req);
+    const streamId = createWritableStream(req);
     const responseId = ++responseCnt;
     parentPort.postMessage({
       type: HTTP_SERVER_INCOMING_HANDLER,
@@ -154,7 +154,7 @@ export async function createHttpRequest(
         res.setTimeout(Number(betweenBytesTimeout));
       });
     res.on("end", () => void res.emit("readable"));
-    const bodyStreamId = createWritableStream(res);
+    const bodyStreamId = createReadableStream(res);
     return {
       status: res.statusCode,
       headers: Array.from(Object.entries(res.headers)),

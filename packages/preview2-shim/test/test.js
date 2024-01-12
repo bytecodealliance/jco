@@ -5,7 +5,6 @@ import {
   strictEqual,
   throws,
 } from "node:assert";
-import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");

@@ -2,8 +2,9 @@ import {
   createReadableStream,
   createWritableStream,
   createPoll,
-  transitionPollReady,
-  transitionPollWait,
+  pollStateReady,
+  pollStateWait,
+  verifyPollsDroppedForDrop,
 } from "./worker-thread.js";
 // See: https://github.com/nodejs/node/blob/main/src/tcp_wrap.cc
 const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
@@ -40,14 +41,6 @@ const SOCKET_STATE_CONNECT = ++stateCnt;
 const SOCKET_STATE_CONNECTION = ++stateCnt;
 const SOCKET_STATE_ERROR = ++stateCnt;
 
-function isReady(socketState) {
-  return !(
-    socketState === SOCKET_STATE_BIND ||
-    socketState === SOCKET_STATE_LISTEN ||
-    socketState === SOCKET_STATE_CONNECT
-  );
-}
-
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
@@ -65,7 +58,7 @@ function isReady(socketState) {
  *   handle: TCP,
  *   pendingAccepts: PendingAccept[],
  *   acceptListener: null | () => void,
- *   polls: number[],
+ *   pollState: PollState,
  * }} SocketRecord
  */
 
@@ -89,14 +82,14 @@ export function createTcpSocket() {
     handle,
     pendingAccepts: [],
     acceptListener: null,
-    polls: [],
+    pollState: { ready: false, listener: null, polls: [] },
   });
   return tcpSocketCnt;
 }
 
 export function socketTcpSubscribe(id) {
   const socket = tcpSockets.get(id);
-  return createPoll(isReady(socket.state), socket.polls);
+  return createPoll(socket.pollState);
 }
 
 export function socketTcpBindStart(id, localAddress) {
@@ -104,7 +97,7 @@ export function socketTcpBindStart(id, localAddress) {
   if (socket.state !== SOCKET_STATE_INIT) throw "invalid-state";
   socket.state = SOCKET_STATE_BIND;
   socket.bindOrConnectAddress = localAddress;
-  transitionPollWait(socket.polls);
+  pollStateWait(socket.pollState);
 }
 
 export function socketTcpBindFinish(id, isIpV6Only) {
@@ -134,7 +127,7 @@ export function socketTcpBindFinish(id, isIpV6Only) {
     (socket.serializedLocalAddress = serializedLocalAddress)
   );
   socket.state = SOCKET_STATE_BOUND;
-  transitionPollReady(socket.polls);
+  pollStateReady(socket.pollState);
 }
 
 export function socketTcpConnectStart(id, { remoteAddress, family, ipv6Only }) {
@@ -148,12 +141,13 @@ export function socketTcpConnectStart(id, { remoteAddress, family, ipv6Only }) {
     !isUnicastIpAddress(remoteAddress) ||
     isMulticastIpAddress(remoteAddress) ||
     remoteAddress.val.port === 0 ||
-    ipv6Only && isIPv4MappedAddress(remoteAddress)) {
+    (ipv6Only && isIPv4MappedAddress(remoteAddress))
+  ) {
     throw "invalid-argument";
   }
   socket.state = SOCKET_STATE_CONNECT;
   socket.bindOrConnectAddress = remoteAddress;
-  transitionPollWait(socket.polls);
+  pollStateWait(socket.pollState);
 }
 
 export function socketTcpConnectFinish(id) {
@@ -165,7 +159,7 @@ export function socketTcpConnectFinish(id) {
     function handleErr(err) {
       tcpSocket.off("connect", handleConnect);
       socket.state = SOCKET_STATE_ERROR;
-      transitionPollReady(socket.polls);
+      pollStateReady(socket.pollState);
       reject(err);
     }
     function handleConnect() {
@@ -180,7 +174,7 @@ export function socketTcpConnectFinish(id) {
         );
       }
       socket.state = SOCKET_STATE_CONNECTION;
-      transitionPollReady(socket.polls);
+      pollStateReady(socket.pollState);
       resolve([
         createReadableStream(tcpSocket),
         createWritableStream(tcpSocket),
@@ -353,6 +347,7 @@ export function socketTcpSetKeepAlive(id, { keepAlive, keepAliveIdleTime }) {
 
 export function socketTcpDispose(id) {
   const socket = tcpSockets.get(id);
+  verifyPollsDroppedForDrop(socket.pollState, "tcp socket");
   if (socket.serializedLocalAddress)
     globalBoundAddresses.delete(socket.serializedLocalAddress);
   socket.handle.close();
