@@ -1,6 +1,7 @@
 import { createReadStream, createWriteStream } from "node:fs";
-import { _rawDebug, exit, hrtime, stderr, stdout } from "node:process";
+import { _rawDebug, hrtime, stderr, stdout } from "node:process";
 import { PassThrough } from "node:stream";
+import { format } from "node:util";
 import { runAsWorker } from "../synckit/index.js";
 import {
   clearOutgoingResponse,
@@ -226,6 +227,7 @@ export function getStreamOrThrow(streamId) {
  * @returns {Promise<any>}
  */
 function handle(call, id, payload) {
+  if (uncaughtException) throw uncaughtException;
   switch (call) {
     // Http
     case HTTP_CREATE_REQUEST: {
@@ -487,16 +489,13 @@ function handle(call, id, payload) {
   switch (call & CALL_MASK) {
     case INPUT_STREAM_READ: {
       const { stream, pollState } = getStreamOrThrow(id);
+      if (!pollState.ready) return new Uint8Array();
       const res = stream.read(Math.min(stream.readableLength, Number(payload)));
-      if (!res) {
-        // return { tag: 'closed' };
-        pollStateWait(pollState);
-        return new Uint8Array();
-      }
+      if (res === null) return { tag: "closed" };
       return res;
     }
     case INPUT_STREAM_BLOCKING_READ: {
-      const pollState = streams.get(id).pollState;
+      const { pollState } = streams.get(id);
       if (pollState.ready)
         return handle(INPUT_STREAM_READ | (call & CALL_TYPE_MASK), id, payload);
       return new Promise((resolve) => void (pollState.listener = resolve)).then(
@@ -690,6 +689,7 @@ function handle(call, id, payload) {
       }
       return readyPromise.then(() => {
         for (const [idx, poll] of pollList.entries()) {
+          poll.listener = null;
           if (poll.ready) doneList.push(idx);
         }
         return new Uint32Array(doneList);
@@ -768,7 +768,7 @@ export function verifyPollsDroppedForDrop(pollState, polledResourceDebugName) {
 export function pollStateWait(pollState) {
   pollState.ready = false;
   if (pollState.listener)
-    criticalError(
+    throw new Error(
       "wasi-io trap: poll has a listener and just transitioned back to wait"
     );
 }
@@ -810,16 +810,13 @@ export function createFuture(promise) {
   return futureId;
 }
 
-function criticalError(msg) {
-  console.trace(msg);
-  setTimeout(() => {
-    _rawDebug("Critical error", msg);
-    exit(1);
-  });
-}
-
-process.on("uncaughtException", (err) => {
-  criticalError(err);
-});
+let uncaughtException;
+process.on("uncaughtException", (err) => (uncaughtException = err));
 
 runAsWorker(handle);
+
+// eslint-disable-next-line no-unused-vars
+function trace(msg) {
+  const tmpErr = new Error(format(msg));
+  _rawDebug(tmpErr.stack);
+}

@@ -46,7 +46,7 @@ const SOCKET_STATE_ERROR = ++stateCnt;
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
  *
  * @typedef {{
- *   socket: number | null,
+ *   tcpSocket: number | null,
  *   err: Error | null,
  * }} PendingAccept
  *
@@ -203,19 +203,19 @@ export function socketTcpAccept(id) {
       bindOrConnectAddress: null,
       serializedLocalAddress: null,
       listenBacklogSize: 128,
-      handle: accept.socket._handle,
+      handle: accept.tcpSocket._handle,
       pendingAccepts: [],
       acceptListener: null,
-      polls: [],
+      pollState: { ready: false, listener: null, polls: [] },
     });
     return [
       tcpSocketCnt,
-      createReadableStream(accept.socket),
-      createWritableStream(accept.socket),
+      createReadableStream(accept.tcpSocket),
+      createWritableStream(accept.tcpSocket),
     ];
   }
   return new Promise((resolve, reject) => {
-    socket.acceptListener = (err, socket) => {
+    socket.acceptListener = (err, tcpSocket) => {
       socket.acceptListener = null;
       if (err) return reject(convertSocketError(err));
       tcpSockets.set(++tcpSocketCnt, {
@@ -226,12 +226,12 @@ export function socketTcpAccept(id) {
         handle: socket._handle,
         pendingAccepts: [],
         acceptListener: null,
-        polls: [],
+        pollState: { ready: false, listener: null, polls: [] },
       });
       resolve([
         tcpSocketCnt,
-        createReadableStream(socket),
-        createWritableStream(socket),
+        createReadableStream(tcpSocket),
+        createWritableStream(tcpSocket),
       ]);
     };
   });
@@ -251,6 +251,7 @@ export function socketTcpListenFinish(id, backlogSize) {
   return new Promise((resolve, reject) => {
     function handleErr(err) {
       server.off("listening", handleListen);
+      socket.state = SOCKET_STATE_ERROR;
       reject(err);
     }
     function handleListen() {
@@ -260,14 +261,16 @@ export function socketTcpListenFinish(id, backlogSize) {
       //   socket.subscribeResolve = noop;
       // }
 
-      server.on("connection", (socket) => {
-        if (socket.acceptListener) return socket.acceptListener(null, socket);
-        socket.pendingAccepts.push({ socket, err: null });
+      server.on("connection", (tcpSocket) => {
+        if (socket.acceptListener)
+          return socket.acceptListener(null, tcpSocket);
+        socket.pendingAccepts.push({ tcpSocket, err: null });
       });
       server.on("error", (err) => {
         if (socket.acceptListener) return socket.acceptListener(err, null);
         socket.pendingAccepts.push({ socket: null, err });
       });
+      socket.state = SOCKET_STATE_LISTENER;
       resolve();
     }
     server.once("listening", handleListen);

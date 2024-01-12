@@ -144,16 +144,16 @@ export async function createHttpRequest(
       req.end();
     }
     const res = await new Promise((resolve, reject) => {
-      req.on("response", resolve);
-      req.on("close", () => reject);
-      req.on("error", reject);
+      req.once("response", resolve);
+      req.once("close", () => reject);
+      req.once("error", reject);
     });
     if (firstByteTimeout) res.setTimeout(Number(firstByteTimeout));
     if (betweenBytesTimeout)
-      res.on("readable", () => {
+      res.once("readable", () => {
         res.setTimeout(Number(betweenBytesTimeout));
       });
-    res.on("end", () => void res.emit("readable"));
+    // res.on("end", () => void res.emit("readable"));
     const bodyStreamId = createReadableStream(res);
     return {
       status: res.statusCode,

@@ -61,6 +61,9 @@ export function createSyncFn(workerPath, callbackHandler) {
       throw new Error('Internal error: Expected a type of a worker callback');
     callbackHandler(type, id, payload);
   });
+  worker.on('exit', () => {
+    process._rawDebug('worker exit');
+  });
   let nextID = 0;
   const syncFn = (...args) => {
     const cid = nextID++;
