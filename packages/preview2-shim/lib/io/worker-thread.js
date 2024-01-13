@@ -120,29 +120,32 @@ import {
   socketUdpSend,
 } from "./worker-socket-udp.js";
 
-function log (msg) {
-  if (debug)
-    process._rawDebug(msg);
+function log(msg) {
+  if (debug) process._rawDebug(msg);
 }
 
 let pollCnt = 0,
   streamCnt = 0,
   futureCnt = 0;
 
+const POLL_STATE_WAIT = 1;
+const POLL_STATE_READY = 2;
+const POLL_STATE_FINISHED = 3;
+
 /**
  * @typedef {{
- *   ready: bool,
+ *   ready: POLL_STATE_UNREADY | POLL_STATE_READY | POLL_STATE_FINISHED,
  *   listener: () => void | null,
- *   polls: number[]
+ *   polls: number[],
  * }} PollState
- * 
+ *
  * @typedef {{
  *   stream: NodeJS.ReadableStream | NodeJS.WritableStream,
  *   flushPromise: Promise<void> | null,
  *   finished: bool,
  *   pollState
  * }} Stream
- * 
+ *
  * @typedef {{
  *   value: any,
  *   error: bool,
@@ -159,39 +162,46 @@ export const streams = new Map();
 /** @type {Map<number, Future>} */
 export const futures = new Map();
 
-/**
- * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
- */
-export function createReadableStream(nodeStream) {
-  const pollState = { ready: false, listener: null, polls: [] };
-  const stream = {
-    stream: nodeStream,
-    flushPromise: null,
-    finished: false,
-    pollState,
-  };
-  streams.set(++streamCnt, stream);
+export function createReadableStreamPollState(nodeStream) {
+  const pollState = { state: POLL_STATE_WAIT, listener: null, polls: [] };
   function pollReady() {
-    pollStateReady(pollState);
+    pollStateReady(pollState, false);
   }
   function pollDone() {
-    pollStateReady(stream.pollState);
-    stream.finished = true;
+    pollStateReady(pollState, true);
     nodeStream.off("readable", pollReady);
     nodeStream.off("end", pollDone);
     nodeStream.off("close", pollDone);
     nodeStream.off("error", pollDone);
+    nodeStream.off("data", pollReady);
   }
-  nodeStream.resume();
+  nodeStream.on("data", () => {
+    process._rawDebug(" --- DATA --- ");
+    pollReady();
+  });
   nodeStream.on("readable", pollReady);
-  nodeStream.on("end", pollDone);
+  nodeStream.on("end", () => pollDone);
   nodeStream.on("close", pollDone);
   nodeStream.on("error", pollDone);
+  return pollState;
+}
+
+/**
+ * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
+ */
+export function createReadableStream(nodeStream, pollState = createReadableStreamPollState(nodeStream)) {
+  const stream = {
+    stream: nodeStream,
+    flushPromise: null,
+    finished: false,
+    pollState,
+  };
+  streams.set(++streamCnt, stream);
   return streamCnt;
 }
 
 export function createWritableStream(nodeStream) {
-  const pollState = { ready: true, listener: null, polls: [] };
+  const pollState = { state: POLL_STATE_READY, listener: null, polls: [] };
   const stream = {
     stream: nodeStream,
     flushPromise: null,
@@ -200,11 +210,10 @@ export function createWritableStream(nodeStream) {
   };
   streams.set(++streamCnt, stream);
   function pollReady() {
-    pollStateReady(pollState);
+    pollStateReady(pollState, false);
   }
   function pollDone() {
-    pollStateReady(pollState);
-    stream.finished = true;
+    pollStateReady(pollState, true);
     nodeStream.off("drain", pollReady);
     nodeStream.off("finish", pollDone);
     nodeStream.off("error", pollDone);
@@ -366,7 +375,7 @@ function handle(call, id, payload) {
       return void futures.delete(id);
     case SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST: {
       const future = futures.get(id);
-      if (!future.pollState.ready) throw "would-block";
+      if (future.pollState.state === POLL_STATE_WAIT) throw "would-block";
       futures.delete(id);
       return future;
     }
@@ -485,7 +494,7 @@ function handle(call, id, payload) {
       payload = hrtime.bigint() + payload;
     // fallthrough
     case CLOCKS_INSTANT_SUBSCRIBE: {
-      const pollState = { ready: false, listener: null, polls: [] };
+      const pollState = { state: POLL_STATE_WAIT, listener: null, polls: [] };
       subscribeInstant(pollState, payload);
       return createPoll(pollState);
     }
@@ -518,19 +527,21 @@ function handle(call, id, payload) {
   switch (call & CALL_MASK) {
     case INPUT_STREAM_READ: {
       const stream = getStreamOrThrow(id);
-      if (!stream.pollState.ready) return new Uint8Array();
-      const res = stream.stream.read(Math.min(stream.stream.readableLength, Number(payload)));
+      if (stream.pollState.state === POLL_STATE_WAIT) return new Uint8Array();
+      const res = stream.stream.read(
+        Math.min(stream.stream.readableLength, Number(payload))
+      );
       if (res === null) {
-        if (stream.finished)
-          return { tag: "closed" };
-        pollStateWait(stream.pollState, id);
+        if (stream.pollState.state === POLL_STATE_FINISHED) return { tag: "closed" };
+        if (stream.stream.readableLength === 0)
+          pollStateWait(stream.pollState, id);
         return new Uint8Array();
       }
       return res;
     }
     case INPUT_STREAM_BLOCKING_READ: {
       const { pollState } = streams.get(id);
-      if (pollState.ready)
+      if (pollState.state !== POLL_STATE_WAIT)
         return handle(INPUT_STREAM_READ | (call & CALL_TYPE_MASK), id, payload);
       return new Promise((resolve) => void (pollState.listener = resolve)).then(
         () => handle(INPUT_STREAM_READ | (call & CALL_TYPE_MASK), id, payload)
@@ -590,7 +601,7 @@ function handle(call, id, payload) {
       return (stream.flushPromise = new Promise((resolve, reject) => {
         stream.stream.write(payload, (err) => {
           stream.flushPromise = null;
-          pollStateReady(stream.pollState);
+          pollStateReady(stream.pollState, false);
           if (err) return void reject(streamError(err));
           resolve(BigInt(payload.byteLength));
         });
@@ -603,7 +614,7 @@ function handle(call, id, payload) {
       return (stream.flushPromise = new Promise((resolve, reject) => {
         stream.stream.write(new Uint8Array([]), (err) => {
           stream.flushPromise = null;
-          pollStateReady(stream.pollState);
+          pollStateReady(stream.pollState, false);
           if (err) return void reject(streamError(err));
           resolve();
         });
@@ -703,7 +714,7 @@ function handle(call, id, payload) {
     }
 
     case POLL_POLLABLE_READY:
-      return polls.get(id).ready;
+      return polls.get(id).state !== POLL_STATE_WAIT;
     case POLL_POLLABLE_BLOCK:
       payload = [id];
     // [intentional case fall-through]
@@ -711,7 +722,7 @@ function handle(call, id, payload) {
       const doneList = [];
       const pollList = payload.map((pollId) => polls.get(pollId));
       for (const [idx, poll] of pollList.entries()) {
-        if (poll.ready) doneList.push(idx);
+        if (poll.state !== POLL_STATE_WAIT) doneList.push(idx);
       }
       if (doneList.length > 0) return new Uint32Array(doneList);
       let readyPromiseResolve;
@@ -724,7 +735,7 @@ function handle(call, id, payload) {
       return readyPromise.then(() => {
         for (const [idx, poll] of pollList.entries()) {
           poll.listener = null;
-          if (poll.ready) doneList.push(idx);
+          if (poll.state !== POLL_STATE_WAIT) doneList.push(idx);
         }
         return new Uint32Array(doneList);
       });
@@ -738,7 +749,7 @@ function handle(call, id, payload) {
 
     case FUTURE_GET_VALUE_AND_DISPOSE: {
       const future = futures.get(id);
-      if (!future.pollState.ready) throw undefined;
+      if (future.pollState.state === POLL_STATE_WAIT) throw undefined;
       return { value: future.value, error: future.error };
     }
     case FUTURE_SUBSCRIBE: {
@@ -773,10 +784,10 @@ export function createPoll(pollState) {
 
 function subscribeInstant(pollState, instant) {
   const duration = instant - hrtime.bigint();
-  if (duration <= 0) return pollStateReady(pollState);
+  if (duration <= 0) return pollStateReady(pollState, true);
   function cb() {
     if (hrtime.bigint() < instant) return subscribeInstant(pollState, instant);
-    pollStateReady(pollState);
+    pollStateReady(pollState, true);
   }
   if (duration < 10e6) setImmediate(cb);
   else setTimeout(cb, Number(duration) / 1e6);
@@ -800,7 +811,7 @@ export function verifyPollsDroppedForDrop(pollState, polledResourceDebugName) {
  * @param {PollState} pollState
  */
 export function pollStateWait(pollState, id) {
-  pollState.ready = false;
+  pollState.state = POLL_STATE_WAIT;
   if (pollState.listener)
     throw new Error(
       "wasi-io trap: poll has a listener and just transitioned back to wait"
@@ -809,16 +820,17 @@ export function pollStateWait(pollState, id) {
 
 /**
  * @param {PollState} pollState
+ * @param {bool} finished
  */
-export function pollStateReady(pollState) {
-  if (pollState.ready) {
+export function pollStateReady(pollState, finished) {
+  if (pollState.state !== POLL_STATE_WAIT) {
     if (pollState.listener)
       throw new Error(
         "wasi-io trap: poll already ready with listener attached"
       );
     return;
   }
-  pollState.ready = true;
+  pollState.state = finished ? POLL_STATE_FINISHED : POLL_STATE_READY;
   if (pollState.listener) {
     pollState.listener();
     pollState.listener = null;
@@ -827,16 +839,16 @@ export function pollStateReady(pollState) {
 
 export function createFuture(promise) {
   const futureId = ++futureCnt;
-  const pollState = { ready: false, listener: null, polls: [] };
+  const pollState = { state: POLL_STATE_WAIT, listener: null, polls: [] };
   const future = { error: false, value: null, pollState };
   futures.set(futureId, future);
   promise.then(
     (value) => {
-      pollStateReady(pollState);
+      pollStateReady(pollState, true);
       future.value = value;
     },
     (value) => {
-      pollStateReady(pollState);
+      pollStateReady(pollState, true);
       future.error = true;
       future.value = value;
     }

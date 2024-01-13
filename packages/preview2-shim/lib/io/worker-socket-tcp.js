@@ -1,7 +1,8 @@
 import {
-  createReadableStream,
-  createWritableStream,
   createPoll,
+  createReadableStream,
+  createReadableStreamPollState,
+  createWritableStream,
   pollStateReady,
   pollStateWait,
   verifyPollsDroppedForDrop,
@@ -48,6 +49,7 @@ const SOCKET_STATE_ERROR = ++stateCnt;
  * @typedef {{
  *   tcpSocket: number | null,
  *   err: Error | null,
+ *   pollState: PollState | null,
  * }} PendingAccept
  *
  * @typedef {{
@@ -125,7 +127,7 @@ export function socketTcpBindFinish(id, isIpV6Only) {
     (socket.serializedLocalAddress = serializedLocalAddress)
   );
   socket.state = SOCKET_STATE_BOUND;
-  pollStateReady(socket.pollState);
+  pollStateReady(socket.pollState, false);
 }
 
 export function socketTcpConnectStart(id, { remoteAddress, family, ipv6Only }) {
@@ -157,7 +159,7 @@ export function socketTcpConnectFinish(id) {
     function handleErr(err) {
       tcpSocket.off("connect", handleConnect);
       socket.state = SOCKET_STATE_ERROR;
-      pollStateReady(socket.pollState);
+      pollStateReady(socket.pollState, false);
       reject(err);
     }
     function handleConnect() {
@@ -172,7 +174,7 @@ export function socketTcpConnectFinish(id) {
         );
       }
       socket.state = SOCKET_STATE_CONNECTION;
-      pollStateReady(socket.pollState);
+      pollStateReady(socket.pollState, false);
       resolve([
         createReadableStream(tcpSocket),
         createWritableStream(tcpSocket),
@@ -203,11 +205,11 @@ export function socketTcpAccept(id) {
     listenBacklogSize: 128,
     handle: accept.tcpSocket._handle,
     pendingAccepts: [],
-    pollState: { ready: false, listener: null, polls: [] },
+    pollState: accept.pollState,
   });
   return [
     tcpSocketCnt,
-    createReadableStream(accept.tcpSocket),
+    createReadableStream(accept.tcpSocket, accept.pollState),
     createWritableStream(accept.tcpSocket),
   ];
 }
@@ -232,26 +234,11 @@ export function socketTcpListenFinish(id, backlogSize) {
     function handleListen() {
       server.off("error", handleErr);
       server.on("connection", (tcpSocket) => {
-        process._rawDebug(">>> GOT CONNECTION FOR ACCEPT");
-        tcpSocket.on('ready', () => {
-          process._rawDebug('--- TCP READY ---');
-        })
-        tcpSocket.on('end', () => {
-          process._rawDebug(' --- TCP END --- ');
-        });
-        tcpSocket.on('close', () => {
-          process._rawDebug(' --- TCP CLOSE --- ');
-        });
-        tcpSocket.on('error', () => {
-          process._rawDebug(' --- TCP ERROR --- ');
-        });
-        tcpSocket.on('readable', () => {
-          process._rawDebug(' --- TCP READABLE --- ');
-        });
-        socket.pendingAccepts.push({ tcpSocket, err: null });
+        const pollState = createReadableStreamPollState(tcpSocket);
+        socket.pendingAccepts.push({ tcpSocket, err: null, pollState });
       });
       server.on("error", (err) => {
-        socket.pendingAccepts.push({ tcpSocket: null, err });
+        socket.pendingAccepts.push({ tcpSocket: null, err, pollState: null });
       });
       socket.state = SOCKET_STATE_LISTENER;
       resolve();

@@ -89,6 +89,7 @@ mod preview2_stream_pollable_correct;
 mod preview2_stream_pollable_traps;
 mod preview2_tcp_bind;
 mod preview2_tcp_connect;
+mod preview2_tcp_sample_application;
 mod preview2_tcp_sockopts;
 mod preview2_tcp_states;
 mod preview2_udp_bind;
