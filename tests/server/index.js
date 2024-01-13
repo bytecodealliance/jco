@@ -3,7 +3,7 @@ import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp } from "node:fs/promises";
 import { readFileSync, rmdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { $init, generate } from "../../obj/js-component-bindgen-component.js";
 import { fork } from "node:child_process";
 
@@ -66,7 +66,7 @@ export async function createIncomingServer(serverName) {
     for (const [name, contents] of files) {
       writeFileSync(testDir + "/" + name, contents);
     }
-    serverProcess.send(testDir + "/component.js");
+    serverProcess.send(pathToFileURL(testDir + "/component.js"));
     const authority = await runningPromise;
     return authority;
   } catch (e) {
