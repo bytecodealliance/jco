@@ -22,6 +22,10 @@ jobs:
         ]
         node: [18.x, 20.x, latest]
         exclude:
+          - os: macos-latest
+            node: 20.x
+          - os: macos-latest
+            node: 18.x
           - os: windows-latest
             node: 20.x
           - os: windows-latest
