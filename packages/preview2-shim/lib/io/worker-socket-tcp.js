@@ -97,7 +97,7 @@ export function socketTcpBindStart(id, localAddress) {
   if (socket.state !== SOCKET_STATE_INIT) throw "invalid-state";
   socket.state = SOCKET_STATE_BIND;
   socket.bindOrConnectAddress = localAddress;
-  pollStateWait(socket.pollState, id);
+  pollStateWait(socket.pollState);
 }
 
 export function socketTcpBindFinish(id, isIpV6Only) {
@@ -147,7 +147,7 @@ export function socketTcpConnectStart(id, { remoteAddress, family, ipv6Only }) {
   }
   socket.state = SOCKET_STATE_CONNECT;
   socket.bindOrConnectAddress = remoteAddress;
-  pollStateWait(socket.pollState, id);
+  pollStateWait(socket.pollState);
 }
 
 export function socketTcpConnectFinish(id) {

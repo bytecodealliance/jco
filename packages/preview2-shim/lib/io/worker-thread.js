@@ -173,12 +173,7 @@ export function createReadableStreamPollState(nodeStream) {
     nodeStream.off("end", pollDone);
     nodeStream.off("close", pollDone);
     nodeStream.off("error", pollDone);
-    nodeStream.off("data", pollReady);
   }
-  nodeStream.on("data", () => {
-    process._rawDebug(" --- DATA --- ");
-    pollReady();
-  });
   nodeStream.on("readable", pollReady);
   nodeStream.on("end", () => pollDone);
   nodeStream.on("close", pollDone);
@@ -534,7 +529,7 @@ function handle(call, id, payload) {
       if (res === null) {
         if (stream.pollState.state === POLL_STATE_FINISHED) return { tag: "closed" };
         if (stream.stream.readableLength === 0)
-          pollStateWait(stream.pollState, id);
+          pollStateWait(stream.pollState);
         return new Uint8Array();
       }
       return res;
@@ -572,7 +567,7 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_CHECK_WRITE: {
       const { stream, pollState } = getStreamOrThrow(id);
       const bytes = stream.writableHighWaterMark - stream.writableLength;
-      if (bytes === 0) pollStateWait(pollState, id);
+      if (bytes === 0) pollStateWait(pollState);
       return BigInt(bytes);
     }
     case OUTPUT_STREAM_WRITE: {
@@ -597,7 +592,7 @@ function handle(call, id, payload) {
           "wasi-io trap: Cannot write more than permitted writable length"
         );
       }
-      pollStateWait(stream.pollState, id);
+      pollStateWait(stream.pollState);
       return (stream.flushPromise = new Promise((resolve, reject) => {
         stream.stream.write(payload, (err) => {
           stream.flushPromise = null;
@@ -610,7 +605,7 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_FLUSH: {
       const stream = getStreamOrThrow(id);
       if (stream.flushPromise) return;
-      pollStateWait(stream.pollState, id);
+      pollStateWait(stream.pollState);
       return (stream.flushPromise = new Promise((resolve, reject) => {
         stream.stream.write(new Uint8Array([]), (err) => {
           stream.flushPromise = null;
@@ -810,7 +805,7 @@ export function verifyPollsDroppedForDrop(pollState, polledResourceDebugName) {
 /**
  * @param {PollState} pollState
  */
-export function pollStateWait(pollState, id) {
+export function pollStateWait(pollState) {
   pollState.state = POLL_STATE_WAIT;
   if (pollState.listener)
     throw new Error(
