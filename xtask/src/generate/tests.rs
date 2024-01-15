@@ -3,7 +3,7 @@ use xshell::{cmd, Shell};
 
 // for debugging
 const TRACE: bool = false;
-const TEST_FILTER: &[&str] = &["piped_simple"];
+const TEST_FILTER: &[&str] = &[];
 
 const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
 

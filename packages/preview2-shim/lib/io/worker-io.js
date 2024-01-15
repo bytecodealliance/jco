@@ -40,8 +40,9 @@ export function registerIncomingHttpHandler(id, handler) {
 }
 
 const instanceId = Math.round(Math.random() * 1000).toString();
-const DEBUG_DEFAULT = true;
-const DEBUG = env.JCO_DEBUG === '0' ? false : env.JCO_DEBUG === '1' ? true : DEBUG_DEFAULT;
+const DEBUG_DEFAULT = false;
+const DEBUG =
+  env.JCO_DEBUG === "0" ? false : env.JCO_DEBUG === "1" ? true : DEBUG_DEFAULT;
 
 /**
  * @type {(call: number, id: number | null, payload: any) -> any}

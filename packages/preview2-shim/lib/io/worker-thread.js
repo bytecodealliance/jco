@@ -11,6 +11,9 @@ import {
   stopHttpServer,
 } from "./worker-http.js";
 import { convertSocketError, socketResolveAddress } from "./worker-sockets.js";
+import { Readable } from "node:stream";
+import { read } from "node:fs";
+import { nextTick } from "node:process";
 
 import {
   CALL_MASK,
@@ -184,7 +187,10 @@ export function createReadableStreamPollState(nodeStream) {
 /**
  * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
  */
-export function createReadableStream(nodeStream, pollState = createReadableStreamPollState(nodeStream)) {
+export function createReadableStream(
+  nodeStream,
+  pollState = createReadableStreamPollState(nodeStream)
+) {
   const stream = {
     stream: nodeStream,
     flushPromise: null,
@@ -473,56 +479,31 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_DISPOSE | STDERR:
       return;
     case INPUT_STREAM_CREATE | STDIN: {
-      const stream = createReadStream(null, {
-        fd: 0,
-        highWaterMark: 64 * 1024,
-      });
-      // for some reason fs streams dont emit readable on end
-      // stream.on("end", () => void stream.emit("readable"));
-      return createReadableStream(stream);
-    }
-    case INPUT_STREAM_SUBSCRIBE | STDIN: {
-      const stream = streams.get(id)?.stream;
-      // already closed or errored -> immediately return poll
-      // (poll 0 is immediately resolved)
-      if (
-        !stream ||
-        stream.closed ||
-        stream.errored ||
-        stream.readableLength > 0
-      ) {
-        process._rawDebug('stdin already ready');
-        return 0;
-      }
-      let resolve, reject;
-      return createPoll(
-        new Promise((_resolve, _reject) => {
-          stream
-            .once("readable", (resolve = _resolve))
-            .once("error", (reject = _reject))
-        }).then(
-          () => {
-            process._rawDebug('STDIN IS READABLE');
-            stream.off("error", reject);
+      return createReadableStream(
+        new Readable({
+          read(n) {
+            if (n <= 0) return void this.push(null);
+            let buf = Buffer.allocUnsafeSlow(n);
+            read(0, buf, 0, n, null, (err, bytesRead) => {
+              if (err) {
+                if (err.code === "EAGAIN") {
+                  nextTick(() => void this._read(n));
+                  return;
+                }
+                this.destroy(err);
+              } else if (bytesRead > 0) {
+                if (bytesRead !== buf.length) {
+                  const dst = Buffer.allocUnsafeSlow(bytesRead);
+                  buf.copy(dst, 0, 0, bytesRead);
+                  buf = dst;
+                }
+                this.push(buf);
+              } else {
+                this.push(null);
+              }
+            });
           },
-          // error is read off of stream itself when later accessed
-          (err) => {
-            process._rawDebug("STDIN ERROR");
-            process._rawDebug(err);
-            void stream.off("readable", resolve);
-            if (err.code === "EAGAIN") {
-              streams.set(id, {
-                flushPromise: null,
-                stream: createReadStream(null, {
-                  fd: 0,
-                  highWaterMark: 64 * 1024
-                })
-              });
-              return handle(INPUT_STREAM_SUBSCRIBE | STDIN, id, payload);
-            }
-            process._rawDebug('ERROR PASSTHROUGH RESOLVE');
-          }
-        )
+        })
       );
     }
 
@@ -571,9 +552,9 @@ function handle(call, id, payload) {
         Math.min(stream.stream.readableLength, Number(payload))
       );
       if (res === null) {
-        if (stream.pollState.state === POLL_STATE_FINISHED) return { tag: "closed" };
-        if (stream.stream.readableLength === 0)
-          pollStateWait(stream.pollState);
+        if (stream.pollState.state === POLL_STATE_FINISHED)
+          return { tag: "closed" };
+        if (stream.stream.readableLength === 0) pollStateWait(stream.pollState);
         return new Uint8Array();
       }
       return res;
@@ -763,10 +744,7 @@ function handle(call, id, payload) {
       for (const [idx, poll] of pollList.entries()) {
         if (poll.state !== POLL_STATE_WAIT) doneList.push(idx);
       }
-      if (doneList.length > 0) {
-        process._rawDebug('early return');
-        return new Uint32Array(doneList);
-      }
+      if (doneList.length > 0) return new Uint32Array(doneList);
       let readyPromiseResolve;
       const readyPromise = new Promise(
         (resolve) => void (readyPromiseResolve = resolve)
@@ -821,7 +799,6 @@ export function createPoll(pollState) {
   const pollId = ++pollCnt;
   pollState.polls.push(pollId);
   polls.set(pollId, pollState);
-  process._rawDebug('create poll ' + pollId);
   return pollId;
 }
 
