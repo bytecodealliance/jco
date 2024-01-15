@@ -67,7 +67,7 @@ export async function apiTest (fixtures) {
       const { files, imports } = await transpile(component, {
         name,
         map: {
-          'testwasi': '#testimport'
+          'test:flavorful/*': '#*import'
         },
       });
       strictEqual(imports.length, 2);
