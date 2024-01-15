@@ -1,7 +1,7 @@
 import { $init, generate } from '../../obj/js-component-bindgen-component.js';
-import { writeFile } from 'fs/promises';
-import { mkdir } from 'fs/promises';
-import { dirname, extname, basename, resolve } from 'path';
+import { writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
+import { dirname, extname, basename, resolve } from 'node:path';
 import c from 'chalk-template';
 import { readFile, sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import { optimizeComponent } from './opt.js';
@@ -10,6 +10,9 @@ import { fileURLToPath } from 'url';
 import { $init as wasmToolsInit, tools } from "../../obj/wasm-tools.js";
 const { componentEmbed, componentNew } = tools;
 import ora from '#ora';
+import { platform } from 'node:process';
+
+const isWindows = platform === 'win32';
 
 export async function transpile (componentPath, opts, program) {
   const varIdx = program?.parent.rawArgs.indexOf('--');
@@ -23,7 +26,7 @@ export async function transpile (componentPath, opts, program) {
     await wasmToolsInit;
     component = componentNew(componentEmbed({
       dummy: true,
-      witPath: resolve(componentPath)
+      witPath: (isWindows ? '//?/' : '') + resolve(componentPath)
     }), []);
   }
 
