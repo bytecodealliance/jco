@@ -62,7 +62,7 @@ export async function codegenTest (fixtures) {
 
       const bindingsSource = new TextDecoder().decode(files['resource-naming.js']);
 
-      ok(bindingsSource.includes('const Thing$1 = class Thing'));
+      ok(bindingsSource.includes('class Thing$1{'));
       ok(bindingsSource.includes('Thing: Thing$1'));
     });
   });

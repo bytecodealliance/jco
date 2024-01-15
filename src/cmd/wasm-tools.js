@@ -4,7 +4,6 @@ import { $init, tools } from "../../obj/wasm-tools.js";
 const { print: printFn, parse: parseFn, componentWit: componentWitFn, componentNew: componentNewFn, componentEmbed: componentEmbedFn, metadataAdd: metadataAddFn, metadataShow: metadataShowFn } = tools;
 import { resolve, basename, extname } from 'node:path';
 import c from 'chalk-template';
-import { platform } from 'node:process';
 
 export async function parse(file, opts) {
   await $init;

@@ -608,6 +608,10 @@ function convertFsError(e) {
       return "unsupported";
     case "ENOTTY":
       return "no-tty";
+    // windows gives this error for badly structured `//` reads
+    // this seems like a slightly better error than unknown given
+    // that it's a common footgun
+    case -4094:
     case "ENXIO":
       return "no-such-device";
     case "EOVERFLOW":

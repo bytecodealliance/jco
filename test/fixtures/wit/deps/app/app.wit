@@ -1,0 +1,34 @@
+package jcbhmr:hello-world-rust-wasm-component-lib;
+
+interface cbh {
+  resource p-string {
+    call: func(a: string);
+  }
+  resource r-string {
+    call: func() -> string;
+  }
+}
+interface cb {
+  use cbh.{p-string as h-p-string, r-string as h-r-string};
+  resource p-string {
+    constructor(cb: h-p-string);
+    call: func(a: string);
+  }
+  resource r-string {
+    constructor(cb: h-r-string);
+    call: func() -> string;
+  }
+}
+
+interface hello-world {
+  use cb.{p-string, r-string};
+  set-cb: func(cb: p-string);
+  run-cb-with-result-of: func(cb: borrow<r-string>);
+}
+
+world hello-world-rust-wasm-component-lib {
+  import cbh;
+  export cb;
+
+  export hello-world;
+}

@@ -1636,28 +1636,16 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 );
             }
-            FunctionKind::Constructor(ty) => {
+            FunctionKind::Constructor(_) => {
                 if self.defined_resource_classes.contains(local_name) {
                     panic!("Internal error: Resource constructor must be defined before other methods and statics");
                 }
-                let ty = &self.resolve.types[ty];
-                let name = ty.name.as_ref().unwrap();
-                if name.to_upper_camel_case() == local_name {
-                    uwrite!(
-                        self.src.js,
-                        "
-                        class {local_name} {{
-                            constructor"
-                    );
-                } else {
-                    uwrite!(
-                        self.src.js,
-                        "
-                        const {local_name} = class {} {{
-                            constructor",
-                        name.to_upper_camel_case()
-                    );
-                }
+                uwrite!(
+                    self.src.js,
+                    "
+                    class {local_name} {{
+                        constructor"
+                );
                 self.defined_resource_classes.insert(local_name.to_string());
             }
         }
