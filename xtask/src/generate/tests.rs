@@ -5,13 +5,7 @@ use xshell::{cmd, Shell};
 const TRACE: bool = false;
 const TEST_FILTER: &[&str] = &[];
 
-const TEST_IGNORE: &[&str] = &[
-    "nn_image_classification",
-    "nn_image_classification_named",
-    "proxy_handler",
-    "proxy_hash",
-    "proxy_echo",
-];
+const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
