@@ -853,12 +853,10 @@ export function pollStateWait(pollState) {
  * @param {bool} finished
  */
 export function pollStateReady(pollState, finished) {
-  if (pollState.state !== POLL_STATE_WAIT) {
-    if (pollState.listener)
-      throw new Error(
-        "wasi-io trap: poll already ready with listener attached"
-      );
-    return;
+  if (pollState.state !== POLL_STATE_WAIT && pollState.listener) {
+    throw new Error(
+      "wasi-io trap: poll already ready with listener attached"
+    );
   }
   pollState.state = finished ? POLL_STATE_FINISHED : POLL_STATE_READY;
   if (pollState.listener) {
