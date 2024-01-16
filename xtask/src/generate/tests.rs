@@ -118,8 +118,7 @@ fn generate_test(test_name: &str) -> String {
     };
 
     let maybe_include_write = if stdin.is_some() {
-        "use std::io::prelude::Write;
-    "
+        "use std::io::prelude::Write;\n"
     } else {
         ""
     };
