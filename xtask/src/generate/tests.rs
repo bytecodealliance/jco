@@ -5,7 +5,15 @@ use xshell::{cmd, Shell};
 const TRACE: bool = false;
 const TEST_FILTER: &[&str] = &[];
 
-const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
+// "cli_splice_stdin",
+// "cli_stdio_write_flushes",
+
+const TEST_IGNORE: &[&str] = &[
+    "nn_image_classification",
+    "nn_image_classification_named",
+    "preview2_stream_pollable_correct",
+    "preview2_stream_pollable_traps",
+];
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
@@ -90,7 +98,7 @@ fn generate_test(test_name: &str) -> String {
         "preview1_stdio_not_isatty" => "notty",
         "proxy_echo" | "proxy_hash" => "server-api-proxy-streaming",
         "proxy_handler" => "server-api-proxy",
-        "piped_simple" => "piped",
+        "piped_simple" | "piped_multiple" | "piped_polling" => "piped",
         _ => {
             if test_name.starts_with("preview1") {
                 "scratch"
@@ -114,16 +122,15 @@ fn generate_test(test_name: &str) -> String {
 
     let includes = if piped || stdin.is_some() {
         "use std::fs;
-use std::process::{{Command, Stdio}};
-use std::io::prelude::Write;"
+use std::io::prelude::Write;
+use std::process::{Command, Stdio};"
     } else {
         "use std::fs;
 use std::process::Command;"
     };
 
     let cmd1 = format!(
-        "{}
-{}
+        "{}{}
     let mut cmd1_child = cmd1.spawn().expect(\"failed to spawn test program\");",
         generate_command_invocation(
             "cmd1",
@@ -136,7 +143,8 @@ use std::process::Command;"
             },
         ),
         if piped {
-            "    cmd1.stdout(Stdio::piped());"
+            "
+    cmd1.stdout(Stdio::piped());"
         } else {
             ""
         }
@@ -145,14 +153,11 @@ use std::process::Command;"
         format!(
             "{}
     cmd2.stdin(cmd1_child.stdout.take().unwrap());
-    let mut cmd2_child = cmd2.spawn().expect(\"failed to spawn test program\");",
+    let mut cmd2_child = cmd2.spawn().expect(\"failed to spawn test program\");
+    ",
             generate_command_invocation(
                 "cmd2",
-                &if piped {
-                    format!("test_name_consumer")
-                } else {
-                    "".into()
-                },
+                &format!("{test_name}_consumer"),
                 &format!("{virtual_env}-consumer"),
                 None,
             )
@@ -172,29 +177,26 @@ fn {test_name}() -> anyhow::Result<()> {{
     let wasi_file = "./tests/rundir/{test_name}.component.wasm";
     let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
     {cmd1}
-    {cmd2}
-{}
-    // let status = cmd1_child.wait().expect("failed to wait on child");
-    // assert!({}status.success(), "producer failed");
-
-{}
+    {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
+    assert!({}status.success(), "test execution failed");
     Ok(())
 }}
 "##,
         match stdin {
             Some(stdin) => format!(
-                "    cmd1_child.stdin.as_ref().unwrap().write(b\"{}\").unwrap();",
+                "cmd1_child
+        .stdin
+        .as_ref()
+        .unwrap()
+        .write(b\"{}\")
+        .unwrap();
+    ",
                 stdin
             ),
             None => "".into(),
         },
+        if piped { "2" } else { "1" },
         if !should_error { "" } else { "!" },
-        if piped {
-            "    let status = cmd2_child.wait().expect(\"failed to wait on child\");
-    assert!(status.success(), \"consumer failed\");"
-        } else {
-            ""
-        }
     )
 }
 

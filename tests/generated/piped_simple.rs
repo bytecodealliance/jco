@@ -2,8 +2,8 @@
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-use std::process::{{Command, Stdio}};
 use std::io::prelude::Write;
+use std::process::{Command, Stdio};
 
 #[test]
 fn piped_simple() -> anyhow::Result<()> {
@@ -27,7 +27,7 @@ fn piped_simple() -> anyhow::Result<()> {
     cmd2.arg("run");
 
     cmd2.arg("--jco-dir");
-    cmd2.arg("./tests/rundir/test_name_consumer");
+    cmd2.arg("./tests/rundir/piped_simple_consumer");
     cmd2.arg("--jco-import");
     cmd2.arg("./tests/virtualenvs/piped-consumer.js");
     cmd2.arg(wasi_file);
@@ -35,11 +35,7 @@ fn piped_simple() -> anyhow::Result<()> {
 
     cmd2.stdin(cmd1_child.stdout.take().unwrap());
     let mut cmd2_child = cmd2.spawn().expect("failed to spawn test program");
-
-    // let status = cmd1_child.wait().expect("failed to wait on child");
-    // assert!(status.success(), "producer failed");
-
     let status = cmd2_child.wait().expect("failed to wait on child");
-    assert!(status.success(), "consumer failed");
+    assert!(status.success(), "test execution failed");
     Ok(())
 }

@@ -19,13 +19,8 @@ fn preview2_ip_name_lookup() -> anyhow::Result<()> {
     cmd1.arg(wasi_file);
     cmd1.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
 
-
     let mut cmd1_child = cmd1.spawn().expect("failed to spawn test program");
-    
-
-    // let status = cmd1_child.wait().expect("failed to wait on child");
-    // assert!(status.success(), "producer failed");
-
-
+    let status = cmd1_child.wait().expect("failed to wait on child");
+    assert!(status.success(), "test execution failed");
     Ok(())
 }

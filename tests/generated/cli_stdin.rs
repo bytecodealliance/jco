@@ -2,8 +2,8 @@
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-use std::process::{{Command, Stdio}};
 use std::io::prelude::Write;
+use std::process::{Command, Stdio};
 
 #[test]
 fn cli_stdin() -> anyhow::Result<()> {
@@ -20,13 +20,14 @@ fn cli_stdin() -> anyhow::Result<()> {
     cmd1.arg(wasi_file);
     cmd1.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
     cmd1.stdin(Stdio::piped());
-
     let mut cmd1_child = cmd1.spawn().expect("failed to spawn test program");
-    
-    cmd1_child.stdin.as_ref().unwrap().write(b"So rested he by the Tumtum tree").unwrap();
-    // let status = cmd1_child.wait().expect("failed to wait on child");
-    // assert!(status.success(), "producer failed");
-
-
+    cmd1_child
+        .stdin
+        .as_ref()
+        .unwrap()
+        .write(b"So rested he by the Tumtum tree")
+        .unwrap();
+    let status = cmd1_child.wait().expect("failed to wait on child");
+    assert!(status.success(), "test execution failed");
     Ok(())
 }

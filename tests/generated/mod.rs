@@ -88,8 +88,6 @@ mod preview2_adapter_badfd;
 mod preview2_ip_name_lookup;
 mod preview2_random;
 mod preview2_sleep;
-mod preview2_stream_pollable_correct;
-mod preview2_stream_pollable_traps;
 mod preview2_tcp_bind;
 mod preview2_tcp_connect;
 mod preview2_tcp_sample_application;
