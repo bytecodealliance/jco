@@ -46,13 +46,13 @@ function extractProperties(object) {
 
 const CALL_TIMEOUT = undefined;
 
-export function createSyncFn(workerPath, callbackHandler) {
+export function createSyncFn(workerPath, debug, callbackHandler) {
   if (!path.isAbsolute(workerPath)) {
     throw new Error("`workerPath` must be absolute");
   }
   const { port1: mainPort, port2: workerPort } = new MessageChannel();
   const worker = new Worker(workerPath, {
-    workerData: { workerPort },
+    workerData: { workerPort, debug },
     transferList: [workerPort],
     execArgv: []
   });
@@ -95,7 +95,7 @@ export function runAsWorker(fn) {
   if (!workerData) {
     return;
   }
-  const { workerPort } = workerData;
+  const { workerPort, debug } = workerData;
   try {
     parentPort.on("message", ({ sharedBuffer, cid, args }) => {
       (async () => {
@@ -123,4 +123,5 @@ export function runAsWorker(fn) {
       Atomics.notify(sharedBufferView, 0);
     });
   }
+  return debug;
 }

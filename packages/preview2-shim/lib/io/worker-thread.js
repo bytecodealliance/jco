@@ -1,6 +1,7 @@
 import { createReadStream, createWriteStream } from "node:fs";
-import { _rawDebug, exit, hrtime, stderr, stdout } from "node:process";
+import { hrtime, stderr, stdout } from "node:process";
 import { PassThrough } from "node:stream";
+import { format } from "node:util";
 import { runAsWorker } from "../synckit/index.js";
 import {
   clearOutgoingResponse,
@@ -10,8 +11,9 @@ import {
   stopHttpServer,
 } from "./worker-http.js";
 import { convertSocketError, socketResolveAddress } from "./worker-sockets.js";
-
-const noop = () => {};
+import { Readable } from "node:stream";
+import { read } from "node:fs";
+import { nextTick } from "node:process";
 
 import {
   CALL_MASK,
@@ -21,6 +23,7 @@ import {
   CLOCKS_NOW,
   FILE,
   FUTURE_DISPOSE,
+  FUTURE_SUBSCRIBE,
   FUTURE_GET_VALUE_AND_DISPOSE,
   HTTP,
   HTTP_CREATE_REQUEST,
@@ -49,19 +52,26 @@ import {
   OUTPUT_STREAM_WRITE,
   OUTPUT_STREAM_WRITE_ZEROES,
   POLL_POLLABLE_BLOCK,
+  POLL_POLLABLE_DISPOSE,
   POLL_POLLABLE_READY,
   POLL_POLL_LIST,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
   SOCKET_TCP_ACCEPT,
-  SOCKET_TCP_BIND,
-  SOCKET_TCP_CONNECT,
+  SOCKET_TCP_BIND_START,
+  SOCKET_TCP_BIND_FINISH,
+  SOCKET_TCP_CONNECT_START,
+  SOCKET_TCP_CONNECT_FINISH,
   SOCKET_TCP_CREATE_HANDLE,
   SOCKET_TCP_DISPOSE,
   SOCKET_TCP_GET_LOCAL_ADDRESS,
   SOCKET_TCP_GET_REMOTE_ADDRESS,
-  SOCKET_TCP_LISTEN,
+  SOCKET_TCP_LISTEN_START,
+  SOCKET_TCP_LISTEN_FINISH,
+  SOCKET_TCP_IS_LISTENING,
+  SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE,
   SOCKET_TCP_SUBSCRIBE,
   SOCKET_TCP_SET_KEEP_ALIVE,
   SOCKET_TCP_SHUTDOWN,
@@ -86,12 +96,17 @@ import {
 import {
   createTcpSocket,
   socketTcpAccept,
-  socketTcpBind,
-  socketTcpConnect,
+  socketTcpBindStart,
+  socketTcpBindFinish,
+  socketTcpConnectStart,
+  socketTcpConnectFinish,
   socketTcpDispose,
   socketTcpGetLocalAddress,
   socketTcpGetRemoteAddress,
-  socketTcpListen,
+  socketTcpListenStart,
+  socketTcpListenFinish,
+  socketTcpIsListening,
+  socketTcpSetListenBacklogSize,
   socketTcpSetKeepAlive,
   socketTcpShutdown,
   socketTcpSubscribe,
@@ -108,42 +123,123 @@ import {
   socketUdpSend,
 } from "./worker-socket-udp.js";
 
-let streamCnt = 0,
-  pollCnt = 0;
+function log(msg) {
+  if (debug) process._rawDebug(msg);
+}
 
-/** @type {Map<number, Promise<void>>} */
-export const unfinishedPolls = new Map();
+let pollCnt = 0,
+  streamCnt = 0,
+  futureCnt = 0;
 
-/** @type {Map<number, { flushPromise: Promise<void> | null, stream: NodeJS.ReadableStream | NodeJS.WritableStream }>} */
-export const unfinishedStreams = new Map();
+const POLL_STATE_WAIT = 1;
+const POLL_STATE_READY = 2;
+const POLL_STATE_FINISHED = 3;
 
-/** @type {Map<number, { value: any, error: bool }>} */
-export const unfinishedFutures = new Map();
+/**
+ * @typedef {{
+ *   ready: POLL_STATE_UNREADY | POLL_STATE_READY | POLL_STATE_FINISHED,
+ *   listener: () => void | null,
+ *   polls: number[],
+ *   parentStream: null | NodeJS.ReadableStream
+ * }} PollState
+ *
+ * @typedef {{
+ *   stream: NodeJS.ReadableStream | NodeJS.WritableStream,
+ *   flushPromise: Promise<void> | null,
+ *   pollState
+ * }} Stream
+ *
+ * @typedef {{
+ *   value: any,
+ *   error: bool,
+ *   pollState
+ * }} Future
+ */
+
+/** @type {Map<number, PollState>} */
+export const polls = new Map();
+
+/** @type {Map<number, Stream>} */
+export const streams = new Map();
+
+/** @type {Map<number, Future>} */
+export const futures = new Map();
+
+export function createReadableStreamPollState(nodeStream) {
+  const pollState = {
+    state: POLL_STATE_READY,
+    listener: null,
+    polls: [],
+    parentStream: nodeStream,
+  };
+  function pollDone() {
+    pollStateReady(pollState, true);
+    nodeStream.off("end", pollDone);
+    nodeStream.off("close", pollDone);
+    nodeStream.off("error", pollDone);
+  }
+  nodeStream.on("end", pollDone);
+  nodeStream.on("close", pollDone);
+  nodeStream.on("error", pollDone);
+  return pollState;
+}
 
 /**
  * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
  */
-export function createStream(nodeStream) {
-  unfinishedStreams.set(++streamCnt, {
-    flushPromise: null,
+export function createReadableStream(
+  nodeStream,
+  pollState = createReadableStreamPollState(nodeStream)
+) {
+  const stream = {
     stream: nodeStream,
-  });
+    flushPromise: null,
+    pollState,
+  };
+  streams.set(++streamCnt, stream);
+  return streamCnt;
+}
+
+export function createWritableStream(nodeStream) {
+  const pollState = {
+    state: POLL_STATE_READY,
+    listener: null,
+    polls: [],
+    parentStream: null,
+  };
+  const stream = {
+    stream: nodeStream,
+    flushPromise: null,
+    pollState,
+  };
+  streams.set(++streamCnt, stream);
+  function pollReady() {
+    pollStateReady(pollState, false);
+  }
+  function pollDone() {
+    pollStateReady(pollState, true);
+    nodeStream.off("drain", pollReady);
+    nodeStream.off("finish", pollDone);
+    nodeStream.off("error", pollDone);
+    nodeStream.off("close", pollDone);
+  }
+  nodeStream.on("drain", pollReady);
+  nodeStream.on("finish", pollDone);
+  nodeStream.on("error", pollDone);
+  nodeStream.on("close", pollDone);
   return streamCnt;
 }
 
 // Stdio
 // Stdin created when used
-createStream(stdout);
-createStream(stderr);
+createWritableStream(stdout);
+createWritableStream(stderr);
 
 /**
  * @param {number} streamId
  * @param {NodeJS.ReadableStream | NodeJS.WritableStream} stream
  */
-function streamError(streamId, stream, err) {
-  if (typeof stream.end === "function") stream.end();
-  // we delete the stream from unfinishedStreams as it is now "finished" (closed)
-  unfinishedStreams.delete(streamId);
+function streamError(err) {
   return {
     tag: "last-operation-failed",
     val: { code: err.code, message: err.message, stack: err.stack },
@@ -152,32 +248,18 @@ function streamError(streamId, stream, err) {
 
 /**
  * @param {number} streamId
- * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, flushPromise: Promise<void> | null }}
+ * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, polls: number[] }}
  */
 export function getStreamOrThrow(streamId) {
-  if (!streamId) throw new Error("Internal error: no stream id provided");
-  const stream = unfinishedStreams.get(streamId);
+  if (!streamId) throw new Error("wasi-io trap: no stream id provided");
+  const stream = streams.get(streamId);
   // not in unfinished streams <=> closed
   if (!stream) throw { tag: "closed" };
-  if (stream.stream.errored)
-    throw streamError(streamId, stream, stream.stream.errored);
+  if (stream.stream.errored) throw streamError(stream.stream.errored);
   if (stream.stream.closed) {
-    unfinishedStreams.delete(streamId);
     throw { tag: "closed" };
   }
   return stream;
-}
-
-function subscribeInstant(instant) {
-  const duration = instant - hrtime.bigint();
-  if (duration <= 0) return Promise.resolve();
-  return new Promise((resolve) =>
-    duration < 10e6
-      ? setImmediate(resolve)
-      : setTimeout(resolve, Number(duration) / 1e6)
-  ).then(() => {
-    if (hrtime.bigint() < instant) return subscribeInstant(instant);
-  });
 }
 
 /**
@@ -187,6 +269,7 @@ function subscribeInstant(instant) {
  * @returns {Promise<any>}
  */
 function handle(call, id, payload) {
+  if (uncaughtException) throw uncaughtException;
   switch (call) {
     // Http
     case HTTP_CREATE_REQUEST: {
@@ -220,7 +303,7 @@ function handle(call, id, payload) {
       // content length is passed as payload
       stream.contentLength = payload;
       stream.bytesRemaining = payload;
-      return createStream(stream);
+      return createWritableStream(stream);
     }
     case OUTPUT_STREAM_SUBSCRIBE | HTTP:
     case OUTPUT_STREAM_FLUSH | HTTP:
@@ -244,7 +327,7 @@ function handle(call, id, payload) {
     }
     case OUTPUT_STREAM_DISPOSE | HTTP:
       throw new Error(
-        "Internal error: HTTP output stream dispose is bypassed for FINISH"
+        "wasi-io trap: HTTP output stream dispose is bypassed for FINISH"
       );
     case OUTPUT_STREAM_WRITE | HTTP: {
       const { stream } = getStreamOrThrow(id);
@@ -290,16 +373,14 @@ function handle(call, id, payload) {
     // Sockets name resolution
     case SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST:
       return createFuture(socketResolveAddress(payload));
+    case SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST:
+      return createPoll(futures.get(id).pollState);
     case SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST:
-      return void unfinishedFutures.delete(id);
+      return void futures.delete(id);
     case SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST: {
-      const future = unfinishedFutures.get(id);
-      if (!future) {
-        // future not ready yet
-        if (unfinishedPolls.get(id)) throw "would-block";
-        throw new Error("internal error: future already got and dropped");
-      }
-      unfinishedFutures.delete(id);
+      const future = futures.get(id);
+      if (future.pollState.state === POLL_STATE_WAIT) throw "would-block";
+      futures.delete(id);
       return future;
     }
 
@@ -308,12 +389,22 @@ function handle(call, id, payload) {
       return socketTcpAccept(id);
     case SOCKET_TCP_CREATE_HANDLE:
       return createTcpSocket();
-    case SOCKET_TCP_BIND:
-      return socketTcpBind(id, payload);
-    case SOCKET_TCP_CONNECT:
-      return socketTcpConnect(id, payload);
-    case SOCKET_TCP_LISTEN:
-      return socketTcpListen(id, payload);
+    case SOCKET_TCP_BIND_START:
+      return socketTcpBindStart(id, payload);
+    case SOCKET_TCP_BIND_FINISH:
+      return socketTcpBindFinish(id);
+    case SOCKET_TCP_CONNECT_START:
+      return socketTcpConnectStart(id, payload);
+    case SOCKET_TCP_CONNECT_FINISH:
+      return socketTcpConnectFinish(id);
+    case SOCKET_TCP_LISTEN_START:
+      return socketTcpListenStart(id);
+    case SOCKET_TCP_LISTEN_FINISH:
+      return socketTcpListenFinish(id);
+    case SOCKET_TCP_IS_LISTENING:
+      return socketTcpIsListening(id);
+    case SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE:
+      return socketTcpSetListenBacklogSize(id);
     case SOCKET_TCP_GET_LOCAL_ADDRESS:
       return socketTcpGetLocalAddress(id);
     case SOCKET_TCP_GET_REMOTE_ADDRESS:
@@ -391,22 +482,50 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_DISPOSE | STDERR:
       return;
     case INPUT_STREAM_CREATE | STDIN: {
-      const stream = createReadStream(null, {
-        fd: 0,
-        highWaterMark: 64 * 1024,
-      });
-      // for some reason fs streams dont emit readable on end
-      stream.on("end", () => void stream.emit("readable"));
-      return createStream(stream);
+      return createReadableStream(
+        new Readable({
+          read(n) {
+            if (n <= 0) return void this.push(null);
+            let buf = Buffer.allocUnsafeSlow(n);
+            read(0, buf, 0, n, null, (err, bytesRead) => {
+              if (err) {
+                if (err.code === "EAGAIN") {
+                  nextTick(() => void this._read(n));
+                  return;
+                }
+                this.destroy(err);
+              } else if (bytesRead > 0) {
+                if (bytesRead !== buf.length) {
+                  const dst = Buffer.allocUnsafeSlow(bytesRead);
+                  buf.copy(dst, 0, 0, bytesRead);
+                  buf = dst;
+                }
+                this.push(buf);
+              } else {
+                this.push(null);
+              }
+            });
+          },
+        })
+      );
     }
 
     // Clocks
     case CLOCKS_NOW:
       return hrtime.bigint();
     case CLOCKS_DURATION_SUBSCRIBE:
-      return createPoll(subscribeInstant(hrtime.bigint() + payload));
-    case CLOCKS_INSTANT_SUBSCRIBE:
-      return createPoll(subscribeInstant(payload));
+      payload = hrtime.bigint() + payload;
+    // fallthrough
+    case CLOCKS_INSTANT_SUBSCRIBE: {
+      const pollState = {
+        state: POLL_STATE_WAIT,
+        listener: null,
+        polls: [],
+        parentStream: null,
+      };
+      subscribeInstant(pollState, payload);
+      return createPoll(pollState);
+    }
 
     // Filesystem
     case INPUT_STREAM_CREATE | FILE: {
@@ -417,9 +536,7 @@ function handle(call, id, payload) {
         highWaterMark: 64 * 1024,
         start: Number(offset),
       });
-      // for some reason fs streams dont emit readable on end
-      stream.on("end", () => void stream.emit("readable"));
-      return createStream(stream);
+      return createReadableStream(stream);
     }
     case OUTPUT_STREAM_CREATE | FILE: {
       const { fd, offset } = payload;
@@ -430,25 +547,32 @@ function handle(call, id, payload) {
         highWaterMark: 64 * 1024,
         start: Number(offset),
       });
-      return createStream(stream);
+      return createWritableStream(stream);
     }
   }
 
   // Generic call implementations (streams + polls)
   switch (call & CALL_MASK) {
     case INPUT_STREAM_READ: {
-      const { stream } = getStreamOrThrow(id);
-      const res = stream.read(Math.min(stream.readableLength, Number(payload)));
-      return res ?? new Uint8Array();
-    }
-    case INPUT_STREAM_BLOCKING_READ:
-      return Promise.resolve(
-        unfinishedPolls.get(
-          handle(INPUT_STREAM_SUBSCRIBE | (call & CALL_TYPE_MASK), id)
-        )
-      ).then(() =>
-        handle(INPUT_STREAM_READ | (call & CALL_TYPE_MASK), id, payload)
+      const stream = getStreamOrThrow(id);
+      if (stream.pollState.state === POLL_STATE_WAIT) return new Uint8Array();
+      const res = stream.stream.read(
+        Math.min(stream.stream.readableLength, Number(payload))
       );
+      if (res) return res;
+      if (stream.pollState.state === POLL_STATE_FINISHED)
+        return { tag: "closed" };
+      return new Uint8Array();
+    }
+    case INPUT_STREAM_BLOCKING_READ: {
+      const { pollState } = streams.get(id);
+      pollStateCheck(pollState);
+      if (pollState.state !== POLL_STATE_WAIT)
+        return handle(INPUT_STREAM_READ | (call & CALL_TYPE_MASK), id, payload);
+      return new Promise((resolve) => void (pollState.listener = resolve)).then(
+        () => handle(INPUT_STREAM_READ | (call & CALL_TYPE_MASK), id, payload)
+      );
+    }
     case INPUT_STREAM_SKIP:
       return handle(
         INPUT_STREAM_READ | (call & CALL_TYPE_MASK),
@@ -461,37 +585,22 @@ function handle(call, id, payload) {
         id,
         new Uint8Array(Number(payload))
       );
-    case INPUT_STREAM_SUBSCRIBE: {
-      const stream = unfinishedStreams.get(id)?.stream;
-      // already closed or errored -> immediately return poll
-      // (poll 0 is immediately resolved)
-      if (
-        !stream ||
-        stream.closed ||
-        stream.errored ||
-        stream.readableLength > 0
-      )
-        return 0;
-      let resolve, reject;
-      return createPoll(
-        new Promise((_resolve, _reject) => {
-          stream
-            .once("readable", (resolve = _resolve))
-            .once("error", (reject = _reject));
-        }).then(
-          () => void stream.off("error", reject),
-          // error is read of stream itself when later accessed
-          (_err) => void stream.off("readable", resolve)
-        )
-      );
-    }
-    case INPUT_STREAM_DISPOSE:
-      unfinishedStreams.delete(id);
+    case INPUT_STREAM_SUBSCRIBE:
+      return createPoll(streams.get(id).pollState);
+    case INPUT_STREAM_DISPOSE: {
+      const stream = streams.get(id);
+      // TODO: fix double drop where IncomingBody drops IncomingStream,
+      //       instead implementing proper core WASI GC
+      if (!stream) return;
+      verifyPollsDroppedForDrop(stream.pollState, "input stream");
+      streams.delete(id);
       return;
-
+    }
     case OUTPUT_STREAM_CHECK_WRITE: {
-      const { stream } = getStreamOrThrow(id);
-      return BigInt(stream.writableHighWaterMark - stream.writableLength);
+      const { stream, pollState } = getStreamOrThrow(id);
+      const bytes = stream.writableHighWaterMark - stream.writableLength;
+      if (bytes === 0) pollStateWait(pollState);
+      return BigInt(bytes);
     }
     case OUTPUT_STREAM_WRITE: {
       const { stream } = getStreamOrThrow(id);
@@ -499,54 +608,51 @@ function handle(call, id, payload) {
         payload.byteLength >
         stream.writableHighWaterMark - stream.writableLength
       )
-        throw new Error("wasi-io error: attempt to write too many bytes");
+        throw new Error("wasi-io trap: attempt to write too many bytes");
       return void stream.write(payload);
     }
     case OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH: {
-      const { stream, flushPromise } = getStreamOrThrow(id);
+      const stream = getStreamOrThrow(id);
       // if an existing flush, try again after that
-      if (flushPromise)
-        return flushPromise.then(() => handle(call, id, payload));
+      if (stream.flushPromise)
+        return stream.flushPromise.then(() => handle(call, id, payload));
       if (
         payload.byteLength >
-        stream.writableHighWaterMark - stream.writableLength
+        stream.stream.writableHighWaterMark - stream.stream.writableLength
       ) {
-        throw streamError(
-          id,
-          stream,
-          new Error("Cannot write more than permitted writable length")
+        new Error(
+          "wasi-io trap: Cannot write more than permitted writable length"
         );
       }
-      return new Promise((resolve, reject) => {
-        stream.once("error", noop);
-        stream.write(payload, (err) => {
-          if (err) return void reject(streamError(id, stream, err));
-          stream.off("error", noop);
+      pollStateWait(stream.pollState);
+      return (stream.flushPromise = new Promise((resolve, reject) => {
+        stream.stream.write(payload, (err) => {
+          stream.flushPromise = null;
+          pollStateReady(stream.pollState, false);
+          if (err) return void reject(streamError(err));
           resolve(BigInt(payload.byteLength));
         });
-      });
+      }));
     }
     case OUTPUT_STREAM_FLUSH: {
       const stream = getStreamOrThrow(id);
       if (stream.flushPromise) return;
+      pollStateWait(stream.pollState);
       return (stream.flushPromise = new Promise((resolve, reject) => {
-        stream.stream.write(new Uint8Array([]), (err) =>
-          err ? reject(streamError(id, stream.stream, err)) : resolve()
-        );
-      }).then(
-        () => void (stream.stream.flushPromise = null),
-        (err) => {
-          stream.stream.flushPromise = null;
-          throw streamError(id, stream.stream, err);
-        }
-      ));
+        stream.stream.write(new Uint8Array([]), (err) => {
+          stream.flushPromise = null;
+          pollStateReady(stream.pollState, false);
+          if (err) return void reject(streamError(err));
+          resolve();
+        });
+      }));
     }
     case OUTPUT_STREAM_BLOCKING_FLUSH: {
-      const { stream, flushPromise } = getStreamOrThrow(id);
-      if (flushPromise) return flushPromise;
+      const stream = getStreamOrThrow(id);
+      if (stream.flushPromise) return stream.flushPromise;
       return new Promise((resolve, reject) => {
-        stream.write(new Uint8Array([]), (err) =>
-          err ? reject(streamError(id, stream, err)) : resolve()
+        stream.stream.write(new Uint8Array([]), (err) =>
+          err ? reject(streamError(err)) : resolve()
         );
       });
     }
@@ -563,13 +669,13 @@ function handle(call, id, payload) {
         new Uint8Array(Number(payload))
       );
     case OUTPUT_STREAM_SPLICE: {
-      const { stream: outputStream } = getStreamOrThrow(id);
-      const { stream: inputStream } = getStreamOrThrow(payload.src);
+      const outputStream = getStreamOrThrow(id);
+      const inputStream = getStreamOrThrow(payload.src);
       let bytesRemaining = Number(payload.len);
       let chunk;
       while (
         bytesRemaining > 0 &&
-        (chunk = inputStream.read(
+        (chunk = inputStream.stream.read(
           Math.min(
             outputStream.writableHighWaterMark - outputStream.writableLength,
             bytesRemaining
@@ -577,66 +683,48 @@ function handle(call, id, payload) {
         ))
       ) {
         bytesRemaining -= chunk.byteLength;
-        outputStream.write(chunk);
+        outputStream.stream.write(chunk);
       }
-      // TODO: these error handlers should be attached, and only for the duration of the splice flush
-      if (inputStream.errored)
-        throw streamError(payload.src, inputStream, inputStream.errored);
-      if (outputStream.errored)
-        throw streamError(id, outputStream, outputStream.errored);
+      if (inputStream.stream.errored)
+        throw streamError(inputStream.stream.errored);
+      if (outputStream.stream.errored)
+        throw streamError(outputStream.stream.errored);
       return payload.len - BigInt(bytesRemaining);
     }
-    case OUTPUT_STREAM_SUBSCRIBE: {
-      const { stream, flushPromise } = unfinishedStreams.get(id) ?? {};
-      if (flushPromise)
-        return flushPromise.then(() => handle(call, id, payload));
-      // not added to unfinishedPolls => it's an immediately resolved poll
-      if (!stream || stream.closed || stream.errored) return 0;
-      if (!stream.writableNeedDrain)
-        return createPoll(new Promise((resolve) => setTimeout(resolve)));
-      let resolve, reject;
-      return createPoll(
-        new Promise((_resolve, _reject) => {
-          stream
-            .once("drain", (resolve = _resolve))
-            .once("error", (reject = _reject));
-        }).then(() => void stream.off("error", reject)),
-        // error is read off stream itself when later accessed
-        (_err) => void stream.off("drain", resolve)
-      );
-    }
+    case OUTPUT_STREAM_SUBSCRIBE:
+      return createPoll(streams.get(id).pollState);
     case OUTPUT_STREAM_BLOCKING_SPLICE: {
-      const { stream: outputStream } = getStreamOrThrow(id);
+      const outputStream = getStreamOrThrow(id);
       let promise = Promise.resolve();
       let resolve, reject;
-      if (outputStream.writableNeedDrain) {
+      if (outputStream.stream.writableNeedDrain) {
         promise = new Promise((_resolve, _reject) => {
-          outputStream
+          outputStream.stream
             .once("drain", (resolve = _resolve))
             .once("error", (reject = _reject));
         }).then(
           () => {
-            outputStream.off("error", reject);
+            outputStream.stream.off("error", reject);
           },
           (err) => {
-            outputStream.off("drain", resolve);
+            outputStream.stream.off("drain", resolve);
             throw streamError(err);
           }
         );
       }
-      const { stream: inputStream } = getStreamOrThrow(payload.src);
-      if (!inputStream.readable) {
+      const inputStream = getStreamOrThrow(payload.src);
+      if (!inputStream.stream.readable) {
         promise = promise.then(() =>
           new Promise((_resolve, _reject) => {
-            inputStream
+            inputStream.stream
               .once("readable", (resolve = _resolve))
               .once("error", (reject = _reject));
           }).then(
             () => {
-              inputStream.off("error", reject);
+              inputStream.stream.off("error", reject);
             },
             (err) => {
-              inputStream.off("readable", resolve);
+              inputStream.stream.off("readable", resolve);
               throw streamError(err);
             }
           )
@@ -645,93 +733,194 @@ function handle(call, id, payload) {
       return promise.then(() => handle(OUTPUT_STREAM_SPLICE, id, payload));
     }
     case OUTPUT_STREAM_DISPOSE: {
-      const stream = unfinishedStreams.get(id);
-      if (stream) {
-        stream.stream.end();
-        unfinishedStreams.delete(id);
-      }
+      const stream = streams.get(id);
+      verifyPollsDroppedForDrop(stream.pollState, "output stream");
+      stream.stream.end();
+      streams.delete(id);
       return;
     }
 
     case POLL_POLLABLE_READY:
-      return !unfinishedPolls.has(id);
+      return polls.get(id).state !== POLL_STATE_WAIT;
     case POLL_POLLABLE_BLOCK:
       payload = [id];
     // [intentional case fall-through]
     case POLL_POLL_LIST: {
       const doneList = [];
-      for (const [idx, id] of payload.entries()) {
-        if (!unfinishedPolls.has(id)) doneList.push(idx);
+      const pollList = payload.map((pollId) => polls.get(pollId));
+      for (const [idx, pollState] of pollList.entries()) {
+        pollStateCheck(pollState);
+        if (pollState.state !== POLL_STATE_WAIT) doneList.push(idx);
       }
       if (doneList.length > 0) return new Uint32Array(doneList);
-      // if all polls are promise type, we just race them
-      return Promise.race(payload.map((id) => unfinishedPolls.get(id))).then(
-        () => {
-          for (const [idx, id] of payload.entries()) {
-            if (!unfinishedPolls.has(id)) doneList.push(idx);
-          }
-          if (doneList.length === 0)
-            throw new Error("poll promise did not unregister poll");
-          return new Uint32Array(doneList);
-        }
+      let readyPromiseResolve;
+      const readyPromise = new Promise(
+        (resolve) => void (readyPromiseResolve = resolve)
       );
+      for (const poll of pollList) {
+        poll.listener = readyPromiseResolve;
+      }
+      return readyPromise.then(() => {
+        for (const [idx, poll] of pollList.entries()) {
+          poll.listener = null;
+          if (poll.state !== POLL_STATE_WAIT) doneList.push(idx);
+        }
+        return new Uint32Array(doneList);
+      });
     }
+    case POLL_POLLABLE_DISPOSE:
+      if (!polls.delete(id))
+        throw new Error(
+          `wasi-io trap: Disposed a poll ${id} that does not exist`
+        );
+      return;
 
     case FUTURE_GET_VALUE_AND_DISPOSE: {
-      const future = unfinishedFutures.get(id);
-      if (!future) {
-        // future not ready yet
-        if (unfinishedPolls.get(id)) throw undefined;
-        throw new Error("future already got and dropped");
-      }
-      unfinishedFutures.delete(id);
-      return future;
+      const future = futures.get(id);
+      if (future.pollState.state === POLL_STATE_WAIT) throw undefined;
+      return { value: future.value, error: future.error };
     }
-    case FUTURE_DISPOSE:
-      return void unfinishedFutures.delete(id);
-
+    case FUTURE_SUBSCRIBE: {
+      const future = futures.get(id);
+      const pollId = ++pollCnt;
+      polls.set(pollId, future.pollState);
+      return pollId;
+    }
+    case FUTURE_DISPOSE: {
+      const future = futures.get(id);
+      verifyPollsDroppedForDrop(future.pollState, "future");
+      return void futures.delete(id);
+    }
     default:
       throw new Error(
-        `Unknown call ${call} (${reverseMap[call]}) with type ${
+        `wasi-io trap: Unknown call ${call} (${reverseMap[call]}) with type ${
           reverseMap[call & CALL_TYPE_MASK]
         }`
       );
   }
 }
 
-// poll promises must always resolve and never error
-export function createPoll(promise) {
+/**
+ * @param {PollState} pollState
+ */
+export function createPoll(pollState) {
   const pollId = ++pollCnt;
-  unfinishedPolls.set(
-    pollId,
-    promise.then(
-      () => void unfinishedPolls.delete(pollId),
-      (err) => {
-        _rawDebug("Unexpected poll error");
-        _rawDebug(err);
-        exit(1);
-      }
-    )
-  );
+  pollState.polls.push(pollId);
+  polls.set(pollId, pollState);
   return pollId;
+}
+
+function subscribeInstant(pollState, instant) {
+  const duration = instant - hrtime.bigint();
+  if (duration <= 0) return pollStateReady(pollState, true);
+  function cb() {
+    if (hrtime.bigint() < instant) return subscribeInstant(pollState, instant);
+    pollStateReady(pollState, true);
+  }
+  if (duration < 10e6) setImmediate(cb);
+  else setTimeout(cb, Number(duration) / 1e6);
+}
+
+/**
+ * @param {PollState} pollState
+ * @param {string} polledResourceDebugName
+ */
+export function verifyPollsDroppedForDrop(pollState, polledResourceDebugName) {
+  for (const pollId of pollState.polls) {
+    const poll = polls.get(pollId);
+    if (poll)
+      throw new Error(
+        `wasi-io trap: Cannot drop ${polledResourceDebugName} as it has a child poll resource which has not been dropped yet`
+      );
+  }
+}
+
+/**
+ * @param {PollState} pollState
+ */
+export function pollStateWait(pollState) {
+  if (pollState.state === POLL_STATE_FINISHED)
+    throw new Error('wasi-io trap: cannot transition from finished to wait');
+  pollState.state = POLL_STATE_WAIT;
+  if (pollState.listener)
+    throw new Error(
+      "wasi-io trap: poll has a listener and just transitioned back to wait"
+    );
+}
+
+/**
+ * @param {PollState} pollState
+ * @param {bool} finished
+ */
+export function pollStateReady(pollState, finished) {
+  if (pollState.state !== POLL_STATE_WAIT) {
+    if (pollState.listener)
+      throw new Error(
+        "wasi-io trap: poll already ready with listener attached"
+      );
+    return;
+  }
+  pollState.state = finished ? POLL_STATE_FINISHED : POLL_STATE_READY;
+  if (pollState.listener) {
+    pollState.listener();
+    pollState.listener = null;
+  }
+}
+
+/**
+ * @param {PollState} pollState
+ */
+function pollStateCheck(pollState) {
+  if (pollState.state === POLL_STATE_READY && pollState.parentStream) {
+    // stream ONLY applies to readable streams here
+    const stream = pollState.parentStream;
+    const res = stream.read(0);
+    if (res !== null) {
+      throw new Error("wasi-io trap: got data for a null read");
+    }
+    if (
+      stream.readableLength === 0 &&
+      pollState.state !== POLL_STATE_FINISHED
+    ) {
+      pollStateWait(pollState);
+      stream.once("readable", () => {
+        pollStateReady(pollState);
+      });
+    }
+  }
 }
 
 export function createFuture(promise) {
-  const pollId = ++pollCnt;
-  unfinishedPolls.set(
-    pollId,
-    promise.then(
-      (value) => {
-        unfinishedPolls.delete(pollId);
-        unfinishedFutures.set(pollId, { value, error: false });
-      },
-      (value) => {
-        unfinishedPolls.delete(pollId);
-        unfinishedFutures.set(pollId, { value, error: true });
-      }
-    )
+  const futureId = ++futureCnt;
+  const pollState = {
+    state: POLL_STATE_WAIT,
+    listener: null,
+    polls: [],
+    parent: null,
+  };
+  const future = { error: false, value: null, pollState };
+  futures.set(futureId, future);
+  promise.then(
+    (value) => {
+      pollStateReady(pollState, true);
+      future.value = value;
+    },
+    (value) => {
+      pollStateReady(pollState, true);
+      future.error = true;
+      future.value = value;
+    }
   );
-  return pollId;
+  return futureId;
 }
 
-runAsWorker(handle);
+let uncaughtException;
+process.on("uncaughtException", (err) => (uncaughtException = err));
+
+// eslint-disable-next-line no-unused-vars
+function trace(msg) {
+  const tmpErr = new Error(format(msg));
+  log(tmpErr.stack);
+}
+
+const debug = runAsWorker(handle);

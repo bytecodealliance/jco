@@ -3,7 +3,7 @@ import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp } from "node:fs/promises";
 import { readFileSync, rmdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { $init, generate } from "../../obj/js-component-bindgen-component.js";
 import { fork } from "node:child_process";
 
@@ -32,7 +32,10 @@ const servers = [];
 export async function createIncomingServer(serverName) {
   const serverProcess = fork(
     fileURLToPath(import.meta.url.split("/").slice(0, -1).join("/")) +
-      "/http-server.js"
+      "/http-server.js",
+    {
+      env: Object.assign(process.env, { JCO_DEBUG: "0" }),
+    }
   );
   servers.push(serverProcess);
   serverProcess.on("error", (err) => {
@@ -41,7 +44,9 @@ export async function createIncomingServer(serverName) {
   const runningPromise = new Promise((resolve) =>
     serverProcess.on("message", resolve)
   );
-  const componentPath = fileURLToPath(import.meta.url.split("/").slice(0, -2).join("/")) + `/rundir/${serverName}.component.wasm`;
+  const componentPath =
+    fileURLToPath(import.meta.url.split("/").slice(0, -2).join("/")) +
+    `/rundir/${serverName}.component.wasm`;
   console.error("loading component " + componentPath);
   try {
     const component = readFileSync(componentPath);
@@ -61,7 +66,7 @@ export async function createIncomingServer(serverName) {
     for (const [name, contents] of files) {
       writeFileSync(testDir + "/" + name, contents);
     }
-    serverProcess.send(testDir + "/component.js");
+    serverProcess.send(pathToFileURL(testDir + "/component.js"));
     const authority = await runningPromise;
     return authority;
   } catch (e) {

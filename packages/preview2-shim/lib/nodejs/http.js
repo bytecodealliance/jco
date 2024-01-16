@@ -5,17 +5,19 @@ import {
   HTTP_SERVER_START,
   HTTP_SERVER_STOP,
   OUTPUT_STREAM_CREATE,
-  FUTURE_GET_VALUE_AND_DISPOSE,
   FUTURE_DISPOSE,
+  FUTURE_GET_VALUE_AND_DISPOSE,
+  FUTURE_SUBSCRIBE,
   HTTP_SERVER_SET_OUTGOING_RESPONSE,
   HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
 } from "../io/calls.js";
 import {
-  ioCall,
-  pollableCreate,
   inputStreamCreate,
+  ioCall,
   outputStreamCreate,
+  pollableCreate,
   registerIncomingHttpHandler,
+  resolvedPoll,
 } from "../io/worker-io.js";
 import { validateHeaderName, validateHeaderValue } from "node:http";
 import { HTTP } from "../io/calls.js";
@@ -95,7 +97,7 @@ delete IncomingRequest._create;
 class FutureTrailers {
   #requested = false;
   subscribe() {
-    return pollableCreate(0);
+    return resolvedPoll;
   }
   get() {
     if (this.#requested)
@@ -383,18 +385,17 @@ const incomingResponseCreate = IncomingResponse._create;
 delete IncomingResponse._create;
 
 class FutureIncomingResponse {
-  #pollId;
+  #id;
   subscribe() {
-    if (this.#pollId) return pollableCreate(this.#pollId);
-    // 0 poll is immediately resolving
-    return pollableCreate(0);
+    if (this.#id) return pollableCreate(ioCall(FUTURE_SUBSCRIBE | HTTP, this.#id, null));
+    return resolvedPoll;
   }
   get() {
     // already taken
-    if (!this.#pollId) return { tag: "err" };
-    const ret = ioCall(FUTURE_GET_VALUE_AND_DISPOSE | HTTP, this.#pollId, null);
+    if (!this.#id) return { tag: "err" };
+    const ret = ioCall(FUTURE_GET_VALUE_AND_DISPOSE | HTTP, this.#id, null);
     if (!ret) return;
-    this.#pollId = undefined;
+    this.#id = null;
     if (ret.error) return { tag: "ok", val: { tag: "err", val: ret.value } };
     const { status, headers, bodyStreamId } = ret.value;
     const textEncoder = new TextEncoder();
@@ -413,7 +414,10 @@ class FutureIncomingResponse {
     };
   }
   [symbolDispose]() {
-    if (this.#pollId) ioCall(FUTURE_DISPOSE | HTTP, this.#pollId, null);
+    if (this.#id) {
+      ioCall(FUTURE_DISPOSE | HTTP, this.#id, null);
+      this.#id = null;
+    }
   }
   static _create(
     method,
@@ -427,7 +431,7 @@ class FutureIncomingResponse {
     firstByteTimeout
   ) {
     const res = new FutureIncomingResponse();
-    res.#pollId = ioCall(HTTP_CREATE_REQUEST, null, {
+    res.#id = ioCall(HTTP_CREATE_REQUEST, null, {
       method,
       scheme,
       authority,

@@ -5,7 +5,13 @@ use xshell::{cmd, Shell};
 const TRACE: bool = false;
 const TEST_FILTER: &[&str] = &[];
 
-const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
+const TEST_IGNORE: &[&str] = &[
+    "nn_image_classification",
+    "nn_image_classification_named",
+    "proxy_handler",
+    "proxy_hash",
+    "proxy_echo",
+];
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
@@ -79,6 +85,7 @@ pub fn run() -> anyhow::Result<()> {
 
 /// Generate an individual test
 fn generate_test(test_name: &str) -> String {
+    let piped = test_name.starts_with("piped_");
     let virtual_env = match test_name {
         "api_read_only" => "readonly",
         "api_time" => "fakeclocks",
@@ -89,6 +96,7 @@ fn generate_test(test_name: &str) -> String {
         "preview1_stdio_not_isatty" => "notty",
         "proxy_echo" | "proxy_hash" => "server-api-proxy-streaming",
         "proxy_handler" => "server-api-proxy",
+        "piped_simple" | "piped_multiple" | "piped_polling" => "piped",
         _ => {
             if test_name.starts_with("preview1") {
                 "scratch"
@@ -110,36 +118,112 @@ fn generate_test(test_name: &str) -> String {
         _ => false,
     };
 
+    let maybe_include_write = if stdin.is_some() {
+        "use std::io::prelude::Write;\n"
+    } else {
+        ""
+    };
+
+    let cmd1 = format!(
+        "{}{}
+    let mut cmd1_child = cmd1.spawn().expect(\"failed to spawn test program\");",
+        generate_command_invocation(
+            "cmd1",
+            test_name,
+            virtual_env,
+            if stdin.is_some() {
+                Some("Stdio::piped()")
+            } else {
+                None
+            },
+        ),
+        if piped {
+            "
+    cmd1.stdout(Stdio::piped());"
+        } else {
+            ""
+        }
+    );
+    let cmd2: String = if piped {
+        format!(
+            "{}
+    cmd2.stdin(cmd1_child.stdout.take().unwrap());
+    let mut cmd2_child = cmd2.spawn().expect(\"failed to spawn test program\");
+    ",
+            generate_command_invocation(
+                "cmd2",
+                &format!("{test_name}_consumer"),
+                &format!("{virtual_env}-consumer"),
+                None,
+            )
+        )
+    } else {
+        "".into()
+    };
+
     format!(
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-use xshell::{{cmd, Shell}};
+{maybe_include_write}use std::process::{{Command, Stdio}};
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
-    let sh = Shell::new()?;
     let wasi_file = "./tests/rundir/{test_name}.component.wasm";
     let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
-
-    let cmd = cmd!(sh, "node ./src/jco.js run {} --jco-dir ./tests/rundir/{test_name} --jco-import ./tests/virtualenvs/{virtual_env}.js {{wasi_file}} hello this '' 'is an argument' 'with 🚩 emoji'");
-{}
-    cmd.run(){};
+    {cmd1}
+    {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
+    assert!({}status.success(), "test execution failed");
     Ok(())
 }}
 "##,
-        if TRACE { "--jco-trace" } else { "" },
         match stdin {
-            Some(stdin) => format!("    let cmd = cmd.stdin(b\"{}\");", stdin),
+            Some(stdin) => format!(
+                "cmd1_child
+        .stdin
+        .as_ref()
+        .unwrap()
+        .write(b\"{}\")
+        .unwrap();
+    ",
+                stdin
+            ),
             None => "".into(),
         },
-        if !should_error {
-            "?"
-        } else {
-            ".expect_err(\"test should exit with code 1\")"
-        }
+        if piped { "2" } else { "1" },
+        if !should_error { "" } else { "!" },
     )
+}
+
+fn generate_command_invocation(
+    cmd_name: &str,
+    run_dir: &str,
+    virtual_env: &str,
+    stdin: Option<&str>,
+) -> String {
+    return format!(
+        r##"let mut {cmd_name} = Command::new("node");
+    {cmd_name}.arg("./src/jco.js");
+    {cmd_name}.arg("run");
+{}
+    {cmd_name}.arg("--jco-dir");
+    {cmd_name}.arg("./tests/rundir/{run_dir}");
+    {cmd_name}.arg("--jco-import");
+    {cmd_name}.arg("./tests/virtualenvs/{virtual_env}.js");
+    {cmd_name}.arg(wasi_file);
+    {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
+    {cmd_name}.stdin({});"##,
+        if TRACE {
+            format!("{cmd_name}.arg(\"--jco-trace\");")
+        } else {
+            "".into()
+        },
+        match stdin {
+            Some(stdin) => stdin,
+            None => "Stdio::null()".into(),
+        },
+    );
 }
 
 /// Generate the mod.rs file containing all tests

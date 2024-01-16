@@ -111,6 +111,8 @@ export function convertSocketError(err) {
 
 export function convertSocketErrorCode(code) {
   switch (code) {
+    case 4053: // windows
+    case 4083: 
     case ENOTCONN:
     case EBADF:
       return "invalid-state";
@@ -129,6 +131,7 @@ export function convertSocketErrorCode(code) {
     case EWOULDBLOCK:
       return "would-block";
     // TODO: return "new-socket-limit";
+    case 4090: // windows
     case EADDRNOTAVAIL:
       return "address-not-bindable";
     case EADDRINUSE:

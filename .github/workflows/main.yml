@@ -34,13 +34,14 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node }}
     - name: Install Rust
       run: rustup update stable --no-self-update && rustup default stable
     - name: Install wasm32-unknown-unknown target
       run: rustup target add wasm32-unknown-unknown
     - name: Install wasm32-wasi target
       run: rustup target add wasm32-wasi
-
     - run: |
         curl https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-16/wasi-sdk-16.0-linux.tar.gz -L | tar xzvf -
         echo "WASI_SDK_PATH=`pwd`/wasi-sdk-16.0" >> $GITHUB_ENV
@@ -54,9 +55,6 @@ jobs:
         echo "WASI_SDK_PATH=`pwd`/wasi-sdk-16.0" >> $GITHUB_ENV
       if : matrix.os == 'windows-latest'
 
-    - uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node }}
     - name: Install NPM packages
       run: npm install
 

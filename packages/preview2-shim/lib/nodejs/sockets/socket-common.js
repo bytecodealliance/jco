@@ -19,14 +19,72 @@ export function tupleToIpv4(arr) {
 }
 
 /**
+ * @param {IpSocketAddress} ipSocketAddress
+ * @returns {boolean}
+ */
+export function isMulticastIpAddress(ipSocketAddress) {
+  // ipv6: [0xff00, 0, 0, 0, 0, 0, 0, 0]
+  // ipv4: [0xe0, 0, 0, 0]
+  return (
+    ipSocketAddress.val.address[0] === 0xe0 ||
+    ipSocketAddress.val.address[0] === 0xff00
+  );
+}
+
+/**
+ * @param {IpSocketAddress} ipSocketAddress
+ * @returns {boolean}
+ */
+export function isIPv4MappedAddress(ipSocketAddress) {
+  // ipv6: [0, 0, 0, 0, 0, 0xffff, 0, 0]
+  if (ipSocketAddress.val.address.length !== 8) {
+    return false;
+  }
+  return ipSocketAddress.val.address[5] === 0xffff;
+}
+
+/**
+ * @param {IpSocketAddress} ipSocketAddress
+ * @returns {boolean}
+ */
+export function isUnicastIpAddress(ipSocketAddress) {
+  return (
+    !isMulticastIpAddress(ipSocketAddress) &&
+    !isBroadcastIpAddress(ipSocketAddress)
+  );
+}
+
+/**
+ * @param {IpSocketAddress} isWildcardAddress
+ * @returns {boolean}
+ */
+export function isWildcardAddress(ipSocketAddress) {
+  // ipv6: [0, 0, 0, 0, 0, 0, 0, 0]
+  // ipv4: [0, 0, 0, 0]
+  return ipSocketAddress.val.address.every((segment) => segment === 0);
+}
+
+/**
+ * @param {IpSocketAddress} isWildcardAddress
+ * @returns {boolean}
+ */
+export function isBroadcastIpAddress(ipSocketAddress) {
+  // ipv4: [255, 255, 255, 255]
+  return (
+    ipSocketAddress.val.address[0] === 0xff && // 255
+    ipSocketAddress.val.address[1] === 0xff && // 255
+    ipSocketAddress.val.address[2] === 0xff && // 255
+    ipSocketAddress.val.address[3] === 0xff // 255
+  );
+}
+
+/**
  * 
  * @param {IpSocketAddress} addr 
  * @param {boolean} includePort 
  * @returns {string}
  */
-export function serializeIpAddress(addr, includePort) {
-  if (includePort)
-    return `${serializeIpAddress(addr, false)}:${addr.val.port}`;
+export function serializeIpAddress(addr) {
   if (addr.tag === "ipv4")
     return tupleToIpv4(addr.val.address);
   return tupleToIPv6(addr.val.address);
