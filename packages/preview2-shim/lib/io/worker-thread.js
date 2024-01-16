@@ -174,7 +174,7 @@ export function createReadableStreamPollState(nodeStream) {
   };
   function pollDone() {
     pollStateReady(pollState, true);
-    process._rawDebug('FINISHED', pollState.state === POLL_STATE_FINISHED);
+    // process._rawDebug('FINISHED', pollState.state === POLL_STATE_FINISHED);
     nodeStream.off("end", pollDone);
     nodeStream.off("close", pollDone);
     nodeStream.off("error", pollDone);
@@ -875,7 +875,7 @@ function pollStateCheck(pollState) {
   if (pollState.state === POLL_STATE_READY && pollState.parentStream) {
     // stream ONLY applies to readable streams here
     const stream = pollState.parentStream;
-    process._rawDebug('read for check');
+    // process._rawDebug('read for check');
     const res = stream.read(0);
     if (res !== null) {
       throw new Error("wasi-io trap: got data for a null read");
@@ -884,7 +884,7 @@ function pollStateCheck(pollState) {
       stream.readableLength === 0 &&
       pollState.state !== POLL_STATE_FINISHED
     ) {
-      process._rawDebug('waiting on readable');
+      // process._rawDebug('waiting on readable');
       pollStateWait(pollState);
       stream.once("readable", () => {
         pollStateReady(pollState);
