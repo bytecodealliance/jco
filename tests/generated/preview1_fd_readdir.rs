@@ -2,7 +2,7 @@
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_fd_readdir() -> anyhow::Result<()> {
@@ -18,7 +18,7 @@ fn preview1_fd_readdir() -> anyhow::Result<()> {
     cmd1.arg("./tests/virtualenvs/scratch.js");
     cmd1.arg(wasi_file);
     cmd1.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
-
+    cmd1.stdin(Stdio::null());
     let mut cmd1_child = cmd1.spawn().expect("failed to spawn test program");
     let status = cmd1_child.wait().expect("failed to wait on child");
     assert!(status.success(), "test execution failed");

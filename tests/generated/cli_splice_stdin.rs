@@ -5,15 +5,15 @@ use std::fs;
 use std::process::{Command, Stdio};
 
 #[test]
-fn preview2_sleep() -> anyhow::Result<()> {
-    let wasi_file = "./tests/rundir/preview2_sleep.component.wasm";
-    let _ = fs::remove_dir_all("./tests/rundir/preview2_sleep");
+fn cli_splice_stdin() -> anyhow::Result<()> {
+    let wasi_file = "./tests/rundir/cli_splice_stdin.component.wasm";
+    let _ = fs::remove_dir_all("./tests/rundir/cli_splice_stdin");
     let mut cmd1 = Command::new("node");
     cmd1.arg("./src/jco.js");
     cmd1.arg("run");
 
     cmd1.arg("--jco-dir");
-    cmd1.arg("./tests/rundir/preview2_sleep");
+    cmd1.arg("./tests/rundir/cli_splice_stdin");
     cmd1.arg("--jco-import");
     cmd1.arg("./tests/virtualenvs/base.js");
     cmd1.arg(wasi_file);

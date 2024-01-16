@@ -5,16 +5,11 @@ use xshell::{cmd, Shell};
 const TRACE: bool = false;
 const TEST_FILTER: &[&str] = &[];
 
-// "cli_splice_stdin",
-// "cli_stdio_write_flushes",
-
 const TEST_IGNORE: &[&str] = &[
     "nn_image_classification",
     "nn_image_classification_named",
     "preview2_stream_pollable_correct",
     "preview2_stream_pollable_traps",
-    "cli_splice_stdin",
-    "cli_stdio_write_flushes",
 ];
 
 pub fn run() -> anyhow::Result<()> {
@@ -122,13 +117,11 @@ fn generate_test(test_name: &str) -> String {
         _ => false,
     };
 
-    let includes = if piped {
-        "use std::process::{Command, Stdio};"
-    } else if stdin.is_some() {
+    let maybe_include_write = if stdin.is_some() {
         "use std::io::prelude::Write;
-use std::process::{Command, Stdio};"
+    "
     } else {
-        "use std::process::Command;"
+        ""
     };
 
     let cmd1 = format!(
@@ -173,7 +166,7 @@ use std::process::{Command, Stdio};"
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-{includes}
+{maybe_include_write}use std::process::{{Command, Stdio}};
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
@@ -220,15 +213,15 @@ fn generate_command_invocation(
     {cmd_name}.arg("./tests/virtualenvs/{virtual_env}.js");
     {cmd_name}.arg(wasi_file);
     {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
-{}"##,
+    {cmd_name}.stdin({});"##,
         if TRACE {
             format!("{cmd_name}.arg(\"--jco-trace\");")
         } else {
             "".into()
         },
         match stdin {
-            Some(stdin) => format!("    {cmd_name}.stdin({stdin});"),
-            None => "".into(),
+            Some(stdin) => stdin,
+            None => "Stdio::null()".into(),
         },
     );
 }

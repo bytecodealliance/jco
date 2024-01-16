@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::io::prelude::Write;
-use std::process::{Command, Stdio};
+    use std::process::{Command, Stdio};
 
 #[test]
 fn cli_stdin() -> anyhow::Result<()> {
