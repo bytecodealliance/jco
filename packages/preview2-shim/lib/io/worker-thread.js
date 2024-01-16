@@ -140,12 +140,12 @@ const POLL_STATE_FINISHED = 3;
  *   ready: POLL_STATE_UNREADY | POLL_STATE_READY | POLL_STATE_FINISHED,
  *   listener: () => void | null,
  *   polls: number[],
+ *   parentStream: null | NodeJS.ReadableStream
  * }} PollState
  *
  * @typedef {{
  *   stream: NodeJS.ReadableStream | NodeJS.WritableStream,
  *   flushPromise: Promise<void> | null,
- *   finished: bool,
  *   pollState
  * }} Stream
  *
@@ -166,19 +166,20 @@ export const streams = new Map();
 export const futures = new Map();
 
 export function createReadableStreamPollState(nodeStream) {
-  const pollState = { state: POLL_STATE_WAIT, listener: null, polls: [] };
-  function pollReady() {
-    pollStateReady(pollState, false);
-  }
+  const pollState = {
+    state: POLL_STATE_READY,
+    listener: null,
+    polls: [],
+    parentStream: nodeStream,
+  };
   function pollDone() {
     pollStateReady(pollState, true);
-    nodeStream.off("readable", pollReady);
+    process._rawDebug('FINISHED', pollState.state === POLL_STATE_FINISHED);
     nodeStream.off("end", pollDone);
     nodeStream.off("close", pollDone);
     nodeStream.off("error", pollDone);
   }
-  nodeStream.on("readable", pollReady);
-  nodeStream.on("end", () => pollDone);
+  nodeStream.on("end", pollDone);
   nodeStream.on("close", pollDone);
   nodeStream.on("error", pollDone);
   return pollState;
@@ -194,7 +195,6 @@ export function createReadableStream(
   const stream = {
     stream: nodeStream,
     flushPromise: null,
-    finished: false,
     pollState,
   };
   streams.set(++streamCnt, stream);
@@ -202,11 +202,15 @@ export function createReadableStream(
 }
 
 export function createWritableStream(nodeStream) {
-  const pollState = { state: POLL_STATE_READY, listener: null, polls: [] };
+  const pollState = {
+    state: POLL_STATE_READY,
+    listener: null,
+    polls: [],
+    parentStream: null,
+  };
   const stream = {
     stream: nodeStream,
     flushPromise: null,
-    finished: false,
     pollState,
   };
   streams.set(++streamCnt, stream);
@@ -514,7 +518,12 @@ function handle(call, id, payload) {
       payload = hrtime.bigint() + payload;
     // fallthrough
     case CLOCKS_INSTANT_SUBSCRIBE: {
-      const pollState = { state: POLL_STATE_WAIT, listener: null, polls: [] };
+      const pollState = {
+        state: POLL_STATE_WAIT,
+        listener: null,
+        polls: [],
+        parentStream: null,
+      };
       subscribeInstant(pollState, payload);
       return createPoll(pollState);
     }
@@ -551,16 +560,14 @@ function handle(call, id, payload) {
       const res = stream.stream.read(
         Math.min(stream.stream.readableLength, Number(payload))
       );
-      if (res === null) {
-        if (stream.pollState.state === POLL_STATE_FINISHED)
-          return { tag: "closed" };
-        if (stream.stream.readableLength === 0) pollStateWait(stream.pollState);
-        return new Uint8Array();
-      }
-      return res;
+      if (res) return res;
+      if (stream.pollState.state === POLL_STATE_FINISHED)
+        return { tag: "closed" };
+      return new Uint8Array();
     }
     case INPUT_STREAM_BLOCKING_READ: {
       const { pollState } = streams.get(id);
+      pollStateCheck(pollState);
       if (pollState.state !== POLL_STATE_WAIT)
         return handle(INPUT_STREAM_READ | (call & CALL_TYPE_MASK), id, payload);
       return new Promise((resolve) => void (pollState.listener = resolve)).then(
@@ -583,7 +590,8 @@ function handle(call, id, payload) {
       return createPoll(streams.get(id).pollState);
     case INPUT_STREAM_DISPOSE: {
       const stream = streams.get(id);
-      // TODO: pick this up with Alex for http_outbound_request_get
+      // TODO: fix double drop where IncomingBody drops IncomingStream,
+      //       instead implementing proper core WASI GC
       if (!stream) return;
       verifyPollsDroppedForDrop(stream.pollState, "input stream");
       streams.delete(id);
@@ -741,8 +749,9 @@ function handle(call, id, payload) {
     case POLL_POLL_LIST: {
       const doneList = [];
       const pollList = payload.map((pollId) => polls.get(pollId));
-      for (const [idx, poll] of pollList.entries()) {
-        if (poll.state !== POLL_STATE_WAIT) doneList.push(idx);
+      for (const [idx, pollState] of pollList.entries()) {
+        pollStateCheck(pollState);
+        if (pollState.state !== POLL_STATE_WAIT) doneList.push(idx);
       }
       if (doneList.length > 0) return new Uint32Array(doneList);
       let readyPromiseResolve;
@@ -831,6 +840,8 @@ export function verifyPollsDroppedForDrop(pollState, polledResourceDebugName) {
  * @param {PollState} pollState
  */
 export function pollStateWait(pollState) {
+  if (pollState.state === POLL_STATE_FINISHED)
+    throw new Error('wasi-io trap: cannot transition from finished to wait');
   pollState.state = POLL_STATE_WAIT;
   if (pollState.listener)
     throw new Error(
@@ -857,9 +868,39 @@ export function pollStateReady(pollState, finished) {
   }
 }
 
+/**
+ * @param {PollState} pollState
+ */
+function pollStateCheck(pollState) {
+  if (pollState.state === POLL_STATE_READY && pollState.parentStream) {
+    // stream ONLY applies to readable streams here
+    const stream = pollState.parentStream;
+    process._rawDebug('read for check');
+    const res = stream.read(0);
+    if (res !== null) {
+      throw new Error("wasi-io trap: got data for a null read");
+    }
+    if (
+      stream.readableLength === 0 &&
+      pollState.state !== POLL_STATE_FINISHED
+    ) {
+      process._rawDebug('waiting on readable');
+      pollStateWait(pollState);
+      stream.once("readable", () => {
+        pollStateReady(pollState);
+      });
+    }
+  }
+}
+
 export function createFuture(promise) {
   const futureId = ++futureCnt;
-  const pollState = { state: POLL_STATE_WAIT, listener: null, polls: [] };
+  const pollState = {
+    state: POLL_STATE_WAIT,
+    listener: null,
+    polls: [],
+    parent: null,
+  };
   const future = { error: false, value: null, pollState };
   futures.set(futureId, future);
   promise.then(

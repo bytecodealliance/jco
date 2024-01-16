@@ -100,6 +100,3 @@ mod preview2_udp_connect;
 mod preview2_udp_sample_application;
 mod preview2_udp_sockopts;
 mod preview2_udp_states;
-mod proxy_echo;
-mod proxy_handler;
-mod proxy_hash;
