@@ -10,7 +10,7 @@ const TEST_IGNORE: &[&str] = &[
     "nn_image_classification_named",
     "proxy_handler",
     "proxy_hash",
-    "proxy_echo"
+    "proxy_echo",
 ];
 
 pub fn run() -> anyhow::Result<()> {
