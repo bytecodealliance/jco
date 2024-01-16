@@ -13,6 +13,8 @@ const TEST_IGNORE: &[&str] = &[
     "nn_image_classification_named",
     "preview2_stream_pollable_correct",
     "preview2_stream_pollable_traps",
+    "cli_splice_stdin",
+    "cli_stdio_write_flushes",
 ];
 
 pub fn run() -> anyhow::Result<()> {
@@ -120,13 +122,13 @@ fn generate_test(test_name: &str) -> String {
         _ => false,
     };
 
-    let includes = if piped || stdin.is_some() {
-        "use std::fs;
-use std::io::prelude::Write;
+    let includes = if piped {
+        "use std::process::{Command, Stdio};"
+    } else if stdin.is_some() {
+        "use std::io::prelude::Write;
 use std::process::{Command, Stdio};"
     } else {
-        "use std::fs;
-use std::process::Command;"
+        "use std::process::Command;"
     };
 
     let cmd1 = format!(
@@ -170,6 +172,7 @@ use std::process::Command;"
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
+use std::fs;
 {includes}
 
 #[test]

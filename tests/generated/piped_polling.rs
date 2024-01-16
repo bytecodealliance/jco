@@ -2,7 +2,6 @@
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
 
 use std::fs;
-use std::io::prelude::Write;
 use std::process::{Command, Stdio};
 
 #[test]
