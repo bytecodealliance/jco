@@ -48,7 +48,6 @@ import {
   ipv6ToTuple,
   serializeIpAddress,
   isUnicastIpAddress,
-  isIPv4MappedAddress,
   isWildcardAddress,
 } from "./sockets/socket-common.js";
 
@@ -198,10 +197,7 @@ class TcpSocket {
   #id;
   #network;
   #family;
-  #initialized = false;
   #options = {
-    ipv6Only: false,
-
     // defaults per https://nodejs.org/docs/latest/api/net.html#socketsetkeepaliveenable-initialdelay
     keepAlive: false,
     // Node.js doesn't give us the ability to detect the OS default,
@@ -233,18 +229,13 @@ class TcpSocket {
   }
   startBind(network, localAddress) {
     if (!mayTcp(network)) throw "access-denied";
-    if (
-      this.#family !== localAddress.tag ||
-      !isUnicastIpAddress(localAddress) ||
-      (isIPv4MappedAddress(localAddress) && this.ipv6Only())
-    )
+    if (this.#family !== localAddress.tag || !isUnicastIpAddress(localAddress))
       throw "invalid-argument";
     ioCall(SOCKET_TCP_BIND_START, this.#id, localAddress);
-    this.#initialized = true;
     this.#network = network;
   }
   finishBind() {
-    ioCall(SOCKET_TCP_BIND_FINISH, this.#id, this.#options.ipv6Only);
+    ioCall(SOCKET_TCP_BIND_FINISH, this.#id);
   }
   startConnect(network, remoteAddress) {
     if (this.#network && network !== this.#network) throw "invalid-argument";
@@ -252,9 +243,7 @@ class TcpSocket {
     ioCall(SOCKET_TCP_CONNECT_START, this.#id, {
       remoteAddress,
       family: this.#family,
-      ipv6Only: this.#options.ipv6Only,
     });
-    this.#initialized = true;
     this.#network = network;
   }
   finishConnect() {
@@ -271,7 +260,6 @@ class TcpSocket {
   startListen() {
     if (!mayTcp(this.#network)) throw "access-denied";
     ioCall(SOCKET_TCP_LISTEN_START, this.#id, null);
-    this.#initialized = true;
   }
   finishListen() {
     ioCall(SOCKET_TCP_LISTEN_FINISH, this.#id, null);
@@ -283,7 +271,6 @@ class TcpSocket {
       this.#id,
       null
     );
-    this.#initialized = true;
     const socket = tcpSocketCreate(this.#family, socketId);
     Object.assign(socket.#options, this.#options);
     return [
@@ -303,15 +290,6 @@ class TcpSocket {
   }
   addressFamily() {
     return this.#family;
-  }
-  ipv6Only() {
-    if (this.#family === "ipv4") throw "not-supported";
-    return this.#options.ipv6Only;
-  }
-  setIpv6Only(value) {
-    if (this.#family === "ipv4") throw "not-supported";
-    if (this.#initialized) throw "invalid-state";
-    this.#options.ipv6Only = value;
   }
   setListenBacklogSize(value) {
     if (value === 0n) throw "invalid-argument";
@@ -535,7 +513,6 @@ class UdpSocket {
   #serializedLocalAddress = null;
   #family;
   #options = {
-    ipv6Only: false,
     // These default configurations will override the default
     // system ones. This is because we are unable to get the configuration
     // value for unbound sockets in Node.js, therefore we always
@@ -560,10 +537,7 @@ class UdpSocket {
   startBind(network, localAddress) {
     if (!mayUdp(network)) throw "access-denied";
     if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
-    if (
-      this.#family !== localAddress.tag ||
-      (isIPv4MappedAddress(localAddress) && this.ipv6Only())
-    )
+    if (this.#family !== localAddress.tag)
       throw "invalid-argument";
     this.#bindOrConnectAddress = localAddress;
     this.#network = network;
@@ -580,7 +554,6 @@ class UdpSocket {
     globalBoundAddresses.add(
       (this.#serializedLocalAddress = ioCall(SOCKET_UDP_BIND, this.#id, {
         localAddress: this.#bindOrConnectAddress,
-        isIpV6Only: this.#options.ipv6Only,
         unicastHopLimit: this.#options.unicastHopLimit,
         receiveBufferSize: this.#options.receiveBufferSize,
         sendBufferSize: this.#options.sendBufferSize,
@@ -621,7 +594,7 @@ class UdpSocket {
       }
 
       if (isWildcardAddress(remoteAddress)) throw "invalid-argument";
-      if (isIPv4MappedAddress(remoteAddress) && this.ipv6Only())
+      if (remoteAddress.tag !== this.#family)
         throw "invalid-argument";
       if (remoteAddress.val.port === 0) throw "invalid-argument";
 
@@ -679,15 +652,6 @@ class UdpSocket {
   }
   addressFamily() {
     return this.#family;
-  }
-  ipv6Only() {
-    if (this.#family === "ipv4") throw "not-supported";
-    return this.#options.ipv6Only;
-  }
-  setIpv6Only(value) {
-    if (this.#family === "ipv4") throw "not-supported";
-    if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
-    this.#options.ipv6Only = value;
   }
   unicastHopLimit() {
     return this.#options.unicastHopLimit;
