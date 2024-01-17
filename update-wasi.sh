@@ -37,8 +37,3 @@ mv ../../test/fixtures/wit/deps/flavorful ../../test/fixtures/wit/
 rm -r ../../test/fixtures/wit/deps
 cp -r crates/wasi/wit/deps ../../test/fixtures/wit/
 mv ../../test/fixtures/wit/flavorful ../../test/fixtures/wit/deps/
-
-# note the WASI version for reference
-cd ../..
-cat .git/modules/submodules/wasmtime/HEAD | head -c 16 > wasi-version
-echo "WASI Updated to $(cat wasi-version)"

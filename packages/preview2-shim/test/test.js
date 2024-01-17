@@ -140,10 +140,14 @@ suite("Node.js Preview2", () => {
 
     const futureIncomingResponse = handle(request);
     futureIncomingResponse.subscribe().block();
-    const incomingResponse = futureIncomingResponse.get().val.val;
+    const incomingResponseResult = futureIncomingResponse.get().val;
 
-    const status = incomingResponse.status();
-    const responseHeaders = incomingResponse.headers().entries();
+    if (incomingResponseResult.tag !== 'ok') {
+      throw incomingResponseResult.val;
+    }
+
+    const status = incomingResponseResult.val.status();
+    const responseHeaders = incomingResponseResult.val.headers().entries();
 
     const decoder = new TextDecoder();
     const headers = Object.fromEntries(
@@ -151,7 +155,7 @@ suite("Node.js Preview2", () => {
     );
 
     let responseBody;
-    const incomingBody = incomingResponse.consume();
+    const incomingBody = incomingResponseResult.val.consume();
     {
       const bodyStream = incomingBody.stream();
       bodyStream.subscribe().block();
@@ -319,8 +323,8 @@ suite("Node.js Preview2", () => {
 
       const pollable = tcpSocket.subscribe();
 
-      const googleIp = await new Promise((resolve) =>
-        lookup("google.com", (_err, result) => resolve(result))
+      const googleIp = await new Promise((resolve, reject) =>
+        lookup("google.com", (err, result) => err ? reject(err) : resolve(result))
       );
 
       tcpSocket.startConnect(network, {

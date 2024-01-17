@@ -12,10 +12,10 @@ const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
 import {
   deserializeIpAddress,
   serializeIpAddress,
-  isIPv4MappedAddress,
   isWildcardAddress,
   isUnicastIpAddress,
   isMulticastIpAddress,
+  isIPv4MappedAddress,
 } from "../nodejs/sockets/socket-common.js";
 import {
   convertSocketError,
@@ -100,20 +100,18 @@ export function socketTcpBindStart(id, localAddress) {
   pollStateWait(socket.pollState);
 }
 
-export function socketTcpBindFinish(id, isIpV6Only) {
+export function socketTcpBindFinish(id) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_BIND) throw "not-in-progress";
   const { handle } = socket;
   const address = serializeIpAddress(socket.bindOrConnectAddress);
+  if (isIPv4MappedAddress(socket.bindOrConnectAddress))
+    throw 'invalid-argument';
   const port = socket.bindOrConnectAddress.val.port;
   if (globalBoundAddresses.has(`${address}:${port}`)) throw "address-in-use";
   const code =
     socket.bindOrConnectAddress.tag === "ipv6"
-      ? handle.bind6(
-          address,
-          port,
-          isIpV6Only ? TCPConstants.UV_TCP_IPV6ONLY : 0
-        )
+      ? handle.bind6(address, port, TCPConstants.UV_TCP_IPV6ONLY)
       : handle.bind(address, port);
   if (code !== 0) {
     socket.state = SOCKET_STATE_ERROR;
@@ -130,7 +128,7 @@ export function socketTcpBindFinish(id, isIpV6Only) {
   pollStateReady(socket.pollState, false);
 }
 
-export function socketTcpConnectStart(id, { remoteAddress, family, ipv6Only }) {
+export function socketTcpConnectStart(id, { remoteAddress, family }) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_INIT && socket.state !== SOCKET_STATE_BOUND)
     throw "invalid-state";
@@ -140,8 +138,7 @@ export function socketTcpConnectStart(id, { remoteAddress, family, ipv6Only }) {
     family !== remoteAddress.tag ||
     !isUnicastIpAddress(remoteAddress) ||
     isMulticastIpAddress(remoteAddress) ||
-    remoteAddress.val.port === 0 ||
-    (ipv6Only && isIPv4MappedAddress(remoteAddress))
+    remoteAddress.val.port === 0
   ) {
     throw "invalid-argument";
   }
@@ -155,6 +152,8 @@ export function socketTcpConnectFinish(id) {
   if (socket.state !== SOCKET_STATE_CONNECT) throw "not-in-progress";
   const tcpSocket = new Socket({ handle: socket.handle, pauseOnCreate: true, allowHalfOpen: true });
   const remoteAddress = socket.bindOrConnectAddress;
+  if (isIPv4MappedAddress(remoteAddress))
+    throw "invalid-argument";
   return new Promise((resolve, reject) => {
     function handleErr(err) {
       tcpSocket.off("connect", handleConnect);

@@ -169,7 +169,7 @@ export async function createHttpRequest(
           tag: "DNS-error",
           val: {
             rcode: err.code,
-            infoCode: err.errno,
+            infoCode: err.errno < 0 ? -err.errno : err.errno,
           },
         };
       case "ECONNREFUSED":
