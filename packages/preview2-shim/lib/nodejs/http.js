@@ -6,7 +6,7 @@ import {
   HTTP_SERVER_STOP,
   OUTPUT_STREAM_CREATE,
   FUTURE_DISPOSE,
-  FUTURE_GET_VALUE_AND_DISPOSE,
+  FUTURE_TAKE_VALUE,
   FUTURE_SUBSCRIBE,
   HTTP_SERVER_SET_OUTGOING_RESPONSE,
   HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
@@ -100,15 +100,14 @@ class FutureTrailers {
     return resolvedPoll;
   }
   get() {
-    if (this.#requested)
-      return { tag: "err" };
+    if (this.#requested) return { tag: "err" };
     this.#requested = true;
     return {
       tag: "ok",
       val: {
         tag: "ok",
         val: undefined,
-      }
+      },
     };
   }
   static _create() {
@@ -387,37 +386,26 @@ delete IncomingResponse._create;
 class FutureIncomingResponse {
   #id;
   subscribe() {
-    if (this.#id) return pollableCreate(ioCall(FUTURE_SUBSCRIBE | HTTP, this.#id, null));
-    return resolvedPoll;
+    return pollableCreate(ioCall(FUTURE_SUBSCRIBE | HTTP, this.#id, null));
   }
   get() {
-    // already taken
-    if (!this.#id) return { tag: "err" };
-    const ret = ioCall(FUTURE_GET_VALUE_AND_DISPOSE | HTTP, this.#id, null);
-    if (!ret) return;
-    this.#id = null;
-    if (ret.error) return { tag: "ok", val: { tag: "err", val: ret.value } };
-    const { status, headers, bodyStreamId } = ret.value;
-    const textEncoder = new TextEncoder();
-    return {
-      tag: "ok",
-      val: {
-        tag: "ok",
-        val: incomingResponseCreate(
-          status,
-          fieldsFromEntriesChecked(
-            headers.map(([key, val]) => [key, textEncoder.encode(val)])
-          ),
-          bodyStreamId
+    const ret = ioCall(FUTURE_TAKE_VALUE | HTTP, this.#id, null);
+    if (ret === undefined) return undefined;
+    if (ret.tag === "ok" && ret.val.tag === "ok") {
+      const textEncoder = new TextEncoder();
+      const { status, headers, bodyStreamId } = ret.val.val;
+      ret.val.val = incomingResponseCreate(
+        status,
+        fieldsFromEntriesChecked(
+          headers.map(([key, val]) => [key, textEncoder.encode(val)])
         ),
-      },
-    };
+        bodyStreamId
+      );
+    }
+    return ret;
   }
   [symbolDispose]() {
-    if (this.#id) {
-      ioCall(FUTURE_DISPOSE | HTTP, this.#id, null);
-      this.#id = null;
-    }
+    ioCall(FUTURE_DISPOSE | HTTP, this.#id, null);
   }
   static _create(
     method,

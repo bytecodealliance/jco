@@ -336,6 +336,8 @@ suite("Node.js Preview2", () => {
       });
 
       ok(!pollable.ready());
+      pollable.block();
+      ok(pollable.ready());
 
       const [input, output] = tcpSocket.finishConnect();
 
