@@ -688,7 +688,13 @@ impl<'a> TsInterface<'a> {
                         iface.src.push_str(&format!("static '{out_name}'"))
                     }
                 }
-                FunctionKind::Constructor(_) => iface.src.push_str("constructor")
+                FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
+            }
+        } else {
+            if is_js_identifier(&out_name) {
+                iface.src.push_str(&out_name);
+            } else {
+                iface.src.push_str(&format!("'{out_name}'"));
             }
         }
 
