@@ -10,11 +10,9 @@ import {
   startHttpServer,
   stopHttpServer,
 } from "./worker-http.js";
-import { convertSocketError, socketResolveAddress } from "./worker-sockets.js";
 import { Readable } from "node:stream";
 import { read } from "node:fs";
 import { nextTick } from "node:process";
-
 import {
   CALL_MASK,
   CALL_TYPE_MASK,
@@ -75,24 +73,39 @@ import {
   SOCKET_TCP_SUBSCRIBE,
   SOCKET_TCP_SET_KEEP_ALIVE,
   SOCKET_TCP_SHUTDOWN,
-  SOCKET_UDP_BIND,
-  SOCKET_UDP_CHECK_SEND,
-  SOCKET_UDP_CONNECT,
   SOCKET_UDP_CREATE_HANDLE,
-  SOCKET_UDP_DISCONNECT,
-  SOCKET_UDP_DISPOSE,
+  SOCKET_UDP_BIND_START,
+  SOCKET_UDP_BIND_FINISH,
+  SOCKET_UDP_STREAM,
+  SOCKET_UDP_SUBSCRIBE,
   SOCKET_UDP_GET_LOCAL_ADDRESS,
   SOCKET_UDP_GET_REMOTE_ADDRESS,
-  SOCKET_UDP_RECEIVE,
-  SOCKET_UDP_SEND,
   SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE,
   SOCKET_UDP_SET_SEND_BUFFER_SIZE,
   SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
+  SOCKET_UDP_DISPOSE,
+  SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE,
+  SOCKET_INCOMING_DATAGRAM_STREAM_SUBSCRIBE,
+  SOCKET_INCOMING_DATAGRAM_STREAM_DISPOSE,
+  SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND,
+  SOCKET_OUTGOING_DATAGRAM_STREAM_SEND,
+  SOCKET_OUTGOING_DATAGRAM_STREAM_SUBSCRIBE,
+  SOCKET_OUTGOING_DATAGRAM_STREAM_DISPOSE,
   STDERR,
   STDIN,
   STDOUT,
   reverseMap,
 } from "./calls.js";
+import {
+  SOCKET_STATE_BIND,
+  SOCKET_STATE_BOUND,
+  SOCKET_STATE_CONNECT,
+  SOCKET_STATE_CONNECTION,
+  SOCKET_STATE_LISTEN,
+  SOCKET_STATE_LISTENER,
+  convertSocketError,
+  socketResolveAddress,
+} from "./worker-sockets.js";
 import {
   createTcpSocket,
   socketTcpAccept,
@@ -103,28 +116,27 @@ import {
   socketTcpGetLocalAddress,
   socketTcpGetRemoteAddress,
   socketTcpListenStart,
-  socketTcpIsListening,
   socketTcpSetListenBacklogSize,
   socketTcpSetKeepAlive,
   socketTcpShutdown,
-  socketTcpSubscribe,
-  SOCKET_STATE_BIND,
-  SOCKET_STATE_BOUND,
-  SOCKET_STATE_CONNECT,
-  SOCKET_STATE_CONNECTION,
-  SOCKET_STATE_LISTEN,
-  SOCKET_STATE_LISTENER,
+  tcpSockets,
 } from "./worker-socket-tcp.js";
 import {
-  SocketUdpReceive,
   createUdpSocket,
-  getUdpSocketOrThrow,
-  socketUdpBind,
-  socketUdpCheckSend,
-  socketUdpConnect,
-  socketUdpDisconnect,
+  socketIncomingDatagramStreamReceive,
+  socketIncomingDatagramStreamDispose,
+  socketOutgoingDatagramStreamSend,
+  socketOutgoingDatagramStreamCheckSend,
+  socketOutgoingDatagramStreamDispose,
+  socketUdpBindStart,
+  socketUdpBindFinish,
   socketUdpDispose,
-  socketUdpSend,
+  socketUdpStream,
+  socketUdpGetLocalAddress,
+  socketUdpGetRemoteAddress,
+  udpSockets,
+  incomingDatagramStreams,
+  outgoingDatagramStreams,
 } from "./worker-socket-udp.js";
 
 function log(msg) {
@@ -404,7 +416,7 @@ function handle(call, id, payload) {
     case SOCKET_TCP_LISTEN_FINISH:
       return socketTcpFinish(id, SOCKET_STATE_LISTEN, SOCKET_STATE_LISTENER);
     case SOCKET_TCP_IS_LISTENING:
-      return socketTcpIsListening(id);
+      return tcpSockets.get(id).state === SOCKET_STATE_LISTENER;
     case SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE:
       return socketTcpSetListenBacklogSize(id);
     case SOCKET_TCP_GET_LOCAL_ADDRESS:
@@ -414,66 +426,69 @@ function handle(call, id, payload) {
     case SOCKET_TCP_SHUTDOWN:
       return socketTcpShutdown(id, payload);
     case SOCKET_TCP_SUBSCRIBE:
-      return socketTcpSubscribe(id);
+      return createPoll(tcpSockets.get(id).pollState);
     case SOCKET_TCP_SET_KEEP_ALIVE:
       return socketTcpSetKeepAlive(id, payload);
     case SOCKET_TCP_DISPOSE:
       return socketTcpDispose(id);
 
     // Sockets UDP
-    case SOCKET_UDP_CREATE_HANDLE: {
-      return createUdpSocket(payload, null);
-    }
-    case SOCKET_UDP_BIND:
-      return socketUdpBind(id, payload);
-    case SOCKET_UDP_CHECK_SEND:
-      return socketUdpCheckSend(id);
-    case SOCKET_UDP_SEND:
-      return socketUdpSend(id, payload);
-    case SOCKET_UDP_RECEIVE:
-      return SocketUdpReceive(id, payload);
-    case SOCKET_UDP_CONNECT:
-      return socketUdpConnect(id, payload);
-    case SOCKET_UDP_DISCONNECT:
-      return socketUdpDisconnect(id);
-    case SOCKET_UDP_GET_LOCAL_ADDRESS: {
-      const socket = getUdpSocketOrThrow(id);
-      const addr = socket.address();
-      addr.family = addr.family.toLowerCase();
-      return addr;
-    }
-    case SOCKET_UDP_GET_REMOTE_ADDRESS: {
-      const socket = getUdpSocketOrThrow(id);
-      const addr = socket.remoteAddress();
-      addr.family = addr.family.toLowerCase();
-      return addr;
-    }
+    case SOCKET_UDP_CREATE_HANDLE:
+      return createUdpSocket(payload);
+    case SOCKET_UDP_BIND_START:
+      return socketUdpBindStart(id, payload.localAddress, payload.family);
+    case SOCKET_UDP_BIND_FINISH:
+      return socketUdpBindFinish(id, payload);
+    case SOCKET_UDP_STREAM:
+      return socketUdpStream(id, payload);
+    case SOCKET_UDP_SUBSCRIBE:
+      return createPoll(udpSockets.get(id).pollState);
+    case SOCKET_UDP_GET_LOCAL_ADDRESS:
+      return socketUdpGetLocalAddress(id);
+    case SOCKET_UDP_GET_REMOTE_ADDRESS:
+      return socketUdpGetRemoteAddress(id);
     case SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE: {
-      const socket = getUdpSocketOrThrow(id);
+      const { udpSocket } = udpSockets.get(id);
       try {
-        socket.setRecvBufferSize(Number(payload));
+        udpSocket.setRecvBufferSize(Number(payload));
       } catch (err) {
         throw convertSocketError(err);
       }
     }
     case SOCKET_UDP_SET_SEND_BUFFER_SIZE: {
-      const socket = getUdpSocketOrThrow(id);
+      const { udpSocket } = udpSockets.get(id);
       try {
-        return socket.setSendBufferSize(Number(payload));
+        return udpSocket.setSendBufferSize(Number(payload));
       } catch (err) {
         throw convertSocketError(err);
       }
     }
     case SOCKET_UDP_SET_UNICAST_HOP_LIMIT: {
-      const socket = getUdpSocketOrThrow(id);
+      const { udpSocket } = udpSockets.get(id);
       try {
-        return socket.setTTL(payload);
+        return udpSocket.setTTL(payload);
       } catch (err) {
         throw convertSocketError(err);
       }
     }
     case SOCKET_UDP_DISPOSE:
       return socketUdpDispose(id);
+
+    case SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE:
+      return socketIncomingDatagramStreamReceive(id, payload);
+    case SOCKET_INCOMING_DATAGRAM_STREAM_SUBSCRIBE:
+      return createPoll(incomingDatagramStreams.get(id).pollState);
+    case SOCKET_INCOMING_DATAGRAM_STREAM_DISPOSE:
+      return socketIncomingDatagramStreamDispose(id);
+
+    case SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND:
+      return socketOutgoingDatagramStreamCheckSend(id);
+    case SOCKET_OUTGOING_DATAGRAM_STREAM_SEND:
+      return socketOutgoingDatagramStreamSend(id, payload);
+    case SOCKET_OUTGOING_DATAGRAM_STREAM_SUBSCRIBE:
+      return createPoll(outgoingDatagramStreams.get(id).pollState);
+    case SOCKET_OUTGOING_DATAGRAM_STREAM_DISPOSE:
+      return socketOutgoingDatagramStreamDispose(id);
 
     // Stdio
     case OUTPUT_STREAM_BLOCKING_FLUSH | STDOUT:
@@ -799,7 +814,7 @@ function handle(call, id, payload) {
 /**
  * @param {PollState} pollState
  */
-export function createPoll(pollState) {
+function createPoll(pollState) {
   const pollId = ++pollCnt;
   pollState.polls.push(pollId);
   polls.set(pollId, pollState);
@@ -925,8 +940,7 @@ export function futureTakeValue(id) {
 
 export function futureDispose(id, ownsState) {
   const { pollState } = futures.get(id);
-  if (ownsState)
-    verifyPollsDroppedForDrop(pollState, "future");
+  if (ownsState) verifyPollsDroppedForDrop(pollState, "future");
   return void futures.delete(id);
 }
 

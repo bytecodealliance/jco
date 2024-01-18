@@ -30,7 +30,17 @@ import {
   EPERM,
   EWOULDBLOCK,
 } from "node:constants";
-import { ipv4ToTuple, ipv6ToTuple } from "../nodejs/sockets/socket-common.js";
+import { ipv4ToTuple, ipv6ToTuple } from "./socket-common.js";
+
+let stateCnt = 0;
+export const SOCKET_STATE_INIT = ++stateCnt;
+export const SOCKET_STATE_BIND = ++stateCnt;
+export const SOCKET_STATE_BOUND = ++stateCnt;
+export const SOCKET_STATE_LISTEN = ++stateCnt;
+export const SOCKET_STATE_LISTENER = ++stateCnt;
+export const SOCKET_STATE_CONNECT = ++stateCnt;
+export const SOCKET_STATE_CONNECTION = ++stateCnt;
+export const SOCKET_STATE_CLOSED = ++stateCnt;
 
 const dnsLookupOptions = {
   verbatim: true,
@@ -76,6 +86,7 @@ export function convertSocketError(err) {
   switch (err?.code) {
     case "EBADF":
     case "ENOTCONN":
+    case "ERR_SOCKET_DGRAM_NOT_CONNECTED":
       return "invalid-state";
     case "EACCES":
     case "EPERM":
@@ -92,8 +103,8 @@ export function convertSocketError(err) {
     case "EWOULDBLOCK":
       return "would-block";
     // TODO: return "new-socket-limit";
-    // TODO: return "address-not-bindable";
     case "EADDRNOTAVAIL":
+      return "address-not-bindable";
     case "EADDRINUSE":
       return "address-in-use";
     // TODO: return "remote-unreachable";

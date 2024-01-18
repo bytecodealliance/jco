@@ -1,6 +1,5 @@
 import {
   createFuture,
-  createPoll,
   createReadableStream,
   createReadableStreamPollState,
   createWritableStream,
@@ -12,60 +11,48 @@ import {
 const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
 import {
   deserializeIpAddress,
-  serializeIpAddress,
-  isWildcardAddress,
-  isUnicastIpAddress,
-  isMulticastIpAddress,
   isIPv4MappedAddress,
-} from "../nodejs/sockets/socket-common.js";
+  isMulticastIpAddress,
+  isUnicastIpAddress,
+  isWildcardAddress,
+  serializeIpAddress,
+} from "./socket-common.js";
 import {
   convertSocketError,
   convertSocketErrorCode,
+  SOCKET_STATE_INIT,
+  SOCKET_STATE_BIND,
+  SOCKET_STATE_BOUND,
+  SOCKET_STATE_LISTEN,
+  SOCKET_STATE_LISTENER,
+  SOCKET_STATE_CONNECT,
+  SOCKET_STATE_CONNECTION,
+  SOCKET_STATE_CLOSED,
 } from "./worker-sockets.js";
 import { Socket, Server } from "node:net";
-import { platform } from "node:os";
-
-// As a workaround, we store the bound address in a global map
-// this is needed because 'address-in-use' is not always thrown when binding
-// more than one socket to the same address
-// TODO: remove this workaround when we figure out why!
-const globalBoundAddresses = new Set();
-
-const isWindows = platform() === "win32";
-
-let stateCnt = 0;
-export const SOCKET_STATE_INIT = ++stateCnt;
-export const SOCKET_STATE_BIND = ++stateCnt;
-export const SOCKET_STATE_BOUND = ++stateCnt;
-export const SOCKET_STATE_LISTEN = ++stateCnt;
-export const SOCKET_STATE_LISTENER = ++stateCnt;
-export const SOCKET_STATE_CONNECT = ++stateCnt;
-export const SOCKET_STATE_CONNECTION = ++stateCnt;
-export const SOCKET_STATE_CLOSED = ++stateCnt;
 
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
  *
  * @typedef {{
- *   tcpSocket: number | null,
+ *   tcpSocket: number,
  *   err: Error | null,
- *   pollState: PollState | null,
+ *   pollState: PollState,
  * }} PendingAccept
  *
  * @typedef {{
  *   state: number,
  *   future: number | null,
- *   serializedLocalAddress: string | null,
  *   listenBacklogSize: number,
  *   handle: TCP,
  *   pendingAccepts: PendingAccept[],
  *   pollState: PollState,
- * }} SocketRecord
+ * }} TcpSocketRecord
  */
 
 /**
- * @type {Map<number, SocketRecord>}
+ * @type {Map<number, TcpSocketRecord>}
  */
 export const tcpSockets = new Map();
 
@@ -79,17 +66,12 @@ export function createTcpSocket() {
   tcpSockets.set(++tcpSocketCnt, {
     state: SOCKET_STATE_INIT,
     future: null,
-    serializedLocalAddress: null,
     listenBacklogSize: 128,
     handle,
     pendingAccepts: [],
     pollState: { ready: true, listener: null, polls: [], parentStream: null },
   });
   return tcpSocketCnt;
-}
-
-export function socketTcpSubscribe(id) {
-  return createPoll(tcpSockets.get(id).pollState);
 }
 
 export function socketTcpFinish(id, fromState, toState) {
@@ -105,8 +87,7 @@ export function socketTcpFinish(id, fromState, toState) {
   } else {
     socket.state = toState;
     // for the listener, we must immediately transition back to unresolved
-    if (toState === SOCKET_STATE_LISTENER)
-      socket.pollState.ready = false;
+    if (toState === SOCKET_STATE_LISTENER) socket.pollState.ready = false;
     return val;
   }
 }
@@ -114,30 +95,29 @@ export function socketTcpFinish(id, fromState, toState) {
 export function socketTcpBindStart(id, localAddress, family) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_INIT) throw "invalid-state";
-  if (family !== localAddress.tag || !isUnicastIpAddress(localAddress))
+  if (
+    family !== localAddress.tag ||
+    !isUnicastIpAddress(localAddress) ||
+    isIPv4MappedAddress(localAddress)
+  )
     throw "invalid-argument";
-  if (isIPv4MappedAddress(localAddress)) throw "invalid-argument";
   socket.state = SOCKET_STATE_BIND;
   const { handle } = socket;
   socket.future = createFuture(
     (async () => {
       const address = serializeIpAddress(localAddress);
       const port = localAddress.val.port;
-      if (globalBoundAddresses.has(`${address}:${port}`))
-        throw "address-in-use";
       const code =
         localAddress.tag === "ipv6"
           ? handle.bind6(address, port, TCPConstants.UV_TCP_IPV6ONLY)
           : handle.bind(address, port);
       if (code !== 0) throw convertSocketErrorCode(-code);
+      // This is a Node.js / libuv quirk to force the bind error to be thrown
+      // (specifically address-in-use).
       {
-        const localAddress = socketTcpGetLocalAddress(id);
-        const serializedLocalAddress = `${serializeIpAddress(localAddress)}:${
-          localAddress.val.port
-        }`;
-        globalBoundAddresses.add(
-          (socket.serializedLocalAddress = serializedLocalAddress)
-        );
+        const out = {};
+        const code = handle.getsockname(out);
+        if (code !== 0) throw convertSocketErrorCode(-code);
       }
     })(),
     socket.pollState
@@ -148,17 +128,16 @@ export function socketTcpConnectStart(id, remoteAddress, family) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_INIT && socket.state !== SOCKET_STATE_BOUND)
     throw "invalid-state";
-  if (remoteAddress.val.port === 0 && isWindows) throw "invalid-argument";
   if (
     isWildcardAddress(remoteAddress) ||
     family !== remoteAddress.tag ||
     !isUnicastIpAddress(remoteAddress) ||
     isMulticastIpAddress(remoteAddress) ||
-    remoteAddress.val.port === 0
+    remoteAddress.val.port === 0 ||
+    isIPv4MappedAddress(remoteAddress)
   ) {
     throw "invalid-argument";
   }
-  if (isIPv4MappedAddress(remoteAddress)) throw "invalid-argument";
   socket.state = SOCKET_STATE_CONNECT;
   socket.future = createFuture(
     new Promise((resolve, reject) => {
@@ -169,19 +148,10 @@ export function socketTcpConnectStart(id, remoteAddress, family) {
       });
       function handleErr(err) {
         tcpSocket.off("connect", handleConnect);
-        reject(err);
+        reject(convertSocketError(err));
       }
       function handleConnect() {
         tcpSocket.off("error", handleErr);
-        if (!tcpSocket.serializedLocalAddress) {
-          const localAddress = socketTcpGetLocalAddress(id);
-          const serializedLocalAddress = `${serializeIpAddress(localAddress)}:${
-            localAddress.val.port
-          }`;
-          globalBoundAddresses.add(
-            (tcpSocket.serializedLocalAddress = serializedLocalAddress)
-          );
-        }
         resolve([
           createReadableStream(tcpSocket),
           createWritableStream(tcpSocket),
@@ -211,7 +181,7 @@ export function socketTcpListenStart(id) {
       const server = new Server({ pauseOnConnect: true, allowHalfOpen: true });
       function handleErr(err) {
         server.off("listening", handleListen);
-        reject(err);
+        reject(convertSocketError(err));
       }
       function handleListen() {
         server.off("error", handleErr);
@@ -243,12 +213,10 @@ export function socketTcpAccept(id) {
     socket.state = SOCKET_STATE_CLOSED;
     throw convertSocketError(accept.err);
   }
-  if (socket.pendingAccepts.length === 0)
-    socket.pollState.ready = false;
+  if (socket.pendingAccepts.length === 0) socket.pollState.ready = false;
   tcpSockets.set(++tcpSocketCnt, {
     state: SOCKET_STATE_CONNECTION,
     future: null,
-    serializedLocalAddress: null,
     listenBacklogSize: 128,
     handle: accept.tcpSocket._handle,
     pendingAccepts: [],
@@ -259,10 +227,6 @@ export function socketTcpAccept(id) {
     createReadableStream(accept.tcpSocket, accept.pollState),
     createWritableStream(accept.tcpSocket),
   ];
-}
-
-export function socketTcpIsListening(id) {
-  return tcpSockets.get(id).state === SOCKET_STATE_LISTENER;
 }
 
 export function socketTcpSetListenBacklogSize(id, backlogSize) {
@@ -333,8 +297,6 @@ export function socketTcpSetKeepAlive(id, { keepAlive, keepAliveIdleTime }) {
 export function socketTcpDispose(id) {
   const socket = tcpSockets.get(id);
   verifyPollsDroppedForDrop(socket.pollState, "tcp socket");
-  if (socket.serializedLocalAddress)
-    globalBoundAddresses.delete(socket.serializedLocalAddress);
   socket.handle.close();
   tcpSockets.delete(id);
 }

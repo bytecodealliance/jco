@@ -1,9 +1,16 @@
 import { isIP } from "node:net";
 import {
+  SOCKET_INCOMING_DATAGRAM_STREAM_DISPOSE,
+  SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE,
+  SOCKET_INCOMING_DATAGRAM_STREAM_SUBSCRIBE,
+  SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND,
+  SOCKET_OUTGOING_DATAGRAM_STREAM_DISPOSE,
+  SOCKET_OUTGOING_DATAGRAM_STREAM_SEND,
+  SOCKET_OUTGOING_DATAGRAM_STREAM_SUBSCRIBE,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
-  SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST,
   SOCKET_TCP_ACCEPT,
   SOCKET_TCP_BIND_FINISH,
   SOCKET_TCP_BIND_START,
@@ -21,19 +28,17 @@ import {
   SOCKET_TCP_SHUTDOWN,
   SOCKET_TCP_SUBSCRIBE,
   SOCKET_TCP,
-  SOCKET_UDP_BIND,
-  SOCKET_UDP_CHECK_SEND,
-  SOCKET_UDP_CONNECT,
+  SOCKET_UDP_BIND_FINISH,
+  SOCKET_UDP_BIND_START,
   SOCKET_UDP_CREATE_HANDLE,
-  SOCKET_UDP_DISCONNECT,
   SOCKET_UDP_DISPOSE,
   SOCKET_UDP_GET_LOCAL_ADDRESS,
   SOCKET_UDP_GET_REMOTE_ADDRESS,
-  SOCKET_UDP_RECEIVE,
-  SOCKET_UDP_SEND,
   SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE,
   SOCKET_UDP_SET_SEND_BUFFER_SIZE,
   SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
+  SOCKET_UDP_STREAM,
+  SOCKET_UDP_SUBSCRIBE,
 } from "../io/calls.js";
 import {
   inputStreamCreate,
@@ -42,13 +47,7 @@ import {
   pollableCreate,
   resolvedPoll,
 } from "../io/worker-io.js";
-import {
-  deserializeIpAddress,
-  ipv4ToTuple,
-  ipv6ToTuple,
-  serializeIpAddress,
-  isWildcardAddress,
-} from "./sockets/socket-common.js";
+import { ipv4ToTuple, ipv6ToTuple } from "../io/socket-common.js";
 
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpSocketAddress} IpSocketAddress
@@ -134,7 +133,8 @@ class ResolveAddressStream {
     return resolvedPoll;
   }
   [symbolDispose]() {
-    if (this.#id) ioCall(SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST, this.#id, null);
+    if (this.#id)
+      ioCall(SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST, this.#id, null);
   }
   static _resolveAddresses(network, name) {
     if (!mayDnsLookup(network)) throw "permanent-resolver-failure";
@@ -184,12 +184,6 @@ export const ipNameLookup = {
   ResolveAddressStream,
   resolveAddresses,
 };
-
-// As a workaround, we store the bound address in a global map
-// this is needed because 'address-in-use' is not always thrown when binding
-// more than one socket to the same address
-// TODO: remove this workaround when we figure out why!
-const globalBoundAddresses = new Set();
 
 class TcpSocket {
   #id;
@@ -384,133 +378,11 @@ export const tcp = {
   TcpSocket,
 };
 
-class IncomingDatagramStream {
-  #socketId;
-  static _create(socketId) {
-    const stream = new IncomingDatagramStream();
-    stream.#socketId = socketId;
-    return stream;
-  }
-  receive(maxResults) {
-    if (maxResults === 0n) {
-      return [];
-    }
-
-    const datagrams = ioCall(
-      SOCKET_UDP_RECEIVE,
-      // socket that's receiving the datagrams
-      this.#socketId,
-      {
-        maxResults,
-      }
-    );
-
-    return datagrams.map(({ data, rinfo }) => {
-      let address = rinfo.address;
-      if (rinfo._address) {
-        // set the original address that the socket was bound to
-        address = rinfo._address;
-      }
-      const remoteAddress = {
-        tag: rinfo.family,
-        val: {
-          address: deserializeIpAddress(address, rinfo.family),
-          port: rinfo.port,
-        },
-      };
-      return {
-        data,
-        remoteAddress,
-      };
-    });
-  }
-  subscribe() {
-    if (this.#socketId) return pollableCreate(this.#socketId);
-    return resolvedPoll;
-  }
-  [symbolDispose]() {
-    // TODO: stop receiving
-  }
-}
-const incomingDatagramStreamCreate = IncomingDatagramStream._create;
-delete IncomingDatagramStream._create;
-
-class OutgoingDatagramStream {
-  pollId = 0;
-  #socketId = 0;
-  static _create(socketId) {
-    const stream = new OutgoingDatagramStream(socketId);
-    stream.#socketId = socketId;
-    return stream;
-  }
-  /**
-   *
-   * @returns {bigint}
-   */
-  checkSend() {
-    const ret = ioCall(SOCKET_UDP_CHECK_SEND, this.#socketId, null);
-    // TODO: When this function returns ok(0), the `subscribe` pollable will
-    // become ready when this function will report at least ok(1), or an
-    // error.
-    return ret;
-  }
-  send(datagrams) {
-    if (datagrams.length === 0) {
-      return 0n;
-    }
-
-    let datagramsSent = 0n;
-
-    for (const datagram of datagrams) {
-      const { data, remoteAddress } = datagram;
-      const remotePort = remoteAddress?.val?.port || undefined;
-      const host = serializeIpAddress(remoteAddress);
-
-      if (this.checkSend() < data.length) throw "datagram-too-large";
-      // TODO: add the other assertions
-
-      const ret = ioCall(
-        SOCKET_UDP_SEND,
-        this.#socketId, // socket that's sending the datagrams
-        {
-          data,
-          remotePort,
-          remoteHost: host,
-        }
-      );
-      if (ret === 0) {
-        datagramsSent++;
-      } else {
-        if (ret === -65) throw "remote-unreachable";
-      }
-    }
-
-    return datagramsSent;
-  }
-  subscribe() {
-    if (this.pollId) return pollableCreate(this.pollId);
-    return resolvedPoll;
-  }
-  [symbolDispose]() {
-    // TODO: stop sending
-  }
-}
-const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
-delete OutgoingDatagramStream._create;
-
-let stateCnt = 0;
-const SOCKET_STATE_INIT = ++stateCnt;
-const SOCKET_STATE_BIND = ++stateCnt;
-const SOCKET_STATE_BOUND = ++stateCnt;
-const SOCKET_STATE_CONNECTION = ++stateCnt;
-
 class UdpSocket {
   #id;
   #network;
-  #state = SOCKET_STATE_INIT;
-  #bindOrConnectAddress = null;
-  #serializedLocalAddress = null;
   #family;
+  #bound = false;
   #options = {
     // These default configurations will override the default
     // system ones. This is because we are unable to get the configuration
@@ -521,124 +393,36 @@ class UdpSocket {
     receiveBufferSize: 8192n,
     sendBufferSize: 8192n,
   };
-
-  /**
-   * @param {IpAddressFamily} addressFamily
-   * @param {number} id
-   * @returns {TcpSocket}
-   */
-  static _create(addressFamily, id) {
+  static _create(addressFamily) {
+    if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
+      throw "not-supported";
     const socket = new UdpSocket();
-    socket.#id = id;
+    socket.#id = ioCall(SOCKET_UDP_CREATE_HANDLE, null, addressFamily);
     socket.#family = addressFamily;
     return socket;
   }
   startBind(network, localAddress) {
     if (!mayUdp(network)) throw "access-denied";
-    if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
-    if (this.#family !== localAddress.tag) throw "invalid-argument";
-    this.#bindOrConnectAddress = localAddress;
+    ioCall(SOCKET_UDP_BIND_START, this.#id, {
+      localAddress,
+      family: this.#family,
+    });
     this.#network = network;
-    this.#state = SOCKET_STATE_BIND;
   }
   finishBind() {
-    if (this.#state !== SOCKET_STATE_BIND) throw "not-in-progress";
-    if (
-      globalBoundAddresses.has(
-        serializeIpAddress(this.#bindOrConnectAddress, true)
-      )
-    )
-      throw "address-in-use";
-    globalBoundAddresses.add(
-      (this.#serializedLocalAddress = ioCall(SOCKET_UDP_BIND, this.#id, {
-        localAddress: this.#bindOrConnectAddress,
-        unicastHopLimit: this.#options.unicastHopLimit,
-        receiveBufferSize: this.#options.receiveBufferSize,
-        sendBufferSize: this.#options.sendBufferSize,
-      }))
-    );
-    this.#state = SOCKET_STATE_BOUND;
+    ioCall(SOCKET_UDP_BIND_FINISH, this.#id, this.#options);
+    this.#bound = true;
   }
-  stream(remoteAddress = undefined) {
+  stream(remoteAddress) {
     if (!mayUdp(this.#network)) throw "access-denied";
-    if (
-      this.#state !== SOCKET_STATE_BOUND &&
-      this.#state !== SOCKET_STATE_CONNECTION
-    )
-      throw "invalid-state";
-
-    if (this.#state === SOCKET_STATE_CONNECTION) {
-      // stream() can be called multiple times, so we need to disconnect first if we are already connected
-      // Note: disconnect() will also reset the connection state but does not close the socket handle!
-      const ret = ioCall(SOCKET_UDP_DISCONNECT, this.#id);
-
-      if (ret === 0) {
-        // this.#options.connectionState = SocketConnectionState.Closed;
-        // this.#options.lastErrorState = null;
-        // this.#options.isBound = false;
-      }
-
-      if (ret !== 0) throw "unknown";
-    }
-
-    if (remoteAddress) {
-      if (
-        remoteAddress === undefined
-        // || this.#options.connectionState === SocketConnectionState.Connected
-      ) {
-        this.#options.remoteAddress = undefined;
-        this.#options.remotePort = 0;
-        return;
-      }
-
-      if (isWildcardAddress(remoteAddress)) throw "invalid-argument";
-      if (remoteAddress.tag !== this.#family) throw "invalid-argument";
-      if (remoteAddress.val.port === 0) throw "invalid-argument";
-
-      const host = serializeIpAddress(remoteAddress);
-      const ipFamily = `ipv${isIP(host)}`;
-
-      if (ipFamily === "ipv0") throw "invalid-argument";
-      if (this.#family !== ipFamily) throw "invalid-argument";
-
-      const { port } = remoteAddress.val;
-      this.#options.remoteAddress = host; // can be undefined
-      this.#options.remotePort = port;
-      // this.#options.connectionState = SocketConnectionState.Connecting;
-
-      if (host === undefined) {
-        return;
-      }
-
-      if (this.#options.isBound === false) {
-        // this.bind(this.network, this.#options.localIpSocketAddress);
-      }
-
-      const err = ioCall(SOCKET_UDP_CONNECT, this.#id, {
-        remoteAddress: host,
-        remotePort: port,
-      });
-
-      if (!err) {
-        // this.#options.connectionState = SocketConnectionState.Connected;
-      } else {
-        if (err === -22) throw "invalid-argument";
-        throw "unknown";
-      }
-    }
-
-    // reconfigure remote host and port.
-    // Note: remoteAddress can be undefined
-    // const host = serializeIpAddress(remoteAddress);
-    // const { port } = remoteAddress?.val || { port: 0 };
-    // this.#options.remoteAddress = host; // host can be undefined
-    // this.#options.remotePort = port;
-
-    this.#state = SOCKET_STATE_CONNECTION;
-
+    const [incomingDatagramStreamId, outgoingDatagramStreamId] = ioCall(
+      SOCKET_UDP_STREAM,
+      this.#id,
+      remoteAddress
+    );
     return [
-      incomingDatagramStreamCreate(this.#id),
-      outgoingDatagramStreamCreate(this.#id),
+      incomingDatagramStreamCreate(incomingDatagramStreamId),
+      outgoingDatagramStreamCreate(outgoingDatagramStreamId),
     ];
   }
   localAddress() {
@@ -656,9 +440,7 @@ class UdpSocket {
   setUnicastHopLimit(value) {
     if (value < 1) throw "invalid-argument";
     this.#options.unicastHopLimit = value;
-    if (this.#state > SOCKET_STATE_BIND) {
-      ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.#id, value);
-    }
+    if (this.#bound) ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.#id, value);
   }
   receiveBufferSize() {
     return this.#options.receiveBufferSize;
@@ -666,9 +448,8 @@ class UdpSocket {
   setReceiveBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
     this.#options.receiveBufferSize = value;
-    if (this.#state > SOCKET_STATE_BIND) {
+    if (this.#bound)
       ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.#id, value);
-    }
   }
   sendBufferSize() {
     return this.#options.sendBufferSize;
@@ -676,32 +457,72 @@ class UdpSocket {
   setSendBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
     this.#options.sendBufferSize = value;
-    if (this.#state > SOCKET_STATE_BIND) {
-      ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.#id, value);
-    }
+    if (this.#bound) ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.#id, value);
   }
   subscribe() {
-    return resolvedPoll;
+    return pollableCreate(ioCall(SOCKET_UDP_SUBSCRIBE, this.#id, null));
   }
   [symbolDispose]() {
     ioCall(SOCKET_UDP_DISPOSE, this.#id, null);
-    if (this.#serializedLocalAddress)
-      globalBoundAddresses.delete(this.#serializedLocalAddress);
   }
 }
 
-const udpSocketCreate = UdpSocket._create;
+const createUdpSocket = UdpSocket._create;
 delete UdpSocket._create;
 
-export const udpCreateSocket = {
-  createUdpSocket(addressFamily) {
-    if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
-      throw "not-supported";
-    return udpSocketCreate(
-      addressFamily,
-      ioCall(SOCKET_UDP_CREATE_HANDLE, null, null)
+class IncomingDatagramStream {
+  #id;
+  static _create(id) {
+    const stream = new IncomingDatagramStream();
+    stream.#id = id;
+    return stream;
+  }
+  receive(maxResults) {
+    return ioCall(
+      SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE,
+      this.#id,
+      maxResults
     );
-  },
+  }
+  subscribe() {
+    return pollableCreate(
+      ioCall(SOCKET_INCOMING_DATAGRAM_STREAM_SUBSCRIBE, this.#id, null)
+    );
+  }
+  [symbolDispose]() {
+    ioCall(SOCKET_INCOMING_DATAGRAM_STREAM_DISPOSE, this.#id, null);
+  }
+}
+const incomingDatagramStreamCreate = IncomingDatagramStream._create;
+delete IncomingDatagramStream._create;
+
+class OutgoingDatagramStream {
+  #id = 0;
+  static _create(id) {
+    const stream = new OutgoingDatagramStream();
+    stream.#id = id;
+    return stream;
+  }
+  checkSend() {
+    return ioCall(SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND, this.#id, null);
+  }
+  send(datagrams) {
+    return ioCall(SOCKET_OUTGOING_DATAGRAM_STREAM_SEND, this.#id, datagrams);
+  }
+  subscribe() {
+    return pollableCreate(
+      ioCall(SOCKET_OUTGOING_DATAGRAM_STREAM_SUBSCRIBE, this.#id, null)
+    );
+  }
+  [symbolDispose]() {
+    ioCall(SOCKET_OUTGOING_DATAGRAM_STREAM_DISPOSE, this.#id, null);
+  }
+}
+const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;
+delete OutgoingDatagramStream._create;
+
+export const udpCreateSocket = {
+  createUdpSocket,
 };
 
 export const udp = {
