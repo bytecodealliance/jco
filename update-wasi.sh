@@ -34,6 +34,12 @@ wasm-tools metadata add \
 
 # replace the existing fixtures with our newly created files
 mv ../../test/fixtures/wit/deps/flavorful ../../test/fixtures/wit/
-rm -r ../../test/fixtures/wit/deps
+rm -r ../../test/fixtures/wit/deps/cli
+rm -r ../../test/fixtures/wit/deps/clocks
+rm -r ../../test/fixtures/wit/deps/filesystem
+rm -r ../../test/fixtures/wit/deps/http
+rm -r ../../test/fixtures/wit/deps/io
+rm -r ../../test/fixtures/wit/deps/random
+rm -r ../../test/fixtures/wit/deps/sockets
 cp -r crates/wasi/wit/deps ../../test/fixtures/wit/
 mv ../../test/fixtures/wit/flavorful ../../test/fixtures/wit/deps/

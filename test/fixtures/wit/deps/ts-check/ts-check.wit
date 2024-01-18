@@ -1,0 +1,10 @@
+package ts:naming;
+
+interface blah {
+  class: func();
+}
+
+world test {
+  export class: func();
+  export blah;
+}

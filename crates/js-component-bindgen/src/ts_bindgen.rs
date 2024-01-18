@@ -1,6 +1,6 @@
 use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
-use crate::names::{maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
+use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, InstantiationMode, TranspileOpts};
 use crate::{dealias, uwrite, uwriteln};
@@ -36,6 +36,7 @@ struct TsInterface<'a> {
     resolve: &'a Resolve,
     needs_ty_option: bool,
     needs_ty_result: bool,
+    local_names: LocalNames,
     resources: HashMap<String, TsInterface<'a>>,
 }
 
@@ -468,6 +469,7 @@ impl TsBindgen {
         TsInterface {
             src: Source::default(),
             resources: HashMap::new(),
+            local_names: LocalNames::default(),
             resolve,
             needs_ty_option: false,
             needs_ty_result: false,
@@ -480,6 +482,7 @@ impl<'a> TsInterface<'a> {
         TsInterface {
             src: Source::default(),
             resources: HashMap::new(),
+            local_names: LocalNames::default(),
             resolve,
             needs_ty_option: false,
             needs_ty_result: false,
@@ -650,23 +653,53 @@ impl<'a> TsInterface<'a> {
             self
         };
 
-        let end_character = if declaration {
-            iface.src.push_str(match func.kind {
-                FunctionKind::Freestanding => "export function ",
-                FunctionKind::Method(_) => "",
-                FunctionKind::Static(_) => "static ",
-                FunctionKind::Constructor(_) => "",
-            });
-            ';'
+        let out_name = if default {
+            "default".to_string()
         } else {
-            ','
+            func.item_name().to_lower_camel_case()
         };
 
-        if default {
-            iface.src.push_str("default");
+        if declaration {
+            match func.kind {
+                FunctionKind::Freestanding => {
+                    if is_js_identifier(&out_name) {
+                        iface.src.push_str(&format!("export function {out_name}"));
+                    } else {
+                        let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
+                        iface
+                            .src
+                            .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
+                        iface
+                            .src
+                            .push_str(&format!("declare function {local_name}"));
+                    };
+                }
+                FunctionKind::Method(_) => {
+                    if is_js_identifier(&out_name) {
+                        iface.src.push_str(&out_name);
+                    } else {
+                        iface.src.push_str(&format!("'{out_name}'"));
+                    }
+                }
+                FunctionKind::Static(_) => {
+                    if is_js_identifier(&out_name) {
+                        iface.src.push_str(&format!("static {out_name}"))
+                    } else {
+                        iface.src.push_str(&format!("static '{out_name}'"))
+                    }
+                }
+                FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
+            }
         } else {
-            iface.src.push_str(&func.item_name().to_lower_camel_case());
+            if is_js_identifier(&out_name) {
+                iface.src.push_str(&out_name);
+            } else {
+                iface.src.push_str(&format!("'{out_name}'"));
+            }
         }
+
+        let end_character = if declaration { ';' } else { ',' };
+
         iface.src.push_str("(");
 
         let param_start = match &func.kind {

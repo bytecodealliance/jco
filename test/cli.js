@@ -78,6 +78,21 @@ export async function cliTest (fixtures) {
       ok(source.includes('console.error(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);'));
     });
 
+    test('TypeScript naming checks', async () => {
+      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/wit/deps/ts-check/ts-check.wit`, '--stub', '-o', outDir);
+      strictEqual(stderr, '');
+      {
+        const source = await readFile(`${outDir}/ts-check.d.ts`);
+        ok(source.toString().includes('declare function _class(): void'));
+        ok(source.toString().includes('export { _class as class }'));
+      }
+      {
+        const source = await readFile(`${outDir}/interfaces/ts-naming-blah.d.ts`);
+        ok(source.toString().includes('declare function _class(): void'));
+        ok(source.toString().includes('export { _class as class }'));
+      }
+    });
+
     test('Transpile to JS', async () => {
       const name = 'flavorful';
       const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/components/${name}.component.wasm`, '--name', name, '--map', 'testwasi=./wasi.js', '--valid-lifting-optimization', '--tla-compat', '--js', '--base64-cutoff=0', '-o', outDir);
