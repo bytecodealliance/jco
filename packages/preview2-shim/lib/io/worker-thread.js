@@ -24,7 +24,7 @@ import {
   FILE,
   FUTURE_DISPOSE,
   FUTURE_SUBSCRIBE,
-  FUTURE_GET_VALUE_AND_DISPOSE,
+  FUTURE_TAKE_VALUE,
   HTTP,
   HTTP_CREATE_REQUEST,
   HTTP_OUTPUT_STREAM_FINISH,
@@ -58,7 +58,7 @@ import {
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
-  SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST,
   SOCKET_TCP_ACCEPT,
   SOCKET_TCP_BIND_START,
   SOCKET_TCP_BIND_FINISH,
@@ -97,19 +97,23 @@ import {
   createTcpSocket,
   socketTcpAccept,
   socketTcpBindStart,
-  socketTcpBindFinish,
+  socketTcpFinish,
   socketTcpConnectStart,
-  socketTcpConnectFinish,
   socketTcpDispose,
   socketTcpGetLocalAddress,
   socketTcpGetRemoteAddress,
   socketTcpListenStart,
-  socketTcpListenFinish,
   socketTcpIsListening,
   socketTcpSetListenBacklogSize,
   socketTcpSetKeepAlive,
   socketTcpShutdown,
   socketTcpSubscribe,
+  SOCKET_STATE_BIND,
+  SOCKET_STATE_BOUND,
+  SOCKET_STATE_CONNECT,
+  SOCKET_STATE_CONNECTION,
+  SOCKET_STATE_LISTEN,
+  SOCKET_STATE_LISTENER,
 } from "./worker-socket-tcp.js";
 import {
   SocketUdpReceive,
@@ -146,8 +150,10 @@ let pollCnt = 0,
  * }} Stream
  *
  * @typedef {{
- *   value: any,
- *   error: bool,
+ *   future: {
+ *     tag: 'ok' | 'err',
+ *     val: any,
+ *   },
  *   pollState
  * }} Future
  */
@@ -372,12 +378,12 @@ function handle(call, id, payload) {
     case SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST:
       return createPoll(futures.get(id).pollState);
     case SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST:
-      return void futures.delete(id);
-    case SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST: {
-      const future = futures.get(id);
-      if (!future.pollState.ready) throw "would-block";
-      futures.delete(id);
-      return future;
+      return void futureDispose(id, true);
+    case SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST: {
+      const val = futureTakeValue(id);
+      if (val === undefined) throw "would-block";
+      // double take avoidance is ensured
+      return val.val;
     }
 
     // Sockets TCP
@@ -386,17 +392,17 @@ function handle(call, id, payload) {
     case SOCKET_TCP_CREATE_HANDLE:
       return createTcpSocket();
     case SOCKET_TCP_BIND_START:
-      return socketTcpBindStart(id, payload);
+      return socketTcpBindStart(id, payload.localAddress, payload.family);
     case SOCKET_TCP_BIND_FINISH:
-      return socketTcpBindFinish(id);
+      return socketTcpFinish(id, SOCKET_STATE_BIND, SOCKET_STATE_BOUND);
     case SOCKET_TCP_CONNECT_START:
-      return socketTcpConnectStart(id, payload);
+      return socketTcpConnectStart(id, payload.remoteAddress, payload.family);
     case SOCKET_TCP_CONNECT_FINISH:
-      return socketTcpConnectFinish(id);
+      return socketTcpFinish(id, SOCKET_STATE_CONNECT, SOCKET_STATE_CONNECTION);
     case SOCKET_TCP_LISTEN_START:
       return socketTcpListenStart(id);
     case SOCKET_TCP_LISTEN_FINISH:
-      return socketTcpListenFinish(id);
+      return socketTcpFinish(id, SOCKET_STATE_LISTEN, SOCKET_STATE_LISTENER);
     case SOCKET_TCP_IS_LISTENING:
       return socketTcpIsListening(id);
     case SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE:
@@ -556,8 +562,7 @@ function handle(call, id, payload) {
         Math.min(stream.stream.readableLength, Number(payload))
       );
       if (res) return res;
-      if (stream.stream.readableEnded)
-        return { tag: "closed" };
+      if (stream.stream.readableEnded) return { tag: "closed" };
       return new Uint8Array();
     }
     case INPUT_STREAM_BLOCKING_READ: {
@@ -595,7 +600,7 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_CHECK_WRITE: {
       const { stream, pollState } = getStreamOrThrow(id);
       const bytes = stream.writableHighWaterMark - stream.writableLength;
-      if (bytes === 0) pollStateWait(pollState);
+      if (bytes === 0) pollState.ready = false;
       return BigInt(bytes);
     }
     case OUTPUT_STREAM_WRITE: {
@@ -620,11 +625,11 @@ function handle(call, id, payload) {
           "wasi-io trap: Cannot write more than permitted writable length"
         );
       }
-      pollStateWait(stream.pollState);
+      stream.pollState.ready = false;
       return (stream.flushPromise = new Promise((resolve, reject) => {
         stream.stream.write(payload, (err) => {
           stream.flushPromise = null;
-          pollStateReady(stream.pollState, false);
+          pollStateReady(stream.pollState);
           if (err) return void reject(streamError(err));
           resolve(BigInt(payload.byteLength));
         });
@@ -633,7 +638,7 @@ function handle(call, id, payload) {
     case OUTPUT_STREAM_FLUSH: {
       const stream = getStreamOrThrow(id);
       if (stream.flushPromise) return;
-      pollStateWait(stream.pollState);
+      stream.pollState.ready = false;
       return (stream.flushPromise = new Promise((resolve, reject) => {
         stream.stream.write(new Uint8Array([]), (err) => {
           stream.flushPromise = null;
@@ -771,22 +776,17 @@ function handle(call, id, payload) {
         );
       return;
 
-    case FUTURE_GET_VALUE_AND_DISPOSE: {
-      const future = futures.get(id);
-      if (!future.pollState.ready) throw undefined;
-      return { value: future.value, error: future.error };
-    }
+    case FUTURE_TAKE_VALUE:
+      return futureTakeValue(id);
+
     case FUTURE_SUBSCRIBE: {
-      const future = futures.get(id);
+      const { pollState } = futures.get(id);
       const pollId = ++pollCnt;
-      polls.set(pollId, future.pollState);
+      polls.set(pollId, pollState);
       return pollId;
     }
-    case FUTURE_DISPOSE: {
-      const future = futures.get(id);
-      verifyPollsDroppedForDrop(future.pollState, "future");
-      return void futures.delete(id);
-    }
+    case FUTURE_DISPOSE:
+      return void futureDispose(id, true);
     default:
       throw new Error(
         `wasi-io trap: Unknown call ${call} (${reverseMap[call]}) with type ${
@@ -826,20 +826,9 @@ export function verifyPollsDroppedForDrop(pollState, polledResourceDebugName) {
     const poll = polls.get(pollId);
     if (poll)
       throw new Error(
-        `wasi-io trap: Cannot drop ${polledResourceDebugName} as it has a child poll resource which has not been dropped yet`
+        `wasi-io trap: Cannot drop ${polledResourceDebugName} as it has a child poll resource which have not been dropped yet`
       );
   }
-}
-
-/**
- * @param {PollState} pollState
- */
-export function pollStateWait(pollState) {
-  pollState.ready = false;
-  if (pollState.listener)
-    throw new Error(
-      "wasi-io trap: poll has a listener and just transitioned back to wait"
-    );
 }
 
 /**
@@ -873,9 +862,10 @@ function pollStateCheck(pollState) {
     if (
       pollState.ready &&
       stream.readableLength === 0 &&
-      !stream.readableEnded && !stream.errored
+      !stream.readableEnded &&
+      !stream.errored
     ) {
-      pollStateWait(pollState);
+      pollState.ready = false;
       stream.once("readable", () => {
         pollStateReady(pollState);
       });
@@ -883,28 +873,61 @@ function pollStateCheck(pollState) {
   }
 }
 
-export function createFuture(promise) {
+/**
+ *
+ * @param {Promise<any>} promise
+ * @param {PollState | undefined} pollState
+ * @returns {number}
+ */
+export function createFuture(promise, pollState) {
   const futureId = ++futureCnt;
-  const pollState = {
-    ready: false,
-    listener: null,
-    polls: [],
-    parent: null,
-  };
-  const future = { error: false, value: null, pollState };
-  futures.set(futureId, future);
+  if (pollState) {
+    pollState.ready = false;
+  } else {
+    pollState = {
+      ready: false,
+      listener: null,
+      polls: [],
+      parent: null,
+    };
+  }
+  const future = { tag: "ok", val: null };
+  futures.set(futureId, { future, pollState });
   promise.then(
     (value) => {
       pollStateReady(pollState);
-      future.value = value;
+      future.val = value;
     },
     (value) => {
       pollStateReady(pollState);
-      future.error = true;
-      future.value = value;
+      future.tag = "err";
+      future.val = value;
     }
   );
   return futureId;
+}
+
+/**
+ * @param {number} id
+ * @returns {undefined | { tag: 'ok', val: any } | { tag: 'err', val: undefined }}
+ * @throws {undefined}
+ */
+export function futureTakeValue(id) {
+  const future = futures.get(id);
+  // Not ready = return undefined
+  if (!future.pollState.ready) return undefined;
+  // Ready but already taken = return { tag: 'err', val: undefined }
+  if (!future.future) return { tag: "err", val: undefined };
+  const out = { tag: "ok", val: future.future };
+  future.future = null;
+  return out;
+}
+
+export function futureDispose(id, ownsState) {
+  const { pollState } = futures.get(id);
+  if (ownsState)
+    verifyPollsDroppedForDrop(pollState, "future");
+  return void futures.delete(id);
 }
 
 let uncaughtException;

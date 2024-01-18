@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 import {
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
-  SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
+  SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
   SOCKET_TCP_ACCEPT,
   SOCKET_TCP_BIND_FINISH,
@@ -47,7 +47,6 @@ import {
   ipv4ToTuple,
   ipv6ToTuple,
   serializeIpAddress,
-  isUnicastIpAddress,
   isWildcardAddress,
 } from "./sockets/socket-common.js";
 
@@ -119,24 +118,23 @@ class ResolveAddressStream {
   #error = false;
   resolveNextAddress() {
     if (!this.#data) {
-      ({ value: this.#data, error: this.#error } = ioCall(
-        SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST,
-        this.#id,
-        null
-      ));
+      const res = ioCall(SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST, this.#id, null);
+      this.#data = res.val;
+      this.#error = res.tag === "err";
     }
     if (this.#error) throw this.#data;
     if (this.#curItem < this.#data.length) return this.#data[this.#curItem++];
     return undefined;
   }
   subscribe() {
-    if (this.#data) return resolvedPoll;
-    return pollableCreate(
-      ioCall(SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST, this.#id, null)
-    );
+    if (this.#id)
+      return pollableCreate(
+        ioCall(SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST, this.#id, null)
+      );
+    return resolvedPoll;
   }
   [symbolDispose]() {
-    if (!this.#data) ioCall(SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST, null, null);
+    if (this.#id) ioCall(SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST, this.#id, null);
   }
   static _resolveAddresses(network, name) {
     if (!mayDnsLookup(network)) throw "permanent-resolver-failure";
@@ -203,7 +201,7 @@ class TcpSocket {
     // Node.js doesn't give us the ability to detect the OS default,
     // therefore we hardcode the default value instead of using the OS default,
     // since we would never be able to report it as a return value otherwise.
-    // We could make this configurable as a glboal JCO implementation configuration
+    // We could make this configurable as a global JCO implementation configuration
     // instead.
     keepAliveIdleTime: 7200_000_000_000n,
 
@@ -229,9 +227,10 @@ class TcpSocket {
   }
   startBind(network, localAddress) {
     if (!mayTcp(network)) throw "access-denied";
-    if (this.#family !== localAddress.tag || !isUnicastIpAddress(localAddress))
-      throw "invalid-argument";
-    ioCall(SOCKET_TCP_BIND_START, this.#id, localAddress);
+    ioCall(SOCKET_TCP_BIND_START, this.#id, {
+      localAddress,
+      family: this.#family,
+    });
     this.#network = network;
   }
   finishBind() {
@@ -537,8 +536,7 @@ class UdpSocket {
   startBind(network, localAddress) {
     if (!mayUdp(network)) throw "access-denied";
     if (this.#state !== SOCKET_STATE_INIT) throw "invalid-state";
-    if (this.#family !== localAddress.tag)
-      throw "invalid-argument";
+    if (this.#family !== localAddress.tag) throw "invalid-argument";
     this.#bindOrConnectAddress = localAddress;
     this.#network = network;
     this.#state = SOCKET_STATE_BIND;
@@ -594,8 +592,7 @@ class UdpSocket {
       }
 
       if (isWildcardAddress(remoteAddress)) throw "invalid-argument";
-      if (remoteAddress.tag !== this.#family)
-        throw "invalid-argument";
+      if (remoteAddress.tag !== this.#family) throw "invalid-argument";
       if (remoteAddress.val.port === 0) throw "invalid-argument";
 
       const host = serializeIpAddress(remoteAddress);

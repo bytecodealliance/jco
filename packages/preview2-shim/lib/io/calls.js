@@ -50,7 +50,7 @@ export const POLL_POLL_LIST = ++call_id << CALL_SHIFT;
 
 // Futures
 export const FUTURE_DISPOSE = ++call_id << CALL_SHIFT;
-export const FUTURE_GET_VALUE_AND_DISPOSE = ++call_id << CALL_SHIFT;
+export const FUTURE_TAKE_VALUE = ++call_id << CALL_SHIFT;
 export const FUTURE_SUBSCRIBE = ++call_id << CALL_SHIFT;
 
 // Http
@@ -102,7 +102,7 @@ export const SOCKET_UDP_SET_SEND_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_UNICAST_HOP_LIMIT = ++call_id << CALL_SHIFT;
 // Name lookup
 export const SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST = ++call_id << CALL_SHIFT;
-export const SOCKET_RESOLVE_ADDRESS_GET_AND_DISPOSE_REQUEST = ++call_id << CALL_SHIFT;
+export const SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST = ++call_id << CALL_SHIFT;
 export const SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST = ++call_id << CALL_SHIFT;
 export const SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST = ++call_id << CALL_SHIFT;
 
