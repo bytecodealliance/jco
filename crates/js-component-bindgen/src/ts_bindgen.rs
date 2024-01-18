@@ -688,7 +688,7 @@ impl<'a> TsInterface<'a> {
                         iface.src.push_str(&format!("static '{out_name}'"))
                     }
                 }
-                FunctionKind::Constructor(_) => {}
+                FunctionKind::Constructor(_) => iface.src.push_str("constructor")
             }
         }
 
