@@ -483,12 +483,12 @@ suite("Node.js Preview2", () => {
 
       socket.startBind(network, localAddress);
       socket.finishBind();
-      socket.stream(remoteAddress);
+      socket.stream();
 
       strictEqual(socket.addressFamily(), "ipv6");
 
       const boundAddress = socket.localAddress();
-      notDeepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
+      deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
       strictEqual(boundAddress.val.port, 1337);
     });
   });
