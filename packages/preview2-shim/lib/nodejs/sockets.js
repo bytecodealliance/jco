@@ -1,11 +1,9 @@
 import {
-  SOCKET_INCOMING_DATAGRAM_STREAM_DISPOSE,
+  SOCKET_DATAGRAM_STREAM_DISPOSE,
+  SOCKET_DATAGRAM_STREAM_SUBSCRIBE,
   SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE,
-  SOCKET_INCOMING_DATAGRAM_STREAM_SUBSCRIBE,
   SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND,
-  SOCKET_OUTGOING_DATAGRAM_STREAM_DISPOSE,
   SOCKET_OUTGOING_DATAGRAM_STREAM_SEND,
-  SOCKET_OUTGOING_DATAGRAM_STREAM_SUBSCRIBE,
   SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
@@ -32,7 +30,10 @@ import {
   SOCKET_UDP_CREATE_HANDLE,
   SOCKET_UDP_DISPOSE,
   SOCKET_UDP_GET_LOCAL_ADDRESS,
+  SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE,
   SOCKET_UDP_GET_REMOTE_ADDRESS,
+  SOCKET_UDP_GET_SEND_BUFFER_SIZE,
+  SOCKET_UDP_GET_UNICAST_HOP_LIMIT,
   SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE,
   SOCKET_UDP_SET_SEND_BUFFER_SIZE,
   SOCKET_UDP_SET_UNICAST_HOP_LIMIT,
@@ -193,7 +194,7 @@ class TcpSocket {
     this.#network = network;
   }
   finishBind() {
-    ioCall(SOCKET_TCP_BIND_FINISH, this.#id);
+    ioCall(SOCKET_TCP_BIND_FINISH, this.#id, null);
   }
   startConnect(network, remoteAddress) {
     if (this.#network && network !== this.#network) throw "invalid-argument";
@@ -343,26 +344,29 @@ export const tcp = {
   TcpSocket,
 };
 
+const udpDefaultOptions = {
+  // These default configurations will override the default
+  // system ones. This is because we are unable to get the configuration
+  // value for unbound sockets in Node.js, therefore we always
+  // enforce these local default values from the start.
+  // Like for TCP, configuration of these JCO defaults can be added in future.
+  unicastHopLimit: 64,
+  receiveBufferSize: 8192n,
+  sendBufferSize: 8192n,
+};
+
 class UdpSocket {
   #id;
   #network;
   #family;
-  #bound = false;
-  #options = {
-    // These default configurations will override the default
-    // system ones. This is because we are unable to get the configuration
-    // value for unbound sockets in Node.js, therefore we always
-    // enforce these local default values from the start.
-    // Like for TCP, configuration of these JCO defaults can be added in future.
-    unicastHopLimit: 64,
-    receiveBufferSize: 8192n,
-    sendBufferSize: 8192n,
-  };
   static _create(addressFamily) {
     if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
       throw "not-supported";
     const socket = new UdpSocket();
-    socket.#id = ioCall(SOCKET_UDP_CREATE_HANDLE, null, addressFamily);
+    socket.#id = ioCall(SOCKET_UDP_CREATE_HANDLE, null, {
+      family: addressFamily,
+      ...udpDefaultOptions,
+    });
     socket.#family = addressFamily;
     return socket;
   }
@@ -375,8 +379,7 @@ class UdpSocket {
     this.#network = network;
   }
   finishBind() {
-    ioCall(SOCKET_UDP_BIND_FINISH, this.#id, this.#options);
-    this.#bound = true;
+    ioCall(SOCKET_UDP_BIND_FINISH, this.#id, null);
   }
   stream(remoteAddress) {
     if (!mayUdp(this.#network)) throw "access-denied";
@@ -400,29 +403,25 @@ class UdpSocket {
     return this.#family;
   }
   unicastHopLimit() {
-    return this.#options.unicastHopLimit;
+    return ioCall(SOCKET_UDP_GET_UNICAST_HOP_LIMIT, this.#id);
   }
   setUnicastHopLimit(value) {
     if (value < 1) throw "invalid-argument";
-    this.#options.unicastHopLimit = value;
-    if (this.#bound) ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.#id, value);
+    ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.#id, value);
   }
   receiveBufferSize() {
-    return this.#options.receiveBufferSize;
+    return ioCall(SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE, this.#id);
   }
   setReceiveBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
-    this.#options.receiveBufferSize = value;
-    if (this.#bound)
-      ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.#id, value);
+    ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.#id, value);
   }
   sendBufferSize() {
-    return this.#options.sendBufferSize;
+    return ioCall(SOCKET_UDP_GET_SEND_BUFFER_SIZE, this.#id);
   }
   setSendBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
-    this.#options.sendBufferSize = value;
-    if (this.#bound) ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.#id, value);
+    ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.#id, value);
   }
   subscribe() {
     return pollableCreate(ioCall(SOCKET_UDP_SUBSCRIBE, this.#id, null));
@@ -451,11 +450,11 @@ class IncomingDatagramStream {
   }
   subscribe() {
     return pollableCreate(
-      ioCall(SOCKET_INCOMING_DATAGRAM_STREAM_SUBSCRIBE, this.#id, null)
+      ioCall(SOCKET_DATAGRAM_STREAM_SUBSCRIBE, this.#id, null)
     );
   }
   [symbolDispose]() {
-    ioCall(SOCKET_INCOMING_DATAGRAM_STREAM_DISPOSE, this.#id, null);
+    ioCall(SOCKET_DATAGRAM_STREAM_DISPOSE, this.#id, null);
   }
 }
 const incomingDatagramStreamCreate = IncomingDatagramStream._create;
@@ -476,11 +475,11 @@ class OutgoingDatagramStream {
   }
   subscribe() {
     return pollableCreate(
-      ioCall(SOCKET_OUTGOING_DATAGRAM_STREAM_SUBSCRIBE, this.#id, null)
+      ioCall(SOCKET_DATAGRAM_STREAM_SUBSCRIBE, this.#id, null)
     );
   }
   [symbolDispose]() {
-    ioCall(SOCKET_OUTGOING_DATAGRAM_STREAM_DISPOSE, this.#id, null);
+    ioCall(SOCKET_DATAGRAM_STREAM_DISPOSE, this.#id, null);
   }
 }
 const outgoingDatagramStreamCreate = OutgoingDatagramStream._create;

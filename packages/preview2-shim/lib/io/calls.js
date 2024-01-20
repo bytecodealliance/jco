@@ -94,17 +94,18 @@ export const SOCKET_UDP_STREAM = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SUBSCRIBE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_DISPOSE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_GET_LOCAL_ADDRESS = ++call_id << CALL_SHIFT;
+export const SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_GET_REMOTE_ADDRESS = ++call_id << CALL_SHIFT;
+export const SOCKET_UDP_GET_SEND_BUFFER_SIZE = ++call_id << CALL_SHIFT;
+export const SOCKET_UDP_GET_UNICAST_HOP_LIMIT = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_SEND_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_UNICAST_HOP_LIMIT = ++call_id << CALL_SHIFT;
 export const SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE = ++call_id << CALL_SHIFT;
-export const SOCKET_INCOMING_DATAGRAM_STREAM_SUBSCRIBE = ++call_id << CALL_SHIFT;
-export const SOCKET_INCOMING_DATAGRAM_STREAM_DISPOSE = ++call_id << CALL_SHIFT;
 export const SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND = ++call_id << CALL_SHIFT;
 export const SOCKET_OUTGOING_DATAGRAM_STREAM_SEND = ++call_id << CALL_SHIFT;
-export const SOCKET_OUTGOING_DATAGRAM_STREAM_SUBSCRIBE = ++call_id << CALL_SHIFT;
-export const SOCKET_OUTGOING_DATAGRAM_STREAM_DISPOSE = ++call_id << CALL_SHIFT;
+export const SOCKET_DATAGRAM_STREAM_SUBSCRIBE = ++call_id << CALL_SHIFT;
+export const SOCKET_DATAGRAM_STREAM_DISPOSE = ++call_id << CALL_SHIFT;
 
 // Name lookup
 export const SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST = ++call_id << CALL_SHIFT;

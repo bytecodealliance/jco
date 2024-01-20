@@ -3,8 +3,8 @@ import {
   createFuture,
   futureDispose,
   futureTakeValue,
-  // pollStateReady,
-  // verifyPollsDroppedForDrop,
+  pollStateReady,
+  verifyPollsDroppedForDrop,
 } from "./worker-thread.js";
 import {
   convertSocketError,
@@ -27,7 +27,11 @@ import {
  *
  *
  * @typedef {{
- *   state: number
+ *   state: number,
+ *   remoteAddress: string | null,
+ *   sendBufferSize: number,
+ *   receiveBufferSize: number,
+ *   unicastHopLimit: number,
  *   udpSocket: import('node:dgram').Socket,
  *   future: number | null,
  *   serializedLocalAddress: string | null,
@@ -37,18 +41,19 @@ import {
  * }} UdpSocketRecord
  *
  * @typedef {{
+ *   active: bool,
+ *   error: any | null,
+ *   udpSocket: import('node:dgram').Socket,
  *   pollState: PollState,
- * }} IncomingDatagramStreamRecord
- *
- * @typedef {{
- *   pollState: PollState,
- * }} OutgoingDatagramStreamRecord
+ *   queue: Buffer[],
+ *   queueByteLen: number,
+ *   cleanup: () => void | null,
+ * }} DatagramStreamRecord
  *
  */
 
 let udpSocketCnt = 0,
-  incomingDatagramStreamCnt,
-  outgoingDatagramStreamCnt;
+  datagramStreamCnt = 0;
 
 /**
  * @type {Map<number, UdpSocketRecord>}
@@ -56,20 +61,20 @@ let udpSocketCnt = 0,
 export const udpSockets = new Map();
 
 /**
- * @type {Map<number, IncomingDatagramStreamRecord>}
+ * @type {Map<number, DatagramStreamRecord>}
  */
-export const incomingDatagramStreams = new Map();
-
-/**
- * @type {Map<number, OutgoingDatagramStreamRecord>}
- */
-export const outgoingDatagramStreams = new Map();
+export const datagramStreams = new Map();
 
 /**
  * @param {IpAddressFamily} addressFamily
  * @returns {number}
  */
-export function createUdpSocket(family) {
+export function createUdpSocket({
+  family,
+  sendBufferSize,
+  receiveBufferSize,
+  unicastHopLimit,
+}) {
   const udpSocket = createSocket({
     type: family === "ipv6" ? "udp6" : "udp4",
     reuseAddr: false,
@@ -78,6 +83,10 @@ export function createUdpSocket(family) {
   });
   udpSockets.set(++udpSocketCnt, {
     state: SOCKET_STATE_INIT,
+    remoteAddress: null,
+    sendBufferSize: Number(sendBufferSize),
+    receiveBufferSize: Number(receiveBufferSize),
+    unicastHopLimit,
     udpSocket,
     future: null,
     serializedLocalAddress: null,
@@ -88,18 +97,55 @@ export function createUdpSocket(family) {
   return udpSocketCnt;
 }
 
-function createIncomingDatagramStream(_udpSocket) {
-  incomingDatagramStreams.set(incomingDatagramStreamCnt++, {
-    pollState: { ready: true, listener: null, polls: [], parentStream: null },
-  });
-  return incomingDatagramStreamCnt;
+function createIncomingDatagramStream(udpSocket) {
+  const id = ++datagramStreamCnt;
+  const datagramStream = {
+    id,
+    active: true,
+    error: null,
+    udpSocket,
+    queue: [],
+    queueByteLen: 0,
+    cleanup,
+    pollState: { ready: false, listener: null, polls: [], parentStream: null },
+  };
+  datagramStreams.set(id, datagramStream);
+  function cleanup() {
+    udpSocket.off("message", onMessage);
+    udpSocket.off("error", onError);
+  }
+  function onMessage(msg, rinfo) {
+    process._rawDebug("MSG", msg, rinfo);
+  }
+  function onError(err) {
+    datagramStream.error = err;
+    pollStateReady(datagramStream.pollState);
+  }
+  udpSocket.on("message", onMessage);
+  udpSocket.once("error", onError);
+  return datagramStream;
 }
 
-function createOutgoingDatagramStream(_udpSocket) {
-  outgoingDatagramStreams.set(outgoingDatagramStreamCnt++, {
+function createOutgoingDatagramStream(udpSocket) {
+  const id = ++datagramStreamCnt;
+  const datagramStream = {
+    id,
+    active: true,
+    error: null,
+    udpSocket,
+    cleanup,
     pollState: { ready: true, listener: null, polls: [], parentStream: null },
-  });
-  return incomingDatagramStreamCnt;
+  };
+  datagramStreams.set(id, datagramStream);
+  udpSocket.on("error", onError);
+  function onError(err) {
+    datagramStream.error = err;
+    pollStateReady(datagramStream.pollState);
+  }
+  function cleanup() {
+    udpSocket.off("error", onError);
+  }
+  return datagramStream;
 }
 
 export function socketUdpBindStart(id, localAddress, family) {
@@ -120,21 +166,20 @@ export function socketUdpBindStart(id, localAddress, family) {
         udpSocket.off("error", bindErr);
       }
       function bindErr(err) {
+        process._rawDebug(err);
         reject(convertSocketError(err));
         udpSocket.off("listening", bindOk);
       }
       udpSocket.once("listening", bindOk);
       udpSocket.once("error", bindErr);
+      process._rawDebug(localAddress, family);
       udpSocket.bind(localAddress.val.port, serializedLocalAddress);
     }),
     socket.pollState
   );
 }
 
-export function socketUdpBindFinish(
-  id,
-  { unicastHopLimit, receiveBufferSize, sendBufferSize }
-) {
+export function socketUdpBindFinish(id) {
   const socket = udpSockets.get(id);
   if (socket.state !== SOCKET_STATE_BIND) throw "not-in-progress";
   if (!socket.pollState.ready) throw "would-block";
@@ -147,9 +192,9 @@ export function socketUdpBindFinish(
   } else {
     // once bound, we can now set the options
     // since Node.js doesn't support setting them until bound
-    socket.udpSocket.setTTL(unicastHopLimit);
-    socket.udpSocket.setRecvBufferSize(Number(receiveBufferSize));
-    socket.udpSocket.setSendBufferSize(Number(sendBufferSize));
+    socket.udpSocket.setTTL(socket.unicastHopLimit);
+    socket.udpSocket.setRecvBufferSize(socket.sendBufferSize);
+    socket.udpSocket.setSendBufferSize(socket.receiveBufferSize);
     socket.state = SOCKET_STATE_BOUND;
     return val;
   }
@@ -213,6 +258,9 @@ export function socketUdpStream(id, remoteAddress) {
   )
     throw "invalid-state";
 
+  if (socket.state === SOCKET_STATE_INIT && !remoteAddress)
+    throw "invalid-state";
+
   if (
     remoteAddress &&
     (remoteAddress.val.port === 0 ||
@@ -222,8 +270,8 @@ export function socketUdpStream(id, remoteAddress) {
     throw "invalid-argument";
 
   if (socket.state === SOCKET_STATE_CONNECTION) {
-    socketIncomingDatagramStreamDispose(socket.incomingDatagramStream);
-    socketOutgoingDatagramStreamDispose(socket.outgoingDatagramStream);
+    socketDatagramStreamClear(socket.incomingDatagramStream);
+    socketDatagramStreamClear(socket.outgoingDatagramStream);
     try {
       udpSocket.disconnect();
     } catch (e) {
@@ -232,37 +280,95 @@ export function socketUdpStream(id, remoteAddress) {
   }
 
   if (remoteAddress) {
+    const serializedRemoteAddress = serializeIpAddress(remoteAddress);
+    socket.remoteAddress = `${serializedRemoteAddress}:${remoteAddress.port}`;
     return new Promise((resolve, reject) => {
       function connectOk() {
+        if (socket.state === SOCKET_STATE_INIT) {
+          socket.udpSocket.setTTL(socket.unicastHopLimit);
+          socket.udpSocket.setRecvBufferSize(socket.sendBufferSize);
+          socket.udpSocket.setSendBufferSize(socket.receiveBufferSize);
+        }
         udpSocket.off("error", connectErr);
         socket.state = SOCKET_STATE_CONNECTION;
         resolve([
           (socket.incomingDatagramStream =
-            createIncomingDatagramStream(udpSocket)),
+            createIncomingDatagramStream(udpSocket)).id,
           (socket.outgoingDatagramStream =
-            createOutgoingDatagramStream(udpSocket)),
+            createOutgoingDatagramStream(udpSocket)).id,
         ]);
       }
       function connectErr(err) {
         udpSocket.off("connect", connectOk);
         reject(convertSocketError(err));
       }
-
       udpSocket.once("connect", connectOk);
       udpSocket.once("error", connectErr);
-
-      udpSocket.connect(
-        remoteAddress?.val.port ?? 1,
-        remoteAddress ? serializeIpAddress(remoteAddress) : undefined
-      );
+      udpSocket.connect(remoteAddress.val.port, serializedRemoteAddress);
     });
   } else {
     socket.state = SOCKET_STATE_BOUND;
+    socket.remoteAddress = null;
     return [
-      (socket.incomingDatagramStream = createIncomingDatagramStream(udpSocket)),
-      (socket.outgoingDatagramStream = createOutgoingDatagramStream(udpSocket)),
+      (socket.incomingDatagramStream = createIncomingDatagramStream(udpSocket))
+        .id,
+      (socket.outgoingDatagramStream = createOutgoingDatagramStream(udpSocket))
+        .id,
     ];
   }
+}
+
+export function socketUdpSetReceiveBufferSize(id, bufferSize) {
+  const socket = udpSockets.get(id);
+  bufferSize = Number(bufferSize);
+  if (socket.state !== SOCKET_STATE_INIT) {
+    try {
+      socket.udpSocket.setRecvBufferSize(bufferSize);
+    } catch (err) {
+      throw convertSocketError(err);
+    }
+  }
+  socket.receiveBufferSize = bufferSize;
+}
+
+export function socketUdpSetSendBufferSize(id, bufferSize) {
+  const socket = udpSockets.get(id);
+  bufferSize = Number(bufferSize);
+  if (socket.state !== SOCKET_STATE_INIT) {
+    try {
+      socket.udpSocket.setSendBufferSize(bufferSize);
+    } catch (err) {
+      throw convertSocketError(err);
+    }
+  }
+  socket.sendBufferSize = bufferSize;
+}
+
+export function socketUdpSetUnicastHopLimit(id, hopLimit) {
+  const socket = udpSockets.get(id);
+  if (socket.state !== SOCKET_STATE_INIT) {
+    try {
+      socket.udpSocket.setTTL(hopLimit);
+    } catch (err) {
+      throw convertSocketError(err);
+    }
+  }
+  socket.unicastHopLimit = hopLimit;
+}
+
+export function socketUdpGetReceiveBufferSize(id) {
+  const { receiveBufferSize } = udpSockets.get(id);
+  return BigInt(receiveBufferSize);
+}
+
+export function socketUdpGetSendBufferSize(id) {
+  const { sendBufferSize } = udpSockets.get(id);
+  return BigInt(sendBufferSize);
+}
+
+export function socketUdpGetUnicastHopLimit(id) {
+  const { unicastHopLimit } = udpSockets.get(id);
+  return unicastHopLimit;
 }
 
 // udpSocket.on("message", (data, rinfo) => {
@@ -309,33 +415,95 @@ export function socketUdpDispose(id) {
 }
 
 export function socketIncomingDatagramStreamReceive(id, maxResults) {
-  // eslint-disable-next-line
-  const incomingDatagramStream = incomingDatagramStreams.get(id);
+  const { active } = datagramStreams.get(id);
+  if (!active)
+    throw new Error(
+      "wasi-io trap: attempt to receive on inactive incoming datagram stream"
+    );
   if (maxResults === 0n) return [];
   // patch up local addres on received dgram
   throw new Error("TODO");
 }
 
-export function socketOutgoingDatagramStreamSend(id, _datagrams) {
-  // eslint-disable-next-line
-  const outgoingDatagramStream = outgoingDatagramStreams.get(id);
-  return BigInt(24);
+export function socketOutgoingDatagramStreamSend(id, datagrams) {
+  const { active, udpSocket } = datagramStreams.get(id);
+  if (!active)
+    throw new Error(
+      "wasi-io trap: writing to inactive outgoing datagram stream"
+    );
+
+  const datagramsToSend = datagrams.map(({ data, remoteAddress }) => {
+    const address = remoteAddress
+      ? serializeIpAddress(remoteAddress)
+      : undefined;
+    const port = remoteAddress?.val.port;
+    if (
+      remoteAddress &&
+      udpSocket.remoteAddress &&
+      udpSocket.remoteAddress !== `${address}:${port}`
+    )
+      throw "invalid-argument";
+    return { data, address, port };
+  });
+
+  return new Promise((resolve, reject) => {
+    let sent = 0;
+    let errored = false;
+    for (const { data, address, port } of datagramsToSend) {
+      if (errored) break;
+      udpSocket.send(data, undefined, undefined, port, address, (err) => {
+        if (err) {
+          process._rawDebug(err);
+          errored = true;
+          if (sent > 0) resolve(BigInt(sent));
+          else reject(convertSocketError(err));
+          return;
+        }
+        sent++;
+        if (sent === datagrams.length) {
+          resolve(BigInt(sent));
+        }
+      });
+    }
+  });
 }
 
 export function socketOutgoingDatagramStreamCheckSend(id) {
-  // eslint-disable-next-line
-  const outgoingDatagramStream = outgoingDatagramStreams.get(id);
-  return BigInt(24);
+  const { active, udpSocket } = datagramStreams.get(id);
+  if (!active)
+    throw new Error(
+      "wasi-io trap: check send on inactive outgoing datagram stream"
+    );
+  try {
+    process._rawDebug(udpSocket.sendBufferSize);
+    return BigInt(
+      Math.floor(
+        (udpSocket.sendBufferSize - udpSocket.getSendQueueSize()) / 1500
+      )
+    );
+  } catch (err) {
+    process._rawDebug(err);
+    throw convertSocketError(err.errno);
+  }
 }
 
-export function socketIncomingDatagramStreamDispose(id) {
-  // eslint-disable-next-line
-  const outgoingDatagramStream = outgoingDatagramStreams.get(id);
+function socketDatagramStreamClear(datagramStream) {
+  datagramStream.active = false;
+  if (datagramStream.cleanup) {
+    datagramStream.cleanup();
+    datagramStream.cleanup = null;
+  }
 }
 
-export function socketOutgoingDatagramStreamDispose(id) {
-  // eslint-disable-next-line
-  const incomingDatagramStream = incomingDatagramStreams.get(id);
+export function socketDatagramStreamDispose(id) {
+  const datagramStream = datagramStreams.get(id);
+  datagramStream.active = false;
+  if (datagramStream.cleanup) {
+    datagramStream.cleanup();
+    datagramStream.cleanup = null;
+  }
+  verifyPollsDroppedForDrop(datagramStream.pollState, "datagram stream");
+  datagramStreams.delete(id);
 }
 
 // if (datagrams.length === 0) {
@@ -414,15 +582,6 @@ export function socketOutgoingDatagramStreamDispose(id) {
 // }
 
 // //-----------------------------------------------------
-
-// export function socketUdpCheckSend(id) {
-//   const socket = udpSockets.get(id);
-//   try {
-//     return socket.getSendBufferSize() - socket.getSendQueueSize();
-//   } catch (err) {
-//     return err.errno;
-//   }
-// }
 
 // export function socketUdpSend(id, payload) {
 //   let { remoteHost, remotePort, data } = payload;
