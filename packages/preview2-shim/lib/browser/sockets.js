@@ -65,12 +65,6 @@ export const tcp = {
   addressFamily() {
   
   },
-  ipv6Only() {
-  
-  },
-  setIpv6Only() {
-  
-  },
   setListenBacklogSize() {
   
   },
@@ -149,14 +143,6 @@ export const udp = {
   },
   
   addressFamily () {
-  
-  },
-  
-  ipv6Only () {
-  
-  },
-  
-  setIpv6Only () {
   
   },
   

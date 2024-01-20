@@ -15,8 +15,7 @@
       "types": "./types/*.d.ts",
       "node": "./lib/nodejs/*.js",
       "default": "./lib/browser/*.js"
-    },
-    "./sockets/*": null
+    }
   },
   "scripts": {
     "test": "mocha -u tdd test/test.js --timeout 10000"
