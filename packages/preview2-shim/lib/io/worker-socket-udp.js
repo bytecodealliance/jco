@@ -7,20 +7,19 @@ import {
   // verifyPollsDroppedForDrop,
 } from "./worker-thread.js";
 import {
-  SOCKET_STATE_INIT,
-  SOCKET_STATE_BIND,
-  SOCKET_STATE_BOUND,
-  SOCKET_STATE_CONNECTION,
-  SOCKET_STATE_CLOSED,
   convertSocketError,
   convertSocketErrorCode,
-} from "./worker-sockets.js";
-import {
-  serializeIpAddress,
-  isIPv4MappedAddress,
   deserializeIpAddress,
+  isIPv4MappedAddress,
   isWildcardAddress,
-} from "./socket-common.js";
+  noLookup,
+  serializeIpAddress,
+  SOCKET_STATE_BIND,
+  SOCKET_STATE_BOUND,
+  SOCKET_STATE_CLOSED,
+  SOCKET_STATE_CONNECTION,
+  SOCKET_STATE_INIT,
+} from "./worker-sockets.js";
 
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
@@ -47,9 +46,9 @@ import {
  *
  */
 
-let udpSocketCnt = 0;
-// incomingDatagramStreamCnt,
-// outgoingDatagramStreamCount;
+let udpSocketCnt = 0,
+  incomingDatagramStreamCnt,
+  outgoingDatagramStreamCnt;
 
 /**
  * @type {Map<number, UdpSocketRecord>}
@@ -65,10 +64,6 @@ export const incomingDatagramStreams = new Map();
  * @type {Map<number, OutgoingDatagramStreamRecord>}
  */
 export const outgoingDatagramStreams = new Map();
-
-function noLookup(ip, _opts, cb) {
-  cb(null, ip);
-}
 
 /**
  * @param {IpAddressFamily} addressFamily
@@ -91,6 +86,20 @@ export function createUdpSocket(family) {
     outgoingDatagramStream: null,
   });
   return udpSocketCnt;
+}
+
+function createIncomingDatagramStream(_udpSocket) {
+  incomingDatagramStreams.set(incomingDatagramStreamCnt++, {
+    pollState: { ready: true, listener: null, polls: [], parentStream: null },
+  });
+  return incomingDatagramStreamCnt;
+}
+
+function createOutgoingDatagramStream(_udpSocket) {
+  outgoingDatagramStreams.set(outgoingDatagramStreamCnt++, {
+    pollState: { ready: true, listener: null, polls: [], parentStream: null },
+  });
+  return incomingDatagramStreamCnt;
 }
 
 export function socketUdpBindStart(id, localAddress, family) {
@@ -142,8 +151,6 @@ export function socketUdpBindFinish(
     socket.udpSocket.setRecvBufferSize(Number(receiveBufferSize));
     socket.udpSocket.setSendBufferSize(Number(sendBufferSize));
     socket.state = SOCKET_STATE_BOUND;
-    socket.incomingDatagramStream = 1;
-    socket.outgoingDatagramStream = 2;
     return val;
   }
 }
@@ -230,8 +237,10 @@ export function socketUdpStream(id, remoteAddress) {
         udpSocket.off("error", connectErr);
         socket.state = SOCKET_STATE_CONNECTION;
         resolve([
-          (socket.incomingDatagramStream = 0),
-          (socket.outgoingDatagramStream = 0),
+          (socket.incomingDatagramStream =
+            createIncomingDatagramStream(udpSocket)),
+          (socket.outgoingDatagramStream =
+            createOutgoingDatagramStream(udpSocket)),
         ]);
       }
       function connectErr(err) {
@@ -249,7 +258,10 @@ export function socketUdpStream(id, remoteAddress) {
     });
   } else {
     socket.state = SOCKET_STATE_BOUND;
-    return [socket.incomingDatagramStream, socket.outgoingDatagramStream];
+    return [
+      (socket.incomingDatagramStream = createIncomingDatagramStream(udpSocket)),
+      (socket.outgoingDatagramStream = createOutgoingDatagramStream(udpSocket)),
+    ];
   }
 }
 
@@ -296,21 +308,68 @@ export function socketUdpDispose(id) {
   });
 }
 
-export function socketIncomingDatagramStreamReceive(_id, _maxResults) {
+export function socketIncomingDatagramStreamReceive(id, maxResults) {
+  // eslint-disable-next-line
+  const incomingDatagramStream = incomingDatagramStreams.get(id);
+  if (maxResults === 0n) return [];
+  // patch up local addres on received dgram
   throw new Error("TODO");
 }
 
-export function socketOutgoingDatagramStreamSend(_id, _datagrams) {
-  throw new Error("TODO");
+export function socketOutgoingDatagramStreamSend(id, _datagrams) {
+  // eslint-disable-next-line
+  const outgoingDatagramStream = outgoingDatagramStreams.get(id);
+  return BigInt(24);
 }
 
-export function socketOutgoingDatagramStreamCheckSend(_id) {
-  throw new Error("TODO");
+export function socketOutgoingDatagramStreamCheckSend(id) {
+  // eslint-disable-next-line
+  const outgoingDatagramStream = outgoingDatagramStreams.get(id);
+  return BigInt(24);
 }
 
-export function socketIncomingDatagramStreamDispose(_id) {}
+export function socketIncomingDatagramStreamDispose(id) {
+  // eslint-disable-next-line
+  const outgoingDatagramStream = outgoingDatagramStreams.get(id);
+}
 
-export function socketOutgoingDatagramStreamDispose(_id) {}
+export function socketOutgoingDatagramStreamDispose(id) {
+  // eslint-disable-next-line
+  const incomingDatagramStream = incomingDatagramStreams.get(id);
+}
+
+// if (datagrams.length === 0) {
+//   return 0n;
+// }
+
+// let datagramsSent = 0n;
+
+// for (const datagram of datagrams) {
+//   const { data, remoteAddress } = datagram;
+//   const remotePort = remoteAddress?.val?.port || undefined;
+//   const host = serializeIpAddress(remoteAddress);
+
+//   if (this.checkSend() < data.length) throw "datagram-too-large";
+//   // TODO: add the other assertions
+
+//   const ret = ioCall(
+//     SOCKET_UDP_SEND,
+//     this.#id, // socket that's sending the datagrams
+//     {
+//       data,
+//       remotePort,
+//       remoteHost: host,
+//     }
+//   );
+//   if (ret === 0) {
+//     datagramsSent++;
+//   } else {
+//     if (ret === -65) throw "remote-unreachable";
+//   }
+// }
+
+// return datagramsSent;
+// return ioCall(SOCKET_OUTGOING_DATAGRAM_STREAM_SEND, this.#id)
 
 // /**
 //  * @type {Map<number, Map<string, { data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>}

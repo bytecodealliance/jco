@@ -10,24 +10,23 @@ import {
 } from "./worker-thread.js";
 const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
 import {
+  convertSocketError,
+  convertSocketErrorCode,
   deserializeIpAddress,
   isIPv4MappedAddress,
   isMulticastIpAddress,
   isUnicastIpAddress,
   isWildcardAddress,
+  noLookup,
   serializeIpAddress,
-} from "./socket-common.js";
-import {
-  convertSocketError,
-  convertSocketErrorCode,
-  SOCKET_STATE_INIT,
   SOCKET_STATE_BIND,
   SOCKET_STATE_BOUND,
-  SOCKET_STATE_LISTEN,
-  SOCKET_STATE_LISTENER,
+  SOCKET_STATE_CLOSED,
   SOCKET_STATE_CONNECT,
   SOCKET_STATE_CONNECTION,
-  SOCKET_STATE_CLOSED,
+  SOCKET_STATE_INIT,
+  SOCKET_STATE_LISTEN,
+  SOCKET_STATE_LISTENER,
 } from "./worker-sockets.js";
 import { Socket, Server } from "node:net";
 
@@ -162,9 +161,7 @@ export function socketTcpConnectStart(id, remoteAddress, family) {
       tcpSocket.connect({
         port: remoteAddress.val.port,
         host: serializeIpAddress(remoteAddress),
-        lookup: () => {
-          throw "invalid-argument";
-        },
+        lookup: noLookup
       });
     }),
     socket.pollState

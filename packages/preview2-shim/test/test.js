@@ -473,13 +473,6 @@ suite("Node.js Preview2", () => {
           port: 1337,
         },
       };
-      const remoteAddress = {
-        tag: 'ipv6',
-        val: {
-          address: [0, 0, 0, 0, 0, 0, 0, 0],
-          port: 1336,
-        },
-      };
 
       socket.startBind(network, localAddress);
       socket.finishBind();

@@ -1,4 +1,3 @@
-import { isIP } from "node:net";
 import {
   SOCKET_INCOMING_DATAGRAM_STREAM_DISPOSE,
   SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE,
@@ -47,7 +46,6 @@ import {
   pollableCreate,
   resolvedPoll,
 } from "../io/worker-io.js";
-import { ipv4ToTuple, ipv6ToTuple } from "../io/socket-common.js";
 
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpSocketAddress} IpSocketAddress
@@ -139,40 +137,7 @@ class ResolveAddressStream {
   static _resolveAddresses(network, name) {
     if (!mayDnsLookup(network)) throw "permanent-resolver-failure";
     const res = new ResolveAddressStream();
-    const isIpNum = isIP(
-      name[0] === "[" && name[name.length - 1] === "]"
-        ? name.slice(1, -1)
-        : name
-    );
-    if (isIpNum > 0) {
-      res.#data = [
-        {
-          tag: "ipv" + isIpNum,
-          val: (isIpNum === 4 ? ipv4ToTuple : ipv6ToTuple)(name),
-        },
-      ];
-    } else {
-      // verify it is a valid domain name using the URL parser
-      let parsedUrl = null;
-      try {
-        parsedUrl = new URL(`https://${name}`);
-        if (
-          parsedUrl.port.length ||
-          parsedUrl.username.length ||
-          parsedUrl.password.length ||
-          parsedUrl.pathname !== "/" ||
-          parsedUrl.search.length ||
-          parsedUrl.hash.length
-        )
-          parsedUrl = null;
-      } catch {
-        // empty
-      }
-      if (!parsedUrl) {
-        throw "invalid-argument";
-      }
-      res.#id = ioCall(SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, null, name);
-    }
+    res.#id = ioCall(SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, null, name);
     return res;
   }
 }
