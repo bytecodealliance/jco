@@ -12,7 +12,7 @@ const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
 import {
   convertSocketError,
   convertSocketErrorCode,
-  deserializeIpAddress,
+  ipSocketAddress,
   isIPv4MappedAddress,
   isMulticastIpAddress,
   isUnicastIpAddress,
@@ -161,7 +161,7 @@ export function socketTcpConnectStart(id, remoteAddress, family) {
       tcpSocket.connect({
         port: remoteAddress.val.port,
         host: serializeIpAddress(remoteAddress),
-        lookup: noLookup
+        lookup: noLookup,
       });
     }),
     socket.pollState
@@ -247,15 +247,7 @@ export function socketTcpGetLocalAddress(id) {
   const out = {};
   const code = handle.getsockname(out);
   if (code !== 0) throw convertSocketErrorCode(-code);
-  const family = out.family.toLowerCase();
-  const { address, port } = out;
-  return {
-    tag: family,
-    val: {
-      address: deserializeIpAddress(address, family),
-      port,
-    },
-  };
+  return ipSocketAddress(out.family.toLowerCase(), out.address, out.port);
 }
 
 export function socketTcpGetRemoteAddress(id) {
@@ -263,15 +255,7 @@ export function socketTcpGetRemoteAddress(id) {
   const out = {};
   const code = handle.getpeername(out);
   if (code !== 0) throw convertSocketErrorCode(-code);
-  const family = out.family.toLowerCase();
-  const { address, port } = out;
-  return {
-    tag: family,
-    val: {
-      address: deserializeIpAddress(address, family),
-      port,
-    },
-  };
+  return ipSocketAddress(out.family.toLowerCase(), out.address, out.port);
 }
 
 // Node.js only supports a write shutdown

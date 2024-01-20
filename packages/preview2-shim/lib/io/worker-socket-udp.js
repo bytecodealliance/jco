@@ -9,7 +9,7 @@ import {
 import {
   convertSocketError,
   convertSocketErrorCode,
-  deserializeIpAddress,
+  ipSocketAddress,
   isIPv4MappedAddress,
   isWildcardAddress,
   noLookup,
@@ -46,7 +46,6 @@ import {
  *   socket: UdpSocketRecord,
  *   pollState: PollState,
  *   queue: Buffer[],
- *   queueByteLen: number,
  *   cleanup: () => void | null,
  * }} DatagramStreamRecord
  *
@@ -103,15 +102,15 @@ export function createUdpSocket({
  */
 function createIncomingDatagramStream(socket) {
   const id = ++datagramStreamCnt;
+  const pollState = { ready: false, listener: null, polls: [], parentStream: null };
   const datagramStream = {
     id,
     active: true,
     error: null,
     socket,
     queue: [],
-    queueByteLen: 0,
     cleanup,
-    pollState: { ready: false, listener: null, polls: [], parentStream: null },
+    pollState,
   };
   const { udpSocket } = socket;
   datagramStreams.set(id, datagramStream);
@@ -119,8 +118,14 @@ function createIncomingDatagramStream(socket) {
     udpSocket.off("message", onMessage);
     udpSocket.off("error", onError);
   }
-  function onMessage(msg, rinfo) {
-    process._rawDebug("MSG", msg, rinfo);
+  function onMessage(data, rinfo) {
+    const family = rinfo.family.toLowerCase();
+    datagramStream.queue.push({
+      data,
+      remoteAddress: ipSocketAddress(family, rinfo.address, rinfo.port)
+    });
+    if (!pollState.ready)
+      pollStateReady(pollState);
   }
   function onError(err) {
     datagramStream.error = err;
@@ -176,13 +181,11 @@ export function socketUdpBindStart(id, localAddress, family) {
         udpSocket.off("error", bindErr);
       }
       function bindErr(err) {
-        process._rawDebug(err);
         reject(convertSocketError(err));
         udpSocket.off("listening", bindOk);
       }
       udpSocket.once("listening", bindOk);
       udpSocket.once("error", bindErr);
-      process._rawDebug(localAddress, family);
       udpSocket.bind(localAddress.val.port, serializedLocalAddress);
     }),
     socket.pollState
@@ -222,16 +225,7 @@ export function socketUdpGetLocalAddress(id) {
   } catch (err) {
     throw convertSocketError(err);
   }
-  family = family.toLowerCase();
-  return {
-    tag: family,
-    val: {
-      port,
-      flowInfo: 0,
-      address: deserializeIpAddress(address, family),
-      scopeId: 0,
-    },
-  };
+  return ipSocketAddress(family.toLowerCase(), address, port);
 }
 
 /**
@@ -246,16 +240,7 @@ export function socketUdpGetRemoteAddress(id) {
   } catch (err) {
     throw convertSocketError(err);
   }
-  family = family.toLowerCase();
-  return {
-    tag: family,
-    val: {
-      port,
-      flowInfo: 0,
-      address: deserializeIpAddress(address, family),
-      scopeId: 0,
-    },
-  };
+  return ipSocketAddress(family.toLowerCase(), address, port);
 }
 
 export function socketUdpStream(id, remoteAddress) {
@@ -379,39 +364,6 @@ export function socketUdpGetUnicastHopLimit(id) {
   return unicastHopLimit;
 }
 
-// udpSocket.on("message", (data, rinfo) => {
-//   const remoteSocket = getUdpSocketByPort(rinfo.port);
-//   let { address, port } = udpSocket.address();
-
-//   if (remoteSocket[symbolSocketUdpIpUnspecified].isUnspecified) {
-//     // cache original bound address
-//     rinfo._address =
-//       remoteSocket[symbolSocketUdpIpUnspecified].localAddress;
-//   }
-
-//   const receiverSocket = {
-//     address,
-//     port,
-//     id,
-//   };
-
-//   enqueueReceivedSocketDatagram(receiverSocket, { data, rinfo });
-// });
-
-// // catch all errors
-// udpSocket.once("error", (err) => {
-//   resolve(err.errno);
-// });
-
-// if (!err) {
-//       // this.#options.connectionState = SocketConnectionState.Connected;
-//     } else {
-//       if (err === -22) throw "invalid-argument";
-//       throw "unknown";
-//     }
-//   }
-// }
-
 export function socketUdpDispose(id) {
   const { udpSocket } = udpSockets.get(id);
   return new Promise((resolve) => {
@@ -423,14 +375,16 @@ export function socketUdpDispose(id) {
 }
 
 export function socketIncomingDatagramStreamReceive(id, maxResults) {
-  const { active } = datagramStreams.get(id);
-  if (!active)
+  const datagramStream = datagramStreams.get(id);
+  if (!datagramStream.active)
     throw new Error(
       "wasi-io trap: attempt to receive on inactive incoming datagram stream"
     );
-  if (maxResults === 0n) return [];
-  // patch up local addres on received dgram
-  throw new Error("TODO");
+  if (maxResults === 0n || datagramStream.queue.length === 0)
+    return [];
+  if (datagramStream.error)
+    throw convertSocketError(datagramStream.error);
+  return datagramStream.queue.splice(0, Number(maxResults));
 }
 
 export function socketOutgoingDatagramStreamSend(id, datagrams) {
@@ -451,6 +405,8 @@ export function socketOutgoingDatagramStreamSend(id, datagrams) {
       return { data, address: undefined, port: undefined };
     }
     else {
+      if (!address)
+        throw "invalid-argument";
       return { data, address, port };
     }
   });
@@ -460,20 +416,29 @@ export function socketOutgoingDatagramStreamSend(id, datagrams) {
     let sent = 0;
     let errored = false;
     for (const { data, address, port } of datagramsToSend) {
-      if (errored) break;
-      udpSocket.send(data, undefined, undefined, port, address, (err) => {
-        if (err) {
-          process._rawDebug(err);
-          errored = true;
-          if (sent > 0) resolve(BigInt(sent));
-          else reject(convertSocketError(err));
-          return;
-        }
-        sent++;
-        if (sent === datagrams.length) {
-          resolve(BigInt(sent));
-        }
-      });
+      if (errored)
+        break;
+      try {
+        if (address)
+          udpSocket.send(data, port, address, handler);
+        else
+          udpSocket.send(data, handler);
+      }
+      catch (e) {
+        handler(e);
+      }
+    }
+    function handler (err) {
+      if (err) {
+        errored = true;
+        if (sent > 0) resolve(BigInt(sent));
+        else reject(convertSocketError(err));
+        return;
+      }
+      sent++;
+      if (sent === datagrams.length) {
+        resolve(BigInt(sent));
+      }
     }
   });
 }
@@ -485,10 +450,11 @@ export function socketOutgoingDatagramStreamCheckSend(id) {
       "wasi-io trap: check send on inactive outgoing datagram stream"
     );
   try {
+    // TODO: backpressure
     return BigInt(
-      Math.floor(
+      Math.min(Math.floor(
         (socket.sendBufferSize - socket.udpSocket.getSendQueueSize()) / 1500
-      )
+      ), 1)
     );
   } catch (err) {
     throw convertSocketError(err.errno);
@@ -513,135 +479,3 @@ export function socketDatagramStreamDispose(id) {
   verifyPollsDroppedForDrop(datagramStream.pollState, "datagram stream");
   datagramStreams.delete(id);
 }
-
-// if (datagrams.length === 0) {
-//   return 0n;
-// }
-
-// let datagramsSent = 0n;
-
-// for (const datagram of datagrams) {
-//   const { data, remoteAddress } = datagram;
-//   const remotePort = remoteAddress?.val?.port || undefined;
-//   const host = serializeIpAddress(remoteAddress);
-
-//   if (this.checkSend() < data.length) throw "datagram-too-large";
-//   // TODO: add the other assertions
-
-//   const ret = ioCall(
-//     SOCKET_UDP_SEND,
-//     this.#id, // socket that's sending the datagrams
-//     {
-//       data,
-//       remotePort,
-//       remoteHost: host,
-//     }
-//   );
-//   if (ret === 0) {
-//     datagramsSent++;
-//   } else {
-//     if (ret === -65) throw "remote-unreachable";
-//   }
-// }
-
-// return datagramsSent;
-// return ioCall(SOCKET_OUTGOING_DATAGRAM_STREAM_SEND, this.#id)
-
-// /**
-//  * @type {Map<number, Map<string, { data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>}
-//  */
-// const queuedReceivedSocketDatagrams = new Map();
-
-// function getUdpSocketByPort(port) {
-//   return Array.from(udpSockets.values()).find(
-//     (socket) => socket.address().port === port
-//   );
-// }
-
-// function getBoundUdpSockets(socketId) {
-//   return Array.from(udpSockets.entries())
-//     .filter(([id, _socket]) => id !== socketId) // exclude source socket
-//     .map(([_id, socket]) => socket.address());
-// }
-
-// function dequeueReceivedSocketDatagram(socketInfo, maxResults) {
-//   const key = `PORT:${socketInfo.port}`;
-//   const dgrams = queuedReceivedSocketDatagrams
-//     .get(key)
-//     .splice(0, Number(maxResults));
-//   return dgrams;
-// }
-// function enqueueReceivedSocketDatagram(socketInfo, { data, rinfo }) {
-//   const key = `PORT:${socketInfo.port}`;
-//   const chunk = {
-//     data,
-//     rinfo, // sender/remote socket info (source)
-//     socketInfo, // receiver socket info (targeted socket)
-//   };
-
-//   // create new queue if not exists
-//   if (!queuedReceivedSocketDatagrams.has(key)) {
-//     queuedReceivedSocketDatagrams.set(key, []);
-//   }
-
-//   // append to queue
-//   const queue = queuedReceivedSocketDatagrams.get(key);
-//   queue.push(chunk);
-// }
-
-// //-----------------------------------------------------
-
-// export function socketUdpSend(id, payload) {
-//   let { remoteHost, remotePort, data } = payload;
-//   const socket = udpSockets.get(id);
-
-//   return new Promise((resolve) => {
-//     const _callback = (err, _byteLength) => {
-//       if (err) return resolve(err.errno);
-//       resolve(0); // success
-//     };
-
-//     // Note: when remoteHost/remotePort is None, we broadcast to all bound sockets
-//     // except the source socket
-//     if (remotePort === undefined || remoteHost === undefined) {
-//       getBoundUdpSockets(id).forEach((adr) => {
-//         socket.send(data, adr.port, adr.address, _callback);
-//       });
-//     } else {
-//       socket.send(data, remotePort, remoteHost, _callback);
-//     }
-
-//     socket.once("error", (err) => {
-//       resolve(err.errno);
-//     });
-//   });
-// }
-
-// export function SocketUdpReceive(id, payload) {
-//   const { maxResults } = payload;
-//   const socket = udpSockets.get(id);
-//   const { address, port } = socket.address();
-
-//   // set target socket info
-//   // we use this to filter out datagrams that are were sent to this socket
-//   const targetSocket = {
-//     address,
-//     port,
-//   };
-
-//   const dgrams = dequeueReceivedSocketDatagram(targetSocket, maxResults);
-//   return Promise.resolve(dgrams);
-// }
-
-// const ipUnspecified =
-// serializedLocalAddress === "0.0.0.0" ||
-// serializedLocalAddress === "0:0:0:0:0:0:0:0";
-
-// // Note: even if the client has bound to IPV4_UNSPECIFIED/IPV6_UNSPECIFIED (0.0.0.0 // ::),
-// // rinfo.address is resolved to IPV4_LOOPBACK/IPV6_LOOPBACK.
-// // We need to cache the original bound IP type and fix rinfo.address when receiving datagrams (see below)
-// // See https://github.com/WebAssembly/wasi-sockets/issues/86
-// socket[symbolSocketUdpIpUnspecified] = {
-// isUnspecified: ipUnspecified,
-// serializedAddress: serializedLocalAddress,
-// };

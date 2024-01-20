@@ -57,12 +57,12 @@ export function socketResolveAddress(name) {
     name[0] === "[" && name[name.length - 1] === "]" ? name.slice(1, -1) : name
   );
   if (isIpNum > 0) {
-    return [
+    return Promise.resolve([
       {
         tag: "ipv" + isIpNum,
         val: (isIpNum === 4 ? ipv4ToTuple : ipv6ToTuple)(name),
       },
-    ];
+    ]);
   }
   // verify it is a valid domain name using the URL parser
   let parsedUrl = null;
@@ -148,7 +148,6 @@ export function convertSocketError(err) {
     case "ECONNABORTED":
       return "connection-aborted";
     default:
-      process._rawDebug(err);
       return "unknown";
   }
 }
@@ -191,7 +190,6 @@ export function convertSocketErrorCode(code) {
     // TODO: return "name-unresolvable";
     // TODO: return "temporary-resolver-failure";
     default:
-      process._rawDebug("ERR: " + code);
       return "unknown";
   }
 }
@@ -324,7 +322,22 @@ export function ipv4ToTuple(ipv4) {
  * @param {IpAddressFamily} family
  * @returns {IpSocketAddress}
  */
-export function deserializeIpAddress(addr, family) {
-  if (family === "ipv4") return ipv4ToTuple(addr);
-  return ipv6ToTuple(addr);
+export function ipSocketAddress(family, addr, port) {
+  if (family === "ipv4")
+    return {
+      tag: "ipv4",
+      val: {
+        port,
+        address: ipv4ToTuple(addr)
+      }
+    };
+  return {
+    tag: "ipv6",
+    val: {
+      port,
+      flowInfo: 0,
+      address: ipv6ToTuple(addr),
+      scopeId: 0
+    }
+  };
 }
