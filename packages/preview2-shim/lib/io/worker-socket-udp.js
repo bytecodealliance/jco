@@ -15,7 +15,12 @@ import {
   convertSocketError,
   convertSocketErrorCode,
 } from "./worker-sockets.js";
-import { serializeIpAddress, isIPv4MappedAddress, deserializeIpAddress } from "./socket-common.js";
+import {
+  serializeIpAddress,
+  isIPv4MappedAddress,
+  deserializeIpAddress,
+  isWildcardAddress,
+} from "./socket-common.js";
 
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
@@ -43,8 +48,8 @@ import { serializeIpAddress, isIPv4MappedAddress, deserializeIpAddress } from ".
  */
 
 let udpSocketCnt = 0;
-  // incomingDatagramStreamCnt,
-  // outgoingDatagramStreamCount;
+// incomingDatagramStreamCnt,
+// outgoingDatagramStreamCount;
 
 /**
  * @type {Map<number, UdpSocketRecord>}
@@ -61,7 +66,7 @@ export const incomingDatagramStreams = new Map();
  */
 export const outgoingDatagramStreams = new Map();
 
-function noLookup (ip, _opts, cb) {
+function noLookup(ip, _opts, cb) {
   cb(null, ip);
 }
 
@@ -137,12 +142,14 @@ export function socketUdpBindFinish(
     socket.udpSocket.setRecvBufferSize(Number(receiveBufferSize));
     socket.udpSocket.setSendBufferSize(Number(sendBufferSize));
     socket.state = SOCKET_STATE_BOUND;
+    socket.incomingDatagramStream = 1;
+    socket.outgoingDatagramStream = 2;
     return val;
   }
 }
 
 /**
- * @param {number} id 
+ * @param {number} id
  * @returns {IpSocketAddress}
  */
 export function socketUdpGetLocalAddress(id) {
@@ -160,8 +167,8 @@ export function socketUdpGetLocalAddress(id) {
       port,
       flowInfo: 0,
       address: deserializeIpAddress(address, family),
-      scopeId: 0
-    }
+      scopeId: 0,
+    },
   };
 }
 
@@ -170,9 +177,7 @@ export function socketUdpGetLocalAddress(id) {
  * @returns {IpSocketAddress}
  */
 export function socketUdpGetRemoteAddress(id) {
-  const { state, udpSocket } = udpSockets.get(id);
-  if (state === SOCKET_STATE_BOUND)
-    throw 'invalid-state';
+  const { udpSocket } = udpSockets.get(id);
   let address, family, port;
   try {
     ({ address, family, port } = udpSocket.remoteAddress());
@@ -186,8 +191,8 @@ export function socketUdpGetRemoteAddress(id) {
       port,
       flowInfo: 0,
       address: deserializeIpAddress(address, family),
-      scopeId: 0
-    }
+      scopeId: 0,
+    },
   };
 }
 
@@ -195,14 +200,20 @@ export function socketUdpStream(id, remoteAddress) {
   const socket = udpSockets.get(id);
   const { udpSocket } = socket;
 
-  if (socket.state !== SOCKET_STATE_BOUND && socket.state !== SOCKET_STATE_CONNECTION)
-    throw 'invalid-state';
+  if (
+    socket.state !== SOCKET_STATE_BOUND &&
+    socket.state !== SOCKET_STATE_CONNECTION
+  )
+    throw "invalid-state";
 
-  if (remoteAddress && remoteAddress.val.port === 0)
-    throw 'invalid-argument';
+  if (
+    remoteAddress &&
+    (remoteAddress.val.port === 0 ||
+      isWildcardAddress(remoteAddress) ||
+      (remoteAddress.tag === "ipv6" && isIPv4MappedAddress(remoteAddress)))
+  )
+    throw "invalid-argument";
 
-  // stream() can be called multiple times, so we need to disconnect first if we are already connected
-  // Note: disconnect() will also reset the connection state but does not close the socket handle!
   if (socket.state === SOCKET_STATE_CONNECTION) {
     socketIncomingDatagramStreamDispose(socket.incomingDatagramStream);
     socketOutgoingDatagramStreamDispose(socket.outgoingDatagramStream);
@@ -213,21 +224,33 @@ export function socketUdpStream(id, remoteAddress) {
     }
   }
 
-  function connectOk () {
-    udpSocket.off('error', connectErr);
-  }
-  function connectErr () {
-    udpSocket.off('connection', connectOk);
-  }
+  if (remoteAddress) {
+    return new Promise((resolve, reject) => {
+      function connectOk() {
+        udpSocket.off("error", connectErr);
+        socket.state = SOCKET_STATE_CONNECTION;
+        resolve([
+          (socket.incomingDatagramStream = 0),
+          (socket.outgoingDatagramStream = 0),
+        ]);
+      }
+      function connectErr(err) {
+        udpSocket.off("connect", connectOk);
+        reject(convertSocketError(err));
+      }
 
-  udpSocket.once('connection', connectOk);
-  udpSocket.once('error', connectErr);
-  udpSocket.connect(remoteAddress?.val.port ?? 1, remoteAddress ? serializeIpAddress(remoteAddress) : undefined);
+      udpSocket.once("connect", connectOk);
+      udpSocket.once("error", connectErr);
 
-  return [
-    socket.incomingDatagramStream = 0,
-    socket.outgoingDatagramStream = 0
-  ];
+      udpSocket.connect(
+        remoteAddress?.val.port ?? 1,
+        remoteAddress ? serializeIpAddress(remoteAddress) : undefined
+      );
+    });
+  } else {
+    socket.state = SOCKET_STATE_BOUND;
+    return [socket.incomingDatagramStream, socket.outgoingDatagramStream];
+  }
 }
 
 // udpSocket.on("message", (data, rinfo) => {
@@ -285,12 +308,9 @@ export function socketOutgoingDatagramStreamCheckSend(_id) {
   throw new Error("TODO");
 }
 
-export function socketIncomingDatagramStreamDispose(_id) {
+export function socketIncomingDatagramStreamDispose(_id) {}
 
-}
-
-export function socketOutgoingDatagramStreamDispose(_id) {
-}
+export function socketOutgoingDatagramStreamDispose(_id) {}
 
 // /**
 //  * @type {Map<number, Map<string, { data: Buffer, rinfo: { address: string, family: string, port: number, size: number } }>>}
@@ -386,8 +406,6 @@ export function socketOutgoingDatagramStreamDispose(_id) {
 //   const dgrams = dequeueReceivedSocketDatagram(targetSocket, maxResults);
 //   return Promise.resolve(dgrams);
 // }
-
-
 
 // const ipUnspecified =
 // serializedLocalAddress === "0.0.0.0" ||
