@@ -43,7 +43,7 @@ import {
  * @typedef {{
  *   active: bool,
  *   error: any | null,
- *   udpSocket: import('node:dgram').Socket,
+ *   socket: UdpSocketRecord,
  *   pollState: PollState,
  *   queue: Buffer[],
  *   queueByteLen: number,
@@ -97,18 +97,23 @@ export function createUdpSocket({
   return udpSocketCnt;
 }
 
-function createIncomingDatagramStream(udpSocket) {
+/**
+ * @param {UdpSocketRecord} socket
+ * @returns {DatagramStreamRecord}
+ */
+function createIncomingDatagramStream(socket) {
   const id = ++datagramStreamCnt;
   const datagramStream = {
     id,
     active: true,
     error: null,
-    udpSocket,
+    socket,
     queue: [],
     queueByteLen: 0,
     cleanup,
     pollState: { ready: false, listener: null, polls: [], parentStream: null },
   };
+  const { udpSocket } = socket;
   datagramStreams.set(id, datagramStream);
   function cleanup() {
     udpSocket.off("message", onMessage);
@@ -126,16 +131,21 @@ function createIncomingDatagramStream(udpSocket) {
   return datagramStream;
 }
 
-function createOutgoingDatagramStream(udpSocket) {
+/**
+ * @param {UdpSocketRecord} socket
+ * @returns {DatagramStreamRecord}
+ */
+function createOutgoingDatagramStream(socket) {
   const id = ++datagramStreamCnt;
   const datagramStream = {
     id,
     active: true,
     error: null,
-    udpSocket,
+    socket,
     cleanup,
     pollState: { ready: true, listener: null, polls: [], parentStream: null },
   };
+  const { udpSocket } = socket;
   datagramStreams.set(id, datagramStream);
   udpSocket.on("error", onError);
   function onError(err) {
@@ -281,7 +291,7 @@ export function socketUdpStream(id, remoteAddress) {
 
   if (remoteAddress) {
     const serializedRemoteAddress = serializeIpAddress(remoteAddress);
-    socket.remoteAddress = `${serializedRemoteAddress}:${remoteAddress.port}`;
+    socket.remoteAddress = `${serializedRemoteAddress}:${remoteAddress.val.port}`;
     return new Promise((resolve, reject) => {
       function connectOk() {
         if (socket.state === SOCKET_STATE_INIT) {
@@ -292,10 +302,10 @@ export function socketUdpStream(id, remoteAddress) {
         udpSocket.off("error", connectErr);
         socket.state = SOCKET_STATE_CONNECTION;
         resolve([
-          (socket.incomingDatagramStream =
-            createIncomingDatagramStream(udpSocket)).id,
-          (socket.outgoingDatagramStream =
-            createOutgoingDatagramStream(udpSocket)).id,
+          (socket.incomingDatagramStream = createIncomingDatagramStream(socket))
+            .id,
+          (socket.outgoingDatagramStream = createOutgoingDatagramStream(socket))
+            .id,
         ]);
       }
       function connectErr(err) {
@@ -310,10 +320,8 @@ export function socketUdpStream(id, remoteAddress) {
     socket.state = SOCKET_STATE_BOUND;
     socket.remoteAddress = null;
     return [
-      (socket.incomingDatagramStream = createIncomingDatagramStream(udpSocket))
-        .id,
-      (socket.outgoingDatagramStream = createOutgoingDatagramStream(udpSocket))
-        .id,
+      (socket.incomingDatagramStream = createIncomingDatagramStream(socket)).id,
+      (socket.outgoingDatagramStream = createOutgoingDatagramStream(socket)).id,
     ];
   }
 }
@@ -426,7 +434,7 @@ export function socketIncomingDatagramStreamReceive(id, maxResults) {
 }
 
 export function socketOutgoingDatagramStreamSend(id, datagrams) {
-  const { active, udpSocket } = datagramStreams.get(id);
+  const { active, socket } = datagramStreams.get(id);
   if (!active)
     throw new Error(
       "wasi-io trap: writing to inactive outgoing datagram stream"
@@ -437,15 +445,17 @@ export function socketOutgoingDatagramStreamSend(id, datagrams) {
       ? serializeIpAddress(remoteAddress)
       : undefined;
     const port = remoteAddress?.val.port;
-    if (
-      remoteAddress &&
-      udpSocket.remoteAddress &&
-      udpSocket.remoteAddress !== `${address}:${port}`
-    )
-      throw "invalid-argument";
-    return { data, address, port };
+    if (socket.remoteAddress) {
+      if (remoteAddress && socket.remoteAddress !== `${address}:${port}`)
+        throw "invalid-argument";
+      return { data, address: undefined, port: undefined };
+    }
+    else {
+      return { data, address, port };
+    }
   });
 
+  const { udpSocket } = socket;
   return new Promise((resolve, reject) => {
     let sent = 0;
     let errored = false;
@@ -469,20 +479,18 @@ export function socketOutgoingDatagramStreamSend(id, datagrams) {
 }
 
 export function socketOutgoingDatagramStreamCheckSend(id) {
-  const { active, udpSocket } = datagramStreams.get(id);
+  const { active, socket } = datagramStreams.get(id);
   if (!active)
     throw new Error(
       "wasi-io trap: check send on inactive outgoing datagram stream"
     );
   try {
-    process._rawDebug(udpSocket.sendBufferSize);
     return BigInt(
       Math.floor(
-        (udpSocket.sendBufferSize - udpSocket.getSendQueueSize()) / 1500
+        (socket.sendBufferSize - socket.udpSocket.getSendQueueSize()) / 1500
       )
     );
   } catch (err) {
-    process._rawDebug(err);
     throw convertSocketError(err.errno);
   }
 }
