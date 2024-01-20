@@ -40,7 +40,7 @@ export function registerIncomingHttpHandler(id, handler) {
 }
 
 const instanceId = Math.round(Math.random() * 1000).toString();
-const DEBUG_DEFAULT = true;
+const DEBUG_DEFAULT = false;
 const DEBUG =
   env.PREVIEW2_SHIM_DEBUG === "0"
     ? false
