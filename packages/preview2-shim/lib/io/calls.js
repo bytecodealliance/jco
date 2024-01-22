@@ -82,9 +82,9 @@ export const SOCKET_TCP_IS_LISTENING = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_ACCEPT = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_GET_LOCAL_ADDRESS = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_GET_REMOTE_ADDRESS = ++call_id << CALL_SHIFT;
-export const SOCKET_TCP_SHUTDOWN = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_SET_KEEP_ALIVE = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE = ++call_id << CALL_SHIFT;
+export const SOCKET_TCP_SHUTDOWN = ++call_id << CALL_SHIFT;
 export const SOCKET_TCP_DISPOSE = ++call_id << CALL_SHIFT;
 // Udp
 export const SOCKET_UDP_CREATE_HANDLE = ++call_id << CALL_SHIFT;
@@ -106,6 +106,9 @@ export const SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND = ++call_id << CALL_SHIF
 export const SOCKET_OUTGOING_DATAGRAM_STREAM_SEND = ++call_id << CALL_SHIFT;
 export const SOCKET_DATAGRAM_STREAM_SUBSCRIBE = ++call_id << CALL_SHIFT;
 export const SOCKET_DATAGRAM_STREAM_DISPOSE = ++call_id << CALL_SHIFT;
+
+export const SOCKET_GET_DEFAULT_SEND_BUFFER_SIZE = ++call_id << CALL_SHIFT;
+export const SOCKET_GET_DEFAULT_RECEIVE_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 
 // Name lookup
 export const SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST = ++call_id << CALL_SHIFT;
