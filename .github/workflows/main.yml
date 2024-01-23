@@ -64,6 +64,10 @@ jobs:
     - name: Test
       run: npm run test
 
+    - name: WASI Preview 2 Conformance
+      run: cargo test
+      if : matrix.os == 'macos-latest'
+
   test-workspaces:
     name: Test Workspaces
     runs-on: ubuntu-latest
