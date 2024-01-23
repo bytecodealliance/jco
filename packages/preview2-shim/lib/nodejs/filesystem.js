@@ -307,6 +307,7 @@ class Descriptor {
 
   openAt(pathFlags, path, openFlags, descriptorFlags) {
     const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
+
     let fsOpenFlags = 0x0;
     if (openFlags.create) fsOpenFlags |= constants.O_CREAT;
     if (openFlags.directory) fsOpenFlags |= constants.O_DIRECTORY;
@@ -334,7 +335,6 @@ class Descriptor {
       );
       if (fullPath.endsWith("/")) {
         // check if its a directory
-        descriptor[symbolDispose]();
         if (!descriptor.getType() === "directory") throw "not-directory";
       }
       return descriptor;
