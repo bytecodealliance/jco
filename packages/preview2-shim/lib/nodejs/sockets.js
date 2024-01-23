@@ -8,6 +8,8 @@ import {
   SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
   SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST,
+  SOCKET_GET_DEFAULT_RECEIVE_BUFFER_SIZE,
+  SOCKET_GET_DEFAULT_SEND_BUFFER_SIZE,
   SOCKET_TCP_ACCEPT,
   SOCKET_TCP_BIND_FINISH,
   SOCKET_TCP_BIND_START,
@@ -165,14 +167,17 @@ class TcpSocket {
     // instead.
     keepAliveIdleTime: 7200_000_000_000n,
 
-    // ALL of the following options are NOT configurable in Node.js!
+    // The following options are NOT configurable in Node.js!
     // Any configurations set will respond correctly, but underneath retain
     // system / Node.js defaults.
     keepAliveInterval: 1_000_000_000n,
     keepAliveCount: 10,
     hopLimit: 1,
-    receiveBufferSize: 8192n,
-    sendBufferSize: 8192n,
+
+    // For sendBufferSize and receiveBufferSize we can at least
+    // use the system defaults, but still we can't support setting them.
+    sendBufferSize: undefined,
+    receiveBufferSize: undefined,
   };
   /**
    * @param {IpAddressFamily} addressFamily
@@ -302,6 +307,8 @@ class TcpSocket {
     this.#options.hopLimit = value;
   }
   receiveBufferSize() {
+    if (!this.#options.receiveBufferSize)
+      this.#options.receiveBufferSize = ioCall(SOCKET_GET_DEFAULT_RECEIVE_BUFFER_SIZE, null, null);
     return this.#options.receiveBufferSize;
   }
   setReceiveBufferSize(value) {
@@ -309,6 +316,8 @@ class TcpSocket {
     this.#options.receiveBufferSize = value;
   }
   sendBufferSize() {
+    if (!this.#options.sendBufferSize)
+      this.#options.sendBufferSize = ioCall(SOCKET_GET_DEFAULT_SEND_BUFFER_SIZE, null, null);
     return this.#options.sendBufferSize;
   }
   setSendBufferSize(value) {
@@ -344,17 +353,6 @@ export const tcp = {
   TcpSocket,
 };
 
-const udpDefaultOptions = {
-  // These default configurations will override the default
-  // system ones. This is because we are unable to get the configuration
-  // value for unbound sockets in Node.js, therefore we always
-  // enforce these local default values from the start.
-  // Like for TCP, configuration of these JCO defaults can be added in future.
-  unicastHopLimit: 64,
-  receiveBufferSize: 8192n,
-  sendBufferSize: 8192n,
-};
-
 class UdpSocket {
   #id;
   #network;
@@ -365,7 +363,10 @@ class UdpSocket {
     const socket = new UdpSocket();
     socket.#id = ioCall(SOCKET_UDP_CREATE_HANDLE, null, {
       family: addressFamily,
-      ...udpDefaultOptions,
+      // we always set the unicastHopLimit, because there is no
+      // getter but only a setter for this in Node.js, so it is the
+      // only way to guarantee the consistent value
+      unicastHopLimit: 64,
     });
     socket.#family = addressFamily;
     return socket;

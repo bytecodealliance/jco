@@ -9,6 +9,8 @@ import {
 import {
   convertSocketError,
   convertSocketErrorCode,
+  getDefaultReceiveBufferSize,
+  getDefaultSendBufferSize,
   ipSocketAddress,
   isIPv4MappedAddress,
   isWildcardAddress,
@@ -21,6 +23,12 @@ import {
   SOCKET_STATE_INIT,
 } from "./worker-sockets.js";
 
+// Experimental support for batched UDP sends. Set this to true to enable.
+// This is not enabled by default because we need to figure out how to know
+// how many datagrams were sent when there is an error in a batch.
+// See the err path in "handler" in the "doSendBatch" of socketOutgoingDatagramStreamSend.
+const UDP_BATCH_SENDS = false;
+
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
@@ -29,8 +37,9 @@ import {
  * @typedef {{
  *   state: number,
  *   remoteAddress: string | null,
- *   sendBufferSize: number,
- *   receiveBufferSize: number,
+ *   remotePort: number | null,
+ *   sendBufferSize: number | null,
+ *   receiveBufferSize: number | null,
  *   unicastHopLimit: number,
  *   udpSocket: import('node:dgram').Socket,
  *   future: number | null,
@@ -45,7 +54,7 @@ import {
  *   error: any | null,
  *   socket: UdpSocketRecord,
  *   pollState: PollState,
- *   queue: Buffer[],
+ *   queue?: Buffer[],
  *   cleanup: () => void | null,
  * }} DatagramStreamRecord
  *
@@ -68,12 +77,7 @@ export const datagramStreams = new Map();
  * @param {IpAddressFamily} addressFamily
  * @returns {number}
  */
-export function createUdpSocket({
-  family,
-  sendBufferSize,
-  receiveBufferSize,
-  unicastHopLimit,
-}) {
+export function createUdpSocket({ family, unicastHopLimit }) {
   const udpSocket = createSocket({
     type: family === "ipv6" ? "udp6" : "udp4",
     reuseAddr: false,
@@ -83,8 +87,9 @@ export function createUdpSocket({
   udpSockets.set(++udpSocketCnt, {
     state: SOCKET_STATE_INIT,
     remoteAddress: null,
-    sendBufferSize: Number(sendBufferSize),
-    receiveBufferSize: Number(receiveBufferSize),
+    remotePort: null,
+    sendBufferSize: null,
+    receiveBufferSize: null,
     unicastHopLimit,
     udpSocket,
     future: null,
@@ -102,7 +107,12 @@ export function createUdpSocket({
  */
 function createIncomingDatagramStream(socket) {
   const id = ++datagramStreamCnt;
-  const pollState = { ready: false, listener: null, polls: [], parentStream: null };
+  const pollState = {
+    ready: false,
+    listener: null,
+    polls: [],
+    parentStream: null,
+  };
   const datagramStream = {
     id,
     active: true,
@@ -122,10 +132,9 @@ function createIncomingDatagramStream(socket) {
     const family = rinfo.family.toLowerCase();
     datagramStream.queue.push({
       data,
-      remoteAddress: ipSocketAddress(family, rinfo.address, rinfo.port)
+      remoteAddress: ipSocketAddress(family, rinfo.address, rinfo.port),
     });
-    if (!pollState.ready)
-      pollStateReady(pollState);
+    if (!pollState.ready) pollStateReady(pollState);
   }
   function onError(err) {
     datagramStream.error = err;
@@ -206,8 +215,10 @@ export function socketUdpBindFinish(id) {
     // once bound, we can now set the options
     // since Node.js doesn't support setting them until bound
     socket.udpSocket.setTTL(socket.unicastHopLimit);
-    socket.udpSocket.setRecvBufferSize(socket.sendBufferSize);
-    socket.udpSocket.setSendBufferSize(socket.receiveBufferSize);
+    if (socket.sendBufferSize)
+      socket.udpSocket.setRecvBufferSize(socket.sendBufferSize);
+    if (socket.receieveBufferSize)
+      socket.udpSocket.setSendBufferSize(socket.receiveBufferSize);
     socket.state = SOCKET_STATE_BOUND;
     return val;
   }
@@ -276,7 +287,8 @@ export function socketUdpStream(id, remoteAddress) {
 
   if (remoteAddress) {
     const serializedRemoteAddress = serializeIpAddress(remoteAddress);
-    socket.remoteAddress = `${serializedRemoteAddress}:${remoteAddress.val.port}`;
+    socket.remoteAddress = serializedRemoteAddress;
+    socket.remotePort = remoteAddress.val.port;
     return new Promise((resolve, reject) => {
       function connectOk() {
         if (socket.state === SOCKET_STATE_INIT) {
@@ -304,6 +316,7 @@ export function socketUdpStream(id, remoteAddress) {
   } else {
     socket.state = SOCKET_STATE_BOUND;
     socket.remoteAddress = null;
+    socket.remotePort = null;
     return [
       (socket.incomingDatagramStream = createIncomingDatagramStream(socket)).id,
       (socket.outgoingDatagramStream = createOutgoingDatagramStream(socket)).id,
@@ -314,7 +327,10 @@ export function socketUdpStream(id, remoteAddress) {
 export function socketUdpSetReceiveBufferSize(id, bufferSize) {
   const socket = udpSockets.get(id);
   bufferSize = Number(bufferSize);
-  if (socket.state !== SOCKET_STATE_INIT) {
+  if (
+    socket.state !== SOCKET_STATE_INIT &&
+    socket.state !== SOCKET_STATE_BIND
+  ) {
     try {
       socket.udpSocket.setRecvBufferSize(bufferSize);
     } catch (err) {
@@ -327,7 +343,10 @@ export function socketUdpSetReceiveBufferSize(id, bufferSize) {
 export function socketUdpSetSendBufferSize(id, bufferSize) {
   const socket = udpSockets.get(id);
   bufferSize = Number(bufferSize);
-  if (socket.state !== SOCKET_STATE_INIT) {
+  if (
+    socket.state !== SOCKET_STATE_INIT &&
+    socket.state !== SOCKET_STATE_BIND
+  ) {
     try {
       socket.udpSocket.setSendBufferSize(bufferSize);
     } catch (err) {
@@ -339,7 +358,10 @@ export function socketUdpSetSendBufferSize(id, bufferSize) {
 
 export function socketUdpSetUnicastHopLimit(id, hopLimit) {
   const socket = udpSockets.get(id);
-  if (socket.state !== SOCKET_STATE_INIT) {
+  if (
+    socket.state !== SOCKET_STATE_INIT &&
+    socket.state !== SOCKET_STATE_BIND
+  ) {
     try {
       socket.udpSocket.setTTL(hopLimit);
     } catch (err) {
@@ -349,14 +371,44 @@ export function socketUdpSetUnicastHopLimit(id, hopLimit) {
   socket.unicastHopLimit = hopLimit;
 }
 
-export function socketUdpGetReceiveBufferSize(id) {
-  const { receiveBufferSize } = udpSockets.get(id);
-  return BigInt(receiveBufferSize);
+export async function socketUdpGetReceiveBufferSize(id) {
+  const socket = udpSockets.get(id);
+  if (socket.receiveBufferSize) return BigInt(socket.receiveBufferSize);
+  if (
+    socket.state !== SOCKET_STATE_INIT &&
+    socket.state !== SOCKET_STATE_BIND
+  ) {
+    try {
+      return BigInt(
+        (socket.receiveBufferSize = socket.udpSocket.getRecvBufferSize())
+      );
+    } catch (err) {
+      throw convertSocketError(err);
+    }
+  } else {
+    return BigInt(
+      (socket.receiveBufferSize = await getDefaultReceiveBufferSize())
+    );
+  }
 }
 
-export function socketUdpGetSendBufferSize(id) {
-  const { sendBufferSize } = udpSockets.get(id);
-  return BigInt(sendBufferSize);
+export async function socketUdpGetSendBufferSize(id) {
+  const socket = udpSockets.get(id);
+  if (socket.sendBufferSize) return BigInt(socket.sendBufferSize);
+  if (
+    socket.state !== SOCKET_STATE_INIT &&
+    socket.state !== SOCKET_STATE_BIND
+  ) {
+    try {
+      return BigInt(
+        (socket.sendBufferSize = socket.udpSocket.getSendBufferSize())
+      );
+    } catch (err) {
+      throw convertSocketError(err);
+    }
+  } else {
+    return BigInt((socket.sendBufferSize = await getDefaultSendBufferSize()));
+  }
 }
 
 export function socketUdpGetUnicastHopLimit(id) {
@@ -380,65 +432,115 @@ export function socketIncomingDatagramStreamReceive(id, maxResults) {
     throw new Error(
       "wasi-io trap: attempt to receive on inactive incoming datagram stream"
     );
-  if (maxResults === 0n || datagramStream.queue.length === 0)
-    return [];
-  if (datagramStream.error)
-    throw convertSocketError(datagramStream.error);
+  if (maxResults === 0n || datagramStream.queue.length === 0) return [];
+  if (datagramStream.error) throw convertSocketError(datagramStream.error);
   return datagramStream.queue.splice(0, Number(maxResults));
 }
 
-export function socketOutgoingDatagramStreamSend(id, datagrams) {
+export async function socketOutgoingDatagramStreamSend(id, datagrams) {
   const { active, socket } = datagramStreams.get(id);
   if (!active)
     throw new Error(
       "wasi-io trap: writing to inactive outgoing datagram stream"
     );
 
-  const datagramsToSend = datagrams.map(({ data, remoteAddress }) => {
+  const { udpSocket } = socket;
+  let sendQueue = [],
+    sendQueueAddress,
+    sendQueuePort;
+  let datagramsSent = 0;
+  for (const { data, remoteAddress } of datagrams) {
     const address = remoteAddress
       ? serializeIpAddress(remoteAddress)
-      : undefined;
-    const port = remoteAddress?.val.port;
-    if (socket.remoteAddress) {
-      if (remoteAddress && socket.remoteAddress !== `${address}:${port}`)
-        throw "invalid-argument";
-      return { data, address: undefined, port: undefined };
+      : socket.remoteAddress;
+    const port = remoteAddress?.val.port ?? socket.remotePort;
+    let sendLastBatch = !UDP_BATCH_SENDS;
+    if (sendQueue.length > 0) {
+      if (sendQueueAddress === address && sendQueuePort === port) {
+        sendQueue.push(data);
+      } else {
+        sendLastBatch = true;
+      }
+    } else {
+      sendQueueAddress = address;
+      sendQueuePort = port;
+      sendQueue.push(data);
     }
-    else {
-      if (!address)
-        throw "invalid-argument";
-      return { data, address, port };
+    if (sendLastBatch) {
+      const err = await doSendBatch();
+      if (err) return BigInt(datagramsSent);
+      if (UDP_BATCH_SENDS) {
+        sendQueue = [data];
+        sendQueuePort = port;
+        sendQueueAddress = address;
+      } else {
+        sendQueue = [];
+        sendQueuePort = port;
+        sendQueueAddress = address;
+      }
     }
-  });
+  }
+  if (sendQueue.length) {
+    const err = await doSendBatch();
+    if (err) return BigInt(datagramsSent);
+  }
 
-  const { udpSocket } = socket;
-  return new Promise((resolve, reject) => {
-    let sent = 0;
-    let errored = false;
-    for (const { data, address, port } of datagramsToSend) {
-      if (errored)
-        break;
-      try {
-        if (address)
-          udpSocket.send(data, port, address, handler);
-        else
-          udpSocket.send(data, handler);
+  if (datagramsSent !== datagrams.length)
+    throw new Error("wasi-io trap: expected to have sent all the datagrams");
+  return BigInt(datagramsSent);
+
+  function doSendBatch() {
+    return new Promise((resolve, reject) => {
+      if (socket.remoteAddress) {
+        if (sendQueueAddress !== socket.remoteAddress || sendQueuePort !== socket.remotePort)
+          return void reject("invalid-argument");
+        udpSocket.send(sendQueue, handler);
+      } else {
+        if (!sendQueueAddress)
+          return void reject("invalid-argument");
+        udpSocket.send(sendQueue, sendQueuePort, sendQueueAddress, handler);
       }
-      catch (e) {
-        handler(e);
+      function handler(err, _sentBytes) {
+        if (err) {
+          // TODO: update datagramsSent properly on error for multiple sends
+          //       to enable send batching. Perhaps a Node.js PR could
+          //       still set the second sendBytes arg?
+          if (datagramsSent > 0) resolve(datagramsSent);
+          else reject(convertSocketError(err));
+          return;
+        }
+        datagramsSent += sendQueue.length;
+        resolve(false);
       }
-    }
-    function handler (err) {
-      if (err) {
-        errored = true;
-        if (sent > 0) resolve(BigInt(sent));
-        else reject(convertSocketError(err));
-        return;
-      }
-      sent++;
-      if (sent === datagrams.length) {
-        resolve(BigInt(sent));
-      }
+    });
+  }
+}
+
+function checkSend(socket) {
+  try {
+    return Math.floor(
+      (socket.udpSocket.getSendBufferSize() -
+        socket.udpSocket.getSendQueueSize()) /
+        1500
+    );
+  } catch (err) {
+    throw convertSocketError(err);
+  }
+}
+
+function pollSend(socket) {
+  socket.pollState.ready = false;
+  // The only way we have of dealing with getting a backpressure
+  // ready signal in Node.js is to just poll on the queue reducing.
+  // Ideally this should implement backoff on the poll interval,
+  // but that work should be done alongside careful benchmarking
+  // in due course.
+  setTimeout(() => {
+    const remaining = checkSend(socket);
+    if (remaining > 0) {
+      pollStateReady(socket.pollState);
+    } else {
+      pollSend(socket);
     }
   });
 }
@@ -449,16 +551,9 @@ export function socketOutgoingDatagramStreamCheckSend(id) {
     throw new Error(
       "wasi-io trap: check send on inactive outgoing datagram stream"
     );
-  try {
-    // TODO: backpressure
-    return BigInt(
-      Math.min(Math.floor(
-        (socket.sendBufferSize - socket.udpSocket.getSendQueueSize()) / 1500
-      ), 1)
-    );
-  } catch (err) {
-    throw convertSocketError(err.errno);
-  }
+  const remaining = checkSend(socket);
+  if (remaining <= 0) pollSend(socket);
+  return BigInt(remaining);
 }
 
 function socketDatagramStreamClear(datagramStream) {

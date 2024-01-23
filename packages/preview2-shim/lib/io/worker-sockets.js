@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
+import { Socket } from "node:dgram";
 import {
   ALL,
   BADFAMILY,
@@ -340,4 +341,29 @@ export function ipSocketAddress(family, addr, port) {
       scopeId: 0
     }
   };
+}
+
+let _recvBufferSize, _sendBufferSize;
+async function getDefaultBufferSizes () {
+  var s = new Socket({ type: 'udp4' });
+  s.bind(0);
+  await new Promise((resolve, reject) => {
+    s.once('error', reject);
+    s.once('listening', resolve);
+  });
+  _recvBufferSize = BigInt(s.getRecvBufferSize());
+  _sendBufferSize = BigInt(s.getSendBufferSize());
+  s.close();
+}
+
+export async function getDefaultSendBufferSize () {
+  if (!_sendBufferSize)
+    await getDefaultBufferSizes();
+  return _sendBufferSize;
+}
+
+export async function getDefaultReceiveBufferSize () {
+  if (!_recvBufferSize)
+    await getDefaultBufferSizes();
+  return _recvBufferSize;
 }
