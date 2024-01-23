@@ -70,7 +70,7 @@ jobs:
       run: |
         cargo xtask generate tests
         cargo test
-      if: ${{ ! matrix.os == 'windows-latest' }}
+      if: matrix.os != 'windows-latest'
 
   test-workspaces:
     name: Test Workspaces
