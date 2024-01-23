@@ -2,13 +2,9 @@ import { _setEnv } from "@bytecodealliance/preview2-shim/cli";
 import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { rmdirSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
-import { tmpdir } from 'node:os';
-import { platform } from 'node:process';
+import { resolve } from 'node:path';
 
-const isWindows = platform === 'win32';
-
-export const testDir = (isWindows ? '' : '') + await mkdtemp(tmpdir() + sep);
+export const testDir = await mkdtemp('./tests/output/base');
 
 _setPreopens({ "/": testDir });
 

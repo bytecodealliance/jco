@@ -2,13 +2,11 @@ import { _appendEnv } from "@bytecodealliance/preview2-shim/cli";
 import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp } from "node:fs/promises";
 import { readFileSync, rmdirSync, writeFileSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { $init, generate } from "../../obj/js-component-bindgen-component.js";
 import { fork } from "node:child_process";
-import { sep } from "node:path";
 
-export const testDir = await mkdtemp(tmpdir() + sep);
+export const testDir = await mkdtemp('tests/output/server');
 
 await $init;
 
