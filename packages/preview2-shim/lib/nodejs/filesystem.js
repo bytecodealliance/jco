@@ -379,9 +379,17 @@ class Descriptor {
     try {
       symlinkSync(target, fullPath);
     } catch (e) {
-      if (fullPath.endsWith("/") && e.code === 'EEXIST' && !statSync(target).isDirectory())
-        throw "not-directory";
-      if (isWindows && (e.code === "EPERM" || e.code === "EEXIST"))
+      if (fullPath.endsWith("/") && e.code === 'EEXIST') {
+        let isDir = false;
+        try {
+          isDir = statSync(fullPath).isDirectory();
+        } catch (_) {
+          //
+        }
+        if (!isDir)
+          throw "not-directory";
+      }
+      if (isWindows && e.code === "EPERM")
         throw "no-entry";
       throw convertFsError(e);
     }
