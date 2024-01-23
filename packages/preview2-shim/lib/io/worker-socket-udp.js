@@ -37,6 +37,7 @@ const UDP_BATCH_SENDS = false;
  * @typedef {{
  *   state: number,
  *   remoteAddress: string | null,
+ *   remotePort: number | null,
  *   sendBufferSize: number | null,
  *   receiveBufferSize: number | null,
  *   unicastHopLimit: number,
@@ -86,6 +87,7 @@ export function createUdpSocket({ family, unicastHopLimit }) {
   udpSockets.set(++udpSocketCnt, {
     state: SOCKET_STATE_INIT,
     remoteAddress: null,
+    remotePort: null,
     sendBufferSize: null,
     receiveBufferSize: null,
     unicastHopLimit,
@@ -285,7 +287,8 @@ export function socketUdpStream(id, remoteAddress) {
 
   if (remoteAddress) {
     const serializedRemoteAddress = serializeIpAddress(remoteAddress);
-    socket.remoteAddress = `${serializedRemoteAddress}:${remoteAddress.val.port}`;
+    socket.remoteAddress = serializedRemoteAddress;
+    socket.remotePort = remoteAddress.val.port;
     return new Promise((resolve, reject) => {
       function connectOk() {
         if (socket.state === SOCKET_STATE_INIT) {
@@ -313,6 +316,7 @@ export function socketUdpStream(id, remoteAddress) {
   } else {
     socket.state = SOCKET_STATE_BOUND;
     socket.remoteAddress = null;
+    socket.remotePort = null;
     return [
       (socket.incomingDatagramStream = createIncomingDatagramStream(socket)).id,
       (socket.outgoingDatagramStream = createOutgoingDatagramStream(socket)).id,
@@ -441,26 +445,20 @@ export async function socketOutgoingDatagramStreamSend(id, datagrams) {
     );
 
   const { udpSocket } = socket;
-  let sendQueue = [], sendQueueAddress, sendQueuePort;
+  let sendQueue = [],
+    sendQueueAddress,
+    sendQueuePort;
   let datagramsSent = 0;
   for (const { data, remoteAddress } of datagrams) {
-    let address = remoteAddress
+    const address = remoteAddress
       ? serializeIpAddress(remoteAddress)
-      : undefined;
-    const port = remoteAddress?.val.port;
-    if (socket.remoteAddress) {
-      if (remoteAddress && socket.remoteAddress !== `${address}:${port}`)
-        throw "invalid-argument";
-      address = undefined;
-    } else if (!address) {
-      throw "invalid-argument";
-    }
+      : socket.remoteAddress;
+    const port = remoteAddress?.val.port ?? socket.remotePort;
     let sendLastBatch = !UDP_BATCH_SENDS;
     if (sendQueue.length > 0) {
       if (sendQueueAddress === address && sendQueuePort === port) {
         sendQueue.push(data);
-      }
-      else {
+      } else {
         sendLastBatch = true;
       }
     } else {
@@ -470,8 +468,7 @@ export async function socketOutgoingDatagramStreamSend(id, datagrams) {
     }
     if (sendLastBatch) {
       const err = await doSendBatch();
-      if (err)
-        return BigInt(datagramsSent);
+      if (err) return BigInt(datagramsSent);
       if (UDP_BATCH_SENDS) {
         sendQueue = [data];
         sendQueuePort = port;
@@ -485,20 +482,24 @@ export async function socketOutgoingDatagramStreamSend(id, datagrams) {
   }
   if (sendQueue.length) {
     const err = await doSendBatch();
-    if (err)
-      return BigInt(datagramsSent);
+    if (err) return BigInt(datagramsSent);
   }
 
   if (datagramsSent !== datagrams.length)
-    throw new Error('wasi-io trap: expected to have sent all the datagrams');
+    throw new Error("wasi-io trap: expected to have sent all the datagrams");
   return BigInt(datagramsSent);
 
-  function doSendBatch () {
+  function doSendBatch() {
     return new Promise((resolve, reject) => {
-      if (sendQueueAddress)
-        udpSocket.send(sendQueue, sendQueuePort, sendQueueAddress, handler);
-      else  
+      if (socket.remoteAddress) {
+        if (sendQueueAddress !== socket.remoteAddress || sendQueuePort !== socket.remotePort)
+          return void reject("invalid-argument");
         udpSocket.send(sendQueue, handler);
+      } else {
+        if (!sendQueueAddress)
+          return void reject("invalid-argument");
+        udpSocket.send(sendQueue, sendQueuePort, sendQueueAddress, handler);
+      }
       function handler(err, _sentBytes) {
         if (err) {
           // TODO: update datagramsSent properly on error for multiple sends
