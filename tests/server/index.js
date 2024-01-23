@@ -6,8 +6,9 @@ import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { $init, generate } from "../../obj/js-component-bindgen-component.js";
 import { fork } from "node:child_process";
+import { sep } from "node:path";
 
-export const testDir = await mkdtemp(tmpdir());
+export const testDir = await mkdtemp(tmpdir() + sep);
 
 await $init;
 
