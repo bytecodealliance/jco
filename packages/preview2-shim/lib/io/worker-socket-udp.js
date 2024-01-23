@@ -23,6 +23,12 @@ import {
   SOCKET_STATE_INIT,
 } from "./worker-sockets.js";
 
+// Experimental support for batched UDP sends. Set this to true to enable.
+// This is not enabled by default because we need to figure out how to know
+// how many datagrams were sent when there is an error in a batch.
+// See the err path in "handler" in the "doSendBatch" of socketOutgoingDatagramStreamSend.
+const UDP_BATCH_SENDS = false;
+
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
@@ -427,54 +433,86 @@ export function socketIncomingDatagramStreamReceive(id, maxResults) {
   return datagramStream.queue.splice(0, Number(maxResults));
 }
 
-export function socketOutgoingDatagramStreamSend(id, datagrams) {
+export async function socketOutgoingDatagramStreamSend(id, datagrams) {
   const { active, socket } = datagramStreams.get(id);
   if (!active)
     throw new Error(
       "wasi-io trap: writing to inactive outgoing datagram stream"
     );
 
-  const datagramsToSend = datagrams.map(({ data, remoteAddress }) => {
-    const address = remoteAddress
+  const { udpSocket } = socket;
+  let sendQueue = [], sendQueueAddress, sendQueuePort;
+  let datagramsSent = 0;
+  for (const { data, remoteAddress } of datagrams) {
+    let address = remoteAddress
       ? serializeIpAddress(remoteAddress)
       : undefined;
     const port = remoteAddress?.val.port;
     if (socket.remoteAddress) {
       if (remoteAddress && socket.remoteAddress !== `${address}:${port}`)
         throw "invalid-argument";
-      return { data, address: undefined, port: undefined };
+      address = undefined;
+    } else if (!address) {
+      throw "invalid-argument";
+    }
+    let sendLastBatch = !UDP_BATCH_SENDS;
+    if (sendQueue.length > 0) {
+      if (sendQueueAddress === address && sendQueuePort === port) {
+        sendQueue.push(data);
+      }
+      else {
+        sendLastBatch = true;
+      }
     } else {
-      if (!address) throw "invalid-argument";
-      return { data, address, port };
+      sendQueueAddress = address;
+      sendQueuePort = port;
+      sendQueue.push(data);
     }
-  });
+    if (sendLastBatch) {
+      const err = await doSendBatch();
+      if (err)
+        return BigInt(datagramsSent);
+      if (UDP_BATCH_SENDS) {
+        sendQueue = [data];
+        sendQueuePort = port;
+        sendQueueAddress = address;
+      } else {
+        sendQueue = [];
+        sendQueuePort = port;
+        sendQueueAddress = address;
+      }
+    }
+  }
+  if (sendQueue.length) {
+    const err = await doSendBatch();
+    if (err)
+      return BigInt(datagramsSent);
+  }
 
-  const { udpSocket } = socket;
-  return new Promise((resolve, reject) => {
-    let sent = 0;
-    let errored = false;
-    for (const { data, address, port } of datagramsToSend) {
-      if (errored) break;
-      try {
-        if (address) udpSocket.send(data, port, address, handler);
-        else udpSocket.send(data, handler);
-      } catch (e) {
-        handler(e);
+  if (datagramsSent !== datagrams.length)
+    throw new Error('wasi-io trap: expected to have sent all the datagrams');
+  return BigInt(datagramsSent);
+
+  function doSendBatch () {
+    return new Promise((resolve, reject) => {
+      if (sendQueueAddress)
+        udpSocket.send(sendQueue, sendQueuePort, sendQueueAddress, handler);
+      else  
+        udpSocket.send(sendQueue, handler);
+      function handler(err, _sentBytes) {
+        if (err) {
+          // TODO: update datagramsSent properly on error for multiple sends
+          //       to enable send batching. Perhaps a Node.js PR could
+          //       still set the second sendBytes arg?
+          if (datagramsSent > 0) resolve(datagramsSent);
+          else reject(convertSocketError(err));
+          return;
+        }
+        datagramsSent += sendQueue.length;
+        resolve(false);
       }
-    }
-    function handler(err) {
-      if (err) {
-        errored = true;
-        if (sent > 0) resolve(BigInt(sent));
-        else reject(convertSocketError(err));
-        return;
-      }
-      sent++;
-      if (sent === datagrams.length) {
-        resolve(BigInt(sent));
-      }
-    }
-  });
+    });
+  }
 }
 
 function checkSend(socket) {
@@ -492,7 +530,7 @@ function checkSend(socket) {
 function pollSend(socket) {
   socket.pollState.ready = false;
   // The only way we have of dealing with getting a backpressure
-  // ready signal in Node.js is to just poll on the queue reducing
+  // ready signal in Node.js is to just poll on the queue reducing.
   // Ideally this should implement backoff on the poll interval,
   // but that work should be done alongside careful benchmarking
   // in due course.
