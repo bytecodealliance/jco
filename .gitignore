@@ -11,3 +11,4 @@ package-lock.json
 /src/**/*.d.ts.map
 /tests/rundir
 /tests/generated
+/tests/mod.rs
