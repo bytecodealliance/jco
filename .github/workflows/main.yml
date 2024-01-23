@@ -33,6 +33,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
     - uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node }}
@@ -45,15 +47,15 @@ jobs:
     - run: |
         curl https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-16/wasi-sdk-16.0-linux.tar.gz -L | tar xzvf -
         echo "WASI_SDK_PATH=`pwd`/wasi-sdk-16.0" >> $GITHUB_ENV
-      if : matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest'
     - run: |
         curl https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-16/wasi-sdk-16.0-macos.tar.gz -L | tar xzvf -
         echo "WASI_SDK_PATH=`pwd`/wasi-sdk-16.0" >> $GITHUB_ENV
-      if : matrix.os == 'macos-latest'
+      if: matrix.os == 'macos-latest'
     - run: |
         curl https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-16/wasi-sdk-16.0-mingw.tar.gz -L | tar xzvf -
         echo "WASI_SDK_PATH=`pwd`/wasi-sdk-16.0" >> $GITHUB_ENV
-      if : matrix.os == 'windows-latest'
+      if: matrix.os == 'windows-latest'
 
     - name: Install NPM packages
       run: npm install
@@ -63,6 +65,12 @@ jobs:
 
     - name: Test
       run: npm run test
+
+    - name: WASI Preview 2 Conformance
+      run: |
+        cargo xtask generate tests
+        cargo test
+      if: matrix.os == 'macos-latest'
 
   test-workspaces:
     name: Test Workspaces

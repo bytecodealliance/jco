@@ -16,7 +16,7 @@ pub fn run() -> anyhow::Result<()> {
     drop(guard);
 
     // Tidy up the dir and recreate it.
-    fs::remove_dir_all("./tests/generated")?;
+    let _ = fs::remove_dir_all("./tests/generated");
     fs::create_dir_all("./tests/generated")?;
     fs::create_dir_all("./tests/rundir")?;
 
