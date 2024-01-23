@@ -379,6 +379,10 @@ class Descriptor {
     try {
       symlinkSync(target, fullPath);
     } catch (e) {
+      if (target.endsWith("/")) {
+        if (e.code === 'EEXIST')
+          throw "not-directory";
+      }
       if (isWindows && (e.code === "EPERM" || e.code === "EEXIST"))
         throw "no-entry";
       throw convertFsError(e);
