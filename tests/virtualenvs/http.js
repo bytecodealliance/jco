@@ -1,12 +1,11 @@
 import { _setEnv } from "@bytecodealliance/preview2-shim/cli";
 import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 import { _forbiddenHeaders } from '@bytecodealliance/preview2-shim/http';
 
-export const testDir = await mkdtemp(tmpdir());
+export const testDir = await mkdtemp('./tests/output/http');
 
 _setPreopens({ "/": testDir });
 _forbiddenHeaders.add('custom-forbidden-header');

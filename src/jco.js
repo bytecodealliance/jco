@@ -19,7 +19,7 @@ function myParseInt(value) {
 
 program.command('componentize')
   .description('Create a component from a JavaScript module')
-  .usage('<js-source> -o <component-path>')
+  .usage('<js-source> --wit wit-world.wit -o <component-path>')
   .argument('<js-source>', 'JS source file to build')
   .requiredOption('-w, --wit <path>', 'WIT path to build with')
   .option('-n, --world-name <name>', 'WIT world to build')

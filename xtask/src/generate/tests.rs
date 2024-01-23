@@ -17,8 +17,11 @@ pub fn run() -> anyhow::Result<()> {
 
     // Tidy up the dir and recreate it.
     let _ = fs::remove_dir_all("./tests/generated");
+    let _ = fs::remove_dir_all("./tests/output");
     fs::create_dir_all("./tests/generated")?;
     fs::create_dir_all("./tests/rundir")?;
+    fs::create_dir_all("./tests/output")?;
+    fs::write("./tests/mod.rs", "mod generated;\n")?;
 
     let mut test_names = vec![];
 
