@@ -178,6 +178,7 @@ export function convertSocketErrorCode(code) {
     case 4090: // windows
     case EADDRNOTAVAIL:
       return "address-not-bindable";
+    case 4091: // windows
     case EADDRINUSE:
       return "address-in-use";
     // TODO: return "remote-unreachable";

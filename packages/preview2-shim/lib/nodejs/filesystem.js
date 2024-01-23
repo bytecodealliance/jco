@@ -334,6 +334,7 @@ class Descriptor {
       );
       if (fullPath.endsWith("/")) {
         // check if its a directory
+        descriptor[symbolDispose]();
         if (!descriptor.getType() === "directory") throw "not-directory";
       }
       return descriptor;
