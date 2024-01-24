@@ -29,7 +29,6 @@ pub fn run() -> anyhow::Result<()> {
     let _ = fs::remove_dir_all("./tests/generated");
     let _ = fs::remove_dir_all("./tests/output");
     fs::create_dir_all("./tests/generated")?;
-    fs::create_dir_all("./tests/rundir")?;
     fs::create_dir_all("./tests/output")?;
     fs::write("./tests/mod.rs", "mod generated;\n")?;
 
