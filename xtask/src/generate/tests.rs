@@ -26,11 +26,11 @@ pub fn run() -> anyhow::Result<()> {
     drop(guard);
 
     // Tidy up the dir and recreate it.
-    let _ = fs::remove_dir_all("./tests/generated");
+    let _ = fs::remove_dir_all("./tests/gen");
     let _ = fs::remove_dir_all("./tests/output");
-    fs::create_dir_all("./tests/generated")?;
+    fs::create_dir_all("./tests/gen")?;
     fs::create_dir_all("./tests/output")?;
-    fs::write("./tests/mod.rs", "mod generated;\n")?;
+    fs::write("./tests/mod.rs", "mod gen;\n")?;
 
     let mut test_names = vec![];
 
@@ -61,7 +61,7 @@ pub fn run() -> anyhow::Result<()> {
     for test_name in &test_names {
         let path = format!("submodules/wasmtime/target/wasm32-wasi/debug/{test_name}.wasm");
         // compile into generated dir
-        let dest_file = format!("./tests/generated/{test_name}.component.wasm");
+        let dest_file = format!("./tests/gen/{test_name}.component.wasm");
 
         if let Err(err) = cmd!(
             sh,
@@ -83,12 +83,12 @@ pub fn run() -> anyhow::Result<()> {
         let windows_skip = false;
 
         let content = generate_test(&test_name, windows_skip);
-        let file_name = format!("tests/generated/{test_name}.rs");
+        let file_name = format!("tests/gen/{test_name}.rs");
         fs::write(file_name, content)?;
     }
 
     let content = generate_mod(test_names.as_slice());
-    let file_name = "tests/generated/mod.rs";
+    let file_name = "tests/gen/mod.rs";
     fs::write(file_name, content)?;
     println!("generated {} tests", test_names.len());
     Ok(())
@@ -182,7 +182,7 @@ use std::fs;
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
     {}{{
-        let wasi_file = "./tests/generated/{test_name}.component.wasm";
+        let wasi_file = "./tests/gen/{test_name}.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
         {cmd1}
         {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
