@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn api_read_only() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/api_read_only.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/api_read_only");

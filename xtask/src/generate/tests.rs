@@ -8,7 +8,6 @@ const TEST_FILTER: &[&str] = &[];
 const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
 
 // Tests that cannot be implemented on Windows
-#[cfg(windows)]
 const TEST_IGNORE_WINDOWS: &[&str] = &[
     // openAt implementation should carry directory permissions through to nested
     // open calls. But our openAt implementation is currently path-based and not
@@ -77,10 +76,7 @@ pub fn run() -> anyhow::Result<()> {
             continue;
         }
 
-        #[cfg(windows)]
         let windows_skip = TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
-        #[cfg(not(windows))]
-        let windows_skip = false;
 
         let content = generate_test(&test_name, windows_skip);
         let file_name = format!("tests/gen/{test_name}.rs");
