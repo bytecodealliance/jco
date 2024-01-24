@@ -25,12 +25,11 @@ pub fn run() -> anyhow::Result<()> {
     drop(guard);
 
     // Tidy up the dir and recreate it.
-    let _ = fs::remove_dir_all("./tests/generated");
+    let _ = fs::remove_dir_all("./tests/gen");
     let _ = fs::remove_dir_all("./tests/output");
-    fs::create_dir_all("./tests/generated")?;
-    fs::create_dir_all("./tests/rundir")?;
+    fs::create_dir_all("./tests/gen")?;
     fs::create_dir_all("./tests/output")?;
-    fs::write("./tests/mod.rs", "mod generated;\n")?;
+    fs::write("./tests/mod.rs", "mod gen;\n")?;
 
     let mut test_names = vec![];
 
@@ -44,12 +43,6 @@ pub fn run() -> anyhow::Result<()> {
         let test_name = String::from(&file_name[0..file_name.len() - 5]);
         if TEST_IGNORE.contains(&test_name.as_ref()) {
             continue;
-        }
-        #[cfg(windows)]
-        {
-            if TEST_IGNORE_WINDOWS.contains(&test_name.as_ref()) {
-                continue;
-            }
         }
         test_names.push(test_name);
     }
@@ -66,8 +59,8 @@ pub fn run() -> anyhow::Result<()> {
 
     for test_name in &test_names {
         let path = format!("submodules/wasmtime/target/wasm32-wasi/debug/{test_name}.wasm");
-        // compile into run dir
-        let dest_file = format!("./tests/rundir/{test_name}.component.wasm");
+        // compile into generated dir
+        let dest_file = format!("./tests/gen/{test_name}.component.wasm");
 
         if let Err(err) = cmd!(
             sh,
@@ -83,20 +76,22 @@ pub fn run() -> anyhow::Result<()> {
             continue;
         }
 
-        let content = generate_test(&test_name);
-        let file_name = format!("tests/generated/{test_name}.rs");
+        let windows_skip = TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
+
+        let content = generate_test(&test_name, windows_skip);
+        let file_name = format!("tests/gen/{test_name}.rs");
         fs::write(file_name, content)?;
     }
 
     let content = generate_mod(test_names.as_slice());
-    let file_name = "tests/generated/mod.rs";
+    let file_name = "tests/gen/mod.rs";
     fs::write(file_name, content)?;
     println!("generated {} tests", test_names.len());
     Ok(())
 }
 
 /// Generate an individual test
-fn generate_test(test_name: &str) -> String {
+fn generate_test(test_name: &str, windows_skip: bool) -> String {
     let piped = test_name.starts_with("piped_");
     let virtual_env = match test_name {
         "api_read_only" => "readonly",
@@ -138,7 +133,7 @@ fn generate_test(test_name: &str) -> String {
 
     let cmd1 = format!(
         "{}{}
-    let mut cmd1_child = cmd1.spawn().expect(\"failed to spawn test program\");",
+        let mut cmd1_child = cmd1.spawn().expect(\"failed to spawn test program\");",
         generate_command_invocation(
             "cmd1",
             test_name,
@@ -151,7 +146,7 @@ fn generate_test(test_name: &str) -> String {
         ),
         if piped {
             "
-    cmd1.stdout(Stdio::piped());"
+        cmd1.stdout(Stdio::piped());"
         } else {
             ""
         }
@@ -159,9 +154,9 @@ fn generate_test(test_name: &str) -> String {
     let cmd2: String = if piped {
         format!(
             "{}
-    cmd2.stdin(cmd1_child.stdout.take().unwrap());
-    let mut cmd2_child = cmd2.spawn().expect(\"failed to spawn test program\");
-    ",
+        cmd2.stdin(cmd1_child.stdout.take().unwrap());
+        let mut cmd2_child = cmd2.spawn().expect(\"failed to spawn test program\");
+        ",
             generate_command_invocation(
                 "cmd2",
                 &format!("{test_name}_consumer"),
@@ -182,23 +177,30 @@ use std::fs;
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
-    let wasi_file = "./tests/rundir/{test_name}.component.wasm";
-    let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
-    {cmd1}
-    {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
-    assert!({}status.success(), "test execution failed");
+    {}{{
+        let wasi_file = "./tests/gen/{test_name}.component.wasm";
+        let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
+        {cmd1}
+        {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
+        assert!({}status.success(), "test execution failed");
+    }}
     Ok(())
 }}
 "##,
+        if windows_skip {
+            "#[cfg(not(windows))]\n    "
+        } else {
+            ""
+        },
         match stdin {
             Some(stdin) => format!(
                 "cmd1_child
-        .stdin
-        .as_ref()
-        .unwrap()
-        .write(b\"{}\")
-        .unwrap();
-    ",
+            .stdin
+            .as_ref()
+            .unwrap()
+            .write(b\"{}\")
+            .unwrap();
+        ",
                 stdin
             ),
             None => "".into(),
@@ -216,18 +218,18 @@ fn generate_command_invocation(
 ) -> String {
     return format!(
         r##"let mut {cmd_name} = Command::new("node");
-    {cmd_name}.arg("./src/jco.js");
-    {cmd_name}.arg("run");
+        {cmd_name}.arg("./src/jco.js");
+        {cmd_name}.arg("run");
 {}
-    {cmd_name}.arg("--jco-dir");
-    {cmd_name}.arg("./tests/rundir/{run_dir}");
-    {cmd_name}.arg("--jco-import");
-    {cmd_name}.arg("./tests/virtualenvs/{virtual_env}.js");
-    {cmd_name}.arg(wasi_file);
-    {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
-    {cmd_name}.stdin({});"##,
+        {cmd_name}.arg("--jco-dir");
+        {cmd_name}.arg("./tests/rundir/{run_dir}");
+        {cmd_name}.arg("--jco-import");
+        {cmd_name}.arg("./tests/virtualenvs/{virtual_env}.js");
+        {cmd_name}.arg(wasi_file);
+        {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
+        {cmd_name}.stdin({});"##,
         if TRACE {
-            format!("{cmd_name}.arg(\"--jco-trace\");")
+            format!("       {cmd_name}.arg(\"--jco-trace\");")
         } else {
             "".into()
         },

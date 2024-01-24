@@ -4,6 +4,8 @@ import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { rmdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+await mkdir("tests/output", { recursive: true });
+
 export const testDir = await mkdtemp('./tests/output/base');
 
 _setPreopens({ "/": testDir });

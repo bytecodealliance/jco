@@ -10,6 +10,4 @@ package-lock.json
 /src/**/*.d.ts
 /src/**/*.d.ts.map
 /tests/rundir
-/tests/generated
-/tests/mod.rs
 /tests/output

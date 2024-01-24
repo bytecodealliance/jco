@@ -45,7 +45,7 @@ export async function createIncomingServer(serverName) {
   );
   const componentPath =
     fileURLToPath(import.meta.url.split("/").slice(0, -2).join("/")) +
-    `/rundir/${serverName}.component.wasm`;
+    `/gen/${serverName}.component.wasm`;
   console.error("loading component " + componentPath);
   try {
     const component = readFileSync(componentPath);
