@@ -13,6 +13,7 @@ const env = {
 
 if (isWindows) {
   env.NO_RENAME_DIR_TO_EMPTY_DIR = "1";
+  env.ERRNO_MODE_WINDOWS = "1";
 }
 
 _setEnv(env);
@@ -26,5 +27,5 @@ _setPreopens({ '/': testDir });
 process.on('exit', () => {
   try {
     rmdirSync(testDir, { recursive: true });
-  } catch {}
+  } catch { }
 });

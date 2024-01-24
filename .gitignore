@@ -12,3 +12,4 @@ package-lock.json
 /tests/rundir
 /tests/generated
 /tests/mod.rs
+/tests/output

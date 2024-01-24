@@ -7,6 +7,15 @@ const TEST_FILTER: &[&str] = &[];
 
 const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
 
+// Tests that cannot be implemented on Windows
+const TEST_IGNORE_WINDOWS: &[&str] = &[
+    // openAt implementation should carry directory permissions through to nested
+    // open calls. But our openAt implementation is currently path-based and not
+    // proper segmented access based. If/when this changes we should be able to
+    // support this.
+    "api_read_only"
+];
+
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
 
@@ -35,6 +44,12 @@ pub fn run() -> anyhow::Result<()> {
         let test_name = String::from(&file_name[0..file_name.len() - 5]);
         if TEST_IGNORE.contains(&test_name.as_ref()) {
             continue;
+        }
+        #[cfg(windows)]
+        {
+            if TEST_IGNORE_WINDOWS.contains(&test_name.as_ref()) {
+                continue;
+            }
         }
         test_names.push(test_name);
     }

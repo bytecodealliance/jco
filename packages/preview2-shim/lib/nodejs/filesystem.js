@@ -118,6 +118,8 @@ class Descriptor {
     try {
       fdatasyncSync(this.#fd);
     } catch (e) {
+      if (e.code === 'EPERM')
+        return;
       throw convertFsError(e);
     }
   }
@@ -212,6 +214,8 @@ class Descriptor {
     try {
       fsyncSync(this.#fd);
     } catch (e) {
+      if (e.code === 'EPERM')
+        return;
       throw convertFsError(e);
     }
   }
@@ -307,7 +311,6 @@ class Descriptor {
 
   openAt(pathFlags, path, openFlags, descriptorFlags) {
     const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
-
     let fsOpenFlags = 0x0;
     if (openFlags.create) fsOpenFlags |= constants.O_CREAT;
     if (openFlags.directory) fsOpenFlags |= constants.O_DIRECTORY;
@@ -325,6 +328,30 @@ class Descriptor {
     // Unsupported:
     // if (descriptorFlags.requestedWriteSync)
     // if (descriptorFlags.mutateDirectory)
+    if (isWindows) {
+      if (!pathFlags.symlinkFollow && !openFlags.create) {
+        let isSymlink = false;
+        try {
+          isSymlink = lstatSync(fullPath).isSymbolicLink();
+        }
+        catch (e) {
+          //
+        }
+        if (isSymlink)
+          throw openFlags.directory ? "not-directory" : "loop";
+      }
+      if (pathFlags.symlinkFollow && openFlags.directory) {
+        let isFile = false;
+        try {
+          isFile = !statSync(fullPath).isDirectory();
+        }
+        catch (e) {
+          //
+        }
+        if (isFile)
+          throw "not-directory";
+      }
+    }
     try {
       const fd = openSync(fullPath, fsOpenFlags);
       const descriptor = descriptorCreate(
@@ -333,13 +360,16 @@ class Descriptor {
         fullPath,
         preopenEntries
       );
-      if (fullPath.endsWith("/")) {
+      if (fullPath.endsWith("/") && isWindows) {
         // check if its a directory
-        if (!descriptor.getType() === "directory") throw "not-directory";
+        if (descriptor.getType() !== "directory") {
+          descriptor[symbolDispose]();
+          throw "not-directory";
+        }
       }
       return descriptor;
     } catch (e) {
-      if (e.code === "ERR_INVALID_ARG_VALUE") throw "invalid";
+      if (e.code === "ERR_INVALID_ARG_VALUE") throw isWindows ? "no-entry" : "invalid";
       throw convertFsError(e);
     }
   }
@@ -388,10 +418,12 @@ class Descriptor {
           //
         }
         if (!isDir)
-          throw "not-directory";
+          throw isWindows ? "no-entry" : "not-directory";
       }
-      if (isWindows && e.code === "EPERM")
-        throw "no-entry";
+      if (isWindows) {
+        if (e.code === "EPERM" || e.code === "EEXIST")
+          throw "no-entry";
+      }
       throw convertFsError(e);
     }
   }
@@ -399,8 +431,20 @@ class Descriptor {
   unlinkFileAt(path) {
     const fullPath = this.#getFullPath(path, false);
     try {
+      if (fullPath.endsWith("/")) {
+        let isDir = false;
+        try {
+          isDir = statSync(fullPath).isDirectory();
+        }
+        catch (e) {
+          //
+        }
+        throw isDir ? (isWindows ? "access" : "is-directory") : "not-directory";
+      }
       unlinkSync(fullPath);
     } catch (e) {
+      if (isWindows && e.code === "EPERM")
+        throw "access";
       throw convertFsError(e);
     }
   }
