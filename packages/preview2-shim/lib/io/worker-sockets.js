@@ -192,7 +192,7 @@ export function convertSocketErrorCode(code) {
     // TODO: return "name-unresolvable";
     // TODO: return "temporary-resolver-failure";
     default:
-      process._rawDebug('unknown error code', code);
+      // process._rawDebug('unknown error code', code);
       return "unknown";
   }
 }
