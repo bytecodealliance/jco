@@ -178,6 +178,7 @@ export function convertSocketErrorCode(code) {
     case 4090: // windows
     case EADDRNOTAVAIL:
       return "address-not-bindable";
+    case 4091: // windows
     case EADDRINUSE:
       return "address-in-use";
     // TODO: return "remote-unreachable";
@@ -191,6 +192,7 @@ export function convertSocketErrorCode(code) {
     // TODO: return "name-unresolvable";
     // TODO: return "temporary-resolver-failure";
     default:
+      // process._rawDebug('unknown error code', code);
       return "unknown";
   }
 }
