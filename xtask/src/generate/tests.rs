@@ -8,6 +8,7 @@ const TEST_FILTER: &[&str] = &[];
 const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
 
 // Tests that cannot be implemented on Windows
+#[cfg(windows)]
 const TEST_IGNORE_WINDOWS: &[&str] = &[
     // openAt implementation should carry directory permissions through to nested
     // open calls. But our openAt implementation is currently path-based and not
@@ -45,12 +46,6 @@ pub fn run() -> anyhow::Result<()> {
         if TEST_IGNORE.contains(&test_name.as_ref()) {
             continue;
         }
-        #[cfg(windows)]
-        {
-            if TEST_IGNORE_WINDOWS.contains(&test_name.as_ref()) {
-                continue;
-            }
-        }
         test_names.push(test_name);
     }
     test_names.sort();
@@ -83,7 +78,12 @@ pub fn run() -> anyhow::Result<()> {
             continue;
         }
 
-        let content = generate_test(&test_name);
+        #[cfg(windows)]
+        let windows_skip = TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
+        #[cfg(not(windows))]
+        let windows_skip = false;
+
+        let content = generate_test(&test_name, windows_skip);
         let file_name = format!("tests/generated/{test_name}.rs");
         fs::write(file_name, content)?;
     }
@@ -96,7 +96,7 @@ pub fn run() -> anyhow::Result<()> {
 }
 
 /// Generate an individual test
-fn generate_test(test_name: &str) -> String {
+fn generate_test(test_name: &str, windows_skip: bool) -> String {
     let piped = test_name.starts_with("piped_");
     let virtual_env = match test_name {
         "api_read_only" => "readonly",
@@ -138,7 +138,7 @@ fn generate_test(test_name: &str) -> String {
 
     let cmd1 = format!(
         "{}{}
-    let mut cmd1_child = cmd1.spawn().expect(\"failed to spawn test program\");",
+        let mut cmd1_child = cmd1.spawn().expect(\"failed to spawn test program\");",
         generate_command_invocation(
             "cmd1",
             test_name,
@@ -159,8 +159,8 @@ fn generate_test(test_name: &str) -> String {
     let cmd2: String = if piped {
         format!(
             "{}
-    cmd2.stdin(cmd1_child.stdout.take().unwrap());
-    let mut cmd2_child = cmd2.spawn().expect(\"failed to spawn test program\");
+        cmd2.stdin(cmd1_child.stdout.take().unwrap());
+        let mut cmd2_child = cmd2.spawn().expect(\"failed to spawn test program\");
     ",
             generate_command_invocation(
                 "cmd2",
@@ -182,14 +182,21 @@ use std::fs;
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
-    let wasi_file = "./tests/rundir/{test_name}.component.wasm";
-    let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
-    {cmd1}
-    {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
-    assert!({}status.success(), "test execution failed");
+    {}{{
+        let wasi_file = "./tests/rundir/{test_name}.component.wasm";
+        let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
+        {cmd1}
+        {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
+        assert!({}status.success(), "test execution failed");
+    }}
     Ok(())
 }}
 "##,
+        if windows_skip {
+            "#[cfg(not(windows))]\n    "
+        } else {
+            ""
+        },
         match stdin {
             Some(stdin) => format!(
                 "cmd1_child
@@ -216,18 +223,18 @@ fn generate_command_invocation(
 ) -> String {
     return format!(
         r##"let mut {cmd_name} = Command::new("node");
-    {cmd_name}.arg("./src/jco.js");
-    {cmd_name}.arg("run");
+        {cmd_name}.arg("./src/jco.js");
+        {cmd_name}.arg("run");
 {}
-    {cmd_name}.arg("--jco-dir");
-    {cmd_name}.arg("./tests/rundir/{run_dir}");
-    {cmd_name}.arg("--jco-import");
-    {cmd_name}.arg("./tests/virtualenvs/{virtual_env}.js");
-    {cmd_name}.arg(wasi_file);
-    {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
-    {cmd_name}.stdin({});"##,
+        {cmd_name}.arg("--jco-dir");
+        {cmd_name}.arg("./tests/rundir/{run_dir}");
+        {cmd_name}.arg("--jco-import");
+        {cmd_name}.arg("./tests/virtualenvs/{virtual_env}.js");
+        {cmd_name}.arg(wasi_file);
+        {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
+        {cmd_name}.stdin({});"##,
         if TRACE {
-            format!("{cmd_name}.arg(\"--jco-trace\");")
+            format!("       {cmd_name}.arg(\"--jco-trace\");")
         } else {
             "".into()
         },

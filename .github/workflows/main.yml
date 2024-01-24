@@ -67,9 +67,7 @@ jobs:
       run: npm run test
 
     - name: WASI Preview 2 Conformance
-      run: |
-        cargo xtask generate tests
-        cargo test
+      run: cargo test
 
   test-workspaces:
     name: Test Workspaces

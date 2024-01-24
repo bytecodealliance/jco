@@ -836,7 +836,7 @@ export function verifyPollsDroppedForDrop(pollState, polledResourceDebugName) {
     const poll = polls.get(pollId);
     if (poll)
       throw new Error(
-        `wasi-io trap: Cannot drop ${polledResourceDebugName} as it has a child poll resource which have not been dropped yet`
+        `wasi-io trap: Cannot drop ${polledResourceDebugName} as it has a child poll resource which has not yet been dropped`
       );
   }
 }
