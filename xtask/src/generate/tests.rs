@@ -13,7 +13,7 @@ const TEST_IGNORE_WINDOWS: &[&str] = &[
     // open calls. But our openAt implementation is currently path-based and not
     // proper segmented access based. If/when this changes we should be able to
     // support this.
-    "api_read_only"
+    "api_read_only",
 ];
 
 pub fn run() -> anyhow::Result<()> {
