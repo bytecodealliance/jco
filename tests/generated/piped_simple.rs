@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn piped_simple() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/piped_simple.component.wasm";
+        let wasi_file = "./tests/generated/piped_simple.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/piped_simple");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

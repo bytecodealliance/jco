@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn api_read_only() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/api_read_only.component.wasm";
+        let wasi_file = "./tests/generated/api_read_only.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/api_read_only");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

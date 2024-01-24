@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn http_outbound_request_unknown_method() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/http_outbound_request_unknown_method.component.wasm";
+        let wasi_file = "./tests/generated/http_outbound_request_unknown_method.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/http_outbound_request_unknown_method");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

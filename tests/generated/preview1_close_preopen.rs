@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn preview1_close_preopen() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/preview1_close_preopen.component.wasm";
+        let wasi_file = "./tests/generated/preview1_close_preopen.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/preview1_close_preopen");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

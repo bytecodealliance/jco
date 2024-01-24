@@ -61,8 +61,8 @@ pub fn run() -> anyhow::Result<()> {
 
     for test_name in &test_names {
         let path = format!("submodules/wasmtime/target/wasm32-wasi/debug/{test_name}.wasm");
-        // compile into run dir
-        let dest_file = format!("./tests/rundir/{test_name}.component.wasm");
+        // compile into generated dir
+        let dest_file = format!("./tests/generated/{test_name}.component.wasm");
 
         if let Err(err) = cmd!(
             sh,
@@ -151,7 +151,7 @@ fn generate_test(test_name: &str, windows_skip: bool) -> String {
         ),
         if piped {
             "
-    cmd1.stdout(Stdio::piped());"
+        cmd1.stdout(Stdio::piped());"
         } else {
             ""
         }
@@ -161,7 +161,7 @@ fn generate_test(test_name: &str, windows_skip: bool) -> String {
             "{}
         cmd2.stdin(cmd1_child.stdout.take().unwrap());
         let mut cmd2_child = cmd2.spawn().expect(\"failed to spawn test program\");
-    ",
+        ",
             generate_command_invocation(
                 "cmd2",
                 &format!("{test_name}_consumer"),
@@ -183,7 +183,7 @@ use std::fs;
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
     {}{{
-        let wasi_file = "./tests/rundir/{test_name}.component.wasm";
+        let wasi_file = "./tests/generated/{test_name}.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/{test_name}");
         {cmd1}
         {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
@@ -200,12 +200,12 @@ fn {test_name}() -> anyhow::Result<()> {{
         match stdin {
             Some(stdin) => format!(
                 "cmd1_child
-        .stdin
-        .as_ref()
-        .unwrap()
-        .write(b\"{}\")
-        .unwrap();
-    ",
+            .stdin
+            .as_ref()
+            .unwrap()
+            .write(b\"{}\")
+            .unwrap();
+        ",
                 stdin
             ),
             None => "".into(),

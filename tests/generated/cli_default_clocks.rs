@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn cli_default_clocks() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/cli_default_clocks.component.wasm";
+        let wasi_file = "./tests/generated/cli_default_clocks.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_default_clocks");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn preview2_tcp_sockopts() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/preview2_tcp_sockopts.component.wasm";
+        let wasi_file = "./tests/generated/preview2_tcp_sockopts.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/preview2_tcp_sockopts");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

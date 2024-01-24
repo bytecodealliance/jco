@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn preview1_regular_file_isatty() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/preview1_regular_file_isatty.component.wasm";
+        let wasi_file = "./tests/generated/preview1_regular_file_isatty.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/preview1_regular_file_isatty");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

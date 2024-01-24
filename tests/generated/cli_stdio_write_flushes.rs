@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn cli_stdio_write_flushes() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/cli_stdio_write_flushes.component.wasm";
+        let wasi_file = "./tests/generated/cli_stdio_write_flushes.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_stdio_write_flushes");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn preview2_adapter_badfd() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/preview2_adapter_badfd.component.wasm";
+        let wasi_file = "./tests/generated/preview2_adapter_badfd.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/preview2_adapter_badfd");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

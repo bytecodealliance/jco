@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn proxy_echo() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/proxy_echo.component.wasm";
+        let wasi_file = "./tests/generated/proxy_echo.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/proxy_echo");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn cli_file_read() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/cli_file_read.component.wasm";
+        let wasi_file = "./tests/generated/cli_file_read.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_file_read");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn proxy_hash() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/proxy_hash.component.wasm";
+        let wasi_file = "./tests/generated/proxy_hash.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/proxy_hash");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");

@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 #[test]
 fn piped_polling() -> anyhow::Result<()> {
     {
-        let wasi_file = "./tests/rundir/piped_polling.component.wasm";
+        let wasi_file = "./tests/generated/piped_polling.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/piped_polling");
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
