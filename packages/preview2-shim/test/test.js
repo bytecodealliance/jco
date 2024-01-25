@@ -10,10 +10,18 @@ import { fileURLToPath } from "node:url";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
+function testWithGCWrap (asyncTestFn) {
+  return async () => {
+    await asyncTestFn();
+    // Force the JS GC to run finalizers
+    gc();
+    await new Promise(resolve => setTimeout(resolve, 200));
+  };
+}
+
 suite("Node.js Preview2", () => {
   test("Stdio", async () => {
     const { cli } = await import("@bytecodealliance/preview2-shim");
-    // todo: wrap in a process call to not spill to test output
     cli.stdout
       .getStdout()
       .blockingWriteAndFlush(new TextEncoder().encode("test stdout"));
@@ -101,27 +109,38 @@ suite("Node.js Preview2", () => {
   });
 
   test("FS read", async () => {
-    const { filesystem } = await import("@bytecodealliance/preview2-shim");
-    const [[rootDescriptor]] = filesystem.preopens.getDirectories();
-    const childDescriptor = rootDescriptor.openAt(
-      {},
-      fileURLToPath(import.meta.url).slice(1),
-      {},
-      {}
-    );
-    const stream = childDescriptor.readViaStream(0);
-    const poll = stream.subscribe();
-    poll.block();
-    let buf = stream.read(10000n);
-    while (buf.byteLength === 0) buf = stream.read(10000n);
-    const source = new TextDecoder().decode(buf);
-    ok(source.includes("UNIQUE STRING"));
-    poll[Symbol.dispose]();
-    stream[Symbol.dispose]();
-    childDescriptor[Symbol.dispose]();
+    let toDispose = [];
+    await (async () => {
+      const { filesystem } = await import("@bytecodealliance/preview2-shim");
+      const [[rootDescriptor]] = filesystem.preopens.getDirectories();
+      const childDescriptor = rootDescriptor.openAt(
+        {},
+        fileURLToPath(import.meta.url).slice(1),
+        {},
+        {}
+      );
+      const stream = childDescriptor.readViaStream(0);
+      const poll = stream.subscribe();
+      poll.block();
+      let buf = stream.read(10000n);
+      while (buf.byteLength === 0) buf = stream.read(10000n);
+      const source = new TextDecoder().decode(buf);
+      ok(source.includes("UNIQUE STRING"));
+      toDispose.push(stream);
+      toDispose.push(childDescriptor);
+    })();
+    
+
+    // Force the Poll to GC so the next dispose doesn't trap
+    gc();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    for (const item of toDispose) {
+      item[symbolDispose]();
+    }
   });
 
-  test("WASI HTTP", async () => {
+  test("WASI HTTP", testWithGCWrap(async () => {
     const { http } = await import("@bytecodealliance/preview2-shim");
     const { handle } = http.outgoingHandler;
     const { OutgoingRequest, OutgoingBody, Fields } = http.types;
@@ -175,7 +194,7 @@ suite("Node.js Preview2", () => {
     strictEqual(status, 200);
     ok(headers["content-type"].startsWith("text/html"));
     ok(responseBody.includes("WebAssembly"));
-  });
+  }));
 
   suite("WASI Sockets (TCP)", async () => {
     test("sockets.instanceNetwork() should be a singleton", async () => {
@@ -316,7 +335,7 @@ suite("Node.js Preview2", () => {
       // const [socket, input, output] = tcpSocket.accept();
     });
 
-    test("tcp.connect(): should connect to a valid ipv4 address and port=0", async () => {
+    test("tcp.connect(): should connect to a valid ipv4 address and port=0", testWithGCWrap(async () => {
       const { lookup } = await import("node:dns");
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
@@ -372,7 +391,7 @@ suite("Node.js Preview2", () => {
         tcpSocket.remoteAddress().val.address,
         googleIp.split(".").map((n) => Number(n))
       );
-    });
+    }));
   });
 
   suite("WASI Sockets (UDP)", async () => {
@@ -462,7 +481,7 @@ suite("Node.js Preview2", () => {
       strictEqual(boundAddress.val.port > 0, true);
     });
 
-    test("udp.stream(): should connect to a valid ipv6 address", async () => {
+    test("udp.stream(): should connect to a valid ipv6 address", testWithGCWrap(async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
       const socket = sockets.udpCreateSocket.createUdpSocket('ipv6');
@@ -483,6 +502,6 @@ suite("Node.js Preview2", () => {
       const boundAddress = socket.localAddress();
       deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
       strictEqual(boundAddress.val.port, 1337);
-    });
+    }));
   });
 });

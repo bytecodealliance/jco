@@ -2,6 +2,7 @@ import {
   ioCall,
   inputStreamCreate,
   outputStreamCreate,
+  registerDispose,
 } from "../io/worker-io.js";
 import { INPUT_STREAM_CREATE, OUTPUT_STREAM_CREATE } from "../io/calls.js";
 import { FILE } from "../io/calls.js";
@@ -53,9 +54,10 @@ function lookupType(obj) {
   return "unknown";
 }
 
-// Note: This should implement per-segment semantics of openAt, but we cannot currently
-//       due to the lack of support for openat() in Node.js.
+// Note: This should implement per-segment semantics of openAt, but we cannot
+//       currently due to the lack of support for openat() in Node.js.
 //       Tracking issue: https://github.com/libuv/libuv/issues/4167
+
 /**
  * @implements {DescriptorProps}
  */
@@ -81,6 +83,7 @@ class Descriptor {
   static _create(fd, mode, fullPath) {
     const descriptor = new Descriptor();
     descriptor.#fd = fd;
+    registerDispose(descriptor, null, fd, closeSync);
     descriptor.#mode = mode;
     descriptor.#fullPath = fullPath;
     return descriptor;
@@ -118,8 +121,7 @@ class Descriptor {
     try {
       fdatasyncSync(this.#fd);
     } catch (e) {
-      if (e.code === 'EPERM')
-        return;
+      if (e.code === "EPERM") return;
       throw convertFsError(e);
     }
   }
@@ -214,8 +216,7 @@ class Descriptor {
     try {
       fsyncSync(this.#fd);
     } catch (e) {
-      if (e.code === 'EPERM')
-        return;
+      if (e.code === "EPERM") return;
       throw convertFsError(e);
     }
   }
@@ -333,23 +334,19 @@ class Descriptor {
         let isSymlink = false;
         try {
           isSymlink = lstatSync(fullPath).isSymbolicLink();
-        }
-        catch (e) {
+        } catch (e) {
           //
         }
-        if (isSymlink)
-          throw openFlags.directory ? "not-directory" : "loop";
+        if (isSymlink) throw openFlags.directory ? "not-directory" : "loop";
       }
       if (pathFlags.symlinkFollow && openFlags.directory) {
         let isFile = false;
         try {
           isFile = !statSync(fullPath).isDirectory();
-        }
-        catch (e) {
+        } catch (e) {
           //
         }
-        if (isFile)
-          throw "not-directory";
+        if (isFile) throw "not-directory";
       }
     }
     try {
@@ -369,7 +366,8 @@ class Descriptor {
       }
       return descriptor;
     } catch (e) {
-      if (e.code === "ERR_INVALID_ARG_VALUE") throw isWindows ? "no-entry" : "invalid";
+      if (e.code === "ERR_INVALID_ARG_VALUE")
+        throw isWindows ? "no-entry" : "invalid";
       throw convertFsError(e);
     }
   }
@@ -410,19 +408,17 @@ class Descriptor {
     try {
       symlinkSync(target, fullPath);
     } catch (e) {
-      if (fullPath.endsWith("/") && e.code === 'EEXIST') {
+      if (fullPath.endsWith("/") && e.code === "EEXIST") {
         let isDir = false;
         try {
           isDir = statSync(fullPath).isDirectory();
         } catch (_) {
           //
         }
-        if (!isDir)
-          throw isWindows ? "no-entry" : "not-directory";
+        if (!isDir) throw isWindows ? "no-entry" : "not-directory";
       }
       if (isWindows) {
-        if (e.code === "EPERM" || e.code === "EEXIST")
-          throw "no-entry";
+        if (e.code === "EPERM" || e.code === "EEXIST") throw "no-entry";
       }
       throw convertFsError(e);
     }
@@ -435,16 +431,14 @@ class Descriptor {
         let isDir = false;
         try {
           isDir = statSync(fullPath).isDirectory();
-        }
-        catch (e) {
+        } catch (e) {
           //
         }
         throw isDir ? (isWindows ? "access" : "is-directory") : "not-directory";
       }
       unlinkSync(fullPath);
     } catch (e) {
-      if (isWindows && e.code === "EPERM")
-        throw "access";
+      if (isWindows && e.code === "EPERM") throw "access";
       throw convertFsError(e);
     }
   }
@@ -532,10 +526,6 @@ class Descriptor {
       );
     return descriptor.#fullPath + (subpath.length > 0 ? "/" : "") + subpath;
   }
-
-  [symbolDispose]() {
-    if (this.#fd) closeSync(this.#fd);
-  }
 }
 const descriptorCreatePreopen = Descriptor._createPreopen;
 delete Descriptor._createPreopen;
@@ -558,12 +548,9 @@ class DirectoryEntryStream {
     const type = lookupType(entry);
     return { name, type };
   }
-  [symbolDispose]() {
-    this.#dir.closeSync();
-  }
-
   static _create(dir) {
     const dirStream = new DirectoryEntryStream();
+    registerDispose(dirStream, null, null, dir.closeSync.bind(dir));
     dirStream.#dir = dir;
     return dirStream;
   }

@@ -62,6 +62,7 @@ export const HTTP_SERVER_STOP = ++call_id << CALL_SHIFT;
 export const HTTP_SERVER_INCOMING_HANDLER = ++call_id << CALL_SHIFT;
 export const HTTP_SERVER_SET_OUTGOING_RESPONSE = ++call_id << CALL_SHIFT;
 export const HTTP_SERVER_CLEAR_OUTGOING_RESPONSE = ++call_id << CALL_SHIFT;
+export const HTTP_OUTGOING_BODY_DISPOSE = ++call_id << CALL_SHIFT;
 
 // Clocks
 export const CLOCKS_NOW = ++call_id << CALL_SHIFT;
@@ -102,7 +103,8 @@ export const SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_SEND_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_UNICAST_HOP_LIMIT = ++call_id << CALL_SHIFT;
 export const SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE = ++call_id << CALL_SHIFT;
-export const SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND = ++call_id << CALL_SHIFT;
+export const SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND =
+  ++call_id << CALL_SHIFT;
 export const SOCKET_OUTGOING_DATAGRAM_STREAM_SEND = ++call_id << CALL_SHIFT;
 export const SOCKET_DATAGRAM_STREAM_SUBSCRIBE = ++call_id << CALL_SHIFT;
 export const SOCKET_DATAGRAM_STREAM_DISPOSE = ++call_id << CALL_SHIFT;
@@ -118,9 +120,9 @@ export const SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST = ++call_id << CALL_SHIFT;
 
 export const reverseMap = {};
 
-import * as calls from './calls.js';
+import * as calls from "./calls.js";
 
 for (const name of Object.getOwnPropertyNames(calls)) {
-  if (name === 'reverseMap') continue;
+  if (name === "reverseMap") continue;
   reverseMap[calls[name]] = name;
 }

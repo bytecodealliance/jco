@@ -25,6 +25,7 @@ import {
   FUTURE_TAKE_VALUE,
   HTTP,
   HTTP_CREATE_REQUEST,
+  HTTP_OUTGOING_BODY_DISPOSE,
   HTTP_OUTPUT_STREAM_FINISH,
   HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
   HTTP_SERVER_SET_OUTGOING_RESPONSE,
@@ -347,10 +348,6 @@ function handle(call, id, payload) {
       // otherwise fall through to generic implementation
       return handle(call & ~HTTP, id, payload);
     }
-    case OUTPUT_STREAM_DISPOSE | HTTP:
-      throw new Error(
-        "wasi-io trap: HTTP output stream dispose is bypassed for FINISH"
-      );
     case OUTPUT_STREAM_WRITE | HTTP: {
       const { stream } = getStreamOrThrow(id);
       stream.bytesRemaining -= payload.byteLength;
@@ -366,8 +363,20 @@ function handle(call, id, payload) {
       const output = handle(OUTPUT_STREAM_WRITE, id, payload);
       return output;
     }
+    case OUTPUT_STREAM_DISPOSE | HTTP:
+      throw new Error(
+        "wasi-io trap: Output stream dispose not implemented as an IO-call for HTTP"
+      );
     case HTTP_OUTPUT_STREAM_FINISH: {
-      const { stream } = getStreamOrThrow(id);
+      let stream;
+      try {
+        ({ stream } = getStreamOrThrow(id));
+      } catch (e) {
+        if (e.tag === "closed")
+          throw { tag: "internal-error", val: "stream closed" };
+        if (e.tag === "last-operation-failed")
+          throw { tag: "internal-error", val: e.val.message };
+      }
       if (stream.bytesRemaining > 0) {
         throw {
           tag: "HTTP-request-body-size",
@@ -383,6 +392,10 @@ function handle(call, id, payload) {
       stream.end();
       return;
     }
+    case HTTP_OUTGOING_BODY_DISPOSE:
+      if (!streams.delete(id))
+        throw new Error("wasi-io trap: stream not found to dispose");
+      return;
     case HTTP_SERVER_START:
       return startHttpServer(id, payload);
     case HTTP_SERVER_STOP:
@@ -600,9 +613,6 @@ function handle(call, id, payload) {
       return createPoll(streams.get(id).pollState);
     case INPUT_STREAM_DISPOSE: {
       const stream = streams.get(id);
-      // TODO: fix double drop where IncomingBody drops IncomingStream,
-      //       instead implementing proper core WASI GC
-      if (!stream) return;
       verifyPollsDroppedForDrop(stream.pollState, "input stream");
       streams.delete(id);
       return;
@@ -757,6 +767,8 @@ function handle(call, id, payload) {
       payload = [id];
     // [intentional case fall-through]
     case POLL_POLL_LIST: {
+      if (payload.length === 0)
+        throw new Error("wasi-io trap: attempt to poll on empty list");
       const doneList = [];
       const pollList = payload.map((pollId) => polls.get(pollId));
       for (const [idx, pollState] of pollList.entries()) {

@@ -3,7 +3,9 @@ import { createSyncFn } from "../synckit/index.js";
 import {
   CALL_MASK,
   CALL_TYPE_MASK,
+  FILE,
   HTTP_SERVER_INCOMING_HANDLER,
+  HTTP,
   INPUT_STREAM_BLOCKING_READ,
   INPUT_STREAM_BLOCKING_SKIP,
   INPUT_STREAM_DISPOSE,
@@ -25,9 +27,12 @@ import {
   POLL_POLLABLE_BLOCK,
   POLL_POLLABLE_DISPOSE,
   POLL_POLLABLE_READY,
+  SOCKET_TCP,
+  STDERR,
+  STDIN,
+  STDOUT,
   reverseMap,
 } from "./calls.js";
-import { STDERR } from "./calls.js";
 import { _rawDebug, exit, stderr, stdout, env } from "node:process";
 
 const workerPath = fileURLToPath(
@@ -92,6 +97,46 @@ if (DEBUG) {
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
+const finalizationRegistry = new FinalizationRegistry(
+  (dispose) => void dispose()
+);
+
+const dummySymbol = Symbol();
+
+/**
+ *
+ * @param {any} resource
+ * @param {any} parentResource
+ * @param {number} id
+ * @param {(number) => void} disposeFn
+ * @returns
+ */
+export function registerDispose(resource, parentResource, id, disposeFn) {
+  // While strictly speaking all components should handle their disposal,
+  // this acts as a last-resort to catch all missed drops through the JS GC.
+  // Mainly for two cases - (1) components which are long lived, that get shut
+  // down and (2) users that interface with low-level WASI APIs directly in JS
+  // for various reasons may end up leaning on JS GC inadvertantly.
+  function finalizer() {
+    // This has no functional purpose other than to pin a strong reference
+    // from the child resource's finalizer to the parent resource, to ensure
+    // that we can never finalize a parent resource before a child resource.
+    // This makes the generational JS GC become piecewise over child resource
+    // graphs (generational at each resource hierarchy level at least).
+    if (parentResource?.[dummySymbol]) return;
+    disposeFn(id);
+  }
+  finalizationRegistry.register(resource, finalizer, finalizer);
+
+  // This is the Symbol.dispose function, which allows for _early_ disposal
+  Object.defineProperty(resource, symbolDispose, {
+    value: () => {
+      finalizationRegistry.unregister(finalizer);
+      disposeFn(id);
+    },
+  });
+}
+
 const _Error = Error;
 const IoError = class Error extends _Error {
   constructor(payload) {
@@ -151,24 +196,59 @@ class InputStream {
   }
   subscribe() {
     return pollableCreate(
-      ioCall(INPUT_STREAM_SUBSCRIBE | this.#streamType, this.#id)
+      ioCall(INPUT_STREAM_SUBSCRIBE | this.#streamType, this.#id),
+      this
     );
-  }
-  [symbolDispose]() {
-    ioCall(INPUT_STREAM_DISPOSE | this.#streamType, this.#id);
   }
   static _id(stream) {
     return stream.#id;
   }
   /**
-   * @param {InputStreamType} streamType
+   * @param {FILE | SOCKET_TCP | STDIN | HTTP} streamType
    */
   static _create(streamType, id) {
     const stream = new InputStream();
     stream.#id = id;
     stream.#streamType = streamType;
+    let disposeFn;
+    switch (streamType) {
+      case FILE:
+        disposeFn = fileInputStreamDispose;
+        break;
+      case SOCKET_TCP:
+        disposeFn = socketTcpInputStreamDispose;
+        break;
+      case STDIN:
+        disposeFn = stdinInputStreamDispose;
+        break;
+      case HTTP:
+        disposeFn = httpInputStreamDispose;
+        break;
+      default:
+        throw new Error(
+          "wasi-io trap: Dispose function not created for stream type " +
+            reverseMap[streamType]
+        );
+    }
+    registerDispose(stream, null, id, disposeFn);
     return stream;
   }
+}
+
+function fileInputStreamDispose(id) {
+  ioCall(INPUT_STREAM_DISPOSE | FILE, id, null);
+}
+
+function socketTcpInputStreamDispose(id) {
+  ioCall(INPUT_STREAM_DISPOSE | SOCKET_TCP, id, null);
+}
+
+function stdinInputStreamDispose(id) {
+  ioCall(INPUT_STREAM_DISPOSE | STDIN, id, null);
+}
+
+function httpInputStreamDispose(id) {
+  ioCall(INPUT_STREAM_DISPOSE | HTTP, id, null);
 }
 
 export const inputStreamCreate = InputStream._create;
@@ -248,9 +328,6 @@ class OutputStream {
       ioCall(OUTPUT_STREAM_SUBSCRIBE | this.#streamType, this.#id)
     );
   }
-  [symbolDispose]() {
-    ioCall(OUTPUT_STREAM_DISPOSE | this.#streamType, this.#id);
-  }
 
   static _id(outputStream) {
     return outputStream.#id;
@@ -263,8 +340,47 @@ class OutputStream {
     const stream = new OutputStream();
     stream.#id = id;
     stream.#streamType = streamType;
+    let disposeFn;
+    switch (streamType) {
+      case STDOUT:
+        disposeFn = stdoutOutputStreamDispose;
+        break;
+      case STDERR:
+        disposeFn = stderrOutputStreamDispose;
+        break;
+      case SOCKET_TCP:
+        disposeFn = socketTcpOutputStreamDispose;
+        break;
+      case FILE:
+        disposeFn = fileOutputStreamDispose;
+        break;
+      case HTTP:
+        return stream;
+      default:
+        throw new Error(
+          "wasi-io trap: Dispose function not created for stream type " +
+            reverseMap[streamType]
+        );
+    }
+    registerDispose(stream, null, id, disposeFn);
     return stream;
   }
+}
+
+function stdoutOutputStreamDispose(id) {
+  ioCall(OUTPUT_STREAM_DISPOSE | STDOUT, id);
+}
+
+function stderrOutputStreamDispose(id) {
+  ioCall(OUTPUT_STREAM_DISPOSE | STDERR, id);
+}
+
+function socketTcpOutputStreamDispose(id) {
+  ioCall(OUTPUT_STREAM_DISPOSE | SOCKET_TCP, id);
+}
+
+function fileOutputStreamDispose(id) {
+  ioCall(OUTPUT_STREAM_DISPOSE | FILE, id);
 }
 
 export const outputStreamCreate = OutputStream._create;
@@ -277,6 +393,10 @@ export const error = { Error: IoError };
 
 export const streams = { InputStream, OutputStream };
 
+function pollableDispose(id) {
+  ioCall(POLL_POLLABLE_DISPOSE, id);
+}
+
 class Pollable {
   #id;
   ready() {
@@ -288,26 +408,19 @@ class Pollable {
       ioCall(POLL_POLLABLE_BLOCK, this.#id);
     }
   }
-  [symbolDispose]() {
-    if (this.#id !== 0) {
-      ioCall(POLL_POLLABLE_DISPOSE, this.#id);
-      this.#id = 0;
-    }
-  }
   static _getId(pollable) {
     return pollable.#id;
   }
-  static _create(id) {
+  static _create(id, parent) {
     const pollable = new Pollable();
     pollable.#id = id;
+    registerDispose(pollable, parent, id, pollableDispose);
     return pollable;
   }
 }
 
 export const pollableCreate = Pollable._create;
 delete Pollable._create;
-
-export const resolvedPoll = pollableCreate(0);
 
 const pollableGetId = Pollable._getId;
 delete Pollable._getId;
