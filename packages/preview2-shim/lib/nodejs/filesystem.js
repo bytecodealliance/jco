@@ -36,6 +36,7 @@ import { platform } from "node:process";
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 const isWindows = platform === "win32";
+const isMac = platform === "darwin";
 
 const nsMagnitude = 1_000_000_000_000n;
 function nsToDateTime(ns) {
@@ -334,10 +335,11 @@ class Descriptor {
     if (descriptorFlags.fileIntegritySync) fsOpenFlags |= constants.O_SYNC;
     if (descriptorFlags.dataIntegritySync) fsOpenFlags |= constants.O_DSYNC;
     if (!pathFlags.symlinkFollow) fsOpenFlags |= constants.O_NOFOLLOW;
-
-    // Unsupported:
-    // if (descriptorFlags.requestedWriteSync)
-    // if (descriptorFlags.mutateDirectory)
+    if (descriptorFlags.requestedWriteSync || descriptorFlags.mutateDirectory)
+      throw "unsupported";
+    // Currently throw to match Wasmtime
+    if (descriptorFlags.fileIntegritySync || descriptorFlags.dataIntegritySync)
+      throw "unsupported";
     if (isWindows) {
       if (!pathFlags.symlinkFollow && !openFlags.create) {
         let isSymlink = false;
@@ -443,7 +445,7 @@ class Descriptor {
         } catch (e) {
           //
         }
-        throw isDir ? (isWindows ? "access" : "is-directory") : "not-directory";
+        throw isDir ? (isWindows ? "access" : (isMac ? "not-permitted" : "is-directory")) : "not-directory";
       }
       unlinkSync(fullPath);
     } catch (e) {

@@ -115,7 +115,7 @@ export async function apiTest (fixtures) {
         tag: 'component',
         val: 4
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.19.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.20.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
     });
 
     test('Multi-file WIT', async () => {
@@ -140,7 +140,7 @@ export async function apiTest (fixtures) {
         tag: 'component',
         val: 1
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.19.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
+      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.20.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
     });
 
     test('Component new adapt', async () => {

@@ -1,9 +1,9 @@
-import { handle } from 'wasi:http/outgoing-handler@0.2.0-rc-2024-01-16';
+import { handle } from 'wasi:http/outgoing-handler@0.2.0';
 import {
   Fields,
   OutgoingRequest,
   OutgoingBody,
-} from 'wasi:http/types@0.2.0-rc-2024-01-16';
+} from 'wasi:http/types@0.2.0';
 
 const sendRequest = (
   method,

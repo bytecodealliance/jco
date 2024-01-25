@@ -5,6 +5,7 @@ import { rmdirSync } from 'node:fs';
 import { platform } from 'node:process';
 
 const isWindows = platform === 'win32';
+const isMac = platform === 'darwin';
 
 const env = {
   FS_TIME_PRECISION: "2000",
@@ -14,6 +15,11 @@ const env = {
 if (isWindows) {
   env.NO_RENAME_DIR_TO_EMPTY_DIR = "1";
   env.ERRNO_MODE_WINDOWS = "1";
+}
+else if (isMac) {
+  env.ERRNO_MODE_MACOS = "1";
+} else {
+  env.ERRNO_MODE_UNIX = "1";
 }
 
 _setEnv(env);

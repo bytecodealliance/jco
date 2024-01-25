@@ -61,6 +61,7 @@ mod preview1_path_filestat;
 mod preview1_path_link;
 mod preview1_path_open_create_existing;
 mod preview1_path_open_dirfd_not_dir;
+mod preview1_path_open_lots;
 mod preview1_path_open_missing;
 mod preview1_path_open_nonblock;
 mod preview1_path_open_preopen;

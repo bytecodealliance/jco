@@ -96,6 +96,7 @@ fn generate_test(test_name: &str, windows_skip: bool) -> String {
     let virtual_env = match test_name {
         "api_read_only" => "readonly",
         "api_time" => "fakeclocks",
+        "cli_env" => "envtest",
         "cli_file_append" => "bar-jabberwock",
         "cli_no_ip_name_lookup" => "deny-dns",
         "cli_no_tcp" => "deny-tcp",
