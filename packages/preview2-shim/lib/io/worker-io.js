@@ -45,7 +45,7 @@ export function registerIncomingHttpHandler(id, handler) {
 }
 
 const instanceId = Math.round(Math.random() * 1000).toString();
-const DEBUG_DEFAULT = true;
+const DEBUG_DEFAULT = false;
 const DEBUG =
   env.PREVIEW2_SHIM_DEBUG === "0"
     ? false
@@ -109,7 +109,6 @@ const dummySymbol = Symbol();
  * @param {any} parentResource
  * @param {number} id
  * @param {(number) => void} disposeFn
- * @returns
  */
 export function registerDispose(resource, parentResource, id, disposeFn) {
   // While strictly speaking all components should handle their disposal,
@@ -127,14 +126,12 @@ export function registerDispose(resource, parentResource, id, disposeFn) {
     disposeFn(id);
   }
   finalizationRegistry.register(resource, finalizer, finalizer);
+  return finalizer;
+}
 
-  // This is the Symbol.dispose function, which allows for _early_ disposal
-  Object.defineProperty(resource, symbolDispose, {
-    value: () => {
-      finalizationRegistry.unregister(finalizer);
-      disposeFn(id);
-    },
-  });
+export function earlyDispose(finalizer) {
+  finalizationRegistry.unregister(finalizer);
+  finalizer();
 }
 
 const _Error = Error;
@@ -166,6 +163,7 @@ function streamIoErrorCall(call, id, payload) {
 class InputStream {
   #id;
   #streamType;
+  #finalizer;
   read(len) {
     return streamIoErrorCall(
       INPUT_STREAM_READ | this.#streamType,
@@ -230,8 +228,14 @@ class InputStream {
             reverseMap[streamType]
         );
     }
-    registerDispose(stream, null, id, disposeFn);
+    stream.#finalizer = registerDispose(stream, null, id, disposeFn);
     return stream;
+  }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 }
 
@@ -260,6 +264,7 @@ delete InputStream._id;
 class OutputStream {
   #id;
   #streamType;
+  #finalizer;
   checkWrite(len) {
     return streamIoErrorCall(
       OUTPUT_STREAM_CHECK_WRITE | this.#streamType,
@@ -362,8 +367,15 @@ class OutputStream {
             reverseMap[streamType]
         );
     }
-    registerDispose(stream, null, id, disposeFn);
+    stream.#finalizer = registerDispose(stream, null, id, disposeFn);
     return stream;
+  }
+
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 }
 
@@ -399,6 +411,7 @@ function pollableDispose(id) {
 
 class Pollable {
   #id;
+  #finalizer;
   ready() {
     if (this.#id === 0) return true;
     return ioCall(POLL_POLLABLE_READY, this.#id);
@@ -414,8 +427,19 @@ class Pollable {
   static _create(id, parent) {
     const pollable = new Pollable();
     pollable.#id = id;
-    registerDispose(pollable, parent, id, pollableDispose);
+    pollable.#finalizer = registerDispose(
+      pollable,
+      parent,
+      id,
+      pollableDispose
+    );
     return pollable;
+  }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 }
 

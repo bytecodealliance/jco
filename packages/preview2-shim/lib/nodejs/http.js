@@ -13,6 +13,7 @@ import {
   OUTPUT_STREAM_DISPOSE,
 } from "../io/calls.js";
 import {
+  earlyDispose,
   inputStreamCreate,
   ioCall,
   outputStreamCreate,
@@ -300,6 +301,7 @@ class OutgoingBody {
   #outputStream = null;
   #outputStreamId = null;
   #contentLength = undefined;
+  #finalizer;
   write() {
     // can only call write once
     const outputStream = this.#outputStream;
@@ -332,13 +334,19 @@ class OutgoingBody {
       HTTP,
       outgoingBody.#outputStreamId
     );
-    registerDispose(
+    outgoingBody.#finalizer = registerDispose(
       outgoingBody,
       null,
       outgoingBody.#outputStreamId,
       outgoingBodyDispose
     );
     return outgoingBody;
+  }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 }
 
@@ -385,6 +393,7 @@ delete IncomingResponse._create;
 
 class FutureIncomingResponse {
   #id;
+  #finalizer;
   subscribe() {
     return pollableCreate(
       ioCall(FUTURE_SUBSCRIBE | HTTP, this.#id, null),
@@ -430,8 +439,19 @@ class FutureIncomingResponse {
       betweenBytesTimeout,
       firstByteTimeout,
     });
-    registerDispose(res, null, res.#id, futureIncomingResponseDispose);
+    res.#finalizer = registerDispose(
+      res,
+      null,
+      res.#id,
+      futureIncomingResponseDispose
+    );
     return res;
+  }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 }
 

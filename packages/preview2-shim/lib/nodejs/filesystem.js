@@ -1,6 +1,7 @@
 import {
-  ioCall,
+  earlyDispose,
   inputStreamCreate,
+  ioCall,
   outputStreamCreate,
   registerDispose,
 } from "../io/worker-io.js";
@@ -64,6 +65,7 @@ function lookupType(obj) {
 class Descriptor {
   #hostPreopen;
   #fd;
+  #finalizer;
   #mode;
   #fullPath;
 
@@ -83,10 +85,17 @@ class Descriptor {
   static _create(fd, mode, fullPath) {
     const descriptor = new Descriptor();
     descriptor.#fd = fd;
-    registerDispose(descriptor, null, fd, closeSync);
+    descriptor.#finalizer = registerDispose(descriptor, null, fd, closeSync);
     descriptor.#mode = mode;
     descriptor.#fullPath = fullPath;
     return descriptor;
+  }
+
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 
   readViaStream(offset) {
@@ -534,6 +543,7 @@ delete Descriptor._create;
 
 class DirectoryEntryStream {
   #dir;
+  #finalizer;
   readDirectoryEntry() {
     let entry;
     try {
@@ -550,9 +560,20 @@ class DirectoryEntryStream {
   }
   static _create(dir) {
     const dirStream = new DirectoryEntryStream();
-    registerDispose(dirStream, null, null, dir.closeSync.bind(dir));
+    dirStream.#finalizer = registerDispose(
+      dirStream,
+      null,
+      null,
+      dir.closeSync.bind(dir)
+    );
     dirStream.#dir = dir;
     return dirStream;
+  }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 }
 const directoryEntryStreamCreate = DirectoryEntryStream._create;

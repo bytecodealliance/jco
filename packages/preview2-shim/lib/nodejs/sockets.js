@@ -43,12 +43,15 @@ import {
   SOCKET_UDP_SUBSCRIBE,
 } from "../io/calls.js";
 import {
+  earlyDispose,
   inputStreamCreate,
   ioCall,
   outputStreamCreate,
   pollableCreate,
   registerDispose,
 } from "../io/worker-io.js";
+
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network").IpSocketAddress} IpSocketAddress
@@ -114,6 +117,7 @@ class ResolveAddressStream {
   #data;
   #curItem = 0;
   #error = false;
+  #finalizer;
   resolveNextAddress() {
     if (!this.#data) {
       const res = ioCall(SOCKET_RESOLVE_ADDRESS_TAKE_REQUEST, this.#id, null);
@@ -134,8 +138,19 @@ class ResolveAddressStream {
     if (!mayDnsLookup(network)) throw "permanent-resolver-failure";
     const res = new ResolveAddressStream();
     res.#id = ioCall(SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, null, name);
-    registerDispose(res, null, res.#id, resolveAddressStreamDispose);
+    res.#finalizer = registerDispose(
+      res,
+      null,
+      res.#id,
+      resolveAddressStreamDispose
+    );
     return res;
+  }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 }
 function resolveAddressStreamDispose(id) {
@@ -154,6 +169,7 @@ class TcpSocket {
   #id;
   #network;
   #family;
+  #finalizer;
   #options = {
     // defaults per https://nodejs.org/docs/latest/api/net.html#socketsetkeepaliveenable-initialdelay
     keepAlive: false,
@@ -185,7 +201,7 @@ class TcpSocket {
     const socket = new TcpSocket();
     socket.#id = id;
     socket.#family = addressFamily;
-    registerDispose(socket, null, id, socketTcpDispose);
+    socket.#finalizer = registerDispose(socket, null, id, socketTcpDispose);
     return socket;
   }
   startBind(network, localAddress) {
@@ -336,6 +352,12 @@ class TcpSocket {
   shutdown(shutdownType) {
     ioCall(SOCKET_TCP_SHUTDOWN, this.#id, shutdownType);
   }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
+  }
 }
 
 function socketTcpDispose(id) {
@@ -364,6 +386,7 @@ class UdpSocket {
   #id;
   #network;
   #family;
+  #finalizer;
   static _create(addressFamily) {
     if (addressFamily !== "ipv4" && addressFamily !== "ipv6")
       throw "not-supported";
@@ -376,7 +399,12 @@ class UdpSocket {
       unicastHopLimit: 64,
     });
     socket.#family = addressFamily;
-    registerDispose(socket, null, socket.#id, socketUdpDispose);
+    socket.#finalizer = registerDispose(
+      socket,
+      null,
+      socket.#id,
+      socketUdpDispose
+    );
     return socket;
   }
   startBind(network, localAddress) {
@@ -435,6 +463,12 @@ class UdpSocket {
   subscribe() {
     return pollableCreate(ioCall(SOCKET_UDP_SUBSCRIBE, this.#id, null), this);
   }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
+  }
 }
 
 function socketUdpDispose(id) {
@@ -446,10 +480,16 @@ delete UdpSocket._create;
 
 class IncomingDatagramStream {
   #id;
+  #finalizer;
   static _create(id) {
     const stream = new IncomingDatagramStream();
     stream.#id = id;
-    registerDispose(stream, null, id, incomingDatagramStreamDispose);
+    stream.#finalizer = registerDispose(
+      stream,
+      null,
+      id,
+      incomingDatagramStreamDispose
+    );
     return stream;
   }
   receive(maxResults) {
@@ -465,6 +505,12 @@ class IncomingDatagramStream {
       this
     );
   }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
+  }
 }
 
 function incomingDatagramStreamDispose(id) {
@@ -476,10 +522,16 @@ delete IncomingDatagramStream._create;
 
 class OutgoingDatagramStream {
   #id = 0;
+  #finalizer;
   static _create(id) {
     const stream = new OutgoingDatagramStream();
     stream.#id = id;
-    registerDispose(stream, null, id, outgoingDatagramStreamDispose);
+    stream.#finalizer = registerDispose(
+      stream,
+      null,
+      id,
+      outgoingDatagramStreamDispose
+    );
     return stream;
   }
   checkSend() {
@@ -493,6 +545,12 @@ class OutgoingDatagramStream {
       ioCall(SOCKET_DATAGRAM_STREAM_SUBSCRIBE, this.#id, null),
       this
     );
+  }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
   }
 }
 function outgoingDatagramStreamDispose(id) {
