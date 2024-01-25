@@ -142,7 +142,6 @@ impl Guest for WasmToolsJs {
             world,
             string_encoding,
             producers.as_ref(),
-            Some(true),
         )
         .map_err(|e| e.to_string())?;
 

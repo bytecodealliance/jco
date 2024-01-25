@@ -1,5 +1,4 @@
-import { _appendEnv } from "@bytecodealliance/preview2-shim/cli";
-import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
+
 import { mkdtemp } from "node:fs/promises";
 import { readFileSync, rmdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";

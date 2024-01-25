@@ -3,6 +3,7 @@ import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { rmdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { platform } from 'node:process';
 
 await mkdir("tests/output", { recursive: true });
 
@@ -20,10 +21,20 @@ await Promise.all([
   writeFile(resolve(testDir, 'sub/yay.txt'), `yay`),
 ]);
 
-_setEnv({
+const env = {
   callooh: "callay",
   frabjous: "day",
-});
+};
+
+if (platform === 'darwin') {
+  env['ERRNO_MODE_MACOS'] = "1";
+} else if (platform === 'win32') {
+  env['ERRNO_MODE_WINDOWS'] = "1";
+} else {
+  env['ERRNO_MODE_UNIX'] = "1";
+}
+
+_setEnv(env);
 
 process.on('exit', () => {
   rmdirSync(testDir, { recursive: true });

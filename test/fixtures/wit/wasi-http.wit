@@ -10,7 +10,7 @@ interface commands {
 }
 
 world command-extended {
-  include wasi:http/proxy@0.2.0-rc-2024-01-16;
+  include wasi:http/proxy@0.2.0;
   
   export commands;
 }
