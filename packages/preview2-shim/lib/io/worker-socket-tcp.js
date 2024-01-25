@@ -33,6 +33,7 @@ import { Socket, Server } from "node:net";
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
+ * @typedef {import("node:net").Socket} TcpSocket
  *
  * @typedef {{
  *   tcpSocket: number,
@@ -43,6 +44,7 @@ import { Socket, Server } from "node:net";
  * @typedef {{
  *   state: number,
  *   future: number | null,
+ *   socket: TcpSocket | null,
  *   listenBacklogSize: number,
  *   handle: TCP,
  *   pendingAccepts: PendingAccept[],
@@ -140,11 +142,11 @@ export function socketTcpConnectStart(id, remoteAddress, family) {
   socket.state = SOCKET_STATE_CONNECT;
   socket.future = createFuture(
     new Promise((resolve, reject) => {
-      const tcpSocket = new Socket({
+      const tcpSocket = (socket.tcpSocket = new Socket({
         handle: socket.handle,
         pauseOnCreate: true,
         allowHalfOpen: true,
-      });
+      }));
       function handleErr(err) {
         tcpSocket.off("connect", handleConnect);
         reject(convertSocketError(err));
@@ -258,12 +260,12 @@ export function socketTcpGetRemoteAddress(id) {
   return ipSocketAddress(out.family.toLowerCase(), out.address, out.port);
 }
 
-// Node.js only supports a write shutdown
-// so we don't actually check the shutdown type
-export function socketTcpShutdown(id, _shutdownType) {
+export function socketTcpShutdown(id, shutdownType) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_CONNECTION) throw "invalid-state";
-  if (socket.socket) socket.socket.end();
+  // Node.js only supports a write shutdown, which is triggered on end
+  if (shutdownType === "send" || shutdownType === "both")
+    socket.tcpSocket.end();
 }
 
 export function socketTcpSetKeepAlive(id, { keepAlive, keepAliveIdleTime }) {

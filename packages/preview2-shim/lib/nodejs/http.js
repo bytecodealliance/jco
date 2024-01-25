@@ -1,23 +1,25 @@
 import {
-  INPUT_STREAM_DISPOSE,
+  FUTURE_DISPOSE,
+  FUTURE_SUBSCRIBE,
+  FUTURE_TAKE_VALUE,
   HTTP_CREATE_REQUEST,
+  HTTP_OUTGOING_BODY_DISPOSE,
   HTTP_OUTPUT_STREAM_FINISH,
+  HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
+  HTTP_SERVER_SET_OUTGOING_RESPONSE,
   HTTP_SERVER_START,
   HTTP_SERVER_STOP,
   OUTPUT_STREAM_CREATE,
-  FUTURE_DISPOSE,
-  FUTURE_TAKE_VALUE,
-  FUTURE_SUBSCRIBE,
-  HTTP_SERVER_SET_OUTGOING_RESPONSE,
-  HTTP_SERVER_CLEAR_OUTGOING_RESPONSE,
+  OUTPUT_STREAM_DISPOSE,
 } from "../io/calls.js";
 import {
+  earlyDispose,
   inputStreamCreate,
   ioCall,
   outputStreamCreate,
   pollableCreate,
+  registerDispose,
   registerIncomingHttpHandler,
-  resolvedPoll,
 } from "../io/worker-io.js";
 import { validateHeaderName, validateHeaderValue } from "node:http";
 import { HTTP } from "../io/calls.js";
@@ -27,12 +29,12 @@ export const _forbiddenHeaders = new Set(["connection", "keep-alive"]);
 
 class IncomingBody {
   #finished = false;
-  #calledStream = false;
-  #streamId = undefined;
+  #stream = undefined;
   stream() {
-    if (this.#calledStream) throw undefined;
-    this.#calledStream = true;
-    return inputStreamCreate(HTTP, this.#streamId);
+    if (!this.#stream) throw undefined;
+    const stream = this.#stream;
+    this.#stream = null;
+    return stream;
   }
   static finish(incomingBody) {
     if (incomingBody.#finished)
@@ -40,15 +42,10 @@ class IncomingBody {
     incomingBody.#finished = true;
     return futureTrailersCreate();
   }
-  [symbolDispose]() {
-    if (!this.#finished) {
-      ioCall(INPUT_STREAM_DISPOSE | HTTP, this.#streamId);
-      this.#streamId = undefined;
-    }
-  }
+  [symbolDispose]() {}
   static _create(streamId) {
     const incomingBody = new IncomingBody();
-    incomingBody.#streamId = streamId;
+    incomingBody.#stream = inputStreamCreate(HTTP, streamId);
     return incomingBody;
   }
 }
@@ -80,6 +77,7 @@ class IncomingRequest {
   consume() {
     return incomingBodyCreate(this.#streamId);
   }
+  [symbolDispose]() {}
   static _create(method, pathWithQuery, scheme, authority, headers, streamId) {
     const incomingRequest = new IncomingRequest();
     incomingRequest.#method = method;
@@ -97,7 +95,7 @@ delete IncomingRequest._create;
 class FutureTrailers {
   #requested = false;
   subscribe() {
-    return resolvedPoll;
+    return pollableCreate(0, this);
   }
   get() {
     if (this.#requested) return { tag: "err" };
@@ -149,7 +147,7 @@ class OutgoingResponse {
     let contentLength;
     if (contentLengthValues.length > 0)
       contentLength = Number(new TextDecoder().decode(contentLengthValues[0]));
-    this.#body = outgoingBodyCreate(contentLength, true);
+    this.#body = outgoingBodyCreate(contentLength);
     return this.#body;
   }
 
@@ -216,7 +214,7 @@ class OutgoingRequest {
     let contentLength;
     if (contentLengthValues.length > 0)
       contentLength = Number(new TextDecoder().decode(contentLengthValues[0]));
-    this.#body = outgoingBodyCreate(contentLength, false);
+    this.#body = outgoingBodyCreate(contentLength);
   }
   body() {
     if (this.#bodyRequested) throw new Error("Body already requested");
@@ -303,24 +301,13 @@ class OutgoingBody {
   #outputStream = null;
   #outputStreamId = null;
   #contentLength = undefined;
+  #finalizer;
   write() {
-    if (!this.#outputStreamId) this.#createOutputStream();
     // can only call write once
     const outputStream = this.#outputStream;
     if (outputStream === null) throw undefined;
     this.#outputStream = null;
     return outputStream;
-  }
-  #createOutputStream() {
-    this.#outputStream = outputStreamCreate(
-      HTTP,
-      (this.#outputStreamId = ioCall(
-        OUTPUT_STREAM_CREATE | HTTP,
-        null,
-        this.#contentLength
-      ))
-    );
-    this.#outputStream[symbolDispose] = () => {};
   }
   /**
    * @param {OutgoingBody} body
@@ -330,19 +317,43 @@ class OutgoingBody {
     if (trailers) throw { tag: "internal-error", val: "trailers unsupported" };
     // this will verify content length, and also verify not already finished
     // throwing errors as appropriate
-    if (body.#outputStreamId)
-      ioCall(HTTP_OUTPUT_STREAM_FINISH, body.#outputStreamId, null);
+    ioCall(HTTP_OUTPUT_STREAM_FINISH, body.#outputStreamId, null);
   }
   static _outputStreamId(outgoingBody) {
     return outgoingBody.#outputStreamId;
   }
-  static _create(contentLength, createBodyStream) {
+  static _create(contentLength) {
     const outgoingBody = new OutgoingBody();
     outgoingBody.#contentLength = contentLength;
-    if (createBodyStream) outgoingBody.#createOutputStream();
+    outgoingBody.#outputStreamId = ioCall(
+      OUTPUT_STREAM_CREATE | HTTP,
+      null,
+      outgoingBody.#contentLength
+    );
+    outgoingBody.#outputStream = outputStreamCreate(
+      HTTP,
+      outgoingBody.#outputStreamId
+    );
+    outgoingBody.#finalizer = registerDispose(
+      outgoingBody,
+      null,
+      outgoingBody.#outputStreamId,
+      outgoingBodyDispose
+    );
     return outgoingBody;
   }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
+  }
 }
+
+function outgoingBodyDispose(id) {
+  ioCall(HTTP_OUTGOING_BODY_DISPOSE, id, null);
+}
+
 const outgoingBodyOutputStreamId = OutgoingBody._outputStreamId;
 delete OutgoingBody._outputStreamId;
 
@@ -352,7 +363,7 @@ delete OutgoingBody._create;
 class IncomingResponse {
   /** @type {Fields} */ #headers = undefined;
   #status = 0;
-  /** @type {number} */ #bodyStreamId;
+  /** @type {number} */ #bodyStream;
   status() {
     return this.#status;
   }
@@ -360,22 +371,19 @@ class IncomingResponse {
     return this.#headers;
   }
   consume() {
-    if (this.#bodyStreamId === undefined) throw undefined;
-    const bodyStreamId = this.#bodyStreamId;
-    this.#bodyStreamId = undefined;
-    return incomingBodyCreate(bodyStreamId);
+    if (this.#bodyStream === undefined) throw undefined;
+    const bodyStream = this.#bodyStream;
+    this.#bodyStream = undefined;
+    return bodyStream;
   }
   [symbolDispose]() {
-    if (this.#bodyStreamId) {
-      ioCall(INPUT_STREAM_DISPOSE | HTTP, this.#bodyStreamId, null);
-      this.#bodyStreamId = undefined;
-    }
+    if (this.#bodyStream) this.#bodyStream[symbolDispose]();
   }
   static _create(status, headers, bodyStreamId) {
     const res = new IncomingResponse();
     res.#status = status;
     res.#headers = headers;
-    res.#bodyStreamId = bodyStreamId;
+    res.#bodyStream = incomingBodyCreate(bodyStreamId);
     return res;
   }
 }
@@ -385,8 +393,12 @@ delete IncomingResponse._create;
 
 class FutureIncomingResponse {
   #id;
+  #finalizer;
   subscribe() {
-    return pollableCreate(ioCall(FUTURE_SUBSCRIBE | HTTP, this.#id, null));
+    return pollableCreate(
+      ioCall(FUTURE_SUBSCRIBE | HTTP, this.#id, null),
+      this
+    );
   }
   get() {
     const ret = ioCall(FUTURE_TAKE_VALUE | HTTP, this.#id, null);
@@ -403,9 +415,6 @@ class FutureIncomingResponse {
       );
     }
     return ret;
-  }
-  [symbolDispose]() {
-    ioCall(FUTURE_DISPOSE | HTTP, this.#id, null);
   }
   static _create(
     method,
@@ -430,8 +439,24 @@ class FutureIncomingResponse {
       betweenBytesTimeout,
       firstByteTimeout,
     });
+    res.#finalizer = registerDispose(
+      res,
+      null,
+      res.#id,
+      futureIncomingResponseDispose
+    );
     return res;
   }
+  [symbolDispose]() {
+    if (this.#finalizer) {
+      earlyDispose(this.#finalizer);
+      this.#finalizer = null;
+    }
+  }
+}
+
+function futureIncomingResponseDispose(id) {
+  ioCall(FUTURE_DISPOSE | HTTP, id, null);
 }
 
 const futureIncomingResponseCreate = FutureIncomingResponse._create;
@@ -645,26 +670,29 @@ export class HTTPServer {
           ),
           streamId
         );
+        let outgoingBodyStreamId;
         const responseOutparam = responseOutparamCreate((response) => {
           if (response.tag === "ok") {
             const outgoingResponse = response.val;
             const statusCode = outgoingResponse.statusCode();
             const headers = outgoingResponse.headers().entries();
             const body = outgoingResponseBody(outgoingResponse);
-            const streamId = outgoingBodyOutputStreamId(body);
+            outgoingBodyStreamId = outgoingBodyOutputStreamId(body);
             ioCall(HTTP_SERVER_SET_OUTGOING_RESPONSE, responseId, {
               statusCode,
               headers,
-              streamId,
+              streamId: outgoingBodyStreamId,
             });
           } else {
             ioCall(HTTP_SERVER_CLEAR_OUTGOING_RESPONSE, responseId, null);
-            console.error("TODO: handle outparam error");
-            console.error(response);
+            console.error(response.val);
             process.exit(1);
           }
         });
         incomingHandler.handle(request, responseOutparam);
+        if (outgoingBodyStreamId) {
+          ioCall(OUTPUT_STREAM_DISPOSE, outgoingBodyStreamId, null);
+        }
       }
     );
   }
@@ -676,5 +704,6 @@ export class HTTPServer {
   stop() {
     clearInterval(this.#liveEventLoopInterval);
     ioCall(HTTP_SERVER_STOP, this.#id, null);
+    httpServers.delete(this.#id);
   }
 }

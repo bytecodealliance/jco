@@ -156,7 +156,7 @@ export async function createHttpRequest(
     return {
       status: res.statusCode,
       headers: Array.from(Object.entries(res.headers)),
-      bodyStreamId: bodyStreamId,
+      bodyStreamId
     };
   } catch (e) {
     if (e?.tag) throw e;

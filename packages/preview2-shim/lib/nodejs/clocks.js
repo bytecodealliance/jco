@@ -1,4 +1,4 @@
-import { ioCall, createPoll, resolvedPoll } from "../io/worker-io.js";
+import { ioCall, createPoll } from "../io/worker-io.js";
 import {
   CLOCKS_NOW,
   CLOCKS_INSTANT_SUBSCRIBE,
@@ -17,7 +17,6 @@ export const monotonicClock = {
   },
   subscribeDuration(duration) {
     duration = BigInt(duration);
-    if (duration === 0n) return resolvedPoll;
     return createPoll(CLOCKS_DURATION_SUBSCRIBE, null, duration);
   },
 };

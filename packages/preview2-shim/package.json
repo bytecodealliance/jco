@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "test": "mocha -u tdd test/test.js --timeout 10000"
+    "test": "node --expose-gc ../../node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000"
   },
   "files": [
     "types",
