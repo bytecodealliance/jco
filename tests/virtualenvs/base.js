@@ -21,10 +21,7 @@ await Promise.all([
   writeFile(resolve(testDir, 'sub/yay.txt'), `yay`),
 ]);
 
-const env = {
-  callooh: "callay",
-  frabjous: "day",
-};
+const env = {};
 
 if (platform === 'darwin') {
   env['ERRNO_MODE_MACOS'] = "1";

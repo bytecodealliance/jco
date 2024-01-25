@@ -137,13 +137,9 @@ impl Guest for WasmToolsJs {
             None => None,
         };
 
-        let encoded = wit_component::metadata::encode(
-            &resolve,
-            world,
-            string_encoding,
-            producers.as_ref(),
-        )
-        .map_err(|e| e.to_string())?;
+        let encoded =
+            wit_component::metadata::encode(&resolve, world, string_encoding, producers.as_ref())
+                .map_err(|e| e.to_string())?;
 
         let section = wasm_encoder::CustomSection {
             name: "component-type".into(),
