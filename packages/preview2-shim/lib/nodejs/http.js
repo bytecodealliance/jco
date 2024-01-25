@@ -10,6 +10,7 @@ import {
   HTTP_SERVER_START,
   HTTP_SERVER_STOP,
   OUTPUT_STREAM_CREATE,
+  OUTPUT_STREAM_DISPOSE,
 } from "../io/calls.js";
 import {
   inputStreamCreate,
@@ -649,26 +650,29 @@ export class HTTPServer {
           ),
           streamId
         );
+        let outgoingBodyStreamId;
         const responseOutparam = responseOutparamCreate((response) => {
           if (response.tag === "ok") {
             const outgoingResponse = response.val;
             const statusCode = outgoingResponse.statusCode();
             const headers = outgoingResponse.headers().entries();
             const body = outgoingResponseBody(outgoingResponse);
-            const streamId = outgoingBodyOutputStreamId(body);
+            outgoingBodyStreamId = outgoingBodyOutputStreamId(body);
             ioCall(HTTP_SERVER_SET_OUTGOING_RESPONSE, responseId, {
               statusCode,
               headers,
-              streamId,
+              streamId: outgoingBodyStreamId,
             });
           } else {
             ioCall(HTTP_SERVER_CLEAR_OUTGOING_RESPONSE, responseId, null);
-            console.error("TODO: handle outparam error");
-            console.error(response);
+            console.error(response.val);
             process.exit(1);
           }
         });
         incomingHandler.handle(request, responseOutparam);
+        if (outgoingBodyStreamId) {
+          ioCall(OUTPUT_STREAM_DISPOSE, outgoingBodyStreamId, null);
+        }
       }
     );
   }
