@@ -45,7 +45,7 @@ wasm-encoder = "0.40.0"
 wasm-metadata = "0.10.16"
 wasmparser = "0.120.0"
 wasmprinter = "0.2.77"
-wasmtime-environ = { version = "16.0.0", features = ["component-model"] }
+wasmtime-environ = { version = "17.0.0", features = ["component-model"] }
 wat = "1.0.84"
 wit-bindgen = "0.16.0"
 wit-bindgen-core = "0.16.0"

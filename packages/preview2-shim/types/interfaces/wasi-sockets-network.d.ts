@@ -76,15 +76,17 @@ export namespace WasiSocketsNetwork {
  * The remote address is not reachable
  * ## `"connection-refused"`
  * 
- * The connection was forcefully rejected
+ * The TCP connection was forcefully rejected
  * ## `"connection-reset"`
  * 
- * The connection was reset.
+ * The TCP connection was reset.
  * ## `"connection-aborted"`
  * 
- * A connection was aborted.
+ * A TCP connection was aborted.
  * ## `"datagram-too-large"`
  * 
+ * The size of a datagram sent to a UDP socket exceeded the maximum
+ * supported size.
  * ## `"name-unresolvable"`
  * 
  * Name does not exist or has no suitable associated IP addresses.
@@ -119,13 +121,31 @@ export interface IpAddressIpv6 {
   val: Ipv6Address,
 }
 export interface Ipv4SocketAddress {
+  /**
+   * sin_port
+   */
   port: number,
+  /**
+   * sin_addr
+   */
   address: Ipv4Address,
 }
 export interface Ipv6SocketAddress {
+  /**
+   * sin6_port
+   */
   port: number,
+  /**
+   * sin6_flowinfo
+   */
   flowInfo: number,
+  /**
+   * sin6_addr
+   */
   address: Ipv6Address,
+  /**
+   * sin6_scope_id
+   */
   scopeId: number,
 }
 export type IpSocketAddress = IpSocketAddressIpv4 | IpSocketAddressIpv6;

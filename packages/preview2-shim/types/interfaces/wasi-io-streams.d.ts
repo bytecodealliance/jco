@@ -2,6 +2,11 @@ export namespace WasiIoStreams {
   /**
    * Perform a non-blocking read from the stream.
    * 
+   * When the source of a `read` is binary data, the bytes from the source
+   * are returned verbatim. When the source of a `read` is known to the
+   * implementation to be text, bytes containing the UTF-8 encoding of the
+   * text are returned.
+   * 
    * This function returns a list of bytes containing the read data,
    * when successful. The returned list will contain up to `len` bytes;
    * it may return fewer than requested, but not more. The list is
@@ -60,6 +65,12 @@ export namespace WasiIoStreams {
   /**
    * Perform a write. This function never blocks.
    * 
+   * When the destination of a `write` is binary data, the bytes from
+   * `contents` are written verbatim. When the destination of a `write` is
+   * known to the implementation to be text, the bytes of `contents` are
+   * transcoded from UTF-8 into the encoding of the destination and then
+   * written.
+   * 
    * Precondition: check-write gave permit of Ok(n) and contents has a
    * length of less than or equal to n. Otherwise, this function will trap.
    * 
@@ -78,7 +89,7 @@ export namespace WasiIoStreams {
    * let pollable = this.subscribe();
    * while !contents.is_empty() {
      * // Wait for the stream to become writable
-     * poll-one(pollable);
+     * pollable.block();
      * let Ok(n) = this.check-write(); // eliding error handling
      * let len = min(n, contents.len());
      * let (chunk, rest) = contents.split_at(len);
@@ -87,7 +98,7 @@ export namespace WasiIoStreams {
      * }
      * this.flush();
      * // Wait for completion of `flush`
-     * poll-one(pollable);
+     * pollable.block();
      * // Check for any errors that arose during `flush`
      * let _ = this.check-write();         // eliding error handling
      * ```
@@ -123,7 +134,7 @@ export namespace WasiIoStreams {
     /**
      * Write zeroes to a stream.
      * 
-     * this should be used precisely like `write` with the exact same
+     * This should be used precisely like `write` with the exact same
      * preconditions (must use check-write first), but instead of
      * passing a list of bytes, you simply pass the number of zero-bytes
      * that should be written.
@@ -141,7 +152,7 @@ export namespace WasiIoStreams {
      * let pollable = this.subscribe();
      * while num_zeroes != 0 {
        * // Wait for the stream to become writable
-       * poll-one(pollable);
+       * pollable.block();
        * let Ok(n) = this.check-write(); // eliding error handling
        * let len = min(n, num_zeroes);
        * this.write-zeroes(len);         // eliding error handling
@@ -149,7 +160,7 @@ export namespace WasiIoStreams {
        * }
        * this.flush();
        * // Wait for completion of `flush`
-       * poll-one(pollable);
+       * pollable.block();
        * // Check for any errors that arose during `flush`
        * let _ = this.check-write();         // eliding error handling
        * ```

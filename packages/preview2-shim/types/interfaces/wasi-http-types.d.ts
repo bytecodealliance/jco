@@ -629,6 +629,18 @@ export type Trailers = Fields;
 export type StatusCode = number;
 export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
+export class ResponseOutparam {
+  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
+}
+
+export class OutgoingResponse {
+  constructor(headers: Headers)
+  statusCode(): StatusCode;
+  setStatusCode(statusCode: StatusCode): void;
+  headers(): Headers;
+  body(): OutgoingBody;
+}
+
 export class OutgoingBody {
   write(): OutputStream;
   static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
@@ -640,15 +652,25 @@ export class Fields {
   get(name: FieldKey): FieldValue[];
   has(name: FieldKey): boolean;
   set(name: FieldKey, value: FieldValue[]): void;
-  delete(name: FieldKey): void;
+  'delete'(name: FieldKey): void;
   append(name: FieldKey, value: FieldValue): void;
   entries(): [FieldKey, FieldValue][];
   clone(): Fields;
 }
 
+export class IncomingBody {
+  stream(): InputStream;
+  static finish(this_: IncomingBody): FutureTrailers;
+}
+
 export class FutureIncomingResponse {
   subscribe(): Pollable;
   get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
+}
+
+export class FutureTrailers {
+  subscribe(): Pollable;
+  get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
 }
 
 export class IncomingRequest {
@@ -658,30 +680,6 @@ export class IncomingRequest {
   authority(): string | undefined;
   headers(): Headers;
   consume(): IncomingBody;
-}
-
-export class IncomingBody {
-  stream(): InputStream;
-  static finish(this_: IncomingBody): FutureTrailers;
-}
-
-export class FutureTrailers {
-  subscribe(): Pollable;
-  get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
-}
-
-export class IncomingResponse {
-  status(): StatusCode;
-  headers(): Headers;
-  consume(): IncomingBody;
-}
-
-export class OutgoingResponse {
-  constructor(headers: Headers)
-  statusCode(): StatusCode;
-  setStatusCode(statusCode: StatusCode): void;
-  headers(): Headers;
-  body(): OutgoingBody;
 }
 
 export class OutgoingRequest {
@@ -698,6 +696,12 @@ export class OutgoingRequest {
   headers(): Headers;
 }
 
+export class IncomingResponse {
+  status(): StatusCode;
+  headers(): Headers;
+  consume(): IncomingBody;
+}
+
 export class RequestOptions {
   constructor()
   connectTimeout(): Duration | undefined;
@@ -706,8 +710,4 @@ export class RequestOptions {
   setFirstByteTimeout(duration: Duration | undefined): void;
   betweenBytesTimeout(): Duration | undefined;
   setBetweenBytesTimeout(duration: Duration | undefined): void;
-}
-
-export class ResponseOutparam {
-  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
 }

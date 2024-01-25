@@ -1,0 +1,23 @@
+import type { WasiCliEnvironment } from './interfaces/wasi-cli-environment.d.ts';
+import type { WasiCliExit } from './interfaces/wasi-cli-exit.d.ts';
+import type { WasiCliRun } from './interfaces/wasi-cli-run.d.ts';
+import type { WasiCliStderr } from './interfaces/wasi-cli-stderr.d.ts';
+import type { WasiCliStdin } from './interfaces/wasi-cli-stdin.d.ts';
+import type { WasiCliStdout } from './interfaces/wasi-cli-stdout.d.ts';
+import type { WasiCliTerminalInput } from './interfaces/wasi-cli-terminal-input.d.ts';
+import type { WasiCliTerminalOutput } from './interfaces/wasi-cli-terminal-output.d.ts';
+import type { WasiCliTerminalStderr } from './interfaces/wasi-cli-terminal-stderr.d.ts';
+import type { WasiCliTerminalStdin } from './interfaces/wasi-cli-terminal-stdin.d.ts';
+import type { WasiCliTerminalStdout } from './interfaces/wasi-cli-terminal-stdout.d.ts';
+
+export const environment: typeof WasiCliEnvironment;
+export const exit: typeof WasiCliExit;
+export const run: typeof WasiCliRun;
+export const stderr: typeof WasiCliStderr;
+export const stdin: typeof WasiCliStdin;
+export const stdout: typeof WasiCliStdout;
+export const terminalInput: typeof WasiCliTerminalInput;
+export const terminalOutput: typeof WasiCliTerminalOutput;
+export const terminalStderr: typeof WasiCliTerminalStderr;
+export const terminalStdin: typeof WasiCliTerminalStdin;
+export const terminalStdout: typeof WasiCliTerminalStdout;

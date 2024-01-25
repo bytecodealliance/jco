@@ -6,18 +6,16 @@ export namespace WasiSocketsTcp {
    * network interface(s) to bind to.
    * If the TCP/UDP port is zero, the socket will be bound to a random free port.
    * 
-   * When a socket is not explicitly bound, the first invocation to a listen or connect operation will
-   * implicitly bind the socket.
+   * Bind can be attempted multiple times on the same socket, even with
+   * different arguments on each iteration. But never concurrently and
+   * only as long as the previous bind failed. Once a bind succeeds, the
+   * binding can't be changed anymore.
    * 
-   * Unlike in POSIX, this function is async. This enables interactive WASI hosts to inject permission prompts.
-   * 
-   * # Typical `start` errors
+   * # Typical errors
    * - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
    * - `invalid-argument`:          `local-address` is not a unicast address. (EINVAL)
-   * - `invalid-argument`:          `local-address` is an IPv4-mapped IPv6 address, but the socket has `ipv6-only` enabled. (EINVAL)
+   * - `invalid-argument`:          `local-address` is an IPv4-mapped IPv6 address. (EINVAL)
    * - `invalid-state`:             The socket is already bound. (EINVAL)
-   * 
-   * # Typical `finish` errors
    * - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
    * - `address-in-use`:            Address is already in use. (EADDRINUSE)
    * - `address-not-bindable`:      `local-address` is not an address that the `network` can bind to. (EADDRNOTAVAIL)
@@ -26,8 +24,14 @@ export namespace WasiSocketsTcp {
    * 
    * # Implementors note
    * When binding to a non-zero port, this bind operation shouldn't be affected by the TIME_WAIT
-   * state of a recently closed socket on the same local address (i.e. the SO_REUSEADDR socket
-   * option should be set implicitly on platforms that require it).
+   * state of a recently closed socket on the same local address. In practice this means that the SO_REUSEADDR
+   * socket option should be set implicitly on all platforms, except on Windows where this is the default behavior
+   * and SO_REUSEADDR performs something different entirely.
+   * 
+   * Unlike in POSIX, in WASI the bind operation is async. This enables
+   * interactive WASI hosts to inject permission prompts. Runtimes that
+   * don't want to make use of this ability can simply call the native
+   * `bind` as part of either `start-bind` or `finish-bind`.
    * 
    * # References
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
@@ -40,38 +44,39 @@ export namespace WasiSocketsTcp {
    * Connect to a remote endpoint.
    * 
    * On success:
-   * - the socket is transitioned into the Connection state
+   * - the socket is transitioned into the `connection` state.
    * - a pair of streams is returned that can be used to read & write to the connection
    * 
-   * POSIX mentions:
-   * > If connect() fails, the state of the socket is unspecified. Conforming applications should
-   * > close the file descriptor and create a new socket before attempting to reconnect.
+   * After a failed connection attempt, the socket will be in the `closed`
+   * state and the only valid action left is to `drop` the socket. A single
+   * socket can not be used to connect more than once.
    * 
-   * WASI prescribes the following behavior:
-   * - If `connect` fails because an input/state validation error, the socket should remain usable.
-   * - If a connection was actually attempted but failed, the socket should become unusable for further network communication.
-   * Besides `drop`, any method after such a failure may return an error.
-   * 
-   * # Typical `start` errors
+   * # Typical errors
    * - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
    * - `invalid-argument`:          `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
-   * - `invalid-argument`:          `remote-address` is an IPv4-mapped IPv6 address, but the socket has `ipv6-only` enabled. (EINVAL, EADDRNOTAVAIL on Illumos)
-   * - `invalid-argument`:          `remote-address` is a non-IPv4-mapped IPv6 address, but the socket was bound to a specific IPv4-mapped IPv6 address. (or vice versa)
+   * - `invalid-argument`:          `remote-address` is an IPv4-mapped IPv6 address. (EINVAL, EADDRNOTAVAIL on Illumos)
    * - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EADDRNOTAVAIL on Windows)
    * - `invalid-argument`:          The port in `remote-address` is set to 0. (EADDRNOTAVAIL on Windows)
    * - `invalid-argument`:          The socket is already attached to a different network. The `network` passed to `connect` must be identical to the one passed to `bind`.
-   * - `invalid-state`:             The socket is already in the Connection state. (EISCONN)
-   * - `invalid-state`:             The socket is already in the Listener state. (EOPNOTSUPP, EINVAL on Windows)
-   * 
-   * # Typical `finish` errors
+   * - `invalid-state`:             The socket is already in the `connected` state. (EISCONN)
+   * - `invalid-state`:             The socket is already in the `listening` state. (EOPNOTSUPP, EINVAL on Windows)
    * - `timeout`:                   Connection timed out. (ETIMEDOUT)
    * - `connection-refused`:        The connection was forcefully rejected. (ECONNREFUSED)
    * - `connection-reset`:          The connection was reset. (ECONNRESET)
    * - `connection-aborted`:        The connection was aborted. (ECONNABORTED)
    * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
    * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
-   * - `not-in-progress`:           A `connect` operation is not in progress.
+   * - `not-in-progress`:           A connect operation is not in progress.
    * - `would-block`:               Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
+   * 
+   * # Implementors note
+   * The POSIX equivalent of `start-connect` is the regular `connect` syscall.
+   * Because all WASI sockets are non-blocking this is expected to return
+   * EINPROGRESS, which should be translated to `ok()` in WASI.
+   * 
+   * The POSIX equivalent of `finish-connect` is a `poll` for event `POLLOUT`
+   * with a timeout of 0 on the socket descriptor. Followed by a check for
+   * the `SO_ERROR` socket option, in case the poll signaled readiness.
    * 
    * # References
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
@@ -82,21 +87,23 @@ export namespace WasiSocketsTcp {
   /**
    * Start listening for new connections.
    * 
-   * Transitions the socket into the Listener state.
+   * Transitions the socket into the `listening` state.
    * 
-   * Unlike POSIX:
-   * - this function is async. This enables interactive WASI hosts to inject permission prompts.
-   * - the socket must already be explicitly bound.
+   * Unlike POSIX, the socket must already be explicitly bound.
    * 
-   * # Typical `start` errors
+   * # Typical errors
    * - `invalid-state`:             The socket is not bound to any local address. (EDESTADDRREQ)
-   * - `invalid-state`:             The socket is already in the Connection state. (EISCONN, EINVAL on BSD)
-   * - `invalid-state`:             The socket is already in the Listener state.
-   * 
-   * # Typical `finish` errors
+   * - `invalid-state`:             The socket is already in the `connected` state. (EISCONN, EINVAL on BSD)
+   * - `invalid-state`:             The socket is already in the `listening` state.
    * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
-   * - `not-in-progress`:           A `listen` operation is not in progress.
+   * - `not-in-progress`:           A listen operation is not in progress.
    * - `would-block`:               Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
+   * 
+   * # Implementors note
+   * Unlike in POSIX, in WASI the listen operation is async. This enables
+   * interactive WASI hosts to inject permission prompts. Runtimes that
+   * don't want to make use of this ability can simply call the native
+   * `listen` as part of either `start-listen` or `finish-listen`.
    * 
    * # References
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html>
@@ -107,9 +114,8 @@ export namespace WasiSocketsTcp {
   /**
    * Accept a new client socket.
    * 
-   * The returned socket is bound and in the Connection state. The following properties are inherited from the listener socket:
+   * The returned socket is bound and in the `connected` state. The following properties are inherited from the listener socket:
    * - `address-family`
-   * - `ipv6-only`
    * - `keep-alive-enabled`
    * - `keep-alive-idle-time`
    * - `keep-alive-interval`
@@ -122,7 +128,7 @@ export namespace WasiSocketsTcp {
    * a pair of streams that can be used to read & write to the connection.
    * 
    * # Typical errors
-   * - `invalid-state`:      Socket is not in the Listener state. (EINVAL)
+   * - `invalid-state`:      Socket is not in the `listening` state. (EINVAL)
    * - `would-block`:        No pending connections at the moment. (EWOULDBLOCK, EAGAIN)
    * - `connection-aborted`: An incoming connection was pending, but was terminated by the client before this listener could accept it. (ECONNABORTED)
    * - `new-socket-limit`:   The new socket resource could not be created because of a system limit. (EMFILE, ENFILE)
@@ -164,7 +170,7 @@ export namespace WasiSocketsTcp {
    * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
    */
   /**
-   * Whether the socket is listening for new connections.
+   * Whether the socket is in the `listening` state.
    * 
    * Equivalent to the SO_ACCEPTCONN socket option.
    */
@@ -172,16 +178,6 @@ export namespace WasiSocketsTcp {
    * Whether this is a IPv4 or IPv6 socket.
    * 
    * Equivalent to the SO_DOMAIN socket option.
-   */
-  /**
-   * Whether IPv4 compatibility (dual-stack) mode is disabled or not.
-   * 
-   * Equivalent to the IPV6_V6ONLY socket option.
-   * 
-   * # Typical errors
-   * - `invalid-state`:        (set) The socket is already bound.
-   * - `not-supported`:        (get/set) `this` socket is an IPv4 socket.
-   * - `not-supported`:        (set) Host does not support dual-stack sockets. (Implementations are not required to.)
    */
   /**
    * Hints the desired listen queue size. Implementations are free to ignore this.
@@ -192,7 +188,7 @@ export namespace WasiSocketsTcp {
    * # Typical errors
    * - `not-supported`:        (set) The platform does not support changing the backlog size after the initial listen.
    * - `invalid-argument`:     (set) The provided value was 0.
-   * - `invalid-state`:        (set) The socket is already in the Connection state.
+   * - `invalid-state`:        (set) The socket is in the `connect-in-progress` or `connected` state.
    */
   /**
    * Enables or disables keepalive.
@@ -248,8 +244,6 @@ export namespace WasiSocketsTcp {
    * 
    * # Typical errors
    * - `invalid-argument`:     (set) The TTL value must be 1 or higher.
-   * - `invalid-state`:        (set) The socket is already in the Connection state.
-   * - `invalid-state`:        (set) The socket is already in the Listener state.
    */
   /**
    * The kernel buffer space reserved for sends/receives on this socket.
@@ -262,11 +256,22 @@ export namespace WasiSocketsTcp {
    * 
    * # Typical errors
    * - `invalid-argument`:     (set) The provided value was 0.
-   * - `invalid-state`:        (set) The socket is already in the Connection state.
-   * - `invalid-state`:        (set) The socket is already in the Listener state.
    */
   /**
-   * Create a `pollable` which will resolve once the socket is ready for I/O.
+   * Create a `pollable` which can be used to poll for, or block on,
+   * completion of any of the asynchronous operations of this socket.
+   * 
+   * When `finish-bind`, `finish-listen`, `finish-connect` or `accept`
+   * return `error(would-block)`, this pollable can be used to wait for
+   * their success or failure, after which the method can be retried.
+   * 
+   * The pollable is not limited to the async operation that happens to be
+   * in progress at the time of calling `subscribe` (if any). Theoretically,
+   * `subscribe` only has to be called once per socket and can then be
+   * (re)used for the remainder of the socket's lifetime.
+   * 
+   * See <https://github.com/WebAssembly/wasi-sockets/TcpSocketOperationalSemantics.md#Pollable-readiness>
+   * for a more information.
    * 
    * Note: this function is here for WASI Preview2 only.
    * It's planned to be removed when `future` is natively supported in Preview3.
@@ -274,17 +279,21 @@ export namespace WasiSocketsTcp {
   /**
    * Initiate a graceful shutdown.
    * 
-   * - receive: the socket is not expecting to receive any more data from the peer. All subsequent read
-   * operations on the `input-stream` associated with this socket will return an End Of Stream indication.
-   * Any data still in the receive queue at time of calling `shutdown` will be discarded.
-   * - send: the socket is not expecting to send any more data to the peer. All subsequent write
-   * operations on the `output-stream` associated with this socket will return an error.
-   * - both: same effect as receive & send combined.
+   * - `receive`: The socket is not expecting to receive any data from
+   * the peer. The `input-stream` associated with this socket will be
+   * closed. Any data still in the receive queue at time of calling
+   * this method will be discarded.
+   * - `send`: The socket has no more data to send to the peer. The `output-stream`
+   * associated with this socket will be closed and a FIN packet will be sent.
+   * - `both`: Same effect as `receive` & `send` combined.
+   * 
+   * This function is idempotent. Shutting a down a direction more than once
+   * has no effect and returns `ok`.
    * 
    * The shutdown function does not close (drop) the socket.
    * 
    * # Typical errors
-   * - `invalid-state`: The socket is not in the Connection state. (ENOTCONN)
+   * - `invalid-state`: The socket is not in the `connected` state. (ENOTCONN)
    * 
    * # References
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/shutdown.html>
@@ -336,8 +345,6 @@ export class TcpSocket {
   remoteAddress(): IpSocketAddress;
   isListening(): boolean;
   addressFamily(): IpAddressFamily;
-  ipv6Only(): boolean;
-  setIpv6Only(value: boolean): void;
   setListenBacklogSize(value: bigint): void;
   keepAliveEnabled(): boolean;
   setKeepAliveEnabled(value: boolean): void;

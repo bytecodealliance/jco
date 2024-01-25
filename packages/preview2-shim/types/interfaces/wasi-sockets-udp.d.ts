@@ -6,18 +6,20 @@ export namespace WasiSocketsUdp {
    * network interface(s) to bind to.
    * If the port is zero, the socket will be bound to a random free port.
    * 
-   * Unlike in POSIX, this function is async. This enables interactive WASI hosts to inject permission prompts.
-   * 
-   * # Typical `start` errors
+   * # Typical errors
    * - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
    * - `invalid-state`:             The socket is already bound. (EINVAL)
-   * 
-   * # Typical `finish` errors
    * - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
    * - `address-in-use`:            Address is already in use. (EADDRINUSE)
    * - `address-not-bindable`:      `local-address` is not an address that the `network` can bind to. (EADDRNOTAVAIL)
    * - `not-in-progress`:           A `bind` operation is not in progress.
    * - `would-block`:               Can't finish the operation, it is still in progress. (EWOULDBLOCK, EAGAIN)
+   * 
+   * # Implementors note
+   * Unlike in POSIX, in WASI the bind operation is async. This enables
+   * interactive WASI hosts to inject permission prompts. Runtimes that
+   * don't want to make use of this ability can simply call the native
+   * `bind` as part of either `start-bind` or `finish-bind`.
    * 
    * # References
    * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
@@ -55,7 +57,6 @@ export namespace WasiSocketsUdp {
        * 
        * # Typical errors
        * - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-       * - `invalid-argument`:          `remote-address` is a non-IPv4-mapped IPv6 address, but the socket was bound to a specific IPv4-mapped IPv6 address. (or vice versa)
        * - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
        * - `invalid-argument`:          The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
        * - `invalid-state`:             The socket is not bound.
@@ -103,16 +104,6 @@ export namespace WasiSocketsUdp {
        * Whether this is a IPv4 or IPv6 socket.
        * 
        * Equivalent to the SO_DOMAIN socket option.
-       */
-      /**
-       * Whether IPv4 compatibility (dual-stack) mode is disabled or not.
-       * 
-       * Equivalent to the IPV6_V6ONLY socket option.
-       * 
-       * # Typical errors
-       * - `not-supported`:        (get/set) `this` socket is an IPv4 socket.
-       * - `invalid-state`:        (set) The socket is already bound.
-       * - `not-supported`:        (set) Host does not support dual-stack sockets. (Implementations are not required to.)
        */
       /**
        * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
@@ -204,7 +195,6 @@ export namespace WasiSocketsUdp {
        * 
        * # Typical errors
        * - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-       * - `invalid-argument`:        `remote-address` is a non-IPv4-mapped IPv6 address, but the socket was bound to a specific IPv4-mapped IPv6 address. (or vice versa)
        * - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
        * - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
        * - `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `stream`. (EISCONN)
@@ -279,24 +269,6 @@ export namespace WasiSocketsUdp {
       remoteAddress?: IpSocketAddress,
     }
     
-    export class UdpSocket {
-      startBind(network: Network, localAddress: IpSocketAddress): void;
-      finishBind(): void;
-      stream(remoteAddress: IpSocketAddress | undefined): [IncomingDatagramStream, OutgoingDatagramStream];
-      localAddress(): IpSocketAddress;
-      remoteAddress(): IpSocketAddress;
-      addressFamily(): IpAddressFamily;
-      ipv6Only(): boolean;
-      setIpv6Only(value: boolean): void;
-      unicastHopLimit(): number;
-      setUnicastHopLimit(value: number): void;
-      receiveBufferSize(): bigint;
-      setReceiveBufferSize(value: bigint): void;
-      sendBufferSize(): bigint;
-      setSendBufferSize(value: bigint): void;
-      subscribe(): Pollable;
-    }
-    
     export class IncomingDatagramStream {
       receive(maxResults: bigint): IncomingDatagram[];
       subscribe(): Pollable;
@@ -305,6 +277,22 @@ export namespace WasiSocketsUdp {
     export class OutgoingDatagramStream {
       checkSend(): bigint;
       send(datagrams: OutgoingDatagram[]): bigint;
+      subscribe(): Pollable;
+    }
+    
+    export class UdpSocket {
+      startBind(network: Network, localAddress: IpSocketAddress): void;
+      finishBind(): void;
+      stream(remoteAddress: IpSocketAddress | undefined): [IncomingDatagramStream, OutgoingDatagramStream];
+      localAddress(): IpSocketAddress;
+      remoteAddress(): IpSocketAddress;
+      addressFamily(): IpAddressFamily;
+      unicastHopLimit(): number;
+      setUnicastHopLimit(value: number): void;
+      receiveBufferSize(): bigint;
+      setReceiveBufferSize(value: bigint): void;
+      sendBufferSize(): bigint;
+      setSendBufferSize(value: bigint): void;
       subscribe(): Pollable;
     }
     
