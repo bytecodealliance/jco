@@ -124,7 +124,6 @@ export function registerDispose(resource, parentResource, id, disposeFn) {
     // This makes the generational JS GC become piecewise over child resource
     // graphs (generational at each resource hierarchy level at least).
     if (parentResource?.[dummySymbol]) return;
-    process._rawDebug('FINALIZE', id);
     disposeFn(id);
   }
   finalizationRegistry.register(resource, finalizer, finalizer);
@@ -133,7 +132,6 @@ export function registerDispose(resource, parentResource, id, disposeFn) {
   Object.defineProperty(resource, symbolDispose, {
     value: () => {
       finalizationRegistry.unregister(finalizer);
-      process._rawDebug('DISPOSE', id);
       disposeFn(id);
     },
   });
