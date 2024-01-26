@@ -1268,28 +1268,40 @@ impl Bindgen for FunctionBindgen<'_> {
                     ResourceData::Host { id, local_name, .. } => {
                         let id = id.as_u32();
                         if !imported {
+                            let rep = format!("rep{}", self.tmp());
+
                             uwriteln!(
                                 self.src,
-                                "var {handle} = {op}[{symbol_resource_handle}];
-                                 if ({handle} === null) {{
-                                     throw new Error('Resource error: \"{class_name}\" lifetime expired.');
-                                 }}
-                                 if ({handle} === undefined) {{
-                                     throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
-                                 }}
-                                 ",
+                                "var {rep} = {op}[{symbol_resource_handle}];
+                                if ({rep} === null) {{
+                                    throw new Error('Resource error: \"{class_name}\" lifetime expired.');
+                                }}
+                                if ({rep} === undefined) {{
+                                    throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                }}
+                                ",
                             );
 
-                            // lowered own handles have their finalizers deregistered
-                            // since the proxy lifecycle has now ended for this own handle
+                            // Own resources of own components lowered into the component
+                            // still need handle table tracking of their rep value, by creating
+                            // a new handle for this.
+                            // The class representation of that own resource is still disposed
+                            // though, and their finalizers deregistered as well.
                             if is_own {
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(
                                     self.src,
-                                    "finalizationRegistry{id}.unregister({op});
-                                     {op}[{symbol_dispose}] = {empty_func};
-                                     {op}[{symbol_resource_handle}] = null;"
+                                    "var {handle} = handleCnt{id}++;
+                                    handleTable{id}.set({handle}, {{ rep: {rep}, own: true }});
+                                    finalizationRegistry{id}.unregister({op});
+                                    {op}[{symbol_dispose}] = {empty_func};
+                                    {op}[{symbol_resource_handle}] = null;"
                                 );
+                            } else {
+                                // it is only in the borrow case where we can simplify the handle
+                                // to just be the original rep value and don't need to track an
+                                // explicit handle lifetime.
+                                uwriteln!(self.src, "var {handle} = {rep};");
                             }
                         } else {
                             // imported resources are always given a unique handle

@@ -30,15 +30,15 @@ export async function cliTest (fixtures) {
     });
     suiteTeardown(async function () {
       try {
-        await rm(tmpDir, { recursive: true });
+        // await rm(tmpDir, { recursive: true });
       }
       catch {}
     });
 
     teardown(async function () {
       try {
-        await rm(outDir, { recursive: true });
-        await rm(outFile);
+        // await rm(outDir, { recursive: true });
+        // await rm(outFile);
       }
       catch {}
     });
@@ -245,6 +245,7 @@ export async function cliTest (fixtures) {
       await writeFile(`${outDir}/package.json`, JSON.stringify({ type: 'module' }));
       const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
       strictEqual(m.hello(), 'world');
+      // strictEqual(m.consumeBar(m.createBar()), 'bar1');
     });
   });
 }
