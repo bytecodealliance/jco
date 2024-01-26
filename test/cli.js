@@ -30,15 +30,15 @@ export async function cliTest (fixtures) {
     });
     suiteTeardown(async function () {
       try {
-        // await rm(tmpDir, { recursive: true });
+        await rm(tmpDir, { recursive: true });
       }
       catch {}
     });
 
     teardown(async function () {
       try {
-        // await rm(outDir, { recursive: true });
-        // await rm(outFile);
+        await rm(outDir, { recursive: true });
+        await rm(outFile);
       }
       catch {}
     });
