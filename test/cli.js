@@ -11,9 +11,11 @@ import { fileURLToPath, pathToFileURL } from "url";
 import { exec, jcoPath } from "./helpers.js";
 import { tmpdir, EOL } from "node:os";
 import { resolve, normalize, sep } from "node:path";
+import { execArgv } from "node:process";
 
-const multiMemory =
-  Number(process.versions.node.split(".")[0]) >= 21 && false ? ["--multi-memory"] : [];
+const multiMemory = execArgv.includes("--experimental-wasm-multi-memory")
+  ? ["--multi-memory"]
+  : [];
 
 export async function cliTest(fixtures) {
   suite("CLI", () => {

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { argv } from "node:process";
+import { argv, execArgv } from "node:process";
 
 export const jcoPath = "src/jco.js";
 const multiMemory =
@@ -13,7 +13,7 @@ export async function exec(cmd, ...args) {
   await new Promise((resolve, reject) => {
     const cp = spawn(
       argv[0],
-      ["--no-warnings", "--experimental-wasm-multi-memory", cmd, ...args],
+      ["--no-warnings", ...execArgv, cmd, ...args],
       { stdio: "pipe" }
     );
     cp.stdout.on("data", (chunk) => {
