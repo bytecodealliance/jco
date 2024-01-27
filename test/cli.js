@@ -44,7 +44,7 @@ export async function cliTest (fixtures) {
     });
 
     test('Transcoding', async () => {
-      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/env-allow.composed.wasm`, '-o', outDir);
+      const { stderr } = await exec(jcoPath, 'transpile', `test/fixtures/env-allow.composed.wasm`, '--multi-memory', '-o', outDir);
       strictEqual(stderr, '');
       await writeFile(`${outDir}/package.json`, JSON.stringify({ type: 'module' }));
       const source = await readFile(`${outDir}/env-allow.composed.js`);
