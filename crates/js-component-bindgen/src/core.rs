@@ -81,7 +81,10 @@ pub enum AugmentedOp {
 }
 
 impl<'a> Translation<'a> {
-    pub fn new(translation: ModuleTranslation<'a>) -> Result<Translation<'a>> {
+    pub fn new(translation: ModuleTranslation<'a>, multi_memory: bool) -> Result<Translation<'a>> {
+        if multi_memory {
+            return Ok(Translation::Normal(translation));
+        }
         let mut features = WasmFeatures {
             multi_memory: false,
             ..Default::default()

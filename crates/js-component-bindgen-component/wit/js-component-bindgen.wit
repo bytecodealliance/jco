@@ -48,6 +48,10 @@ world js-component-bindgen {
     /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
     /// These exports can break typescript builds.
     no-namespaced-exports: option<bool>,
+
+    /// Whether to output core Wasm utilizing multi-memory or to polyfill
+    /// this handling.
+    multi-memory: option<bool>,
   }
 
   variant wit {

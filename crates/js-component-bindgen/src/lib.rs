@@ -126,7 +126,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
 
     let modules: PrimaryMap<StaticModuleIndex, core::Translation<'_>> = modules
         .into_iter()
-        .map(|(_i, module)| core::Translation::new(module))
+        .map(|(_i, module)| core::Translation::new(module, opts.multi_memory))
         .collect::<Result<_>>()?;
 
     let types = types.finish();

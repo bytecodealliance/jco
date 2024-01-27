@@ -63,8 +63,13 @@ jobs:
     - name: Build
       run: npm run build
 
-    - name: Test
+    - name: Test LTS Node.js
+      run: npm run test:lts
+      if: matrix.node == '18.x' || matrix.node == '20.x'
+
+    - name: Test Latest Node.js
       run: npm run test
+      if: matrix.node == 'latest'
 
     - name: WASI Preview 2 Conformance
       run: cargo test

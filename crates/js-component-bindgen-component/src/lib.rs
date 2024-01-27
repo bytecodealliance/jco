@@ -67,6 +67,7 @@ impl Guest for JsComponentBindgenComponent {
             valid_lifting_optimization: options.valid_lifting_optimization.unwrap_or(false),
             tracing: options.tracing.unwrap_or(false),
             no_namespaced_exports: options.no_namespaced_exports.unwrap_or(false),
+            multi_memory: options.multi_memory.unwrap_or(false),
         };
 
         let js_component_bindgen::Transpiled {
@@ -133,6 +134,7 @@ impl Guest for JsComponentBindgenComponent {
             base64_cutoff: 0,
             tracing: false,
             no_namespaced_exports: false,
+            multi_memory: false,
         };
 
         let files = generate_types(name, resolve, world, opts).map_err(|e| e.to_string())?;

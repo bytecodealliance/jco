@@ -49,6 +49,7 @@ program.command('transpile')
   .addOption(new Option('-I, --instantiation [mode]', 'output for custom module instantiation').choices(['async', 'sync']).preset('async'))
   .option('-q, --quiet', 'disable logging')
   .option('--no-namespaced-exports', 'disable namespaced exports for typescript compatibility')
+  .option('--multi-memory', 'optimized output for Wasm multi-memory')
   .option('--', 'for --optimize, custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(transpile));
 

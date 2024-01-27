@@ -71,6 +71,9 @@ pub struct TranspileOpts {
     /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
     /// These exports can break typescript builds.
     pub no_namespaced_exports: bool,
+    /// Whether to output core Wasm utilizing multi-memory or to polyfill
+    /// this handling.
+    pub multi_memory: bool,
 }
 
 #[derive(Default, Clone, Debug)]
