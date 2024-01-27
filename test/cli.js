@@ -245,6 +245,7 @@ export async function cliTest (fixtures) {
       await writeFile(`${outDir}/package.json`, JSON.stringify({ type: 'module' }));
       const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
       strictEqual(m.hello(), 'world');
+      // strictEqual(m.consumeBar(m.createBar()), 'bar1');
     });
   });
 }

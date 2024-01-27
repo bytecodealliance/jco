@@ -1,5 +1,13 @@
 package local:test;
 
+interface foo {
+  resource bar {}
+}
+
 world test {
+  use foo.{bar};
+  export create-bar: func() -> bar;
+  export consume-bar: func(bar: bar) -> string;
+
   export hello: func() -> string;
 }
