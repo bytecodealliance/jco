@@ -1,26 +1,40 @@
-import { deepStrictEqual, ok, strictEqual } from 'node:assert';
-import { readFile } from 'node:fs/promises';
-import { transpile, opt, print, parse, componentWit, componentNew, componentEmbed, metadataShow, preview1AdapterReactorPath } from '../src/api.js';
-import { fileURLToPath } from 'node:url';
-import { platform } from 'node:process';
+import { deepStrictEqual, ok, strictEqual } from "node:assert";
+import { readFile } from "node:fs/promises";
+import {
+  transpile,
+  opt,
+  print,
+  parse,
+  componentWit,
+  componentNew,
+  componentEmbed,
+  metadataShow,
+  preview1AdapterReactorPath,
+} from "../src/api.js";
+import { fileURLToPath } from "node:url";
+import { platform } from "node:process";
 
 const isWindows = platform === "win32";
 
-export async function apiTest (fixtures) {
-  suite('API', () => {
-    test('Transpile', async () => {
-      const name = 'flavorful';
-      const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
+export async function apiTest(fixtures) {
+  suite("API", () => {
+    test("Transpile", async () => {
+      const name = "flavorful";
+      const component = await readFile(
+        `test/fixtures/components/${name}.component.wasm`
+      );
       const { files, imports, exports } = await transpile(component, { name });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 3);
-      deepStrictEqual(exports[0], ['test', 'instance']);
-      ok(files[name + '.js']);
+      deepStrictEqual(exports[0], ["test", "instance"]);
+      ok(files[name + ".js"]);
     });
 
-    test('Transpile & Optimize & Minify', async () => {
-      const name = 'flavorful';
-      const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
+    test("Transpile & Optimize & Minify", async () => {
+      const name = "flavorful";
+      const component = await readFile(
+        `test/fixtures/components/${name}.component.wasm`
+      );
       const { files, imports, exports } = await transpile(component, {
         name,
         minify: true,
@@ -31,16 +45,18 @@ export async function apiTest (fixtures) {
       });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 3);
-      deepStrictEqual(exports[0], ['test', 'instance']);
-      ok(files[name + '.js'].length < 11_000);
+      deepStrictEqual(exports[0], ["test", "instance"]);
+      ok(files[name + ".js"].length < 11_000);
     });
 
-    test('Transpile to JS', async () => {
-      const name = 'flavorful';
-      const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
+    test("Transpile to JS", async () => {
+      const name = "flavorful";
+      const component = await readFile(
+        `test/fixtures/components/${name}.component.wasm`
+      );
       const { files, imports, exports } = await transpile(component, {
         map: {
-          'test*': './*.js'
+          "test*": "./*.js",
         },
         name,
         validLiftingOptimization: true,
@@ -50,121 +66,161 @@ export async function apiTest (fixtures) {
       });
       strictEqual(imports.length, 2);
       strictEqual(exports.length, 3);
-      deepStrictEqual(exports[0], ['test', 'instance']);
-      deepStrictEqual(exports[1], ['test:flavorful/test', 'instance']);
-      deepStrictEqual(exports[2], ['testImports', 'function']);
-      const source = Buffer.from(files[name + '.js']).toString();
-      ok(source.includes('./wasi.js'));
-      ok(source.includes('testwasi'));
-      ok(source.includes('FUNCTION_TABLE'));
-      for (let i = 0; i < 2; i++)
-        ok(source.includes(exports[i][0]));
+      deepStrictEqual(exports[0], ["test", "instance"]);
+      deepStrictEqual(exports[1], ["test:flavorful/test", "instance"]);
+      deepStrictEqual(exports[2], ["testImports", "function"]);
+      const source = Buffer.from(files[name + ".js"]).toString();
+      ok(source.includes("./wasi.js"));
+      ok(source.includes("testwasi"));
+      ok(source.includes("FUNCTION_TABLE"));
+      for (let i = 0; i < 2; i++) ok(source.includes(exports[i][0]));
     });
 
-    test('Transpile map into package imports', async () => {
-      const name = 'flavorful';
-      const component = await readFile(`test/fixtures/components/${name}.component.wasm`);
+    test("Transpile map into package imports", async () => {
+      const name = "flavorful";
+      const component = await readFile(
+        `test/fixtures/components/${name}.component.wasm`
+      );
       const { files, imports } = await transpile(component, {
         name,
         map: {
-          'test:flavorful/*': '#*import'
+          "test:flavorful/*": "#*import",
         },
       });
       strictEqual(imports.length, 2);
-      strictEqual(imports[0], '#testimport');
-      const source = Buffer.from(files[name + '.js']).toString();
-      ok(source.includes('\'#testimport\''));
+      strictEqual(imports[0], "#testimport");
+      const source = Buffer.from(files[name + ".js"]).toString();
+      ok(source.includes("'#testimport'"));
     });
 
-    test('Optimize', async () => {
-      const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
+    test("Optimize", async () => {
+      const component = await readFile(
+        `test/fixtures/components/flavorful.component.wasm`
+      );
       const { component: optimizedComponent } = await opt(component);
       ok(optimizedComponent.byteLength < component.byteLength);
     });
 
-    test('Print & Parse', async () => {
-      const component = await readFile(`test/fixtures/components/flavorful.component.wasm`);
+    test("Print & Parse", async () => {
+      const component = await readFile(
+        `test/fixtures/components/flavorful.component.wasm`
+      );
       const output = await print(component);
-      strictEqual(output.slice(0, 10), '(component');
+      strictEqual(output.slice(0, 10), "(component");
 
       const componentParsed = await parse(output);
       ok(componentParsed);
     });
 
-    test('Wit & New', async () => {
-      const wit = await readFile(`test/fixtures/wit/deps/flavorful/flavorful.wit`, 'utf8');
+    test("Wit & New", async () => {
+      const wit = await readFile(
+        `test/fixtures/wit/deps/flavorful/flavorful.wit`,
+        "utf8"
+      );
 
       const generatedComponent = await componentEmbed({
         witSource: wit,
         dummy: true,
-        metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
+        metadata: [
+          ["language", [["javascript", ""]]],
+          ["processed-by", [["dummy-gen", "test"]]],
+        ],
       });
       {
         const output = await print(generatedComponent);
-        strictEqual(output.slice(0, 7), '(module');
+        strictEqual(output.slice(0, 7), "(module");
       }
 
       const newComponent = await componentNew(generatedComponent);
       {
         const output = await print(newComponent);
-        strictEqual(output.slice(0, 10), '(component');
+        strictEqual(output.slice(0, 10), "(component");
       }
 
       const meta = await metadataShow(newComponent);
       deepStrictEqual(meta[0].metaType, {
-        tag: 'component',
-        val: 4
+        tag: "component",
+        val: 4,
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.20.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
+      deepStrictEqual(meta[1].producers, [
+        [
+          "processed-by",
+          [
+            ["wit-component", "0.20.0"],
+            ["dummy-gen", "test"],
+          ],
+        ],
+        ["language", [["javascript", ""]]],
+      ]);
     });
 
-    test('Multi-file WIT', async () => {
+    test("Multi-file WIT", async () => {
       const generatedComponent = await componentEmbed({
         dummy: true,
-        witPath: (isWindows ? '//?/' : '') + fileURLToPath(new URL('./fixtures/componentize/source.wit', import.meta.url)),
-        metadata: [['language', [['javascript', '']]], ['processed-by', [['dummy-gen', 'test']]]]
+        witPath:
+          (isWindows ? "//?/" : "") +
+          fileURLToPath(
+            new URL("./fixtures/componentize/source.wit", import.meta.url)
+          ),
+        metadata: [
+          ["language", [["javascript", ""]]],
+          ["processed-by", [["dummy-gen", "test"]]],
+        ],
       });
       {
         const output = await print(generatedComponent);
-        strictEqual(output.slice(0, 7), '(module');
+        strictEqual(output.slice(0, 7), "(module");
       }
 
       const newComponent = await componentNew(generatedComponent);
       {
         const output = await print(newComponent);
-        strictEqual(output.slice(0, 10), '(component');
+        strictEqual(output.slice(0, 10), "(component");
       }
 
       const meta = await metadataShow(newComponent);
       deepStrictEqual(meta[0].metaType, {
-        tag: 'component',
-        val: 1
+        tag: "component",
+        val: 1,
       });
-      deepStrictEqual(meta[1].producers, [['processed-by', [['wit-component', '0.20.0'], ['dummy-gen', 'test']]], ['language', [['javascript', '']]]]);
+      deepStrictEqual(meta[1].producers, [
+        [
+          "processed-by",
+          [
+            ["wit-component", "0.20.0"],
+            ["dummy-gen", "test"],
+          ],
+        ],
+        ["language", [["javascript", ""]]],
+      ]);
     });
 
-    test('Component new adapt', async () => {
+    test("Component new adapt", async () => {
       const component = await readFile(`test/fixtures/modules/exitcode.wasm`);
 
-      const generatedComponent = await componentNew(component, [['wasi_snapshot_preview1', await readFile(preview1AdapterReactorPath())]]);
+      const generatedComponent = await componentNew(component, [
+        [
+          "wasi_snapshot_preview1",
+          await readFile(preview1AdapterReactorPath()),
+        ],
+      ]);
 
       await print(generatedComponent);
     });
 
-    test('Extract metadata', async () => {
+    test("Extract metadata", async () => {
       const component = await readFile(`test/fixtures/modules/exitcode.wasm`);
 
       const meta = await metadataShow(component);
 
-      deepStrictEqual(meta, [{
-        metaType: { tag: 'module' },
-        producers: [],
-        name: undefined,
-        range: [
-          0,
-          262
-        ]
-      }]);
+      deepStrictEqual(meta, [
+        {
+          metaType: { tag: "module" },
+          producers: [],
+          name: undefined,
+          range: [0, 262],
+        },
+      ]);
     });
   });
 }
