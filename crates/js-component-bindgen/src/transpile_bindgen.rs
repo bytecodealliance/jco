@@ -248,7 +248,7 @@ impl<'a> JsBindgen<'a> {
                     output,
                     "\
                         {}
-                        export function instantiate(getCoreModule, imports, instantiateCore = WebAssembly.Instance) {{
+                        export function instantiate(getCoreModule, imports, instantiateCore = (module, importObject) => new WebAssembly.Instance(module, importObject)) {{
                             {}
                     ",
                     &js_intrinsics as &str,
