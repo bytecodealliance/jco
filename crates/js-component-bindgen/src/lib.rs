@@ -113,7 +113,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
     // internal to a component to a straight linear list of initializers
     // that need to be executed to instantiate a component.
     let scope = ScopeVec::new();
-    let tunables = Tunables::default();
+    let tunables = Tunables::default_host();
     let mut types = ComponentTypesBuilder::default();
     let mut validator = Validator::new_with_features(WasmFeatures {
         component_model: true,
@@ -129,7 +129,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .map(|(_i, module)| core::Translation::new(module, opts.multi_memory))
         .collect::<Result<_>>()?;
 
-    let types = types.finish();
+    let types = types.finish_sans_reflection();
 
     // Insert all core wasm modules into the generated `Files` which will
     // end up getting used in the `generate_instantiate` method.

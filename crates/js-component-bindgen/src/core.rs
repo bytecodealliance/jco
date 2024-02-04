@@ -45,6 +45,9 @@ use wasmtime_environ::component::CoreDef;
 use wasmtime_environ::wasmparser;
 use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};
 
+fn unimplemented_try_table() -> wasm_encoder::Instruction<'static> {
+    unimplemented!()
+}
 pub enum Translation<'a> {
     Normal(ModuleTranslation<'a>),
     Augmented {
@@ -711,6 +714,7 @@ macro_rules! define_translate {
     (mk F32Const $v:ident) => (F32Const(f32::from_bits($v.bits())));
     (mk F64Const $v:ident) => (F64Const(f64::from_bits($v.bits())));
     (mk V128Const $v:ident) => (V128Const($v.i128()));
+    (mk TryTable $v:ident) => (unimplemented_try_table());
     (mk MemoryGrow $($x:tt)*) => ({
         if true { unimplemented!() } Nop
     });
@@ -753,6 +757,17 @@ macro_rules! define_translate {
         $arg.targets().map(|i| i.unwrap()).collect::<Vec<_>>().into(),
         $arg.default(),
     ));
+    (map $self:ident $arg:ident try_table) => {$arg};
+    (map $self:ident $arg:ident struct_type_index) => {$self.remap(Item::Type, $arg).unwrap()};
+    (map $self:ident $arg:ident field_index) => {$arg};
+    (map $self:ident $arg:ident array_type_index) => {$self.remap(Item::Type, $arg).unwrap()};
+    (map $self:ident $arg:ident array_size) => {$arg};
+    (map $self:ident $arg:ident array_data_index) => ($self.remap(Item::Data, $arg).unwrap());
+    (map $self:ident $arg:ident array_elem_index) => ($self.remap(Item::Element, $arg).unwrap());
+    (map $self:ident $arg:ident array_type_index_dst) => ($self.remap(Item::Type, $arg).unwrap());
+    (map $self:ident $arg:ident array_type_index_src) => ($self.remap(Item::Type, $arg).unwrap());
+    (map $self:ident $arg:ident from_ref_type) => ($self.refty(&$arg).unwrap());
+    (map $self:ident $arg:ident to_ref_type) => ($self.refty(&$arg).unwrap());
 }
 
 impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
@@ -761,7 +776,26 @@ impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
     wasmparser::for_each_operator!(define_translate);
 }
 
+#[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
+pub enum Item {
+    Function,
+    Table,
+    Memory,
+    Tag,
+    Global,
+    Type,
+    Data,
+    Element,
+}
+
 impl Translator<'_, '_> {
+    fn remap(&mut self, item: Item, idx: u32) -> Result<u32> {
+        let _ = item;
+        Ok(idx)
+    }
+    fn refty(&mut self, ty: &wasmparser::RefType) -> Result<wasm_encoder::RefType> {
+        unimplemented!()
+    }
     fn blockty(&self, ty: wasmparser::BlockType) -> wasm_encoder::BlockType {
         match ty {
             wasmparser::BlockType::Empty => wasm_encoder::BlockType::Empty,
