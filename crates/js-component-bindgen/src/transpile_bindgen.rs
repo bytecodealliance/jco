@@ -776,9 +776,9 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "function trampoline{i}(fromRid, toRid, handle) {{
                         const {{ table: fromTable }} = {handle_tables}.get(fromRid);
-                        const {{ rep }} = fromHandleTable.get(handle);
+                        const {{ rep }} = fromTable.get(handle);
                         fromTable.delete(handle);
-                        const {{ table: toTable, creataeHandle }} = {handle_tables}.get(toRid);
+                        const {{ table: toTable, createHandle }} = {handle_tables}.get(toRid);
                         const newHandle = createHandle();
                         toTable.set(newHandle, {{ rep, own: true }});
                         return newHandle();
@@ -792,9 +792,9 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "function trampoline{i}(fromRid, toRid, handle) {{
                         const {{ table: fromTable }} = {handle_tables}.get(fromRid);
-                        const {{ rep }} = fromHandleTable.get(handle);
+                        const {{ rep }} = fromTable.get(handle);
                         fromTable.delete(handle);
-                        const {{ table: toTable, creataeHandle }} = {handle_tables}.get(toRid);
+                        const {{ table: toTable, createHandle }} = {handle_tables}.get(toRid);
                         const newHandle = createHandle();
                         toTable.set(newHandle, {{ rep, own: false }});
                         return newHandle();
