@@ -584,7 +584,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     "const handleTable{rid} = new Map();
-                    {handle_tables}.set({rid}, {{ table: handleTable{rid}, createHandle: () => ++handleCnt }});
+                    {handle_tables}.set({rid}, {{ table: handleTable{rid}, createHandle: () => ++handleCnt{rid} }});
                     let handleCnt{rid} = 0;",
                 );
 
