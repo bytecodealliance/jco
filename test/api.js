@@ -5,7 +5,6 @@ import {
   opt,
   print,
   parse,
-  componentWit,
   componentNew,
   componentEmbed,
   metadataShow,
