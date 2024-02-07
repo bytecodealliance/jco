@@ -285,22 +285,23 @@ impl<'a> JsBindgen<'a> {
                 &self.src.js as &str,
             );
         } else {
-            let (maybe_init_export, maybe_init) = if self.opts.tla_compat {
-                uwriteln!(self.src.js_init, "_initialized = true;");
-                (
-                    "\
+            let (maybe_init_export, maybe_init) =
+                if self.opts.tla_compat && matches!(opts.instantiation, None) {
+                    uwriteln!(self.src.js_init, "_initialized = true;");
+                    (
+                        "\
                         let _initialized = false;
                         export ",
-                    "",
-                )
-            } else {
-                (
-                    "",
-                    "
+                        "",
+                    )
+                } else {
+                    (
+                        "",
+                        "
                         await $init;
                     ",
-                )
-            };
+                    )
+                };
 
             uwrite!(
                 output,
@@ -1295,7 +1296,10 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        if self.gen.opts.tla_compat && matches!(abi, AbiVariant::GuestExport) {
+        if self.gen.opts.tla_compat
+            && matches!(abi, AbiVariant::GuestExport)
+            && matches!(self.gen.opts.instantiation, None)
+        {
             let throw_uninitialized = self.gen.intrinsic(Intrinsic::ThrowUninitialized);
             uwrite!(
                 self.src.js,
