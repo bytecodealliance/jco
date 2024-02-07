@@ -770,11 +770,7 @@ impl<'a> Instantiator<'a, '_> {
                     ",
                 );
             }
-            Trampoline::ResourceTransferOwn => {
-                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransfer);
-                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
-            }
-            Trampoline::ResourceTransferBorrow => {
+            Trampoline::ResourceTransferOwn | Trampoline::ResourceTransferBorrow => {
                 let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransfer);
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
