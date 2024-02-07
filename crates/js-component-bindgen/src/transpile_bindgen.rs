@@ -771,36 +771,12 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceTransferOwn => {
-                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
-                uwrite!(
-                    self.src.js,
-                    "function trampoline{i}(fromRid, toRid, handle) {{
-                        const {{ table: fromTable }} = {handle_tables}.get(fromRid);
-                        const {{ rep }} = fromTable.get(handle);
-                        fromTable.delete(handle);
-                        const {{ table: toTable, createHandle }} = {handle_tables}.get(toRid);
-                        const newHandle = createHandle();
-                        toTable.set(newHandle, {{ rep, own: true }});
-                        return newHandle;
-                    }}
-                    ",
-                );
+                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransfer);
+                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
             Trampoline::ResourceTransferBorrow => {
-                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
-                uwrite!(
-                    self.src.js,
-                    "function trampoline{i}(fromRid, toRid, handle) {{
-                        const {{ table: fromTable }} = {handle_tables}.get(fromRid);
-                        const {{ rep }} = fromTable.get(handle);
-                        fromTable.delete(handle);
-                        const {{ table: toTable, createHandle }} = {handle_tables}.get(toRid);
-                        const newHandle = createHandle();
-                        toTable.set(newHandle, {{ rep, own: false }});
-                        return newHandle;
-                    }}
-                    ",
-                );
+                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransfer);
+                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
             Trampoline::ResourceEnterCall => {
                 uwrite!(

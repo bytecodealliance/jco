@@ -20,6 +20,7 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
+    ResourceTransfer,
     SymbolResourceHandle,
     SymbolDispose,
     ThrowInvalidBool,
@@ -183,6 +184,18 @@ pub fn render_intrinsics(
 
             Intrinsic::IsLE => output.push_str("
                 const isLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+            "),
+
+            Intrinsic::ResourceTransfer => output.push_str("
+                function resourceTransfer(fromRid, toRid, handle) {
+                    const { table: fromTable } = {handle_tables}.get(fromRid);
+                    const entry = fromTable.get(handle);
+                    fromTable.delete(handle);
+                    const { table: toTable, createHandle } = {handle_tables}.get(toRid);
+                    const newHandle = createHandle();
+                    toTable.set(newHandle, entry);
+                    return newHandle;
+                }
             "),
 
             Intrinsic::SymbolResourceHandle => output.push_str("
@@ -441,6 +454,7 @@ impl Intrinsic {
             Intrinsic::I64ToF64 => "i64ToF64",
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
+            Intrinsic::ResourceTransfer => "resourceTransfer",
             Intrinsic::SymbolResourceHandle => "resourceHandleSymbol",
             Intrinsic::SymbolDispose => "symbolDispose",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
