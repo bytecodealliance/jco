@@ -33,6 +33,7 @@ struct TsBindgen {
 /// typescript definitions.
 struct TsInterface<'a> {
     src: Source,
+    is_root: bool,
     resolve: &'a Resolve,
     needs_ty_option: bool,
     needs_ty_result: bool,
@@ -92,7 +93,7 @@ pub fn ts_bindgen(
 
                     let name = ty.name.as_ref().unwrap();
 
-                    let mut gen = bindgen.ts_interface(resolve);
+                    let mut gen = bindgen.ts_interface(resolve, true);
                     gen.docs(&ty.docs);
                     match &ty.kind {
                         TypeDefKind::Record(record) => {
@@ -349,7 +350,7 @@ impl TsBindgen {
         _files: &mut Files,
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
-        let mut gen = self.ts_interface(resolve);
+        let mut gen = self.ts_interface(resolve, false);
         gen.ts_func(func, true, false);
         let src = gen.finish();
         self.import_object.push_str(&src);
@@ -393,7 +394,7 @@ impl TsBindgen {
         _files: &mut Files,
         declaration: bool,
     ) {
-        let mut gen = self.ts_interface(resolve);
+        let mut gen = self.ts_interface(resolve, false);
         for (_, func) in funcs {
             gen.ts_func(func, false, declaration);
         }
@@ -436,7 +437,7 @@ impl TsBindgen {
             return local_name;
         }
 
-        let mut gen = self.ts_interface(resolve);
+        let mut gen = self.ts_interface(resolve, false);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
         for (_, func) in resolve.interfaces[id].functions.iter() {
@@ -449,7 +450,7 @@ impl TsBindgen {
                 if !gen.resources.contains_key(resource) {
                     uwriteln!(gen.src, "export {{ {} }};", resource.to_upper_camel_case());
                     gen.resources
-                        .insert(resource.to_string(), TsInterface::new(resolve));
+                        .insert(resource.to_string(), TsInterface::new(resolve, false));
                 }
             }
         }
@@ -465,8 +466,9 @@ impl TsBindgen {
         local_name
     }
 
-    fn ts_interface<'b>(&'b mut self, resolve: &'b Resolve) -> TsInterface<'b> {
+    fn ts_interface<'b>(&'b mut self, resolve: &'b Resolve, is_root: bool) -> TsInterface<'b> {
         TsInterface {
+            is_root,
             src: Source::default(),
             resources: HashMap::new(),
             local_names: LocalNames::default(),
@@ -478,8 +480,9 @@ impl TsBindgen {
 }
 
 impl<'a> TsInterface<'a> {
-    fn new(resolve: &'a Resolve) -> Self {
+    fn new(resolve: &'a Resolve, is_root: bool) -> Self {
         TsInterface {
+            is_root,
             src: Source::default(),
             resources: HashMap::new(),
             local_names: LocalNames::default(),
@@ -646,7 +649,7 @@ impl<'a> TsInterface<'a> {
             if !self.resources.contains_key(resource) {
                 uwriteln!(self.src, "export {{ {} }};", resource.to_upper_camel_case());
                 self.resources
-                    .insert(resource.to_string(), TsInterface::new(self.resolve));
+                    .insert(resource.to_string(), TsInterface::new(self.resolve, false));
             }
             self.resources.get_mut(resource).unwrap()
         } else {
@@ -936,6 +939,7 @@ impl<'a> TsInterface<'a> {
             }
             _ => None,
         };
+        let path_prefix = if self.is_root { "./interfaces/" } else { "./" };
         let type_name = name.to_upper_camel_case();
         match owner_not_parent {
             Some(owned_interface_name) => {
@@ -948,12 +952,12 @@ impl<'a> TsInterface<'a> {
                 if orig_name == type_name {
                     uwriteln!(
                         self.src,
-                        "import type {{ {type_name} }} from '../interfaces/{owned_interface_name}.js';",
+                        "import type {{ {type_name} }} from '{path_prefix}{owned_interface_name}.js';",
                     );
                 } else {
                     uwriteln!(
                         self.src,
-                        "import type {{ {orig_name} as {type_name} }} from '../interfaces/{owned_interface_name}.js';",
+                        "import type {{ {orig_name} as {type_name} }} from '{path_prefix}{owned_interface_name}.js';",
                     );
                 }
                 self.src.push_str(&format!("export {{ {} }};\n", type_name));
