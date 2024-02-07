@@ -460,7 +460,7 @@ impl<'a> Instantiator<'a, '_> {
                                 self.connect_resources(*ty, *resource, true);
                             }
                             Export::Type(TypeDef::Interface(iface)) => {
-                                self.connect_resource_types(*ty, iface, true);
+                                self.connect_resource_types(*ty, &iface, true);
                             }
                             _ => unreachable!(),
                         }
@@ -579,9 +579,12 @@ impl<'a> Instantiator<'a, '_> {
                     (true, "".into())
                 };
 
+                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+
                 uwriteln!(
                     self.src.js,
                     "const handleTable{rid} = new Map();
+                    {handle_tables}.set({rid}, {{ table: handleTable{rid}, createHandle: () => ++handleCnt }});
                     let handleCnt{rid} = 0;",
                 );
 
@@ -767,10 +770,56 @@ impl<'a> Instantiator<'a, '_> {
                     ",
                 );
             }
-            Trampoline::ResourceTransferOwn => unimplemented!(),
-            Trampoline::ResourceTransferBorrow => unimplemented!(),
-            Trampoline::ResourceEnterCall => unimplemented!(),
-            Trampoline::ResourceExitCall => unimplemented!(),
+            Trampoline::ResourceTransferOwn => {
+                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}(fromRid, toRid, handle) {{
+                        const {{ table: fromTable }} = {handle_tables}.get(fromRid);
+                        const {{ rep }} = fromHandleTable.get(handle);
+                        fromTable.delete(handle);
+                        const {{ table: toTable, creataeHandle }} = {handle_tables}.get(toRid);
+                        const newHandle = createHandle();
+                        toTable.set(newHandle, {{ rep, own: true }});
+                        return newHandle();
+                    }}
+                    ",
+                );
+            }
+            Trampoline::ResourceTransferBorrow => {
+                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}(fromRid, toRid, handle) {{
+                        const {{ table: fromTable }} = {handle_tables}.get(fromRid);
+                        const {{ rep }} = fromHandleTable.get(handle);
+                        fromTable.delete(handle);
+                        const {{ table: toTable, creataeHandle }} = {handle_tables}.get(toRid);
+                        const newHandle = createHandle();
+                        toTable.set(newHandle, {{ rep, own: false }});
+                        return newHandle();
+                    }}
+                    ",
+                );
+            }
+            Trampoline::ResourceEnterCall => {
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}() {{
+                        console.log('RESOURCE ENTER CALL');
+                    }}
+                    ",
+                );
+            }
+            Trampoline::ResourceExitCall => {
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}() {{
+                        console.log('RESOURCE EXIT CALL');
+                    }}
+                    ",
+                );
+            }
         }
     }
 

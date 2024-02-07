@@ -14,6 +14,7 @@ pub enum Intrinsic {
     F64ToI64,
     FetchCompile,
     GetErrorPayload,
+    HandleTables,
     HasOwnProperty,
     I32ToF32,
     I64ToF64,
@@ -155,6 +156,10 @@ pub fn render_intrinsics(
                     }}
                 ")
             },
+
+            Intrinsic::HandleTables => output.push_str("
+                const handleTables = new Map();
+            "),
 
             Intrinsic::HasOwnProperty => output.push_str("
                 const hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -430,6 +435,7 @@ impl Intrinsic {
             Intrinsic::F64ToI64 => "f64ToI64",
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::GetErrorPayload => "getErrorPayload",
+            Intrinsic::HandleTables => "handleTables",
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::I32ToF32 => "i32ToF32",
             Intrinsic::I64ToF64 => "i64ToF64",
