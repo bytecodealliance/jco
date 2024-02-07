@@ -213,7 +213,7 @@ pub fn ts_bindgen(
         bindgen.src.push_str(&bindgen.export_object);
     }
 
-    if opts.tla_compat {
+    if opts.tla_compat && matches!(opts.instantiation, None) {
         uwriteln!(
             bindgen.src,
             "
