@@ -113,7 +113,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
     // internal to a component to a straight linear list of initializers
     // that need to be executed to instantiate a component.
     let scope = ScopeVec::new();
-    let tunables = Tunables::default_host();
+    let tunables = Tunables::default_u32();
     let mut types = ComponentTypesBuilder::default();
     let mut validator = Validator::new_with_features(WasmFeatures {
         component_model: true,

@@ -778,11 +778,11 @@ impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
 pub enum Item {
-    Function,
-    Table,
-    Memory,
-    Tag,
-    Global,
+    // Function,
+    // Table,
+    // Memory,
+    // Tag,
+    // Global,
     Type,
     Data,
     Element,
@@ -793,7 +793,7 @@ impl Translator<'_, '_> {
         let _ = item;
         Ok(idx)
     }
-    fn refty(&mut self, ty: &wasmparser::RefType) -> Result<wasm_encoder::RefType> {
+    fn refty(&mut self, _ty: &wasmparser::RefType) -> Result<wasm_encoder::RefType> {
         unimplemented!()
     }
     fn blockty(&self, ty: wasmparser::BlockType) -> wasm_encoder::BlockType {
