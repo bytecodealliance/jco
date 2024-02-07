@@ -781,7 +781,7 @@ impl<'a> Instantiator<'a, '_> {
                         const {{ table: toTable, createHandle }} = {handle_tables}.get(toRid);
                         const newHandle = createHandle();
                         toTable.set(newHandle, {{ rep, own: true }});
-                        return newHandle();
+                        return newHandle;
                     }}
                     ",
                 );
@@ -797,7 +797,7 @@ impl<'a> Instantiator<'a, '_> {
                         const {{ table: toTable, createHandle }} = {handle_tables}.get(toRid);
                         const newHandle = createHandle();
                         toTable.set(newHandle, {{ rep, own: false }});
-                        return newHandle();
+                        return newHandle;
                     }}
                     ",
                 );
