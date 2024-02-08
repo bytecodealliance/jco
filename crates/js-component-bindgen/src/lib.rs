@@ -129,7 +129,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .map(|(_i, module)| core::Translation::new(module, opts.multi_memory))
         .collect::<Result<_>>()?;
 
-    let types = types.finish_sans_reflection();
+    let types = types.finish(&PrimaryMap::new(), Vec::new(), Vec::new());
 
     // Insert all core wasm modules into the generated `Files` which will
     // end up getting used in the `generate_instantiate` method.
@@ -142,7 +142,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
     }
 
     let (imports, exports) = transpile_bindgen(
-        &name, &component, &modules, &types, &resolve, world_id, opts, &mut files,
+        &name, &component, &modules, &types.0, &resolve, world_id, opts, &mut files,
     );
 
     let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
