@@ -94,14 +94,11 @@ To disable this automatic WASI handling the `--no-wasi-shim` flag can be provide
 
 ### Interface Implementation Example
 
-For an example of the transpilation conventions and imports, consider a component with the following WIT definition:
+Here's an example of implementing a custom WIT interface in JavaScript:
 
 example.wit
 ```wit
 package test:pkg;
-world myworld {
-  import iface;
-}
 interface interface-types {
   type some-type = list<u32>;
   record some-record {
@@ -112,36 +109,57 @@ interface iface {
   use interface-types.{some-record};
   interface-fn: func(%record: some-record) -> result<string, string>;
 }
+world myworld {
+  import iface;
+  export test: func() -> string;
+}
 ```
 
-To see an example of the output without even having a real component we can use the `--stub` feature of transpile:
+When transpiling, we can use the map rules as described in the previous section to implement all interfaces from a single JS file.
+
+Given a component compiled for this world, we could transpile it, but given this is only an example, we can use the `--stub` feature of transpile to inspect the bindings:
 
 ```
-jco transpile example.wit --stub -o output
+jco transpile example.wit --stub -o output --map 'test:pkg/*=./imports.js#*'
 ```
 
 The `output/example.js` file contains the generated bindgen:
 
 ```js
-import { interfaceFn } from 'test:pkg/interface-b';
+import { iface } from './imports.js';
+const { interfaceFn } = iface;
 
 // ... bindings ...
 
-const iface = {
-  interfaceFn: interfaceFn$1
-};
-export { iface, iface as 'test:pkg/iface' }
-```
-
-To implement the imported interface, the following JavaScript file can be written:
-
-```js
-export function interfaceFn (record) {
-  return 'string';
+function test () {
+  // ...
 }
+
+export { test }
 ```
 
-> Top-level results are turned into JS exceptions, all other results are treated as tagged objects `{ tag: 'ok' | 'err', val }`.
+Therefore, we can implement this mapping of the world with the following JS file:
+
+imports.js
+```js
+export const iface = {
+  interfaceFn (record) {
+    return 'string';
+  }
+};
+```
+
+> Note: Top-level results are turned into JS exceptions, all other results are treated as tagged objects `{ tag: 'ok' | 'err', val }`.
+
+### WASI Proposals
+
+**JCO will always take PRs to support all open WASI proposals.**
+
+These PRs can be implemented by extending the [default map configuration provided by JCO](https://github.com/bytecodealliance/jco/blob/main/src/cmd/transpile.js#L110) to support the new `--map wasi:subsytem/*=shimpkg/subsystem#*` for the WASI subsystem being implemented.
+
+> `shimpkg` in the above refers to a published npm package implementation to install per JS ecosystem conventions. This way, polyfill packages can be published to npm.
+
+Upstreaming into the [@bytecodealliance/preview2-shim](https://github.com/bytecodealliance/jco/)[https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim] package is also possible for WASI proposals that have progressed to Phase 1 in the [WASI proposal stage process](https://github.com/WebAssembly/WASI/blob/main/Proposals.md).
 
 ## Instantiation
 
