@@ -4,7 +4,7 @@
 
 ## Features
 
-- [Transpiling](transpiling.md) Wasm Component binaries into [ECMAScript modules](https://nodejs.org/api/esm.html#modules-ecmascript-modules) that can run in any JavaScript environment.
+- [Transpiling](./transpiling.md) Wasm Component binaries into [ECMAScript modules](https://nodejs.org/api/esm.html#modules-ecmascript-modules) that can run in any JavaScript environment.
 - WASI Preview2 support in Node.js & browsers (experimental).
 - Component builds of Wasm Tools helpers, available for use as a library or CLI commands for use in native JS environments
 - Optimization helper for Components via Binaryen.
