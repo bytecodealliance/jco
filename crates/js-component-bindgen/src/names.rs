@@ -170,6 +170,7 @@ pub(crate) const RESERVED_KEYWORDS: &[&str] = &[
     "default",
     "delete",
     "do",
+    "eval",
     "else",
     "enum",
     "export",
