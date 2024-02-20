@@ -451,11 +451,11 @@ impl<'a> Instantiator<'a, '_> {
             match item {
                 WorldItem::Interface(iface) => {
                     let iface = &self.resolve.interfaces[*iface];
-                    let Export::Instance(instance) = &export else {
+                    let Export::Instance { exports, .. } = &export else {
                         unreachable!()
                     };
                     for (ty_name, ty) in &iface.types {
-                        match instance.get(ty_name).unwrap() {
+                        match exports.get(ty_name).unwrap() {
                             Export::Type(TypeDef::Resource(resource)) => {
                                 self.connect_resources(*ty, *resource, true);
                             }
@@ -466,7 +466,7 @@ impl<'a> Instantiator<'a, '_> {
                         }
                     }
                     for (func_name, func) in &iface.functions {
-                        let Export::LiftedFunction { ty, .. } = instance.get(func_name).unwrap()
+                        let Export::LiftedFunction { ty, .. } = exports.get(func_name).unwrap()
                         else {
                             unreachable!()
                         };
@@ -1539,12 +1539,12 @@ impl<'a> Instantiator<'a, '_> {
                         );
                     }
                 }
-                Export::Instance(iface) => {
+                Export::Instance { exports, .. } => {
                     let id = match item {
                         WorldItem::Interface(id) => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    for (func_name, export) in iface {
+                    for (func_name, export) in exports {
                         let (def, options, _) = match export {
                             Export::LiftedFunction { func, options, ty } => (func, options, ty),
                             Export::Type(_) => continue, // ignored
@@ -1566,7 +1566,7 @@ impl<'a> Instantiator<'a, '_> {
                         }
                         .to_string();
 
-                        self.export_bindgen(&local_name, def, options, func, export_name, true);
+                        self.export_bindgen(&local_name, &def, &options, func, export_name, true);
 
                         if let FunctionKind::Constructor(ty)
                         | FunctionKind::Method(ty)
@@ -1594,7 +1594,7 @@ impl<'a> Instantiator<'a, '_> {
 
                 // This can't be tested at this time so leave it unimplemented
                 Export::ModuleStatic(_) => unimplemented!(),
-                Export::ModuleImport(_) => unimplemented!(),
+                Export::ModuleImport { .. } => unimplemented!(),
             }
         }
         self.gen.esm_bindgen.populate_export_aliases();

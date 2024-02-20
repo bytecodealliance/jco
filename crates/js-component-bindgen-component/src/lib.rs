@@ -90,7 +90,7 @@ impl Guest for JsComponentBindgenComponent {
                             wasmtime_environ::component::Export::LiftedFunction { .. } => {
                                 ExportType::Function
                             }
-                            wasmtime_environ::component::Export::Instance(_) => {
+                            wasmtime_environ::component::Export::Instance { .. } => {
                                 ExportType::Instance
                             }
                             _ => panic!("Unexpected export type"),
