@@ -1221,9 +1221,8 @@ impl Bindgen for FunctionBindgen<'_> {
                         let lower_camel = resource_name.to_lower_camel_case();
 
                         if !imported {
-                            uwriteln!(self.src, "var {rsc} = repTable.get({handle}).rep;");
-
                             if is_own {
+                                uwriteln!(self.src, "var {rsc} = repTable.get($resource_{prefix}rep${lower_camel}({handle})).rep;");
                                 uwrite!(
                                     self.src,
                                     "repTable.delete({handle});
@@ -1231,6 +1230,8 @@ impl Bindgen for FunctionBindgen<'_> {
                                      finalizationRegistry_export${prefix}{lower_camel}.unregister({rsc});
                                     "
                                 );
+                            } else {
+                                uwriteln!(self.src, "var {rsc} = repTable.get({handle}).rep;");
                             }
                         } else {
                             let upper_camel = resource_name.to_upper_camel_case();
