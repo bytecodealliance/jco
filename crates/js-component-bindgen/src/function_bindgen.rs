@@ -1085,9 +1085,8 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // after a high level call, we need to deactivate the component resource borrows
                 if !self.cur_resource_borrows.is_empty() {
-                    let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
-                    for resource in &self.cur_resource_borrows {
-                        uwriteln!(self.src, "{resource}[{symbol_resource_handle}] = null;");
+                    for resource_borrow in &self.cur_resource_borrows {
+                        uwriteln!(self.src, "{}", resource_borrow);
                     }
                     self.cur_resource_borrows = Vec::new();
                 }
@@ -1198,7 +1197,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 // these are handled by CallInterface
                                 // note that it will definitely be called because it is not possible
                                 // for core Wasm to return a borrow that would be lifted
-                                self.cur_resource_borrows.push(rsc.to_string());
+                                self.cur_resource_borrows.push(format!(
+                                    "{}[{symbol_resource_handle}] = null;",
+                                    rsc.to_string()
+                                ));
                             }
                         } else {
                             // imported handles lift as instance capture from a previous lowering
@@ -1247,6 +1249,14 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.src,
                                 "finalizationRegistry_import${prefix}{lower_camel}.register({rsc}, {handle}, {rsc});",
                             );
+
+                            if !is_own {
+                                self.cur_resource_borrows.push(format!(
+                                    "if ({rsc}[{symbol_resource_handle}]) {{
+                                        $resource_import${prefix}drop${lower_camel}({rsc}[{symbol_resource_handle}]);
+                                        delete {rsc}[{symbol_resource_handle}];
+                                    }}"));
+                            }
                         }
                     }
                 }
@@ -1315,17 +1325,17 @@ impl Bindgen for FunctionBindgen<'_> {
                                  var {handle} = handleCnt{id}++;
                                  handleTable{id}.set({handle}, {{ rep: {op}, own: {is_own} }});",
                             );
-                        }
 
-                        // track lowered borrows to ensure they are dropped
-                        // cur_resource_borrows can be reused because:
-                        // - it is not possible to have a Wasm call that lifts a a borrow handle argument
-                        //   and wasm calls cannot return borrow handles for lifting
-                        // - conversely, it is not possible to have a JS call that lowers a borrow handle argument
-                        //   and JS calls cannot return borrows for lowering
-                        if !is_own && !self.valid_lifting_optimization {
-                            self.cur_resource_borrows
-                                .push(format!("handleTable{id}.get({handle})"));
+                            // track lowered borrows to ensure they are dropped
+                            // cur_resource_borrows can be reused because:
+                            // - it is not possible to have a Wasm call that lifts a a borrow handle argument
+                            //   and wasm calls cannot return borrow handles for lifting
+                            // - conversely, it is not possible to have a JS call that lowers a borrow handle argument
+                            //   and JS calls cannot return borrows for lowering
+                            if !is_own && !self.valid_lifting_optimization {
+                                self.cur_resource_borrows
+                                    .push(format!("handleTable{id}.get({handle})"));
+                            }
                         }
                     }
 
