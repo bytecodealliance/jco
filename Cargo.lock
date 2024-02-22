@@ -69,9 +69,9 @@ checksum = "ed570934406eb16438a4e976b1b4500774099c13b8cb96eec99f620f05090ddf"
 
 [[package]]
 name = "bumpalo"
-version = "3.15.1"
+version = "3.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c764d619ca78fccbf3069b37bd7af92577f044bb15236036662d79b6559f25b7"
+checksum = "a3b1be7772ee4501dba05acbe66bb1e8760f6a6c474a36035631638e4415f130"
 
 [[package]]
 name = "cfg-if"
@@ -96,9 +96,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-entity"
-version = "0.105.0"
+version = "0.105.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfd988176a86d6985dd75ac0762033b36d134c4af8b806b605e8542c489fe1c2"
+checksum = "7f40df95180ad317c60459bb90dd87803d35e538f4c54376d8b26c851f6f0a1b"
 dependencies = [
  "serde",
  "serde_derive",
@@ -203,7 +203,7 @@ checksum = "b1a46d1a171d865aa5f83f92695765caa047a9b4cbae2cbf37dbd613a793fd4c"
 
 [[package]]
 name = "jco"
-version = "1.0.0"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "tempdir",
@@ -212,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen"
-version = "1.0.0"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "base64",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen-component"
-version = "1.0.0"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
@@ -662,15 +662,15 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-component-util"
-version = "18.0.0"
+version = "18.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46cfc42a79a53273366298c0388b77e7217ae21e5bda86696c15c9634ac967e5"
+checksum = "2c9f72619f484df95fc03162cdef9cb98778abc4103811849501bb34e79a3aac"
 
 [[package]]
 name = "wasmtime-environ"
-version = "18.0.0"
+version = "18.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e33dc65ef6dc1044219e75b60c4c2813d287653a2f82b940105554dcdbf36226"
+checksum = "e8da991421528c2767053cb0cfa70b5d28279100dbcf70ed7f74b51abe1656ef"
 dependencies = [
  "anyhow",
  "bincode",
@@ -692,9 +692,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-types"
-version = "18.0.0"
+version = "18.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33873067c517b4ba7e944cfffce1c30a7cc5e74008f69ac4c08e9608b71c9b63"
+checksum = "12c56e31fd7fa707fbd7720b2b29ac42ccfb092fe9d85c98f1d3988f9a1d4558"
 dependencies = [
  "cranelift-entity",
  "serde",
