@@ -69,9 +69,9 @@ checksum = "ed570934406eb16438a4e976b1b4500774099c13b8cb96eec99f620f05090ddf"
 
 [[package]]
 name = "bumpalo"
-version = "3.15.2"
+version = "3.15.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3b1be7772ee4501dba05acbe66bb1e8760f6a6c474a36035631638e4415f130"
+checksum = "8ea184aa71bb362a1157c896979544cc23974e08fd265f29ea96b59f0b4a555b"
 
 [[package]]
 name = "cfg-if"
@@ -490,9 +490,9 @@ dependencies = [
 
 [[package]]
 name = "target-lexicon"
-version = "0.12.13"
+version = "0.12.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69758bda2e78f098e4ccb393021a0963bb3442eac05f135c30f61b7370bbafae"
+checksum = "e1fc403891a21bcfb7c37834ba66a547a8f402146eba7265b5a6d88059c9ff2f"
 
 [[package]]
 name = "tempdir"
@@ -589,9 +589,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-metadata"
-version = "0.10.20"
+version = "0.200.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18ebaa7bd0f9e7a5e5dd29b9a998acf21c4abed74265524dd7e85934597bfb10"
+checksum = "c31b8cc0c21f46d55b0aaa419cacce1eadcf28eaebd0e1488d6a6313ee71a586"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -599,8 +599,8 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "spdx",
- "wasm-encoder 0.41.2",
- "wasmparser 0.121.2",
+ "wasm-encoder 0.200.0",
+ "wasmparser 0.200.0",
 ]
 
 [[package]]
@@ -749,9 +749,9 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "wit-bindgen"
-version = "0.18.0"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5408d742fcdf418b766f23b2393f0f4d9b10b72b7cd96d9525626943593e8cc0"
+checksum = "a4ee004d9efcb9931de5eb7ac424d6f32c176ad81297636302b66e4fedf7bd02"
 dependencies = [
  "bitflags 2.4.2",
  "wit-bindgen-rust-macro",
@@ -759,9 +759,9 @@ dependencies = [
 
 [[package]]
 name = "wit-bindgen-core"
-version = "0.18.0"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7146725463d08ccf9c6c5357a7a6c1fff96185d95d6e84e7c75c92e5b1273c93"
+checksum = "81b9b74b29ab2b8652cd8fbefcf93616bd5415088b539f74edb277d94a3d9765"
 dependencies = [
  "anyhow",
  "wit-parser",
@@ -769,9 +769,9 @@ dependencies = [
 
 [[package]]
 name = "wit-bindgen-rust"
-version = "0.18.0"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb5fefcf93ff2ea03c8fe9b9db2caee3096103c0e3cd62ed54f6f9493aa6b405"
+checksum = "bafb494693e7380aafc96a4911c6f4e57abc507b5f9694b7c5fbe88b07101f7a"
 dependencies = [
  "anyhow",
  "heck 0.4.1",
@@ -782,9 +782,9 @@ dependencies = [
 
 [[package]]
 name = "wit-bindgen-rust-macro"
-version = "0.18.1"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce4059a1adc671e4457f457cb638ed2f766a1a462bb7daa3b638c6fb1fda156e"
+checksum = "b62c1deb957177fb2f072e33ce24016d68162bc3863661dec85e9b81ae91900f"
 dependencies = [
  "anyhow",
  "proc-macro2",
@@ -796,9 +796,9 @@ dependencies = [
 
 [[package]]
 name = "wit-component"
-version = "0.21.0"
+version = "0.200.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be60cd1b2ff7919305301d0c27528d4867bd793afe890ba3837743da9655d91b"
+checksum = "39979723340baea490b87b11b2abae05f149d86f2b55c18d41d78a2a2b284c16"
 dependencies = [
  "anyhow",
  "bitflags 2.4.2",
@@ -807,18 +807,18 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "wasm-encoder 0.41.2",
+ "wasm-encoder 0.200.0",
  "wasm-metadata",
- "wasmparser 0.121.2",
+ "wasmparser 0.200.0",
  "wat",
  "wit-parser",
 ]
 
 [[package]]
 name = "wit-parser"
-version = "0.14.0"
+version = "0.200.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ee4ad7310367bf272507c0c8e0c74a80b4ed586b833f7c7ca0b7588f686f11a"
+checksum = "7f717576b37f01c15696bda7f6f13868367b9c5913485f9f0ec8e59fd28c8e13"
 dependencies = [
  "anyhow",
  "id-arena",
@@ -829,7 +829,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "unicode-xid",
- "wasmparser 0.121.2",
+ "wasmparser 0.200.0",
 ]
 
 [[package]]
