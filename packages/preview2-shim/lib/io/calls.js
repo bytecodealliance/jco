@@ -65,7 +65,6 @@ export const HTTP_SERVER_CLEAR_OUTGOING_RESPONSE = ++call_id << CALL_SHIFT;
 export const HTTP_OUTGOING_BODY_DISPOSE = ++call_id << CALL_SHIFT;
 
 // Clocks
-export const CLOCKS_NOW = ++call_id << CALL_SHIFT;
 export const CLOCKS_DURATION_SUBSCRIBE = ++call_id << CALL_SHIFT;
 export const CLOCKS_INSTANT_SUBSCRIBE = ++call_id << CALL_SHIFT;
 

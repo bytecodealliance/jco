@@ -31,6 +31,7 @@ pub enum Intrinsic {
     ResourceTransferBorrowValidLifting,
     ResourceTransferOwn,
     ScopeId,
+    SymbolCabiLower,
     SymbolResourceHandle,
     SymbolDispose,
     ThrowInvalidBool,
@@ -361,6 +362,9 @@ pub fn render_intrinsics(
                     }}
                 "));
             },
+            Intrinsic::SymbolCabiLower => output.push_str("
+                const symbolCabiLower = Symbol.for('cabiLower');
+            "),
 
             Intrinsic::ScopeId => output.push_str("
                 let scopeId = 0;
@@ -635,8 +639,9 @@ impl Intrinsic {
             Intrinsic::ResourceTransferBorrowValidLifting => "resourceTransferBorrowValidLifting",
             Intrinsic::ResourceTransferOwn => "resourceTransferOwn",
             Intrinsic::ScopeId => "scopeId",
-            Intrinsic::SymbolResourceHandle => "resourceHandleSymbol",
+            Intrinsic::SymbolCabiLower => "symbolCabiLower",
             Intrinsic::SymbolDispose => "symbolDispose",
+            Intrinsic::SymbolResourceHandle => "resourceHandleSymbol",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
             Intrinsic::ThrowUninitialized => "throwUninitialized",
             Intrinsic::ToBigInt64 => "toInt64",

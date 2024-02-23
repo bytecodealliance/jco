@@ -342,6 +342,8 @@ fn generate_command_invocation(
         {cmd_name}.arg("./tests/rundir/{run_dir}");
         {cmd_name}.arg("--jco-import");
         {cmd_name}.arg("./tests/virtualenvs/{virtual_env}.js");
+        {cmd_name}.arg("--jco-import-bindings");
+        {cmd_name}.arg("hybrid");
         {cmd_name}.arg(wasi_file);
         {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
         {cmd_name}.stdin({});"##,

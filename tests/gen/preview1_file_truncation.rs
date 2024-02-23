@@ -16,6 +16,8 @@ fn preview1_file_truncation() -> anyhow::Result<()> {
         cmd1.arg("./tests/rundir/preview1_file_truncation");
         cmd1.arg("--jco-import");
         cmd1.arg("./tests/virtualenvs/scratch.js");
+        cmd1.arg("--jco-import-bindings");
+        cmd1.arg("hybrid");
         cmd1.arg(wasi_file);
         cmd1.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
         cmd1.stdin(Stdio::null());

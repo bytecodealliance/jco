@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use js_component_bindgen::BindingsMode;
 use std::{collections::HashMap, fs, io::Write, path::PathBuf};
 use wit_component::ComponentEncoder;
 
@@ -68,6 +69,7 @@ fn transpile(component_path: &str, name: String) -> Result<()> {
         tracing: false,
         no_namespaced_exports: true,
         multi_memory: true,
+        import_bindings: Some(BindingsMode::Js),
     };
 
     let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;

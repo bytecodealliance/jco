@@ -75,7 +75,8 @@ async function runComponent (componentPath, args, opts, executor) {
         wasiShim: true,
         outDir,
         tracing: opts.jcoTrace,
-        map: opts.jcoMap
+        map: opts.jcoMap,
+        importBindings: opts.jcoImportBindings,
       });
     }
     catch (e) {

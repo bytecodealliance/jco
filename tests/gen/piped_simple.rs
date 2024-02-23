@@ -16,6 +16,8 @@ fn piped_simple() -> anyhow::Result<()> {
         cmd1.arg("./tests/rundir/piped_simple");
         cmd1.arg("--jco-import");
         cmd1.arg("./tests/virtualenvs/piped.js");
+        cmd1.arg("--jco-import-bindings");
+        cmd1.arg("hybrid");
         cmd1.arg(wasi_file);
         cmd1.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
         cmd1.stdin(Stdio::null());
@@ -28,6 +30,8 @@ fn piped_simple() -> anyhow::Result<()> {
         cmd2.arg("./tests/rundir/piped_simple_consumer");
         cmd2.arg("--jco-import");
         cmd2.arg("./tests/virtualenvs/piped-consumer.js");
+        cmd2.arg("--jco-import-bindings");
+        cmd2.arg("hybrid");
         cmd2.arg(wasi_file);
         cmd2.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
         cmd2.stdin(Stdio::null());

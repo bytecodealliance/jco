@@ -52,6 +52,9 @@ pub struct TranspileOpts {
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
     pub instantiation: Option<InstantiationMode>,
+    /// Configure how import bindings are provided, as high-level JS bindings,
+    /// or as hybrid optimized bindings.
+    pub import_bindings: Option<BindingsMode>,
     /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of
     /// component import specifiers to JS import specifiers.
     pub map: Option<HashMap<String, String>>,
@@ -91,6 +94,15 @@ enum CallType {
     FirstArgIsThis,
     /// Imported resource method calls - callee is a member of the parameter
     CalleeResourceDispatch,
+}
+
+#[derive(Default, Clone, Debug)]
+pub enum BindingsMode {
+    Hybrid,
+    #[default]
+    Js,
+    Optimized,
+    DirectOptimized,
 }
 
 struct JsBindgen<'a> {
@@ -647,16 +659,16 @@ impl<'a> Instantiator<'a, '_> {
             // these are hoisted before initialization
             Trampoline::LowerImport { .. } => {}
 
-            // This is only used for a "degenerate component" which internally
-            // has a function that always traps. While this should be trivial to
-            // implement (generate a JS function that always throws) there's no
-            // way to test this at this time so leave this unimplemented.
-            Trampoline::AlwaysTrap => unimplemented!(),
+            Trampoline::AlwaysTrap => {
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}(rep) {{
+                        throw new Error('AlwaysTrap');
+                    }}
+                "
+                );
+            }
 
-            // This is required when strings pass between components within a
-            // component and may change encodings. This is left unimplemented
-            // for now since it can't be tested and additionally JS doesn't
-            // support multi-memory which transcoders rely on anyway.
             Trampoline::Transcoder {
                 op,
                 from,
@@ -1000,24 +1012,78 @@ impl<'a> Instantiator<'a, '_> {
             .wasm_signature(AbiVariant::GuestImport, func)
             .params
             .len();
-
-        uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
-        self.bindgen(
-            nparams,
-            call_type,
-            if import_name.is_empty() {
-                None
-            } else {
-                Some(import_name)
-            },
-            &callee_name,
-            options,
-            func,
-            AbiVariant::GuestImport,
-            false,
-        );
-        uwriteln!(self.src.js, "");
-
+        match self.gen.opts.import_bindings {
+            None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
+                uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
+                self.bindgen(
+                    nparams,
+                    call_type,
+                    if import_name.is_empty() {
+                        None
+                    } else {
+                        Some(import_name)
+                    },
+                    &callee_name,
+                    options,
+                    func,
+                    AbiVariant::GuestImport,
+                    false,
+                );
+                uwriteln!(self.src.js, "");
+            }
+            Some(BindingsMode::Optimized) | Some(BindingsMode::DirectOptimized) => {
+                uwriteln!(self.src.js, "let trampoline{};", trampoline.as_u32());
+            }
+        };
+        if !matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
+            let memory = options
+                .memory
+                .map(|idx| format!("memory{}", idx.as_u32()))
+                .unwrap_or("null".into());
+            let realloc = options
+                .realloc
+                .map(|idx| format!("realloc{}", idx.as_u32()))
+                .unwrap_or("null".into());
+            let post_return = options
+                .post_return
+                .map(|idx| format!("postReturn{}", idx.as_u32()))
+                .unwrap_or("null".into());
+            let string_encoding = match options.string_encoding {
+                component::StringEncoding::Utf8 => "null",
+                component::StringEncoding::Utf16 => "'utf16'",
+                component::StringEncoding::CompactUtf16 => "'compact-utf16'",
+            };
+            let callee_name = match func.kind {
+                FunctionKind::Static(_) | FunctionKind::Freestanding => &callee_name,
+                FunctionKind::Method(_) => &callee_name[0..callee_name.len() - 5],
+                FunctionKind::Constructor(_) => &callee_name[4..],
+            };
+            match self.gen.opts.import_bindings {
+                Some(BindingsMode::Hybrid) => {
+                    let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
+                    uwriteln!(self.src.js_init, "if ({callee_name}[{symbol_cabi_lower}]) {{
+                        trampoline{} = {callee_name}[{symbol_cabi_lower}]({memory}, {realloc}, {post_return}, {string_encoding});
+                    }}", trampoline.as_u32());
+                }
+                Some(BindingsMode::Optimized) => {
+                    let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
+                    if !self.gen.opts.valid_lifting_optimization {
+                        uwriteln!(self.src.js_init, "if (!{callee_name}[{symbol_cabi_lower}]) {{
+                            throw new Error('import for \"{import_name}\" does not define a Symbol.for('cabiLower') optimized binding');
+                        }}");
+                    }
+                    uwriteln!(self.src.js_init, "trampoline{} = {callee_name}[{symbol_cabi_lower}]({memory}, {realloc}, {post_return}, {string_encoding});", trampoline.as_u32());
+                }
+                Some(BindingsMode::DirectOptimized) => {
+                    uwriteln!(
+                        self.src.js_init,
+                        "trampoline{} = {callee_name}({memory}, {realloc}, {post_return}, {string_encoding});",
+                        trampoline.as_u32()
+                    );
+                }
+                None | Some(BindingsMode::Js) => unreachable!(),
+            };
+        }
         let (import_name, binding_name) = match func.kind {
             FunctionKind::Freestanding => (func_name.to_lower_camel_case(), callee_name),
             FunctionKind::Method(tid)
