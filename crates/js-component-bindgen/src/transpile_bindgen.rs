@@ -589,7 +589,7 @@ impl<'a> Instantiator<'a, '_> {
                 self.src.js,
                 "const handleTable{rid} = new Map();
                 {handle_tables}.set({rid}, {{ table: handleTable{rid}, createHandle: () => ++handleCnt{rid} }});
-                let handleCnt{rid} = 0;",
+                let handleCnt{rid} = 1;",
             );
 
             if !is_imported {
@@ -710,6 +710,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceRep(resource) => {
+                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
                     self.src.js,
@@ -724,6 +725,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceDrop(resource) => {
+                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 let resource = &self.types[*resource];
                 let dtor = if let Some(resource_idx) =
@@ -774,8 +776,12 @@ impl<'a> Instantiator<'a, '_> {
                     ",
                 );
             }
-            Trampoline::ResourceTransferOwn | Trampoline::ResourceTransferBorrow => {
-                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransfer);
+            Trampoline::ResourceTransferOwn => {
+                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransferOwn);
+                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
+            }
+            Trampoline::ResourceTransferBorrow => {
+                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransferBorrow);
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
             Trampoline::ResourceEnterCall => {

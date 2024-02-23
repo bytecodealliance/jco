@@ -20,7 +20,8 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
-    ResourceTransfer,
+    ResourceTransferBorrow,
+    ResourceTransferOwn,
     SymbolResourceHandle,
     SymbolDispose,
     ThrowInvalidBool,
@@ -186,17 +187,34 @@ pub fn render_intrinsics(
                 const isLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
             "),
 
-            Intrinsic::ResourceTransfer => output.push_str("
-                function resourceTransfer(fromRid, toRid, handle) {
-                    const { table: fromTable } = {handle_tables}.get(fromRid);
-                    const entry = fromTable.get(handle);
-                    fromTable.delete(handle);
-                    const { table: toTable, createHandle } = {handle_tables}.get(toRid);
-                    const newHandle = createHandle();
-                    toTable.set(newHandle, entry);
-                    return newHandle;
-                }
-            "),
+            Intrinsic::ResourceTransferBorrow => {
+                let handle_tables = Intrinsic::name(&Intrinsic::HandleTables);
+                output.push_str(&format!("
+                    function resourceTransferBorrow(handle, fromRid, toRid) {{
+                        const {{ table: fromTable }} = {handle_tables}.get(fromRid);
+                        const entry = fromTable.get(handle);
+                        const {{ table: toTable, createHandle }} = {handle_tables}.get(toRid);
+                        const newHandle = createHandle();
+                        toTable.set(newHandle, {{ rep: entry.rep, own: false }});
+                        return entry.rep;
+                    }}
+                "));
+            },
+
+            Intrinsic::ResourceTransferOwn => {
+                let handle_tables = Intrinsic::name(&Intrinsic::HandleTables);
+                output.push_str(&format!("
+                    function resourceTransferOwn(handle, fromRid, toRid) {{
+                        const {{ table: fromTable }} = {handle_tables}.get(fromRid);
+                        const entry = fromTable.get(handle);
+                        fromTable.delete(handle);
+                        const {{ table: toTable, createHandle }} = {handle_tables}.get(toRid);
+                        const newHandle = createHandle();
+                        toTable.set(newHandle, entry);
+                        return newHandle;
+                    }}
+                "));
+            },
 
             Intrinsic::SymbolResourceHandle => output.push_str("
                 const resourceHandleSymbol = Symbol('resource');
@@ -454,7 +472,8 @@ impl Intrinsic {
             Intrinsic::I64ToF64 => "i64ToF64",
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
-            Intrinsic::ResourceTransfer => "resourceTransfer",
+            Intrinsic::ResourceTransferBorrow => "resourceTransferBorrow",
+            Intrinsic::ResourceTransferOwn => "resourceTransferOwn",
             Intrinsic::SymbolResourceHandle => "resourceHandleSymbol",
             Intrinsic::SymbolDispose => "symbolDispose",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
