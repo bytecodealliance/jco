@@ -545,12 +545,16 @@ impl<'a> Instantiator<'a, '_> {
             ids_to_ensure.insert(id.clone());
         }
         for id in ids_to_ensure {
-            let rid = id.as_u32();
-            if !self.resource_tables_initialized[rid as usize] {
-                let resource = self.types[id].ty;
-                let (is_imported, dtor) = if let Some(resource_idx) =
-                    self.component.defined_resource_index(resource)
-                {
+            self.ensure_resource_table(id);
+        }
+    }
+
+    fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
+        let rid = id.as_u32();
+        if !self.resource_tables_initialized[rid as usize] {
+            let resource = self.types[id].ty;
+            let (is_imported, dtor) =
+                if let Some(resource_idx) = self.component.defined_resource_index(resource) {
                     let resource_def = self
                         .component
                         .initializers
@@ -566,9 +570,9 @@ impl<'a> Instantiator<'a, '_> {
                             false,
                             format!(
                                 "
-                                    if (handleEntry.own) {{
-                                        {}(handleEntry.rep);
-                                    }}",
+                                if (handleEntry.own) {{
+                                    {}(handleEntry.rep);
+                                }}",
                                 self.core_def(dtor)
                             ),
                         )
@@ -579,31 +583,30 @@ impl<'a> Instantiator<'a, '_> {
                     (true, "".into())
                 };
 
-                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+            let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
 
+            uwriteln!(
+                self.src.js,
+                "const handleTable{rid} = new Map();
+                {handle_tables}.set({rid}, {{ table: handleTable{rid}, createHandle: () => ++handleCnt{rid} }});
+                let handleCnt{rid} = 0;",
+            );
+
+            if !is_imported {
                 uwriteln!(
                     self.src.js,
-                    "const handleTable{rid} = new Map();
-                    {handle_tables}.set({rid}, {{ table: handleTable{rid}, createHandle: () => ++handleCnt{rid} }});
-                    let handleCnt{rid} = 0;",
+                    "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
+                        const handleEntry = handleTable{rid}.get(handle);
+                        if (handleEntry) {{
+                            handleTable{rid}.delete(handle);
+                            {}
+                        }}
+                    }});
+                    ",
+                    dtor
                 );
-
-                if !is_imported {
-                    uwriteln!(
-                        self.src.js,
-                        "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
-                            const handleEntry = handleTable{rid}.get(handle);
-                            if (handleEntry) {{
-                                handleTable{rid}.delete(handle);
-                                {}
-                            }}
-                        }});
-                        ",
-                        dtor
-                    );
-                }
-                self.resource_tables_initialized[rid as usize] = true;
             }
+            self.resource_tables_initialized[rid as usize] = true;
         }
     }
 
@@ -694,6 +697,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ResourceNew(resource) => {
+                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
                     self.src.js,
