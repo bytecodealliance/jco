@@ -14,11 +14,16 @@ pub enum Intrinsic {
     F64ToI64,
     FetchCompile,
     GetErrorPayload,
+    HandleTables,
     HasOwnProperty,
     I32ToF32,
     I64ToF64,
     InstantiateCore,
     IsLE,
+    ResourceCallBorrows,
+    ResourceTransferBorrow,
+    ResourceTransferBorrowValidLifting,
+    ResourceTransferOwn,
     SymbolResourceHandle,
     SymbolDispose,
     ThrowInvalidBool,
@@ -156,6 +161,10 @@ pub fn render_intrinsics(
                 ")
             },
 
+            Intrinsic::HandleTables => output.push_str("
+                const handleTables = new Map();
+            "),
+
             Intrinsic::HasOwnProperty => output.push_str("
                 const hasOwnProperty = Object.prototype.hasOwnProperty;
             "),
@@ -179,6 +188,63 @@ pub fn render_intrinsics(
             Intrinsic::IsLE => output.push_str("
                 const isLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
             "),
+
+            Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
+
+            Intrinsic::ResourceTransferBorrow => {
+                let handle_tables = Intrinsic::HandleTables.name();
+                let resource_borrows = Intrinsic::ResourceCallBorrows.name();
+                output.push_str(&format!("
+                    function resourceTransferBorrow(handle, fromRid, toRid) {{
+                        const {{ t: fromTable, l: fromLocal }} = {handle_tables}.get(fromRid);
+                        let rep = handle;
+                        if (!fromLocal) {{
+                            ({{ rep }} = fromTable.get(handle));
+                            fromTable.delete(handle);
+                        }}
+                        const {{ t: toTable, h: createHandle, l: toLocal }} = {handle_tables}.get(toRid);
+                        if (toLocal) return rep;
+                        const newHandle = createHandle();
+                        toTable.set(newHandle, {{ rep, own: false }});
+                        {resource_borrows}.push({{ rid: toRid, handle: newHandle }});
+                        return newHandle;
+                    }}
+                "));
+            },
+
+            Intrinsic::ResourceTransferBorrowValidLifting => {
+                let handle_tables = Intrinsic::HandleTables.name();
+                output.push_str(&format!("
+                    function resourceTransferBorrowValidLifting(handle, fromRid, toRid) {{
+                        const {{ t: fromTable, l: fromLocal }} = {handle_tables}.get(fromRid);
+                        let rep = handle;
+                        if (!fromLocal) {{
+                            ({{ rep }} = fromTable.get(handle));
+                            fromTable.delete(handle);
+                        }}
+                        const {{ t: toTable, h: createHandle, l: toLocal }} = {handle_tables}.get(toRid);
+                        if (toLocal) return rep;
+                        const newHandle = createHandle();
+                        toTable.set(newHandle, {{ rep, own: false }});
+                        return newHandle;
+                    }}
+                "));
+            },
+
+            Intrinsic::ResourceTransferOwn => {
+                let handle_tables = Intrinsic::HandleTables.name();
+                output.push_str(&format!("
+                    function resourceTransferOwn(handle, fromRid, toRid) {{
+                        const {{ t: fromTable }} = {handle_tables}.get(fromRid);
+                        const entry = fromTable.get(handle);
+                        fromTable.delete(handle);
+                        const {{ t: toTable, h }} = {handle_tables}.get(toRid);
+                        const newHandle = h();
+                        toTable.set(newHandle, entry);
+                        return newHandle;
+                    }}
+                "));
+            },
 
             Intrinsic::SymbolResourceHandle => output.push_str("
                 const resourceHandleSymbol = Symbol('resource');
@@ -430,11 +496,16 @@ impl Intrinsic {
             Intrinsic::F64ToI64 => "f64ToI64",
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::GetErrorPayload => "getErrorPayload",
+            Intrinsic::HandleTables => "handleTables",
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::I32ToF32 => "i32ToF32",
             Intrinsic::I64ToF64 => "i64ToF64",
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
+            Intrinsic::ResourceCallBorrows => "resourceCallBorrows",
+            Intrinsic::ResourceTransferBorrow => "resourceTransferBorrow",
+            Intrinsic::ResourceTransferBorrowValidLifting => "resourceTransferBorrowValidLifting",
+            Intrinsic::ResourceTransferOwn => "resourceTransferOwn",
             Intrinsic::SymbolResourceHandle => "resourceHandleSymbol",
             Intrinsic::SymbolDispose => "symbolDispose",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",

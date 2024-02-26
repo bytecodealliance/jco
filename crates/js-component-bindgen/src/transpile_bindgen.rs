@@ -460,7 +460,7 @@ impl<'a> Instantiator<'a, '_> {
                                 self.connect_resources(*ty, *resource, true);
                             }
                             Export::Type(TypeDef::Interface(iface)) => {
-                                self.connect_resource_types(*ty, iface, true);
+                                self.connect_resource_types(*ty, &iface, true);
                             }
                             _ => unreachable!(),
                         }
@@ -545,12 +545,16 @@ impl<'a> Instantiator<'a, '_> {
             ids_to_ensure.insert(id.clone());
         }
         for id in ids_to_ensure {
-            let rid = id.as_u32();
-            if !self.resource_tables_initialized[rid as usize] {
-                let resource = self.types[id].ty;
-                let (is_imported, dtor) = if let Some(resource_idx) =
-                    self.component.defined_resource_index(resource)
-                {
+            self.ensure_resource_table(id);
+        }
+    }
+
+    fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
+        let rid = id.as_u32();
+        if !self.resource_tables_initialized[rid as usize] {
+            let resource = self.types[id].ty;
+            let (is_imported, maybe_dtor) =
+                if let Some(resource_idx) = self.component.defined_resource_index(resource) {
                     let resource_def = self
                         .component
                         .initializers
@@ -562,16 +566,7 @@ impl<'a> Instantiator<'a, '_> {
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
-                        (
-                            false,
-                            format!(
-                                "
-                                    if (handleEntry.own) {{
-                                        {}(handleEntry.rep);
-                                    }}",
-                                self.core_def(dtor)
-                            ),
-                        )
+                        (false, format!("\n{}(rep);", self.core_def(dtor)))
                     } else {
                         (false, "".into())
                     }
@@ -579,28 +574,30 @@ impl<'a> Instantiator<'a, '_> {
                     (true, "".into())
                 };
 
+            let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+
+            if is_imported {
                 uwriteln!(
                     self.src.js,
                     "const handleTable{rid} = new Map();
-                    let handleCnt{rid} = 0;",
+                    let handleCnt{rid} = 1;
+                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, h: () => ++handleCnt{rid}, l: false }});",
                 );
-
-                if !is_imported {
-                    uwriteln!(
-                        self.src.js,
-                        "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
-                            const handleEntry = handleTable{rid}.get(handle);
-                            if (handleEntry) {{
-                                handleTable{rid}.delete(handle);
-                                {}
-                            }}
-                        }});
-                        ",
-                        dtor
-                    );
-                }
-                self.resource_tables_initialized[rid as usize] = true;
+            } else {
+                uwriteln!(
+                    self.src.js,
+                    "const handleTable{rid} = new Map();
+                    let handleCnt{rid} = 1;
+                    const finalizationRegistry{rid} = new FinalizationRegistry((handle) => {{
+                        const handleEntry = handleTable{rid}.get(handle);
+                        const {{ rep }} = handleEntry;
+                        handleTable{rid}.delete(handle);{maybe_dtor}
+                    }});
+                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, h: () => ++handleCnt{rid}, l: true }});
+                    ",
+                );
             }
+            self.resource_tables_initialized[rid as usize] = true;
         }
     }
 
@@ -691,6 +688,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ResourceNew(resource) => {
+                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
                     self.src.js,
@@ -703,6 +701,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceRep(resource) => {
+                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 uwrite!(
                     self.src.js,
@@ -717,6 +716,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ResourceDrop(resource) => {
+                self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 let resource = &self.types[*resource];
                 let dtor = if let Some(resource_idx) =
@@ -767,10 +767,57 @@ impl<'a> Instantiator<'a, '_> {
                     ",
                 );
             }
-            Trampoline::ResourceTransferOwn => unimplemented!(),
-            Trampoline::ResourceTransferBorrow => unimplemented!(),
-            Trampoline::ResourceEnterCall => unimplemented!(),
-            Trampoline::ResourceExitCall => unimplemented!(),
+            Trampoline::ResourceTransferOwn => {
+                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransferOwn);
+                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
+            }
+            Trampoline::ResourceTransferBorrow => {
+                let resource_transfer =
+                    self.gen
+                        .intrinsic(if self.gen.opts.valid_lifting_optimization {
+                            Intrinsic::ResourceTransferBorrowValidLifting
+                        } else {
+                            Intrinsic::ResourceTransferBorrow
+                        });
+                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
+            }
+            Trampoline::ResourceEnterCall => {
+                // Resource enter call does not do anything in Jco as all the logic is handled
+                // by exit call based on the invariant that resourceCallBorrows should always
+                // be an empty array here.
+                let empty_func = self.gen.intrinsic(Intrinsic::EmptyFunc);
+                uwrite!(
+                    self.src.js,
+                    "const trampoline{i} = {empty_func};
+                    ",
+                );
+            }
+            Trampoline::ResourceExitCall => {
+                // Resource exit call is responsible for handling dynamic borrow drop checks
+                // for transferred resources (disabled for valid_lifting_optimization).
+                if self.gen.opts.valid_lifting_optimization {
+                    let empty_func = self.gen.intrinsic(Intrinsic::EmptyFunc);
+                    uwrite!(
+                        self.src.js,
+                        "const trampoline{i} = {empty_func};
+                        ",
+                    );
+                    return;
+                }
+                let resource_borrows = self.gen.intrinsic(Intrinsic::ResourceCallBorrows);
+                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}() {{
+                        for (const {{ rid, handle }} of {resource_borrows}) {{
+                            if ({handle_tables}.get(rid).has(handle))
+                                throw new Error('borrow was not dropped for resource transfer call');
+                        }}
+                        {resource_borrows} = [];
+                    }}
+                    ",
+                );
+            }
         }
     }
 
