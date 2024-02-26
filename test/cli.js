@@ -71,9 +71,45 @@ export async function cliTest(fixtures) {
         `${outDir}/package.json`,
         JSON.stringify({ type: "module" })
       );
-      const source = await readFile(`${outDir}/env-allow.composed.js`);
       const m = await import(`${pathToFileURL(outDir)}/env-allow.composed.js`);
       deepStrictEqual(m.testGetEnv(), [["CUSTOM", "VAL"]]);
+    });
+
+    test("Resource transfer", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/stdio.composed.wasm`,
+        ...multiMemory,
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      await writeFile(
+        `${outDir}/package.json`,
+        JSON.stringify({ type: "module" })
+      );
+      const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
+      m.testStdio();
+    });
+
+    test("Resource transfer valid lifting", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/stdio.composed.wasm`,
+        ...multiMemory,
+        "--valid-lifting-optimization",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      await writeFile(
+        `${outDir}/package.json`,
+        JSON.stringify({ type: "module" })
+      );
+      const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
+      m.testStdio();
     });
 
     test("Transpile", async () => {

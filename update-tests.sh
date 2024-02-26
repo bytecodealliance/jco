@@ -37,7 +37,8 @@ cd ../..
   --wit test/fixtures/component-gen/import-fn.wit \
   -o test/fixtures/components/import-fn.component.wasm
 
-## wasi virt to generate composition case
+## wasi virt to generate composition cases
 cd submodules/wasi-virt
 cargo test
 cp tests/generated/env-allow.composed.wasm ../../test/fixtures/
+cp tests/generated/stdio.composed.wasm ../../test/fixtures/

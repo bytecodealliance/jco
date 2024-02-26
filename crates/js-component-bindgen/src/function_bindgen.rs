@@ -1193,10 +1193,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     }
                                 );
                             } else {
-                                // borrow handles are tracked to release after the call
-                                // these are handled by CallInterface
-                                // note that it will definitely be called because it is not possible
-                                // for core Wasm to return a borrow that would be lifted
+                                // borrow handles are tracked to release after the call by CallInterface
                                 self.cur_resource_borrows.push(format!(
                                     "{}[{symbol_resource_handle}] = null;",
                                     rsc.to_string()
@@ -1309,7 +1306,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     {op}[{symbol_resource_handle}] = null;"
                                 );
                             } else {
-                                // it is only in the borrow case where we can simplify the handle
+                                // it is only in the local borrow case where we can simplify the handle
                                 // to just be the original rep value and don't need to track an
                                 // explicit handle lifetime.
                                 uwriteln!(self.src, "var {handle} = {rep};");

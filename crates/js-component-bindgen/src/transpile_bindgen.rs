@@ -553,7 +553,7 @@ impl<'a> Instantiator<'a, '_> {
         let rid = id.as_u32();
         if !self.resource_tables_initialized[rid as usize] {
             let resource = self.types[id].ty;
-            let (is_imported, dtor) =
+            let (is_imported, maybe_dtor) =
                 if let Some(resource_idx) = self.component.defined_resource_index(resource) {
                     let resource_def = self
                         .component
@@ -566,16 +566,7 @@ impl<'a> Instantiator<'a, '_> {
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
-                        (
-                            false,
-                            format!(
-                                "
-                                if (handleEntry.own) {{
-                                    {}(handleEntry.rep);
-                                }}",
-                                self.core_def(dtor)
-                            ),
-                        )
+                        (false, format!("\n{}(rep);", self.core_def(dtor)))
                     } else {
                         (false, "".into())
                     }
@@ -585,25 +576,25 @@ impl<'a> Instantiator<'a, '_> {
 
             let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
 
-            uwriteln!(
-                self.src.js,
-                "const handleTable{rid} = new Map();
-                {handle_tables}.set({rid}, {{ table: handleTable{rid}, createHandle: () => ++handleCnt{rid} }});
-                let handleCnt{rid} = 1;",
-            );
-
-            if !is_imported {
+            if is_imported {
                 uwriteln!(
                     self.src.js,
-                    "const finalizationRegistry{rid} = new FinalizationRegistry(handle => {{
+                    "const handleTable{rid} = new Map();
+                    let handleCnt{rid} = 1;
+                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, h: () => ++handleCnt{rid}, l: false }});",
+                );
+            } else {
+                uwriteln!(
+                    self.src.js,
+                    "const handleTable{rid} = new Map();
+                    let handleCnt{rid} = 1;
+                    const finalizationRegistry{rid} = new FinalizationRegistry((handle) => {{
                         const handleEntry = handleTable{rid}.get(handle);
-                        if (handleEntry) {{
-                            handleTable{rid}.delete(handle);
-                            {}
-                        }}
+                        const {{ rep }} = handleEntry;
+                        handleTable{rid}.delete(handle);{maybe_dtor}
                     }});
+                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, h: () => ++handleCnt{rid}, l: true }});
                     ",
-                    dtor
                 );
             }
             self.resource_tables_initialized[rid as usize] = true;
@@ -781,23 +772,48 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
             Trampoline::ResourceTransferBorrow => {
-                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransferBorrow);
+                let resource_transfer =
+                    self.gen
+                        .intrinsic(if self.gen.opts.valid_lifting_optimization {
+                            Intrinsic::ResourceTransferBorrowValidLifting
+                        } else {
+                            Intrinsic::ResourceTransferBorrow
+                        });
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
             Trampoline::ResourceEnterCall => {
+                // Resource enter call does not do anything in Jco as all the logic is handled
+                // by exit call based on the invariant that resourceCallBorrows should always
+                // be an empty array here.
+                let empty_func = self.gen.intrinsic(Intrinsic::EmptyFunc);
                 uwrite!(
                     self.src.js,
-                    "function trampoline{i}() {{
-                        console.log('RESOURCE ENTER CALL');
-                    }}
+                    "const trampoline{i} = {empty_func};
                     ",
                 );
             }
             Trampoline::ResourceExitCall => {
+                // Resource exit call is responsible for handling dynamic borrow drop checks
+                // for transferred resources (disabled for valid_lifting_optimization).
+                if self.gen.opts.valid_lifting_optimization {
+                    let empty_func = self.gen.intrinsic(Intrinsic::EmptyFunc);
+                    uwrite!(
+                        self.src.js,
+                        "const trampoline{i} = {empty_func};
+                        ",
+                    );
+                    return;
+                }
+                let resource_borrows = self.gen.intrinsic(Intrinsic::ResourceCallBorrows);
+                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}() {{
-                        console.log('RESOURCE EXIT CALL');
+                        for (const {{ rid, handle }} of {resource_borrows}) {{
+                            if ({handle_tables}.get(rid).has(handle))
+                                throw new Error('borrow was not dropped for resource transfer call');
+                        }}
+                        {resource_borrows} = [];
                     }}
                     ",
                 );
