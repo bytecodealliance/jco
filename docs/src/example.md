@@ -93,7 +93,7 @@ To turn this into a component run:
 ```shell
 $ jco componentize cowsay.js --wit cowsay.wit -o cowsay.wasm
 
-OK Successfully written cowsay.component.wasm with imports ().
+OK Successfully written cowsay.wasm with imports ().
 ```
 
 > Note: For debugging, it is useful to pass `--enable-stdout` to ComponentizeJS to get error messages and enable `console.log`.
@@ -128,10 +128,10 @@ $ jco transpile cowsay.wasm -o cowsay
 
 Transpiled JS Component Files:
 
- - cowsay/cowsay.component.core.wasm  7.61 MiB
- - cowsay/cowsay.component.d.ts       0.07 KiB
- - cowsay/cowsay.component.js         2.62 KiB
- - cowsay/interfaces/cow.d.ts         0.21 KiB
+ - cowsay/cowsay.core.wasm     7.61 MiB
+ - cowsay/cowsay.d.ts          0.07 KiB
+ - cowsay/cowsay.js            2.62 KiB
+ - cowsay/interfaces/cow.d.ts  0.21 KiB
 ```
 
 Now the Component can be directly imported and used as an ES module:
