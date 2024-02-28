@@ -54,7 +54,7 @@ return `${text}
 To turn this into a component run:
 
 ```shell
-jco componentize cowsay.js --wit cowsay.wit -o cowsay.component.wasm
+jco componentize cowsay.js --wit cowsay.wit -o cowsay.wasm
 
 OK Successfully written cowsay.component.wasm with imports ().
 ```
