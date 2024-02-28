@@ -45,7 +45,7 @@ Now the `jco componentize` command will be ready to use.
 
 ### Creating a Component with ComponentizeJS
 
-For this Cowsay component, lets create the following WIT file ([WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) is the typing language used for defining Components):
+This Cowsay component uses the following WIT file ([WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) is the typing language used for defining Components):
 
 cowsay.wit
 ```wit
