@@ -29,7 +29,7 @@ replacing all `jco` shell calls in the following example with either `./node_mod
 
 ### Installing ComponentizeJS
 
-To use ComponentizeJS, it must be separately installed, locally or globally depending on whether Jco was installed locally or globally:
+To use ComponentizeJS, it must be separately installed, globally or locally depending on whether Jco was installed globally or locally. Globally:
 
 ```shell
 $ npm install -g @bytecodealliance/componentize-js
@@ -109,7 +109,6 @@ package root:component;
 world root {
   export cow: interface {
     enum cows {
-      cat,
       default,
       owl,
     }
@@ -167,7 +166,7 @@ $ node test.js
 
 Passing in the optional second parameter, we can change the cow:
 
-test.mjs
+test.js
 ```js
 import { cow } from './cowsay/cowsay.js';
 
