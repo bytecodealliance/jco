@@ -244,8 +244,8 @@ export { test }
 <p>Note: Top-level results are turned into JS exceptions, all other results are treated as tagged objects <code>{ tag: 'ok' | 'err', val }</code>.</p>
 </blockquote>
 <h3 id="wasi-proposals"><a class="header" href="#wasi-proposals">WASI Proposals</a></h3>
-<p><strong>JCO will always take PRs to support all open WASI proposals.</strong></p>
-<p>These PRs can be implemented by extending the <a href="https://github.com/bytecodealliance/jco/blob/main/src/cmd/transpile.js#L110">default map configuration provided by JCO</a> to support the new <code>--map wasi:subsytem/*=shimpkg/subsystem#*</code> for the WASI subsystem being implemented.</p>
+<p><strong>Jco will always take PRs to support all open WASI proposals.</strong></p>
+<p>These PRs can be implemented by extending the <a href="https://github.com/bytecodealliance/jco/blob/main/src/cmd/transpile.js#L110">default map configuration provided by Jco</a> to support the new <code>--map wasi:subsytem/*=shimpkg/subsystem#*</code> for the WASI subsystem being implemented.</p>
 <blockquote>
 <p><code>shimpkg</code> in the above refers to a published npm package implementation to install per JS ecosystem conventions. This way, polyfill packages can be published to npm.</p>
 </blockquote>
