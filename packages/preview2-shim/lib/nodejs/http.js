@@ -21,11 +21,10 @@ import {
   registerDispose,
   registerIncomingHttpHandler,
 } from "../io/worker-io.js";
-// import { validateHeaderName, validateHeaderValue } from "node:http";
 import { HTTP } from "../io/calls.js";
 
-function validateHeaderName(_name){}
-function validateHeaderValue(_name, _value){}
+import * as http from "node:http";
+const { validateHeaderName = () => {}, validateHeaderValue = () => {} } = http;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 export const _forbiddenHeaders = new Set(["connection", "keep-alive"]);
