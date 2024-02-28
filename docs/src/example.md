@@ -1,35 +1,80 @@
-## jco Example Workflow
+## Jco Example Workflow
 
 Given an existing Wasm Component, `jco` provides the tooling necessary to work with this Component fully natively in JS.
 
-For an example, consider a Component `cowsay.wasm`:
+Jco also provides an experimental feature for generating components from JavaScript by wrapping [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS) in the `jco componentize` command.
 
-```shell
-- cowsay.wasm
+To demonstrate a full end-to-end component, we can create a JavaScript component embedding Spidermnokey then run it in JavaScript.
+
+### Creating a Component with ComponentizeJS
+
+For this Cowsay component, lets create the following WIT file ([WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) is the typing language used for defining Components):
+
+cowsay.wit
+```wit
+package local:cowsay;
+world cowsay {
+  export cow: interface {
+    enum cows {
+      default,
+      owl
+    }
+    say: func(text: string, cow: option<cows>) -> string;
+  }
+}
 ```
 
-Where we would like to use and run this Component in a JS environment.
+We can implement this with the following JS:
+
+cowsay.js
+```js
+export const cow = {
+  say (text, cow = 'default') {
+    switch (cow) {
+      case 'default':
+return `${text}
+  \\   ^__^
+    \\  (oo)\\______
+      (__)\\      )\/\\
+          ||----w |
+          ||     ||
+`;
+      case 'owl':
+return `${text}
+   ___
+  (o o)
+ (  V  )
+/--m-m-
+`;
+    }
+  }
+};
+```
+
+To turn this into a component run:
+
+```shell
+jco componentize cowsay.js --wit cowsay.wit -o cowsay.component.wasm
+
+OK Successfully written cowsay.component.wasm with imports ().
+```
+
+> Note: For debugging, it is useful to pass `--enable-stdout` to ComponentizeJS to get error messages and enable `console.log`.
 
 ### Inspecting Component WIT
 
 As a first step, we might like to look instead this binary black box of a Component and see what it actually does.
 
-To do this, we can use `jco wit` to extract the "WIT world" of the Component ([WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) is the typing language used for defining Components).
-
 ```shell
 > jco wit cowsay.wasm
-world cowsay {
+package root:component;
+
+world root {
   export cow: interface {
     enum cows {
+      cat,
       default,
-      cheese,
-      daemon,
-      dragon-and-cow,
-      dragon,
-      elephant-in-snake,
-      elephant,
-      eyes,
-      flaming-sheep
+      owl,
     }
 
     say: func(text: string, cow: option<cows>) -> string;
@@ -37,22 +82,19 @@ world cowsay {
 }
 ```
 
-From the above we can see that this Component exports a `cow` interface with a single function export, `say`, taking as input a string, an optional cow, and returning a string.
-
-Alternatively `jco print cowsay.wasm -o out.wat` would output the full concrete Wasm WAT to inspect the Component, with all the implementation details (don't forget the `-o` flag...).
-
 ### Transpiling to JS
 
 To execute the Component in a JS environment, use the `jco transpile` command to generate the JS for the Component:
 
 ```shell
-> jco transpile cowsay.wasm --minify -o cowsay
+> jco transpile cowsay.wasm -o cowsay
 
 Transpiled JS Component Files:
 
- - cowsay/cowsay.core.wasm      2.01 MiB
- - cowsay/cowsay.d.ts           0.73 KiB
- - cowsay/cowsay.js             6.01 KiB
+ - cowsay/cowsay.component.core.wasm  7.61 MiB
+ - cowsay/cowsay.component.d.ts       0.07 KiB
+ - cowsay/cowsay.component.js         2.62 KiB
+ - cowsay/interfaces/cow.d.ts         0.21 KiB
 ```
 
 Now the Component can be directly imported and used as an ES module:
@@ -69,17 +111,34 @@ The above JavaScript can be executed in Node.js:
 ```shell
 > node test.mjs
 
- ________________________
-< Hello Wasm Components! >
- ------------------------
-        \   ^__^
-         \  (oo)\_______
-            (__)\       )\/\
-                ||----w |
-                ||     ||
+ Hello Wasm Components!
+  \   ^__^
+    \  (oo)\______
+      (__)\      )/\
+          ||----w |
+          ||     ||
 ```
 
-Or it can be executed in a browser via a module script:
+Passing in the optional second parameter, we can change the cow:
+
+test.mjs
+```js
+import { cow } from './cowsay/cowsay.js';
+
+console.log(cow.say('Hello Wasm Components!', 'owl'));
+```
+
+```shell
+> node test.mjs
+
+ Hello Wasm Components!
+   ___
+  (o o)
+ (  V  )
+/--m-m-
+```
+
+It can also be executed in a browser via a module script:
 
 ```html
 <script type="module" src="test.mjs"></script>
