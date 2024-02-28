@@ -6,6 +6,43 @@ Jco also provides an experimental feature for generating components from JavaScr
 
 To demonstrate a full end-to-end component, we can create a JavaScript component embedding Spidermnokey then run it in JavaScript.
 
+### Installing Jco
+
+Either install Jco globally:
+
+```shell
+$ npm install -g @bytecodealliance/jco
+$ jco --version
+1.0.3
+```
+
+Or install it locally and use `npx` to run it:
+
+```shell
+$ npm install @bytecodealliance/jco
+$ npx jco --version
+1.0.3
+```
+
+Local usage can be preferable to ensure the project is reproducible and self-contained, but requires
+replacing all `jco` shell calls in the following example with either `./node_modules/.bin/jco` or `npx jco`.
+
+### Installing ComponentizeJS
+
+To use ComponentizeJS, it must be separately installed, locally or globally depending on whether Jco was installed locally or globally:
+
+```shell
+$ npm install -g @bytecodealliance/componentize-js
+```
+
+Or locally:
+
+```shell
+$ npm install @bytecodealliance/componentize-js
+```
+
+Now the `jco componentize` command will be ready to use.
+
 ### Creating a Component with ComponentizeJS
 
 For this Cowsay component, lets create the following WIT file ([WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) is the typing language used for defining Components):
@@ -54,7 +91,7 @@ return `${text}
 To turn this into a component run:
 
 ```shell
-jco componentize cowsay.js --wit cowsay.wit -o cowsay.wasm
+$ jco componentize cowsay.js --wit cowsay.wit -o cowsay.wasm
 
 OK Successfully written cowsay.component.wasm with imports ().
 ```
@@ -66,7 +103,7 @@ OK Successfully written cowsay.component.wasm with imports ().
 As a first step, we might like to look instead this binary black box of a Component and see what it actually does.
 
 ```shell
-> jco wit cowsay.wasm
+$ jco wit cowsay.wasm
 package root:component;
 
 world root {
@@ -87,7 +124,7 @@ world root {
 To execute the Component in a JS environment, use the `jco transpile` command to generate the JS for the Component:
 
 ```shell
-> jco transpile cowsay.wasm -o cowsay
+$ jco transpile cowsay.wasm -o cowsay
 
 Transpiled JS Component Files:
 
@@ -99,17 +136,26 @@ Transpiled JS Component Files:
 
 Now the Component can be directly imported and used as an ES module:
 
-test.mjs
+test.js
 ```js
 import { cow } from './cowsay/cowsay.js';
 
 console.log(cow.say('Hello Wasm Components!'));
 ```
 
-The above JavaScript can be executed in Node.js:
+For Node.js to allow us to run native ES modules, we must first create or edit the local `package.json` file to include a `"type": "module"` field:
+
+package.json
+```json
+{
+  "type": "module"
+}
+```
+
+The above JavaScript can now be executed in Node.js:
 
 ```shell
-> node test.mjs
+$ node test.js
 
  Hello Wasm Components!
   \   ^__^
@@ -129,7 +175,7 @@ console.log(cow.say('Hello Wasm Components!', 'owl'));
 ```
 
 ```shell
-> node test.mjs
+$ node test.js
 
  Hello Wasm Components!
    ___
@@ -141,7 +187,7 @@ console.log(cow.say('Hello Wasm Components!', 'owl'));
 It can also be executed in a browser via a module script:
 
 ```html
-<script type="module" src="test.mjs"></script>
+<script type="module" src="test.js"></script>
 ```
 
 There are a number of custom transpilation options available, detailed in the [API section](README.md#API).
