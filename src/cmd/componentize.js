@@ -1,7 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import c from 'chalk-template';
-import { isWindows } from '../common.js';
 
 export async function componentize (jsSource, opts) {
   let componentizeFn;
@@ -14,6 +13,7 @@ export async function componentize (jsSource, opts) {
   }
   const source = await readFile(jsSource, 'utf8');
   const { component, imports } = await componentizeFn(source, {
+    sourceName: jsSource,
     witPath: resolve(opts.wit),
     worldName: opts.worldName,
     enableStdout: opts.enableStdout,

@@ -153,9 +153,9 @@ export const iface = {
 
 ### WASI Proposals
 
-**JCO will always take PRs to support all open WASI proposals.**
+**Jco will always take PRs to support all open WASI proposals.**
 
-These PRs can be implemented by extending the [default map configuration provided by JCO](https://github.com/bytecodealliance/jco/blob/main/src/cmd/transpile.js#L110) to support the new `--map wasi:subsytem/*=shimpkg/subsystem#*` for the WASI subsystem being implemented.
+These PRs can be implemented by extending the [default map configuration provided by Jco](https://github.com/bytecodealliance/jco/blob/main/src/cmd/transpile.js#L110) to support the new `--map wasi:subsytem/*=shimpkg/subsystem#*` for the WASI subsystem being implemented.
 
 > `shimpkg` in the above refers to a published npm package implementation to install per JS ecosystem conventions. This way, polyfill packages can be published to npm.
 
