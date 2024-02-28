@@ -20,7 +20,7 @@
 
 ## Overview
 
-JCO provides a fully native JS toolchain for working with [WebAssembly Components](https://github.com/WebAssembly/component-model) in JavaScript.
+Jco provides a fully native JS toolchain for working with [WebAssembly Components](https://github.com/WebAssembly/component-model) in JavaScript.
 
 Features include:
 
@@ -40,7 +40,7 @@ For creating components in other languages, see the [Cargo Component](https://gi
 npm install @bytecodealliance/jco
 ```
 
-JCO can be used as either a library import or as a CLI via the `jco` command.
+Jco can be used as either a library import or as a CLI via the `jco` command.
 
 ## Example
 
