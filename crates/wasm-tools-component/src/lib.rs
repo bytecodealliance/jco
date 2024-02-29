@@ -11,13 +11,12 @@ use exports::local::wasm_tools::tools::{
 };
 
 wit_bindgen::generate!({
-    world: "wasm-tools",
-    exports: {
-        "local:wasm-tools/tools": WasmToolsJs
-    }
+    world: "wasm-tools"
 });
 
 struct WasmToolsJs;
+
+export!(WasmToolsJs);
 
 impl Guest for WasmToolsJs {
     fn parse(wat: String) -> Result<Vec<u8>, String> {
