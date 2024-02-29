@@ -34,10 +34,7 @@ macro_rules! uwriteln {
 }
 
 wit_bindgen::generate!({
-    world: "js-component-bindgen",
-    exports: {
-        world: JsComponentBindgenComponent
-    }
+    world: "js-component-bindgen"
 });
 
 impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
@@ -50,6 +47,8 @@ impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
 }
 
 struct JsComponentBindgenComponent;
+
+export!(JsComponentBindgenComponent);
 
 impl Guest for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {

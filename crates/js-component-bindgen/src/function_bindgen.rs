@@ -144,6 +144,54 @@ impl FunctionBindgen<'_> {
             }
         }
     }
+
+    fn bitcast(&mut self, cast: &Bitcast, op: &str) -> String {
+        match cast {
+            Bitcast::I32ToF32 => {
+                let cvt = self.intrinsic(Intrinsic::I32ToF32);
+                format!("{cvt}({op})")
+            }
+            Bitcast::F32ToI32 => {
+                let cvt = self.intrinsic(Intrinsic::F32ToI32);
+                format!("{cvt}({op})")
+            }
+            Bitcast::I64ToF64 => {
+                let cvt = self.intrinsic(Intrinsic::I64ToF64);
+                format!("{cvt}({op})")
+            }
+            Bitcast::F64ToI64 => {
+                let cvt = self.intrinsic(Intrinsic::F64ToI64);
+                format!("{}({})", cvt, op)
+            }
+            Bitcast::I32ToI64 => format!("BigInt({op})"),
+            Bitcast::I64ToI32 => format!("Number({op})"),
+            Bitcast::I64ToF32 => {
+                let cvt = self.intrinsic(Intrinsic::I32ToF32);
+                format!("{cvt}(Number({op}))")
+            }
+            Bitcast::F32ToI64 => {
+                let cvt = self.intrinsic(Intrinsic::F32ToI32);
+                format!("BigInt({cvt}({op}))")
+            }
+            Bitcast::None
+            | Bitcast::P64ToI64
+            | Bitcast::LToI32
+            | Bitcast::I32ToL
+            | Bitcast::LToP
+            | Bitcast::PToL
+            | Bitcast::PToI32
+            | Bitcast::I32ToP => op.to_string(),
+            Bitcast::PToP64 | Bitcast::I64ToP64 | Bitcast::LToI64 => format!("BigInt({op})"),
+            Bitcast::P64ToP | Bitcast::I64ToL => format!("Number({op})"),
+            Bitcast::Sequence(casts) => {
+                let mut statement = op.to_string();
+                for cast in casts.iter() {
+                    statement = self.bitcast(cast, &statement);
+                }
+                statement
+            }
+        }
+    }
 }
 
 impl Bindgen for FunctionBindgen<'_> {
@@ -185,10 +233,12 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::ConstZero { tys } => {
                 for t in tys.iter() {
                     match t {
-                        WasmType::I64 => results.push("0n".to_string()),
-                        WasmType::I32 | WasmType::F32 | WasmType::F64 => {
-                            results.push("0".to_string());
-                        }
+                        WasmType::I64 | WasmType::PointerOrI64 => results.push("0n".to_string()),
+                        WasmType::I32
+                        | WasmType::F32
+                        | WasmType::F64
+                        | WasmType::Pointer
+                        | WasmType::Length => results.push("0".to_string()),
                     }
                 }
             }
@@ -203,9 +253,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::S16FromI32 => self.clamp_guest(results, operands, i16::MIN, i16::MAX),
             // Use `>>>0` to ensure the bits of the number are treated as
             // unsigned.
-            Instruction::U32FromI32 => {
-                results.push(format!("{} >>> 0", operands[0]));
-            }
+            Instruction::U32FromI32 => results.push(format!("{} >>> 0", operands[0])),
             // All bigints coming from wasm are treated as signed, so convert
             // it to ensure it's treated as unsigned.
             Instruction::U64FromI64 => results.push(format!("BigInt.asUintN(64, {})", operands[0])),
@@ -257,9 +305,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(operands.pop().unwrap())
             }
 
+            // Use a unary `+` to cast to a float.
             Instruction::F32FromFloat32 | Instruction::F64FromFloat64 => {
-                // Use a unary `+` to cast to a float.
-                results.push(format!("+{}", operands[0]));
+                results.push(format!("+{}", operands[0]))
             }
 
             // Validate that i32 values coming from wasm are indeed valid code
@@ -278,35 +326,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::Bitcasts { casts } => {
                 for (cast, op) in casts.iter().zip(operands) {
-                    match cast {
-                        Bitcast::I32ToF32 => {
-                            let cvt = self.intrinsic(Intrinsic::I32ToF32);
-                            results.push(format!("{}({})", cvt, op));
-                        }
-                        Bitcast::F32ToI32 => {
-                            let cvt = self.intrinsic(Intrinsic::F32ToI32);
-                            results.push(format!("{}({})", cvt, op));
-                        }
-                        Bitcast::I64ToF64 => {
-                            let cvt = self.intrinsic(Intrinsic::I64ToF64);
-                            results.push(format!("{}({})", cvt, op));
-                        }
-                        Bitcast::F64ToI64 => {
-                            let cvt = self.intrinsic(Intrinsic::F64ToI64);
-                            results.push(format!("{}({})", cvt, op));
-                        }
-                        Bitcast::I32ToI64 => results.push(format!("BigInt({})", op)),
-                        Bitcast::I64ToI32 => results.push(format!("Number({})", op)),
-                        Bitcast::I64ToF32 => {
-                            let cvt = self.intrinsic(Intrinsic::I32ToF32);
-                            results.push(format!("{}(Number({}))", cvt, op));
-                        }
-                        Bitcast::F32ToI64 => {
-                            let cvt = self.intrinsic(Intrinsic::F32ToI32);
-                            results.push(format!("BigInt({}({}))", cvt, op));
-                        }
-                        Bitcast::None => results.push(op.clone()),
-                    }
+                    results.push(self.bitcast(cast, op));
                 }
             }
 
@@ -1132,6 +1152,13 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::F64Store { offset } => self.store("setFloat64", *offset, operands),
             Instruction::I32Store8 { offset } => self.store("setInt8", *offset, operands),
             Instruction::I32Store16 { offset } => self.store("setInt16", *offset, operands),
+
+            Instruction::LengthStore { offset } => self.store("setInt32", *offset, operands),
+            Instruction::LengthLoad { offset } => self.load("getInt32", *offset, operands, results),
+            Instruction::PointerStore { offset } => self.store("setInt32", *offset, operands),
+            Instruction::PointerLoad { offset } => {
+                self.load("getInt32", *offset, operands, results)
+            }
 
             Instruction::Malloc { size, align, .. } => {
                 let tmp = self.tmp();
