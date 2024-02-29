@@ -87,7 +87,7 @@ export function createSyncFn(workerPath, debug, callbackHandler) {
     }
     return result;
   };
-  worker.unref();
+  if (worker.unref) worker.unref();
   return syncFn;
 }
 

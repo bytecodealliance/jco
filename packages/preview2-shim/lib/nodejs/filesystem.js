@@ -17,7 +17,6 @@ import {
   futimesSync,
   linkSync,
   lstatSync,
-  lutimesSync,
   mkdirSync,
   opendirSync,
   openSync,
@@ -32,6 +31,9 @@ import {
   writeSync,
 } from "node:fs";
 import { platform } from "node:process";
+
+import * as nodeFs from 'node:fs';
+const lutimesSync = nodeFs.lutimesSync;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -297,6 +299,9 @@ class Descriptor {
       dataModificationTimestamp.tag === "no-change" &&
         stats.dataModificationTimestamp
     );
+    if (!pathFlags.symlinkFollow && !lutimesSync){
+      throw new Error("Changing the timestamps of symlinks isn't supported");
+    }
     try {
       (pathFlags.symlinkFollow ? utimesSync : lutimesSync)(
         fullPath,

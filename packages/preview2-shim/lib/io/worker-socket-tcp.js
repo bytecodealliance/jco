@@ -8,6 +8,7 @@ import {
   pollStateReady,
   verifyPollsDroppedForDrop,
 } from "./worker-thread.js";
+import process from "node:process";
 const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
 import {
   convertSocketError,

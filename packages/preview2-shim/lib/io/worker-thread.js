@@ -147,6 +147,7 @@ import {
   socketUdpStream,
   udpSockets,
 } from "./worker-socket-udp.js";
+import process from "node:process";
 
 function log(msg) {
   if (debug) process._rawDebug(msg);

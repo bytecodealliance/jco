@@ -33,7 +33,10 @@ import {
   STDOUT,
   reverseMap,
 } from "./calls.js";
-import { _rawDebug, exit, stderr, stdout, env } from "node:process";
+import { exit, stderr, stdout, env } from "node:process";
+
+import * as nodeProcess from "node:process";
+const _rawDebug = nodeProcess._rawDebug || console.error.bind(console);
 
 const workerPath = fileURLToPath(
   new URL("./worker-thread.js", import.meta.url)
