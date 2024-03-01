@@ -12,7 +12,6 @@ fn preview1_big_random_buf() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/preview1_big_random_buf");
         cmd1.arg("--jco-import");

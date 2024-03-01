@@ -12,7 +12,6 @@ fn preview2_udp_sample_application() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/preview2_udp_sample_application");
         cmd1.arg("--jco-import");

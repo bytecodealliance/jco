@@ -1,5 +1,6 @@
 import { chmodSync } from 'node:fs';
 import { resolve } from 'node:path';
+import process from 'node:process';
 
 process.on('exit', () => {
   chmodSync(testDir, 0o777);

@@ -17,4 +17,5 @@ _setEnv({
   'HTTP_SERVER': `localhost:${PORT}`
 });
 
-worker.unref();
+if (worker.unref)
+  worker.unref();

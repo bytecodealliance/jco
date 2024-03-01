@@ -12,7 +12,6 @@ fn piped_simple() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/piped_simple");
         cmd1.arg("--jco-import");
@@ -25,7 +24,6 @@ fn piped_simple() -> anyhow::Result<()> {
         let mut cmd2 = Command::new("node");
         cmd2.arg("./src/jco.js");
         cmd2.arg("run");
-
         cmd2.arg("--jco-dir");
         cmd2.arg("./tests/rundir/piped_simple_consumer");
         cmd2.arg("--jco-import");

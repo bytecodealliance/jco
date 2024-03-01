@@ -12,7 +12,6 @@ fn preview1_remove_nonempty_directory() -> anyhow::Result<()> {
         let mut cmd1 = Command::new("node");
         cmd1.arg("./src/jco.js");
         cmd1.arg("run");
-
         cmd1.arg("--jco-dir");
         cmd1.arg("./tests/rundir/preview1_remove_nonempty_directory");
         cmd1.arg("--jco-import");

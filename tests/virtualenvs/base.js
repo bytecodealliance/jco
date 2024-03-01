@@ -4,6 +4,7 @@ import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { rmdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { platform } from 'node:process';
+import process from 'node:process';
 
 await mkdir("tests/output", { recursive: true });
 
