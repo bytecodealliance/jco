@@ -799,8 +799,8 @@ impl<'a> Instantiator<'a, '_> {
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}() {{
-                        for (const {{ rid, handle }} of {resource_borrows}) {{
-                            if ({handle_tables}.get(rid).has(handle))
+                        for (const {{ rid, handle, rep }} of {resource_borrows}) {{
+                            if ({handle_tables}.get(rid).tryGet(handle)?.rep === rep)
                                 throw new Error('borrow was not dropped for resource transfer call');
                         }}
                         {resource_borrows} = [];

@@ -195,9 +195,9 @@ pub fn render_intrinsics(
             // 
             // # Resource table slab implementation
             // 
-            // To correspond to a fixed "SMI" array in JS engines, a fixed contiguous array of u32s
-            // in the browser engine for performance. We don't use a typed array because we need
-            // resizability without reserving a large buffer.
+            // Resource table slab implementation on top of a fixed "SMI" array in JS engines,
+            // a fixed contiguous array of u32s, for performance. We don't use a typed array because
+            // we need resizability without reserving a large buffer.
             //
             // The flag bit for all data values is 1 << 30. We avoid the use of the highest bit
             // entirely to not trigger SMI deoptimization.
@@ -273,6 +273,15 @@ pub fn render_intrinsics(
                         const own = (val & T_FLAG) !== 0;
                         const rep = val & ~T_FLAG;
                         if (rep === 0 || (scope & T_FLAG) !== 0) throw new Error('Invalid handle');
+                        return {{ rep, scope, own }};
+                    }}
+                    tryGet(handle) {{
+                        const scope = this.table[handle << 1];
+                        const val = this.table[(handle << 1) + 1];
+                        const own = (val & T_FLAG) !== 0;
+                        const rep = val & ~T_FLAG;
+                        if (rep === 0 || (scope & T_FLAG) !== 0)
+                            return;
                         return {{ rep, scope, own }};
                     }}
                     remove(handle) {{
