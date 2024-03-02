@@ -45,8 +45,8 @@ pub enum ResourceData {
 ///
 /// For a given resource id {x}, the local variables are assumed:
 /// - handleTable{x}
-/// - captureTable{x}
-/// - captureCnt{x}
+/// - captureTable{x} (only for imported tables)
+/// - captureCnt{x} (only for imported tables)
 ///
 /// For component-defined resources:
 /// - finalizationRegistry{x}
