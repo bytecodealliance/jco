@@ -1351,15 +1351,13 @@ impl Bindgen for FunctionBindgen<'_> {
                             }
                         } else {
                             // imported resources are always given a unique handle
-                            let rep = format!("rep{}", self.tmp());
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {local_name})) {{
                                      throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
-                                 var {rep} = ++captureCnt{id};
-                                 captureTable{id}.set({rep}, {op});
-                                 var {handle} = handleTable{id}.create{}({rep});
+                                 captureTable{id}.set(++captureCnt{id}, {op});
+                                 var {handle} = handleTable{id}.create{}(captureCnt{id});
                                  ",
                                  if is_own { "Own" } else { "Borrow" }
                             );
