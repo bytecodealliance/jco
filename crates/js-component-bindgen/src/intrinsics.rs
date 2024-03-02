@@ -193,34 +193,49 @@ pub fn render_intrinsics(
             Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
 
             // 
-            // Resource table slab implementation
+            // # Resource table slab implementation
             // 
             // To correspond to a fixed "SMI" array in JS engines, a fixed contiguous array of u32s
             // in the browser engine for performance. We don't use a typed array because we need
             // resizability without reserving a large buffer.
             //
             // The flag bit for all data values is 1 << 30. We avoid the use of the highest bit
-            // entirely to not trigger SMI deoptimmization on 32 bit machines.
+            // entirely to not trigger SMI deoptimization.
             //
             // Each entry consists of a pair of u32s, either a free list entry, or a data entry.
             //
+            // ## Free List Entries:
+            //
+            //  |    index (x, u30)   |       ~unused~      |
+            //  |------ 32 bits ------|------ 32 bits ------|
+            //  | 01xxxxxxxxxxxxxxxxx | ################### |
+            //
             // Free list entries use only the first value in the pair, with the high bit always set
             // to indicate that the pair is part of the free list. The first pair of entries at
-            // indices 0 and 1 is the free list head, set to zero initially. The initial value for
-            // entries 0 and 1 in the array are 1 << 30 and 0, where 1 << 30 always indicates the end
-            // of the free list. The free list numbering matches the handle numbering, indexing by
-            // pair.
+            // indices 0 and 1 is the free list head, with the initial values of 1 << 30 and 0
+            // respectively. Removing the 1 << 30 flag gives 0, which indicates the end of the free
+            // list.
             //
-            // Data entry pairs consist of the u30 context (either the scope for borrow handles or
-            // the ref count for own handles (we always call this the "scope" field to ensure a
-            // consistent interface shape). The high bit is never set for this first entry to
-            // distinguish the pair from the free list. The second item in the pair is the rep for
-            // the resource, with the high bit in this entry indicating it is an own handle.
+            // ## Data Entries:
             //
-            // Therefore, to access a handle n, we read value n * 2 in the array to get the context,
-            // throwing for invalid handle if the high bit it set. The rep is then the value at
-            // n * 2 + 1 in the array, and it is an own handle if the high bit is set here. A rep
-            // value of zero is also an invalid value.
+            //  |    scope (x, u30)   | own(o), rep(x, u30) |
+            //  |------ 32 bits ------|------ 32 bits ------|
+            //  | 00xxxxxxxxxxxxxxxxx | 0oxxxxxxxxxxxxxxxxx |
+            //
+            // Data entry pairs consist of a first u30 scope entry and a second rep entry. The field
+            // is only called the scope for interface shape consistency, but is actually used for the
+            // ref count for own handles and the scope id for borrow handles. The high bit is never
+            // set for this first entry to distinguish the pair from the free list. The second item
+            // in the pair is the rep for  the resource, with the high bit in this entry indicating
+            // if it is an own handle.
+            //
+            // The free list numbering and the handle numbering are the same, indexing by pair, so to
+            // get from a handle or free list numbering to an index, we multiply by two.
+            //
+            // For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
+            // the array to get the context and rep respectively. If the high bit is set on the
+            // context, we throw for an invalid handle. The rep value is masked out from the
+            // ownership high bit, also throwing for an invalid zero rep.
             //
             Intrinsic::ResourceTable => output.push_str(&format!("
                 const T_FLAG = 1 << 30;
