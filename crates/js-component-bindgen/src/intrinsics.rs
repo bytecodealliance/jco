@@ -305,7 +305,7 @@ pub fn render_intrinsics(
 
             Intrinsic::ThrowUninitialized => output.push_str("
                 function throwUninitialized() {
-                    throw new TypeError('Wasm uninitialized use `await $init` first');
+                    throw new Error('Wasm uninitialized use `await $init` first');
                 }
             "),
 

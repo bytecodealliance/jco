@@ -732,13 +732,7 @@ impl<'a> Instantiator<'a, '_> {
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
-                        format!(
-                            "if (handleEntry.own) {{
-                                {}(handleEntry.rep);
-                            }}
-                            ",
-                            self.core_def(dtor)
-                        )
+                        format!("{}(handleEntry.rep);", self.core_def(dtor))
                     } else {
                         "".into()
                     }
@@ -747,11 +741,9 @@ impl<'a> Instantiator<'a, '_> {
                     // resources when the resource is dropped
                     let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
                     format!(
-                        "if (handleEntry.own) {{
-                            const rsc = captureTable{rid}.get(handleEntry.rep);
-                            if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                            captureTable{rid}.delete(handleEntry.rep);
-                        }}"
+                        "const rsc = captureTable{rid}.get(handleEntry.rep);
+                        if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
+                        captureTable{rid}.delete(handleEntry.rep);"
                     )
                 };
 
@@ -759,6 +751,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "function trampoline{i}(handle) {{
                         const handleEntry = handleTable{rid}.take(handle);
+                        if (!handleEntry.own) throw new Error('Unexpected borrow handle');
                         {dtor}
                     }}
                     ",
