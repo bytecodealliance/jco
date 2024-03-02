@@ -747,8 +747,10 @@ impl<'a> Instantiator<'a, '_> {
                     // resources when the resource is dropped
                     let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
                     format!(
-                        "if (handleEntry.own && handleEntry.rep[{symbol_dispose}]) {{
-                            handleEntry.rep[{symbol_dispose}]();
+                        "if (handleEntry.own) {{
+                            const rsc = captureTable{rid}.get(handleEntry.rep);
+                            if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
+                            captureTable{rid}.delete(handleEntry.rep);
                         }}"
                     )
                 };
@@ -757,9 +759,6 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "function trampoline{i}(handle) {{
                         const handleEntry = handleTable{rid}.take(handle);
-                        if (handleEntry.own) {{
-                            captureTable{rid}.delete(handleEntry.rep);
-                        }}
                         {dtor}
                     }}
                     ",
