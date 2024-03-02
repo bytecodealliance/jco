@@ -45,7 +45,8 @@ pub enum ResourceData {
 ///
 /// For a given resource id {x}, the local variables are assumed:
 /// - handleTable{x}
-/// - handleCnt{x}
+/// - captureTable{x}
+/// - captureCnt{x}
 ///
 /// For component-defined resources:
 /// - finalizationRegistry{x}
@@ -1215,11 +1216,12 @@ impl Bindgen for FunctionBindgen<'_> {
                                     self.src,
                                     "finalizationRegistry{id}.register({rsc}, {handle}, {rsc});
                                     Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{{}}} }});
+                                    handleTable{id}.take({handle});
                                     ",
                                     match dtor_name {
                                         Some(dtor) => format!("
                                             finalizationRegistry{id}.unregister({rsc});
-                                            handleTable{id}.delete({handle});
+                                            handleTable{id}.take({handle});
                                             {rsc}[{symbol_dispose}] = {empty_func};
                                             {rsc}[{symbol_resource_handle}] = null;
                                             {dtor}({rep});
@@ -1236,12 +1238,14 @@ impl Bindgen for FunctionBindgen<'_> {
                             }
                         } else {
                             // imported handles lift as instance capture from a previous lowering
-                            uwriteln!(self.src, "var {rsc} = handleTable{id}.get({handle}).rep;");
-                        }
-
-                        // an own lifting is a transfer to JS, so handle is implicitly dropped
-                        if is_own {
-                            uwriteln!(self.src, "handleTable{id}.delete({handle});");
+                            uwriteln!(self.src, "var {rsc} = captureTable{id}.get(handleTable{id}.get({handle}).rep);");
+                            // an own lifting is a transfer to JS, so handle is implicitly dropped
+                            if is_own {
+                                uwriteln!(
+                                    self.src,
+                                    "captureTable{id}.delete(handleTable{id}.take({handle}).rep);"
+                                );
+                            }
                         }
                     }
 
@@ -1334,8 +1338,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(
                                     self.src,
-                                    "var {handle} = handleCnt{id}++;
-                                    handleTable{id}.set({handle}, {{ rep: {rep}, own: true }});
+                                    "var {handle} = handleTable{id}.createOwn({rep});
                                     finalizationRegistry{id}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
                                     {op}[{symbol_resource_handle}] = null;"
@@ -1348,14 +1351,17 @@ impl Bindgen for FunctionBindgen<'_> {
                             }
                         } else {
                             // imported resources are always given a unique handle
-                            // their assigned rep is deduped across usage though
+                            let rep = format!("rep{}", self.tmp());
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {local_name})) {{
                                      throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
-                                 var {handle} = handleCnt{id}++;
-                                 handleTable{id}.set({handle}, {{ rep: {op}, own: {is_own} }});",
+                                 var {rep} = ++captureCnt{id};
+                                 captureTable{id}.set({rep}, {op});
+                                 var {handle} = handleTable{id}.create{}({rep});
+                                 ",
+                                 if is_own { "Own" } else { "Borrow" }
                             );
 
                             // track lowered borrows to ensure they are dropped

@@ -20,6 +20,7 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
+    ResourceTable,
     ResourceCallBorrows,
     ResourceTransferBorrow,
     ResourceTransferBorrowValidLifting,
@@ -191,21 +192,72 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
 
+            // Resource table slab implementation
+            // First entry is reserved, free list points to zero as the end
+            // Top bit (E_FREE) indicates a number as part of a free list
+            // Second top bit (E_OWN) indicates an own resource
+            // Remaining bits form the rep
+            // Valid entries (hence handles) are therefore non-zero entries without an E_FREE bit
+            // Entire data structure of "{ free, entries }" is a PUBLIC API for low-level bindgen
+            // For convenience in usage, take is used for get + delete, instead of delete
+            Intrinsic::ResourceTable => output.push_str(&format!("
+                const E_OWN = 1 << 30, E_FREE = 1 << 31;
+                class ResourceTable {{
+                    free = 0;
+                    entries = [0];
+                    createBorrow(rep) {{
+                        if (rep === 0) throw new Error('Invalid rep');
+                        const free = this.free;
+                        if (free === 0) {{
+                            this.entries.push(rep);
+                            return this.entries.length - 1;
+                        }}
+                        this.free = this.entries[free] & ~E_FREE;
+                        this.entries[free] = rep;
+                        return free;
+                    }}
+                    createOwn(rep) {{
+                        if (rep === 0) throw new Error('Invalid rep');
+                        const free = this.free;
+                        if (free === 0) {{
+                            this.entries.push(rep | E_OWN);
+                            return this.entries.length - 1;
+                        }}
+                        this.free = this.entries[free] & ~E_FREE;
+                        this.entries[free] = rep | E_OWN;
+                        return free;
+                    }}
+                    get(handle) {{
+                        const val = this.entries[handle];
+                        const rep = val & (E_OWN - 1);
+                        if (rep === 0 || (val & E_FREE) !== 0) throw new Error('Invalid handle');
+                        return {{ rep, own: (val & E_OWN) !== 0 }};
+                    }}
+                    has(handle) {{
+                        const val = this.entries[handle];
+                        return (val & (E_OWN - 1)) > 0 && (val & E_FREE) === 0;
+                    }}
+                    take(handle) {{
+                        const val = this.entries[handle];
+                        const rep = val & (E_OWN - 1);
+                        if (rep === 0 || (val & E_FREE) !== 0) throw new Error('Invalid handle');
+                        this.entries[handle] = this.free | E_FREE;
+                        this.free = handle;
+                        return {{ rep, own: (val & E_OWN) !== 0 }};
+                    }}
+                }}"
+            )),
+
             Intrinsic::ResourceTransferBorrow => {
                 let handle_tables = Intrinsic::HandleTables.name();
                 let resource_borrows = Intrinsic::ResourceCallBorrows.name();
                 output.push_str(&format!("
                     function resourceTransferBorrow(handle, fromRid, toRid) {{
-                        const {{ t: fromTable, l: fromLocal }} = {handle_tables}.get(fromRid);
-                        let rep = handle;
-                        if (!fromLocal) {{
-                            ({{ rep }} = fromTable.get(handle));
-                            fromTable.delete(handle);
-                        }}
-                        const {{ t: toTable, h: createHandle, l: toLocal }} = {handle_tables}.get(toRid);
-                        if (toLocal) return rep;
-                        const newHandle = createHandle();
-                        toTable.set(newHandle, {{ rep, own: false }});
+                        const {{ t: fromTable, i: fromImport }} = {handle_tables}.get(fromRid);
+                        const rep = fromImport ? fromTable.take(handle) : handle;
+                        const {{ t: toTable, i: toImport }} = {handle_tables}.get(toRid);
+                        if (!toImport) return rep;
+                        const newHandle = toTable.createBorrow(rep);
                         {resource_borrows}.push({{ rid: toRid, handle: newHandle }});
                         return newHandle;
                     }}
@@ -216,17 +268,11 @@ pub fn render_intrinsics(
                 let handle_tables = Intrinsic::HandleTables.name();
                 output.push_str(&format!("
                     function resourceTransferBorrowValidLifting(handle, fromRid, toRid) {{
-                        const {{ t: fromTable, l: fromLocal }} = {handle_tables}.get(fromRid);
-                        let rep = handle;
-                        if (!fromLocal) {{
-                            ({{ rep }} = fromTable.get(handle));
-                            fromTable.delete(handle);
-                        }}
-                        const {{ t: toTable, h: createHandle, l: toLocal }} = {handle_tables}.get(toRid);
-                        if (toLocal) return rep;
-                        const newHandle = createHandle();
-                        toTable.set(newHandle, {{ rep, own: false }});
-                        return newHandle;
+                        const {{ t: fromTable, i: fromImport }} = {handle_tables}.get(fromRid);
+                        const rep = fromImport ? fromTable.take(handle) : handle;
+                        const {{ t: toTable, i: toImport }} = {handle_tables}.get(toRid);
+                        if (!toImport) return rep;
+                        return toTable.createBorrow(rep);
                     }}
                 "));
             },
@@ -236,12 +282,9 @@ pub fn render_intrinsics(
                 output.push_str(&format!("
                     function resourceTransferOwn(handle, fromRid, toRid) {{
                         const {{ t: fromTable }} = {handle_tables}.get(fromRid);
-                        const entry = fromTable.get(handle);
-                        fromTable.delete(handle);
-                        const {{ t: toTable, h }} = {handle_tables}.get(toRid);
-                        const newHandle = h();
-                        toTable.set(newHandle, entry);
-                        return newHandle;
+                        const {{ rep }} = fromTable.take(handle);
+                        const {{ t: toTable }} = {handle_tables}.get(toRid);
+                        return toTable.createOwn(rep);
                     }}
                 "));
             },
@@ -442,6 +485,8 @@ impl Intrinsic {
             "dv",
             "emptyFunc",
             "Error",
+            "E_OWN",
+            "E_FREE",
             "f32ToI32",
             "f64ToI64",
             "fetch",
@@ -503,6 +548,7 @@ impl Intrinsic {
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
             Intrinsic::ResourceCallBorrows => "resourceCallBorrows",
+            Intrinsic::ResourceTable => "ResourceTable",
             Intrinsic::ResourceTransferBorrow => "resourceTransferBorrow",
             Intrinsic::ResourceTransferBorrowValidLifting => "resourceTransferBorrowValidLifting",
             Intrinsic::ResourceTransferOwn => "resourceTransferOwn",

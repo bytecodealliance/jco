@@ -585,25 +585,26 @@ impl<'a> Instantiator<'a, '_> {
                 };
 
             let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+            let resource_table = self.gen.intrinsic(Intrinsic::ResourceTable);
 
             if is_imported {
+                // imported resouces have both a rep table and a rep assignment
+                // for captured resource classes to assign them a rep numbering
                 uwriteln!(
                     self.src.js,
-                    "const handleTable{rid} = new Map();
-                    let handleCnt{rid} = 1;
-                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, h: () => ++handleCnt{rid}, l: false }});",
+                    "const handleTable{rid} = new {resource_table}();
+                    const captureTable{rid} = new Map();
+                    let captureCnt{rid} = 0;
+                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, i: captureTable{rid}.get.bind(captureTable{rid}) }});",
                 );
             } else {
                 uwriteln!(
                     self.src.js,
-                    "const handleTable{rid} = new Map();
-                    let handleCnt{rid} = 1;
+                    "const handleTable{rid} = new {resource_table}();
                     const finalizationRegistry{rid} = new FinalizationRegistry((handle) => {{
-                        const handleEntry = handleTable{rid}.get(handle);
-                        const {{ rep }} = handleEntry;
-                        handleTable{rid}.delete(handle);{maybe_dtor}
+                        const {{ rep }} = handleTable{rid}.take(handle);{maybe_dtor}
                     }});
-                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, h: () => ++handleCnt{rid}, l: true }});
+                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, i: null }});
                     ",
                 );
             }
@@ -700,29 +701,17 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceNew(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
-                uwrite!(
+                uwriteln!(
                     self.src.js,
-                    "function trampoline{i}(rep) {{
-                        const handle = handleCnt{rid}++;
-                        handleTable{rid}.set(handle, {{ rep, own: true }});
-                        return handle;
-                    }}
-                "
+                    "const trampoline{i} = handleTable{rid}.createOwn.bind(handleTable{rid});"
                 );
             }
             Trampoline::ResourceRep(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
-                uwrite!(
+                uwriteln!(
                     self.src.js,
-                    "function trampoline{i}(handle) {{
-                        const handleEntry = handleTable{rid}.get(handle);
-                        if (!handleEntry) {{
-                            throw new Error(`Resource error: Invalid handle ${{handle}}`);
-                        }}
-                        return handleEntry.rep;
-                    }}
-                "
+                    "const trampoline{i} = handleTable{rid}.get.bind(handleTable{rid});"
                 );
             }
             Trampoline::ResourceDrop(resource) => {
@@ -767,11 +756,10 @@ impl<'a> Instantiator<'a, '_> {
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
-                        const handleEntry = handleTable{rid}.get(handle);
-                        if (!handleEntry) {{
-                            throw new Error(`Resource error: Invalid handle ${{handle}}`);
+                        const handleEntry = handleTable{rid}.take(handle);
+                        if (handleEntry.own) {{
+                            captureTable{rid}.delete(handleEntry.rep);
                         }}
-                        handleTable{rid}.delete(handle);
                         {dtor}
                     }}
                     ",
