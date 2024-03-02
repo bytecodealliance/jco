@@ -192,58 +192,83 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
 
+            // 
             // Resource table slab implementation
-            // First entry is reserved, free list points to zero as the end
-            // Top bit (E_FREE) indicates a number as part of a free list
-            // Second top bit (E_OWN) indicates an own resource
-            // Remaining bits form the rep
-            // Valid entries (hence handles) are therefore non-zero entries without an E_FREE bit
-            // Entire data structure of "{ free, entries }" is a PUBLIC API for low-level bindgen
-            // For convenience in usage, take is used for get + delete, instead of delete
+            // 
+            // To correspond to a fixed "SMI" array in JS engines, a fixed contiguous array of u32s
+            // in the browser engine for performance. We don't use a typed array because we need
+            // resizability without reserving a large buffer.
+            //
+            // The flag bit for all data values is 1 << 30. We avoid the use of the highest bit
+            // entirely to not trigger SMI deoptimmization on 32 bit machines.
+            //
+            // Each entry consists of a pair of u32s, either a free list entry, or a data entry.
+            //
+            // Free list entries use only the first value in the pair, with the high bit always set
+            // to indicate that the pair is part of the free list. The first pair of entries at
+            // indices 0 and 1 is the free list head, set to zero initially. The initial value for
+            // entries 0 and 1 in the array are 1 << 30 and 0, where 1 << 30 always indicates the end
+            // of the free list. The free list numbering matches the handle numbering, indexing by
+            // pair.
+            //
+            // Data entry pairs consist of the u30 context (either the scope for borrow handles or
+            // the ref count for own handles (we always call this the "scope" field to ensure a
+            // consistent interface shape). The high bit is never set for this first entry to
+            // distinguish the pair from the free list. The second item in the pair is the rep for
+            // the resource, with the high bit in this entry indicating it is an own handle.
+            //
+            // Therefore, to access a handle n, we read value n * 2 in the array to get the context,
+            // throwing for invalid handle if the high bit it set. The rep is then the value at
+            // n * 2 + 1 in the array, and it is an own handle if the high bit is set here. A rep
+            // value of zero is also an invalid value.
+            //
             Intrinsic::ResourceTable => output.push_str(&format!("
-                const E_OWN = 1 << 30, E_FREE = 1 << 31;
+                const T_FLAG = 1 << 30;
                 class ResourceTable {{
-                    free = 0;
-                    entries = [0];
-                    createBorrow(rep) {{
+                    table = [T_FLAG, 0];
+                    createBorrow(rep, scope) {{
                         if (rep === 0) throw new Error('Invalid rep');
-                        const free = this.free;
+                        const free = this.table[0] & ~T_FLAG;
                         if (free === 0) {{
-                            this.entries.push(rep);
-                            return this.entries.length - 1;
+                            this.table.push(scope);
+                            this.table.push(rep);
+                            return (this.table.length >> 1) - 1;
                         }}
-                        this.free = this.entries[free] & ~E_FREE;
-                        this.entries[free] = rep;
+                        this.table[0] = this.table[free];
+                        this.table[free << 1] = scope;
+                        this.table[(free << 1) + 1] = rep;
                         return free;
                     }}
                     createOwn(rep) {{
                         if (rep === 0) throw new Error('Invalid rep');
-                        const free = this.free;
+                        const free = this.table[0] & ~T_FLAG;
                         if (free === 0) {{
-                            this.entries.push(rep | E_OWN);
-                            return this.entries.length - 1;
+                            this.table.push(0);
+                            this.table.push(rep | T_FLAG);
+                            return (this.table.length >> 1) - 1;
                         }}
-                        this.free = this.entries[free] & ~E_FREE;
-                        this.entries[free] = rep | E_OWN;
+                        this.table[0] = this.table[free << 1];
+                        this.table[free << 1] = 0;
+                        this.table[(free << 1) + 1] = rep | T_FLAG;
                         return free;
                     }}
                     get(handle) {{
-                        const val = this.entries[handle];
-                        const rep = val & (E_OWN - 1);
-                        if (rep === 0 || (val & E_FREE) !== 0) throw new Error('Invalid handle');
-                        return {{ rep, own: (val & E_OWN) !== 0 }};
+                        const scope = this.table[handle << 1];
+                        const val = this.table[(handle << 1) + 1];
+                        const own = (val & T_FLAG) !== 0;
+                        const rep = val & ~T_FLAG;
+                        if (rep === 0 || (scope & T_FLAG) !== 0) throw new Error('Invalid handle');
+                        return {{ rep, scope, own }};
                     }}
-                    has(handle) {{
-                        const val = this.entries[handle];
-                        return (val & (E_OWN - 1)) > 0 && (val & E_FREE) === 0;
-                    }}
-                    take(handle) {{
-                        const val = this.entries[handle];
-                        const rep = val & (E_OWN - 1);
-                        if (rep === 0 || (val & E_FREE) !== 0) throw new Error('Invalid handle');
-                        this.entries[handle] = this.free | E_FREE;
-                        this.free = handle;
-                        return {{ rep, own: (val & E_OWN) !== 0 }};
+                    remove(handle) {{
+                        const scope = this.table[handle << 1];
+                        const val = this.table[(handle << 1) + 1];
+                        const own = (val & T_FLAG) !== 0;
+                        const rep = val & ~T_FLAG;
+                        if (val === 0 || (scope & T_FLAG) !== 0) throw new Error('Invalid handle');
+                        this.table[handle << 1] = this.table[0] | T_FLAG;
+                        this.table[0] = handle | T_FLAG;
+                        return {{ rep, scope, own }};
                     }}
                 }}"
             )),
@@ -254,7 +279,7 @@ pub fn render_intrinsics(
                 output.push_str(&format!("
                     function resourceTransferBorrow(handle, fromRid, toRid) {{
                         const {{ t: fromTable, i: fromImport }} = {handle_tables}.get(fromRid);
-                        const rep = fromImport ? fromTable.take(handle) : handle;
+                        const rep = fromImport ? fromTable.remove(handle) : handle;
                         const {{ t: toTable, i: toImport }} = {handle_tables}.get(toRid);
                         if (!toImport) return rep;
                         const newHandle = toTable.createBorrow(rep);
@@ -269,7 +294,7 @@ pub fn render_intrinsics(
                 output.push_str(&format!("
                     function resourceTransferBorrowValidLifting(handle, fromRid, toRid) {{
                         const {{ t: fromTable, i: fromImport }} = {handle_tables}.get(fromRid);
-                        const rep = fromImport ? fromTable.take(handle) : handle;
+                        const rep = fromImport ? fromTable.remove(handle) : handle;
                         const {{ t: toTable, i: toImport }} = {handle_tables}.get(toRid);
                         if (!toImport) return rep;
                         return toTable.createBorrow(rep);
@@ -282,7 +307,7 @@ pub fn render_intrinsics(
                 output.push_str(&format!("
                     function resourceTransferOwn(handle, fromRid, toRid) {{
                         const {{ t: fromTable }} = {handle_tables}.get(fromRid);
-                        const {{ rep }} = fromTable.take(handle);
+                        const {{ rep }} = fromTable.remove(handle);
                         const {{ t: toTable }} = {handle_tables}.get(toRid);
                         return toTable.createOwn(rep);
                     }}

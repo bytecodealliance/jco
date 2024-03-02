@@ -602,7 +602,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "const handleTable{rid} = new {resource_table}();
                     const finalizationRegistry{rid} = new FinalizationRegistry((handle) => {{
-                        const {{ rep }} = handleTable{rid}.take(handle);{maybe_dtor}
+                        const {{ rep }} = handleTable{rid}.remove(handle);{maybe_dtor}
                     }});
                     {handle_tables}.set({rid}, {{ t: handleTable{rid}, i: null }});
                     ",
@@ -750,7 +750,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
-                        const handleEntry = handleTable{rid}.take(handle);
+                        const handleEntry = handleTable{rid}.remove(handle);
                         if (!handleEntry.own) throw new Error('Unexpected borrow handle');
                         {dtor}
                     }}

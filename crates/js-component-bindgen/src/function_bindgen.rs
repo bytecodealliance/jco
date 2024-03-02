@@ -1216,12 +1216,12 @@ impl Bindgen for FunctionBindgen<'_> {
                                     self.src,
                                     "finalizationRegistry{id}.register({rsc}, {handle}, {rsc});
                                     Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{{}}} }});
-                                    handleTable{id}.take({handle});
+                                    handleTable{id}.remove({handle});
                                     ",
                                     match dtor_name {
                                         Some(dtor) => format!("
                                             finalizationRegistry{id}.unregister({rsc});
-                                            handleTable{id}.take({handle});
+                                            handleTable{id}.remove({handle});
                                             {rsc}[{symbol_dispose}] = {empty_func};
                                             {rsc}[{symbol_resource_handle}] = null;
                                             {dtor}({rep});
@@ -1243,7 +1243,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             if is_own {
                                 uwriteln!(
                                     self.src,
-                                    "captureTable{id}.delete(handleTable{id}.take({handle}).rep);"
+                                    "captureTable{id}.delete(handleTable{id}.remove({handle}).rep);"
                                 );
                             }
                         }
