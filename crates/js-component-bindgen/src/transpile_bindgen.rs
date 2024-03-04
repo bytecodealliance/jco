@@ -83,6 +83,16 @@ pub enum InstantiationMode {
     Sync,
 }
 
+/// Internal Bindgen calling convention
+enum CallType {
+    /// Standard calls - inner function is called directly with parameters
+    Standard,
+    /// Exported resource method calls - this is passed as the first argument
+    FirstArgIsThis,
+    /// Imported resource method calls - callee is a member of the parameter
+    CalleeResourceDispatch,
+}
+
 struct JsBindgen<'a> {
     local_names: LocalNames,
 
@@ -959,10 +969,9 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        let callee_name = match func.kind {
-            FunctionKind::Freestanding => {
-                let callee_name = self
-                    .gen
+        let (callee_name, call_type) = match func.kind {
+            FunctionKind::Freestanding => (
+                self.gen
                     .local_names
                     .get_or_create(
                         &format!(
@@ -974,40 +983,39 @@ impl<'a> Instantiator<'a, '_> {
                         &func.name,
                     )
                     .0
-                    .to_string();
-                callee_name
-            }
-            FunctionKind::Method(ty) => format!(
-                "{}.prototype.{}.call",
-                match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => {
-                        self.gen.esm_bindgen.ensure_import_binding(local_name);
-                        local_name
-                    }
-                    ResourceData::Guest { .. } => unreachable!(),
-                },
-                func.item_name().to_lower_camel_case()
+                    .to_string(),
+                CallType::Standard,
             ),
-            FunctionKind::Static(ty) => format!(
-                "{}.{}",
-                match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => {
-                        self.gen.esm_bindgen.ensure_import_binding(local_name);
-                        local_name
-                    }
-                    ResourceData::Guest { .. } => unreachable!(),
-                },
-                func.item_name().to_lower_camel_case()
+            FunctionKind::Method(_) => (
+                func.item_name().to_lower_camel_case(),
+                CallType::CalleeResourceDispatch,
             ),
-            FunctionKind::Constructor(ty) => format!(
-                "new {}",
-                match &self.imports_resource_map[&ty].data {
-                    ResourceData::Host { local_name, .. } => {
-                        self.gen.esm_bindgen.ensure_import_binding(local_name);
-                        local_name
-                    }
-                    ResourceData::Guest { .. } => unreachable!(),
-                },
+            FunctionKind::Static(ty) => (
+                format!(
+                    "{}.{}",
+                    match &self.imports_resource_map[&ty].data {
+                        ResourceData::Host { local_name, .. } => {
+                            self.gen.esm_bindgen.ensure_import_binding(local_name);
+                            local_name
+                        }
+                        ResourceData::Guest { .. } => unreachable!(),
+                    },
+                    func.item_name().to_lower_camel_case()
+                ),
+                CallType::Standard,
+            ),
+            FunctionKind::Constructor(ty) => (
+                format!(
+                    "new {}",
+                    match &self.imports_resource_map[&ty].data {
+                        ResourceData::Host { local_name, .. } => {
+                            self.gen.esm_bindgen.ensure_import_binding(local_name);
+                            local_name
+                        }
+                        ResourceData::Guest { .. } => unreachable!(),
+                    },
+                ),
+                CallType::Standard,
             ),
         };
 
@@ -1020,7 +1028,7 @@ impl<'a> Instantiator<'a, '_> {
         uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
         self.bindgen(
             nparams,
-            false,
+            call_type,
             if import_name.is_empty() {
                 None
             } else {
@@ -1290,7 +1298,7 @@ impl<'a> Instantiator<'a, '_> {
     fn bindgen(
         &mut self,
         nparams: usize,
-        this_ref: bool,
+        call_type: CallType,
         module_name: Option<&str>,
         callee: &str,
         opts: &CanonicalOptions,
@@ -1308,7 +1316,7 @@ impl<'a> Instantiator<'a, '_> {
         let mut params = Vec::new();
         let mut first = true;
         for i in 0..nparams {
-            if i == 0 && this_ref {
+            if i == 0 && matches!(call_type, CallType::FirstArgIsThis) {
                 params.push("this".into());
                 continue;
             }
@@ -1377,6 +1385,7 @@ impl<'a> Instantiator<'a, '_> {
             block_storage: Vec::new(),
             blocks: Vec::new(),
             callee,
+            callee_resource_dynamic: matches!(call_type, CallType::CalleeResourceDispatch),
             memory: memory.as_ref(),
             realloc: realloc.as_ref(),
             tmp: 0,
@@ -1706,7 +1715,10 @@ impl<'a> Instantiator<'a, '_> {
         let callee = self.core_def(def);
         self.bindgen(
             func.params.len(),
-            matches!(func.kind, FunctionKind::Method(_)),
+            match func.kind {
+                FunctionKind::Method(_) => CallType::FirstArgIsThis,
+                _ => CallType::Standard,
+            },
             if export_name.is_empty() {
                 None
             } else {

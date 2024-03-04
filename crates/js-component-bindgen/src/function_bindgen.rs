@@ -81,6 +81,7 @@ pub struct FunctionBindgen<'a> {
     pub tracing_prefix: Option<&'a String>,
     pub encoding: StringEncoding,
     pub callee: &'a str,
+    pub callee_resource_dynamic: bool,
     pub resolve: &'a Resolve,
 }
 
@@ -1070,24 +1071,31 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallInterface { func } => {
                 let results_length = func.results.len();
+                let call = if self.callee_resource_dynamic {
+                    format!(
+                        "{}.{}({})",
+                        operands[0],
+                        self.callee,
+                        operands[1..].join(", ")
+                    )
+                } else {
+                    format!("{}({})", self.callee, operands.join(", "))
+                };
                 if self.err == ErrHandling::ResultCatchHandler {
                     let err_payload = self.intrinsic(Intrinsic::GetErrorPayload);
                     uwriteln!(
                         self.src,
                         "let ret;
                         try {{
-                            ret = {{ tag: 'ok', val: {}({}) }};
+                            ret = {{ tag: 'ok', val: {call} }};
                         }} catch (e) {{
-                            ret = {{ tag: 'err', val: {}(e) }};
-                        }}",
-                        self.callee,
-                        operands.join(", "),
-                        err_payload,
+                            ret = {{ tag: 'err', val: {err_payload}(e) }};
+                        }}"
                     );
                     results.push("ret".to_string());
                 } else {
                     self.bind_results(results_length, results);
-                    uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+                    uwriteln!(self.src, "{call};");
                 }
 
                 if let Some(prefix) = self.tracing_prefix {
