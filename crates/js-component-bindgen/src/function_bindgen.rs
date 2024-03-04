@@ -1195,14 +1195,16 @@ impl Bindgen for FunctionBindgen<'_> {
                     } => {
                         let id = id.as_u32();
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
+                        let rsc_table_remove = self.intrinsic(Intrinsic::ResourceTableRemove);
                         if !imported {
                             let rep = format!("rep{}", self.tmp());
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
+                            let rsc_table_get = self.intrinsic(Intrinsic::ResourceTableGet);
                             uwrite!(
                                 self.src,
                                 "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
-                                 var {rep} = handleTable{id}.get({handle}).rep;
+                                 var {rep} = {rsc_table_get}(handleTable{id}, {handle}).rep;
                                  Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
                                 ",
                             );
@@ -1216,12 +1218,12 @@ impl Bindgen for FunctionBindgen<'_> {
                                     self.src,
                                     "finalizationRegistry{id}.register({rsc}, {handle}, {rsc});
                                     Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{{}}} }});
-                                    handleTable{id}.remove({handle});
+                                    {rsc_table_remove}(handleTable{id}, {handle});
                                     ",
                                     match dtor_name {
                                         Some(dtor) => format!("
                                             finalizationRegistry{id}.unregister({rsc});
-                                            handleTable{id}.remove({handle});
+                                            {rsc_table_remove}(handleTable{id}, {handle});
                                             {rsc}[{symbol_dispose}] = {empty_func};
                                             {rsc}[{symbol_resource_handle}] = null;
                                             {dtor}({rep});
@@ -1238,12 +1240,13 @@ impl Bindgen for FunctionBindgen<'_> {
                             }
                         } else {
                             // imported handles lift as instance capture from a previous lowering
-                            uwriteln!(self.src, "var {rsc} = captureTable{id}.get(handleTable{id}.get({handle}).rep);");
+                            let rsc_table_get = self.intrinsic(Intrinsic::ResourceTableGet);
+                            uwriteln!(self.src, "var {rsc} = captureTable{id}.get({rsc_table_get}(handleTable{id}, {handle}).rep);");
                             // an own lifting is a transfer to JS, so handle is implicitly dropped
                             if is_own {
                                 uwriteln!(
                                     self.src,
-                                    "captureTable{id}.delete(handleTable{id}.remove({handle}).rep);"
+                                    "captureTable{id}.delete({rsc_table_remove}(handleTable{id}, {handle}).rep);"
                                 );
                             }
                         }
@@ -1336,9 +1339,11 @@ impl Bindgen for FunctionBindgen<'_> {
                             // though, and their finalizers deregistered as well.
                             if is_own {
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
+                                let rsc_table_create_own =
+                                    self.intrinsic(Intrinsic::ResourceTableCreateOwn);
                                 uwriteln!(
                                     self.src,
-                                    "var {handle} = handleTable{id}.createOwn({rep});
+                                    "var {handle} = {rsc_table_create_own}(handleTable{id}, {rep});
                                     finalizationRegistry{id}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
                                     {op}[{symbol_resource_handle}] = null;"
@@ -1356,11 +1361,23 @@ impl Bindgen for FunctionBindgen<'_> {
                                 "if (!({op} instanceof {local_name})) {{
                                      throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
-                                 captureTable{id}.set(++captureCnt{id}, {op});
-                                 var {handle} = handleTable{id}.create{}(captureCnt{id});
-                                 ",
-                                 if is_own { "Own" } else { "Borrow" }
+                                 captureTable{id}.set(++captureCnt{id}, {op});"
                             );
+                            if is_own {
+                                let rsc_table_create_own =
+                                    self.intrinsic(Intrinsic::ResourceTableCreateOwn);
+                                uwriteln!(
+                                    self.src,
+                                    "var {handle} = {rsc_table_create_own}(handleTable{id}, captureCnt{id});",
+                                );
+                            } else {
+                                let rsc_table_create_borrow =
+                                    self.intrinsic(Intrinsic::ResourceTableCreateBorrow);
+                                uwriteln!(
+                                    self.src,
+                                    "var {handle} = {rsc_table_create_borrow}(handleTable{id}, captureCnt{id});",
+                                );
+                            }
 
                             // track lowered borrows to ensure they are dropped
                             // cur_resource_borrows can be reused because:
@@ -1369,8 +1386,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             // - conversely, it is not possible to have a JS call that lowers a borrow handle argument
                             //   and JS calls cannot return borrows for lowering
                             if !is_own && !self.valid_lifting_optimization {
+                                let rsc_table_get = self.intrinsic(Intrinsic::ResourceTableGet);
                                 self.cur_resource_borrows
-                                    .push(format!("handleTable{id}.get({handle})"));
+                                    .push(format!("{rsc_table_get}(handleTable{id}, {handle})"));
                             }
                         }
                     }
