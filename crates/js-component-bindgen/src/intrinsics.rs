@@ -20,10 +20,17 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
+    ResourceTableFlag,
+    ResourceTableCreateBorrow,
+    ResourceTableCreateOwn,
+    ResourceTableGet,
+    ResourceTableTryGet,
+    ResourceTableRemove,
     ResourceCallBorrows,
     ResourceTransferBorrow,
     ResourceTransferBorrowValidLifting,
     ResourceTransferOwn,
+    ScopeId,
     SymbolResourceHandle,
     SymbolDispose,
     ThrowInvalidBool,
@@ -191,21 +198,135 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
 
+            // 
+            // # Resource table slab implementation
+            // 
+            // Resource table slab implementation on top of a fixed "SMI" array in JS engines,
+            // a fixed contiguous array of u32s, for performance. We don't use a typed array because
+            // we need resizability without reserving a large buffer.
+            //
+            // The flag bit for all data values is 1 << 30. We avoid the use of the highest bit
+            // entirely to not trigger SMI deoptimization.
+            //
+            // Each entry consists of a pair of u32s, either a free list entry, or a data entry.
+            //
+            // ## Free List Entries:
+            //
+            //  |    index (x, u30)   |       ~unused~      |
+            //  |------ 32 bits ------|------ 32 bits ------|
+            //  | 01xxxxxxxxxxxxxxxxx | ################### |
+            //
+            // Free list entries use only the first value in the pair, with the high bit always set
+            // to indicate that the pair is part of the free list. The first pair of entries at
+            // indices 0 and 1 is the free list head, with the initial values of 1 << 30 and 0
+            // respectively. Removing the 1 << 30 flag gives 0, which indicates the end of the free
+            // list.
+            //
+            // ## Data Entries:
+            //
+            //  |    scope (x, u30)   | own(o), rep(x, u30) |
+            //  |------ 32 bits ------|------ 32 bits ------|
+            //  | 00xxxxxxxxxxxxxxxxx | 0oxxxxxxxxxxxxxxxxx |
+            //
+            // Data entry pairs consist of a first u30 scope entry and a second rep entry. The field
+            // is only called the scope for interface shape consistency, but is actually used for the
+            // ref count for own handles and the scope id for borrow handles. The high bit is never
+            // set for this first entry to distinguish the pair from the free list. The second item
+            // in the pair is the rep for  the resource, with the high bit in this entry indicating
+            // if it is an own handle.
+            //
+            // The free list numbering and the handle numbering are the same, indexing by pair, so to
+            // get from a handle or free list numbering to an index, we multiply by two.
+            //
+            // For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
+            // the array to get the context and rep respectively. If the high bit is set on the
+            // context, we throw for an invalid handle. The rep value is masked out from the
+            // ownership high bit, also throwing for an invalid zero rep.
+            //
+            Intrinsic::ResourceTableFlag => output.push_str("
+                const T_FLAG = 1 << 30;
+            "),
+
+            Intrinsic::ResourceTableCreateBorrow => output.push_str("
+                function rscTableCreateBorrow (table, rep) {
+                    if (rep === 0) throw new Error('Invalid rep');
+                    const free = table[0] & ~T_FLAG;
+                    if (free === 0) {
+                        table.push(scopeId);
+                        table.push(rep);
+                        return (table.length >> 1) - 1;
+                    }
+                    table[0] = table[free];
+                    table[free << 1] = scopeId;
+                    table[(free << 1) + 1] = rep;
+                    return free;
+                }
+            "),
+
+            Intrinsic::ResourceTableCreateOwn => output.push_str("
+                function rscTableCreateOwn (table, rep) {
+                    if (rep === 0) throw new Error('Invalid rep');
+                    const free = table[0] & ~T_FLAG;
+                    if (free === 0) {
+                        table.push(0);
+                        table.push(rep | T_FLAG);
+                        return (table.length >> 1) - 1;
+                    }
+                    table[0] = table[free << 1];
+                    table[free << 1] = 0;
+                    table[(free << 1) + 1] = rep | T_FLAG;
+                    return free;
+                }
+            "),
+
+            Intrinsic::ResourceTableGet => output.push_str("
+                function rscTableGet (table, handle) {
+                    const scope = table[handle << 1];
+                    const val = table[(handle << 1) + 1];
+                    const own = (val & T_FLAG) !== 0;
+                    const rep = val & ~T_FLAG;
+                    if (rep === 0 || (scope & T_FLAG) !== 0) throw new Error('Invalid handle');
+                    return { rep, scope, own };
+                }
+            "),
+
+            Intrinsic::ResourceTableTryGet => output.push_str("
+                function rscTableTryGet (table, handle) {
+                    const scope = table[handle << 1];
+                    const val = table[(handle << 1) + 1];
+                    const own = (val & T_FLAG) !== 0;
+                    const rep = val & ~T_FLAG;
+                    if (rep === 0 || (scope & T_FLAG) !== 0)
+                        return;
+                    return { rep, scope, own };
+                }
+            "),
+
+            Intrinsic::ResourceTableRemove => output.push_str("
+                function rscTableRemove (table, handle) {
+                    const scope = table[handle << 1];
+                    const val = table[(handle << 1) + 1];
+                    const own = (val & T_FLAG) !== 0;
+                    const rep = val & ~T_FLAG;
+                    if (val === 0 || (scope & T_FLAG) !== 0) throw new Error('Invalid handle');
+                    table[handle << 1] = table[0] | T_FLAG;
+                    table[0] = handle | T_FLAG;
+                    return { rep, scope, own };
+                }
+            "),
+
             Intrinsic::ResourceTransferBorrow => {
                 let handle_tables = Intrinsic::HandleTables.name();
                 let resource_borrows = Intrinsic::ResourceCallBorrows.name();
+                let rsc_table_remove = Intrinsic::ResourceTableRemove.name();
+                let rsc_table_create_borrow = Intrinsic::ResourceTableCreateBorrow.name();
                 output.push_str(&format!("
                     function resourceTransferBorrow(handle, fromRid, toRid) {{
-                        const {{ t: fromTable, l: fromLocal }} = {handle_tables}.get(fromRid);
-                        let rep = handle;
-                        if (!fromLocal) {{
-                            ({{ rep }} = fromTable.get(handle));
-                            fromTable.delete(handle);
-                        }}
-                        const {{ t: toTable, h: createHandle, l: toLocal }} = {handle_tables}.get(toRid);
-                        if (toLocal) return rep;
-                        const newHandle = createHandle();
-                        toTable.set(newHandle, {{ rep, own: false }});
+                        const {{ t: fromTable, i: fromImport }} = {handle_tables}.get(fromRid);
+                        const rep = fromImport ? {rsc_table_remove}(fromTable, handle) : handle;
+                        const {{ t: toTable, i: toImport }} = {handle_tables}.get(toRid);
+                        if (!toImport) return rep;
+                        const newHandle = {rsc_table_create_borrow}(toTable, rep);
                         {resource_borrows}.push({{ rid: toRid, handle: newHandle }});
                         return newHandle;
                     }}
@@ -214,37 +335,36 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceTransferBorrowValidLifting => {
                 let handle_tables = Intrinsic::HandleTables.name();
+                let rsc_table_remove = Intrinsic::ResourceTableRemove.name();
+                let rsc_table_create_borrow = Intrinsic::ResourceTableCreateBorrow.name();
                 output.push_str(&format!("
                     function resourceTransferBorrowValidLifting(handle, fromRid, toRid) {{
-                        const {{ t: fromTable, l: fromLocal }} = {handle_tables}.get(fromRid);
-                        let rep = handle;
-                        if (!fromLocal) {{
-                            ({{ rep }} = fromTable.get(handle));
-                            fromTable.delete(handle);
-                        }}
-                        const {{ t: toTable, h: createHandle, l: toLocal }} = {handle_tables}.get(toRid);
-                        if (toLocal) return rep;
-                        const newHandle = createHandle();
-                        toTable.set(newHandle, {{ rep, own: false }});
-                        return newHandle;
+                        const {{ t: fromTable, i: fromImport }} = {handle_tables}.get(fromRid);
+                        const rep = fromImport ? {rsc_table_remove}(fromTable, handle) : handle;
+                        const {{ t: toTable, i: toImport }} = {handle_tables}.get(toRid);
+                        if (!toImport) return rep;
+                        return {rsc_table_create_borrow}(toTable, rep);
                     }}
                 "));
             },
 
             Intrinsic::ResourceTransferOwn => {
                 let handle_tables = Intrinsic::HandleTables.name();
+                let rsc_table_remove = Intrinsic::ResourceTableRemove.name();
+                let rsc_table_create_own = Intrinsic::ResourceTableCreateOwn.name();
                 output.push_str(&format!("
                     function resourceTransferOwn(handle, fromRid, toRid) {{
                         const {{ t: fromTable }} = {handle_tables}.get(fromRid);
-                        const entry = fromTable.get(handle);
-                        fromTable.delete(handle);
-                        const {{ t: toTable, h }} = {handle_tables}.get(toRid);
-                        const newHandle = h();
-                        toTable.set(newHandle, entry);
-                        return newHandle;
+                        const {{ rep }} = {rsc_table_remove}(fromTable, handle);
+                        const {{ t: toTable }} = {handle_tables}.get(toRid);
+                        return {rsc_table_create_own}(toTable, rep);
                     }}
                 "));
             },
+
+            Intrinsic::ScopeId => output.push_str("
+                let scopeId = 0;
+            "),
 
             Intrinsic::SymbolResourceHandle => output.push_str("
                 const resourceHandleSymbol = Symbol('resource');
@@ -262,7 +382,7 @@ pub fn render_intrinsics(
 
             Intrinsic::ThrowUninitialized => output.push_str("
                 function throwUninitialized() {
-                    throw new TypeError('Wasm uninitialized use `await $init` first');
+                    throw new Error('Wasm uninitialized use `await $init` first');
                 }
             "),
 
@@ -442,6 +562,8 @@ impl Intrinsic {
             "dv",
             "emptyFunc",
             "Error",
+            "E_OWN",
+            "E_FREE",
             "f32ToI32",
             "f64ToI64",
             "fetch",
@@ -503,9 +625,16 @@ impl Intrinsic {
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
             Intrinsic::ResourceCallBorrows => "resourceCallBorrows",
+            Intrinsic::ResourceTableFlag => "T_FLAG",
+            Intrinsic::ResourceTableCreateBorrow => "rscTableCreateBorrow",
+            Intrinsic::ResourceTableCreateOwn => "rscTableCreateOwn",
+            Intrinsic::ResourceTableGet => "rscTableGet",
+            Intrinsic::ResourceTableTryGet => "rscTableTryGet",
+            Intrinsic::ResourceTableRemove => "rscTableRemove",
             Intrinsic::ResourceTransferBorrow => "resourceTransferBorrow",
             Intrinsic::ResourceTransferBorrowValidLifting => "resourceTransferBorrowValidLifting",
             Intrinsic::ResourceTransferOwn => "resourceTransferOwn",
+            Intrinsic::ScopeId => "scopeId",
             Intrinsic::SymbolResourceHandle => "resourceHandleSymbol",
             Intrinsic::SymbolDispose => "symbolDispose",
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
