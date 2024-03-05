@@ -34,7 +34,6 @@ import {
   reverseMap,
 } from "./calls.js";
 import nodeProcess, { exit, stderr, stdout, env } from "node:process";
-import { rscTableGetRep } from "./low-level.js";
 
 const _rawDebug = nodeProcess._rawDebug || console.error.bind(console);
 

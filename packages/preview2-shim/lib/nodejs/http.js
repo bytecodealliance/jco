@@ -27,7 +27,7 @@ import * as http from "node:http";
 const { validateHeaderName = () => {}, validateHeaderValue = () => {} } = http;
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
-export const _forbiddenHeaders = new Set(["connection", "keep-alive"]);
+export const _forbiddenHeaders = new Set(["connection", "keep-alive", "host"]);
 
 class IncomingBody {
   #finished = false;

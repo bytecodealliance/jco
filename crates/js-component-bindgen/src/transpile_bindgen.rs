@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
 use wasmtime_environ::component::{
-    ComponentTypes, InterfaceType, RuntimeComponentInstanceIndex, TypeDef,
-    TypeFuncIndex, TypeResourceTableIndex,
+    ComponentTypes, InterfaceType, RuntimeComponentInstanceIndex, TypeDef, TypeFuncIndex,
+    TypeResourceTableIndex,
 };
 use wasmtime_environ::{
     component,
@@ -1128,15 +1128,11 @@ impl<'a> Instantiator<'a, '_> {
                 let func_ty = &self.types[*func_ty];
                 let params_ty = &self.types[func_ty.params];
                 let results_ty = &self.types[func_ty.results];
-                for ((_, ty), iface_ty) in func.params.iter().zip(params_ty.types.iter()) {
-                    if let Type::Id(id) = ty {
-                        self.collect_resource_types(*id, iface_ty, &mut resource_tables);
-                    }
+                for iface_ty in params_ty.types.iter() {
+                    self.collect_resource_types(iface_ty, &mut resource_tables);
                 }
-                for (ty, iface_ty) in func.results.iter_types().zip(results_ty.types.iter()) {
-                    if let Type::Id(id) = ty {
-                        self.collect_resource_types(*id, iface_ty, &mut resource_tables);
-                    }
+                for iface_ty in results_ty.types.iter() {
+                    self.collect_resource_types(iface_ty, &mut resource_tables);
                 }
                 if resource_tables.len() == 0 {
                     "".to_string()
@@ -1416,70 +1412,64 @@ impl<'a> Instantiator<'a, '_> {
 
     fn collect_resource_types(
         &mut self,
-        id: TypeId,
         iface_ty: &InterfaceType,
         resources: &mut Vec<TypeResourceTableIndex>,
     ) {
-        match (&self.resolve.types[id].kind, iface_ty) {
-            (TypeDefKind::Flags(_), InterfaceType::Flags(_))
-            | (TypeDefKind::Enum(_), InterfaceType::Enum(_)) => {}
-            (TypeDefKind::Record(t1), InterfaceType::Record(t2)) => {
-                let t2 = &self.types[*t2];
-                for (f1, f2) in t1.fields.iter().zip(t2.fields.iter()) {
-                    if let Type::Id(id) = f1.ty {
-                        self.collect_resource_types(id, &f2.ty, resources);
+        match iface_ty {
+            InterfaceType::Flags(_) | InterfaceType::Enum(_) => {}
+            InterfaceType::Record(t) => {
+                let t = &self.types[*t];
+                for f in t.fields.iter() {
+                    self.collect_resource_types(&f.ty, resources);
+                }
+            }
+            InterfaceType::Own(t) | InterfaceType::Borrow(t) => {
+                resources.push(*t);
+            }
+            InterfaceType::Tuple(t) => {
+                let t = &self.types[*t];
+                for f in t.types.iter() {
+                    self.collect_resource_types(f, resources);
+                }
+            }
+            InterfaceType::Variant(t) => {
+                let t = &self.types[*t];
+                for f in t.cases.iter() {
+                    if let Some(ty) = f.ty {
+                        self.collect_resource_types(&ty, resources);
                     }
                 }
             }
-            (
-                TypeDefKind::Handle(Handle::Own(_) | Handle::Borrow(_)),
-                InterfaceType::Own(t2) | InterfaceType::Borrow(t2),
-            ) => {
-                resources.push(*t2);
+            InterfaceType::Option(t) => {
+                let t = &self.types[*t];
+                self.collect_resource_types(&t.ty, resources);
             }
-            (TypeDefKind::Tuple(t1), InterfaceType::Tuple(t2)) => {
-                let t2 = &self.types[*t2];
-                for (f1, f2) in t1.types.iter().zip(t2.types.iter()) {
-                    if let Type::Id(id) = f1 {
-                        self.collect_resource_types(*id, f2, resources);
-                    }
+            InterfaceType::Result(t) => {
+                let t = &self.types[*t];
+                if let Some(ok) = &t.ok {
+                    self.collect_resource_types(&ok, resources);
+                }
+                if let Some(err) = &t.err {
+                    self.collect_resource_types(&err, resources);
                 }
             }
-            (TypeDefKind::Variant(t1), InterfaceType::Variant(t2)) => {
-                let t2 = &self.types[*t2];
-                for (f1, f2) in t1.cases.iter().zip(t2.cases.iter()) {
-                    if let Some(Type::Id(id)) = &f1.ty {
-                        self.collect_resource_types(*id, f2.ty.as_ref().unwrap(), resources);
-                    }
-                }
+            InterfaceType::List(t) => {
+                let t = &self.types[*t];
+                self.collect_resource_types(&t.element, resources);
             }
-            (TypeDefKind::Option(t1), InterfaceType::Option(t2)) => {
-                let t2 = &self.types[*t2];
-                if let Type::Id(id) = t1 {
-                    self.collect_resource_types(*id, &t2.ty, resources);
-                }
-            }
-            (TypeDefKind::Result(t1), InterfaceType::Result(t2)) => {
-                let t2 = &self.types[*t2];
-                if let Some(Type::Id(id)) = &t1.ok {
-                    self.collect_resource_types(*id, &t2.ok.unwrap(), resources);
-                }
-                if let Some(Type::Id(id)) = &t1.err {
-                    self.collect_resource_types(*id, &t2.err.unwrap(), resources);
-                }
-            }
-            (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
-                let t2 = &self.types[*t2];
-                if let Type::Id(id) = t1 {
-                    self.collect_resource_types(*id, &t2.element, resources);
-                }
-            }
-            (TypeDefKind::Type(ty), _) => {
-                if let Type::Id(id) = ty {
-                    self.collect_resource_types(*id, iface_ty, resources);
-                }
-            }
-            (_, _) => unreachable!(),
+            InterfaceType::Bool
+            | InterfaceType::S8
+            | InterfaceType::U8
+            | InterfaceType::S16
+            | InterfaceType::U16
+            | InterfaceType::S32
+            | InterfaceType::U32
+            | InterfaceType::S64
+            | InterfaceType::U64
+            | InterfaceType::Float32
+            | InterfaceType::Float64
+            | InterfaceType::Char
+            | InterfaceType::String => {}
         }
     }
 
