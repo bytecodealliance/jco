@@ -445,7 +445,7 @@ class Pollable {
   }
 }
 
-const cabiLowerSymbol = Symbol.for('cabiLower');
+// const cabiLowerSymbol = Symbol.for('cabiLower');
 
 // Pollable.prototype.ready[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
 //   return function pollableReady (handle) {
