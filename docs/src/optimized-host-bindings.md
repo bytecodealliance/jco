@@ -106,3 +106,29 @@ For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 
 the array to get the context and rep respectively. If the high bit is set on the
 context, we throw for an invalid handle. The rep value is masked out from the
 ownership high bit, also throwing for an invalid zero rep.
+
+### `ResourceClass[Symbol.for('cabiDispose')](rep) -> void`
+
+Just like `Symbol.dispose` is used in high-level bindgen to provide a destructor for when an own
+handle to a resource is dropped, low-level bindgen provides this hook through the `cabiDispose`
+function.
+
+The `Symbol.for('cabiDispose')` function is an optional destructor which is available as a direct
+static method on the imported resource class.
+
+Unlike the other low-level functions, this one does not need to be bound and is called directly, as
+it takes the rep directly to handle internal destructor mechanisms.
+
+### `resourceInstance[Symbol.for('cabiRep')]`
+
+Normally imported resource classes do not have to define any special symbols, as they are assigned
+rep numbers when passed in.
+
+When using hybrid or optimized bindgen, high-level functions may still return and take high-level
+resource classes as parameters. For example, a resource type used optimized in import bindgen might
+still be constructible elsewhere to be passed in as a parameter to an exported function of a
+component attached to that optimized low-level import bindgen.
+
+As a result, when using low-level bindgen, any high-level resource instances MUST define a
+`Symbol.for('cabiRep')` symbol in order for these resources to correctly interact with low-level
+bindgen functions referring to those same resources.

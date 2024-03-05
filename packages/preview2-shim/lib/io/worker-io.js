@@ -448,20 +448,24 @@ class Pollable {
 
 const cabiLowerSymbol = Symbol.for('cabiLower');
 
-Pollable.prototype.ready[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
-  return function pollableReady (handle) {
-    const rep = table[(handle << 1) + 1] & ~T_FLAG;
-    const ready = ioCall(POLL_POLLABLE_READY, rep);
-    return ready ? 1 : 0;
-  }
-};
+// Pollable.prototype.ready[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
+//   return function pollableReady (handle) {
+//     const rep = table[(handle << 1) + 1] & ~T_FLAG;
+//     const ready = ioCall(POLL_POLLABLE_READY, rep);
+//     return ready ? 1 : 0;
+//   };
+// };
 
-Pollable.prototype.block[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
-  return function pollableBlock (handle) {
-    const rep = table[(handle << 1) + 1] & ~T_FLAG;
-    ioCall(POLL_POLLABLE_BLOCK, rep);
-  }
-};
+// Pollable.prototype.block[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
+//   return function pollableBlock (handle) {
+//     const rep = table[(handle << 1) + 1] & ~T_FLAG;
+//     ioCall(POLL_POLLABLE_BLOCK, rep);
+//   };
+// };
+
+// Pollable[Symbol.for('cabiDispose')] = function pollableDispose (rep) {
+//   ioCall(POLL_POLLABLE_DISPOSE, rep);
+// };
 
 export const pollableCreate = Pollable._create;
 delete Pollable._create;
@@ -475,6 +479,17 @@ export const poll = {
     return ioCall(POLL_POLL_LIST, null, list.map(pollableGetId));
   },
 };
+
+// Verify mix and match works
+// poll.poll[cabiLowerSymbol] = function ({ memory, realloc, postReturn, resourceTables: [table] }) {
+//   return function pollPollList (listPtr, len) {
+//     // iterate handles
+//     // read out reps
+//     const result = ioCall(POLL_POLL_LIST, null, list.map(pollableGetId));
+//     postReturn();
+//     return result;
+//   };
+// };
 
 export function createPoll(call, id, initPayload) {
   return pollableCreate(ioCall(call, id, initPayload));

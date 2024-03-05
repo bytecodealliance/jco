@@ -569,6 +569,19 @@ impl<'a> Instantiator<'a, '_> {
         for id in ids_to_ensure {
             self.ensure_resource_table(id);
         }
+        if self
+            .gen
+            .all_intrinsics
+            .contains(&Intrinsic::ResourceTransferBorrow)
+            || self
+                .gen
+                .all_intrinsics
+                .contains(&Intrinsic::ResourceTransferBorrowValidLifting)
+        {
+            let imported_resource_cnt = Intrinsic::ImportedResourceCnt.name();
+            let val = self.component.imported_resources.len();
+            uwrite!(self.src.js, "const {imported_resource_cnt} = {val};");
+        }
     }
 
     fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
@@ -601,14 +614,11 @@ impl<'a> Instantiator<'a, '_> {
             let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
 
             if is_imported {
-                // imported resouces have both a rep table and a rep assignment
-                // for captured resource classes to assign them a rep numbering
                 uwriteln!(
                     self.src.js,
                     "const handleTable{rid} = [{rsc_table_flag}, 0];
                     const captureTable{rid} = new Map();
-                    let captureCnt{rid} = 0;
-                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, i: captureTable{rid}.get.bind(captureTable{rid}) }});",
+                    let captureCnt{rid} = 0;"
                 );
             } else {
                 uwriteln!(
@@ -617,10 +627,10 @@ impl<'a> Instantiator<'a, '_> {
                     const finalizationRegistry{rid} = new FinalizationRegistry((handle) => {{
                         const {{ rep }} = {rsc_table_remove}(handleTable{rid}, handle);{maybe_dtor}
                     }});
-                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, i: null }});
                     ",
                 );
             }
+            uwriteln!(self.src.js, "{handle_tables}[{rid}] = handleTable{rid};");
             self.resource_tables_initialized[rid as usize] = true;
         }
     }
@@ -754,22 +764,42 @@ impl<'a> Instantiator<'a, '_> {
                         "".into()
                     }
                 } else {
-                    // if there is a Symbol.dispose handler, call it explicitly for imported
-                    // resources when the resource is dropped
-                    let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
-                    format!(
-                        "const rsc = captureTable{rid}.get(handleEntry.rep);
-                        if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                        captureTable{rid}.delete(handleEntry.rep);"
-                    )
+                    // if it is a captured instance (class instance was created externally so had to
+                    // be assigned a rep), and there is a Symbol.dispose handler, call it explicitly
+                    // for imported resources when the resource is dropped, otherwise
+                    // if it is an instance without a captured class definition, then call the
+                    // low-level bindgen destructor
+                    if matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
+                        let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
+                        format!(
+                            "const rsc = captureTable{rid}.get(handleEntry.rep);
+                            if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
+                            captureTable{rid}.delete(handleEntry.rep);"
+                        )
+                    } else {
+                        let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
+                        let symbol_cabi_dispose = self.gen.intrinsic(Intrinsic::SymbolCabiDispose);
+                        let resource_name = "help";
+                        format!(
+                            "const rsc = captureTable{rid}.get(handleEntry.rep);
+                            if (rsc) {{
+                                if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
+                                captureTable{rid}.delete(handleEntry.rep);
+                            }} else if ({resource_name}[{symbol_cabi_dispose}]) {{
+                                {resource_name}[{symbol_cabi_dispose}](handleEntry.rep);
+                            }}"
+                        )
+                    }
                 };
 
+                // If the unexpected borrow handle case does ever happen in further testing,
+                // then we must handle this.
                 let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
                         const handleEntry = {rsc_table_remove}(handleTable{rid}, handle);
-                        if (!handleEntry.own) throw new Error('Unexpected borrow handle');
+                        if (!handleEntry.own) throw new Error('Internal error: Unexpected borrow handle');
                         {dtor}
                     }}
                     ",
@@ -803,17 +833,18 @@ impl<'a> Instantiator<'a, '_> {
                 let scope_id = self.gen.intrinsic(Intrinsic::ScopeId);
                 let resource_borrows = self.gen.intrinsic(Intrinsic::ResourceCallBorrows);
                 let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
-                let rsc_table_try_get = self.gen.intrinsic(Intrinsic::ResourceTableCreateOwn);
+                // To verify that borrows are dropped, it is enough to verify that the handle
+                // either no longer exists (part of free list) or belongs to another scope, since
+                // the enter call closed off the ability to create new handles in the parent scope
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}() {{
-                        for (const {{ rid, handle, rep, scope }} of {resource_borrows}) {{
-                            const entry = {rsc_table_try_get}({handle_tables}.get(rid), handle);
-                            if (entry && entry.rep === rep && entry.scope === scope)
-                                throw new Error('borrow was not dropped for resource transfer call');
+                        {scope_id}--;
+                        for (const {{ rid, handle }} of {resource_borrows}) {{
+                            if ({handle_tables}[rid][handle << 1] === {scope_id})
+                                throw new Error('borrows not dropped for resource call');
                         }}
                         {resource_borrows} = [];
-                        {scope_id}--;
                     }}
                     ",
                 );
