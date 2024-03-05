@@ -1200,12 +1200,12 @@ impl Bindgen for FunctionBindgen<'_> {
                             let rep = format!("rep{}", self.tmp());
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
-                            let rsc_table_get = self.intrinsic(Intrinsic::ResourceTableGet);
+                            let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
                             uwrite!(
                                 self.src,
                                 "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
-                                 var {rep} = {rsc_table_get}(handleTable{id}, {handle}).rep;
-                                 Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
+                                var {rep} = handleTable{id}[({handle} << 1) + 1] & ~{rsc_flag};
+                                Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
                                 ",
                             );
                             if is_own {
@@ -1240,8 +1240,8 @@ impl Bindgen for FunctionBindgen<'_> {
                             }
                         } else {
                             // imported handles lift as instance capture from a previous lowering
-                            let rsc_table_get = self.intrinsic(Intrinsic::ResourceTableGet);
-                            uwriteln!(self.src, "var {rsc} = captureTable{id}.get({rsc_table_get}(handleTable{id}, {handle}).rep);");
+                            let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
+                            uwriteln!(self.src, "var {rsc} = captureTable{id}.get(handleTable{id}[({handle} << 1) + 1] & ~{rsc_flag});");
                             // an own lifting is a transfer to JS, so handle is implicitly dropped
                             if is_own {
                                 uwriteln!(

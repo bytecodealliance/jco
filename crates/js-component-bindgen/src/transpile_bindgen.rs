@@ -723,10 +723,12 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceRep(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
-                let rsc_table_get = self.gen.intrinsic(Intrinsic::ResourceTableGet);
+                let rsc_flag = self.gen.intrinsic(Intrinsic::ResourceTableFlag);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {rsc_table_get}.bind(null, handleTable{rid});"
+                    "function trampoline{i} (handle) {{
+                        return handleTable{rid}[(handle << 1) + 1] & ~{rsc_flag};
+                    }}"
                 );
             }
             Trampoline::ResourceDrop(resource) => {
@@ -1038,31 +1040,58 @@ impl<'a> Instantiator<'a, '_> {
         if !matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
             let memory = options
                 .memory
-                .map(|idx| format!("memory{}", idx.as_u32()))
-                .unwrap_or("null".into());
+                .map(|idx| format!(" memory: memory{},", idx.as_u32()))
+                .unwrap_or("".into());
             let realloc = options
                 .realloc
-                .map(|idx| format!("realloc{}", idx.as_u32()))
-                .unwrap_or("null".into());
+                .map(|idx| format!(" realloc: realloc{},", idx.as_u32()))
+                .unwrap_or("".into());
             let post_return = options
                 .post_return
-                .map(|idx| format!("postReturn{}", idx.as_u32()))
-                .unwrap_or("null".into());
+                .map(|idx| format!(" postReturn: postReturn{},", idx.as_u32()))
+                .unwrap_or("".into());
             let string_encoding = match options.string_encoding {
-                component::StringEncoding::Utf8 => "null",
-                component::StringEncoding::Utf16 => "'utf16'",
-                component::StringEncoding::CompactUtf16 => "'compact-utf16'",
+                component::StringEncoding::Utf8 => "",
+                component::StringEncoding::Utf16 => " stringEncoding: 'utf16',",
+                component::StringEncoding::CompactUtf16 => " stringEncoding: 'compact-utf16',",
             };
             let callee_name = match func.kind {
-                FunctionKind::Static(_) | FunctionKind::Freestanding => &callee_name,
-                FunctionKind::Method(_) => &callee_name[0..callee_name.len() - 5],
-                FunctionKind::Constructor(_) => &callee_name[4..],
+                FunctionKind::Static(_) | FunctionKind::Freestanding => callee_name.to_string(),
+                FunctionKind::Method(ty) => format!(
+                    "{}.prototype.{}",
+                    match &self.imports_resource_map[&ty].data {
+                        ResourceData::Host { local_name, .. } => {
+                            self.gen.esm_bindgen.ensure_import_binding(local_name);
+                            local_name
+                        }
+                        ResourceData::Guest { .. } => unreachable!(),
+                    },
+                    callee_name
+                ),
+                FunctionKind::Constructor(_) => callee_name[4..].to_string(),
+            };
+            // TODO: for resources, we must iterate the unique resources represented over the params and returns,
+            //       collect those resource ids for this representation, and pass their table numbers as an array
+            let resource_tables = {
+                let mut resource_tables: Vec<u32> = Vec::new();
+                if resource_tables.len() == 0 {
+                    "".to_string()
+                } else {
+                    format!(
+                        " resourceTables: [{}],",
+                        resource_tables
+                            .iter()
+                            .map(|x| x.to_string())
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    )
+                }
             };
             match self.gen.opts.import_bindings {
                 Some(BindingsMode::Hybrid) => {
                     let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
                     uwriteln!(self.src.js_init, "if ({callee_name}[{symbol_cabi_lower}]) {{
-                        trampoline{} = {callee_name}[{symbol_cabi_lower}]({memory}, {realloc}, {post_return}, {string_encoding});
+                        trampoline{} = {callee_name}[{symbol_cabi_lower}]({{{memory}{realloc}{post_return}{string_encoding}{resource_tables}}});
                     }}", trampoline.as_u32());
                 }
                 Some(BindingsMode::Optimized) => {
@@ -1072,7 +1101,7 @@ impl<'a> Instantiator<'a, '_> {
                             throw new Error('import for \"{import_name}\" does not define a Symbol.for('cabiLower') optimized binding');
                         }}");
                     }
-                    uwriteln!(self.src.js_init, "trampoline{} = {callee_name}[{symbol_cabi_lower}]({memory}, {realloc}, {post_return}, {string_encoding});", trampoline.as_u32());
+                    uwriteln!(self.src.js_init, "trampoline{} = {callee_name}[{symbol_cabi_lower}]({memory}{realloc}{post_return}{string_encoding}{resource_tables});", trampoline.as_u32());
                 }
                 Some(BindingsMode::DirectOptimized) => {
                     uwriteln!(

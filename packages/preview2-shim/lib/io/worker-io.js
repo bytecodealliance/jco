@@ -34,6 +34,7 @@ import {
   reverseMap,
 } from "./calls.js";
 import nodeProcess, { exit, stderr, stdout, env } from "node:process";
+import { rscTableGetRep } from "./low-level.js";
 
 const _rawDebug = nodeProcess._rawDebug || console.error.bind(console);
 
@@ -444,6 +445,23 @@ class Pollable {
     }
   }
 }
+
+const cabiLowerSymbol = Symbol.for('cabiLower');
+
+Pollable.prototype.ready[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
+  return function pollableReady (handle) {
+    const rep = table[(handle << 1) + 1] & ~T_FLAG;
+    const ready = ioCall(POLL_POLLABLE_READY, rep);
+    return ready ? 1 : 0;
+  }
+};
+
+Pollable.prototype.block[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
+  return function pollableBlock (handle) {
+    const rep = table[(handle << 1) + 1] & ~T_FLAG;
+    ioCall(POLL_POLLABLE_BLOCK, rep);
+  }
+};
 
 export const pollableCreate = Pollable._create;
 delete Pollable._create;
