@@ -1232,14 +1232,19 @@ impl Bindgen for FunctionBindgen<'_> {
                             // imported handles either lift as instance capture from a previous lowering,
                             // or we create a new JS class to represent it
                             let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
+                            let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
-                            uwriteln!(self.src, "var {rep} = handleTable{id}[({handle} << 1) + 1] & ~{rsc_flag};");
-                            uwriteln!(self.src, 
+                            uwriteln!(
+                                self.src,
+                                "var {rep} = handleTable{id}[({handle} << 1) + 1] & ~{rsc_flag};"
+                            );
+                            uwriteln!(self.src,
                                 "var {rsc} = captureTable{id}.get({rep});
                                 if (!{rsc}) {{
                                     {rsc} = Object.create({local_name}.prototype);
-                                    Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
+                                    Object.defineProperty({rsc}, {symbol_resource_rep}, {{ writable: true, value: {rep} }});
+                                    Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                 }}"
                             );
                             if is_own {

@@ -235,7 +235,10 @@ fn generate_test(test_name: &str, windows_skip: bool, deno: bool) -> String {
     };
 
     let should_error = match test_name {
-        "cli_exit_failure" | "cli_exit_panic" | "preview2_stream_pollable_traps" => true,
+        "cli_exit_failure"
+        | "cli_exit_panic"
+        | "preview2_stream_pollable_traps"
+        | "preview2_pollable_traps" => true,
         _ => false,
     };
 
