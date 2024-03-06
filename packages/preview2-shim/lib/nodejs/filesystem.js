@@ -325,13 +325,14 @@ class Descriptor {
   }
 
   openAt(pathFlags, path, openFlags, descriptorFlags) {
+    if (preopenEntries.length === 0)
+      throw "access";
     const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
     let fsOpenFlags = 0x0;
     if (openFlags.create) fsOpenFlags |= constants.O_CREAT;
     if (openFlags.directory) fsOpenFlags |= constants.O_DIRECTORY;
     if (openFlags.exclusive) fsOpenFlags |= constants.O_EXCL;
     if (openFlags.truncate) fsOpenFlags |= constants.O_TRUNC;
-
     if (descriptorFlags.read && descriptorFlags.write)
       fsOpenFlags |= constants.O_RDWR;
     else if (descriptorFlags.write) fsOpenFlags |= constants.O_WRONLY;
