@@ -775,31 +775,26 @@ impl<'a> Instantiator<'a, '_> {
 
                     // previous imports walk should define all imported resources which are accessible
                     // if not, then capture / disposal paths are not possible
-                    if let Some(imported_resource_local_name) =
-                        self.gen.local_names.try_get(resource)
-                    {
-                        if matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
-                            let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
-                            format!(
-                                "
-                                const rsc = captureTable{rid}.get(handleEntry.rep);
-                                if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                                captureTable{rid}.delete(handleEntry.rep);"
-                            )
-                        } else {
-                            format!(
-                                "
-                                const rsc = captureTable{rid}.get(handleEntry.rep);
-                                if (rsc) {{
-                                    if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                                    captureTable{rid}.delete(handleEntry.rep);
-                                }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
-                                    {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
-                                }}"
-                            )
-                        }
+                    let imported_resource_local_name = self.gen.local_names.get(resource_ty.ty);
+                    if matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
+                        let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
+                        format!(
+                            "
+                            const rsc = captureTable{rid}.get(handleEntry.rep);
+                            if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
+                            captureTable{rid}.delete(handleEntry.rep);"
+                        )
                     } else {
-                        "".into()
+                        format!(
+                            "
+                            const rsc = captureTable{rid}.get(handleEntry.rep);
+                            if (rsc) {{
+                                if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
+                                captureTable{rid}.delete(handleEntry.rep);
+                            }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
+                                {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
+                            }}"
+                        )
                     }
                 };
 
