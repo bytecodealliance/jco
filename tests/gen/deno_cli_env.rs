@@ -18,6 +18,8 @@ fn cli_env() -> anyhow::Result<()> {
         cmd1.arg("./tests/rundir/deno_cli_env");
         cmd1.arg("--jco-import");
         cmd1.arg("./tests/virtualenvs/envtest.js");
+        cmd1.arg("--jco-import-bindings");
+        cmd1.arg("hybrid");
         cmd1.arg(wasi_file);
         cmd1.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
         cmd1.stdin(Stdio::null());

@@ -91,6 +91,8 @@ const DENO_IGNORE: &[&str] = &[
     "preview1_unlink_file_trailing_slashes",
     "preview2_adapter_badfd",
     "preview2_ip_name_lookup",
+    "preview2_pollable_correct",
+    "preview2_pollable_traps",
     "preview2_sleep",
     "preview2_stream_pollable_correct",
     "preview2_stream_pollable_traps",

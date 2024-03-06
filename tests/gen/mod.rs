@@ -96,6 +96,8 @@ mod preview1_unicode_output;
 mod preview1_unlink_file_trailing_slashes;
 mod preview2_adapter_badfd;
 mod preview2_ip_name_lookup;
+mod preview2_pollable_correct;
+mod preview2_pollable_traps;
 mod preview2_random;
 mod preview2_sleep;
 mod preview2_stream_pollable_correct;
