@@ -176,26 +176,38 @@ const responseOutparamCreate = ResponseOutparam._create;
 delete ResponseOutparam._create;
 
 class RequestOptions {
-  #connectTimeoutMs;
-  #firstByteTimeoutMs;
-  #betweenBytesTimeoutMs;
-  connectTimeoutMs() {
-    return this.#connectTimeoutMs;
+  #connectTimeout;
+  #firstByteTimeout;
+  #betweenBytesTimeout;
+  //The WASI Duration is nanoseconds, js timers are set with Ms.
+  //We store the data as nanos, but provide TimeoutMs methods for
+  //convenience in setting timers elsewhere
+  connectTimeout() {
+    return this.#connectTimeout;
   }
-  setConnectTimeoutMs(duration) {
-    this.#connectTimeoutMs = duration;
+  connectTimeoutMs() {
+    return this.#connectTimeout / 1_000_000;
+  }
+  setConnectTimeout(duration) {
+    this.#connectTimeout = duration;
+  }
+  firstByteTimeout() {
+    return this.#firstByteTimeout;
   }
   firstByteTimeoutMs() {
-    return this.#firstByteTimeoutMs;
+    return this.#firstByteTimeout / 1_000_000;
   }
-  setFirstByteTimeoutMs(duration) {
-    this.#firstByteTimeoutMs = duration;
+  setFirstByteTimeout(duration) {
+    this.#firstByteTimeout = duration;
+  }
+  betweenBytesTimeout() {
+    return this.#betweenBytesTimeout;
   }
   betweenBytesTimeoutMs() {
-    return this.#betweenBytesTimeoutMs;
+    return this.#betweenBytesTimeout / 1_000_000;
   }
-  setBetweenBytesTimeoutMs(duration) {
-    this.#betweenBytesTimeoutMs = duration;
+  setBetweenBytesTimeout(duration) {
+    this.#betweenBytesTimeout = duration;
   }
 }
 
