@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
-use js_component_bindgen::{generate_types, source::wit_parser::Resolve};
+use js_component_bindgen::{generate_types, source::wit_parser::Resolve, BindingsMode};
 
 pub(crate) fn run() -> Result<()> {
     for world in ["wasi:http/proxy", "wasi:cli/command"] {
@@ -37,6 +37,7 @@ pub(crate) fn run() -> Result<()> {
             tracing: false,
             no_namespaced_exports: true,
             multi_memory: false,
+            import_bindings: Some(BindingsMode::Js),
         };
 
         let files = generate_types(name, resolve, world, opts)?;

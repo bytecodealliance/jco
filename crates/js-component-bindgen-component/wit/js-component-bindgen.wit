@@ -9,6 +9,13 @@ world js-component-bindgen {
     sync,
   }
 
+  variant bindings-mode {
+    js,
+    hybrid,
+    optimized,
+    direct-optimized,
+  }
+
   record generate-options {
     /// Name to use for the generated component
     name: string,
@@ -20,6 +27,9 @@ world js-component-bindgen {
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
     instantiation: option<instantiation-mode>,
+
+    /// Import bindings generation mode
+    import-bindings: option<bindings-mode>,
 
     /// Mappings of component import specifiers to JS import specifiers.
     map: option<maps>,

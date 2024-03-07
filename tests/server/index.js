@@ -33,7 +33,7 @@ export async function createIncomingServer(serverName) {
     fileURLToPath(import.meta.url.split("/").slice(0, -1).join("/")) +
       "/http-server.js",
     {
-      env: Object.assign(process.env, { PREVIEW2_SHIM_DEBUG: "0" }),
+      env: Object.assign(process.env, { PREVIEW2_SHIM_DEBUG: "0", FS: "0" }),
     }
   );
   servers.push(serverProcess);
@@ -52,6 +52,7 @@ export async function createIncomingServer(serverName) {
     const { files } = generate(component, {
       name: "component",
       noTypescript: true,
+      importBindings: { tag: 'hybrid' },
       map: Object.entries({
         "wasi:cli/*": "@bytecodealliance/preview2-shim/cli#*",
         "wasi:clocks/*": "@bytecodealliance/preview2-shim/clocks#*",

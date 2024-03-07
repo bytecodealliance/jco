@@ -52,6 +52,16 @@ impl<'a> LocalNames {
         &self.local_name_ids[&hash]
     }
 
+    pub fn try_get<H: Hash>(&'a self, unique_id: H) -> Option<&'a str> {
+        let mut new_s = self.random_state.build_hasher();
+        unique_id.hash(&mut new_s);
+        let hash = new_s.finish();
+        if !self.local_name_ids.contains_key(&hash) {
+            return None;
+        }
+        Some(&self.local_name_ids[&hash])
+    }
+
     /// get or create a unique identifier for a string while storing the lookup by unique id
     pub fn get_or_create<H: Hash>(&'a mut self, unique_id: H, goal_name: &str) -> (&'a str, bool) {
         let mut new_s = self.random_state.build_hasher();

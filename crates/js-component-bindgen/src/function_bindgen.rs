@@ -45,8 +45,9 @@ pub enum ResourceData {
 ///
 /// For a given resource id {x}, the local variables are assumed:
 /// - handleTable{x}
-/// - captureTable{x} (only for imported tables)
-/// - captureCnt{x} (only for imported tables)
+/// - captureTable{x} (rep to instance map for captured imported tables, only for JS import bindgen,
+///                    not hybrid)
+/// - captureCnt{x} for assigning capture rep
 ///
 /// For component-defined resources:
 /// - finalizationRegistry{x}
@@ -1045,17 +1046,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 self.bind_results(sig_results_length, results);
                 uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
 
-                if !self.cur_resource_borrows.is_empty() {
-                    uwriteln!(
-                        self.src,
-                        "if ({}) {{
-                            throw new Error('Resource error: borrows were not dropped');
-                        }}",
-                        self.cur_resource_borrows.join(" || ")
-                    );
-                    self.cur_resource_borrows = Vec::new();
-                }
-
                 if let Some(prefix) = self.tracing_prefix {
                     let to_result_string = self.intrinsic(Intrinsic::ToResultString);
                     uwriteln!(
@@ -1196,16 +1186,16 @@ impl Bindgen for FunctionBindgen<'_> {
                         let id = id.as_u32();
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
                         let rsc_table_remove = self.intrinsic(Intrinsic::ResourceTableRemove);
+                        let rep = format!("rep{}", self.tmp());
                         if !imported {
-                            let rep = format!("rep{}", self.tmp());
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
-                            let rsc_table_get = self.intrinsic(Intrinsic::ResourceTableGet);
+                            let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
                             uwrite!(
                                 self.src,
                                 "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
-                                 var {rep} = {rsc_table_get}(handleTable{id}, {handle}).rep;
-                                 Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
+                                var {rep} = handleTable{id}[({handle} << 1) + 1] & ~{rsc_flag};
+                                Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
                                 ",
                             );
                             if is_own {
@@ -1239,15 +1229,39 @@ impl Bindgen for FunctionBindgen<'_> {
                                 ));
                             }
                         } else {
-                            // imported handles lift as instance capture from a previous lowering
-                            let rsc_table_get = self.intrinsic(Intrinsic::ResourceTableGet);
-                            uwriteln!(self.src, "var {rsc} = captureTable{id}.get({rsc_table_get}(handleTable{id}, {handle}).rep);");
-                            // an own lifting is a transfer to JS, so handle is implicitly dropped
+                            // imported handles either lift as instance capture from a previous lowering,
+                            // or we create a new JS class to represent it
+                            let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
+                            let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
+                            let symbol_resource_handle =
+                                self.intrinsic(Intrinsic::SymbolResourceHandle);
+                            uwriteln!(
+                                self.src,
+                                "var {rep} = handleTable{id}[({handle} << 1) + 1] & ~{rsc_flag};"
+                            );
+                            uwriteln!(self.src,
+                                "var {rsc} = captureTable{id}.get({rep});
+                                if (!{rsc}) {{
+                                    {rsc} = Object.create({local_name}.prototype);
+                                    Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
+                                    Object.defineProperty({rsc}, {symbol_resource_rep}, {{ writable: true, value: {rep} }});
+                                }}"
+                            );
                             if is_own {
+                                // an own lifting is a transfer to JS, so existing own handle is implicitly dropped
                                 uwriteln!(
                                     self.src,
-                                    "captureTable{id}.delete({rsc_table_remove}(handleTable{id}, {handle}).rep);"
+                                    "else {{
+                                        captureTable{id}.delete({rep});
+                                    }}
+                                    {rsc_table_remove}(handleTable{id}, {handle});"
                                 );
+                            } else {
+                                // if lifting a borrow, that was not previously captured, create the class
+                                self.cur_resource_borrows.push(format!(
+                                    "{}[{symbol_resource_handle}] = null;",
+                                    rsc.to_string()
+                                ));
                             }
                         }
                     }
@@ -1318,78 +1332,72 @@ impl Bindgen for FunctionBindgen<'_> {
                     ResourceData::Host { id, local_name, .. } => {
                         let id = id.as_u32();
                         if !imported {
-                            let rep = format!("rep{}", self.tmp());
-
                             uwriteln!(
                                 self.src,
-                                "var {rep} = {op}[{symbol_resource_handle}];
-                                if ({rep} === null) {{
-                                    throw new Error('Resource error: \"{class_name}\" lifetime expired.');
-                                }}
-                                if ({rep} === undefined) {{
+                                "var {handle} = {op}[{symbol_resource_handle}];
+                                if (!{handle}) {{
                                     throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
                                 }}
                                 ",
                             );
 
-                            // Own resources of own components lowered into the component
-                            // still need handle table tracking of their rep value, by creating
-                            // a new handle for this.
-                            // The class representation of that own resource is still disposed
-                            // though, and their finalizers deregistered as well.
                             if is_own {
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
-                                let rsc_table_create_own =
-                                    self.intrinsic(Intrinsic::ResourceTableCreateOwn);
                                 uwriteln!(
                                     self.src,
-                                    "var {handle} = {rsc_table_create_own}(handleTable{id}, {rep});
-                                    finalizationRegistry{id}.unregister({op});
+                                    "finalizationRegistry{id}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
                                     {op}[{symbol_resource_handle}] = null;"
                                 );
-                            } else {
-                                // it is only in the local borrow case where we can simplify the handle
-                                // to just be the original rep value and don't need to track an
-                                // explicit handle lifetime.
-                                uwriteln!(self.src, "var {handle} = {rep};");
                             }
                         } else {
-                            // imported resources are always given a unique handle
+                            // imported resources may already have a handle if they were constructed
+                            // by a component and then passed out
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {local_name})) {{
                                      throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
-                                 captureTable{id}.set(++captureCnt{id}, {op});"
+                                 var {handle} = {op}[{symbol_resource_handle}];
+                                 "
                             );
+                            // otherwise, in hybrid bindgen we check for a Symbol.for('cabiRep')
+                            // to get the resource rep
+                            // fall back to assign a new rep in the capture table, when the imported
+                            // resource was constructed externally
                             if is_own {
-                                let rsc_table_create_own =
+                                let symbol_resource_rep =
+                                    self.intrinsic(Intrinsic::SymbolResourceRep);
+                                let rsc_table_create =
                                     self.intrinsic(Intrinsic::ResourceTableCreateOwn);
                                 uwriteln!(
                                     self.src,
-                                    "var {handle} = {rsc_table_create_own}(handleTable{id}, captureCnt{id});",
+                                    "if (!{handle}) {{
+                                        let rep = {op}[{symbol_resource_rep}];
+                                        if (!rep) {{
+                                           captureTable{id}.set(++captureCnt{id}, {op});
+                                           rep = captureCnt{id};
+                                        }} else {{
+                                            {op}[{symbol_resource_rep}] = null;
+                                        }}
+                                        {handle} = {rsc_table_create}(handleTable{id}, rep);
+                                    }}"
                                 );
                             } else {
-                                let rsc_table_create_borrow =
+                                let symbol_resource_rep =
+                                    self.intrinsic(Intrinsic::SymbolResourceRep);
+                                let rsc_table_create =
                                     self.intrinsic(Intrinsic::ResourceTableCreateBorrow);
                                 uwriteln!(
                                     self.src,
-                                    "var {handle} = {rsc_table_create_borrow}(handleTable{id}, captureCnt{id});",
+                                    "if (!{handle}) {{
+                                        if (!{op}[{symbol_resource_rep}]) {{
+                                            captureTable{id}.set(++captureCnt{id}, {op});
+                                        }}
+                                        {handle} = {rsc_table_create}(handleTable{id}, {op}[{symbol_resource_rep}] || captureCnt{id});
+                                    }}"
                                 );
-                            }
-
-                            // track lowered borrows to ensure they are dropped
-                            // cur_resource_borrows can be reused because:
-                            // - it is not possible to have a Wasm call that lifts a a borrow handle argument
-                            //   and wasm calls cannot return borrow handles for lifting
-                            // - conversely, it is not possible to have a JS call that lowers a borrow handle argument
-                            //   and JS calls cannot return borrows for lowering
-                            if !is_own && !self.valid_lifting_optimization {
-                                let rsc_table_get = self.intrinsic(Intrinsic::ResourceTableGet);
-                                self.cur_resource_borrows
-                                    .push(format!("{rsc_table_get}(handleTable{id}, {handle})"));
-                            }
+                            };
                         }
                     }
 

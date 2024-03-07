@@ -411,24 +411,19 @@ function pollableDispose(id) {
   ioCall(POLL_POLLABLE_DISPOSE, id);
 }
 
+const rep = Symbol.for("cabiRep");
+
 class Pollable {
-  #id;
   #finalizer;
   ready() {
-    if (this.#id === 0) return true;
-    return ioCall(POLL_POLLABLE_READY, this.#id);
+    return ioCall(POLL_POLLABLE_READY, this[rep]);
   }
   block() {
-    if (this.#id !== 0) {
-      ioCall(POLL_POLLABLE_BLOCK, this.#id);
-    }
-  }
-  static _getId(pollable) {
-    return pollable.#id;
+    ioCall(POLL_POLLABLE_BLOCK, this[rep]);
   }
   static _create(id, parent) {
     const pollable = new Pollable();
-    pollable.#id = id;
+    pollable[rep] = id;
     pollable.#finalizer = registerDispose(
       pollable,
       parent,
@@ -438,26 +433,88 @@ class Pollable {
     return pollable;
   }
   [symbolDispose]() {
-    if (this.#finalizer) {
+    if (this.#finalizer && this[rep]) {
       earlyDispose(this.#finalizer);
       this.#finalizer = null;
     }
   }
 }
 
+const cabiLowerSymbol = Symbol.for("cabiLower");
+const T_FLAG = 1 << 30;
+
+Pollable.prototype.ready[cabiLowerSymbol] = function ({
+  resourceTables: [table],
+}) {
+  return function pollableReady(handle) {
+    const rep = table[(handle << 1) + 1] & ~T_FLAG;
+    const ready = ioCall(POLL_POLLABLE_READY, rep);
+    return ready ? 1 : 0;
+  };
+};
+
+Pollable.prototype.block[cabiLowerSymbol] = function ({
+  resourceTables: [table],
+}) {
+  return function pollableBlock(handle) {
+    const rep = table[(handle << 1) + 1] & ~T_FLAG;
+    ioCall(POLL_POLLABLE_BLOCK, rep);
+  };
+};
+
+Pollable[Symbol.for("cabiDispose")] = function pollableDispose(rep) {
+  ioCall(POLL_POLLABLE_DISPOSE, rep);
+};
+
 export const pollableCreate = Pollable._create;
 delete Pollable._create;
-
-const pollableGetId = Pollable._getId;
-delete Pollable._getId;
 
 export const poll = {
   Pollable,
   poll(list) {
-    return ioCall(POLL_POLL_LIST, null, list.map(pollableGetId));
+    return ioCall(
+      POLL_POLL_LIST,
+      null,
+      list.map((pollable) => pollable[rep])
+    );
   },
+};
+
+poll.poll[cabiLowerSymbol] = function ({ memory, realloc, resourceTables: [table] }) {
+  return function pollPollList (listPtr, len, retptr) {
+    const handleList = new Uint32Array(memory.buffer, listPtr, len);
+    const repList = Array(len);
+    for (let i = 0; i < len; i++) {
+      const handle = handleList[i];
+      repList[i] = table[(handle << 1) + 1] & ~T_FLAG;
+    }
+    const result = ioCall(POLL_POLL_LIST, null, repList);
+    const ptr = realloc(0, 0, 4, result.byteLength);
+    const out = new Uint32Array(memory.buffer, ptr, result.length);
+    out.set(result);
+    const ret = new Uint32Array(memory.buffer, retptr, 2);
+    ret[0] = ptr;
+    ret[1] = result.length;
+    return retptr;
+  };
 };
 
 export function createPoll(call, id, initPayload) {
   return pollableCreate(ioCall(call, id, initPayload));
+}
+
+export function createPollLower(call, id, table) {
+  return function (initPayload) {
+    const rep = ioCall(call, id, initPayload);
+    const free = table[0] & ~T_FLAG;
+    if (free === 0) {
+      table.push(0);
+      table.push(rep | T_FLAG);
+      return (table.length >> 1) - 1;
+    }
+    table[0] = table[free << 1];
+    table[free << 1] = 0;
+    table[(free << 1) + 1] = rep | T_FLAG;
+    return free;
+  };
 }

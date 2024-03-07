@@ -80,6 +80,7 @@ async function wasm2Js (source) {
  * @param {{
  *   name: string,
  *   instantiation?: 'async' | 'sync',
+ *   importBindings?: 'js' | 'optimized', 'hybrid', 'direct-optimized',
  *   map?: Record<string, string>,
  *   validLiftingOptimization?: bool,
  *   tracing?: bool,
@@ -133,6 +134,7 @@ export async function transpileComponent (component, opts = {}) {
     name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? {}),
     instantiation,
+    importBindings: opts.importBindings ? { tag: opts.importBindings } : null,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     tracing: opts.tracing ?? false,
     noNodejsCompat: opts.nodejsCompat === false,

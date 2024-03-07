@@ -46,6 +46,17 @@ impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
     }
 }
 
+impl From<BindingsMode> for js_component_bindgen::BindingsMode {
+    fn from(value: BindingsMode) -> Self {
+        match value {
+            BindingsMode::Js => js_component_bindgen::BindingsMode::Js,
+            BindingsMode::DirectOptimized => js_component_bindgen::BindingsMode::DirectOptimized,
+            BindingsMode::Optimized => js_component_bindgen::BindingsMode::Optimized,
+            BindingsMode::Hybrid => js_component_bindgen::BindingsMode::Hybrid,
+        }
+    }
+}
+
 struct JsComponentBindgenComponent;
 
 export!(JsComponentBindgenComponent);
@@ -67,6 +78,7 @@ impl Guest for JsComponentBindgenComponent {
             tracing: options.tracing.unwrap_or(false),
             no_namespaced_exports: options.no_namespaced_exports.unwrap_or(false),
             multi_memory: options.multi_memory.unwrap_or(false),
+            import_bindings: options.import_bindings.map(Into::into),
         };
 
         let js_component_bindgen::Transpiled {
@@ -134,6 +146,7 @@ impl Guest for JsComponentBindgenComponent {
             tracing: false,
             no_namespaced_exports: false,
             multi_memory: false,
+            import_bindings: None,
         };
 
         let files = generate_types(name, resolve, world, opts).map_err(|e| e.to_string())?;

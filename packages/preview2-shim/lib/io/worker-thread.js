@@ -18,7 +18,6 @@ import {
   CALL_TYPE_MASK,
   CLOCKS_DURATION_SUBSCRIBE,
   CLOCKS_INSTANT_SUBSCRIBE,
-  CLOCKS_NOW,
   FILE,
   FUTURE_DISPOSE,
   FUTURE_SUBSCRIBE,
@@ -537,8 +536,6 @@ function handle(call, id, payload) {
     }
 
     // Clocks
-    case CLOCKS_NOW:
-      return hrtime.bigint();
     case CLOCKS_DURATION_SUBSCRIBE:
       payload = hrtime.bigint() + payload;
     // fallthrough
@@ -776,7 +773,9 @@ function handle(call, id, payload) {
         pollStateCheck(pollState);
         if (pollState.ready) doneList.push(idx);
       }
-      if (doneList.length > 0) return new Uint32Array(doneList);
+      if (doneList.length > 0) {
+        return new Uint32Array(doneList);
+      }
       let readyPromiseResolve;
       const readyPromise = new Promise(
         (resolve) => void (readyPromiseResolve = resolve)

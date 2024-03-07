@@ -37,12 +37,6 @@ use wit_parser::{
     WorldItem, WorldKey,
 };
 
-#[derive(Hash)]
-struct ResourceInstance<'a> {
-    resource_id: TypeId,
-    import: Option<&'a str>,
-}
-
 #[derive(Default, Clone)]
 pub struct TranspileOpts {
     pub name: String,
@@ -52,6 +46,9 @@ pub struct TranspileOpts {
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
     pub instantiation: Option<InstantiationMode>,
+    /// Configure how import bindings are provided, as high-level JS bindings,
+    /// or as hybrid optimized bindings.
+    pub import_bindings: Option<BindingsMode>,
     /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of
     /// component import specifiers to JS import specifiers.
     pub map: Option<HashMap<String, String>>,
@@ -91,6 +88,15 @@ enum CallType {
     FirstArgIsThis,
     /// Imported resource method calls - callee is a member of the parameter
     CalleeResourceDispatch,
+}
+
+#[derive(Default, Clone, Debug)]
+pub enum BindingsMode {
+    Hybrid,
+    #[default]
+    Js,
+    Optimized,
+    DirectOptimized,
 }
 
 struct JsBindgen<'a> {
@@ -523,7 +529,26 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
+        // We push lower import initializers down to right before instantiate, so that the
+        // memory, realloc and postReturn functions are available to the import lowerings
+        // for optimized bindgen
+        let mut lower_import_initializers = Vec::new();
         for init in self.component.initializers.iter() {
+            match init {
+                GlobalInitializer::InstantiateModule(_) => {
+                    for init in lower_import_initializers.drain(..) {
+                        self.instantiation_global_initializer(init);
+                    }
+                }
+                GlobalInitializer::LowerImport { .. } => {
+                    lower_import_initializers.push(init);
+                    continue;
+                }
+                _ => {}
+            }
+            self.instantiation_global_initializer(init);
+        }
+        for init in lower_import_initializers.drain(..) {
             self.instantiation_global_initializer(init);
         }
 
@@ -557,8 +582,23 @@ impl<'a> Instantiator<'a, '_> {
         for id in ids_to_ensure {
             self.ensure_resource_table(id);
         }
+        if self
+            .gen
+            .all_intrinsics
+            .contains(&Intrinsic::ResourceTransferBorrow)
+            || self
+                .gen
+                .all_intrinsics
+                .contains(&Intrinsic::ResourceTransferBorrowValidLifting)
+        {
+            let imported_resource_cnt = Intrinsic::ImportedResourceCnt.name();
+            let val = self.component.imported_resources.len();
+            uwrite!(self.src.js, "const {imported_resource_cnt} = {val};");
+        }
     }
 
+    // instead of always outputting resource tables for all resources, only
+    // define resource tables that are explicitly used
     fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
         let rid = id.as_u32();
         if !self.resource_tables_initialized[rid as usize] {
@@ -589,14 +629,11 @@ impl<'a> Instantiator<'a, '_> {
             let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
 
             if is_imported {
-                // imported resouces have both a rep table and a rep assignment
-                // for captured resource classes to assign them a rep numbering
                 uwriteln!(
                     self.src.js,
                     "const handleTable{rid} = [{rsc_table_flag}, 0];
                     const captureTable{rid} = new Map();
-                    let captureCnt{rid} = 0;
-                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, i: captureTable{rid}.get.bind(captureTable{rid}) }});",
+                    let captureCnt{rid} = 0;"
                 );
             } else {
                 uwriteln!(
@@ -605,10 +642,10 @@ impl<'a> Instantiator<'a, '_> {
                     const finalizationRegistry{rid} = new FinalizationRegistry((handle) => {{
                         const {{ rep }} = {rsc_table_remove}(handleTable{rid}, handle);{maybe_dtor}
                     }});
-                    {handle_tables}.set({rid}, {{ t: handleTable{rid}, i: null }});
                     ",
                 );
             }
+            uwriteln!(self.src.js, "{handle_tables}[{rid}] = handleTable{rid};");
             self.resource_tables_initialized[rid as usize] = true;
         }
     }
@@ -647,16 +684,16 @@ impl<'a> Instantiator<'a, '_> {
             // these are hoisted before initialization
             Trampoline::LowerImport { .. } => {}
 
-            // This is only used for a "degenerate component" which internally
-            // has a function that always traps. While this should be trivial to
-            // implement (generate a JS function that always throws) there's no
-            // way to test this at this time so leave this unimplemented.
-            Trampoline::AlwaysTrap => unimplemented!(),
+            Trampoline::AlwaysTrap => {
+                uwrite!(
+                    self.src.js,
+                    "function trampoline{i}(rep) {{
+                        throw new Error('AlwaysTrap');
+                    }}
+                "
+                );
+            }
 
-            // This is required when strings pass between components within a
-            // component and may change encodings. This is left unimplemented
-            // for now since it can't be tested and additionally JS doesn't
-            // support multi-memory which transcoders rely on anyway.
             Trampoline::Transcoder {
                 op,
                 from,
@@ -711,18 +748,20 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceRep(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
-                let rsc_table_get = self.gen.intrinsic(Intrinsic::ResourceTableGet);
+                let rsc_flag = self.gen.intrinsic(Intrinsic::ResourceTableFlag);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {rsc_table_get}.bind(null, handleTable{rid});"
+                    "function trampoline{i} (handle) {{
+                        return handleTable{rid}[(handle << 1) + 1] & ~{rsc_flag};
+                    }}"
                 );
             }
             Trampoline::ResourceDrop(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
-                let resource = &self.types[*resource];
+                let resource_ty = &self.types[*resource];
                 let dtor = if let Some(resource_idx) =
-                    self.component.defined_resource_index(resource.ty)
+                    self.component.defined_resource_index(resource_ty.ty)
                 {
                     let resource_def = self
                         .component
@@ -735,28 +774,47 @@ impl<'a> Instantiator<'a, '_> {
                         .unwrap();
 
                     if let Some(dtor) = &resource_def.dtor {
-                        format!("{}(handleEntry.rep);", self.core_def(dtor))
+                        format!(
+                            "
+                            {}(handleEntry.rep);",
+                            self.core_def(dtor)
+                        )
                     } else {
                         "".into()
                     }
                 } else {
-                    // if there is a Symbol.dispose handler, call it explicitly for imported
-                    // resources when the resource is dropped
+                    // imported resource is one without a defined resource index
+                    // if it is a captured instance (class instance was created externally so had to
+                    // be assigned a rep), and there is a Symbol.dispose handler, call it explicitly
+                    // for imported resources when the resource is dropped, otherwise
+                    // if it is an instance without a captured class definition, then call the
+                    // low-level bindgen destructor
                     let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
+                    let symbol_cabi_dispose = self.gen.intrinsic(Intrinsic::SymbolCabiDispose);
+
+                    // previous imports walk should define all imported resources which are accessible
+                    // if not, then capture / disposal paths are not possible
+                    let imported_resource_local_name = self.gen.local_names.get(resource_ty.ty);
                     format!(
-                        "const rsc = captureTable{rid}.get(handleEntry.rep);
-                        if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                        captureTable{rid}.delete(handleEntry.rep);"
+                        "
+                        const rsc = captureTable{rid}.get(handleEntry.rep);
+                        if (rsc) {{
+                            if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
+                            captureTable{rid}.delete(handleEntry.rep);
+                        }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
+                            {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
+                        }}"
                     )
                 };
 
+                // If the unexpected borrow handle case does ever happen in further testing,
+                // then we must handle this.
                 let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
                         const handleEntry = {rsc_table_remove}(handleTable{rid}, handle);
-                        if (!handleEntry.own) throw new Error('Unexpected borrow handle');
-                        {dtor}
+                        if (!handleEntry.own) throw new Error('Internal error: Unexpected borrow handle');{dtor}
                     }}
                     ",
                 );
@@ -789,17 +847,18 @@ impl<'a> Instantiator<'a, '_> {
                 let scope_id = self.gen.intrinsic(Intrinsic::ScopeId);
                 let resource_borrows = self.gen.intrinsic(Intrinsic::ResourceCallBorrows);
                 let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
-                let rsc_table_try_get = self.gen.intrinsic(Intrinsic::ResourceTableCreateOwn);
+                // To verify that borrows are dropped, it is enough to verify that the handle
+                // either no longer exists (part of free list) or belongs to another scope, since
+                // the enter call closed off the ability to create new handles in the parent scope
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}() {{
-                        for (const {{ rid, handle, rep, scope }} of {resource_borrows}) {{
-                            const entry = {rsc_table_try_get}({handle_tables}.get(rid), handle);
-                            if (entry && entry.rep === rep && entry.scope === scope)
-                                throw new Error('borrow was not dropped for resource transfer call');
+                        {scope_id}--;
+                        for (const {{ rid, handle }} of {resource_borrows}) {{
+                            if ({handle_tables}[rid][handle << 1] === {scope_id})
+                                throw new Error('borrows not dropped for resource call');
                         }}
                         {resource_borrows} = [];
-                        {scope_id}--;
                     }}
                     ",
                 );
@@ -920,26 +979,37 @@ impl<'a> Instantiator<'a, '_> {
         let (options, trampoline, _) = self.lowering_options[index];
 
         let (import_index, path) = &self.component.imports[import];
-        let (import_name, _) = &self.component.import_types[*import_index];
+        let (import_name, import_ty) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, import_name);
 
-        let (func, func_name, iface_name) =
+        let (func, func_name, iface_name, func_ty) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
                     assert_eq!(path.len(), 0);
-                    (func, import_name, None)
+                    let TypeDef::ComponentFunc(func_ty) = import_ty else {
+                        unreachable!()
+                    };
+                    (func, import_name, None, func_ty)
                 }
                 WorldItem::Interface(i) => {
                     assert_eq!(path.len(), 1);
+                    let TypeDef::ComponentInstance(instance) = import_ty else {
+                        unreachable!()
+                    };
+                    let import_ty = &self.types[*instance];
                     let iface = &self.resolve.interfaces[*i];
                     let func = &iface.functions[&path[0]];
+                    let TypeDef::ComponentFunc(func_ty) = &import_ty.exports[&func.name] else {
+                        unreachable!()
+                    };
                     (
                         func,
                         &path[0],
                         Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
+                        func_ty,
                     )
                 }
                 WorldItem::Type(_) => unreachable!(),
@@ -1000,24 +1070,113 @@ impl<'a> Instantiator<'a, '_> {
             .wasm_signature(AbiVariant::GuestImport, func)
             .params
             .len();
+        match self.gen.opts.import_bindings {
+            None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
+                uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
+                self.bindgen(
+                    nparams,
+                    call_type,
+                    if import_name.is_empty() {
+                        None
+                    } else {
+                        Some(import_name)
+                    },
+                    &callee_name,
+                    options,
+                    func,
+                    AbiVariant::GuestImport,
+                    false,
+                );
+                uwriteln!(self.src.js, "");
+            }
+            Some(BindingsMode::Optimized) | Some(BindingsMode::DirectOptimized) => {
+                uwriteln!(self.src.js, "let trampoline{};", trampoline.as_u32());
+            }
+        };
+        if !matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
+            let memory = options
+                .memory
+                .map(|idx| format!(" memory: memory{},", idx.as_u32()))
+                .unwrap_or("".into());
+            let realloc = options
+                .realloc
+                .map(|idx| format!(" realloc: realloc{},", idx.as_u32()))
+                .unwrap_or("".into());
+            let post_return = options
+                .post_return
+                .map(|idx| format!(" postReturn: postReturn{},", idx.as_u32()))
+                .unwrap_or("".into());
+            let string_encoding = match options.string_encoding {
+                component::StringEncoding::Utf8 => "",
+                component::StringEncoding::Utf16 => " stringEncoding: 'utf16',",
+                component::StringEncoding::CompactUtf16 => " stringEncoding: 'compact-utf16',",
+            };
+            let callee_name = match func.kind {
+                FunctionKind::Static(_) | FunctionKind::Freestanding => callee_name.to_string(),
+                FunctionKind::Method(ty) => format!(
+                    "{}.prototype.{}",
+                    match &self.imports_resource_map[&ty].data {
+                        ResourceData::Host { local_name, .. } => {
+                            self.gen.esm_bindgen.ensure_import_binding(local_name);
+                            local_name
+                        }
+                        ResourceData::Guest { .. } => unreachable!(),
+                    },
+                    callee_name
+                ),
+                FunctionKind::Constructor(_) => callee_name[4..].to_string(),
+            };
+            let resource_tables = {
+                let mut resource_tables: Vec<TypeResourceTableIndex> = Vec::new();
 
-        uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
-        self.bindgen(
-            nparams,
-            call_type,
-            if import_name.is_empty() {
-                None
-            } else {
-                Some(import_name)
-            },
-            &callee_name,
-            options,
-            func,
-            AbiVariant::GuestImport,
-            false,
-        );
-        uwriteln!(self.src.js, "");
-
+                let func_ty = &self.types[*func_ty];
+                let params_ty = &self.types[func_ty.params];
+                let results_ty = &self.types[func_ty.results];
+                for iface_ty in params_ty.types.iter() {
+                    self.collect_resource_types(iface_ty, &mut resource_tables);
+                }
+                for iface_ty in results_ty.types.iter() {
+                    self.collect_resource_types(iface_ty, &mut resource_tables);
+                }
+                if resource_tables.len() == 0 {
+                    "".to_string()
+                } else {
+                    format!(
+                        " resourceTables: [{}],",
+                        resource_tables
+                            .iter()
+                            .map(|x| format!("handleTable{}", x.as_u32().to_string()))
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    )
+                }
+            };
+            match self.gen.opts.import_bindings {
+                Some(BindingsMode::Hybrid) => {
+                    let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
+                    uwriteln!(self.src.js_init, "if ({callee_name}[{symbol_cabi_lower}]) {{
+                        trampoline{} = {callee_name}[{symbol_cabi_lower}]({{{memory}{realloc}{post_return}{string_encoding}{resource_tables}}});
+                    }}", trampoline.as_u32());
+                }
+                Some(BindingsMode::Optimized) => {
+                    let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
+                    if !self.gen.opts.valid_lifting_optimization {
+                        uwriteln!(self.src.js_init, "if (!{callee_name}[{symbol_cabi_lower}]) {{
+                            throw new Error('import for \"{import_name}\" does not define a Symbol.for('cabiLower') optimized binding');
+                        }}");
+                    }
+                    uwriteln!(self.src.js_init, "trampoline{} = {callee_name}[{symbol_cabi_lower}]({memory}{realloc}{post_return}{string_encoding}{resource_tables});", trampoline.as_u32());
+                }
+                Some(BindingsMode::DirectOptimized) => {
+                    uwriteln!(
+                        self.src.js_init,
+                        "trampoline{} = {callee_name}({memory}, {realloc}, {post_return}, {string_encoding});",
+                        trampoline.as_u32()
+                    );
+                }
+                None | Some(BindingsMode::Js) => unreachable!(),
+            };
+        }
         let (import_name, binding_name) = match func.kind {
             FunctionKind::Freestanding => (func_name.to_lower_camel_case(), callee_name),
             FunctionKind::Method(tid)
@@ -1120,11 +1279,8 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let ty = &self.resolve.types[resource_id];
-        let resource = ty.name.as_ref().unwrap();
+        let resource_name = ty.name.as_ref().unwrap().to_upper_camel_case();
 
-        let resource_name = resource.to_upper_camel_case();
-
-        // ensure imported resources are imported
         let local_name = if imported {
             let (world_key, iface_name) = match ty.owner {
                 wit_parser::TypeOwner::World(world) => (
@@ -1156,13 +1312,7 @@ impl<'a> Instantiator<'a, '_> {
             };
 
             let import_name = self.resolve.name_world_key(&world_key);
-            let (local_name, _) = self.gen.local_names.get_or_create(
-                ResourceInstance {
-                    resource_id,
-                    import: Some(&import_name),
-                },
-                &resource_name,
-            );
+            let (local_name, _) = self.gen.local_names.get_or_create(resource, &resource_name);
 
             let local_name_str = local_name.to_string();
 
@@ -1181,14 +1331,7 @@ impl<'a> Instantiator<'a, '_> {
 
             local_name_str
         } else {
-            let (local_name, _) = self.gen.local_names.get_or_create(
-                ResourceInstance {
-                    resource_id,
-                    import: None,
-                },
-                &resource_name,
-            );
-
+            let (local_name, _) = self.gen.local_names.get_or_create(resource, &resource_name);
             local_name.to_string()
         };
 
@@ -1268,6 +1411,69 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
             (_, _) => unreachable!(),
+        }
+    }
+
+    fn collect_resource_types(
+        &mut self,
+        iface_ty: &InterfaceType,
+        resources: &mut Vec<TypeResourceTableIndex>,
+    ) {
+        match iface_ty {
+            InterfaceType::Flags(_) | InterfaceType::Enum(_) => {}
+            InterfaceType::Record(t) => {
+                let t = &self.types[*t];
+                for f in t.fields.iter() {
+                    self.collect_resource_types(&f.ty, resources);
+                }
+            }
+            InterfaceType::Own(t) | InterfaceType::Borrow(t) => {
+                resources.push(*t);
+            }
+            InterfaceType::Tuple(t) => {
+                let t = &self.types[*t];
+                for f in t.types.iter() {
+                    self.collect_resource_types(f, resources);
+                }
+            }
+            InterfaceType::Variant(t) => {
+                let t = &self.types[*t];
+                for f in t.cases.iter() {
+                    if let Some(ty) = f.ty {
+                        self.collect_resource_types(&ty, resources);
+                    }
+                }
+            }
+            InterfaceType::Option(t) => {
+                let t = &self.types[*t];
+                self.collect_resource_types(&t.ty, resources);
+            }
+            InterfaceType::Result(t) => {
+                let t = &self.types[*t];
+                if let Some(ok) = &t.ok {
+                    self.collect_resource_types(&ok, resources);
+                }
+                if let Some(err) = &t.err {
+                    self.collect_resource_types(&err, resources);
+                }
+            }
+            InterfaceType::List(t) => {
+                let t = &self.types[*t];
+                self.collect_resource_types(&t.element, resources);
+            }
+            InterfaceType::Bool
+            | InterfaceType::S8
+            | InterfaceType::U8
+            | InterfaceType::S16
+            | InterfaceType::U16
+            | InterfaceType::S32
+            | InterfaceType::U32
+            | InterfaceType::S64
+            | InterfaceType::U64
+            | InterfaceType::Float32
+            | InterfaceType::Float64
+            | InterfaceType::Char
+            | InterfaceType::String => {}
         }
     }
 
@@ -1536,10 +1742,13 @@ impl<'a> Instantiator<'a, '_> {
                     | FunctionKind::Method(resource_id)
                     | FunctionKind::Static(resource_id) = func.kind
                     {
-                        self.gen.local_names.get(ResourceInstance {
-                            resource_id,
-                            import: None,
-                        })
+                        let ResourceData::Host { id, .. } =
+                            &self.exports_resource_map.get(&resource_id).unwrap().data
+                        else {
+                            unreachable!()
+                        };
+                        let resource = self.types[*id].ty;
+                        self.gen.local_names.get(resource)
                     } else {
                         self.gen.local_names.create_once(export_name)
                     }
@@ -1589,10 +1798,13 @@ impl<'a> Instantiator<'a, '_> {
                         | FunctionKind::Method(resource_id)
                         | FunctionKind::Static(resource_id) = func.kind
                         {
-                            self.gen.local_names.get(ResourceInstance {
-                                resource_id,
-                                import: None,
-                            })
+                            let ResourceData::Host { id, .. } =
+                                &self.exports_resource_map.get(&resource_id).unwrap().data
+                            else {
+                                unreachable!()
+                            };
+                            let resource = self.types[*id].ty;
+                            self.gen.local_names.get(resource)
                         } else {
                             self.gen.local_names.create_once(func_name)
                         }

@@ -1,6 +1,11 @@
 import { _forbiddenHeaders, HTTPServer } from '@bytecodealliance/preview2-shim/http';
+import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
+import process from "node:process";
 
 _forbiddenHeaders.add('custom-forbidden-header');
+
+if (process.env.FS === "0")
+  _setPreopens({});
 
 let server;
 process.on('message', async msg => {
@@ -37,6 +42,7 @@ process.on('message', async msg => {
     });
 
   } catch (e) {
+    process._rawDebug(e);
     console.error(`Error updating server handler to ${msg}`);
     console.error(e);
     process.exit(1);
