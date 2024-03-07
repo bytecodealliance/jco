@@ -152,6 +152,8 @@ class Descriptor {
     try {
       ftruncateSync(this.#fd, Number(size));
     } catch (e) {
+      if (isWindows && e.code === 'EPERM')
+        throw 'access';
       throw convertFsError(e);
     }
   }
