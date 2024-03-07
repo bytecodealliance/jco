@@ -529,7 +529,26 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
+        // We push lower import initializers down to right before instantiate, so that the
+        // memory, realloc and postReturn functions are available to the import lowerings
+        // for optimized bindgen
+        let mut lower_import_initializers = Vec::new();
         for init in self.component.initializers.iter() {
+            match init {
+                GlobalInitializer::InstantiateModule(_) => {
+                    for init in lower_import_initializers.drain(..) {
+                        self.instantiation_global_initializer(init);
+                    }
+                }
+                GlobalInitializer::LowerImport { .. } => {
+                    lower_import_initializers.push(init);
+                    continue;
+                }
+                _ => {}
+            }
+            self.instantiation_global_initializer(init);
+        }
+        for init in lower_import_initializers.drain(..) {
             self.instantiation_global_initializer(init);
         }
 
@@ -776,26 +795,16 @@ impl<'a> Instantiator<'a, '_> {
                     // previous imports walk should define all imported resources which are accessible
                     // if not, then capture / disposal paths are not possible
                     let imported_resource_local_name = self.gen.local_names.get(resource_ty.ty);
-                    if matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
-                        let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
-                        format!(
-                            "
-                            const rsc = captureTable{rid}.get(handleEntry.rep);
+                    format!(
+                        "
+                        const rsc = captureTable{rid}.get(handleEntry.rep);
+                        if (rsc) {{
                             if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                            captureTable{rid}.delete(handleEntry.rep);"
-                        )
-                    } else {
-                        format!(
-                            "
-                            const rsc = captureTable{rid}.get(handleEntry.rep);
-                            if (rsc) {{
-                                if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                                captureTable{rid}.delete(handleEntry.rep);
-                            }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
-                                {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
-                            }}"
-                        )
-                    }
+                            captureTable{rid}.delete(handleEntry.rep);
+                        }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
+                            {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
+                        }}"
+                    )
                 };
 
                 // If the unexpected borrow handle case does ever happen in further testing,

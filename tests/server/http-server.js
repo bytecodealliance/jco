@@ -42,6 +42,7 @@ process.on('message', async msg => {
     });
 
   } catch (e) {
+    process._rawDebug(e);
     console.error(`Error updating server handler to ${msg}`);
     console.error(e);
     process.exit(1);

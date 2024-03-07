@@ -52,6 +52,7 @@ export async function createIncomingServer(serverName) {
     const { files } = generate(component, {
       name: "component",
       noTypescript: true,
+      importBindings: { tag: 'hybrid' },
       map: Object.entries({
         "wasi:cli/*": "@bytecodealliance/preview2-shim/cli#*",
         "wasi:clocks/*": "@bytecodealliance/preview2-shim/clocks#*",

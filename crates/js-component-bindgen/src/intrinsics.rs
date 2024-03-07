@@ -372,7 +372,7 @@ pub fn render_intrinsics(
             "),
 
             Intrinsic::SymbolResourceHandle => output.push_str("
-                const symbolRscHandle = Symbol('resource');
+                const symbolRscHandle = Symbol('handle');
             "),
 
             Intrinsic::SymbolResourceRep => output.push_str("

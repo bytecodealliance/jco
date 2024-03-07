@@ -1243,8 +1243,8 @@ impl Bindgen for FunctionBindgen<'_> {
                                 "var {rsc} = captureTable{id}.get({rep});
                                 if (!{rsc}) {{
                                     {rsc} = Object.create({local_name}.prototype);
-                                    Object.defineProperty({rsc}, {symbol_resource_rep}, {{ writable: true, value: {rep} }});
                                     Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
+                                    Object.defineProperty({rsc}, {symbol_resource_rep}, {{ writable: true, value: {rep} }});
                                 }}"
                             );
                             if is_own {
@@ -1365,21 +1365,39 @@ impl Bindgen for FunctionBindgen<'_> {
                             // to get the resource rep
                             // fall back to assign a new rep in the capture table, when the imported
                             // resource was constructed externally
-                            let rsc_table_create = if is_own {
-                                self.intrinsic(Intrinsic::ResourceTableCreateOwn)
+                            if is_own {
+                                let symbol_resource_rep =
+                                    self.intrinsic(Intrinsic::SymbolResourceRep);
+                                let rsc_table_create =
+                                    self.intrinsic(Intrinsic::ResourceTableCreateOwn);
+                                uwriteln!(
+                                    self.src,
+                                    "if (!{handle}) {{
+                                        let rep = {op}[{symbol_resource_rep}];
+                                        if (!rep) {{
+                                           captureTable{id}.set(++captureCnt{id}, {op});
+                                           rep = captureCnt{id};
+                                        }} else {{
+                                            {op}[{symbol_resource_rep}] = null;
+                                        }}
+                                        {handle} = {rsc_table_create}(handleTable{id}, rep);
+                                    }}"
+                                );
                             } else {
-                                self.intrinsic(Intrinsic::ResourceTableCreateBorrow)
+                                let symbol_resource_rep =
+                                    self.intrinsic(Intrinsic::SymbolResourceRep);
+                                let rsc_table_create =
+                                    self.intrinsic(Intrinsic::ResourceTableCreateBorrow);
+                                uwriteln!(
+                                    self.src,
+                                    "if (!{handle}) {{
+                                        if (!{op}[{symbol_resource_rep}]) {{
+                                            captureTable{id}.set(++captureCnt{id}, {op});
+                                        }}
+                                        {handle} = {rsc_table_create}(handleTable{id}, {op}[{symbol_resource_rep}] || captureCnt{id});
+                                    }}"
+                                );
                             };
-                            let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
-                            uwriteln!(
-                                self.src,
-                                "if (!{handle}) {{
-                                    if (!{op}[{symbol_resource_rep}]) {{
-                                        captureTable{id}.set(++captureCnt{id}, {op});
-                                    }}
-                                    {handle} = {rsc_table_create}(handleTable{id}, {op}[{symbol_resource_rep}] || captureCnt{id});
-                                }}"
-                            );
                         }
                     }
 
