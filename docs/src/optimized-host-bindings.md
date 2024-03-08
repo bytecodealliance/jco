@@ -123,9 +123,9 @@ bindgen functions referring to those same resources.
 
 ### `ResourceClass[Symbol.for('cabiDispose')](rep) -> void`
 
-Just like `Symbol.dispose` is used in high-level bindgen to provide a destructor for when an own
-handle to a resource is dropped, low-level bindgen provides this hook through the `cabiDispose`
-function.
+Just like `Symbol.dispose` is used in high-level bindgen for imported resources to provide a
+destructor for when an own handle to a resource is dropped, low-level bindgen provides this hook
+for imported resources through the `cabiDispose` function.
 
 The `Symbol.for('cabiDispose')` function is an optional destructor which is available as a direct
 static method on the imported resource class.
@@ -133,5 +133,8 @@ static method on the imported resource class.
 Unlike the other low-level functions, this one does not need to be bound and is called directly, as
 it takes the rep directly to handle internal destructor mechanisms.
 
-When a captured resource class is available, an explicit `resourceInstance[Symbol.dispose]()` will
-take precedence over the `cabiDispose` call.
+Imported resources created externally are always "captured" explicitly when passed in to high-level
+functions, even when defining `Symbol.for('cabiRep')`, so any GC is implicitly averted. In these
+capture cases their `resourceInstance[Symbol.dispose]()` disposal will always be called instead
+of `cabiDispose`, even if they do not define a `Symbol.dispose`. This allows any custom GC hooks to
+apply correctly.
