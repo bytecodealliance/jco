@@ -18,13 +18,13 @@
   },
   "type": "module",
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "0.15.1",
-    "binaryen": "^111.0.0",
-    "chalk-template": "^0.4.0",
-    "commander": "^9.4.1",
-    "mkdirp": "^1.0.4",
-    "ora": "^6.1.2",
-    "terser": "^5.16.1"
+    "@bytecodealliance/preview2-shim": "0.16.0",
+    "binaryen": "^116.0.0",
+    "chalk-template": "^1",
+    "commander": "^12",
+    "mkdirp": "^3",
+    "ora": "^8",
+    "terser": "^5"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.7.0",
