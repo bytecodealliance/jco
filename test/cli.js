@@ -459,6 +459,8 @@ export async function cliTest(fixtures) {
           outFile,
           "--name",
           "componentize",
+          "--map",
+          "local:test/foo=./foo.js",
           "-o",
           outDir
         );
@@ -468,6 +470,7 @@ export async function cliTest(fixtures) {
         `${outDir}/package.json`,
         JSON.stringify({ type: "module" })
       );
+      await writeFile(`${outDir}/foo.js`, `export class Bar {}`);
       const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
       strictEqual(m.hello(), "world");
       // strictEqual(m.consumeBar(m.createBar()), 'bar1');

@@ -5,7 +5,7 @@ use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::TypeResourceTableIndex;
+use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
@@ -18,10 +18,11 @@ pub enum ErrHandling {
     ResultCatchHandler,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ResourceData {
     Host {
-        id: TypeResourceTableIndex,
+        tid: TypeResourceTableIndex,
+        rid: ResourceIndex,
         local_name: String,
         dtor_name: Option<String>,
     },
@@ -43,11 +44,11 @@ pub enum ResourceData {
 ///
 /// The second bool is true if it is an imported resource.
 ///
-/// For a given resource id {x}, the local variables are assumed:
+/// For a given resource table id {x}, with resource index {y} the local variables are assumed:
 /// - handleTable{x}
-/// - captureTable{x} (rep to instance map for captured imported tables, only for JS import bindgen,
+/// - captureTable{y} (rep to instance map for captured imported tables, only for JS import bindgen,
 ///                    not hybrid)
-/// - captureCnt{x} for assigning capture rep
+/// - captureCnt{y} for assigning capture rep
 ///
 /// For component-defined resources:
 /// - finalizationRegistry{x}
@@ -58,7 +59,7 @@ pub enum ResourceData {
 /// the direct JS object being referenced, since in JS the object is its own handle.
 ///
 ///
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ResourceTable {
     pub imported: bool,
     pub data: ResourceData,
@@ -1179,11 +1180,13 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 match data {
                     ResourceData::Host {
-                        id,
+                        tid,
+                        rid,
                         local_name,
                         dtor_name,
                     } => {
-                        let id = id.as_u32();
+                        let tid = tid.as_u32();
+                        let rid = rid.as_u32();
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
                         let rsc_table_remove = self.intrinsic(Intrinsic::ResourceTableRemove);
                         let rep = format!("rep{}", self.tmp());
@@ -1194,7 +1197,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwrite!(
                                 self.src,
                                 "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
-                                var {rep} = handleTable{id}[({handle} << 1) + 1] & ~{rsc_flag};
+                                var {rep} = handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag};
                                 Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
                                 ",
                             );
@@ -1206,14 +1209,14 @@ impl Bindgen for FunctionBindgen<'_> {
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(
                                     self.src,
-                                    "finalizationRegistry{id}.register({rsc}, {handle}, {rsc});
+                                    "finalizationRegistry{tid}.register({rsc}, {handle}, {rsc});
                                     Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{{}}} }});
-                                    {rsc_table_remove}(handleTable{id}, {handle});
+                                    {rsc_table_remove}(handleTable{tid}, {handle});
                                     ",
                                     match dtor_name {
                                         Some(dtor) => format!("
-                                            finalizationRegistry{id}.unregister({rsc});
-                                            {rsc_table_remove}(handleTable{id}, {handle});
+                                            finalizationRegistry{tid}.unregister({rsc});
+                                            {rsc_table_remove}(handleTable{tid}, {handle});
                                             {rsc}[{symbol_dispose}] = {empty_func};
                                             {rsc}[{symbol_resource_handle}] = null;
                                             {dtor}({rep});
@@ -1237,10 +1240,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
                             uwriteln!(
                                 self.src,
-                                "var {rep} = handleTable{id}[({handle} << 1) + 1] & ~{rsc_flag};"
+                                "var {rep} = handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag};"
                             );
                             uwriteln!(self.src,
-                                "var {rsc} = captureTable{id}.get({rep});
+                                "var {rsc} = captureTable{rid}.get({rep});
                                 if (!{rsc}) {{
                                     {rsc} = Object.create({local_name}.prototype);
                                     Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
@@ -1252,9 +1255,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     "else {{
-                                        captureTable{id}.delete({rep});
+                                        captureTable{rid}.delete({rep});
                                     }}
-                                    {rsc_table_remove}(handleTable{id}, {handle});"
+                                    {rsc_table_remove}(handleTable{tid}, {handle});"
                                 );
                             } else {
                                 // if lifting a borrow, that was not previously captured, create the class
@@ -1329,8 +1332,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 let op = &operands[0];
 
                 match data {
-                    ResourceData::Host { id, local_name, .. } => {
-                        let id = id.as_u32();
+                    ResourceData::Host {
+                        tid,
+                        rid,
+                        local_name,
+                        ..
+                    } => {
+                        let tid = tid.as_u32();
+                        let rid = rid.as_u32();
                         if !imported {
                             uwriteln!(
                                 self.src,
@@ -1345,7 +1354,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(
                                     self.src,
-                                    "finalizationRegistry{id}.unregister({op});
+                                    "finalizationRegistry{tid}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
                                     {op}[{symbol_resource_handle}] = null;"
                                 );
@@ -1373,14 +1382,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     "if (!{handle}) {{
-                                        let rep = {op}[{symbol_resource_rep}];
-                                        if (!rep) {{
-                                           captureTable{id}.set(++captureCnt{id}, {op});
-                                           rep = captureCnt{id};
-                                        }} else {{
-                                            {op}[{symbol_resource_rep}] = null;
-                                        }}
-                                        {handle} = {rsc_table_create}(handleTable{id}, rep);
+                                        const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
+                                        captureTable{rid}.set(rep, {op});
+                                        {handle} = {rsc_table_create}(handleTable{tid}, rep);
                                     }}"
                                 );
                             } else {
@@ -1391,10 +1395,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     "if (!{handle}) {{
-                                        if (!{op}[{symbol_resource_rep}]) {{
-                                            captureTable{id}.set(++captureCnt{id}, {op});
-                                        }}
-                                        {handle} = {rsc_table_create}(handleTable{id}, {op}[{symbol_resource_rep}] || captureCnt{id});
+                                        const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
+                                        captureTable{rid}.set(rep, {op});
+                                        {handle} = {rsc_table_create}(handleTable{tid}, rep);
                                     }}"
                                 );
                             };
