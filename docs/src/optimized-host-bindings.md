@@ -107,18 +107,6 @@ the array to get the context and rep respectively. If the high bit is set on the
 context, we throw for an invalid handle. The rep value is masked out from the
 ownership high bit, also throwing for an invalid zero rep.
 
-### `ResourceClass[Symbol.for('cabiDispose')](rep) -> void`
-
-Just like `Symbol.dispose` is used in high-level bindgen to provide a destructor for when an own
-handle to a resource is dropped, low-level bindgen provides this hook through the `cabiDispose`
-function.
-
-The `Symbol.for('cabiDispose')` function is an optional destructor which is available as a direct
-static method on the imported resource class.
-
-Unlike the other low-level functions, this one does not need to be bound and is called directly, as
-it takes the rep directly to handle internal destructor mechanisms.
-
 ### `resourceInstance[Symbol.for('cabiRep')]`
 
 Normally imported resource classes do not have to define any special symbols, as they are assigned
@@ -132,3 +120,18 @@ component attached to that optimized low-level import bindgen.
 As a result, when using low-level bindgen, any high-level resource instances MUST define a
 `Symbol.for('cabiRep')` symbol in order for these resources to correctly interact with low-level
 bindgen functions referring to those same resources.
+
+### `ResourceClass[Symbol.for('cabiDispose')](rep) -> void`
+
+Just like `Symbol.dispose` is used in high-level bindgen to provide a destructor for when an own
+handle to a resource is dropped, low-level bindgen provides this hook through the `cabiDispose`
+function.
+
+The `Symbol.for('cabiDispose')` function is an optional destructor which is available as a direct
+static method on the imported resource class.
+
+Unlike the other low-level functions, this one does not need to be bound and is called directly, as
+it takes the rep directly to handle internal destructor mechanisms.
+
+When a captured resource class is available, an explicit `resourceInstance[Symbol.dispose]()` will
+take precedence over the `cabiDispose` call.

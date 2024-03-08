@@ -795,8 +795,9 @@ impl<'a> Instantiator<'a, '_> {
             }
             Trampoline::ResourceDrop(resource) => {
                 self.ensure_resource_table(*resource);
-                let rid = resource.as_u32();
+                let tid = resource.as_u32();
                 let resource_ty = &self.types[*resource];
+                let rid = resource_ty.ty.as_u32();
                 let dtor = if let Some(resource_idx) =
                     self.component.defined_resource_index(resource_ty.ty)
                 {
@@ -850,7 +851,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
-                        const handleEntry = {rsc_table_remove}(handleTable{rid}, handle);
+                        const handleEntry = {rsc_table_remove}(handleTable{tid}, handle);
                         if (!handleEntry.own) throw new Error('Internal error: Unexpected borrow handle');{dtor}
                     }}
                     ",
