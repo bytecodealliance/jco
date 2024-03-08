@@ -1382,13 +1382,8 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     "if (!{handle}) {{
-                                        let rep = {op}[{symbol_resource_rep}];
-                                        if (!rep) {{
-                                           captureTable{rid}.set(++captureCnt{rid}, {op});
-                                           rep = captureCnt{rid};
-                                        }} else {{
-                                            {op}[{symbol_resource_rep}] = null;
-                                        }}
+                                        const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
+                                        captureTable{rid}.set(rep, {op});
                                         {handle} = {rsc_table_create}(handleTable{tid}, rep);
                                     }}"
                                 );
@@ -1400,10 +1395,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     "if (!{handle}) {{
-                                        if (!{op}[{symbol_resource_rep}]) {{
-                                            captureTable{rid}.set(++captureCnt{rid}, {op});
-                                        }}
-                                        {handle} = {rsc_table_create}(handleTable{tid}, {op}[{symbol_resource_rep}] || captureCnt{rid});
+                                        const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
+                                        captureTable{rid}.set(rep, {op});
+                                        {handle} = {rsc_table_create}(handleTable{tid}, rep);
                                     }}"
                                 );
                             };

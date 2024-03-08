@@ -840,6 +840,7 @@ impl<'a> Instantiator<'a, '_> {
                             if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
                             captureTable{rid}.delete(handleEntry.rep);
                         }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
+                            process._rawDebug('cabi dispose because no entry in capture table', {rid});
                             {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
                         }}"
                     )
