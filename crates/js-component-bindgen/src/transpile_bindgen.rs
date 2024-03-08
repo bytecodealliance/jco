@@ -165,6 +165,9 @@ pub fn transpile_bindgen(
         used_instance_flags: Default::default(),
         defined_resource_classes: Default::default(),
         resource_dtors: Default::default(),
+        resources_initialized: (0..component.component.num_resources)
+            .map(|_| false)
+            .collect(),
         resource_tables_initialized: (0..component.component.num_resource_tables)
             .map(|_| false)
             .collect(),
@@ -372,6 +375,7 @@ struct Instantiator<'a, 'b> {
     sizes: SizeAlign,
     component: &'a Component,
     translation: &'a ComponentTranslation,
+    resources_initialized: Vec<bool>,
     resource_tables_initialized: Vec<bool>,
     exports: BTreeMap<String, WorldKey>,
     imports: BTreeMap<String, WorldKey>,
@@ -568,16 +572,42 @@ impl<'a> Instantiator<'a, '_> {
     fn ensure_resource_tables(&mut self) {
         let mut ids_to_ensure = BTreeSet::new();
         for (_, ResourceTable { data, .. }) in self.imports_resource_map.iter() {
-            let ResourceData::Host { id, .. } = &data else {
+            let ResourceData::Host {
+                tid,
+                rid,
+                local_name,
+                ..
+            } = &data
+            else {
                 panic!("unexpected guest data")
             };
-            ids_to_ensure.insert(id.clone());
+            ids_to_ensure.insert(tid.clone());
+
+            let is_imported = self.component.defined_resource_index(*rid).is_none();
+            if is_imported {
+                self.gen.esm_bindgen.ensure_import_binding(local_name);
+            } else if !self.defined_resource_classes.contains(local_name) {
+                uwriteln!(self.src.js, "\nclass {local_name} {{}}");
+                self.defined_resource_classes.insert(local_name.to_string());
+            }
         }
         for (_, ResourceTable { data, .. }) in self.exports_resource_map.iter() {
-            let ResourceData::Host { id, .. } = &data else {
+            let ResourceData::Host {
+                tid,
+                rid,
+                local_name,
+                ..
+            } = &data
+            else {
                 panic!("unexpected guest data")
             };
-            ids_to_ensure.insert(id.clone());
+            ids_to_ensure.insert(tid.clone());
+
+            let is_imported = self.component.defined_resource_index(*rid).is_none();
+            if !is_imported && !self.defined_resource_classes.contains(local_name) {
+                uwriteln!(self.src.js, "\nclass {local_name} {{}}");
+                self.defined_resource_classes.insert(local_name.to_string());
+            }
         }
         for id in ids_to_ensure {
             self.ensure_resource_table(id);
@@ -600,9 +630,10 @@ impl<'a> Instantiator<'a, '_> {
     // instead of always outputting resource tables for all resources, only
     // define resource tables that are explicitly used
     fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
-        let rid = id.as_u32();
-        if !self.resource_tables_initialized[rid as usize] {
+        let rtid = id.as_u32();
+        if !self.resource_tables_initialized[rtid as usize] {
             let resource = self.types[id].ty;
+            let ridx = resource.as_u32();
             let (is_imported, maybe_dtor) =
                 if let Some(resource_idx) = self.component.defined_resource_index(resource) {
                     let resource_def = self
@@ -631,22 +662,28 @@ impl<'a> Instantiator<'a, '_> {
             if is_imported {
                 uwriteln!(
                     self.src.js,
-                    "const handleTable{rid} = [{rsc_table_flag}, 0];
-                    const captureTable{rid} = new Map();
-                    let captureCnt{rid} = 0;"
+                    "const handleTable{rtid} = [{rsc_table_flag}, 0];"
                 );
+                if !self.resources_initialized[ridx as usize] {
+                    uwriteln!(
+                        self.src.js,
+                        "const captureTable{ridx} = new Map();
+                        let captureCnt{ridx} = 0;"
+                    );
+                    self.resources_initialized[ridx as usize] = true;
+                }
             } else {
                 uwriteln!(
                     self.src.js,
-                    "const handleTable{rid} = [{rsc_table_flag}, 0];
-                    const finalizationRegistry{rid} = new FinalizationRegistry((handle) => {{
-                        const {{ rep }} = {rsc_table_remove}(handleTable{rid}, handle);{maybe_dtor}
+                    "const handleTable{rtid} = [{rsc_table_flag}, 0];
+                    const finalizationRegistry{rtid} = new FinalizationRegistry((handle) => {{
+                        const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
                     }});
                     ",
                 );
             }
-            uwriteln!(self.src.js, "{handle_tables}[{rid}] = handleTable{rid};");
-            self.resource_tables_initialized[rid as usize] = true;
+            uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
+            self.resource_tables_initialized[rtid as usize] = true;
         }
     }
 
@@ -1260,6 +1297,9 @@ impl<'a> Instantiator<'a, '_> {
             .is_none();
 
         let resource_id = crate::dealias(self.resolve, t1);
+        if resource_id != t1 {
+            return;
+        }
 
         let resource = self.types[t2].ty;
         if let Some(resource_idx) = self.component.defined_resource_index(resource) {
@@ -1338,7 +1378,8 @@ impl<'a> Instantiator<'a, '_> {
         let entry = ResourceTable {
             imported,
             data: ResourceData::Host {
-                id: t2,
+                tid: t2,
+                rid: self.types[t2].ty,
                 dtor_name: None,
                 local_name,
             },
@@ -1346,7 +1387,9 @@ impl<'a> Instantiator<'a, '_> {
         if is_exports {
             self.exports_resource_map.insert(resource_id, entry);
         } else {
-            self.imports_resource_map.insert(resource_id, entry);
+            if let Some(existing) = self.imports_resource_map.insert(resource_id, entry.clone()) {
+                assert_eq!(existing, entry);
+            }
         }
     }
 
@@ -1742,13 +1785,12 @@ impl<'a> Instantiator<'a, '_> {
                     | FunctionKind::Method(resource_id)
                     | FunctionKind::Static(resource_id) = func.kind
                     {
-                        let ResourceData::Host { id, .. } =
+                        let ResourceData::Host { rid, .. } =
                             &self.exports_resource_map.get(&resource_id).unwrap().data
                         else {
                             unreachable!()
                         };
-                        let resource = self.types[*id].ty;
-                        self.gen.local_names.get(resource)
+                        self.gen.local_names.get(rid)
                     } else {
                         self.gen.local_names.create_once(export_name)
                     }
@@ -1798,13 +1840,12 @@ impl<'a> Instantiator<'a, '_> {
                         | FunctionKind::Method(resource_id)
                         | FunctionKind::Static(resource_id) = func.kind
                         {
-                            let ResourceData::Host { id, .. } =
+                            let ResourceData::Host { rid, .. } =
                                 &self.exports_resource_map.get(&resource_id).unwrap().data
                             else {
                                 unreachable!()
                             };
-                            let resource = self.types[*id].ty;
-                            self.gen.local_names.get(resource)
+                            self.gen.local_names.get(rid)
                         } else {
                             self.gen.local_names.create_once(func_name)
                         }
