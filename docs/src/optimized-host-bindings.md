@@ -77,9 +77,10 @@ Each entry consists of a pair of u32s, with each pair either a free list entry, 
 
 #### Free List Entries:
 
- |    index (x, u30)   |       ~unused~      |
- |------ 32 bits ------|------ 32 bits ------|
- | 01xxxxxxxxxxxxxxxxx | ################### |
+|    index (x, u30)   |       ~unused~      |
+|:-------------------:|:-------------------:|
+|       32 bits       | 32 bits             |
+| 01xxxxxxxxxxxxxxxxx | ################### |
 
 Free list entries use only the first value in the pair, with the high bit always set
 to indicate that the pair is part of the free list. The first entry pair at indices
@@ -88,9 +89,10 @@ Removing the 1 << 30 flag gives 0, which indicates the end of the free list.
 
 #### Data Entries:
 
- |    scope (x, u30)   | own(o), rep(x, u30) |
- |------ 32 bits ------|------ 32 bits ------|
- | 00xxxxxxxxxxxxxxxxx | 0oxxxxxxxxxxxxxxxxx |
+|    scope (x, u30)   | own(o), rep(x, u30) |
+|:-------------------:|:-------------------:|
+|       32 bits       | 32 bits             |
+| 00xxxxxxxxxxxxxxxxx | 0oxxxxxxxxxxxxxxxxx |
 
 Data entry pairs consist of a first u30 scope value and a second rep value. The field
 is only called the scope for interface shape consistency, but is actually used for the
