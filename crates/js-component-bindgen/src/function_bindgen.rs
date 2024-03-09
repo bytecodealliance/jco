@@ -24,7 +24,7 @@ pub enum ResourceData {
         tid: TypeResourceTableIndex,
         rid: ResourceIndex,
         local_name: String,
-        dtor_name: Option<String>,
+        dtor: Option<String>,
     },
     Guest {
         resource_name: String,
@@ -1170,8 +1170,8 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::HandleLift { handle, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
-                let ResourceTable { imported, data } =
-                    &self.resource_map[&crate::dealias(self.resolve, *ty)];
+                let resource_ty = &crate::dealias(self.resolve, *ty);
+                let ResourceTable { imported, data } = &self.resource_map[resource_ty];
 
                 let is_own = matches!(handle, Handle::Own(_));
                 let rsc = format!("rsc{}", self.tmp());
@@ -1183,7 +1183,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         tid,
                         rid,
                         local_name,
-                        dtor_name,
+                        dtor,
                     } => {
                         let tid = tid.as_u32();
                         let rid = rid.as_u32();
@@ -1213,14 +1213,16 @@ impl Bindgen for FunctionBindgen<'_> {
                                     Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{{}}} }});
                                     {rsc_table_remove}(handleTable{tid}, {handle});
                                     ",
-                                    match dtor_name {
-                                        Some(dtor) => format!("
-                                            finalizationRegistry{tid}.unregister({rsc});
-                                            {rsc_table_remove}(handleTable{tid}, {handle});
-                                            {rsc}[{symbol_dispose}] = {empty_func};
-                                            {rsc}[{symbol_resource_handle}] = null;
-                                            {dtor}({rep});
-                                        "),
+                                    match dtor {
+                                        Some(dtor) => {
+                                            format!("
+                                                finalizationRegistry{tid}.unregister({rsc});
+                                                {rsc_table_remove}(handleTable{tid}, {handle});
+                                                {rsc}[{symbol_dispose}] = {empty_func};
+                                                {rsc}[{symbol_resource_handle}] = null;
+                                                {dtor}({rep});
+                                            ")
+                                        },
                                         None => "".into(),
                                     }
                                 );

@@ -1,6 +1,7 @@
 use heck::ToLowerCamelCase;
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::hash::{BuildHasher, Hash, Hasher};
 
 #[derive(Default)]
@@ -42,12 +43,12 @@ impl<'a> LocalNames {
         self.local_names.get(&goal).unwrap()
     }
 
-    pub fn get<H: Hash>(&'a self, unique_id: H) -> &'a str {
+    pub fn get<H: Hash + Debug>(&'a self, unique_id: H) -> &'a str {
         let mut new_s = self.random_state.build_hasher();
         unique_id.hash(&mut new_s);
         let hash = new_s.finish();
         if !self.local_name_ids.contains_key(&hash) {
-            panic!("Internal error, no name defined for {}", hash);
+            panic!("Internal error, no name defined for {:?}", unique_id);
         }
         &self.local_name_ids[&hash]
     }

@@ -18,6 +18,7 @@ pub(crate) fn run(release: bool) -> Result<()> {
 }
 
 fn transpile(component_path: &str, name: String) -> Result<()> {
+    std::env::set_var("RUST_BACKTRACE", "1");
     let component = fs::read(component_path).context("wasm bindgen component missing")?;
 
     let adapter_path = "lib/wasi_snapshot_preview1.reactor.wasm";
