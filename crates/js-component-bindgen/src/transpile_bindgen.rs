@@ -1334,7 +1334,7 @@ impl<'a> Instantiator<'a, '_> {
                 tid,
                 rid: self.types[tid].ty,
                 local_name,
-                dtor: dtor_str,
+                dtor_name: dtor_str,
             },
         };
         if let Some(existing) = resource_map.get(&resource_id) {
