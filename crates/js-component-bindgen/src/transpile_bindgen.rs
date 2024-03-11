@@ -1121,15 +1121,17 @@ impl<'a> Instantiator<'a, '_> {
             let resource_tables = {
                 let mut resource_tables: Vec<TypeResourceTableIndex> = Vec::new();
 
-                let func_ty = &self.types[func_ty];
-                let params_ty = &self.types[func_ty.params];
-                let results_ty = &self.types[func_ty.results];
-                for iface_ty in params_ty.types.iter() {
-                    self.collect_resource_types(iface_ty, &mut resource_tables);
+                for (_, data) in resource_map {
+                    let ResourceTable {
+                        data: ResourceData::Host { tid, .. },
+                        ..
+                    } = &data
+                    else {
+                        unreachable!();
+                    };
+                    resource_tables.push(*tid);
                 }
-                for iface_ty in results_ty.types.iter() {
-                    self.collect_resource_types(iface_ty, &mut resource_tables);
-                }
+
                 if resource_tables.len() == 0 {
                     "".to_string()
                 } else {
@@ -1409,69 +1411,6 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
             (_, _) => unreachable!(),
-        }
-    }
-
-    fn collect_resource_types(
-        &mut self,
-        iface_ty: &InterfaceType,
-        resources: &mut Vec<TypeResourceTableIndex>,
-    ) {
-        match iface_ty {
-            InterfaceType::Flags(_) | InterfaceType::Enum(_) => {}
-            InterfaceType::Record(t) => {
-                let t = &self.types[*t];
-                for f in t.fields.iter() {
-                    self.collect_resource_types(&f.ty, resources);
-                }
-            }
-            InterfaceType::Own(t) | InterfaceType::Borrow(t) => {
-                resources.push(*t);
-            }
-            InterfaceType::Tuple(t) => {
-                let t = &self.types[*t];
-                for f in t.types.iter() {
-                    self.collect_resource_types(f, resources);
-                }
-            }
-            InterfaceType::Variant(t) => {
-                let t = &self.types[*t];
-                for f in t.cases.iter() {
-                    if let Some(ty) = f.ty {
-                        self.collect_resource_types(&ty, resources);
-                    }
-                }
-            }
-            InterfaceType::Option(t) => {
-                let t = &self.types[*t];
-                self.collect_resource_types(&t.ty, resources);
-            }
-            InterfaceType::Result(t) => {
-                let t = &self.types[*t];
-                if let Some(ok) = &t.ok {
-                    self.collect_resource_types(&ok, resources);
-                }
-                if let Some(err) = &t.err {
-                    self.collect_resource_types(&err, resources);
-                }
-            }
-            InterfaceType::List(t) => {
-                let t = &self.types[*t];
-                self.collect_resource_types(&t.element, resources);
-            }
-            InterfaceType::Bool
-            | InterfaceType::S8
-            | InterfaceType::U8
-            | InterfaceType::S16
-            | InterfaceType::U16
-            | InterfaceType::S32
-            | InterfaceType::U32
-            | InterfaceType::S64
-            | InterfaceType::U64
-            | InterfaceType::Float32
-            | InterfaceType::Float64
-            | InterfaceType::Char
-            | InterfaceType::String => {}
         }
     }
 
