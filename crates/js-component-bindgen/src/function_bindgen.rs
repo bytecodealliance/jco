@@ -1170,8 +1170,8 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::HandleLift { handle, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
-                let ResourceTable { imported, data } =
-                    &self.resource_map[&crate::dealias(self.resolve, *ty)];
+                let resource_ty = &crate::dealias(self.resolve, *ty);
+                let ResourceTable { imported, data } = &self.resource_map[resource_ty];
 
                 let is_own = matches!(handle, Handle::Own(_));
                 let rsc = format!("rsc{}", self.tmp());

@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
 use wasmtime_environ::component::{
-    ComponentTypes, InterfaceType, RuntimeComponentInstanceIndex, TypeDef, TypeFuncIndex,
-    TypeResourceTableIndex,
+    ComponentTypes, InterfaceType, ResourceIndex, RuntimeComponentInstanceIndex, TypeDef,
+    TypeFuncIndex, TypeResourceTableIndex,
 };
 use wasmtime_environ::{
     component,
@@ -160,11 +160,10 @@ pub fn transpile_bindgen(
         imports: Default::default(),
         exports: Default::default(),
         lowering_options: Default::default(),
-        imports_resource_map: Default::default(),
-        exports_resource_map: Default::default(),
         used_instance_flags: Default::default(),
         defined_resource_classes: Default::default(),
-        resource_dtors: Default::default(),
+        imports_resource_types: Default::default(),
+        exports_resource_types: Default::default(),
         resources_initialized: (0..component.component.num_resources)
             .map(|_| false)
             .collect(),
@@ -175,8 +174,7 @@ pub fn transpile_bindgen(
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
     instantiator.instantiate();
-    instantiator.ensure_resource_tables();
-    instantiator.destructors();
+    instantiator.resource_definitions();
     instantiator.instance_flags();
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
@@ -375,27 +373,35 @@ struct Instantiator<'a, 'b> {
     sizes: SizeAlign,
     component: &'a Component,
     translation: &'a ComponentTranslation,
-    resources_initialized: Vec<bool>,
-    resource_tables_initialized: Vec<bool>,
+    exports_resource_types: BTreeMap<TypeId, ResourceIndex>,
+    imports_resource_types: BTreeMap<TypeId, ResourceIndex>,
+    resources_initialized: PrimaryMap<ResourceIndex, bool>,
+    resource_tables_initialized: PrimaryMap<TypeResourceTableIndex, bool>,
     exports: BTreeMap<String, WorldKey>,
     imports: BTreeMap<String, WorldKey>,
-    imports_resource_map: ResourceMap,
-    exports_resource_map: ResourceMap,
     /// Instance flags which references have been emitted externally at least once.
     used_instance_flags: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
     defined_resource_classes: BTreeSet<String>,
-    resource_dtors: BTreeMap<TypeId, CoreDef>,
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
 }
 
 impl<'a> Instantiator<'a, '_> {
     fn initialize(&mut self) {
-        // populate reverse map from import names to world items
-        // as well as the full resource map for the world
-        for (key, item) in &self.resolve.worlds[self.world].imports {
+        // populate reverse map from import and export names to world items
+        for (key, _) in &self.resolve.worlds[self.world].imports {
             let name = &self.resolve.name_world_key(key);
             self.imports.insert(name.to_string(), key.clone());
+        }
+        for (key, _) in &self.resolve.worlds[self.world].exports {
+            let name = &self.resolve.name_world_key(key);
+            self.exports.insert(name.to_string(), key.clone());
+        }
+
+        // populate reverse map from TypeId to ResourceIndex
+        // populate the resource type to resource index map
+        for (key, item) in &self.resolve.worlds[self.world].imports {
+            let name = &self.resolve.name_world_key(key);
             let Some((_, (_, import))) = self
                 .component
                 .import_types
@@ -405,10 +411,12 @@ impl<'a> Instantiator<'a, '_> {
                 match item {
                     WorldItem::Interface(_) => unreachable!(),
                     WorldItem::Function(_) => unreachable!(),
-                    WorldItem::Type(ty) => assert!(!matches!(
-                        self.resolve.types[*ty].kind,
-                        TypeDefKind::Resource
-                    )),
+                    WorldItem::Type(ty) => {
+                        assert!(!matches!(
+                            self.resolve.types[*ty].kind,
+                            TypeDefKind::Resource
+                        ))
+                    }
                 }
                 continue;
             };
@@ -422,46 +430,30 @@ impl<'a> Instantiator<'a, '_> {
                     for (ty_name, ty) in &iface.types {
                         match &import_ty.exports.get(ty_name) {
                             Some(TypeDef::Resource(resource)) => {
-                                self.connect_resources(*ty, *resource, false);
+                                let ty = crate::dealias(self.resolve, *ty);
+                                let resource_idx = self.types[*resource].ty;
+                                self.imports_resource_types.insert(ty, resource_idx);
                             }
-                            Some(TypeDef::Interface(iface)) => {
-                                self.connect_resource_types(*ty, iface, false);
-                            }
+                            Some(TypeDef::Interface(_)) | None => {}
                             Some(_) => unreachable!(),
-                            None => {
-                                // This can be safely ignored because you can import
-                                // less than an interface actually has
-                            }
                         }
                     }
-                    for (func_name, func) in &iface.functions {
-                        let TypeDef::ComponentFunc(ty) = &import_ty.exports[func_name] else {
-                            unreachable!()
-                        };
-                        self.create_resource_fn_map(func, *ty, false);
-                    }
                 }
-                WorldItem::Function(func) => {
-                    let TypeDef::ComponentFunc(func_ty) = import else {
-                        unreachable!()
-                    };
-                    self.create_resource_fn_map(func, *func_ty, false);
-                }
+                WorldItem::Function(_) => {}
                 WorldItem::Type(ty) => match import {
                     TypeDef::Resource(resource) => {
-                        self.connect_resources(*ty, *resource, false);
+                        let ty = crate::dealias(self.resolve, *ty);
+                        let resource_idx = self.types[*resource].ty;
+                        self.imports_resource_types.insert(ty, resource_idx);
                     }
-                    TypeDef::Interface(iface) => {
-                        self.connect_resource_types(*ty, iface, false);
-                    }
+                    TypeDef::Interface(_) => {}
                     _ => unreachable!(),
                 },
             }
         }
-        self.exports_resource_map = self.imports_resource_map.clone();
+        self.exports_resource_types = self.imports_resource_types.clone();
         for (key, item) in &self.resolve.worlds[self.world].exports {
             let name = &self.resolve.name_world_key(key);
-            self.exports.insert(name.to_string(), key.clone());
             let (_, export) = self
                 .component
                 .exports
@@ -477,33 +469,20 @@ impl<'a> Instantiator<'a, '_> {
                     for (ty_name, ty) in &iface.types {
                         match exports.get(ty_name).unwrap() {
                             Export::Type(TypeDef::Resource(resource)) => {
-                                self.connect_resources(*ty, *resource, true);
+                                let ty = crate::dealias(self.resolve, *ty);
+                                let resource_idx = self.types[*resource].ty;
+                                self.exports_resource_types.insert(ty, resource_idx);
                             }
-                            Export::Type(TypeDef::Interface(iface)) => {
-                                self.connect_resource_types(*ty, &iface, true);
-                            }
+                            Export::Type(_) => {}
                             _ => unreachable!(),
                         }
                     }
-                    for (func_name, func) in &iface.functions {
-                        let Export::LiftedFunction { ty, .. } = exports.get(func_name).unwrap()
-                        else {
-                            unreachable!()
-                        };
-                        self.create_resource_fn_map(func, *ty, true);
-                    }
                 }
-                WorldItem::Function(func) => {
-                    let Export::LiftedFunction { ty, .. } = export else {
-                        unreachable!()
-                    };
-                    self.create_resource_fn_map(func, *ty, true);
-                }
+                WorldItem::Function(_) => {}
                 WorldItem::Type(_) => unreachable!(),
             }
         }
     }
-
     fn instantiate(&mut self) {
         for (i, trampoline) in self.translation.trampolines.iter() {
             let Trampoline::LowerImport {
@@ -569,49 +548,23 @@ impl<'a> Instantiator<'a, '_> {
         self.exports(&self.component.exports);
     }
 
-    fn ensure_resource_tables(&mut self) {
-        let mut ids_to_ensure = BTreeSet::new();
-        for (_, ResourceTable { data, .. }) in self.imports_resource_map.iter() {
-            let ResourceData::Host {
-                tid,
-                rid,
-                local_name,
-                ..
-            } = &data
-            else {
-                panic!("unexpected guest data")
-            };
-            ids_to_ensure.insert(tid.clone());
-
-            let is_imported = self.component.defined_resource_index(*rid).is_none();
+    fn resource_definitions(&mut self) {
+        // It is theoretically possible for locally defined resources used in no functions
+        // to still be exported
+        for resource in 0..self.component.num_resources {
+            let resource = ResourceIndex::from_u32(resource);
+            let is_imported = self.component.defined_resource_index(resource).is_none();
             if is_imported {
-                self.gen.esm_bindgen.ensure_import_binding(local_name);
-            } else if !self.defined_resource_classes.contains(local_name) {
-                uwriteln!(self.src.js, "\nclass {local_name} {{}}");
-                self.defined_resource_classes.insert(local_name.to_string());
+                continue;
+            }
+            if let Some(local_name) = self.gen.local_names.try_get(resource) {
+                if !self.defined_resource_classes.contains(local_name) {
+                    uwriteln!(self.src.js, "\nclass {local_name} {{}}");
+                    self.defined_resource_classes.insert(local_name.to_string());
+                }
             }
         }
-        for (_, ResourceTable { data, .. }) in self.exports_resource_map.iter() {
-            let ResourceData::Host {
-                tid,
-                rid,
-                local_name,
-                ..
-            } = &data
-            else {
-                panic!("unexpected guest data")
-            };
-            ids_to_ensure.insert(tid.clone());
 
-            let is_imported = self.component.defined_resource_index(*rid).is_none();
-            if !is_imported && !self.defined_resource_classes.contains(local_name) {
-                uwriteln!(self.src.js, "\nclass {local_name} {{}}");
-                self.defined_resource_classes.insert(local_name.to_string());
-            }
-        }
-        for id in ids_to_ensure {
-            self.ensure_resource_table(id);
-        }
         if self
             .gen
             .all_intrinsics
@@ -630,61 +583,64 @@ impl<'a> Instantiator<'a, '_> {
     // instead of always outputting resource tables for all resources, only
     // define resource tables that are explicitly used
     fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
-        let rtid = id.as_u32();
-        if !self.resource_tables_initialized[rtid as usize] {
-            let resource = self.types[id].ty;
-            let ridx = resource.as_u32();
-            let (is_imported, maybe_dtor) =
-                if let Some(resource_idx) = self.component.defined_resource_index(resource) {
-                    let resource_def = self
-                        .component
-                        .initializers
-                        .iter()
-                        .find_map(|i| match i {
-                            GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
-                            _ => None,
-                        })
-                        .unwrap();
+        if self.resource_tables_initialized[id] {
+            return;
+        }
 
-                    if let Some(dtor) = &resource_def.dtor {
-                        (false, format!("\n{}(rep);", self.core_def(dtor)))
-                    } else {
-                        (false, "".into())
-                    }
+        let resource = self.types[id].ty;
+
+        let (is_imported, maybe_dtor) =
+            if let Some(resource_idx) = self.component.defined_resource_index(resource) {
+                let resource_def = self
+                    .component
+                    .initializers
+                    .iter()
+                    .find_map(|i| match i {
+                        GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
+                        _ => None,
+                    })
+                    .unwrap();
+
+                if let Some(dtor) = &resource_def.dtor {
+                    (false, format!("\n{}(rep);", self.core_def(dtor)))
                 } else {
-                    (true, "".into())
-                };
-
-            let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
-            let rsc_table_flag = self.gen.intrinsic(Intrinsic::ResourceTableFlag);
-            let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
-
-            if is_imported {
-                uwriteln!(
-                    self.src.js,
-                    "const handleTable{rtid} = [{rsc_table_flag}, 0];"
-                );
-                if !self.resources_initialized[ridx as usize] {
-                    uwriteln!(
-                        self.src.js,
-                        "const captureTable{ridx} = new Map();
-                        let captureCnt{ridx} = 0;"
-                    );
-                    self.resources_initialized[ridx as usize] = true;
+                    (false, "".into())
                 }
             } else {
+                (true, "".into())
+            };
+
+        let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+        let rsc_table_flag = self.gen.intrinsic(Intrinsic::ResourceTableFlag);
+        let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
+
+        let rtid = id.as_u32();
+        if is_imported {
+            uwriteln!(
+                self.src.js,
+                "const handleTable{rtid} = [{rsc_table_flag}, 0];",
+            );
+            if !self.resources_initialized[resource] {
+                let ridx = resource.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const handleTable{rtid} = [{rsc_table_flag}, 0];
-                    const finalizationRegistry{rtid} = new FinalizationRegistry((handle) => {{
-                        const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
-                    }});
-                    ",
+                    "const captureTable{ridx} = new Map();
+                    let captureCnt{ridx} = 0;"
                 );
+                self.resources_initialized[resource] = true;
             }
-            uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
-            self.resource_tables_initialized[rtid as usize] = true;
+        } else {
+            uwriteln!(
+                self.src.js,
+                "const handleTable{rtid} = [{rsc_table_flag}, 0];
+                const finalizationRegistry{rtid} = new FinalizationRegistry((handle) => {{
+                    const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
+                }});
+                ",
+            );
         }
+        uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
+        self.resource_tables_initialized[id] = true;
     }
 
     fn instance_flags(&mut self) {
@@ -699,20 +655,6 @@ impl<'a> Instantiator<'a, '_> {
                 | wasmtime_environ::component::FLAG_MAY_ENTER);
         }
         self.src.js_init.prepend_str(&instance_flag_defs);
-    }
-
-    fn destructors(&mut self) {
-        for (ty, dtor) in self.resource_dtors.iter() {
-            let dtor_name_str = self.core_def(dtor);
-            let Some(ResourceTable {
-                data: ResourceData::Host { dtor_name, .. },
-                ..
-            }) = self.exports_resource_map.get_mut(ty)
-            else {
-                panic!("Expected exports resource map entry for dtor")
-            };
-            let _ = dtor_name.insert(dtor_name_str);
-        }
     }
 
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
@@ -831,18 +773,23 @@ impl<'a> Instantiator<'a, '_> {
                     let symbol_cabi_dispose = self.gen.intrinsic(Intrinsic::SymbolCabiDispose);
 
                     // previous imports walk should define all imported resources which are accessible
-                    // if not, then capture / disposal paths are not possible
-                    let imported_resource_local_name = self.gen.local_names.get(resource_ty.ty);
-                    format!(
-                        "
-                        const rsc = captureTable{rid}.get(handleEntry.rep);
-                        if (rsc) {{
-                            if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
-                            captureTable{rid}.delete(handleEntry.rep);
-                        }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
-                            {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
-                        }}"
-                    )
+                    if let Some(imported_resource_local_name) =
+                        self.gen.local_names.try_get(resource_ty.ty)
+                    {
+                        format!(
+                            "
+                            const rsc = captureTable{rid}.get(handleEntry.rep);
+                            if (rsc) {{
+                                if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
+                                captureTable{rid}.delete(handleEntry.rep);
+                            }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
+                                {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
+                            }}"
+                        )
+                    } else {
+                        // if not, then capture / disposal paths are never called
+                        "throw new Error('unreachable resource trampoline')".into()
+                    }
                 };
 
                 // If the unexpected borrow handle case does ever happen in further testing,
@@ -997,61 +944,72 @@ impl<'a> Instantiator<'a, '_> {
         &mut self,
         func: &Function,
         ty_func_idx: TypeFuncIndex,
-        is_exports: bool,
+        resource_map: &mut ResourceMap,
     ) {
         let params_ty = &self.types[self.types[ty_func_idx].params];
         for ((_, ty), iface_ty) in func.params.iter().zip(params_ty.types.iter()) {
             if let Type::Id(id) = ty {
-                self.connect_resource_types(*id, iface_ty, is_exports);
+                self.connect_resource_types(*id, iface_ty, resource_map);
             }
         }
         let results_ty = &self.types[self.types[ty_func_idx].results];
         for (ty, iface_ty) in func.results.iter_types().zip(results_ty.types.iter()) {
             if let Type::Id(id) = ty {
-                self.connect_resource_types(*id, iface_ty, is_exports);
+                self.connect_resource_types(*id, iface_ty, resource_map);
             }
         }
     }
 
+    fn resource_name(
+        resolve: &Resolve,
+        local_names: &'a mut LocalNames,
+        resource: TypeId,
+        resource_map: &BTreeMap<TypeId, ResourceIndex>,
+    ) -> &'a str {
+        let resource = crate::dealias(resolve, resource);
+        local_names
+            .get_or_create(
+                resource_map[&resource],
+                &resolve.types[resource]
+                    .name
+                    .as_ref()
+                    .unwrap()
+                    .to_upper_camel_case(),
+            )
+            .0
+    }
+
     fn lower_import(&mut self, index: LoweredIndex, import: RuntimeImportIndex) {
-        let (options, trampoline, _) = self.lowering_options[index];
+        let (options, trampoline, func_ty) = self.lowering_options[index];
 
         let (import_index, path) = &self.component.imports[import];
-        let (import_name, import_ty) = &self.component.import_types[*import_index];
+        let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, import_name);
 
-        let (func, func_name, iface_name, func_ty) =
+        let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
                     assert_eq!(path.len(), 0);
-                    let TypeDef::ComponentFunc(func_ty) = import_ty else {
-                        unreachable!()
-                    };
-                    (func, import_name, None, func_ty)
+                    (func, import_name, None)
                 }
                 WorldItem::Interface(i) => {
                     assert_eq!(path.len(), 1);
-                    let TypeDef::ComponentInstance(instance) = import_ty else {
-                        unreachable!()
-                    };
-                    let import_ty = &self.types[*instance];
                     let iface = &self.resolve.interfaces[*i];
                     let func = &iface.functions[&path[0]];
-                    let TypeDef::ComponentFunc(func_ty) = &import_ty.exports[&func.name] else {
-                        unreachable!()
-                    };
                     (
                         func,
                         &path[0],
                         Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
-                        func_ty,
                     )
                 }
                 WorldItem::Type(_) => unreachable!(),
             };
+
+        let mut resource_map = ResourceMap::new();
+        self.create_resource_fn_map(func, func_ty, &mut resource_map);
 
         let (callee_name, call_type) = match func.kind {
             FunctionKind::Freestanding => (
@@ -1074,30 +1032,28 @@ impl<'a> Instantiator<'a, '_> {
                 func.item_name().to_lower_camel_case(),
                 CallType::CalleeResourceDispatch,
             ),
-            FunctionKind::Static(ty) => (
+            FunctionKind::Static(resource_id) => (
                 format!(
                     "{}.{}",
-                    match &self.imports_resource_map[&ty].data {
-                        ResourceData::Host { local_name, .. } => {
-                            self.gen.esm_bindgen.ensure_import_binding(local_name);
-                            local_name
-                        }
-                        ResourceData::Guest { .. } => unreachable!(),
-                    },
+                    Instantiator::resource_name(
+                        &self.resolve,
+                        &mut self.gen.local_names,
+                        resource_id,
+                        &self.imports_resource_types
+                    ),
                     func.item_name().to_lower_camel_case()
                 ),
                 CallType::Standard,
             ),
-            FunctionKind::Constructor(ty) => (
+            FunctionKind::Constructor(resource_id) => (
                 format!(
                     "new {}",
-                    match &self.imports_resource_map[&ty].data {
-                        ResourceData::Host { local_name, .. } => {
-                            self.gen.esm_bindgen.ensure_import_binding(local_name);
-                            local_name
-                        }
-                        ResourceData::Guest { .. } => unreachable!(),
-                    },
+                    Instantiator::resource_name(
+                        &self.resolve,
+                        &mut self.gen.local_names,
+                        resource_id,
+                        &self.imports_resource_types
+                    )
                 ),
                 CallType::Standard,
             ),
@@ -1122,8 +1078,8 @@ impl<'a> Instantiator<'a, '_> {
                     &callee_name,
                     options,
                     func,
+                    &resource_map,
                     AbiVariant::GuestImport,
-                    false,
                 );
                 uwriteln!(self.src.js, "");
             }
@@ -1151,31 +1107,31 @@ impl<'a> Instantiator<'a, '_> {
             };
             let callee_name = match func.kind {
                 FunctionKind::Static(_) | FunctionKind::Freestanding => callee_name.to_string(),
-                FunctionKind::Method(ty) => format!(
-                    "{}.prototype.{}",
-                    match &self.imports_resource_map[&ty].data {
-                        ResourceData::Host { local_name, .. } => {
-                            self.gen.esm_bindgen.ensure_import_binding(local_name);
-                            local_name
-                        }
-                        ResourceData::Guest { .. } => unreachable!(),
-                    },
-                    callee_name
+                FunctionKind::Method(resource_id) => format!(
+                    "{}.prototype.{callee_name}",
+                    Instantiator::resource_name(
+                        &self.resolve,
+                        &mut self.gen.local_names,
+                        resource_id,
+                        &self.imports_resource_types
+                    )
                 ),
                 FunctionKind::Constructor(_) => callee_name[4..].to_string(),
             };
             let resource_tables = {
                 let mut resource_tables: Vec<TypeResourceTableIndex> = Vec::new();
 
-                let func_ty = &self.types[*func_ty];
-                let params_ty = &self.types[func_ty.params];
-                let results_ty = &self.types[func_ty.results];
-                for iface_ty in params_ty.types.iter() {
-                    self.collect_resource_types(iface_ty, &mut resource_tables);
+                for (_, data) in resource_map {
+                    let ResourceTable {
+                        data: ResourceData::Host { tid, .. },
+                        ..
+                    } = &data
+                    else {
+                        unreachable!();
+                    };
+                    resource_tables.push(*tid);
                 }
-                for iface_ty in results_ty.types.iter() {
-                    self.collect_resource_types(iface_ty, &mut resource_tables);
-                }
+
                 if resource_tables.len() == 0 {
                     "".to_string()
                 } else {
@@ -1223,13 +1179,13 @@ impl<'a> Instantiator<'a, '_> {
                 let ty = &self.resolve.types[tid];
                 (
                     ty.name.as_ref().unwrap().to_upper_camel_case(),
-                    match &self.imports_resource_map[&tid].data {
-                        ResourceData::Host { local_name, .. } => {
-                            self.gen.esm_bindgen.ensure_import_binding(local_name);
-                            local_name.to_string()
-                        }
-                        ResourceData::Guest { .. } => unreachable!(),
-                    },
+                    Instantiator::resource_name(
+                        &self.resolve,
+                        &mut self.gen.local_names,
+                        tid,
+                        &self.imports_resource_types,
+                    )
+                    .to_string(),
                 )
             }
         };
@@ -1244,7 +1200,6 @@ impl<'a> Instantiator<'a, '_> {
                 None
             },
             binding_name,
-            false,
         );
     }
 
@@ -1255,7 +1210,6 @@ impl<'a> Instantiator<'a, '_> {
         iface_member: Option<&str>,
         import_binding: Option<String>,
         local_name: String,
-        unused: bool,
     ) {
         // add the function import to the ESM bindgen
         if let Some(_iface_name) = iface_name {
@@ -1269,40 +1223,41 @@ impl<'a> Instantiator<'a, '_> {
                         import_binding.unwrap().to_string(),
                     ],
                     local_name,
-                    unused,
                 );
             } else {
                 self.gen.esm_bindgen.add_import_binding(
                     &[import_specifier, import_binding.unwrap().to_string()],
                     local_name,
-                    unused,
                 );
             }
         } else if let Some(import_binding) = import_binding {
-            self.gen.esm_bindgen.add_import_binding(
-                &[import_specifier, import_binding],
-                local_name,
-                unused,
-            );
+            self.gen
+                .esm_bindgen
+                .add_import_binding(&[import_specifier, import_binding], local_name);
         } else {
             self.gen
                 .esm_bindgen
-                .add_import_binding(&[import_specifier], local_name, unused);
+                .add_import_binding(&[import_specifier], local_name);
         }
     }
 
-    fn connect_resources(&mut self, t1: TypeId, t2: TypeResourceTableIndex, is_exports: bool) {
+    fn connect_resources(
+        &mut self,
+        t: TypeId,
+        tid: TypeResourceTableIndex,
+        resource_map: &mut ResourceMap,
+    ) {
+        self.ensure_resource_table(tid);
+        let mut dtor_str = None;
+
         let imported = self
             .component
-            .defined_resource_index(self.types[t2].ty)
+            .defined_resource_index(self.types[tid].ty)
             .is_none();
 
-        let resource_id = crate::dealias(self.resolve, t1);
-        if resource_id != t1 {
-            return;
-        }
+        let resource_id = crate::dealias(self.resolve, t);
 
-        let resource = self.types[t2].ty;
+        let resource = self.types[tid].ty;
         if let Some(resource_idx) = self.component.defined_resource_index(resource) {
             let resource_def = self
                 .component
@@ -1315,7 +1270,7 @@ impl<'a> Instantiator<'a, '_> {
                 .unwrap();
 
             if let Some(dtor) = &resource_def.dtor {
-                self.resource_dtors.insert(resource_id, dtor.clone());
+                dtor_str = Some(self.core_def(dtor));
             }
         }
 
@@ -1328,7 +1283,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.resolve.worlds[world]
                         .imports
                         .iter()
-                        .find(|&(_, item)| *item == WorldItem::Type(t1))
+                        .find(|&(_, item)| *item == WorldItem::Type(t))
                         .unwrap()
                         .0
                         .clone(),
@@ -1367,7 +1322,6 @@ impl<'a> Instantiator<'a, '_> {
                 maybe_iface_member.as_deref(),
                 Some(resource_name),
                 local_name_str.to_string(),
-                true,
             );
 
             local_name_str
@@ -1379,22 +1333,24 @@ impl<'a> Instantiator<'a, '_> {
         let entry = ResourceTable {
             imported,
             data: ResourceData::Host {
-                tid: t2,
-                rid: self.types[t2].ty,
-                dtor_name: None,
+                tid,
+                rid: self.types[tid].ty,
                 local_name,
+                dtor_name: dtor_str,
             },
         };
-        if is_exports {
-            self.exports_resource_map.insert(resource_id, entry);
-        } else {
-            if let Some(existing) = self.imports_resource_map.insert(resource_id, entry.clone()) {
-                assert_eq!(existing, entry);
-            }
+        if let Some(existing) = resource_map.get(&resource_id) {
+            assert_eq!(*existing, entry);
         }
+        resource_map.insert(resource_id, entry);
     }
 
-    fn connect_resource_types(&mut self, id: TypeId, iface_ty: &InterfaceType, is_exports: bool) {
+    fn connect_resource_types(
+        &mut self,
+        id: TypeId,
+        iface_ty: &InterfaceType,
+        resource_map: &mut ResourceMap,
+    ) {
         match (&self.resolve.types[id].kind, iface_ty) {
             (TypeDefKind::Flags(_), InterfaceType::Flags(_))
             | (TypeDefKind::Enum(_), InterfaceType::Enum(_)) => {}
@@ -1402,7 +1358,7 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.fields.iter().zip(t2.fields.iter()) {
                     if let Type::Id(id) = f1.ty {
-                        self.connect_resource_types(id, &f2.ty, is_exports);
+                        self.connect_resource_types(id, &f2.ty, resource_map);
                     }
                 }
             }
@@ -1410,13 +1366,13 @@ impl<'a> Instantiator<'a, '_> {
                 TypeDefKind::Handle(Handle::Own(t1) | Handle::Borrow(t1)),
                 InterfaceType::Own(t2) | InterfaceType::Borrow(t2),
             ) => {
-                self.connect_resources(*t1, *t2, is_exports);
+                self.connect_resources(*t1, *t2, resource_map);
             }
             (TypeDefKind::Tuple(t1), InterfaceType::Tuple(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.types.iter().zip(t2.types.iter()) {
                     if let Type::Id(id) = f1 {
-                        self.connect_resource_types(*id, f2, is_exports);
+                        self.connect_resource_types(*id, f2, resource_map);
                     }
                 }
             }
@@ -1424,100 +1380,37 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.cases.iter().zip(t2.cases.iter()) {
                     if let Some(Type::Id(id)) = &f1.ty {
-                        self.connect_resource_types(*id, f2.ty.as_ref().unwrap(), is_exports);
+                        self.connect_resource_types(*id, f2.ty.as_ref().unwrap(), resource_map);
                     }
                 }
             }
             (TypeDefKind::Option(t1), InterfaceType::Option(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
-                    self.connect_resource_types(*id, &t2.ty, is_exports);
+                    self.connect_resource_types(*id, &t2.ty, resource_map);
                 }
             }
             (TypeDefKind::Result(t1), InterfaceType::Result(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Some(Type::Id(id)) = &t1.ok {
-                    self.connect_resource_types(*id, &t2.ok.unwrap(), is_exports);
+                    self.connect_resource_types(*id, &t2.ok.unwrap(), resource_map);
                 }
                 if let Some(Type::Id(id)) = &t1.err {
-                    self.connect_resource_types(*id, &t2.err.unwrap(), is_exports);
+                    self.connect_resource_types(*id, &t2.err.unwrap(), resource_map);
                 }
             }
             (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
-                    self.connect_resource_types(*id, &t2.element, is_exports);
+                    self.connect_resource_types(*id, &t2.element, resource_map);
                 }
             }
             (TypeDefKind::Type(ty), _) => {
                 if let Type::Id(id) = ty {
-                    self.connect_resource_types(*id, iface_ty, is_exports);
+                    self.connect_resource_types(*id, iface_ty, resource_map);
                 }
             }
             (_, _) => unreachable!(),
-        }
-    }
-
-    fn collect_resource_types(
-        &mut self,
-        iface_ty: &InterfaceType,
-        resources: &mut Vec<TypeResourceTableIndex>,
-    ) {
-        match iface_ty {
-            InterfaceType::Flags(_) | InterfaceType::Enum(_) => {}
-            InterfaceType::Record(t) => {
-                let t = &self.types[*t];
-                for f in t.fields.iter() {
-                    self.collect_resource_types(&f.ty, resources);
-                }
-            }
-            InterfaceType::Own(t) | InterfaceType::Borrow(t) => {
-                resources.push(*t);
-            }
-            InterfaceType::Tuple(t) => {
-                let t = &self.types[*t];
-                for f in t.types.iter() {
-                    self.collect_resource_types(f, resources);
-                }
-            }
-            InterfaceType::Variant(t) => {
-                let t = &self.types[*t];
-                for f in t.cases.iter() {
-                    if let Some(ty) = f.ty {
-                        self.collect_resource_types(&ty, resources);
-                    }
-                }
-            }
-            InterfaceType::Option(t) => {
-                let t = &self.types[*t];
-                self.collect_resource_types(&t.ty, resources);
-            }
-            InterfaceType::Result(t) => {
-                let t = &self.types[*t];
-                if let Some(ok) = &t.ok {
-                    self.collect_resource_types(&ok, resources);
-                }
-                if let Some(err) = &t.err {
-                    self.collect_resource_types(&err, resources);
-                }
-            }
-            InterfaceType::List(t) => {
-                let t = &self.types[*t];
-                self.collect_resource_types(&t.element, resources);
-            }
-            InterfaceType::Bool
-            | InterfaceType::S8
-            | InterfaceType::U8
-            | InterfaceType::S16
-            | InterfaceType::U16
-            | InterfaceType::S32
-            | InterfaceType::U32
-            | InterfaceType::S64
-            | InterfaceType::U64
-            | InterfaceType::Float32
-            | InterfaceType::Float64
-            | InterfaceType::Char
-            | InterfaceType::String => {}
         }
     }
 
@@ -1529,8 +1422,8 @@ impl<'a> Instantiator<'a, '_> {
         callee: &str,
         opts: &CanonicalOptions,
         func: &Function,
+        resource_map: &ResourceMap,
         abi: AbiVariant,
-        is_exports: bool,
     ) {
         let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
         let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
@@ -1591,11 +1484,7 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let mut f = FunctionBindgen {
-            resource_map: if is_exports {
-                &self.exports_resource_map
-            } else {
-                &self.imports_resource_map
-            },
+            resource_map: &resource_map,
             cur_resource_borrows: Vec::new(),
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
@@ -1774,24 +1663,29 @@ impl<'a> Instantiator<'a, '_> {
         for (export_name, export) in exports.iter() {
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
+            let mut resource_map = ResourceMap::new();
             match export {
                 Export::LiftedFunction {
-                    func: def, options, ..
+                    func: def,
+                    options,
+                    ty: func_ty,
                 } => {
                     let func = match item {
                         WorldItem::Function(f) => f,
                         WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
                     };
+                    self.create_resource_fn_map(func, *func_ty, &mut resource_map);
+
                     let local_name = if let FunctionKind::Constructor(resource_id)
                     | FunctionKind::Method(resource_id)
                     | FunctionKind::Static(resource_id) = func.kind
                     {
-                        let ResourceData::Host { rid, .. } =
-                            &self.exports_resource_map.get(&resource_id).unwrap().data
-                        else {
-                            unreachable!()
-                        };
-                        self.gen.local_names.get(rid)
+                        Instantiator::resource_name(
+                            &self.resolve,
+                            &mut self.gen.local_names,
+                            resource_id,
+                            &self.exports_resource_types,
+                        )
                     } else {
                         self.gen.local_names.create_once(export_name)
                     }
@@ -1802,8 +1696,7 @@ impl<'a> Instantiator<'a, '_> {
                         options,
                         func,
                         export_name,
-                        // exported top-level functions only reference imported resources
-                        false,
+                        &resource_map,
                     );
                     if let FunctionKind::Constructor(ty)
                     | FunctionKind::Method(ty)
@@ -1829,7 +1722,7 @@ impl<'a> Instantiator<'a, '_> {
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
                     for (func_name, export) in exports {
-                        let (def, options, _) = match export {
+                        let (def, options, func_ty) = match export {
                             Export::LiftedFunction { func, options, ty } => (func, options, ty),
                             Export::Type(_) => continue, // ignored
                             _ => unreachable!(),
@@ -1837,22 +1730,31 @@ impl<'a> Instantiator<'a, '_> {
 
                         let func = &self.resolve.interfaces[id].functions[func_name];
 
+                        self.create_resource_fn_map(func, *func_ty, &mut resource_map);
+
                         let local_name = if let FunctionKind::Constructor(resource_id)
                         | FunctionKind::Method(resource_id)
                         | FunctionKind::Static(resource_id) = func.kind
                         {
-                            let ResourceData::Host { rid, .. } =
-                                &self.exports_resource_map.get(&resource_id).unwrap().data
-                            else {
-                                unreachable!()
-                            };
-                            self.gen.local_names.get(rid)
+                            Instantiator::resource_name(
+                                &self.resolve,
+                                &mut self.gen.local_names,
+                                resource_id,
+                                &self.exports_resource_types,
+                            )
                         } else {
                             self.gen.local_names.create_once(func_name)
                         }
                         .to_string();
 
-                        self.export_bindgen(&local_name, &def, &options, func, export_name, true);
+                        self.export_bindgen(
+                            &local_name,
+                            &def,
+                            &options,
+                            func,
+                            export_name,
+                            &resource_map,
+                        );
 
                         if let FunctionKind::Constructor(ty)
                         | FunctionKind::Method(ty)
@@ -1893,7 +1795,7 @@ impl<'a> Instantiator<'a, '_> {
         options: &CanonicalOptions,
         func: &Function,
         export_name: &String,
-        exports_resource_map: bool,
+        resource_map: &ResourceMap,
     ) {
         match func.kind {
             FunctionKind::Freestanding => uwrite!(self.src.js, "\nfunction {local_name}"),
@@ -1957,8 +1859,8 @@ impl<'a> Instantiator<'a, '_> {
             &callee,
             options,
             func,
+            resource_map,
             AbiVariant::GuestExport,
-            exports_resource_map,
         );
         match func.kind {
             FunctionKind::Freestanding => self.src.js("\n"),

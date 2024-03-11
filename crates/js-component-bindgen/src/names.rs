@@ -47,7 +47,7 @@ impl<'a> LocalNames {
         unique_id.hash(&mut new_s);
         let hash = new_s.finish();
         if !self.local_name_ids.contains_key(&hash) {
-            panic!("Internal error, no name defined for {}", hash);
+            panic!("Internal error, no name defined in local names map");
         }
         &self.local_name_ids[&hash]
     }

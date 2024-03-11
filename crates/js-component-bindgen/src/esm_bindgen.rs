@@ -3,7 +3,7 @@ use heck::ToLowerCamelCase;
 use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source::Source;
 use crate::{uwrite, uwriteln, TranspileOpts};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Write;
 
 type LocalName = String;
@@ -16,7 +16,6 @@ enum Binding {
 #[derive(Default)]
 pub struct EsmBindgen {
     imports: BTreeMap<String, Binding>,
-    unused_imports: BTreeSet<LocalName>,
     exports: BTreeMap<String, Binding>,
     export_aliases: BTreeMap<String, String>,
 }
@@ -26,7 +25,7 @@ impl EsmBindgen {
     /// first segment
     /// arbitrary nesting of interfaces is supported in order to support virtual WASI interfaces
     /// only two-level nesting supports serialization into imports currently
-    pub fn add_import_binding(&mut self, path: &[String], binding_name: String, unused: bool) {
+    pub fn add_import_binding(&mut self, path: &[String], binding_name: String) {
         let mut iface = &mut self.imports;
         for i in 0..path.len() - 1 {
             if !iface.contains_key(&path[i]) {
@@ -40,17 +39,10 @@ impl EsmBindgen {
                 ),
             };
         }
-        if unused {
-            self.unused_imports.insert(binding_name.to_string());
-        }
         iface.insert(
             path[path.len() - 1].to_string(),
             Binding::Local(binding_name),
         );
-    }
-
-    pub fn ensure_import_binding(&mut self, binding_name: &str) {
-        self.unused_imports.remove(binding_name);
     }
 
     /// add an exported function binding, optionally on an interface id or kebab name
@@ -106,11 +98,7 @@ impl EsmBindgen {
 
     /// get the final top-level import specifier list
     pub fn import_specifiers(&self) -> Vec<String> {
-        self.imports
-            .keys()
-            .filter(|impt| !self.unused_imports.contains(*impt))
-            .map(|impt| impt.to_string())
-            .collect()
+        self.imports.keys().map(|impt| impt.to_string()).collect()
     }
 
     /// get the exports (including exported aliases) from the bindgen
@@ -212,15 +200,6 @@ impl EsmBindgen {
         js_string.contains("\"") || js_string.contains("'") || js_string.contains("`")
     }
 
-    fn binding_has_used(&self, binding: &Binding) -> bool {
-        match binding {
-            Binding::Interface(iface) => iface
-                .iter()
-                .any(|(_, binding)| self.binding_has_used(binding)),
-            Binding::Local(binding_name) => !self.unused_imports.contains(binding_name),
-        }
-    }
-
     pub fn render_imports(
         &mut self,
         output: &mut Source,
@@ -229,9 +208,6 @@ impl EsmBindgen {
     ) {
         let mut iface_imports = Vec::new();
         for (specifier, binding) in &self.imports {
-            if !self.binding_has_used(binding) {
-                continue;
-            }
             if imports_object.is_some() {
                 uwrite!(output, "const ");
             } else {
@@ -296,9 +272,6 @@ impl EsmBindgen {
                     }
                 }
                 Binding::Local(local_name) => {
-                    if self.unused_imports.contains(local_name) {
-                        continue;
-                    }
                     if let Some(imports_object) = imports_object {
                         uwriteln!(
                             output,
