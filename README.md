@@ -96,7 +96,7 @@ fn();
 Imports can be remapped using the `--map` flag, or to provide imports as an argument use the `--instantiation` option.
 
 Components relying on WASI bindings will contain external WASI imports, which are automatically updated
-to the `@bytecodealliance/preview-shim` package. This package can be installed from npm separately for
+to the `@bytecodealliance/preview2-shim` package. This package can be installed from npm separately for
 runtime usage. This shim layer supports both Node.js and browsers.
 
 Options include:
