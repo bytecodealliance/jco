@@ -179,32 +179,59 @@ class RequestOptions {
   #connectTimeout;
   #firstByteTimeout;
   #betweenBytesTimeout;
+  #defaultTimeoutMs = 600_000n;
+  #nanoToMilliConversion = 1_000_000n;
   //The WASI Duration is nanoseconds, js timers are set with Ms.
-  //We store the data as nanos, but provide TimeoutMs methods for
-  //convenience in setting timers elsewhere
+  //We store the data as nanos (in bigints), but provide TimeoutMs
+  //methods for convenience in setting timers elsewhere. A default
+  //value of 600_000Ms is set to match Wasmtime's defaults
   connectTimeout() {
-    return this.#connectTimeout;
+    if (this.#connectTimeout) {
+      return this.#connectTimeout;
+    } else {
+      return this.#defaultTimeoutMs * this.#nanoToMilliConversion;
+    }
   }
   connectTimeoutMs() {
-    return this.#connectTimeout / 1_000_000;
+    if (this.#connectTimeout) {
+      return this.#connectTimeout / this.#nanoToMilliConversion;
+    } else {
+      return this.#defaultTimeoutMs;
+    }
   }
   setConnectTimeout(duration) {
     this.#connectTimeout = duration;
   }
   firstByteTimeout() {
-    return this.#firstByteTimeout;
+    if (this.#firstByteTimeout) {
+      return this.#firstByteTimeout;
+    } else {
+      return this.#defaultTimeoutMs * this.#nanoToMilliConversion;
+    }
   }
   firstByteTimeoutMs() {
-    return this.#firstByteTimeout / 1_000_000;
+    if (this.#firstByteTimeout) {
+      return this.#firstByteTimeout / this.#nanoToMilliConversion;
+    } else {
+      return this.#defaultTimeoutMs;
+    }
   }
   setFirstByteTimeout(duration) {
     this.#firstByteTimeout = duration;
   }
   betweenBytesTimeout() {
-    return this.#betweenBytesTimeout;
+    if (this.#betweenBytesTimeout) {
+      return this.#betweenBytesTimeout;
+    } else {
+      return this.#defaultTimeoutMs * this.#nanoToMilliConversion;
+    }
   }
   betweenBytesTimeoutMs() {
-    return this.#betweenBytesTimeout / 1_000_000;
+    if (this.#betweenBytesTimeout) {
+      return this.#betweenBytesTimeout / this.#nanoToMilliConversion;
+    } else {
+      return this.#defaultTimeoutMs;
+    }
   }
   setBetweenBytesTimeout(duration) {
     this.#betweenBytesTimeout = duration;
