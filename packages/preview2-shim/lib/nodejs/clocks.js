@@ -38,7 +38,7 @@ export const wallClock = {
 
 monotonicClock.resolution[symbolCabiLower] = () => resolution;
 monotonicClock.now[symbolCabiLower] = () => hrtime.bigint;
-wallClock.resolution[symbolCabiLower] = (memory) => {
+wallClock.resolution[symbolCabiLower] = ({ memory }) => {
   let buf32 = new Int32Array(memory.buffer);
   return function now(retptr) {
     if (memory.buffer !== buf32.buffer) buf32 = new Int32Array(memory.buffer);
@@ -49,7 +49,7 @@ wallClock.resolution[symbolCabiLower] = (memory) => {
   };
 };
 
-wallClock.now[symbolCabiLower] = (memory) => {
+wallClock.now[symbolCabiLower] = ({ memory }) => {
   let buf32 = new Int32Array(memory.buffer);
   let buf64 = new BigInt64Array(memory.buffer);
   return function now(retptr) {

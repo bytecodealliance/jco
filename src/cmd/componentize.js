@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import c from 'chalk-template';
 
 export async function componentize (jsSource, opts) {
@@ -13,7 +13,7 @@ export async function componentize (jsSource, opts) {
   }
   const source = await readFile(jsSource, 'utf8');
   const { component, imports } = await componentizeFn(source, {
-    sourceName: jsSource,
+    sourceName: basename(jsSource),
     witPath: resolve(opts.wit),
     worldName: opts.worldName,
     enableStdout: opts.enableStdout,

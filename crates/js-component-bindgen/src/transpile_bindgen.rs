@@ -1164,7 +1164,7 @@ impl<'a> Instantiator<'a, '_> {
                 Some(BindingsMode::DirectOptimized) => {
                     uwriteln!(
                         self.src.js_init,
-                        "trampoline{} = {callee_name}({memory}, {realloc}, {post_return}, {string_encoding});",
+                        "trampoline{} = {callee_name}({memory}{realloc}{post_return}{string_encoding});",
                         trampoline.as_u32()
                     );
                 }
