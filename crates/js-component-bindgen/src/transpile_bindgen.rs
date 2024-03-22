@@ -667,7 +667,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(rep) {{
-                        throw new Error('AlwaysTrap');
+                        throw new TypeError('AlwaysTrap');
                     }}
                 "
                 );
@@ -788,7 +788,7 @@ impl<'a> Instantiator<'a, '_> {
                         )
                     } else {
                         // if not, then capture / disposal paths are never called
-                        "throw new Error('unreachable resource trampoline')".into()
+                        "throw new TypeError('unreachable resource trampoline')".into()
                     }
                 };
 
@@ -841,7 +841,7 @@ impl<'a> Instantiator<'a, '_> {
                         {scope_id}--;
                         for (const {{ rid, handle }} of {resource_borrows}) {{
                             if ({handle_tables}[rid][handle << 1] === {scope_id})
-                                throw new Error('borrows not dropped for resource call');
+                                throw new TypeError('borrows not dropped for resource call');
                         }}
                         {resource_borrows} = [];
                     }}
@@ -1156,7 +1156,7 @@ impl<'a> Instantiator<'a, '_> {
                     let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
                     if !self.gen.opts.valid_lifting_optimization {
                         uwriteln!(self.src.js_init, "if (!{callee_name}[{symbol_cabi_lower}]) {{
-                            throw new Error('import for \"{import_name}\" does not define a Symbol.for('cabiLower') optimized binding');
+                            throw new TypeError('import for \"{import_name}\" does not define a Symbol.for('cabiLower') optimized binding');
                         }}");
                     }
                     uwriteln!(self.src.js_init, "trampoline{} = {callee_name}[{symbol_cabi_lower}]({memory}{realloc}{post_return}{string_encoding}{resource_tables});", trampoline.as_u32());
@@ -1518,7 +1518,6 @@ impl<'a> Instantiator<'a, '_> {
             },
             src: source::Source::default(),
             resolve: self.resolve,
-            maybe_err_cause: false,
         };
         abi::call(
             self.resolve,
