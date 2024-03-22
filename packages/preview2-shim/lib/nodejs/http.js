@@ -175,18 +175,22 @@ class ResponseOutparam {
 const responseOutparamCreate = ResponseOutparam._create;
 delete ResponseOutparam._create;
 
+const defaultHttpTimeoutMs = 600_000n;
+const nanoToMilliConversion = 1_000_000n;
+
 class RequestOptions {
-  #connectTimeout;
-  #firstByteTimeout;
-  #betweenBytesTimeout;
+  #connectTimeout = defaultHttpTimeoutMs * nanoToMilliConversion;
+  #firstByteTimeout = defaultHttpTimeoutMs * nanoToMilliConversion;
+  #betweenBytesTimeout = defaultHttpTimeoutMs * nanoToMilliConversion;
   //The WASI Duration is nanoseconds, js timers are set with Ms.
-  //We store the data as nanos, but provide TimeoutMs methods for
-  //convenience in setting timers elsewhere
+  //We store the data as nanos (in bigints), but provide TimeoutMs
+  //methods for convenience in setting timers elsewhere. A default
+  //value of 600_000Ms is set to match Wasmtime's defaults
   connectTimeout() {
     return this.#connectTimeout;
   }
   connectTimeoutMs() {
-    return this.#connectTimeout / 1_000_000;
+    return this.#connectTimeout / nanoToMilliConversion;
   }
   setConnectTimeout(duration) {
     this.#connectTimeout = duration;
@@ -195,7 +199,7 @@ class RequestOptions {
     return this.#firstByteTimeout;
   }
   firstByteTimeoutMs() {
-    return this.#firstByteTimeout / 1_000_000;
+    return this.#firstByteTimeout / nanoToMilliConversion;
   }
   setFirstByteTimeout(duration) {
     this.#firstByteTimeout = duration;
@@ -204,7 +208,7 @@ class RequestOptions {
     return this.#betweenBytesTimeout;
   }
   betweenBytesTimeoutMs() {
-    return this.#betweenBytesTimeout / 1_000_000;
+    return this.#betweenBytesTimeout / nanoToMilliConversion;
   }
   setBetweenBytesTimeout(duration) {
     this.#betweenBytesTimeout = duration;
