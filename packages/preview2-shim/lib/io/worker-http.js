@@ -1,7 +1,4 @@
-import {
-  createReadableStream,
-  getStreamOrThrow,
-} from "./worker-thread.js";
+import { createReadableStream, getStreamOrThrow } from "./worker-thread.js";
 import {
   createServer,
   request as httpRequest,
@@ -117,7 +114,7 @@ export async function createHttpRequest(
           host: authority.split(":")[0],
           port: authority.split(":")[1],
           path: pathWithQuery,
-          timeout: connectTimeout && Number(connectTimeout),
+          timeout: connectTimeout && Number(connectTimeout / 1_000_000n),
         });
         break;
       case "https:":
@@ -127,7 +124,7 @@ export async function createHttpRequest(
           host: authority.split(":")[0],
           port: authority.split(":")[1],
           path: pathWithQuery,
-          timeout: connectTimeout && Number(connectTimeout),
+          timeout: connectTimeout && Number(connectTimeout / 1_000_000n),
         });
         break;
       default:
@@ -143,6 +140,12 @@ export async function createHttpRequest(
       req.end();
     }
     const res = await new Promise((resolve, reject) => {
+      req.once('timeout', () => {
+        reject({
+          tag: "connection-timeout"
+        });
+        req.destroy();
+      });
       req.once("response", resolve);
       req.once("close", () => reject);
       req.once("error", reject);
@@ -156,7 +159,7 @@ export async function createHttpRequest(
     return {
       status: res.statusCode,
       headers: Array.from(Object.entries(res.headers)),
-      bodyStreamId
+      bodyStreamId,
     };
   } catch (e) {
     if (e?.tag) throw e;

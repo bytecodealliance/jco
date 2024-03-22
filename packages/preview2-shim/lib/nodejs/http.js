@@ -175,22 +175,14 @@ class ResponseOutparam {
 const responseOutparamCreate = ResponseOutparam._create;
 delete ResponseOutparam._create;
 
-const defaultHttpTimeoutMs = 600_000n;
-const nanoToMilliConversion = 1_000_000n;
+const defaultHttpTimeout = 600_000_000_000n;
 
 class RequestOptions {
-  #connectTimeout = defaultHttpTimeoutMs * nanoToMilliConversion;
-  #firstByteTimeout = defaultHttpTimeoutMs * nanoToMilliConversion;
-  #betweenBytesTimeout = defaultHttpTimeoutMs * nanoToMilliConversion;
-  //The WASI Duration is nanoseconds, js timers are set with Ms.
-  //We store the data as nanos (in bigints), but provide TimeoutMs
-  //methods for convenience in setting timers elsewhere. A default
-  //value of 600_000Ms is set to match Wasmtime's defaults
+  #connectTimeout = defaultHttpTimeout;
+  #firstByteTimeout = defaultHttpTimeout;
+  #betweenBytesTimeout = defaultHttpTimeout;
   connectTimeout() {
     return this.#connectTimeout;
-  }
-  connectTimeoutMs() {
-    return this.#connectTimeout / nanoToMilliConversion;
   }
   setConnectTimeout(duration) {
     this.#connectTimeout = duration;
@@ -198,17 +190,11 @@ class RequestOptions {
   firstByteTimeout() {
     return this.#firstByteTimeout;
   }
-  firstByteTimeoutMs() {
-    return this.#firstByteTimeout / nanoToMilliConversion;
-  }
   setFirstByteTimeout(duration) {
     this.#firstByteTimeout = duration;
   }
   betweenBytesTimeout() {
     return this.#betweenBytesTimeout;
-  }
-  betweenBytesTimeoutMs() {
-    return this.#betweenBytesTimeout / nanoToMilliConversion;
   }
   setBetweenBytesTimeout(duration) {
     this.#betweenBytesTimeout = duration;
@@ -288,9 +274,9 @@ class OutgoingRequest {
   }
   [symbolDispose]() {}
   static _handle(request, options) {
-    const connectTimeout = options?.connectTimeoutMs();
-    const betweenBytesTimeout = options?.betweenBytesTimeoutMs();
-    const firstByteTimeout = options?.firstByteTimeoutMs();
+    const connectTimeout = options?.connectTimeout();
+    const betweenBytesTimeout = options?.betweenBytesTimeout();
+    const firstByteTimeout = options?.firstByteTimeout();
     const scheme = schemeString(request.#scheme);
     // note: host header is automatically added by Node.js
     const headers = [];
@@ -307,7 +293,7 @@ class OutgoingRequest {
       outgoingBodyOutputStreamId(request.#body),
       connectTimeout,
       betweenBytesTimeout,
-      firstByteTimeout
+      firstByteTimeout,
     );
   }
 }

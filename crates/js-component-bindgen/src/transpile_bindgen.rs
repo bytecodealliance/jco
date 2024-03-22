@@ -1518,6 +1518,7 @@ impl<'a> Instantiator<'a, '_> {
             },
             src: source::Source::default(),
             resolve: self.resolve,
+            maybe_err_cause: false,
         };
         abi::call(
             self.resolve,

@@ -86,6 +86,7 @@ pub struct FunctionBindgen<'a> {
     pub callee: &'a str,
     pub callee_resource_dynamic: bool,
     pub resolve: &'a Resolve,
+    pub maybe_err_cause: bool,
 }
 
 impl FunctionBindgen<'_> {
@@ -194,6 +195,14 @@ impl FunctionBindgen<'_> {
                 }
                 statement
             }
+        }
+    }
+
+    fn type_err(&self, err: &str) -> String {
+        if self.maybe_err_cause {
+            format!("throw new TypeError({err}, maybeCause)")
+        } else {
+            format!("throw new TypeError({err})")
         }
     }
 }
@@ -437,11 +446,15 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwrite!(self.src, ";\n");
                 }
 
-                uwrite!(self.src, "\
+                uwrite!(
+                    self.src,
+                    "\
                     }} else if ({op0} !== null && {op0} !== undefined) {{
-                        throw new TypeError('only an object, undefined or null can be converted to flags');
+                        {}
                     }}
-                ");
+                ",
+                    self.type_err("'only an object, undefined or null can be converted to flags'")
+                );
 
                 // We don't need to do anything else for the null/undefined
                 // case, since that's interpreted as everything false, and we
@@ -461,8 +474,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         uwriteln!(
                             self.src,
                             "if (({op} & {mask}) !== 0) {{
-                                throw new TypeError('flags have extraneous bits set');
-                            }}"
+                                {}
+                            }}",
+                            self.type_err("'flags have extraneous bits set'")
                         );
                     }
                 }
@@ -522,9 +536,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 let variant_name = name.to_upper_camel_case();
                 uwriteln!(
                     self.src,
-                    r#"default: {{
-                        throw new TypeError(`invalid variant tag value \`${{JSON.stringify({expr_to_match})}}\` (received \`${{variant{tmp}}}\`) specified for \`{variant_name}\``);
-                    }}"#,
+                    "default: {{
+                        {}
+                    }}",
+                    self.type_err(&format!(r#"`invalid variant tag value \`${{JSON.stringify({expr_to_match})}}\` (received \`${{variant{tmp}}}\`) specified for \`{variant_name}\``"#))
                 );
                 uwriteln!(self.src, "}}");
             }
@@ -573,8 +588,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(
                         self.src,
                         "default: {{
-                            throw new TypeError('invalid variant discriminant for {variant_name}');
-                        }}"
+                            {}
+                        }}",
+                        self.type_err(&format!(
+                            "'invalid variant discriminant for {variant_name}'"
+                        ))
                     );
                 }
                 uwriteln!(self.src, "}}");
@@ -617,9 +635,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 break;
                             }}
                             default: {{
-                                throw new TypeError('invalid variant specified for option');
+                                {}
                             }}
-                        }}"
+                        }}",
+                        self.type_err("'invalid variant specified for option'")
                     );
                 } else {
                     uwriteln!(
@@ -674,9 +693,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 break;
                             }}
                             default: {{
-                                throw new TypeError('invalid variant discriminant for option');
+                                {}
                             }}
-                        }}"
+                        }}",
+                        self.type_err("'invalid variant discriminant for option'")
                     );
                 } else {
                     uwriteln!(
@@ -730,9 +750,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             break;
                         }}
                         default: {{
-                            throw new TypeError('invalid variant specified for result');
+                            {}
                         }}
-                    }}"
+                    }}",
+                    self.type_err("'invalid variant specified for result'")
                 );
             }
 
@@ -778,9 +799,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 break;
                             }}
                             default: {{
-                                throw new TypeError('invalid variant discriminant for expected');
+                                {}
                             }}
-                        }}"
+                        }}",
+                        self.type_err("'invalid variant discriminant for expected'")
                     );
                 } else {
                     uwriteln!(
@@ -839,9 +861,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "
-                            throw new TypeError(`\"${{val{tmp}}}\" is not one of the cases of {name}`);
+                            {}
                         }}
-                    }}"
+                    }}",
+                    self.type_err(&format!(
+                        "`\"${{val{tmp}}}\" is not one of the cases of {name}`"
+                    ))
                 );
 
                 results.push(format!("enum{tmp}"));
@@ -871,8 +896,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(
                         self.src,
                         "default: {{
-                            throw new TypeError('invalid discriminant specified for {name}');
+                            {}
                         }}",
+                        self.type_err(&format!("'invalid discriminant specified for {name}'"))
                     );
                 }
                 uwriteln!(self.src, "}}");
@@ -1074,13 +1100,28 @@ impl Bindgen for FunctionBindgen<'_> {
                     format!("{}({})", self.callee, operands.join(", "))
                 };
                 if self.err == ErrHandling::ResultCatchHandler {
-                    let err_payload = self.intrinsic(Intrinsic::GetErrorPayload);
+                    self.maybe_err_cause = true;
+                    // result<_, string> allows JS error coercion only, while
+                    // any other result type will trap for arbitrary JS errors
+                    let err_payload = if let (_, Some(Type::Id(err_ty))) =
+                        func.results.throws(self.resolve).unwrap()
+                    {
+                        match &self.resolve.types[*err_ty].kind {
+                            TypeDefKind::Type(Type::String) => {
+                                self.intrinsic(Intrinsic::GetErrorPayloadString)
+                            }
+                            _ => self.intrinsic(Intrinsic::GetErrorPayload),
+                        }
+                    } else {
+                        self.intrinsic(Intrinsic::GetErrorPayload)
+                    };
                     uwriteln!(
                         self.src,
-                        "let ret;
+                        "let ret, maybeCause;
                         try {{
                             ret = {{ tag: 'ok', val: {call} }};
                         }} catch (e) {{
+                            maybeCause = {{ cause: e }};
                             ret = {{ tag: 'err', val: {err_payload}(e) }};
                         }}"
                     );
@@ -1343,11 +1384,14 @@ impl Bindgen for FunctionBindgen<'_> {
                                     self.src,
                                     "var {handle} = {op}[{symbol_resource_handle}];
                                     if (!{handle}) {{
-                                        throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                        {}
                                     }}
                                     finalizationRegistry{tid}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
-                                    {op}[{symbol_resource_handle}] = null;"
+                                    {op}[{symbol_resource_handle}] = null;",
+                                    self.type_err(&format!(
+                                        "'Resource error: Not a valid \"{class_name}\" resource.'"
+                                    ))
                                 );
                             } else {
                                 // When expecting a borrow, the JS resource provided will always be an own
@@ -1359,9 +1403,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(self.src,
                                     "var {own_handle} = {op}[{symbol_resource_handle}];
                                     if (!{own_handle} || (handleTable{tid}[({own_handle} << 1) + 1] & {rsc_flag}) === 0) {{
-                                        throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                        {}
                                     }}
-                                    var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};"
+                                    var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};",
+                                    self.type_err(&format!("'Resource error: Not a valid \"{class_name}\" resource.'"))
                                 );
                             }
                         } else {
@@ -1370,9 +1415,12 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {local_name})) {{
-                                     throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                     {}
                                  }}
-                                 var {handle} = {op}[{symbol_resource_handle}];"
+                                 var {handle} = {op}[{symbol_resource_handle}];",
+                                self.type_err(&format!(
+                                    "'Resource error: Not a valid \"{class_name}\" resource.'"
+                                ))
                             );
                             // Otherwise, in hybrid bindgen we check for a Symbol.for('cabiRep')
                             // to get the resource rep.
@@ -1406,13 +1454,15 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         if !imported {
                             let local_rep = format!("localRep{}", self.tmp());
-
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {upper_camel})) {{
-                                    throw new Error('Resource error: Not a valid \"{upper_camel}\" resource.');
+                                    {}
                                 }}
-                                let {handle} = {op}[{symbol_resource_handle}];"
+                                let {handle} = {op}[{symbol_resource_handle}];",
+                                self.type_err(
+                                    "'Resource error: Not a valid \"{upper_camel}\" resource.'"
+                                )
                             );
 
                             if is_own {

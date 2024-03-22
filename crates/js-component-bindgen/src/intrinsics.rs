@@ -14,6 +14,7 @@ pub enum Intrinsic {
     F64ToI64,
     FetchCompile,
     GetErrorPayload,
+    GetErrorPayloadString,
     HandleTables,
     HasOwnProperty,
     I32ToF32,
@@ -77,7 +78,9 @@ pub fn render_intrinsics(
     let mut output = Source::default();
 
     // Handle intrinsic "dependence"
-    if intrinsics.contains(&Intrinsic::GetErrorPayload) {
+    if intrinsics.contains(&Intrinsic::GetErrorPayload)
+        || intrinsics.contains(&Intrinsic::GetErrorPayloadString)
+    {
         intrinsics.insert(Intrinsic::HasOwnProperty);
     }
     if intrinsics.contains(&Intrinsic::Utf16Encode) {
@@ -167,6 +170,18 @@ pub fn render_intrinsics(
                 uwrite!(output, "
                     function getErrorPayload(e) {{
                         if (e && {hop}.call(e, 'payload')) return e.payload;
+                        if (e instanceof Error) throw e;
+                        return e;
+                    }}
+                ")
+            },
+
+            Intrinsic::GetErrorPayloadString => {
+                let hop = Intrinsic::HasOwnProperty.name();
+                uwrite!(output, "
+                    function getErrorPayloadString(e) {{
+                        if (e && {hop}.call(e, 'payload')) return e.payload;
+                        if (e instanceof Error) return e.message;
                         return e;
                     }}
                 ")
@@ -647,6 +662,7 @@ impl Intrinsic {
             Intrinsic::F64ToI64 => "f64ToI64",
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::GetErrorPayload => "getErrorPayload",
+            Intrinsic::GetErrorPayloadString => "getErrorPayloadString",
             Intrinsic::HandleTables => "handleTables",
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::I32ToF32 => "i32ToF32",
