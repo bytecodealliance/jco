@@ -441,7 +441,7 @@ export async function cliTest(fixtures) {
       ]);
     });
 
-    (process.platform === 'win32' ? test.skip : test)("Componentize", async () => {
+    test("Componentize", async () => {
       const { stdout, stderr } = await exec(
         jcoPath,
         "componentize",
