@@ -260,13 +260,13 @@ export namespace WasiFilesystemTypes {
    */
   export function filesystemErrorCode(err: Error): ErrorCode | undefined;
 }
-import type { InputStream } from '../interfaces/wasi-io-streams.js';
+import type { InputStream } from './wasi-io-streams.js';
 export { InputStream };
-import type { OutputStream } from '../interfaces/wasi-io-streams.js';
+import type { OutputStream } from './wasi-io-streams.js';
 export { OutputStream };
-import type { Error } from '../interfaces/wasi-io-streams.js';
+import type { Error } from './wasi-io-streams.js';
 export { Error };
-import type { Datetime } from '../interfaces/wasi-clocks-wall-clock.js';
+import type { Datetime } from './wasi-clocks-wall-clock.js';
 export { Datetime };
 /**
  * File size or length of a region within a file.
@@ -639,6 +639,10 @@ export interface MetadataHashValue {
   upper: bigint,
 }
 
+export class DirectoryEntryStream {
+  readDirectoryEntry(): DirectoryEntry | undefined;
+}
+
 export class Descriptor {
   readViaStream(offset: Filesize): InputStream;
   writeViaStream(offset: Filesize): OutputStream;
@@ -667,8 +671,4 @@ export class Descriptor {
   isSameObject(other: Descriptor): boolean;
   metadataHash(): MetadataHashValue;
   metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;
-}
-
-export class DirectoryEntryStream {
-  readDirectoryEntry(): DirectoryEntry | undefined;
 }

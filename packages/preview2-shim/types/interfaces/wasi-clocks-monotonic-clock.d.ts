@@ -23,7 +23,7 @@ export namespace WasiClocksMonotonicClock {
    */
   export function subscribeDuration(when: Duration): Pollable;
 }
-import type { Pollable } from '../interfaces/wasi-io-poll.js';
+import type { Pollable } from './wasi-io-poll.js';
 export { Pollable };
 /**
  * An instant in time, in nanoseconds. An instant is relative to an

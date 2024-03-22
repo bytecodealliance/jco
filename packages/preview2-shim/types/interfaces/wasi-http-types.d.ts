@@ -354,15 +354,15 @@ export namespace WasiHttpTypes {
    * `output-stream` child.
    */
 }
-import type { Duration } from '../interfaces/wasi-clocks-monotonic-clock.js';
+import type { Duration } from './wasi-clocks-monotonic-clock.js';
 export { Duration };
-import type { InputStream } from '../interfaces/wasi-io-streams.js';
+import type { InputStream } from './wasi-io-streams.js';
 export { InputStream };
-import type { OutputStream } from '../interfaces/wasi-io-streams.js';
+import type { OutputStream } from './wasi-io-streams.js';
 export { OutputStream };
-import type { Error as IoError } from '../interfaces/wasi-io-error.js';
+import type { Error as IoError } from './wasi-io-error.js';
 export { IoError };
-import type { Pollable } from '../interfaces/wasi-io-poll.js';
+import type { Pollable } from './wasi-io-poll.js';
 export { Pollable };
 /**
  * This type corresponds to HTTP standard Methods.
@@ -629,10 +629,6 @@ export type Trailers = Fields;
 export type StatusCode = number;
 export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
-export class ResponseOutparam {
-  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
-}
-
 export class OutgoingResponse {
   constructor(headers: Headers)
   statusCode(): StatusCode;
@@ -644,56 +640,6 @@ export class OutgoingResponse {
 export class OutgoingBody {
   write(): OutputStream;
   static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
-}
-
-export class Fields {
-  constructor()
-  static fromList(entries: [FieldKey, FieldValue][]): Fields;
-  get(name: FieldKey): FieldValue[];
-  has(name: FieldKey): boolean;
-  set(name: FieldKey, value: FieldValue[]): void;
-  'delete'(name: FieldKey): void;
-  append(name: FieldKey, value: FieldValue): void;
-  entries(): [FieldKey, FieldValue][];
-  clone(): Fields;
-}
-
-export class IncomingBody {
-  stream(): InputStream;
-  static finish(this_: IncomingBody): FutureTrailers;
-}
-
-export class FutureIncomingResponse {
-  subscribe(): Pollable;
-  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
-}
-
-export class FutureTrailers {
-  subscribe(): Pollable;
-  get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
-}
-
-export class IncomingRequest {
-  method(): Method;
-  pathWithQuery(): string | undefined;
-  scheme(): Scheme | undefined;
-  authority(): string | undefined;
-  headers(): Headers;
-  consume(): IncomingBody;
-}
-
-export class OutgoingRequest {
-  constructor(headers: Headers)
-  body(): OutgoingBody;
-  method(): Method;
-  setMethod(method: Method): void;
-  pathWithQuery(): string | undefined;
-  setPathWithQuery(pathWithQuery: string | undefined): void;
-  scheme(): Scheme | undefined;
-  setScheme(scheme: Scheme | undefined): void;
-  authority(): string | undefined;
-  setAuthority(authority: string | undefined): void;
-  headers(): Headers;
 }
 
 export class IncomingResponse {
@@ -710,4 +656,58 @@ export class RequestOptions {
   setFirstByteTimeout(duration: Duration | undefined): void;
   betweenBytesTimeout(): Duration | undefined;
   setBetweenBytesTimeout(duration: Duration | undefined): void;
+}
+
+export class OutgoingRequest {
+  constructor(headers: Headers)
+  body(): OutgoingBody;
+  method(): Method;
+  setMethod(method: Method): void;
+  pathWithQuery(): string | undefined;
+  setPathWithQuery(pathWithQuery: string | undefined): void;
+  scheme(): Scheme | undefined;
+  setScheme(scheme: Scheme | undefined): void;
+  authority(): string | undefined;
+  setAuthority(authority: string | undefined): void;
+  headers(): Headers;
+}
+
+export class IncomingRequest {
+  method(): Method;
+  pathWithQuery(): string | undefined;
+  scheme(): Scheme | undefined;
+  authority(): string | undefined;
+  headers(): Headers;
+  consume(): IncomingBody;
+}
+
+export class Fields {
+  constructor()
+  static fromList(entries: [FieldKey, FieldValue][]): Fields;
+  get(name: FieldKey): FieldValue[];
+  has(name: FieldKey): boolean;
+  set(name: FieldKey, value: FieldValue[]): void;
+  'delete'(name: FieldKey): void;
+  append(name: FieldKey, value: FieldValue): void;
+  entries(): [FieldKey, FieldValue][];
+  clone(): Fields;
+}
+
+export class FutureTrailers {
+  subscribe(): Pollable;
+  get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
+}
+
+export class FutureIncomingResponse {
+  subscribe(): Pollable;
+  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
+}
+
+export class IncomingBody {
+  stream(): InputStream;
+  static finish(this_: IncomingBody): FutureTrailers;
+}
+
+export class ResponseOutparam {
+  static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
 }

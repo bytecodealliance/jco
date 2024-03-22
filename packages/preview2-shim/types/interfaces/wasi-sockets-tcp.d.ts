@@ -302,21 +302,21 @@ export namespace WasiSocketsTcp {
    * - <https://man.freebsd.org/cgi/man.cgi?query=shutdown&sektion=2>
    */
 }
-import type { InputStream } from '../interfaces/wasi-io-streams.js';
+import type { InputStream } from './wasi-io-streams.js';
 export { InputStream };
-import type { OutputStream } from '../interfaces/wasi-io-streams.js';
+import type { OutputStream } from './wasi-io-streams.js';
 export { OutputStream };
-import type { Pollable } from '../interfaces/wasi-io-poll.js';
+import type { Pollable } from './wasi-io-poll.js';
 export { Pollable };
-import type { Duration } from '../interfaces/wasi-clocks-monotonic-clock.js';
+import type { Duration } from './wasi-clocks-monotonic-clock.js';
 export { Duration };
-import type { Network } from '../interfaces/wasi-sockets-network.js';
+import type { Network } from './wasi-sockets-network.js';
 export { Network };
-import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
+import type { ErrorCode } from './wasi-sockets-network.js';
 export { ErrorCode };
-import type { IpSocketAddress } from '../interfaces/wasi-sockets-network.js';
+import type { IpSocketAddress } from './wasi-sockets-network.js';
 export { IpSocketAddress };
-import type { IpAddressFamily } from '../interfaces/wasi-sockets-network.js';
+import type { IpAddressFamily } from './wasi-sockets-network.js';
 export { IpAddressFamily };
 /**
  * # Variants

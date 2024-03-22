@@ -188,9 +188,9 @@ export namespace WasiIoStreams {
        * is ready for reading, before performing the `splice`.
        */
     }
-    import type { Error } from '../interfaces/wasi-io-error.js';
+    import type { Error } from './wasi-io-error.js';
     export { Error };
-    import type { Pollable } from '../interfaces/wasi-io-poll.js';
+    import type { Pollable } from './wasi-io-poll.js';
     export { Pollable };
     /**
      * An error for input-stream and output-stream operations.

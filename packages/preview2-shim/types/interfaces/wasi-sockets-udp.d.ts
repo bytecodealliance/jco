@@ -220,15 +220,15 @@ export namespace WasiSocketsUdp {
        * It's planned to be removed when `future` is natively supported in Preview3.
        */
     }
-    import type { Pollable } from '../interfaces/wasi-io-poll.js';
+    import type { Pollable } from './wasi-io-poll.js';
     export { Pollable };
-    import type { Network } from '../interfaces/wasi-sockets-network.js';
+    import type { Network } from './wasi-sockets-network.js';
     export { Network };
-    import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
+    import type { ErrorCode } from './wasi-sockets-network.js';
     export { ErrorCode };
-    import type { IpSocketAddress } from '../interfaces/wasi-sockets-network.js';
+    import type { IpSocketAddress } from './wasi-sockets-network.js';
     export { IpSocketAddress };
-    import type { IpAddressFamily } from '../interfaces/wasi-sockets-network.js';
+    import type { IpAddressFamily } from './wasi-sockets-network.js';
     export { IpAddressFamily };
     /**
      * A received datagram.

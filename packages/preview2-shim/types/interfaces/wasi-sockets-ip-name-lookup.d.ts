@@ -45,13 +45,13 @@ export namespace WasiSocketsIpNameLookup {
    * It's planned to be removed when `future` is natively supported in Preview3.
    */
 }
-import type { Pollable } from '../interfaces/wasi-io-poll.js';
+import type { Pollable } from './wasi-io-poll.js';
 export { Pollable };
-import type { Network } from '../interfaces/wasi-sockets-network.js';
+import type { Network } from './wasi-sockets-network.js';
 export { Network };
-import type { ErrorCode } from '../interfaces/wasi-sockets-network.js';
+import type { ErrorCode } from './wasi-sockets-network.js';
 export { ErrorCode };
-import type { IpAddress } from '../interfaces/wasi-sockets-network.js';
+import type { IpAddress } from './wasi-sockets-network.js';
 export { IpAddress };
 
 export class ResolveAddressStream {
