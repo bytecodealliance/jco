@@ -548,6 +548,20 @@ impl<'a> Instantiator<'a, '_> {
         self.exports(&self.component.exports);
     }
 
+    fn ensure_local_resource_class(&mut self, local_name: String) {
+        if !self.defined_resource_classes.contains(&local_name) {
+            uwriteln!(
+                self.src.js,
+                "\nclass {local_name} {{
+                constructor () {{
+                    throw new Error('\"{local_name}\" resource cannot be explicitly constructed');
+                }}
+            }}"
+            );
+            self.defined_resource_classes.insert(local_name.to_string());
+        }
+    }
+
     fn resource_definitions(&mut self) {
         // It is theoretically possible for locally defined resources used in no functions
         // to still be exported
@@ -558,10 +572,7 @@ impl<'a> Instantiator<'a, '_> {
                 continue;
             }
             if let Some(local_name) = self.gen.local_names.try_get(resource) {
-                if !self.defined_resource_classes.contains(local_name) {
-                    uwriteln!(self.src.js, "\nclass {local_name} {{}}");
-                    self.defined_resource_classes.insert(local_name.to_string());
-                }
+                self.ensure_local_resource_class(local_name.to_string());
             }
         }
 
@@ -1800,10 +1811,7 @@ impl<'a> Instantiator<'a, '_> {
         match func.kind {
             FunctionKind::Freestanding => uwrite!(self.src.js, "\nfunction {local_name}"),
             FunctionKind::Method(_) => {
-                if !self.defined_resource_classes.contains(local_name) {
-                    uwriteln!(self.src.js, "\nclass {local_name} {{}}");
-                    self.defined_resource_classes.insert(local_name.to_string());
-                }
+                self.ensure_local_resource_class(local_name.to_string());
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
@@ -1816,10 +1824,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             FunctionKind::Static(_) => {
-                if !self.defined_resource_classes.contains(local_name) {
-                    uwriteln!(self.src.js, "\nclass {local_name} {{}}");
-                    self.defined_resource_classes.insert(local_name.to_string());
-                }
+                self.ensure_local_resource_class(local_name.to_string());
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
