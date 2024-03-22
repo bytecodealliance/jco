@@ -763,12 +763,12 @@ impl<'a> Instantiator<'a, '_> {
                         "".into()
                     }
                 } else {
-                    // imported resource is one without a defined resource index
-                    // if it is a captured instance (class instance was created externally so had to
+                    // Imported resource is one without a defined resource index.
+                    // If it is a captured instance (class instance was created externally so had to
                     // be assigned a rep), and there is a Symbol.dispose handler, call it explicitly
-                    // for imported resources when the resource is dropped, otherwise
-                    // if it is an instance without a captured class definition, then call the
-                    // low-level bindgen destructor
+                    // for imported resources when the resource is dropped.
+                    // Otherwise if it is an instance without a captured class definition, then
+                    // call the low-level bindgen destructor.
                     let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
                     let symbol_cabi_dispose = self.gen.intrinsic(Intrinsic::SymbolCabiDispose);
 
@@ -792,14 +792,14 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 };
 
-                // If the unexpected borrow handle case does ever happen in further testing,
-                // then we must handle this.
                 let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
                         const handleEntry = {rsc_table_remove}(handleTable{tid}, handle);
-                        if (!handleEntry.own) throw new Error('Internal error: Unexpected borrow handle');{dtor}
+                        if (handleEntry.own) {{
+                            {dtor}
+                        }}
                     }}
                     ",
                 );
