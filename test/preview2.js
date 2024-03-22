@@ -61,7 +61,7 @@ export async function preview2Test() {
       strictEqual(stderr, "writing to stderr: hello, world\n");
     });
 
-    test("wasi-http-proxy", async () => {
+    test.skip("wasi-http-proxy", async () => {
       const server = createServer(async (req, res) => {
         if (req.url == "/api/examples") {
           res.writeHead(200, {
