@@ -150,10 +150,10 @@ export async function createHttpRequest(
       req.once("close", () => reject);
       req.once("error", reject);
     });
-    if (firstByteTimeout) res.setTimeout(Number(firstByteTimeout));
+    if (firstByteTimeout) res.setTimeout(Number(firstByteTimeout / 1_000_000n));
     if (betweenBytesTimeout)
       res.once("readable", () => {
-        res.setTimeout(Number(betweenBytesTimeout));
+        res.setTimeout(Number(betweenBytesTimeout / 1_000_000n));
       });
     const bodyStreamId = createReadableStream(res);
     return {
