@@ -31,7 +31,7 @@ function getRandomBytes(len) {
   return randomBytes(Number(len));
 }
 
-randomBytes[Symbol.for("cabiLower")] = ({ memory, realloc }) => {
+getRandomBytes[Symbol.for("cabiLower")] = ({ memory, realloc }) => {
   let buf32 = new Uint32Array(memory.buffer);
   return function randomBytes(len, retptr) {
     len = Number(len);

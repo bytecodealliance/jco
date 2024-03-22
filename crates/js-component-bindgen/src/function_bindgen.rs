@@ -1103,7 +1103,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
 
-                // after a high level call, we need to deactivate the component resource borrows
+                // After a high level call, we need to deactivate the component resource borrows.
                 if !self.cur_resource_borrows.is_empty() {
                     for resource_borrow in &self.cur_resource_borrows {
                         uwriteln!(self.src, "{}", resource_borrow);
@@ -1189,61 +1189,57 @@ impl Bindgen for FunctionBindgen<'_> {
                         let rid = rid.as_u32();
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
                         let rsc_table_remove = self.intrinsic(Intrinsic::ResourceTableRemove);
-                        let rep = format!("rep{}", self.tmp());
+                        let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
                         if !imported {
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
-                            let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
-                            uwrite!(
-                                self.src,
-                                "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);
-                                var {rep} = handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag};
-                                Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {rep} }});
-                                ",
-                            );
+                            uwriteln!(self.src, "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);");
                             if is_own {
-                                // when we share an own handle with JS, we need to remove the original handle
-                                // and add a finalizer to the JS handle created
-                                // in addition, we add a Symbol.dispose function for manual destructor calls
-                                // / integration with explicit resource management
+                                // Sending an own handle out to JS as a return value - set up finalizer and disposal.
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
-                                uwriteln!(
-                                    self.src,
-                                    "finalizationRegistry{tid}.register({rsc}, {handle}, {rsc});
-                                    Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{{}}} }});
-                                    {rsc_table_remove}(handleTable{tid}, {handle});
-                                    ",
-                                    match dtor_name {
-                                        Some(dtor) => format!("
+                                uwriteln!(self.src,
+                                    "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
+                                    finalizationRegistry{tid}.register({rsc}, {handle}, {rsc});");
+                                if let Some(dtor) = dtor_name {
+                                    // The Symbol.dispose function gets disabled on drop, so we can rely on the own handle remaining valid.
+                                    uwriteln!(
+                                        self.src,
+                                        "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{
                                             finalizationRegistry{tid}.unregister({rsc});
                                             {rsc_table_remove}(handleTable{tid}, {handle});
                                             {rsc}[{symbol_dispose}] = {empty_func};
                                             {rsc}[{symbol_resource_handle}] = null;
-                                            {dtor}({rep});
-                                        "),
-                                        None => "".into(),
-                                    }
-                                );
+                                            {dtor}(handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag});
+                                        }}}});"
+                                    );
+                                } else {
+                                    // Set up Symbol.dispose for borrows to allow its call, even though it does nothing.
+                                    uwriteln!(
+                                        self.src,
+                                        "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: {empty_func} }});",
+                                    );
+                                }
                             } else {
-                                // borrow handles are tracked to release after the call by CallInterface
+                                // Borrow handles of local resources have rep handles, which we carry through here.
+                                uwriteln!(self.src, "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});");
+                                // Borrow handles are tracked to release after the call by CallInterface.
+                                // Once may_enter and may_leave are properly implemented, we can be certain to avoid non-reentrancy of import calls
+                                // calling export calls with borrow handles, so can maintain the invariant that borrows cannot ever be passed in.
                                 self.cur_resource_borrows.push(format!(
                                     "{}[{symbol_resource_handle}] = null;",
                                     rsc.to_string()
                                 ));
                             }
                         } else {
-                            // imported handles either lift as instance capture from a previous lowering,
-                            // or we create a new JS class to represent it
-                            let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
+                            let rep = format!("rep{}", self.tmp());
+                            // Imported handles either lift as instance capture from a previous lowering,
+                            // or we create a new JS class to represent it.
                             let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
-                            uwriteln!(
-                                self.src,
-                                "var {rep} = handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag};"
-                            );
                             uwriteln!(self.src,
-                                "var {rsc} = captureTable{rid}.get({rep});
+                                "var {rep} = handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag};
+                                var {rsc} = captureTable{rid}.get({rep});
                                 if (!{rsc}) {{
                                     {rsc} = Object.create({local_name}.prototype);
                                     Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
@@ -1251,7 +1247,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 }}"
                             );
                             if is_own {
-                                // an own lifting is a transfer to JS, so existing own handle is implicitly dropped
+                                // An own lifting is a transfer to JS, so existing own handle is implicitly dropped.
                                 uwriteln!(
                                     self.src,
                                     "else {{
@@ -1260,7 +1256,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     {rsc_table_remove}(handleTable{tid}, {handle});"
                                 );
                             } else {
-                                // if lifting a borrow, that was not previously captured, create the class
+                                // If lifting a borrow, that was not previously captured, create the class.
                                 self.cur_resource_borrows.push(format!(
                                     "{}[{symbol_resource_handle}] = null;",
                                     rsc.to_string()
@@ -1341,66 +1337,62 @@ impl Bindgen for FunctionBindgen<'_> {
                         let tid = tid.as_u32();
                         let rid = rid.as_u32();
                         if !imported {
-                            uwriteln!(
-                                self.src,
-                                "var {handle} = {op}[{symbol_resource_handle}];
-                                if (!{handle}) {{
-                                    throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
-                                }}
-                                ",
-                            );
-
                             if is_own {
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(
                                     self.src,
-                                    "finalizationRegistry{tid}.unregister({op});
+                                    "var {handle} = {op}[{symbol_resource_handle}];
+                                    if (!{handle}) {{
+                                        throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                    }}
+                                    finalizationRegistry{tid}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
                                     {op}[{symbol_resource_handle}] = null;"
                                 );
+                            } else {
+                                // When expecting a borrow, the JS resource provided will always be an own
+                                // handle. This is because it is not possible for borrow handles to be passed
+                                // back reentrantly.
+                                // We then set the handle to the rep per the local borrow rule.
+                                let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
+                                let own_handle = format!("handle{}", self.tmp());
+                                uwriteln!(self.src,
+                                    "var {own_handle} = {op}[{symbol_resource_handle}];
+                                    if (!{own_handle} || (handleTable{tid}[({own_handle} << 1) + 1] & {rsc_flag}) === 0) {{
+                                        throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                    }}
+                                    var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};"
+                                );
                             }
                         } else {
-                            // imported resources may already have a handle if they were constructed
-                            // by a component and then passed out
+                            // Imported resources may already have a handle if they were constructed
+                            // by a component and then passed out.
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {local_name})) {{
                                      throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
-                                 var {handle} = {op}[{symbol_resource_handle}];
-                                 "
+                                 var {handle} = {op}[{symbol_resource_handle}];"
                             );
-                            // otherwise, in hybrid bindgen we check for a Symbol.for('cabiRep')
-                            // to get the resource rep
-                            // fall back to assign a new rep in the capture table, when the imported
-                            // resource was constructed externally
-                            if is_own {
-                                let symbol_resource_rep =
-                                    self.intrinsic(Intrinsic::SymbolResourceRep);
-                                let rsc_table_create =
-                                    self.intrinsic(Intrinsic::ResourceTableCreateOwn);
-                                uwriteln!(
-                                    self.src,
-                                    "if (!{handle}) {{
-                                        const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
-                                        captureTable{rid}.set(rep, {op});
-                                        {handle} = {rsc_table_create}(handleTable{tid}, rep);
-                                    }}"
-                                );
+                            // Otherwise, in hybrid bindgen we check for a Symbol.for('cabiRep')
+                            // to get the resource rep.
+                            // Fall back to assign a new rep in the capture table, when the imported
+                            // resource was constructed externally.
+                            let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
+                            let rsc_table_create = if is_own {
+                                self.intrinsic(Intrinsic::ResourceTableCreateOwn)
                             } else {
-                                let symbol_resource_rep =
-                                    self.intrinsic(Intrinsic::SymbolResourceRep);
-                                let rsc_table_create =
-                                    self.intrinsic(Intrinsic::ResourceTableCreateBorrow);
-                                uwriteln!(
-                                    self.src,
-                                    "if (!{handle}) {{
-                                        const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
-                                        captureTable{rid}.set(rep, {op});
-                                        {handle} = {rsc_table_create}(handleTable{tid}, rep);
-                                    }}"
-                                );
+                                self.intrinsic(Intrinsic::ScopeId);
+                                self.intrinsic(Intrinsic::ResourceTableCreateBorrow)
                             };
+                            uwriteln!(
+                                self.src,
+                                "if (!{handle}) {{
+                                    const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
+                                    captureTable{rid}.set(rep, {op});
+                                    {handle} = {rsc_table_create}(handleTable{tid}, rep);
+                                }}"
+                            );
                         }
                     }
 
@@ -1415,21 +1407,37 @@ impl Bindgen for FunctionBindgen<'_> {
                         if !imported {
                             let local_rep = format!("localRep{}", self.tmp());
 
-                            uwrite!(
+                            uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {upper_camel})) {{
-                                     throw new Error('Resource error: Not a valid \"{upper_camel}\" resource.');
-                                 }}
-                                 let {handle} = {op}[{symbol_resource_handle}];
-                                 if ({handle} === undefined) {{
-                                     var {local_rep} = repCnt++;
-                                     repTable.set({local_rep}, {{ rep: {op}, own: {is_own} }});
-                                     {handle} = $resource_{prefix}new${lower_camel}({local_rep});
-                                     {op}[{symbol_resource_handle}] = {handle};
-                                     finalizationRegistry_export${prefix}{lower_camel}.register({op}, {handle}, {op});
-                                 }}
-                                 "
+                                    throw new Error('Resource error: Not a valid \"{upper_camel}\" resource.');
+                                }}
+                                let {handle} = {op}[{symbol_resource_handle}];"
                             );
+
+                            if is_own {
+                                uwriteln!(
+                                    self.src,
+                                    "if ({handle} === undefined) {{
+                                        var {local_rep} = repCnt++;
+                                        repTable.set({local_rep}, {{ rep: {op}, own: true }});
+                                        {handle} = $resource_{prefix}new${lower_camel}({local_rep});
+                                        {op}[{symbol_resource_handle}] = {handle};
+                                        finalizationRegistry_export${prefix}{lower_camel}.register({op}, {handle}, {op});
+                                    }}
+                                    "
+                                );
+                            } else {
+                                uwriteln!(
+                                    self.src,
+                                    "if ({handle} === undefined) {{
+                                        var {local_rep} = repCnt++;
+                                        repTable.set({local_rep}, {{ rep: {op}, own: false }});
+                                        {op}[{symbol_resource_handle}] = {local_rep};
+                                    }}
+                                    "
+                                );
+                            }
                         } else {
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
