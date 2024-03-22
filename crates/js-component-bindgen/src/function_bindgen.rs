@@ -437,7 +437,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwrite!(self.src, ";\n");
                 }
 
-                uwrite!(self.src, "\
+                uwrite!(
+                    self.src,
+                    "\
                     }} else if ({op0} !== null && {op0} !== undefined) {{
                         throw new TypeError('only an object, undefined or null can be converted to flags');
                     }}
@@ -574,7 +576,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         self.src,
                         "default: {{
                             throw new TypeError('invalid variant discriminant for {variant_name}');
-                        }}"
+                        }}",
                     );
                 }
                 uwriteln!(self.src, "}}");
@@ -619,7 +621,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             default: {{
                                 throw new TypeError('invalid variant specified for option');
                             }}
-                        }}"
+                        }}",
                     );
                 } else {
                     uwriteln!(
@@ -676,7 +678,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             default: {{
                                 throw new TypeError('invalid variant discriminant for option');
                             }}
-                        }}"
+                        }}",
                     );
                 } else {
                     uwriteln!(
@@ -732,7 +734,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         default: {{
                             throw new TypeError('invalid variant specified for result');
                         }}
-                    }}"
+                    }}",
                 );
             }
 
@@ -780,7 +782,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             default: {{
                                 throw new TypeError('invalid variant discriminant for expected');
                             }}
-                        }}"
+                        }}",
                     );
                 } else {
                     uwriteln!(
@@ -841,7 +843,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     "
                             throw new TypeError(`\"${{val{tmp}}}\" is not one of the cases of {name}`);
                         }}
-                    }}"
+                    }}",
                 );
 
                 results.push(format!("enum{tmp}"));
@@ -1074,7 +1076,20 @@ impl Bindgen for FunctionBindgen<'_> {
                     format!("{}({})", self.callee, operands.join(", "))
                 };
                 if self.err == ErrHandling::ResultCatchHandler {
-                    let err_payload = self.intrinsic(Intrinsic::GetErrorPayload);
+                    // result<_, string> allows JS error coercion only, while
+                    // any other result type will trap for arbitrary JS errors.
+                    let err_payload = if let (_, Some(Type::Id(err_ty))) =
+                        func.results.throws(self.resolve).unwrap()
+                    {
+                        match &self.resolve.types[*err_ty].kind {
+                            TypeDefKind::Type(Type::String) => {
+                                self.intrinsic(Intrinsic::GetErrorPayloadString)
+                            }
+                            _ => self.intrinsic(Intrinsic::GetErrorPayload),
+                        }
+                    } else {
+                        self.intrinsic(Intrinsic::GetErrorPayload)
+                    };
                     uwriteln!(
                         self.src,
                         "let ret;
@@ -1082,7 +1097,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             ret = {{ tag: 'ok', val: {call} }};
                         }} catch (e) {{
                             ret = {{ tag: 'err', val: {err_payload}(e) }};
-                        }}"
+                        }}",
                     );
                     results.push("ret".to_string());
                 } else {
@@ -1343,11 +1358,11 @@ impl Bindgen for FunctionBindgen<'_> {
                                     self.src,
                                     "var {handle} = {op}[{symbol_resource_handle}];
                                     if (!{handle}) {{
-                                        throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                        throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                     }}
                                     finalizationRegistry{tid}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
-                                    {op}[{symbol_resource_handle}] = null;"
+                                    {op}[{symbol_resource_handle}] = null;",
                                 );
                             } else {
                                 // When expecting a borrow, the JS resource provided will always be an own
@@ -1359,9 +1374,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(self.src,
                                     "var {own_handle} = {op}[{symbol_resource_handle}];
                                     if (!{own_handle} || (handleTable{tid}[({own_handle} << 1) + 1] & {rsc_flag}) === 0) {{
-                                        throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                        throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                     }}
-                                    var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};"
+                                    var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};",
                                 );
                             }
                         } else {
@@ -1370,9 +1385,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {local_name})) {{
-                                     throw new Error('Resource error: Not a valid \"{class_name}\" resource.');
+                                     throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
-                                 var {handle} = {op}[{symbol_resource_handle}];"
+                                 var {handle} = {op}[{symbol_resource_handle}];",
                             );
                             // Otherwise, in hybrid bindgen we check for a Symbol.for('cabiRep')
                             // to get the resource rep.
@@ -1406,13 +1421,12 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         if !imported {
                             let local_rep = format!("localRep{}", self.tmp());
-
                             uwriteln!(
                                 self.src,
                                 "if (!({op} instanceof {upper_camel})) {{
-                                    throw new Error('Resource error: Not a valid \"{upper_camel}\" resource.');
+                                    throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
                                 }}
-                                let {handle} = {op}[{symbol_resource_handle}];"
+                                let {handle} = {op}[{symbol_resource_handle}];",
                             );
 
                             if is_own {

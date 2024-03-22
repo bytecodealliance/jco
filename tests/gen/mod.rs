@@ -30,6 +30,7 @@ mod http_outbound_request_large_post;
 mod http_outbound_request_post;
 mod http_outbound_request_put;
 mod http_outbound_request_response_build;
+mod http_outbound_request_timeout;
 mod http_outbound_request_unknown_method;
 mod http_outbound_request_unsupported_scheme;
 mod piped_multiple;

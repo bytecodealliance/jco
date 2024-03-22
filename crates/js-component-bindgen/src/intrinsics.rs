@@ -14,6 +14,7 @@ pub enum Intrinsic {
     F64ToI64,
     FetchCompile,
     GetErrorPayload,
+    GetErrorPayloadString,
     HandleTables,
     HasOwnProperty,
     I32ToF32,
@@ -77,7 +78,9 @@ pub fn render_intrinsics(
     let mut output = Source::default();
 
     // Handle intrinsic "dependence"
-    if intrinsics.contains(&Intrinsic::GetErrorPayload) {
+    if intrinsics.contains(&Intrinsic::GetErrorPayload)
+        || intrinsics.contains(&Intrinsic::GetErrorPayloadString)
+    {
         intrinsics.insert(Intrinsic::HasOwnProperty);
     }
     if intrinsics.contains(&Intrinsic::Utf16Encode) {
@@ -167,6 +170,18 @@ pub fn render_intrinsics(
                 uwrite!(output, "
                     function getErrorPayload(e) {{
                         if (e && {hop}.call(e, 'payload')) return e.payload;
+                        if (e instanceof Error) throw e;
+                        return e;
+                    }}
+                ")
+            },
+
+            Intrinsic::GetErrorPayloadString => {
+                let hop = Intrinsic::HasOwnProperty.name();
+                uwrite!(output, "
+                    function getErrorPayloadString(e) {{
+                        if (e && {hop}.call(e, 'payload')) return e.payload;
+                        if (e instanceof Error) return e.message;
                         return e;
                     }}
                 ")
@@ -255,7 +270,7 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceTableCreateBorrow => output.push_str("
                 function rscTableCreateBorrow (table, rep) {
-                    if (rep === 0) throw new Error('Invalid rep');
+                    if (rep === 0) throw new TypeError('Invalid rep');
                     const free = table[0] & ~T_FLAG;
                     if (free === 0) {
                         table.push(scopeId);
@@ -271,7 +286,7 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceTableCreateOwn => output.push_str("
                 function rscTableCreateOwn (table, rep) {
-                    if (rep === 0) throw new Error('Invalid rep');
+                    if (rep === 0) throw new TypeError('Invalid rep');
                     const free = table[0] & ~T_FLAG;
                     if (free === 0) {
                         table.push(0);
@@ -291,7 +306,7 @@ pub fn render_intrinsics(
                     const val = table[(handle << 1) + 1];
                     const own = (val & T_FLAG) !== 0;
                     const rep = val & ~T_FLAG;
-                    if (rep === 0 || (scope & T_FLAG) !== 0) throw new Error('Invalid handle');
+                    if (rep === 0 || (scope & T_FLAG) !== 0) throw new TypeError('Invalid handle');
                     return { rep, scope, own };
                 }
             "),
@@ -299,7 +314,7 @@ pub fn render_intrinsics(
             Intrinsic::ResourceTableEnsureBorrowDrop => output.push_str("
                 function rscTableEnsureBorrowDrop (table, handle, scope) {
                     if (table[handle << 1] === scope)
-                        throw new Error('Resource borrow was not dropped at end of call');
+                        throw new TypeError('Resource borrow was not dropped at end of call');
                 }
             "),
 
@@ -309,7 +324,7 @@ pub fn render_intrinsics(
                     const val = table[(handle << 1) + 1];
                     const own = (val & T_FLAG) !== 0;
                     const rep = val & ~T_FLAG;
-                    if (val === 0 || (scope & T_FLAG) !== 0) throw new Error('Invalid handle');
+                    if (val === 0 || (scope & T_FLAG) !== 0) throw new TypeError('Invalid handle');
                     table[handle << 1] = table[0] | T_FLAG;
                     table[0] = handle | T_FLAG;
                     return { rep, scope, own };
@@ -391,7 +406,7 @@ pub fn render_intrinsics(
 
             Intrinsic::ThrowUninitialized => output.push_str("
                 function throwUninitialized() {
-                    throw new Error('Wasm uninitialized use `await $init` first');
+                    throw new TypeError('Wasm uninitialized use `await $init` first');
                 }
             "),
 
@@ -647,6 +662,7 @@ impl Intrinsic {
             Intrinsic::F64ToI64 => "f64ToI64",
             Intrinsic::FetchCompile => "fetchCompile",
             Intrinsic::GetErrorPayload => "getErrorPayload",
+            Intrinsic::GetErrorPayloadString => "getErrorPayloadString",
             Intrinsic::HandleTables => "handleTables",
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::I32ToF32 => "i32ToF32",
