@@ -554,7 +554,7 @@ impl<'a> Instantiator<'a, '_> {
                 self.src.js,
                 "\nclass {local_name} {{
                 constructor () {{
-                    throw new Error('\"{local_name}\" resource cannot be explicitly constructed');
+                    throw new Error('\"{local_name}\" resource does not define a constructor');
                 }}
             }}"
             );
