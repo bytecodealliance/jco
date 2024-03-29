@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn http_outbound_request_content_length() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/http_outbound_request_content_length.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_http_outbound_request_content_length");

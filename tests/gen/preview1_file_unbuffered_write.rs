@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_file_unbuffered_write() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview1_file_unbuffered_write.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/preview1_file_unbuffered_write");

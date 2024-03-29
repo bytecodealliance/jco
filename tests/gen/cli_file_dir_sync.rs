@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_file_dir_sync() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_file_dir_sync.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_file_dir_sync");

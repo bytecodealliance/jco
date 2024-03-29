@@ -126,7 +126,7 @@ pub fn run() -> anyhow::Result<()> {
             continue;
         }
 
-        let windows_skip = TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
+        let windows_skip = DENO || TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
 
         let content = generate_test(&test_name, windows_skip, false);
         fs::write(format!("tests/gen/{test_name}.rs"), content)?;

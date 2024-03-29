@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn api_reactor() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/api_reactor.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_api_reactor");

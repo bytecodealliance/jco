@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_path_open_nonblock() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview1_path_open_nonblock.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/preview1_path_open_nonblock");

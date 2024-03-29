@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_path_rename_dir_trailing_slashes() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview1_path_rename_dir_trailing_slashes.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_preview1_path_rename_dir_trailing_slashes");

@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_exit_success() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_exit_success.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_cli_exit_success");

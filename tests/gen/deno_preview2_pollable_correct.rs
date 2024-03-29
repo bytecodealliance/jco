@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview2_pollable_correct() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview2_pollable_correct.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_preview2_pollable_correct");

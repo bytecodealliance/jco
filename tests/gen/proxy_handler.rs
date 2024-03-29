@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn proxy_handler() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/proxy_handler.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/proxy_handler");

@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_path_open_dirfd_not_dir() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview1_path_open_dirfd_not_dir.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_preview1_path_open_dirfd_not_dir");

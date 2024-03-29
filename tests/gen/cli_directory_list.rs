@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_directory_list() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_directory_list.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_directory_list");

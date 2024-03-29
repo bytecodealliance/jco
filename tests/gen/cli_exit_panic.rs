@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_exit_panic() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_exit_panic.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_exit_panic");

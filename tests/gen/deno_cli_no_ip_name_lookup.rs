@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_no_ip_name_lookup() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_no_ip_name_lookup.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_cli_no_ip_name_lookup");

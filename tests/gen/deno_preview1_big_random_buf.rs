@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_big_random_buf() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview1_big_random_buf.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_preview1_big_random_buf");

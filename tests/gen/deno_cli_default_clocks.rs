@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_default_clocks() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_default_clocks.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_cli_default_clocks");

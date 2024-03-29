@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview2_adapter_badfd() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview2_adapter_badfd.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/preview2_adapter_badfd");

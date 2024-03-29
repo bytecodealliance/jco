@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_remove_nonempty_directory() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview1_remove_nonempty_directory.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_preview1_remove_nonempty_directory");

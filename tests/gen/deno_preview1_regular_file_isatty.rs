@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_regular_file_isatty() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview1_regular_file_isatty.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/deno_preview1_regular_file_isatty");

@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_no_udp() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_no_udp.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_no_udp");
