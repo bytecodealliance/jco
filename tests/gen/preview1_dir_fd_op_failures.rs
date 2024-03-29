@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn preview1_dir_fd_op_failures() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/preview1_dir_fd_op_failures.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/preview1_dir_fd_op_failures");

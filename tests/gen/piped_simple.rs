@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn piped_simple() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/piped_simple.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/piped_simple");

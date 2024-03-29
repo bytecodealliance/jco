@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_stdin() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_stdin.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_stdin");

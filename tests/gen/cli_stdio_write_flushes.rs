@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn cli_stdio_write_flushes() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/cli_stdio_write_flushes.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/cli_stdio_write_flushes");

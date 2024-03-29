@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn api_time() -> anyhow::Result<()> {
+    #[cfg(not(windows))]
     {
         let wasi_file = "./tests/gen/api_time.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/api_time");
