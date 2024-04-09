@@ -13,6 +13,7 @@ pub enum Intrinsic {
     F32ToI32,
     F64ToI64,
     FetchCompile,
+    FinalizationRegistryCreate,
     GetErrorPayload,
     GetErrorPayloadString,
     HandleTables,
@@ -141,6 +142,15 @@ pub fn render_intrinsics(
 
             Intrinsic::EmptyFunc => output.push_str("
                 const emptyFunc = () => {};
+            "),
+
+            Intrinsic::FinalizationRegistryCreate => output.push_str("
+                function finalizationRegistryCreate (unregister) {{
+                    if (typeof FinalizationRegistry === 'undefined') {{
+                        return {{ unregister () {{}} }};
+                    }}
+                    return new FinalizationRegistry(unregister);
+                }}
             "),
 
             Intrinsic::F64ToI64 => output.push_str("
@@ -585,6 +595,7 @@ impl Intrinsic {
             "f32ToI32",
             "f64ToI64",
             "fetchCompile",
+            "finalizationRegistryCreate",
             "getErrorPayload",
             "handleTables",
             "hasOwnProperty",
@@ -661,6 +672,7 @@ impl Intrinsic {
             Intrinsic::F32ToI32 => "f32ToI32",
             Intrinsic::F64ToI64 => "f64ToI64",
             Intrinsic::FetchCompile => "fetchCompile",
+            Intrinsic::FinalizationRegistryCreate => "finalizationRegistryCreate",
             Intrinsic::GetErrorPayload => "getErrorPayload",
             Intrinsic::GetErrorPayloadString => "getErrorPayloadString",
             Intrinsic::HandleTables => "handleTables",
