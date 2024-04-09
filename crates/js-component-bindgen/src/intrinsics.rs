@@ -145,12 +145,12 @@ pub fn render_intrinsics(
             "),
 
             Intrinsic::FinalizationRegistryCreate => output.push_str("
-                function finalizationRegistryCreate (unregister) {{
-                    if (typeof FinalizationRegistry === 'undefined') {{
-                        return {{ unregister () {{}} }};
-                    }}
+                function finalizationRegistryCreate (unregister) {
+                    if (typeof FinalizationRegistry === 'undefined') {
+                        return { unregister () {} };
+                    }
                     return new FinalizationRegistry(unregister);
-                }}
+                }
             "),
 
             Intrinsic::F64ToI64 => output.push_str("
