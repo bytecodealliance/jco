@@ -91,7 +91,6 @@ export async function preview2Test() {
           "test/fixtures/wit",
           "--world-name",
           "test:jco/command-extended",
-          "--enable-stdout",
           "-o",
           outFile
         );

@@ -150,8 +150,6 @@ Currently requires an explicit install of the componentize-js engine via `npm in
 
 See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
 
-> Additional engines might be supported in future via an `--engine` field or otherwise.
-
 ## API
 
 #### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
