@@ -15,18 +15,16 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::{
-    ComponentTypes, InterfaceType, ResourceIndex, RuntimeComponentInstanceIndex, TypeDef,
-    TypeFuncIndex, TypeResourceTableIndex,
-};
+use wasmtime_environ::component::Transcode;
 use wasmtime_environ::{
     component,
     component::{
-        CanonicalOptions, Component, ComponentTranslation, CoreDef, CoreExport, Export, ExportItem,
-        GlobalInitializer, InstantiateModule, LoweredIndex, RuntimeImportIndex,
-        RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
+        CanonicalOptions, Component, ComponentTranslation, ComponentTypes, CoreDef, CoreExport,
+        Export, ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule, InterfaceType,
+        LoweredIndex, ResourceIndex, RuntimeComponentInstanceIndex, RuntimeImportIndex,
+        RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex, TypeDef,
+        TypeFuncIndex, TypeResourceTableIndex,
     },
-    fact::{FixedEncoding, Transcode},
     EntityIndex, PrimaryMap,
 };
 use wit_bindgen_core::abi::{self, LiftLower};
@@ -1393,7 +1391,7 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.cases.iter().zip(t2.cases.iter()) {
                     if let Some(Type::Id(id)) = &f1.ty {
-                        self.connect_resource_types(*id, f2.ty.as_ref().unwrap(), resource_map);
+                        self.connect_resource_types(*id, f2.1.as_ref().unwrap(), resource_map);
                     }
                 }
             }

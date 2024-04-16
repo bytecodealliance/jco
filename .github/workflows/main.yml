@@ -74,6 +74,17 @@ jobs:
       run: npm run test
       if: matrix.node == 'latest'
 
+    - name: Cache Conformance Tests
+      id: cache-conformance-tests
+      uses: actions/cache@v4
+      with:
+        path: tests/gen/*.wasm
+        key: ${{ hashFiles('.git/modules/submodules/wasmtime/refs/heads/jco-fork') }}
+
+    - name: Generate Conformance Tests
+      if: steps.cache-conformance-tests.outputs.cache-hit != 'true'
+      run: cargo xtask generate tests
+
     - name: WASI Preview 2 Conformance
       run: cargo test
 

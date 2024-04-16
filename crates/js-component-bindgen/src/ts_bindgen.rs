@@ -551,8 +551,8 @@ impl<'a> TsInterface<'a> {
             | Type::S16
             | Type::U32
             | Type::S32
-            | Type::Float32
-            | Type::Float64 => self.src.push_str("number"),
+            | Type::F32
+            | Type::F64 => self.src.push_str("number"),
             Type::U64 | Type::S64 => self.src.push_str("bigint"),
             Type::Char => self.src.push_str("string"),
             Type::String => self.src.push_str("string"),

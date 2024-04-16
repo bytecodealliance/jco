@@ -284,6 +284,8 @@ class OutgoingRequest {
     for (const [key, value] of request.#headers.entries()) {
       headers.push([key, decoder.decode(value)]);
     }
+    if (!request.#pathWithQuery)
+      throw { tag: 'HTTP-request-URI-invalid' };
     return futureIncomingResponseCreate(
       request.#method.val || request.#method.tag,
       scheme,
