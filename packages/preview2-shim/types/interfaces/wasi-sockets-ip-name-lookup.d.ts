@@ -22,28 +22,7 @@ export namespace WasiSocketsIpNameLookup {
    * - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
    */
   export function resolveAddresses(network: Network, name: string): ResolveAddressStream;
-  /**
-   * Returns the next address from the resolver.
-   * 
-   * This function should be called multiple times. On each call, it will
-   * return the next address in connection order preference. If all
-   * addresses have been exhausted, this function returns `none`.
-   * 
-   * This function never returns IPv4-mapped IPv6 addresses.
-   * 
-   * # Typical errors
-   * - `name-unresolvable`:          Name does not exist or has no suitable associated IP addresses. (EAI_NONAME, EAI_NODATA, EAI_ADDRFAMILY)
-   * - `temporary-resolver-failure`: A temporary failure in name resolution occurred. (EAI_AGAIN)
-   * - `permanent-resolver-failure`: A permanent failure in name resolution occurred. (EAI_FAIL)
-   * - `would-block`:                A result is not available yet. (EWOULDBLOCK, EAGAIN)
-   */
   export { ResolveAddressStream };
-  /**
-   * Create a `pollable` which will resolve once the stream is ready for I/O.
-   * 
-   * Note: this function is here for WASI Preview2 only.
-   * It's planned to be removed when `future` is natively supported in Preview3.
-   */
 }
 import type { Pollable } from './wasi-io-poll.js';
 export { Pollable };
@@ -55,6 +34,27 @@ import type { IpAddress } from './wasi-sockets-network.js';
 export { IpAddress };
 
 export class ResolveAddressStream {
+  /**
+  * Returns the next address from the resolver.
+  * 
+  * This function should be called multiple times. On each call, it will
+  * return the next address in connection order preference. If all
+  * addresses have been exhausted, this function returns `none`.
+  * 
+  * This function never returns IPv4-mapped IPv6 addresses.
+  * 
+  * # Typical errors
+  * - `name-unresolvable`:          Name does not exist or has no suitable associated IP addresses. (EAI_NONAME, EAI_NODATA, EAI_ADDRFAMILY)
+  * - `temporary-resolver-failure`: A temporary failure in name resolution occurred. (EAI_AGAIN)
+  * - `permanent-resolver-failure`: A permanent failure in name resolution occurred. (EAI_FAIL)
+  * - `would-block`:                A result is not available yet. (EWOULDBLOCK, EAGAIN)
+  */
   resolveNextAddress(): IpAddress | undefined;
+  /**
+  * Create a `pollable` which will resolve once the stream is ready for I/O.
+  * 
+  * Note: this function is here for WASI Preview2 only.
+  * It's planned to be removed when `future` is natively supported in Preview3.
+  */
   subscribe(): Pollable;
 }

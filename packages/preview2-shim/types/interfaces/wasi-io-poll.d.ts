@@ -1,17 +1,5 @@
 export namespace WasiIoPoll {
-  /**
-   * Return the readiness of a pollable. This function never blocks.
-   * 
-   * Returns `true` when the pollable is ready, and `false` otherwise.
-   */
   export { Pollable };
-  /**
-   * `block` returns immediately if the pollable is ready, and otherwise
-   * blocks until ready.
-   * 
-   * This function is equivalent to calling `poll.poll` on a list
-   * containing only this pollable.
-   */
   /**
    * Poll for completion on a set of pollables.
    * 
@@ -36,6 +24,18 @@ export namespace WasiIoPoll {
 }
 
 export class Pollable {
+  /**
+  * Return the readiness of a pollable. This function never blocks.
+  * 
+  * Returns `true` when the pollable is ready, and `false` otherwise.
+  */
   ready(): boolean;
+  /**
+  * `block` returns immediately if the pollable is ready, and otherwise
+  * blocks until ready.
+  * 
+  * This function is equivalent to calling `poll.poll` on a list
+  * containing only this pollable.
+  */
   block(): void;
 }

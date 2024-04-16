@@ -1,250 +1,5 @@
 export namespace WasiFilesystemTypes {
-  /**
-   * Return a stream for reading from a file, if available.
-   * 
-   * May fail with an error-code describing why the file cannot be read.
-   * 
-   * Multiple read, write, and append streams may be active on the same open
-   * file and they do not interfere with each other.
-   * 
-   * Note: This allows using `read-stream`, which is similar to `read` in POSIX.
-   */
   export { Descriptor };
-  /**
-   * Return a stream for writing to a file, if available.
-   * 
-   * May fail with an error-code describing why the file cannot be written.
-   * 
-   * Note: This allows using `write-stream`, which is similar to `write` in
-   * POSIX.
-   */
-  /**
-   * Return a stream for appending to a file, if available.
-   * 
-   * May fail with an error-code describing why the file cannot be appended.
-   * 
-   * Note: This allows using `write-stream`, which is similar to `write` with
-   * `O_APPEND` in in POSIX.
-   */
-  /**
-   * Provide file advisory information on a descriptor.
-   * 
-   * This is similar to `posix_fadvise` in POSIX.
-   */
-  /**
-   * Synchronize the data of a file to disk.
-   * 
-   * This function succeeds with no effect if the file descriptor is not
-   * opened for writing.
-   * 
-   * Note: This is similar to `fdatasync` in POSIX.
-   */
-  /**
-   * Get flags associated with a descriptor.
-   * 
-   * Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
-   * 
-   * Note: This returns the value that was the `fs_flags` value returned
-   * from `fdstat_get` in earlier versions of WASI.
-   */
-  /**
-   * Get the dynamic type of a descriptor.
-   * 
-   * Note: This returns the same value as the `type` field of the `fd-stat`
-   * returned by `stat`, `stat-at` and similar.
-   * 
-   * Note: This returns similar flags to the `st_mode & S_IFMT` value provided
-   * by `fstat` in POSIX.
-   * 
-   * Note: This returns the value that was the `fs_filetype` value returned
-   * from `fdstat_get` in earlier versions of WASI.
-   */
-  /**
-   * Adjust the size of an open file. If this increases the file's size, the
-   * extra bytes are filled with zeros.
-   * 
-   * Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
-   */
-  /**
-   * Adjust the timestamps of an open file or directory.
-   * 
-   * Note: This is similar to `futimens` in POSIX.
-   * 
-   * Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
-   */
-  /**
-   * Read from a descriptor, without using and updating the descriptor's offset.
-   * 
-   * This function returns a list of bytes containing the data that was
-   * read, along with a bool which, when true, indicates that the end of the
-   * file was reached. The returned list will contain up to `length` bytes; it
-   * may return fewer than requested, if the end of the file is reached or
-   * if the I/O operation is interrupted.
-   * 
-   * In the future, this may change to return a `stream<u8, error-code>`.
-   * 
-   * Note: This is similar to `pread` in POSIX.
-   */
-  /**
-   * Write to a descriptor, without using and updating the descriptor's offset.
-   * 
-   * It is valid to write past the end of a file; the file is extended to the
-   * extent of the write, with bytes between the previous end and the start of
-   * the write set to zero.
-   * 
-   * In the future, this may change to take a `stream<u8, error-code>`.
-   * 
-   * Note: This is similar to `pwrite` in POSIX.
-   */
-  /**
-   * Read directory entries from a directory.
-   * 
-   * On filesystems where directories contain entries referring to themselves
-   * and their parents, often named `.` and `..` respectively, these entries
-   * are omitted.
-   * 
-   * This always returns a new stream which starts at the beginning of the
-   * directory. Multiple streams may be active on the same directory, and they
-   * do not interfere with each other.
-   */
-  /**
-   * Synchronize the data and metadata of a file to disk.
-   * 
-   * This function succeeds with no effect if the file descriptor is not
-   * opened for writing.
-   * 
-   * Note: This is similar to `fsync` in POSIX.
-   */
-  /**
-   * Create a directory.
-   * 
-   * Note: This is similar to `mkdirat` in POSIX.
-   */
-  /**
-   * Return the attributes of an open file or directory.
-   * 
-   * Note: This is similar to `fstat` in POSIX, except that it does not return
-   * device and inode information. For testing whether two descriptors refer to
-   * the same underlying filesystem object, use `is-same-object`. To obtain
-   * additional data that can be used do determine whether a file has been
-   * modified, use `metadata-hash`.
-   * 
-   * Note: This was called `fd_filestat_get` in earlier versions of WASI.
-   */
-  /**
-   * Return the attributes of a file or directory.
-   * 
-   * Note: This is similar to `fstatat` in POSIX, except that it does not
-   * return device and inode information. See the `stat` description for a
-   * discussion of alternatives.
-   * 
-   * Note: This was called `path_filestat_get` in earlier versions of WASI.
-   */
-  /**
-   * Adjust the timestamps of a file or directory.
-   * 
-   * Note: This is similar to `utimensat` in POSIX.
-   * 
-   * Note: This was called `path_filestat_set_times` in earlier versions of
-   * WASI.
-   */
-  /**
-   * Create a hard link.
-   * 
-   * Note: This is similar to `linkat` in POSIX.
-   */
-  /**
-   * Open a file or directory.
-   * 
-   * The returned descriptor is not guaranteed to be the lowest-numbered
-   * descriptor not currently open/ it is randomized to prevent applications
-   * from depending on making assumptions about indexes, since this is
-   * error-prone in multi-threaded contexts. The returned descriptor is
-   * guaranteed to be less than 2**31.
-   * 
-   * If `flags` contains `descriptor-flags::mutate-directory`, and the base
-   * descriptor doesn't have `descriptor-flags::mutate-directory` set,
-   * `open-at` fails with `error-code::read-only`.
-   * 
-   * If `flags` contains `write` or `mutate-directory`, or `open-flags`
-   * contains `truncate` or `create`, and the base descriptor doesn't have
-   * `descriptor-flags::mutate-directory` set, `open-at` fails with
-   * `error-code::read-only`.
-   * 
-   * Note: This is similar to `openat` in POSIX.
-   */
-  /**
-   * Read the contents of a symbolic link.
-   * 
-   * If the contents contain an absolute or rooted path in the underlying
-   * filesystem, this function fails with `error-code::not-permitted`.
-   * 
-   * Note: This is similar to `readlinkat` in POSIX.
-   */
-  /**
-   * Remove a directory.
-   * 
-   * Return `error-code::not-empty` if the directory is not empty.
-   * 
-   * Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
-   */
-  /**
-   * Rename a filesystem object.
-   * 
-   * Note: This is similar to `renameat` in POSIX.
-   */
-  /**
-   * Create a symbolic link (also known as a "symlink").
-   * 
-   * If `old-path` starts with `/`, the function fails with
-   * `error-code::not-permitted`.
-   * 
-   * Note: This is similar to `symlinkat` in POSIX.
-   */
-  /**
-   * Unlink a filesystem object that is not a directory.
-   * 
-   * Return `error-code::is-directory` if the path refers to a directory.
-   * Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
-   */
-  /**
-   * Test whether two descriptors refer to the same filesystem object.
-   * 
-   * In POSIX, this corresponds to testing whether the two descriptors have the
-   * same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
-   * wasi-filesystem does not expose device and inode numbers, so this function
-   * may be used instead.
-   */
-  /**
-   * Return a hash of the metadata associated with a filesystem object referred
-   * to by a descriptor.
-   * 
-   * This returns a hash of the last-modification timestamp and file size, and
-   * may also include the inode number, device number, birth timestamp, and
-   * other metadata fields that may change when the file is modified or
-   * replaced. It may also include a secret value chosen by the
-   * implementation and not otherwise exposed.
-   * 
-   * Implementations are encourated to provide the following properties:
-   * 
-   * - If the file is not modified or replaced, the computed hash value should
-   * usually not change.
-   * - If the object is modified or replaced, the computed hash value should
-   * usually change.
-   * - The inputs to the hash should not be easily computable from the
-   * computed hash.
-   * 
-   * However, none of these is required.
-   */
-  /**
-   * Return a hash of the metadata associated with a filesystem object referred
-   * to by a directory descriptor and a relative path.
-   * 
-   * This performs the same hash computation as `metadata-hash`.
-   */
-  /**
-   * Read a single directory entry from a `directory-entry-stream`.
-   */
   export { DirectoryEntryStream };
   /**
    * Attempts to extract a filesystem-related `error-code` from the stream
@@ -639,36 +394,281 @@ export interface MetadataHashValue {
   upper: bigint,
 }
 
-export class DirectoryEntryStream {
-  readDirectoryEntry(): DirectoryEntry | undefined;
+export class Descriptor {
+  /**
+  * Return a stream for reading from a file, if available.
+  * 
+  * May fail with an error-code describing why the file cannot be read.
+  * 
+  * Multiple read, write, and append streams may be active on the same open
+  * file and they do not interfere with each other.
+  * 
+  * Note: This allows using `read-stream`, which is similar to `read` in POSIX.
+  */
+  readViaStream(offset: Filesize): InputStream;
+  /**
+  * Return a stream for writing to a file, if available.
+  * 
+  * May fail with an error-code describing why the file cannot be written.
+  * 
+  * Note: This allows using `write-stream`, which is similar to `write` in
+  * POSIX.
+  */
+  writeViaStream(offset: Filesize): OutputStream;
+  /**
+  * Return a stream for appending to a file, if available.
+  * 
+  * May fail with an error-code describing why the file cannot be appended.
+  * 
+  * Note: This allows using `write-stream`, which is similar to `write` with
+  * `O_APPEND` in in POSIX.
+  */
+  appendViaStream(): OutputStream;
+  /**
+  * Provide file advisory information on a descriptor.
+  * 
+  * This is similar to `posix_fadvise` in POSIX.
+  */
+  advise(offset: Filesize, length: Filesize, advice: Advice): void;
+  /**
+  * Synchronize the data of a file to disk.
+  * 
+  * This function succeeds with no effect if the file descriptor is not
+  * opened for writing.
+  * 
+  * Note: This is similar to `fdatasync` in POSIX.
+  */
+  syncData(): void;
+  /**
+  * Get flags associated with a descriptor.
+  * 
+  * Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
+  * 
+  * Note: This returns the value that was the `fs_flags` value returned
+  * from `fdstat_get` in earlier versions of WASI.
+  */
+  getFlags(): DescriptorFlags;
+  /**
+  * Get the dynamic type of a descriptor.
+  * 
+  * Note: This returns the same value as the `type` field of the `fd-stat`
+  * returned by `stat`, `stat-at` and similar.
+  * 
+  * Note: This returns similar flags to the `st_mode & S_IFMT` value provided
+  * by `fstat` in POSIX.
+  * 
+  * Note: This returns the value that was the `fs_filetype` value returned
+  * from `fdstat_get` in earlier versions of WASI.
+  */
+  getType(): DescriptorType;
+  /**
+  * Adjust the size of an open file. If this increases the file's size, the
+  * extra bytes are filled with zeros.
+  * 
+  * Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
+  */
+  setSize(size: Filesize): void;
+  /**
+  * Adjust the timestamps of an open file or directory.
+  * 
+  * Note: This is similar to `futimens` in POSIX.
+  * 
+  * Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
+  */
+  setTimes(dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
+  /**
+  * Read from a descriptor, without using and updating the descriptor's offset.
+  * 
+  * This function returns a list of bytes containing the data that was
+  * read, along with a bool which, when true, indicates that the end of the
+  * file was reached. The returned list will contain up to `length` bytes; it
+  * may return fewer than requested, if the end of the file is reached or
+  * if the I/O operation is interrupted.
+  * 
+  * In the future, this may change to return a `stream<u8, error-code>`.
+  * 
+  * Note: This is similar to `pread` in POSIX.
+  */
+  read(length: Filesize, offset: Filesize): [Uint8Array, boolean];
+  /**
+  * Write to a descriptor, without using and updating the descriptor's offset.
+  * 
+  * It is valid to write past the end of a file; the file is extended to the
+  * extent of the write, with bytes between the previous end and the start of
+  * the write set to zero.
+  * 
+  * In the future, this may change to take a `stream<u8, error-code>`.
+  * 
+  * Note: This is similar to `pwrite` in POSIX.
+  */
+  write(buffer: Uint8Array, offset: Filesize): Filesize;
+  /**
+  * Read directory entries from a directory.
+  * 
+  * On filesystems where directories contain entries referring to themselves
+  * and their parents, often named `.` and `..` respectively, these entries
+  * are omitted.
+  * 
+  * This always returns a new stream which starts at the beginning of the
+  * directory. Multiple streams may be active on the same directory, and they
+  * do not interfere with each other.
+  */
+  readDirectory(): DirectoryEntryStream;
+  /**
+  * Synchronize the data and metadata of a file to disk.
+  * 
+  * This function succeeds with no effect if the file descriptor is not
+  * opened for writing.
+  * 
+  * Note: This is similar to `fsync` in POSIX.
+  */
+  sync(): void;
+  /**
+  * Create a directory.
+  * 
+  * Note: This is similar to `mkdirat` in POSIX.
+  */
+  createDirectoryAt(path: string): void;
+  /**
+  * Return the attributes of an open file or directory.
+  * 
+  * Note: This is similar to `fstat` in POSIX, except that it does not return
+  * device and inode information. For testing whether two descriptors refer to
+  * the same underlying filesystem object, use `is-same-object`. To obtain
+  * additional data that can be used do determine whether a file has been
+  * modified, use `metadata-hash`.
+  * 
+  * Note: This was called `fd_filestat_get` in earlier versions of WASI.
+  */
+  stat(): DescriptorStat;
+  /**
+  * Return the attributes of a file or directory.
+  * 
+  * Note: This is similar to `fstatat` in POSIX, except that it does not
+  * return device and inode information. See the `stat` description for a
+  * discussion of alternatives.
+  * 
+  * Note: This was called `path_filestat_get` in earlier versions of WASI.
+  */
+  statAt(pathFlags: PathFlags, path: string): DescriptorStat;
+  /**
+  * Adjust the timestamps of a file or directory.
+  * 
+  * Note: This is similar to `utimensat` in POSIX.
+  * 
+  * Note: This was called `path_filestat_set_times` in earlier versions of
+  * WASI.
+  */
+  setTimesAt(pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
+  /**
+  * Create a hard link.
+  * 
+  * Note: This is similar to `linkat` in POSIX.
+  */
+  linkAt(oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
+  /**
+  * Open a file or directory.
+  * 
+  * The returned descriptor is not guaranteed to be the lowest-numbered
+  * descriptor not currently open/ it is randomized to prevent applications
+  * from depending on making assumptions about indexes, since this is
+  * error-prone in multi-threaded contexts. The returned descriptor is
+  * guaranteed to be less than 2**31.
+  * 
+  * If `flags` contains `descriptor-flags::mutate-directory`, and the base
+  * descriptor doesn't have `descriptor-flags::mutate-directory` set,
+  * `open-at` fails with `error-code::read-only`.
+  * 
+  * If `flags` contains `write` or `mutate-directory`, or `open-flags`
+  * contains `truncate` or `create`, and the base descriptor doesn't have
+  * `descriptor-flags::mutate-directory` set, `open-at` fails with
+  * `error-code::read-only`.
+  * 
+  * Note: This is similar to `openat` in POSIX.
+  */
+  openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags): Descriptor;
+  /**
+  * Read the contents of a symbolic link.
+  * 
+  * If the contents contain an absolute or rooted path in the underlying
+  * filesystem, this function fails with `error-code::not-permitted`.
+  * 
+  * Note: This is similar to `readlinkat` in POSIX.
+  */
+  readlinkAt(path: string): string;
+  /**
+  * Remove a directory.
+  * 
+  * Return `error-code::not-empty` if the directory is not empty.
+  * 
+  * Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
+  */
+  removeDirectoryAt(path: string): void;
+  /**
+  * Rename a filesystem object.
+  * 
+  * Note: This is similar to `renameat` in POSIX.
+  */
+  renameAt(oldPath: string, newDescriptor: Descriptor, newPath: string): void;
+  /**
+  * Create a symbolic link (also known as a "symlink").
+  * 
+  * If `old-path` starts with `/`, the function fails with
+  * `error-code::not-permitted`.
+  * 
+  * Note: This is similar to `symlinkat` in POSIX.
+  */
+  symlinkAt(oldPath: string, newPath: string): void;
+  /**
+  * Unlink a filesystem object that is not a directory.
+  * 
+  * Return `error-code::is-directory` if the path refers to a directory.
+  * Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
+  */
+  unlinkFileAt(path: string): void;
+  /**
+  * Test whether two descriptors refer to the same filesystem object.
+  * 
+  * In POSIX, this corresponds to testing whether the two descriptors have the
+  * same device (`st_dev`) and inode (`st_ino` or `d_ino`) numbers.
+  * wasi-filesystem does not expose device and inode numbers, so this function
+  * may be used instead.
+  */
+  isSameObject(other: Descriptor): boolean;
+  /**
+  * Return a hash of the metadata associated with a filesystem object referred
+  * to by a descriptor.
+  * 
+  * This returns a hash of the last-modification timestamp and file size, and
+  * may also include the inode number, device number, birth timestamp, and
+  * other metadata fields that may change when the file is modified or
+  * replaced. It may also include a secret value chosen by the
+  * implementation and not otherwise exposed.
+  * 
+  * Implementations are encourated to provide the following properties:
+  * 
+  * - If the file is not modified or replaced, the computed hash value should
+  * usually not change.
+  * - If the object is modified or replaced, the computed hash value should
+  * usually change.
+  * - The inputs to the hash should not be easily computable from the
+  * computed hash.
+  * 
+  * However, none of these is required.
+  */
+  metadataHash(): MetadataHashValue;
+  /**
+  * Return a hash of the metadata associated with a filesystem object referred
+  * to by a directory descriptor and a relative path.
+  * 
+  * This performs the same hash computation as `metadata-hash`.
+  */
+  metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;
 }
 
-export class Descriptor {
-  readViaStream(offset: Filesize): InputStream;
-  writeViaStream(offset: Filesize): OutputStream;
-  appendViaStream(): OutputStream;
-  advise(offset: Filesize, length: Filesize, advice: Advice): void;
-  syncData(): void;
-  getFlags(): DescriptorFlags;
-  getType(): DescriptorType;
-  setSize(size: Filesize): void;
-  setTimes(dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
-  read(length: Filesize, offset: Filesize): [Uint8Array, boolean];
-  write(buffer: Uint8Array, offset: Filesize): Filesize;
-  readDirectory(): DirectoryEntryStream;
-  sync(): void;
-  createDirectoryAt(path: string): void;
-  stat(): DescriptorStat;
-  statAt(pathFlags: PathFlags, path: string): DescriptorStat;
-  setTimesAt(pathFlags: PathFlags, path: string, dataAccessTimestamp: NewTimestamp, dataModificationTimestamp: NewTimestamp): void;
-  linkAt(oldPathFlags: PathFlags, oldPath: string, newDescriptor: Descriptor, newPath: string): void;
-  openAt(pathFlags: PathFlags, path: string, openFlags: OpenFlags, flags: DescriptorFlags): Descriptor;
-  readlinkAt(path: string): string;
-  removeDirectoryAt(path: string): void;
-  renameAt(oldPath: string, newDescriptor: Descriptor, newPath: string): void;
-  symlinkAt(oldPath: string, newPath: string): void;
-  unlinkFileAt(path: string): void;
-  isSameObject(other: Descriptor): boolean;
-  metadataHash(): MetadataHashValue;
-  metadataHashAt(pathFlags: PathFlags, path: string): MetadataHashValue;
+export class DirectoryEntryStream {
+  /**
+  * Read a single directory entry from a `directory-entry-stream`.
+  */
+  readDirectoryEntry(): DirectoryEntry | undefined;
 }
