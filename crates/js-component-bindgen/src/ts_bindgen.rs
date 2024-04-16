@@ -638,8 +638,6 @@ impl<'a> TsInterface<'a> {
     }
 
     fn ts_func(&mut self, func: &Function, default: bool, declaration: bool) {
-        self.docs(&func.docs);
-
         let iface = if let FunctionKind::Method(ty)
         | FunctionKind::Static(ty)
         | FunctionKind::Constructor(ty) = func.kind
@@ -655,6 +653,8 @@ impl<'a> TsInterface<'a> {
         } else {
             self
         };
+
+        iface.docs(&func.docs);
 
         let out_name = if default {
             "default".to_string()
