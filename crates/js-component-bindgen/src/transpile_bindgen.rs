@@ -641,10 +641,12 @@ impl<'a> Instantiator<'a, '_> {
                 self.resources_initialized[resource] = true;
             }
         } else {
+            let finalization_registry_create =
+                self.gen.intrinsic(Intrinsic::FinalizationRegistryCreate);
             uwriteln!(
                 self.src.js,
                 "const handleTable{rtid} = [{rsc_table_flag}, 0];
-                const finalizationRegistry{rtid} = new FinalizationRegistry((handle) => {{
+                const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
                     const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
                 }});
                 ",
