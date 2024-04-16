@@ -12,13 +12,13 @@ export async function componentize (jsSource, opts) {
     throw e;
   }
   const source = await readFile(jsSource, 'utf8');
-  const { component, imports } = await componentizeFn(source, {
+  const { component } = await componentizeFn(source, {
     sourceName: basename(jsSource),
     witPath: resolve(opts.wit),
     worldName: opts.worldName,
-    enableStdout: opts.enableStdout,
+    disableFeatures: opts.disable,
     preview2Adapter: opts.preview2Adapter,
   });
   await writeFile(opts.out, component);
-  console.log(c`{green OK} Successfully written {bold ${opts.out}} with imports (${imports.join(', ')}).`);
+  console.log(c`{green OK} Successfully written {bold ${opts.out}}.`);
 }

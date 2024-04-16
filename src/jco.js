@@ -23,7 +23,7 @@ program.command('componentize')
   .argument('<js-source>', 'JS source file to build')
   .requiredOption('-w, --wit <path>', 'WIT path to build with')
   .option('-n, --world-name <name>', 'WIT world to build')
-  .option('--enable-stdout', 'Allow console.log to output to stdout')
+  .addOption(new Option('-d, --disable <feature...>', 'disable WASI features').choices(['stdio', 'random', 'clocks']))
   .option('--preview2-adapter <adapter>', 'provide a custom preview2 adapter path')
   .requiredOption('-o, --out <out>', 'output component file')
   .action(asyncAction(componentize));
