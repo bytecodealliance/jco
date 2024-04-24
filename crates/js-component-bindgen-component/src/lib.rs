@@ -117,17 +117,25 @@ impl Guest for JsComponentBindgenComponent {
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
         let mut resolve = Resolve::default();
-        let pkg = match opts.wit {
+        let id = match opts.wit {
             Wit::Source(source) => {
-                UnresolvedPackage::parse(&PathBuf::from(format!("{name}.wit")), &source)
-                    .map_err(|e| e.to_string())?
+                let pkg = UnresolvedPackage::parse(&PathBuf::from(format!("{name}.wit")), &source)
+                    .map_err(|e| e.to_string())?;
+                resolve.push(pkg).map_err(|e| e.to_string())?
             }
             Wit::Path(path) => {
-                UnresolvedPackage::parse_file(&PathBuf::from(path)).map_err(|e| e.to_string())?
+                let pkg = UnresolvedPackage::parse_file(&PathBuf::from(path))
+                    .map_err(|e| e.to_string())?;
+                resolve.push(pkg).map_err(|e| e.to_string())?
+            }
+            Wit::Dir(path) => {
+                resolve
+                    .push_dir(&PathBuf::from(path))
+                    .map_err(|e| e.to_string())?
+                    .0
             }
             Wit::Binary(_) => todo!(),
         };
-        let id = resolve.push(pkg).map_err(|e| e.to_string())?;
 
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve

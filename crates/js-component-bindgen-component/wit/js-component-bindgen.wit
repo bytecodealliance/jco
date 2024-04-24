@@ -71,6 +71,8 @@ world js-component-bindgen {
     binary(list<u8>),
     /// wit is provided from a filesystem path
     path(string),
+    /// wit is provided from a directory path
+    dir(string),
   }
 
   record type-generation-options {
