@@ -68,8 +68,6 @@ jobs:
       with:
         name: jco-build
         path: obj
-    - name: Check Build
-      run: ls obj
     - name: Test LTS Node.js
       run: npm run test:lts
       if: matrix.node == '18.x' || matrix.node == '20.x'
@@ -79,7 +77,6 @@ jobs:
 
   wasi-tests:
     name: WASI Test Generation
-    needs: [build]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -90,7 +87,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: tests/gen
-        key: wasi-wasmtime-${{ hashFiles('submodules/wasmtime/Cargo.lock') }}
+        key: wasi-${{ hashFiles('submodules/wasmtime/Cargo.lock') }}
     - name: Install Rust
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
       run: rustup update stable --no-self-update && rustup default stable

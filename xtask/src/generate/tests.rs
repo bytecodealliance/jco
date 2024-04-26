@@ -116,7 +116,7 @@ pub fn run() -> anyhow::Result<()> {
 
         if let Err(err) = cmd!(
             sh,
-            "node ./src/jco.js new {path} --wasi-command -o {dest_file}"
+            "wasm-tools component new {path} --adapt ./lib/wasi_snapshot_preview1.command.wasm -o {dest_file}"
         )
         .run()
         {
