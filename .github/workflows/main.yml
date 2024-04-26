@@ -134,7 +134,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: wasi-tests
-        path: tests-gen
+        path: tests/gen
     - name: WASI Preview 2 Conformance
       run: cargo xtask test deno
 
@@ -175,7 +175,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: wasi-tests
-        path: tests-gen
+        path: tests/gen
     - name: WASI Preview 2 Conformance
       run: cargo xtask test node
 
