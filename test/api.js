@@ -2,6 +2,7 @@ import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import { readFile } from "node:fs/promises";
 import {
   transpile,
+  types,
   opt,
   print,
   parse,
@@ -90,6 +91,15 @@ export async function apiTest(fixtures) {
       strictEqual(imports[0], "#testimport");
       const source = Buffer.from(files[name + ".js"]).toString();
       ok(source.includes("'#testimport'"));
+    });
+
+    test('Type generation', async () => {
+      const files = await types('test/fixtures/wit', {
+        worldName: 'test:flavorful/flavorful',
+      });
+     strictEqual(Object.keys(files).length, 2);
+     strictEqual(Object.keys(files)[0], 'flavorful.d.ts');
+     ok(Buffer.from(files[Object.keys(files)[0]]).includes('export const test'));
     });
 
     test("Optimize", async () => {

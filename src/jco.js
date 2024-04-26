@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { program, Option } from 'commander';
 import { opt } from './cmd/opt.js';
-import { transpile } from './cmd/transpile.js';
+import { transpile, types } from './cmd/transpile.js';
 import { run as runCmd, serve as serveCmd } from './cmd/run.js';
 import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
 import { componentize } from './cmd/componentize.js';
@@ -48,11 +48,23 @@ program.command('transpile')
   .option('--stub', 'generate a stub implementation from a WIT file directly')
   .option('--js', 'output JS instead of core WebAssembly')
   .addOption(new Option('-I, --instantiation [mode]', 'output for custom module instantiation').choices(['async', 'sync']).preset('async'))
-  .option('-q, --quiet', 'disable logging')
+  .option('-q, --quiet', 'disable output summary')
   .option('--no-namespaced-exports', 'disable namespaced exports for typescript compatibility')
   .option('--multi-memory', 'optimized output for Wasm multi-memory')
   .option('--', 'for --optimize, custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(transpile));
+
+program.command('types')
+  .description('Generate types for the given WIT')
+  .usage('<wit-path> -o <out-dir>')
+  .argument('<wit-path>', 'path to a WIT file or directory')
+  .option('--name <name>', 'custom output name')
+  .option('-n, --world-name <world>', 'WIT world to generate types for')
+  .requiredOption('-o, --out-dir <out-dir>', 'output directory')
+  .option('--tla-compat', 'generates types for the TLA compat output with an async $init promise export')
+  .addOption(new Option('-I, --instantiation [mode]', 'type output for custom module instantiation').choices(['async', 'sync']).preset('async'))
+  .option('-q, --quiet', 'disable output summary')
+  .action(asyncAction(types));
 
 program.command('run')
   .description('Run a WASI Command component')
@@ -158,7 +170,7 @@ program.command('embed')
   .requiredOption('--wit <wit-world>', 'WIT world path')
   .option('--dummy', 'generate a dummy component')
   .option('--string-encoding <utf8|utf16|compact-utf16>', 'set the component string encoding')
-  .option('--world <world-name>', 'positional world path to embed')
+  .option('-n, --world-name <world-name>', 'world name to embed')
   .option('-m, --metadata <metadata...>', 'field=name[@version] producer metadata to add with the embedding')
   .action(asyncAction(componentEmbed));
 
