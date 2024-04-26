@@ -11,7 +11,7 @@ defaults:
     shell: bash
 
 jobs:
-  gen-conformance:
+  wasi-tests:
     name: WASI Test Generation
     runs-on: ubuntu-latest
     steps:
@@ -24,6 +24,15 @@ jobs:
       with:
         path: tests/gen
         key: wasi-wasmtime-${{ hashFiles('submodules/wasmtime/Cargo.lock') }}
+    - name: Install Rust
+      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+      run: rustup update stable --no-self-update && rustup default stable
+    - name: Install wasm32-unknown-unknown target
+      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+      run: rustup target add wasm32-unknown-unknown
+    - name: Install wasm32-wasi target
+      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+      run: rustup target add wasm32-wasi
     - name: Generate WASI Tests
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
       run: cargo xtask generate tests
@@ -89,6 +98,8 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: jco-build
+    - name: Check Build
+      run: ls obj
     - name: Test LTS Node.js
       run: npm run test:lts
       if: matrix.node == '18.x' || matrix.node == '20.x'
@@ -116,7 +127,7 @@ jobs:
           - os: windows-latest
             node: 18.x
     runs-on: ${{ matrix.os }}
-    needs: [build]
+    needs: [build, wasi-tests]
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v3
