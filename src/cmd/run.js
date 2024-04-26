@@ -92,7 +92,9 @@ async function runComponent (componentPath, args, opts, executor) {
           break;
         }
       }
-      catch {}
+      catch {
+        // empty
+      }
       let len = preview2ShimPath.length;
       preview2ShimPath = resolve(preview2ShimPath, '..', '..', '..', 'node_modules', '@bytecodealliance', 'preview2-shim');
       if (preview2ShimPath.length === len) {
@@ -134,6 +136,8 @@ async function runComponent (componentPath, args, opts, executor) {
     try {
       if (!opts.jcoDir)
         await rm(outDir, { recursive: true });
-    } catch {}
+    } catch {
+      // empty
+    }
   }
 }

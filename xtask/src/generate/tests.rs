@@ -116,7 +116,7 @@ pub fn run() -> anyhow::Result<()> {
 
         if let Err(err) = cmd!(
             sh,
-            "node ./src/jco.js new {path} --wasi-command -o {dest_file}"
+            "wasm-tools component new {path} --adapt ./lib/wasi_snapshot_preview1.command.wasm -o {dest_file}"
         )
         .run()
         {
@@ -131,7 +131,7 @@ pub fn run() -> anyhow::Result<()> {
         let windows_skip = DENO || TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
 
         let content = generate_test(&test_name, windows_skip, false);
-        fs::write(format!("tests/gen/{test_name}.rs"), content)?;
+        fs::write(format!("tests/gen/node_{test_name}.rs"), content)?;
 
         if DENO && !DENO_IGNORE.contains(&test_name.as_ref()) {
             let content = generate_test(&test_name, windows_skip, true);
@@ -140,7 +140,7 @@ pub fn run() -> anyhow::Result<()> {
             all_names.push(test_name);
         }
 
-        all_names.push(test_name);
+        all_names.push(format!("node_{test_name}"));
     }
 
     all_names.sort();
