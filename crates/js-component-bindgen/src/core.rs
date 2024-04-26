@@ -42,8 +42,8 @@ use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
 use wasmparser::*;
 use wasmtime_environ::component::CoreDef;
-use wasmtime_environ::wasmparser;
-use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};
+use wasmtime_environ::{wasmparser, ModuleTranslation};
+use wasmtime_environ::{EntityIndex, MemoryIndex, PrimaryMap};
 
 fn unimplemented_try_table() -> wasm_encoder::Instruction<'static> {
     unimplemented!()

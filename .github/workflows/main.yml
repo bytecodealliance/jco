@@ -74,6 +74,17 @@ jobs:
       run: npm run test
       if: matrix.node == 'latest'
 
+    - name: Cache Conformance Tests
+      id: cache-conformance-tests
+      uses: actions/cache@v4
+      with:
+        path: tests/gen/*.wasm
+        key: conformance-wasm-${{ hashFiles('.git/modules/submodules/wasmtime/refs/heads/jco-fork') }}
+
+    - name: Generate Conformance Tests
+      if: steps.cache-conformance-tests.outputs.cache-hit != 'true'
+      run: cargo xtask generate tests
+
     - name: WASI Preview 2 Conformance
       run: cargo test
 
@@ -104,5 +115,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: Install Rust
       run: rustup update stable && rustup default stable && rustup component add rustfmt
+    - name: Remove tests mod
+      run: rm -r tests/mod.rs
     - name: Format source code
       run: cargo fmt -- --check

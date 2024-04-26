@@ -305,12 +305,12 @@ impl Bindgen for FunctionBindgen<'_> {
             // The native representation in JS of f32 and f64 is just a number,
             // so there's nothing to do here. Everything wasm gives us is
             // representable in JS.
-            Instruction::Float32FromF32 | Instruction::Float64FromF64 => {
+            Instruction::F32FromCoreF32 | Instruction::F64FromCoreF64 => {
                 results.push(operands.pop().unwrap())
             }
 
             // Use a unary `+` to cast to a float.
-            Instruction::F32FromFloat32 | Instruction::F64FromFloat64 => {
+            Instruction::CoreF32FromF32 | Instruction::CoreF64FromF64 => {
                 results.push(format!("+{}", operands[0]))
             }
 
@@ -1466,8 +1466,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 results.push(handle);
             }
-
-            i => unimplemented!("{:?}", i),
+            Instruction::GuestDeallocate { .. }
+            | Instruction::GuestDeallocateString
+            | Instruction::GuestDeallocateList { .. }
+            | Instruction::GuestDeallocateVariant { .. } => unimplemented!("Guest deallocation"),
         }
     }
 }
@@ -1524,8 +1526,8 @@ pub fn array_ty(resolve: &Resolve, ty: &Type) -> Option<&'static str> {
         Type::S32 => Some("Int32Array"),
         Type::U64 => Some("BigUint64Array"),
         Type::S64 => Some("BigInt64Array"),
-        Type::Float32 => Some("Float32Array"),
-        Type::Float64 => Some("Float64Array"),
+        Type::F32 => Some("Float32Array"),
+        Type::F64 => Some("Float64Array"),
         Type::Char => None,
         Type::String => None,
         Type::Id(id) => match &resolve.types[*id].kind {
