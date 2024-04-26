@@ -1,4 +1,4 @@
-import { $init, generate } from '../../obj/js-component-bindgen-component.js';
+import { $init, generate, generateTypes } from '../../obj/js-component-bindgen-component.js';
 import { writeFile } from 'node:fs/promises';
 import { mkdir } from 'node:fs/promises';
 import { dirname, extname, basename, resolve } from 'node:path';
@@ -13,6 +13,58 @@ import ora from '#ora';
 import { platform } from 'node:process';
 
 const isWindows = platform === 'win32';
+
+export async function types (witPath, opts) {
+  const files = await typesComponent(witPath, opts);
+  await writeFiles(files, opts.quiet ? false : 'Generated Type Files');
+}
+
+/**
+ * @param {string} witPath
+ * @param {{
+ *   name?: string,
+ *   worldName?: string,
+ *   instantiation?: 'async' | 'sync',
+ *   tlaCompat?: bool,
+ *   outDir?: string,
+ * }} opts
+ * @returns {Promise<{ [filename: string]: Uint8Array }>}
+ */
+export async function typesComponent (witPath, opts) {
+  await $init;
+  const name = opts.name || (opts.worldName
+    ? opts.worldName.split(':').pop().split('/').pop()
+    : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
+  let instantiation;
+  if (opts.instantiation) {
+    instantiation = { tag: opts.instantiation };
+  }
+  let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
+  if (!outDir.endsWith('/') && outDir !== '')
+    outDir += '/';
+  return Object.fromEntries(generateTypes(name, {
+    wit: { tag: 'path', val: (isWindows ? '//?/' : '') + resolve(witPath) },
+    instantiation,
+    tlaCompat: opts.tlaCompat ?? false,
+    world: opts.worldName
+  }).map(([name, file]) => [`${outDir}${name}`, file]));
+}
+
+async function writeFiles(files, summaryTitle) {
+  await Promise.all(Object.entries(files).map(async ([name, file]) => {
+    await mkdir(dirname(name), { recursive: true });
+    await writeFile(name, file);
+  }));
+  if (!summaryTitle)
+    return;
+  console.log(c`
+  {bold ${summaryTitle}:}
+  
+${table(Object.entries(files).map(([name, source]) => [
+    c` - {italic ${name}}  `,
+    c`{black.italic ${sizeStr(source.length)}}`
+  ]))}`);
+}
 
 export async function transpile (componentPath, opts, program) {
   const varIdx = program?.parent.rawArgs.indexOf('--');
@@ -37,20 +89,7 @@ export async function transpile (componentPath, opts, program) {
   if (opts.map)
     opts.map = Object.fromEntries(opts.map.map(mapping => mapping.split('=')));
   const { files } = await transpileComponent(component, opts);
-
-  await Promise.all(Object.entries(files).map(async ([name, file]) => {
-    await mkdir(dirname(name), { recursive: true });
-    await writeFile(name, file);
-  }));
-
-  if (!opts.quiet)
-    console.log(c`
-{bold Transpiled JS Component Files:}
-
-${table(Object.entries(files).map(([name, source]) => [
-  c` - {italic ${name}}  `,
-  c`{black.italic ${sizeStr(source.length)}}`
-]))}`);
+  await writeFiles(files, opts.quiet ? false : 'Transpiled JS Component Files');
 }
 
 let WASM_2_JS;
@@ -91,6 +130,7 @@ async function wasm2Js (source) {
  *   minify?: bool,
  *   optimize?: bool,
  *   namespacedExports?: bool,
+ *   outDir?: string,
  *   multiMemory?: bool,
  *   optArgs?: string[],
  * }} opts

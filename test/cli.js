@@ -180,6 +180,21 @@ export async function cliTest(fixtures) {
       );
     });
 
+    test("Type generation", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wit",
+        "--world-name",
+        "test:flavorful/flavorful",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/flavorful.d.ts`, "utf8");
+      ok(source.includes("export const test"));
+    });
+
     test("TypeScript naming checks", async () => {
       const { stderr } = await exec(
         jcoPath,

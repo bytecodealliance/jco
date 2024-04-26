@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use js_component_bindgen::{
     generate_types,
     source::wit_parser::{Resolve, UnresolvedPackage},
@@ -117,17 +117,30 @@ impl Guest for JsComponentBindgenComponent {
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
         let mut resolve = Resolve::default();
-        let pkg = match opts.wit {
+        let id = match opts.wit {
             Wit::Source(source) => {
-                UnresolvedPackage::parse(&PathBuf::from(format!("{name}.wit")), &source)
-                    .map_err(|e| e.to_string())?
+                let pkg = UnresolvedPackage::parse(&PathBuf::from(format!("{name}.wit")), &source)
+                    .map_err(|e| e.to_string())?;
+                resolve.push(pkg).map_err(|e| e.to_string())?
             }
             Wit::Path(path) => {
-                UnresolvedPackage::parse_file(&PathBuf::from(path)).map_err(|e| e.to_string())?
+                let path = PathBuf::from(path);
+                if path.is_dir() {
+                    resolve.push_dir(&path).map_err(|e| e.to_string())?.0
+                } else {
+                    let contents = std::fs::read(&path)
+                        .with_context(|| format!("failed to read file {path:?}"))
+                        .map_err(|e| e.to_string())?;
+                    let text = match std::str::from_utf8(&contents) {
+                        Ok(s) => s,
+                        Err(_) => return Err("input file is not valid utf-8".into()),
+                    };
+                    let pkg = UnresolvedPackage::parse(&path, text).map_err(|e| e.to_string())?;
+                    resolve.push(pkg).map_err(|e| e.to_string())?
+                }
             }
             Wit::Binary(_) => todo!(),
         };
-        let id = resolve.push(pkg).map_err(|e| e.to_string())?;
 
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
