@@ -10,4 +10,4 @@ node_modules
 /src/**/*.d.ts.map
 /tests/rundir
 /tests/output
-/tests/gen/*.wasm
+/tests/gen
