@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use js_component_bindgen::BindingsMode;
+use xshell::{cmd, Shell};
 use std::{collections::HashMap, fs, io::Write, path::PathBuf};
 use wit_component::ComponentEncoder;
 
@@ -8,16 +9,18 @@ pub(crate) fn run(release: bool) -> Result<()> {
     transpile(
         &format!("target/wasm32-wasi/{build}/js_component_bindgen_component.wasm"),
         "js-component-bindgen-component".to_string(),
+        release
     )?;
     transpile(
         &format!("target/wasm32-wasi/{build}/wasm_tools_js.wasm"),
         "wasm-tools".to_string(),
+        release
     )?;
 
     Ok(())
 }
 
-fn transpile(component_path: &str, name: String) -> Result<()> {
+fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
     std::env::set_var("RUST_BACKTRACE", "1");
     let component = fs::read(component_path).context("wasm bindgen component missing")?;
 
@@ -30,11 +33,17 @@ fn transpile(component_path: &str, name: String) -> Result<()> {
 
     encoder = encoder.adapter("wasi_snapshot_preview1", &adapter)?;
 
-    let adapted_component = encoder.encode()?;
+    let mut adapted_component = encoder.encode()?;
     fs::create_dir_all(PathBuf::from("./obj"))?;
     let mut component_path = PathBuf::from("./obj").join(&name);
     component_path.set_extension("component.wasm");
-    fs::write(component_path, &adapted_component)?;
+    fs::write(&component_path, &adapted_component)?;
+
+    let sh = Shell::new()?;
+    if optimize {
+        cmd!(sh, "node ./src/jco.js opt {component_path} -o {component_path}").read()?;
+        adapted_component = fs::read(component_path)?;
+    }
 
     let import_map = HashMap::from([
         (

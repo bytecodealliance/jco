@@ -62,7 +62,10 @@
   "files": [
     "lib",
     "src",
-    "obj"
+    "obj/*.core.wasm",
+    "obj/*.js",
+    "obj/*.ts",
+    "obj/interfaces"
   ],
   "workspaces": [
     "packages/preview2-shim"
