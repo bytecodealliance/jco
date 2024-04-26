@@ -105,6 +105,11 @@ jobs:
     - name: Generate WASI Tests
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
       run: cargo xtask generate tests
+    - name: Upload Generated WASI Tests
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasi-tests
+        path: tests/gen
 
   test-wasi-deno:
     name: Jco Deno WASI Conformance Tests
@@ -126,10 +131,10 @@ jobs:
         name: jco-build
         path: obj
     - name: Download WASI Tests
-      uses: actions/cache/restore@v4
+      uses: actions/download-artifact@v4
       with:
-        path: tests/gen
-        key: ${{ needs.build-wasi-tests.outputs.cache-key }}
+        name: wasi-tests
+        path: tests-gen
     - name: WASI Preview 2 Conformance
       run: cargo xtask test deno
 
@@ -167,10 +172,10 @@ jobs:
         name: jco-build
         path: obj
     - name: Download WASI Tests
-      uses: actions/cache/restore@v4
+      uses: actions/download-artifact@v4
       with:
-        path: tests/gen
-        key: ${{ needs.build-wasi-tests.outputs.cache-key }}
+        name: wasi-tests
+        path: tests-gen
     - name: WASI Preview 2 Conformance
       run: cargo xtask test node
 
