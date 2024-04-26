@@ -6,7 +6,7 @@ use crate::transpile_bindgen::{parse_world_key, InstantiationMode, TranspileOpts
 use crate::{dealias, uwrite, uwriteln};
 use heck::*;
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
 use wit_parser::*;
 
@@ -38,7 +38,7 @@ struct TsInterface<'a> {
     needs_ty_option: bool,
     needs_ty_result: bool,
     local_names: LocalNames,
-    resources: HashMap<String, TsInterface<'a>>,
+    resources: BTreeMap<String, TsInterface<'a>>,
 }
 
 pub fn ts_bindgen(
@@ -470,7 +470,7 @@ impl TsBindgen {
         TsInterface {
             is_root,
             src: Source::default(),
-            resources: HashMap::new(),
+            resources: BTreeMap::new(),
             local_names: LocalNames::default(),
             resolve,
             needs_ty_option: false,
@@ -484,7 +484,7 @@ impl<'a> TsInterface<'a> {
         TsInterface {
             is_root,
             src: Source::default(),
-            resources: HashMap::new(),
+            resources: BTreeMap::new(),
             local_names: LocalNames::default(),
             resolve,
             needs_ty_option: false,

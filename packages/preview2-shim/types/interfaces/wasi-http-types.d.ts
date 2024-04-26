@@ -300,6 +300,221 @@ export type Trailers = Fields;
 export type StatusCode = number;
 export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
+export class Fields {
+  /**
+  * Construct an empty HTTP Fields.
+  * 
+  * The resulting `fields` is mutable.
+  */
+  constructor()
+  /**
+  * Construct an HTTP Fields.
+  * 
+  * The resulting `fields` is mutable.
+  * 
+  * The list represents each key-value pair in the Fields. Keys
+  * which have multiple values are represented by multiple entries in this
+  * list with the same key.
+  * 
+  * The tuple is a pair of the field key, represented as a string, and
+  * Value, represented as a list of bytes. In a valid Fields, all keys
+  * and values are valid UTF-8 strings. However, values are not always
+  * well-formed, so they are represented as a raw list of bytes.
+  * 
+  * An error result will be returned if any header or value was
+  * syntactically invalid, or if a header was forbidden.
+  */
+  static fromList(entries: [FieldKey, FieldValue][]): Fields;
+  /**
+  * Get all of the values corresponding to a key. If the key is not present
+  * in this `fields`, an empty list is returned. However, if the key is
+  * present but empty, this is represented by a list with one or more
+  * empty field-values present.
+  */
+  get(name: FieldKey): FieldValue[];
+  /**
+  * Returns `true` when the key is present in this `fields`. If the key is
+  * syntactically invalid, `false` is returned.
+  */
+  has(name: FieldKey): boolean;
+  /**
+  * Set all of the values for a key. Clears any existing values for that
+  * key, if they have been set.
+  * 
+  * Fails with `header-error.immutable` if the `fields` are immutable.
+  */
+  set(name: FieldKey, value: FieldValue[]): void;
+  /**
+  * Delete all values for a key. Does nothing if no values for the key
+  * exist.
+  * 
+  * Fails with `header-error.immutable` if the `fields` are immutable.
+  */
+  'delete'(name: FieldKey): void;
+  /**
+  * Append a value for a key. Does not change or delete any existing
+  * values for that key.
+  * 
+  * Fails with `header-error.immutable` if the `fields` are immutable.
+  */
+  append(name: FieldKey, value: FieldValue): void;
+  /**
+  * Retrieve the full set of keys and values in the Fields. Like the
+  * constructor, the list represents each key-value pair.
+  * 
+  * The outer list represents each key-value pair in the Fields. Keys
+  * which have multiple values are represented by multiple entries in this
+  * list with the same key.
+  */
+  entries(): [FieldKey, FieldValue][];
+  /**
+  * Make a deep copy of the Fields. Equivelant in behavior to calling the
+  * `fields` constructor on the return value of `entries`. The resulting
+  * `fields` is mutable.
+  */
+  clone(): Fields;
+}
+
+export class FutureIncomingResponse {
+  /**
+  * Returns a pollable which becomes ready when either the Response has
+  * been received, or an error has occured. When this pollable is ready,
+  * the `get` method will return `some`.
+  */
+  subscribe(): Pollable;
+  /**
+  * Returns the incoming HTTP Response, or an error, once one is ready.
+  * 
+  * The outer `option` represents future readiness. Users can wait on this
+  * `option` to become `some` using the `subscribe` method.
+  * 
+  * The outer `result` is used to retrieve the response or error at most
+  * once. It will be success on the first call in which the outer option
+  * is `some`, and error on subsequent calls.
+  * 
+  * The inner `result` represents that either the incoming HTTP Response
+  * status and headers have recieved successfully, or that an error
+  * occured. Errors may also occur while consuming the response body,
+  * but those will be reported by the `incoming-body` and its
+  * `output-stream` child.
+  */
+  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
+}
+
+export class FutureTrailers {
+  /**
+  * Returns a pollable which becomes ready when either the trailers have
+  * been received, or an error has occured. When this pollable is ready,
+  * the `get` method will return `some`.
+  */
+  subscribe(): Pollable;
+  /**
+  * Returns the contents of the trailers, or an error which occured,
+  * once the future is ready.
+  * 
+  * The outer `option` represents future readiness. Users can wait on this
+  * `option` to become `some` using the `subscribe` method.
+  * 
+  * The outer `result` is used to retrieve the trailers or error at most
+  * once. It will be success on the first call in which the outer option
+  * is `some`, and error on subsequent calls.
+  * 
+  * The inner `result` represents that either the HTTP Request or Response
+  * body, as well as any trailers, were received successfully, or that an
+  * error occured receiving them. The optional `trailers` indicates whether
+  * or not trailers were present in the body.
+  * 
+  * When some `trailers` are returned by this method, the `trailers`
+  * resource is immutable, and a child. Use of the `set`, `append`, or
+  * `delete` methods will return an error, and the resource must be
+  * dropped before the parent `future-trailers` is dropped.
+  */
+  get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
+}
+
+export class IncomingBody {
+  /**
+  * Returns the contents of the body, as a stream of bytes.
+  * 
+  * Returns success on first call: the stream representing the contents
+  * can be retrieved at most once. Subsequent calls will return error.
+  * 
+  * The returned `input-stream` resource is a child: it must be dropped
+  * before the parent `incoming-body` is dropped, or consumed by
+  * `incoming-body.finish`.
+  * 
+  * This invariant ensures that the implementation can determine whether
+  * the user is consuming the contents of the body, waiting on the
+  * `future-trailers` to be ready, or neither. This allows for network
+  * backpressure is to be applied when the user is consuming the body,
+  * and for that backpressure to not inhibit delivery of the trailers if
+  * the user does not read the entire body.
+  */
+  stream(): InputStream;
+  /**
+  * Takes ownership of `incoming-body`, and returns a `future-trailers`.
+  * This function will trap if the `input-stream` child is still alive.
+  */
+  static finish(this_: IncomingBody): FutureTrailers;
+}
+
+export class IncomingRequest {
+  /**
+  * Returns the method of the incoming request.
+  */
+  method(): Method;
+  /**
+  * Returns the path with query parameters from the request, as a string.
+  */
+  pathWithQuery(): string | undefined;
+  /**
+  * Returns the protocol scheme from the request.
+  */
+  scheme(): Scheme | undefined;
+  /**
+  * Returns the authority from the request, if it was present.
+  */
+  authority(): string | undefined;
+  /**
+  * Get the `headers` associated with the request.
+  * 
+  * The returned `headers` resource is immutable: `set`, `append`, and
+  * `delete` operations will fail with `header-error.immutable`.
+  * 
+  * The `headers` returned are a child resource: it must be dropped before
+  * the parent `incoming-request` is dropped. Dropping this
+  * `incoming-request` before all children are dropped will trap.
+  */
+  headers(): Headers;
+  /**
+  * Gives the `incoming-body` associated with this request. Will only
+  * return success at most once, and subsequent calls will return error.
+  */
+  consume(): IncomingBody;
+}
+
+export class IncomingResponse {
+  /**
+  * Returns the status code from the incoming response.
+  */
+  status(): StatusCode;
+  /**
+  * Returns the headers from the incoming response.
+  * 
+  * The returned `headers` resource is immutable: `set`, `append`, and
+  * `delete` operations will fail with `header-error.immutable`.
+  * 
+  * This headers resource is a child: it must be dropped before the parent
+  * `incoming-response` is dropped.
+  */
+  headers(): Headers;
+  /**
+  * Returns the incoming body. May be called at most once. Returns error
+  * if called additional times.
+  */
+  consume(): IncomingBody;
+}
+
 export class OutgoingBody {
   /**
   * Returns a stream for writing the body contents.
@@ -325,81 +540,6 @@ export class OutgoingBody {
   * Content-Length.
   */
   static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
-}
-
-export class RequestOptions {
-  /**
-  * Construct a default `request-options` value.
-  */
-  constructor()
-  /**
-  * The timeout for the initial connect to the HTTP Server.
-  */
-  connectTimeout(): Duration | undefined;
-  /**
-  * Set the timeout for the initial connect to the HTTP Server. An error
-  * return value indicates that this timeout is not supported.
-  */
-  setConnectTimeout(duration: Duration | undefined): void;
-  /**
-  * The timeout for receiving the first byte of the Response body.
-  */
-  firstByteTimeout(): Duration | undefined;
-  /**
-  * Set the timeout for receiving the first byte of the Response body. An
-  * error return value indicates that this timeout is not supported.
-  */
-  setFirstByteTimeout(duration: Duration | undefined): void;
-  /**
-  * The timeout for receiving subsequent chunks of bytes in the Response
-  * body stream.
-  */
-  betweenBytesTimeout(): Duration | undefined;
-  /**
-  * Set the timeout for receiving subsequent chunks of bytes in the Response
-  * body stream. An error return value indicates that this timeout is not
-  * supported.
-  */
-  setBetweenBytesTimeout(duration: Duration | undefined): void;
-}
-
-export class OutgoingResponse {
-  /**
-  * Construct an `outgoing-response`, with a default `status-code` of `200`.
-  * If a different `status-code` is needed, it must be set via the
-  * `set-status-code` method.
-  * 
-  * * `headers` is the HTTP Headers for the Response.
-  */
-  constructor(headers: Headers)
-  /**
-  * Get the HTTP Status Code for the Response.
-  */
-  statusCode(): StatusCode;
-  /**
-  * Set the HTTP Status Code for the Response. Fails if the status-code
-  * given is not a valid http status code.
-  */
-  setStatusCode(statusCode: StatusCode): void;
-  /**
-  * Get the headers associated with the Request.
-  * 
-  * The returned `headers` resource is immutable: `set`, `append`, and
-  * `delete` operations will fail with `header-error.immutable`.
-  * 
-  * This headers resource is a child: it must be dropped before the parent
-  * `outgoing-request` is dropped, or its ownership is transfered to
-  * another component by e.g. `outgoing-handler.handle`.
-  */
-  headers(): Headers;
-  /**
-  * Returns the resource corresponding to the outgoing Body for this Response.
-  * 
-  * Returns success on the first call: the `outgoing-body` resource for
-  * this `outgoing-response` can be retrieved at most once. Subsequent
-  * calls will return error.
-  */
-  body(): OutgoingBody;
 }
 
 export class OutgoingRequest {
@@ -482,79 +622,79 @@ export class OutgoingRequest {
   headers(): Headers;
 }
 
-export class Fields {
+export class OutgoingResponse {
   /**
-  * Construct an empty HTTP Fields.
+  * Construct an `outgoing-response`, with a default `status-code` of `200`.
+  * If a different `status-code` is needed, it must be set via the
+  * `set-status-code` method.
   * 
-  * The resulting `fields` is mutable.
+  * * `headers` is the HTTP Headers for the Response.
+  */
+  constructor(headers: Headers)
+  /**
+  * Get the HTTP Status Code for the Response.
+  */
+  statusCode(): StatusCode;
+  /**
+  * Set the HTTP Status Code for the Response. Fails if the status-code
+  * given is not a valid http status code.
+  */
+  setStatusCode(statusCode: StatusCode): void;
+  /**
+  * Get the headers associated with the Request.
+  * 
+  * The returned `headers` resource is immutable: `set`, `append`, and
+  * `delete` operations will fail with `header-error.immutable`.
+  * 
+  * This headers resource is a child: it must be dropped before the parent
+  * `outgoing-request` is dropped, or its ownership is transfered to
+  * another component by e.g. `outgoing-handler.handle`.
+  */
+  headers(): Headers;
+  /**
+  * Returns the resource corresponding to the outgoing Body for this Response.
+  * 
+  * Returns success on the first call: the `outgoing-body` resource for
+  * this `outgoing-response` can be retrieved at most once. Subsequent
+  * calls will return error.
+  */
+  body(): OutgoingBody;
+}
+
+export class RequestOptions {
+  /**
+  * Construct a default `request-options` value.
   */
   constructor()
   /**
-  * Construct an HTTP Fields.
-  * 
-  * The resulting `fields` is mutable.
-  * 
-  * The list represents each key-value pair in the Fields. Keys
-  * which have multiple values are represented by multiple entries in this
-  * list with the same key.
-  * 
-  * The tuple is a pair of the field key, represented as a string, and
-  * Value, represented as a list of bytes. In a valid Fields, all keys
-  * and values are valid UTF-8 strings. However, values are not always
-  * well-formed, so they are represented as a raw list of bytes.
-  * 
-  * An error result will be returned if any header or value was
-  * syntactically invalid, or if a header was forbidden.
+  * The timeout for the initial connect to the HTTP Server.
   */
-  static fromList(entries: [FieldKey, FieldValue][]): Fields;
+  connectTimeout(): Duration | undefined;
   /**
-  * Get all of the values corresponding to a key. If the key is not present
-  * in this `fields`, an empty list is returned. However, if the key is
-  * present but empty, this is represented by a list with one or more
-  * empty field-values present.
+  * Set the timeout for the initial connect to the HTTP Server. An error
+  * return value indicates that this timeout is not supported.
   */
-  get(name: FieldKey): FieldValue[];
+  setConnectTimeout(duration: Duration | undefined): void;
   /**
-  * Returns `true` when the key is present in this `fields`. If the key is
-  * syntactically invalid, `false` is returned.
+  * The timeout for receiving the first byte of the Response body.
   */
-  has(name: FieldKey): boolean;
+  firstByteTimeout(): Duration | undefined;
   /**
-  * Set all of the values for a key. Clears any existing values for that
-  * key, if they have been set.
-  * 
-  * Fails with `header-error.immutable` if the `fields` are immutable.
+  * Set the timeout for receiving the first byte of the Response body. An
+  * error return value indicates that this timeout is not supported.
   */
-  set(name: FieldKey, value: FieldValue[]): void;
+  setFirstByteTimeout(duration: Duration | undefined): void;
   /**
-  * Delete all values for a key. Does nothing if no values for the key
-  * exist.
-  * 
-  * Fails with `header-error.immutable` if the `fields` are immutable.
+  * The timeout for receiving subsequent chunks of bytes in the Response
+  * body stream.
   */
-  'delete'(name: FieldKey): void;
+  betweenBytesTimeout(): Duration | undefined;
   /**
-  * Append a value for a key. Does not change or delete any existing
-  * values for that key.
-  * 
-  * Fails with `header-error.immutable` if the `fields` are immutable.
+  * Set the timeout for receiving subsequent chunks of bytes in the Response
+  * body stream. An error return value indicates that this timeout is not
+  * supported.
   */
-  append(name: FieldKey, value: FieldValue): void;
-  /**
-  * Retrieve the full set of keys and values in the Fields. Like the
-  * constructor, the list represents each key-value pair.
-  * 
-  * The outer list represents each key-value pair in the Fields. Keys
-  * which have multiple values are represented by multiple entries in this
-  * list with the same key.
-  */
-  entries(): [FieldKey, FieldValue][];
-  /**
-  * Make a deep copy of the Fields. Equivelant in behavior to calling the
-  * `fields` constructor on the return value of `entries`. The resulting
-  * `fields` is mutable.
-  */
-  clone(): Fields;
+  setBetweenBytesTimeout(duration: Duration | undefined): void;
 }
 
 export class ResponseOutparam {
@@ -570,144 +710,4 @@ export class ResponseOutparam {
   * implementation determine how to respond with an HTTP error response.
   */
   static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
-}
-
-export class FutureTrailers {
-  /**
-  * Returns a pollable which becomes ready when either the trailers have
-  * been received, or an error has occured. When this pollable is ready,
-  * the `get` method will return `some`.
-  */
-  subscribe(): Pollable;
-  /**
-  * Returns the contents of the trailers, or an error which occured,
-  * once the future is ready.
-  * 
-  * The outer `option` represents future readiness. Users can wait on this
-  * `option` to become `some` using the `subscribe` method.
-  * 
-  * The outer `result` is used to retrieve the trailers or error at most
-  * once. It will be success on the first call in which the outer option
-  * is `some`, and error on subsequent calls.
-  * 
-  * The inner `result` represents that either the HTTP Request or Response
-  * body, as well as any trailers, were received successfully, or that an
-  * error occured receiving them. The optional `trailers` indicates whether
-  * or not trailers were present in the body.
-  * 
-  * When some `trailers` are returned by this method, the `trailers`
-  * resource is immutable, and a child. Use of the `set`, `append`, or
-  * `delete` methods will return an error, and the resource must be
-  * dropped before the parent `future-trailers` is dropped.
-  */
-  get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
-}
-
-export class IncomingRequest {
-  /**
-  * Returns the method of the incoming request.
-  */
-  method(): Method;
-  /**
-  * Returns the path with query parameters from the request, as a string.
-  */
-  pathWithQuery(): string | undefined;
-  /**
-  * Returns the protocol scheme from the request.
-  */
-  scheme(): Scheme | undefined;
-  /**
-  * Returns the authority from the request, if it was present.
-  */
-  authority(): string | undefined;
-  /**
-  * Get the `headers` associated with the request.
-  * 
-  * The returned `headers` resource is immutable: `set`, `append`, and
-  * `delete` operations will fail with `header-error.immutable`.
-  * 
-  * The `headers` returned are a child resource: it must be dropped before
-  * the parent `incoming-request` is dropped. Dropping this
-  * `incoming-request` before all children are dropped will trap.
-  */
-  headers(): Headers;
-  /**
-  * Gives the `incoming-body` associated with this request. Will only
-  * return success at most once, and subsequent calls will return error.
-  */
-  consume(): IncomingBody;
-}
-
-export class IncomingBody {
-  /**
-  * Returns the contents of the body, as a stream of bytes.
-  * 
-  * Returns success on first call: the stream representing the contents
-  * can be retrieved at most once. Subsequent calls will return error.
-  * 
-  * The returned `input-stream` resource is a child: it must be dropped
-  * before the parent `incoming-body` is dropped, or consumed by
-  * `incoming-body.finish`.
-  * 
-  * This invariant ensures that the implementation can determine whether
-  * the user is consuming the contents of the body, waiting on the
-  * `future-trailers` to be ready, or neither. This allows for network
-  * backpressure is to be applied when the user is consuming the body,
-  * and for that backpressure to not inhibit delivery of the trailers if
-  * the user does not read the entire body.
-  */
-  stream(): InputStream;
-  /**
-  * Takes ownership of `incoming-body`, and returns a `future-trailers`.
-  * This function will trap if the `input-stream` child is still alive.
-  */
-  static finish(this_: IncomingBody): FutureTrailers;
-}
-
-export class FutureIncomingResponse {
-  /**
-  * Returns a pollable which becomes ready when either the Response has
-  * been received, or an error has occured. When this pollable is ready,
-  * the `get` method will return `some`.
-  */
-  subscribe(): Pollable;
-  /**
-  * Returns the incoming HTTP Response, or an error, once one is ready.
-  * 
-  * The outer `option` represents future readiness. Users can wait on this
-  * `option` to become `some` using the `subscribe` method.
-  * 
-  * The outer `result` is used to retrieve the response or error at most
-  * once. It will be success on the first call in which the outer option
-  * is `some`, and error on subsequent calls.
-  * 
-  * The inner `result` represents that either the incoming HTTP Response
-  * status and headers have recieved successfully, or that an error
-  * occured. Errors may also occur while consuming the response body,
-  * but those will be reported by the `incoming-body` and its
-  * `output-stream` child.
-  */
-  get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
-}
-
-export class IncomingResponse {
-  /**
-  * Returns the status code from the incoming response.
-  */
-  status(): StatusCode;
-  /**
-  * Returns the headers from the incoming response.
-  * 
-  * The returned `headers` resource is immutable: `set`, `append`, and
-  * `delete` operations will fail with `header-error.immutable`.
-  * 
-  * This headers resource is a child: it must be dropped before the parent
-  * `incoming-response` is dropped.
-  */
-  headers(): Headers;
-  /**
-  * Returns the incoming body. May be called at most once. Returns error
-  * if called additional times.
-  */
-  consume(): IncomingBody;
 }

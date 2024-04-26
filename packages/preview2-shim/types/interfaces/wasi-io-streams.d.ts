@@ -28,6 +28,64 @@ export interface StreamErrorClosed {
   tag: 'closed',
 }
 
+export class InputStream {
+  /**
+  * Perform a non-blocking read from the stream.
+  * 
+  * When the source of a `read` is binary data, the bytes from the source
+  * are returned verbatim. When the source of a `read` is known to the
+  * implementation to be text, bytes containing the UTF-8 encoding of the
+  * text are returned.
+  * 
+  * This function returns a list of bytes containing the read data,
+  * when successful. The returned list will contain up to `len` bytes;
+  * it may return fewer than requested, but not more. The list is
+  * empty when no bytes are available for reading at this time. The
+  * pollable given by `subscribe` will be ready when more bytes are
+  * available.
+  * 
+  * This function fails with a `stream-error` when the operation
+  * encounters an error, giving `last-operation-failed`, or when the
+  * stream is closed, giving `closed`.
+  * 
+  * When the caller gives a `len` of 0, it represents a request to
+  * read 0 bytes. If the stream is still open, this call should
+  * succeed and return an empty list, or otherwise fail with `closed`.
+  * 
+  * The `len` parameter is a `u64`, which could represent a list of u8 which
+  * is not possible to allocate in wasm32, or not desirable to allocate as
+  * as a return value by the callee. The callee may return a list of bytes
+  * less than `len` in size while more bytes are available for reading.
+  */
+  read(len: bigint): Uint8Array;
+  /**
+  * Read bytes from a stream, after blocking until at least one byte can
+  * be read. Except for blocking, behavior is identical to `read`.
+  */
+  blockingRead(len: bigint): Uint8Array;
+  /**
+  * Skip bytes from a stream. Returns number of bytes skipped.
+  * 
+  * Behaves identical to `read`, except instead of returning a list
+  * of bytes, returns the number of bytes consumed from the stream.
+  */
+  skip(len: bigint): bigint;
+  /**
+  * Skip bytes from a stream, after blocking until at least one byte
+  * can be skipped. Except for blocking behavior, identical to `skip`.
+  */
+  blockingSkip(len: bigint): bigint;
+  /**
+  * Create a `pollable` which will resolve once either the specified stream
+  * has bytes available to read or the other end of the stream has been
+  * closed.
+  * The created `pollable` is a child resource of the `input-stream`.
+  * Implementations may trap if the `input-stream` is dropped before
+  * all derived `pollable`s created with this function are dropped.
+  */
+  subscribe(): Pollable;
+}
+
 export class OutputStream {
   /**
   * Check readiness for writing. This function never blocks.
@@ -175,63 +233,5 @@ export class OutputStream {
       * is ready for reading, before performing the `splice`.
       */
       blockingSplice(src: InputStream, len: bigint): bigint;
-    }
-    
-    export class InputStream {
-      /**
-      * Perform a non-blocking read from the stream.
-      * 
-      * When the source of a `read` is binary data, the bytes from the source
-      * are returned verbatim. When the source of a `read` is known to the
-      * implementation to be text, bytes containing the UTF-8 encoding of the
-      * text are returned.
-      * 
-      * This function returns a list of bytes containing the read data,
-      * when successful. The returned list will contain up to `len` bytes;
-      * it may return fewer than requested, but not more. The list is
-      * empty when no bytes are available for reading at this time. The
-      * pollable given by `subscribe` will be ready when more bytes are
-      * available.
-      * 
-      * This function fails with a `stream-error` when the operation
-      * encounters an error, giving `last-operation-failed`, or when the
-      * stream is closed, giving `closed`.
-      * 
-      * When the caller gives a `len` of 0, it represents a request to
-      * read 0 bytes. If the stream is still open, this call should
-      * succeed and return an empty list, or otherwise fail with `closed`.
-      * 
-      * The `len` parameter is a `u64`, which could represent a list of u8 which
-      * is not possible to allocate in wasm32, or not desirable to allocate as
-      * as a return value by the callee. The callee may return a list of bytes
-      * less than `len` in size while more bytes are available for reading.
-      */
-      read(len: bigint): Uint8Array;
-      /**
-      * Read bytes from a stream, after blocking until at least one byte can
-      * be read. Except for blocking, behavior is identical to `read`.
-      */
-      blockingRead(len: bigint): Uint8Array;
-      /**
-      * Skip bytes from a stream. Returns number of bytes skipped.
-      * 
-      * Behaves identical to `read`, except instead of returning a list
-      * of bytes, returns the number of bytes consumed from the stream.
-      */
-      skip(len: bigint): bigint;
-      /**
-      * Skip bytes from a stream, after blocking until at least one byte
-      * can be skipped. Except for blocking behavior, identical to `skip`.
-      */
-      blockingSkip(len: bigint): bigint;
-      /**
-      * Create a `pollable` which will resolve once either the specified stream
-      * has bytes available to read or the other end of the stream has been
-      * closed.
-      * The created `pollable` is a child resource of the `input-stream`.
-      * Implementations may trap if the `input-stream` is dropped before
-      * all derived `pollable`s created with this function are dropped.
-      */
-      subscribe(): Pollable;
     }
     

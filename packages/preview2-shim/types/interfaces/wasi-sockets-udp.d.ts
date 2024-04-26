@@ -52,6 +52,103 @@ export interface OutgoingDatagram {
   remoteAddress?: IpSocketAddress,
 }
 
+export class IncomingDatagramStream {
+  /**
+  * Receive messages on the socket.
+  * 
+  * This function attempts to receive up to `max-results` datagrams on the socket without blocking.
+  * The returned list may contain fewer elements than requested, but never more.
+  * 
+  * This function returns successfully with an empty list when either:
+  * - `max-results` is 0, or:
+  * - `max-results` is greater than 0, but no results are immediately available.
+  * This function never returns `error(would-block)`.
+  * 
+  * # Typical errors
+  * - `remote-unreachable`: The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+  * - `connection-refused`: The connection was refused. (ECONNREFUSED)
+  * 
+  * # References
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
+  * - <https://man7.org/linux/man-pages/man2/recv.2.html>
+  * - <https://man7.org/linux/man-pages/man2/recvmmsg.2.html>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
+  * - <https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms741687(v=vs.85)>
+  * - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
+  */
+  receive(maxResults: bigint): IncomingDatagram[];
+  /**
+  * Create a `pollable` which will resolve once the stream is ready to receive again.
+  * 
+  * Note: this function is here for WASI Preview2 only.
+  * It's planned to be removed when `future` is natively supported in Preview3.
+  */
+  subscribe(): Pollable;
+}
+
+export class OutgoingDatagramStream {
+  /**
+  * Check readiness for sending. This function never blocks.
+  * 
+  * Returns the number of datagrams permitted for the next call to `send`,
+  * or an error. Calling `send` with more datagrams than this function has
+  * permitted will trap.
+  * 
+  * When this function returns ok(0), the `subscribe` pollable will
+  * become ready when this function will report at least ok(1), or an
+  * error.
+  * 
+  * Never returns `would-block`.
+  */
+  checkSend(): bigint;
+  /**
+  * Send messages on the socket.
+  * 
+  * This function attempts to send all provided `datagrams` on the socket without blocking and
+  * returns how many messages were actually sent (or queued for sending). This function never
+  * returns `error(would-block)`. If none of the datagrams were able to be sent, `ok(0)` is returned.
+  * 
+  * This function semantically behaves the same as iterating the `datagrams` list and sequentially
+  * sending each individual datagram until either the end of the list has been reached or the first error occurred.
+  * If at least one datagram has been sent successfully, this function never returns an error.
+  * 
+  * If the input list is empty, the function returns `ok(0)`.
+  * 
+  * Each call to `send` must be permitted by a preceding `check-send`. Implementations must trap if
+  * either `check-send` was not called or `datagrams` contains more items than `check-send` permitted.
+  * 
+  * # Typical errors
+  * - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+  * - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+  * - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+  * - `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `stream`. (EISCONN)
+  * - `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
+  * - `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+  * - `connection-refused`:      The connection was refused. (ECONNREFUSED)
+  * - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
+  * 
+  * # References
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
+  * - <https://man7.org/linux/man-pages/man2/send.2.html>
+  * - <https://man7.org/linux/man-pages/man2/sendmmsg.2.html>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
+  * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
+  */
+  send(datagrams: OutgoingDatagram[]): bigint;
+  /**
+  * Create a `pollable` which will resolve once the stream is ready to send again.
+  * 
+  * Note: this function is here for WASI Preview2 only.
+  * It's planned to be removed when `future` is natively supported in Preview3.
+  */
+  subscribe(): Pollable;
+}
+
 export class UdpSocket {
   /**
   * Bind the socket to a specific network on the provided IP address and port.
@@ -192,103 +289,6 @@ export class UdpSocket {
       setSendBufferSize(value: bigint): void;
       /**
       * Create a `pollable` which will resolve once the socket is ready for I/O.
-      * 
-      * Note: this function is here for WASI Preview2 only.
-      * It's planned to be removed when `future` is natively supported in Preview3.
-      */
-      subscribe(): Pollable;
-    }
-    
-    export class IncomingDatagramStream {
-      /**
-      * Receive messages on the socket.
-      * 
-      * This function attempts to receive up to `max-results` datagrams on the socket without blocking.
-      * The returned list may contain fewer elements than requested, but never more.
-      * 
-      * This function returns successfully with an empty list when either:
-      * - `max-results` is 0, or:
-      * - `max-results` is greater than 0, but no results are immediately available.
-      * This function never returns `error(would-block)`.
-      * 
-      * # Typical errors
-      * - `remote-unreachable`: The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-      * - `connection-refused`: The connection was refused. (ECONNREFUSED)
-      * 
-      * # References
-      * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
-      * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
-      * - <https://man7.org/linux/man-pages/man2/recv.2.html>
-      * - <https://man7.org/linux/man-pages/man2/recvmmsg.2.html>
-      * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
-      * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
-      * - <https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms741687(v=vs.85)>
-      * - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
-      */
-      receive(maxResults: bigint): IncomingDatagram[];
-      /**
-      * Create a `pollable` which will resolve once the stream is ready to receive again.
-      * 
-      * Note: this function is here for WASI Preview2 only.
-      * It's planned to be removed when `future` is natively supported in Preview3.
-      */
-      subscribe(): Pollable;
-    }
-    
-    export class OutgoingDatagramStream {
-      /**
-      * Check readiness for sending. This function never blocks.
-      * 
-      * Returns the number of datagrams permitted for the next call to `send`,
-      * or an error. Calling `send` with more datagrams than this function has
-      * permitted will trap.
-      * 
-      * When this function returns ok(0), the `subscribe` pollable will
-      * become ready when this function will report at least ok(1), or an
-      * error.
-      * 
-      * Never returns `would-block`.
-      */
-      checkSend(): bigint;
-      /**
-      * Send messages on the socket.
-      * 
-      * This function attempts to send all provided `datagrams` on the socket without blocking and
-      * returns how many messages were actually sent (or queued for sending). This function never
-      * returns `error(would-block)`. If none of the datagrams were able to be sent, `ok(0)` is returned.
-      * 
-      * This function semantically behaves the same as iterating the `datagrams` list and sequentially
-      * sending each individual datagram until either the end of the list has been reached or the first error occurred.
-      * If at least one datagram has been sent successfully, this function never returns an error.
-      * 
-      * If the input list is empty, the function returns `ok(0)`.
-      * 
-      * Each call to `send` must be permitted by a preceding `check-send`. Implementations must trap if
-      * either `check-send` was not called or `datagrams` contains more items than `check-send` permitted.
-      * 
-      * # Typical errors
-      * - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-      * - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
-      * - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-      * - `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `stream`. (EISCONN)
-      * - `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
-      * - `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-      * - `connection-refused`:      The connection was refused. (ECONNREFUSED)
-      * - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
-      * 
-      * # References
-      * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
-      * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
-      * - <https://man7.org/linux/man-pages/man2/send.2.html>
-      * - <https://man7.org/linux/man-pages/man2/sendmmsg.2.html>
-      * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
-      * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
-      * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
-      * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
-      */
-      send(datagrams: OutgoingDatagram[]): bigint;
-      /**
-      * Create a `pollable` which will resolve once the stream is ready to send again.
       * 
       * Note: this function is here for WASI Preview2 only.
       * It's planned to be removed when `future` is natively supported in Preview3.
