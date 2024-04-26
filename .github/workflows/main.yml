@@ -102,12 +102,6 @@ jobs:
     - name: Generate WASI Tests
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
       run: cargo xtask generate tests
-    - name: Download Build
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      uses: actions/download-artifact@v4
-      with:
-        name: jco-build
-        path: obj
     - name: Upload Generated WASI Tests
       uses: actions/upload-artifact@v4
       with:
