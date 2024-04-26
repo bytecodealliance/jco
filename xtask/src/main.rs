@@ -9,9 +9,17 @@ enum Opts {
     /// Build the project
     Build(Build),
     /// Run cargo tests
-    Test,
+    Test(Platform),
     /// Generate code
     Generate(Generate),
+}
+
+#[derive(StructOpt)]
+enum Platform {
+    /// Test on Node.js
+    Node,
+    /// Test on Deno
+    Deno,
 }
 
 #[derive(StructOpt)]
@@ -42,7 +50,8 @@ fn main() -> anyhow::Result<()> {
             build::jco::run(true)?;
             Ok(())
         }
-        Opts::Test => test::run(),
+        Opts::Test(Platform::Node) => test::run(false),
+        Opts::Test(Platform::Deno) => test::run(true),
         Opts::Generate(Generate::Tests) => generate::tests::run(),
         Opts::Generate(Generate::WasiTypes) => generate::wasi_types::run(),
     }
