@@ -136,7 +136,7 @@ jobs:
         name: wasi-tests
         path: tests/gen
     - name: WASI Preview 2 Conformance
-      run: cargo xtask test deno
+      run: cargo test deno_
 
   test-wasi:
     name: Jco Node.js WASI Conformance Tests
@@ -177,7 +177,7 @@ jobs:
         name: wasi-tests
         path: tests/gen
     - name: WASI Preview 2 Conformance
-      run: cargo xtask test node
+      run: cargo test node_
 
   test-workspaces:
     name: Test Workspaces
