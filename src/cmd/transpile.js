@@ -284,7 +284,7 @@ ${
 }${
             exports
               .map(([name]) => {
-                if (name === asmMangle(name)) {
+                if (name === asmMangle(name)){
                   return `  ${name},`;
                 } else {
                   return `  ${asmMangle(name)} as '${name}',`;

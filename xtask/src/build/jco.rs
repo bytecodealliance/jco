@@ -1,20 +1,20 @@
 use anyhow::{Context, Result};
 use js_component_bindgen::BindingsMode;
-use xshell::{cmd, Shell};
 use std::{collections::HashMap, fs, io::Write, path::PathBuf};
 use wit_component::ComponentEncoder;
+use xshell::{cmd, Shell};
 
 pub(crate) fn run(release: bool) -> Result<()> {
     let build = if release { "release" } else { "debug" };
     transpile(
         &format!("target/wasm32-wasi/{build}/js_component_bindgen_component.wasm"),
         "js-component-bindgen-component".to_string(),
-        release
+        release,
     )?;
     transpile(
         &format!("target/wasm32-wasi/{build}/wasm_tools_js.wasm"),
         "wasm-tools".to_string(),
-        release
+        release,
     )?;
 
     Ok(())
@@ -41,7 +41,11 @@ fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
 
     let sh = Shell::new()?;
     if optimize {
-        cmd!(sh, "node ./src/jco.js opt {component_path} -o {component_path}").read()?;
+        cmd!(
+            sh,
+            "node ./src/jco.js opt {component_path} -o {component_path}"
+        )
+        .read()?;
         adapted_component = fs::read(component_path)?;
     }
 
