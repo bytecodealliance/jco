@@ -11,37 +11,6 @@ defaults:
     shell: bash
 
 jobs:
-  wasi-tests:
-    name: WASI Test Generation
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - name: Cache WASI Tests
-      id: cache-wasi-tests
-      uses: actions/cache@v4
-      with:
-        path: tests/gen
-        key: wasi-wasmtime-${{ hashFiles('submodules/wasmtime/Cargo.lock') }}
-    - name: Install Rust
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup update stable --no-self-update && rustup default stable
-    - name: Install wasm32-unknown-unknown target
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup target add wasm32-unknown-unknown
-    - name: Install wasm32-wasi target
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup target add wasm32-wasi
-    - name: Generate WASI Tests
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: cargo xtask generate tests
-    - name: Upload Generated WASI Tests
-      uses: actions/upload-artifact@v4
-      with:
-        name: wasi-tests
-        path: tests/gen
-
   build:
     name: Jco Build
     runs-on: 'ubuntu-latest'
@@ -98,6 +67,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: jco-build
+        path: obj
     - name: Check Build
       run: ls obj
     - name: Test LTS Node.js
@@ -106,6 +76,44 @@ jobs:
     - name: Test Latest Node.js
       run: npm run test
       if: matrix.node == 'latest'
+
+  wasi-tests:
+    name: WASI Test Generation
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Cache WASI Tests
+      id: cache-wasi-tests
+      uses: actions/cache@v4
+      with:
+        path: tests/gen
+        key: wasi-wasmtime-${{ hashFiles('submodules/wasmtime/Cargo.lock') }}
+    - name: Install Rust
+      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+      run: rustup update stable --no-self-update && rustup default stable
+    - name: Install wasm32-unknown-unknown target
+      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+      run: rustup target add wasm32-unknown-unknown
+    - name: Install wasm32-wasi target
+      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+      run: rustup target add wasm32-wasi
+    - name: Generate WASI Tests
+      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+      run: cargo xtask generate tests
+    - name: Download Build
+      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+      uses: actions/download-artifact@v4
+      with:
+        name: jco-build
+        path: obj
+    - name: Upload Generated WASI Tests
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasi-tests
+        path: tests/gen
 
   test-wasi:
     name: Jco WASI Conformance Tests
@@ -142,10 +150,12 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: jco-build
+        path: obj
     - name: Download WASI Tests
       uses: actions/download-artifact@v4
       with:
         name: wasi-tests
+        path: tests/gen
     - name: WASI Preview 2 Conformance
       run: cargo test
 
