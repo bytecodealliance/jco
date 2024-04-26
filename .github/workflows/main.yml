@@ -75,9 +75,11 @@ jobs:
       run: npm run test
       if: matrix.node == 'latest'
 
-  wasi-tests:
+  build-wasi-tests:
     name: WASI Test Generation
     runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cache-wasi-tests.outputs.cache-primary-key }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -103,14 +105,36 @@ jobs:
     - name: Generate WASI Tests
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
       run: cargo xtask generate tests
-    - name: Upload Generated WASI Tests
-      uses: actions/upload-artifact@v4
+
+  test-wasi-deno:
+    name: Jco Deno WASI Conformance Tests
+    runs-on: 'ubuntu-latest'
+    needs: [build, build-wasi-tests]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v3
       with:
-        name: wasi-tests
+        node-version: 'latest'
+    - uses: denoland/setup-deno@v1
+      with:
+        deno-version: v1.x
+    - name: Install NPM packages
+      run: npm install
+    - name: Download Build
+      uses: actions/download-artifact@v4
+      with:
+        name: jco-build
+        path: obj
+    - name: Download WASI Tests
+      uses: actions/cache/restore@v4
+      with:
         path: tests/gen
+        key: ${{ needs.build-wasi-tests.outputs.cache-key }}
+    - name: WASI Preview 2 Conformance
+      run: cargo xtask test deno
 
   test-wasi:
-    name: Jco WASI Conformance Tests
+    name: Jco Node.js WASI Conformance Tests
     strategy:
       matrix:
         os: [
@@ -129,15 +153,12 @@ jobs:
           - os: windows-latest
             node: 18.x
     runs-on: ${{ matrix.os }}
-    needs: [build, wasi-tests]
+    needs: [build, build-wasi-tests]
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node }}
-    - uses: denoland/setup-deno@v1
-      with:
-        deno-version: v1.x
     - name: Install NPM packages
       run: npm install
     - name: Download Build
@@ -146,12 +167,12 @@ jobs:
         name: jco-build
         path: obj
     - name: Download WASI Tests
-      uses: actions/download-artifact@v4
+      uses: actions/cache/restore@v4
       with:
-        name: wasi-tests
         path: tests/gen
+        key: ${{ needs.build-wasi-tests.outputs.cache-key }}
     - name: WASI Preview 2 Conformance
-      run: cargo test
+      run: cargo xtask test node
 
   test-workspaces:
     name: Test Workspaces
