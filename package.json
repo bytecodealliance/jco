@@ -1,6 +1,6 @@
 {
   "name": "@bytecodealliance/jco",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "author": "Guy Bedford",
   "bin": {
@@ -62,7 +62,7 @@
   "files": [
     "lib",
     "src",
-    "obj/*.core.wasm",
+    "obj/*.core*.wasm",
     "obj/*.js",
     "obj/*.ts",
     "obj/interfaces"
