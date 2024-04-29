@@ -280,7 +280,6 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceTableCreateBorrow => output.push_str("
                 function rscTableCreateBorrow (table, rep) {
-                    if (rep === 0) throw new TypeError('Invalid rep');
                     const free = table[0] & ~T_FLAG;
                     if (free === 0) {
                         table.push(scopeId);
@@ -296,7 +295,6 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceTableCreateOwn => output.push_str("
                 function rscTableCreateOwn (table, rep) {
-                    if (rep === 0) throw new TypeError('Invalid rep');
                     const free = table[0] & ~T_FLAG;
                     if (free === 0) {
                         table.push(0);
