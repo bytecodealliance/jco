@@ -68,7 +68,7 @@ pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
 pub struct FunctionBindgen<'a> {
     pub resource_map: &'a ResourceMap,
-    pub cur_resource_borrows: Vec<String>,
+    pub cur_resource_borrows: bool,
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
     pub valid_lifting_optimization: bool,
     pub sizes: &'a SizeAlign,
@@ -1119,11 +1119,35 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 // After a high level call, we need to deactivate the component resource borrows.
-                if !self.cur_resource_borrows.is_empty() {
-                    for resource_borrow in &self.cur_resource_borrows {
-                        uwriteln!(self.src, "{}", resource_borrow);
+                if self.cur_resource_borrows {
+                    let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
+                    let cur_resource_borrows = self.intrinsic(Intrinsic::CurResourceBorrows);
+                    let host = matches!(
+                        self.resource_map.iter().nth(0).unwrap().1.data,
+                        ResourceData::Host { .. }
+                    );
+                    if host {
+                        uwriteln!(
+                            self.src,
+                            "for (const rsc of {cur_resource_borrows}) {{
+                                rsc[{symbol_resource_handle}] = null;
+                            }}
+                            {cur_resource_borrows} = [];"
+                        );
+                    } else {
+                        uwriteln!(
+                            self.src,
+                            "for (const {{ rsc, drop }} of {cur_resource_borrows}) {{
+                                if (rsc[{symbol_resource_handle}]) {{
+                                    drop(rsc[{symbol_resource_handle}]);
+                                    delete rsc[{symbol_resource_handle}];
+                                }}
+                                {cur_resource_borrows}[i][{symbol_resource_handle}] = null;
+                            }}
+                            {cur_resource_borrows} = [];"
+                        );
                     }
-                    self.cur_resource_borrows = Vec::new();
+                    self.cur_resource_borrows = false;
                 }
             }
 
@@ -1237,13 +1261,6 @@ impl Bindgen for FunctionBindgen<'_> {
                             } else {
                                 // Borrow handles of local resources have rep handles, which we carry through here.
                                 uwriteln!(self.src, "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});");
-                                // Borrow handles are tracked to release after the call by CallInterface.
-                                // Once may_enter and may_leave are properly implemented, we can be certain to avoid non-reentrancy of import calls
-                                // calling export calls with borrow handles, so can maintain the invariant that borrows cannot ever be passed in.
-                                self.cur_resource_borrows.push(format!(
-                                    "{}[{symbol_resource_handle}] = null;",
-                                    rsc.to_string()
-                                ));
                             }
                         } else {
                             let rep = format!("rep{}", self.tmp());
@@ -1270,13 +1287,15 @@ impl Bindgen for FunctionBindgen<'_> {
                                     }}
                                     {rsc_table_remove}(handleTable{tid}, {handle});"
                                 );
-                            } else {
-                                // If lifting a borrow, that was not previously captured, create the class.
-                                self.cur_resource_borrows.push(format!(
-                                    "{}[{symbol_resource_handle}] = null;",
-                                    rsc.to_string()
-                                ));
                             }
+                        }
+
+                        // Borrow handles are tracked to release after the call by CallInterface.
+                        if !is_own {
+                            let cur_resource_borrows =
+                                self.intrinsic(Intrinsic::CurResourceBorrows);
+                            uwriteln!(self.src, "{cur_resource_borrows}.push({rsc});");
+                            self.cur_resource_borrows = true;
                         }
                     }
 
@@ -1318,11 +1337,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             );
 
                             if !is_own {
-                                self.cur_resource_borrows.push(format!(
-                                    "if ({rsc}[{symbol_resource_handle}]) {{
-                                        $resource_import${prefix}drop${lower_camel}({rsc}[{symbol_resource_handle}]);
-                                        delete {rsc}[{symbol_resource_handle}];
-                                    }}"));
+                                let cur_resource_borrows =
+                                    self.intrinsic(Intrinsic::CurResourceBorrows);
+                                uwriteln!(self.src, "{cur_resource_borrows}.push({{ rsc: {rsc}, drop: $resource_import${prefix}drop${lower_camel} }});");
+                                self.cur_resource_borrows = true;
                             }
                         }
                     }

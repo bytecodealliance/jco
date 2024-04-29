@@ -1496,7 +1496,7 @@ impl<'a> Instantiator<'a, '_> {
 
         let mut f = FunctionBindgen {
             resource_map: &resource_map,
-            cur_resource_borrows: Vec::new(),
+            cur_resource_borrows: false,
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
             sizes: &self.sizes,
