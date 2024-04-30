@@ -344,6 +344,9 @@ pub fn render_intrinsics(
                 }
             "),
 
+            // For own transfer, in the case of a resource transfer where that resource is never dropped,
+            // it is possible to transfer in to a table that is otherwise fully uninitialized by the
+            // bindgen.
             Intrinsic::ResourceTransferBorrow => {
                 let handle_tables = Intrinsic::HandleTables.name();
                 let resource_borrows = Intrinsic::ResourceCallBorrows.name();
@@ -354,7 +357,8 @@ pub fn render_intrinsics(
                     function resourceTransferBorrow(handle, fromRid, toRid) {{
                         const rep = fromRid < {imported_rsc_cnt} ? {rsc_table_remove}({handle_tables}[fromRid], handle).rep : handle;
                         if (toRid >= {imported_rsc_cnt}) return rep;
-                        const newHandle = {rsc_table_create_borrow}({handle_tables}[toRid], rep);
+                        const toTable = {handle_tables}[toRid] || ({handle_tables}[toRid] = [T_FLAG, 0]);
+                        const newHandle = {rsc_table_create_borrow}(toTable, rep);
                         {resource_borrows}.push({{ rid: toRid, handle: newHandle }});
                         return newHandle;
                     }}
@@ -370,7 +374,8 @@ pub fn render_intrinsics(
                     function resourceTransferBorrowValidLifting(handle, fromRid, toRid) {{
                         const rep = fromRid < {imported_rsc_cnt} ? {rsc_table_remove}({handle_tables}[fromRid], handle).rep : handle;
                         if (toRid >= {imported_rsc_cnt}) return rep;
-                        return {rsc_table_create_borrow}({handle_tables}[toRid], rep);
+                        const toTable = {handle_tables}[toRid] || ({handle_tables}[toRid] = [T_FLAG, 0]);
+                        return {rsc_table_create_borrow}(toTable, rep);
                     }}
                 "));
             },
@@ -382,7 +387,8 @@ pub fn render_intrinsics(
                 output.push_str(&format!("
                     function resourceTransferOwn(handle, fromRid, toRid) {{
                         const {{ rep }} = {rsc_table_remove}({handle_tables}[fromRid], handle);
-                        return {rsc_table_create_own}({handle_tables}[toRid], rep);
+                        const toTable = {handle_tables}[toRid] || ({handle_tables}[toRid] = [T_FLAG, 0]);
+                        return {rsc_table_create_own}(toTable, rep);
                     }}
                 "));
             },
