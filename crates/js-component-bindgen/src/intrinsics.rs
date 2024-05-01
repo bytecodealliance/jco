@@ -360,7 +360,7 @@ pub fn render_intrinsics(
                 let imported_rsc_cnt = Intrinsic::ImportedResourceTableCnt.name();
                 output.push_str(&format!("
                     function resourceTransferBorrow(handle, fromTid, toTid) {{
-                        const fromTable = handleTables[fromTid];
+                        const fromTable = {handle_tables}[fromTid];
                         const rep = fromTid >= {imported_rsc_cnt} ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
                         if (toTid >= {imported_rsc_cnt}) return rep;
                         const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
@@ -378,7 +378,7 @@ pub fn render_intrinsics(
                 let imported_rsc_cnt = Intrinsic::ImportedResourceTableCnt.name();
                 output.push_str(&format!("
                     function resourceTransferBorrowValidLifting(handle, fromTid, toTid) {{
-                        const fromTable = handleTables[fromTid];
+                        const fromTable = {handle_tables}[fromTid];
                         const rep = fromTid >= {imported_rsc_cnt} ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
                         if (toTid >= {imported_rsc_cnt}) return rep;
                         const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
