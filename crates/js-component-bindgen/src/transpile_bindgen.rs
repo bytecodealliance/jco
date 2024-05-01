@@ -583,9 +583,29 @@ impl<'a> Instantiator<'a, '_> {
                 .all_intrinsics
                 .contains(&Intrinsic::ResourceTransferBorrowValidLifting)
         {
-            let imported_resource_cnt = Intrinsic::ImportedResourceCnt.name();
-            let val = self.component.imported_resources.len();
-            uwrite!(self.src.js, "const {imported_resource_cnt} = {val};");
+            let imported_rsc_table_cnt = (0..self.component.num_resource_tables)
+                .find(|&tidx| {
+                    let tid = TypeResourceTableIndex::from_u32(tidx as u32);
+                    let rid = self.types[tid].ty;
+                    self.component.defined_resource_index(rid).is_some()
+                })
+                .unwrap_or(self.component.num_resource_tables);
+
+            if (imported_rsc_table_cnt..self.component.num_resource_tables)
+                .find(|&tidx| {
+                    let tid = TypeResourceTableIndex::from_u32(tidx as u32);
+                    let rid = self.types[tid].ty;
+                    self.component.defined_resource_index(rid).is_none()
+                })
+                .is_some()
+            {
+                panic!("Internal error: Unexpected disjoint import / export table index space for resources");
+            }
+            let imported_rsc_cnt = Intrinsic::ImportedResourceTableCnt.name();
+            uwrite!(
+                self.src.js,
+                "const {imported_rsc_cnt} = {imported_rsc_table_cnt};"
+            );
         }
     }
 
