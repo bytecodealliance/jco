@@ -574,6 +574,7 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
+        // Write out the defined resource table indices for the runtime
         if self
             .gen
             .all_intrinsics
@@ -583,9 +584,22 @@ impl<'a> Instantiator<'a, '_> {
                 .all_intrinsics
                 .contains(&Intrinsic::ResourceTransferBorrowValidLifting)
         {
-            let imported_resource_cnt = Intrinsic::ImportedResourceCnt.name();
-            let val = self.component.imported_resources.len();
-            uwrite!(self.src.js, "const {imported_resource_cnt} = {val};");
+            let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
+            uwrite!(self.src.js, "const {defined_resource_tables} = [");
+            for tidx in 0..self.component.num_resource_tables {
+                let tid = TypeResourceTableIndex::from_u32(tidx as u32);
+                let rid = self.types[tid].ty;
+                if let Some(defined_index) = self.component.defined_resource_index(rid) {
+                    if self.types[tid].instance
+                        == self.component.defined_resource_instances[defined_index]
+                    {
+                        uwrite!(self.src.js, "true,");
+                    }
+                } else {
+                    uwrite!(self.src.js, ",");
+                };
+            }
+            uwrite!(self.src.js, "]");
         }
     }
 

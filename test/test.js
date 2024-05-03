@@ -21,6 +21,7 @@ const componentFixtures = env.COMPONENT_FIXTURES
 
 import { codegenTest } from './codegen.js';
 import { runtimeTest } from './runtime.js';
+import { commandsTest } from './commands.js';
 import { apiTest } from './api.js';
 import { cliTest } from './cli.js';
 import { preview2Test } from './preview2.js';
@@ -30,5 +31,6 @@ await codegenTest(componentFixtures);
 tsTest();
 await preview2Test();
 await runtimeTest(componentFixtures);
+await commandsTest();
 await apiTest(componentFixtures);
 await cliTest(componentFixtures);

@@ -34,6 +34,7 @@ const DENO_IGNORE: &[&str] = &[
     "preview1_file_truncation",
     "preview1_file_unbuffered_write",
     "preview1_file_write",
+    "preview1_interesting_paths",
     "preview1_nofollow_errors",
     "preview1_path_filestat",
     "preview1_path_open_lots",
