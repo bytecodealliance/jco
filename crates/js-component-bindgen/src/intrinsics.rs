@@ -10,6 +10,7 @@ pub enum Intrinsic {
     ComponentError,
     CurResourceBorrows,
     DataView,
+    DefinedResourceTables,
     EmptyFunc,
     F32ToI32,
     F64ToI64,
@@ -21,7 +22,6 @@ pub enum Intrinsic {
     HasOwnProperty,
     I32ToF32,
     I64ToF64,
-    ImportedResourceTableCnt,
     InstantiateCore,
     IsLE,
     ResourceTableFlag,
@@ -150,6 +150,8 @@ pub fn render_intrinsics(
                 const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
             "),
 
+            Intrinsic::DefinedResourceTables => {},
+
             Intrinsic::EmptyFunc => output.push_str("
                 const emptyFunc = () => {};
             "),
@@ -224,8 +226,6 @@ pub fn render_intrinsics(
             Intrinsic::I64ToF64 => output.push_str("
                 const i64ToF64 = i => (i64ToF64I[0] = i, i64ToF64F[0]);
             "),
-
-            Intrinsic::ImportedResourceTableCnt => {},
 
             Intrinsic::InstantiateCore => if !instantiation {
                 output.push_str("
@@ -357,12 +357,13 @@ pub fn render_intrinsics(
                 let resource_borrows = Intrinsic::ResourceCallBorrows.name();
                 let rsc_table_remove = Intrinsic::ResourceTableRemove.name();
                 let rsc_table_create_borrow = Intrinsic::ResourceTableCreateBorrow.name();
-                let imported_rsc_cnt = Intrinsic::ImportedResourceTableCnt.name();
+                let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
                 output.push_str(&format!("
                     function resourceTransferBorrow(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
-                        const rep = fromTid >= {imported_rsc_cnt} ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
-                        if (toTid >= {imported_rsc_cnt}) return rep;
+                        const isOwn = (fromTable[(handle << 1) + 1] & T_FLAG) !== 0;
+                        const rep = isOwn ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
+                        if ({defined_resource_tables}[toTid]) return rep;
                         const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
                         const newHandle = {rsc_table_create_borrow}(toTable, rep);
                         {resource_borrows}.push({{ rid: toTid, handle: newHandle }});
@@ -375,12 +376,13 @@ pub fn render_intrinsics(
                 let handle_tables = Intrinsic::HandleTables.name();
                 let rsc_table_remove = Intrinsic::ResourceTableRemove.name();
                 let rsc_table_create_borrow = Intrinsic::ResourceTableCreateBorrow.name();
-                let imported_rsc_cnt = Intrinsic::ImportedResourceTableCnt.name();
+                let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
                 output.push_str(&format!("
                     function resourceTransferBorrowValidLifting(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
-                        const rep = fromTid >= {imported_rsc_cnt} ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
-                        if (toTid >= {imported_rsc_cnt}) return rep;
+                        const isOwn = (fromTable[(handle << 1) + 1] & T_FLAG) !== 0;
+                        const rep = isOwn ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
+                        if ({defined_resource_tables}[toTid]) return rep;
                         const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
                         return {rsc_table_create_borrow}(toTable, rep);
                     }}
@@ -608,6 +610,7 @@ impl Intrinsic {
             "ComponentError",
             "curResourceBorrows",
             "dataView",
+            "definedResourceTables",
             "emptyFunc",
             "f32ToI32",
             "f64ToI64",
@@ -618,7 +621,6 @@ impl Intrinsic {
             "hasOwnProperty",
             "i32ToF32",
             "i64ToF64",
-            "importedResourceCnt",
             "instantiateCore",
             "isLE",
             "resourceCallBorrows",
@@ -686,6 +688,7 @@ impl Intrinsic {
             Intrinsic::ComponentError => "ComponentError",
             Intrinsic::CurResourceBorrows => "curResourceBorrows",
             Intrinsic::DataView => "dataView",
+            Intrinsic::DefinedResourceTables => "definedResourceTables",
             Intrinsic::EmptyFunc => "emptyFunc",
             Intrinsic::F32ToI32 => "f32ToI32",
             Intrinsic::F64ToI64 => "f64ToI64",
@@ -697,7 +700,6 @@ impl Intrinsic {
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::I32ToF32 => "i32ToF32",
             Intrinsic::I64ToF64 => "i64ToF64",
-            Intrinsic::ImportedResourceTableCnt => "importedResourceCnt",
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
             Intrinsic::ResourceCallBorrows => "resourceCallBorrows",
