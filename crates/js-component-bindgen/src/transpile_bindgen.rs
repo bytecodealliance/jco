@@ -172,12 +172,18 @@ pub fn transpile_bindgen(
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
     instantiator.instantiate();
-    instantiator.resource_definitions();
+
+    let mut intrinsic_definitions = source::Source::default();
+
+    instantiator.resource_definitions(&mut intrinsic_definitions);
     instantiator.instance_flags();
+
     instantiator.gen.src.js(&instantiator.src.js);
     instantiator.gen.src.js_init(&instantiator.src.js_init);
 
-    instantiator.gen.finish_component(name, files, &opts);
+    instantiator
+        .gen
+        .finish_component(name, files, &opts, intrinsic_definitions);
 
     let exports = instantiator
         .gen
@@ -198,7 +204,13 @@ pub fn transpile_bindgen(
 }
 
 impl<'a> JsBindgen<'a> {
-    fn finish_component(&mut self, name: &str, files: &mut Files, opts: &TranspileOpts) {
+    fn finish_component(
+        &mut self,
+        name: &str,
+        files: &mut Files,
+        opts: &TranspileOpts,
+        intrinsic_definitions: source::Source,
+    ) {
         let mut output = source::Source::default();
         let mut compilation_promises = source::Source::default();
 
@@ -250,10 +262,12 @@ impl<'a> JsBindgen<'a> {
                     output,
                     "\
                         {}
+                        {}
                         export async function instantiate(getCoreModule, imports, instantiateCore = WebAssembly.instantiate) {{
                             {}
                     ",
                     &js_intrinsics as &str,
+                    &intrinsic_definitions as &str,
                     &compilation_promises as &str,
                 )
             }
@@ -263,10 +277,12 @@ impl<'a> JsBindgen<'a> {
                     output,
                     "\
                         {}
+                        {}
                         export function instantiate(getCoreModule, imports, instantiateCore = (module, importObject) => new WebAssembly.Instance(module, importObject)) {{
                             {}
                     ",
                     &js_intrinsics as &str,
+                    &intrinsic_definitions as &str,
                     &compilation_promises as &str,
                 )
             }
@@ -323,6 +339,7 @@ impl<'a> JsBindgen<'a> {
                 "\
                     {}
                     {}
+                    {}
                     {maybe_init_export}const $init = (async() => {{
                         {}\
                         {}\
@@ -330,6 +347,7 @@ impl<'a> JsBindgen<'a> {
                     {maybe_init}\
                 ",
                 &js_intrinsics as &str,
+                &intrinsic_definitions as &str,
                 &self.src.js as &str,
                 &compilation_promises as &str,
                 &self.src.js_init as &str,
@@ -560,7 +578,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn resource_definitions(&mut self) {
+    fn resource_definitions(&mut self, definitions: &mut source::Source) {
         // It is theoretically possible for locally defined resources used in no functions
         // to still be exported
         for resource in 0..self.component.num_resources {
@@ -585,7 +603,7 @@ impl<'a> Instantiator<'a, '_> {
                 .contains(&Intrinsic::ResourceTransferBorrowValidLifting)
         {
             let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
-            uwrite!(self.src.js, "const {defined_resource_tables} = [");
+            uwrite!(definitions, "const {defined_resource_tables} = [");
             for tidx in 0..self.component.num_resource_tables {
                 let tid = TypeResourceTableIndex::from_u32(tidx as u32);
                 let rid = self.types[tid].ty;
@@ -593,13 +611,13 @@ impl<'a> Instantiator<'a, '_> {
                     if self.types[tid].instance
                         == self.component.defined_resource_instances[defined_index]
                     {
-                        uwrite!(self.src.js, "true,");
+                        uwrite!(definitions, "true,");
                     }
                 } else {
-                    uwrite!(self.src.js, ",");
+                    uwrite!(definitions, ",");
                 };
             }
-            uwrite!(self.src.js, "]");
+            uwrite!(definitions, "];\n");
         }
     }
 

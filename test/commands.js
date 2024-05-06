@@ -3,6 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { exec, jcoPath } from "./helpers.js";
 
+const DEBUG = false;
+
 const tests = JSON.parse(readFileSync('test/fixtures/commands/tests.json', 'utf8'));
 
 export async function commandsTest() {
@@ -14,6 +16,7 @@ export async function commandsTest() {
         const { stdout, stderr } = await exec(
           jcoPath,
           "run",
+          ...DEBUG ? ["--jco-dir", `test/output/commands/${fixture}`] : [],
           resolve("test/fixtures/commands", fixture),
           ...(tests[runName]?.args || [])
         );
