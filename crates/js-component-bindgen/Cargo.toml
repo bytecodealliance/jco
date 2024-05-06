@@ -9,6 +9,7 @@ license = "Apache-2.0 WITH LLVM-exception"
 categories = ["wasm"]
 keywords = ["webassembly", "wasm"]
 homepage = "https://github.com/bytecodealliance/jco/tree/main/crates/js-component-bindgen"
+repository = "https://github.com/bytecodealliance/jco"
 version = { workspace = true }
 edition = { workspace = true }
 
