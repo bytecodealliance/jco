@@ -572,6 +572,9 @@ pub fn render_intrinsics(
                         writtenTotal += written;
                         s = s.slice(read);
                     }
+                    if (writtenTotal < allocLen) {
+                        ptr = realloc(ptr, allocLen, 1, writtenTotal);
+                    }
                     utf8EncodedLen = writtenTotal;
                     return ptr;
                 }
