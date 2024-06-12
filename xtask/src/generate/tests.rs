@@ -129,13 +129,13 @@ pub fn run() -> anyhow::Result<()> {
             continue;
         }
 
-        let windows_skip = DENO || TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
+        let windows_skip = TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
 
         let content = generate_test(&test_name, windows_skip, false);
         fs::write(format!("tests/gen/node_{test_name}.rs"), content)?;
 
         if DENO && !DENO_IGNORE.contains(&test_name.as_ref()) {
-            let content = generate_test(&test_name, windows_skip, true);
+            let content = generate_test(&test_name, true, true);
             let test_name = format!("deno_{test_name}");
             fs::write(format!("tests/gen/{test_name}.rs"), content)?;
             all_names.push(test_name);
