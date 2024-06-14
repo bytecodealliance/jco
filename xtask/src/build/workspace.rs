@@ -10,11 +10,11 @@ pub(crate) fn run(release: bool) -> anyhow::Result<()> {
     cmd!(sh, "node node_modules/typescript/bin/tsc -p tsconfig.json").read()?;
     sh.copy_file(
         "lib/wasi_snapshot_preview1.command.wasm",
-        "node_modules/@bytecodealliance/jco/lib",
+        "node_modules/@golemcloud/jco/lib",
     )?;
     sh.copy_file(
         "lib/wasi_snapshot_preview1.reactor.wasm",
-        "node_modules/@bytecodealliance/jco/lib",
+        "node_modules/@golemcloud/jco/lib",
     )?;
     Ok(())
 }
