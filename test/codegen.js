@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';
 import { exec, jcoPath } from './helpers.js';
 import { strictEqual } from 'node:assert';
-import { componentNew, componentEmbed, transpile } from '@bytecodealliance/jco';
+import { componentNew, componentEmbed, transpile } from '@golemcloud/jco';
 import { ok } from 'node:assert';
 
 const eslintPath = `node_modules/eslint/bin/eslint.js`;

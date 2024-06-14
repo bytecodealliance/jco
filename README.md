@@ -61,8 +61,9 @@ Options:
 Commands:
   componentize [options] <js-source>    Create a component from a JavaScript module
   transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
+  types [options] <wit-path>            Generate types for the given WIT
   run [options] <command> [args...]     Run a WASI Command component
-  serve [options] <command> [args...]   Serve a WASI HTTP component
+  serve [options] <server> [args...]    Serve a WASI HTTP component
   opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations
   wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
   print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]

@@ -5,10 +5,10 @@ import c from 'chalk-template';
 export async function componentize (jsSource, opts) {
   let componentizeFn;
   try {
-    ({ componentize: componentizeFn } = await eval('import("@bytecodealliance/componentize-js")'));
+    ({ componentize: componentizeFn } = await eval('import("@golemcloud/componentize-js")'));
   } catch (e) {
-    if (e?.code === 'ERR_MODULE_NOT_FOUND' && e?.message?.includes('\'@bytecodealliance/componentize-js\''))
-      throw new Error(`componentize-js must first be installed separately via "npm install @bytecodealliance/componentize-js".`);
+    if (e?.code === 'ERR_MODULE_NOT_FOUND' && e?.message?.includes('\'@golemcloud/componentize-js\''))
+      throw new Error(`componentize-js must first be installed separately via "npm install @golemcloud/componentize-js".`);
     throw e;
   }
   const source = await readFile(jsSource, 'utf8');
