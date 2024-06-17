@@ -6,7 +6,7 @@ use crate::transpile_bindgen::parse_world_key;
 use crate::{dealias, uwrite, uwriteln};
 use heck::*;
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use wit_parser::*;
 
@@ -21,11 +21,6 @@ struct TsBindgen {
 
     interface_names: LocalNames,
     local_names: LocalNames,
-
-    /// TypeScript definitions which will become the import object
-    import_object: Source,
-    /// TypeScript definitions which will become the export object
-    export_object: Source,
 }
 
 pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
@@ -33,8 +28,6 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
         src: Source::default(),
         interface_names: LocalNames::default(),
         local_names: LocalNames::default(),
-        import_object: Source::default(),
-        export_object: Source::default(),
     };
 
     let world = &resolve.worlds[id];
@@ -52,7 +45,7 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                 WorldItem::Interface(id) => match name {
                     WorldKey::Name(name) => {
                         // kebab name -> direct ns namespace import
-                        bindgen.import_interface(resolve, name, *id, files);
+                        bindgen.generate_interface(name, resolve, *id, files);
                     }
                     // namespaced ns:pkg/iface
                     // TODO: map support
@@ -102,15 +95,9 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                 }
             }
         }
-        // kebab import funcs (always default imports)
-        for (name, func) in funcs {
-            bindgen.import_funcs(resolve, &name, func, files);
-        }
-        // namespace imports are grouped by namespace / kebab name
-        // kebab name imports are direct
-        for (name, import_interfaces) in interface_imports {
-            println!("importing interfaces: {name} - {:?}", import_interfaces);
-            bindgen.import_interfaces(resolve, name.as_ref(), import_interfaces, files);
+
+        for (_name, import_interfaces) in interface_imports {
+            bindgen.import_interfaces(resolve, import_interfaces, files);
         }
     }
 
@@ -157,7 +144,7 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
 
                     uwriteln!(src, "}}");
 
-                    bindgen.export_object.push_str(&src);
+                    bindgen.src.push_str(&src);
                 }
                 WorldItem::Type(_) => unimplemented!("type exports"),
             }
@@ -171,8 +158,6 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
     uwriteln!(bindgen.src, "export interface {camel} {{",);
     uwriteln!(bindgen.src, "}}");
 
-    bindgen.src.push_str(&bindgen.export_object);
-
     let name = world.name.to_kebab_case();
     files.push(&format!("{name}.d.ts"), bindgen.src.as_bytes());
 }
@@ -183,66 +168,16 @@ enum WorldExport<'a> {
 }
 
 impl TsBindgen {
-    fn import_interface(
-        &mut self,
-        resolve: &Resolve,
-        name: &str,
-        id: InterfaceId,
-        files: &mut Files,
-    ) -> String {
-        // in case an imported type is used as an exported type
-        let local_name = self.generate_interface(name, resolve, id, files);
-        uwriteln!(
-            self.import_object,
-            "{}: typeof {local_name},",
-            maybe_quote_id(name)
-        );
-        local_name
-    }
-
     fn import_interfaces(
         &mut self,
         resolve: &Resolve,
-        import_name: &str,
         ifaces: Vec<(String, InterfaceId)>,
         files: &mut Files,
     ) {
-        if ifaces.len() == 1 {
-            let (iface_name, id) = ifaces.first().unwrap();
-            if iface_name == "*" {
-                uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
-                let name = resolve.interfaces[*id].name.as_ref().unwrap();
-                let local_name = self.generate_interface(name, resolve, *id, files);
-                uwriteln!(self.import_object, "typeof {local_name},",);
-                return;
-            }
-        }
-        uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
-        for (iface_name, id) in ifaces {
+        for (_, id) in ifaces {
             let name = resolve.interfaces[id].name.as_ref().unwrap();
-            let local_name = self.generate_interface(name, resolve, id, files);
-            uwriteln!(
-                self.import_object,
-                "{}: typeof {local_name},",
-                iface_name.to_lower_camel_case()
-            );
+            self.generate_interface(name, resolve, id, files);
         }
-        uwriteln!(self.import_object, "}},");
-    }
-
-    fn import_funcs(
-        &mut self,
-        resolve: &Resolve,
-        import_name: &str,
-        func: &Function,
-        _files: &mut Files,
-    ) {
-        uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
-        let mut gen = TsImport::new(resolve);
-        gen.ts_func(func, true, false);
-        let src = gen.finish();
-        self.import_object.push_str(&src);
-        uwriteln!(self.import_object, "}},");
     }
 
     fn process_exports(
@@ -266,7 +201,7 @@ impl TsBindgen {
             }
         }
         let src = gen.finish();
-        self.export_object.push_str(&src);
+        self.src.push_str(&src);
     }
 
     fn generate_interface(
@@ -287,8 +222,7 @@ impl TsBindgen {
         let (local_name, local_exists) = self.local_names.get_or_create(file_name, &goal_name);
         let local_name = local_name.to_upper_camel_case();
 
-        let package = resolve.interfaces[id].package.expect("interface package");
-        let package_name = resolve.packages[package].name.to_string();
+        let package_name = interface_module_name(resolve, id);
 
         if !local_exists {
             uwriteln!(
@@ -809,10 +743,7 @@ impl<'a> TsImport<'a> {
                 .unwrap()
                 .to_upper_camel_case();
 
-            let package_name = {
-                let id = self.resolve.interfaces[owner_id].package.unwrap();
-                self.resolve.packages[id].name.to_string()
-            };
+            let package_name = interface_module_name(self.resolve, owner_id);
 
             if orig_name == type_name {
                 uwriteln!(
@@ -854,19 +785,39 @@ fn interface_goal_name(iface_name: &str) -> String {
         .to_kebab_case()
 }
 
+// "golem:api/host@0.2.0";
+fn interface_module_name(resolve: &Resolve, id: InterfaceId) -> String {
+    let i = &resolve.interfaces[id];
+    let i_name = i.name.as_ref().expect("interface name");
+    match i.package {
+        Some(package) => {
+            let package_name = &resolve.packages[package].name;
+            let mut s = String::new();
+            uwrite!(
+                s,
+                "{}:{}/{}",
+                package_name.namespace,
+                package_name.name,
+                i_name
+            );
+
+            if let Some(version) = package_name.version.as_ref() {
+                uwrite!(s, "@{}", version);
+            }
+
+            s
+        }
+        None => i_name.to_string(),
+    }
+}
+
 struct TsExport<'a> {
     src: Source,
     resolve: &'a Resolve,
     needs_ty_option: bool,
     needs_ty_result: bool,
     local_names: LocalNames,
-    // resources: BTreeMap<String, TsResourceExport>,
 }
-
-// struct TsResourceExport {
-//     name: String,
-//     src: Source,
-// }
 
 impl<'a> TsExport<'a> {
     fn docs_raw(&mut self, docs: &str) {
