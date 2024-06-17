@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use js_component_bindgen::ts_stubgen::ts_bindgen;
 
+static IS_DEBUG: bool = true;
+
 #[test]
 fn test_ts_stubgen() {
     let mut resolve = js_component_bindgen::source::wit_parser::Resolve::default();
@@ -29,9 +31,31 @@ fn test_ts_stubgen() {
     let mut files = js_component_bindgen::files::Files::default();
     ts_bindgen(&resolve, id, &mut files);
 
-    files.iter().for_each(|(name, data)| {
-        let name = name.to_string();
-        let data = String::from_utf8(data.to_vec()).unwrap();
-        println!("{}:\n{}\n\n", name, data)
-    })
+    // files.iter().for_each(|(name, data)| {
+    //     let name = name.to_string();
+    //     let data = String::from_utf8(data.to_vec()).unwrap();
+    //     println!("{}:\n{}\n\n", name, data)
+    // });
+
+    // Write output to files
+    if IS_DEBUG {
+        let prefix = PathBuf::from("tests/temp/");
+
+        // delete all files in the directory
+
+        std::fs::remove_dir_all(&prefix).ok();
+
+        files.iter().for_each(|(name, data)| {
+            let name = name.to_string();
+            let data = String::from_utf8(data.to_vec()).unwrap();
+            let path = prefix.join(name);
+
+            // Create the parent directory if it doesn't exist
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("Create parent directory");
+            }
+
+            std::fs::write(path, data).expect("Write file");
+        });
+    }
 }
