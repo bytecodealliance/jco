@@ -10,9 +10,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use wit_parser::*;
 
-// IMPORTS ARE CONVERTED TO DECLARE MODULE
-
-struct TsBindgen {
+struct TsStubgen {
     /// The source code for the "main" file that's going to be created for the
     /// component we're generating bindings for. This is incrementally added to
     /// over time and primarily contains the main `instantiate` function as well
@@ -23,8 +21,8 @@ struct TsBindgen {
     local_names: LocalNames,
 }
 
-pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
-    let mut bindgen = TsBindgen {
+pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
+    let mut bindgen = TsStubgen {
         src: Source::default(),
         interface_names: LocalNames::default(),
         local_names: LocalNames::default(),
@@ -44,11 +42,8 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                 },
                 WorldItem::Interface(id) => match name {
                     WorldKey::Name(name) => {
-                        // kebab name -> direct ns namespace import
                         bindgen.generate_interface(name, resolve, *id, files);
                     }
-                    // namespaced ns:pkg/iface
-                    // TODO: map support
                     WorldKey::Interface(id) => {
                         let import_specifier = resolve.id_of(*id).unwrap();
                         let (_, _, iface) = parse_world_key(&import_specifier).unwrap();
@@ -69,21 +64,25 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                     let name = ty.name.as_ref().unwrap();
 
                     let mut gen = TsImport::new(resolve);
-                    gen.docs(&ty.docs);
+                    let mut printer = gen.as_printer();
                     match &ty.kind {
                         TypeDefKind::Record(record) => {
-                            gen.type_record(*tid, name, record, &ty.docs)
+                            printer.type_record(*tid, name, record, &ty.docs)
                         }
-                        TypeDefKind::Flags(flags) => gen.type_flags(*tid, name, flags, &ty.docs),
-                        TypeDefKind::Tuple(tuple) => gen.type_tuple(*tid, name, tuple, &ty.docs),
-                        TypeDefKind::Enum(enum_) => gen.type_enum(*tid, name, enum_, &ty.docs),
+                        TypeDefKind::Flags(flags) => {
+                            printer.type_flags(*tid, name, flags, &ty.docs)
+                        }
+                        TypeDefKind::Tuple(tuple) => {
+                            printer.type_tuple(*tid, name, tuple, &ty.docs)
+                        }
+                        TypeDefKind::Enum(enum_) => printer.type_enum(*tid, name, enum_, &ty.docs),
                         TypeDefKind::Variant(variant) => {
-                            gen.type_variant(*tid, name, variant, &ty.docs)
+                            printer.type_variant(*tid, name, variant, &ty.docs)
                         }
-                        TypeDefKind::Option(t) => gen.type_option(*tid, name, t, &ty.docs),
-                        TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
-                        TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
-                        TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
+                        TypeDefKind::Option(t) => printer.type_option(*tid, name, t, &ty.docs),
+                        TypeDefKind::Result(r) => printer.type_result(*tid, name, r, &ty.docs),
+                        TypeDefKind::List(t) => printer.type_list(*tid, name, t, &ty.docs),
+                        TypeDefKind::Type(t) => printer.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("generate for future"),
                         TypeDefKind::Stream(_) => todo!("generate for stream"),
                         TypeDefKind::Unknown => unreachable!(),
@@ -167,7 +166,7 @@ enum WorldExport<'a> {
     Interface(InterfaceId),
 }
 
-impl TsBindgen {
+impl TsStubgen {
     fn import_interfaces(
         &mut self,
         resolve: &Resolve,
@@ -299,34 +298,40 @@ impl<'a> TsImport<'a> {
         self.src
     }
 
-    fn docs_raw(&mut self, docs: &str) {
-        self.src.push_str("/**\n");
-        for line in docs.lines() {
-            self.src.push_str(&format!(" * {}\n", line));
-        }
-        self.src.push_str(" */\n");
-    }
-
-    fn docs(&mut self, docs: &Docs) {
-        if let Some(docs) = &docs.contents {
-            self.docs_raw(docs);
+    fn as_printer(&mut self) -> Printer {
+        Printer {
+            resolve: self.resolve,
+            src: &mut self.src,
+            needs_ty_option: &mut self.needs_ty_option,
+            needs_ty_result: &mut self.needs_ty_result,
         }
     }
 
     fn types(&mut self, iface_id: InterfaceId) {
-        let iface = &self.resolve().interfaces[iface_id];
+        let iface = &self.resolve.interfaces[iface_id];
         for (name, id) in iface.types.iter() {
-            let ty = &self.resolve().types[*id];
+            let ty = &self.resolve.types[*id];
             match &ty.kind {
-                TypeDefKind::Record(record) => self.type_record(*id, name, record, &ty.docs),
-                TypeDefKind::Flags(flags) => self.type_flags(*id, name, flags, &ty.docs),
-                TypeDefKind::Tuple(tuple) => self.type_tuple(*id, name, tuple, &ty.docs),
-                TypeDefKind::Enum(enum_) => self.type_enum(*id, name, enum_, &ty.docs),
-                TypeDefKind::Variant(variant) => self.type_variant(*id, name, variant, &ty.docs),
-                TypeDefKind::Option(t) => self.type_option(*id, name, t, &ty.docs),
-                TypeDefKind::Result(r) => self.type_result(*id, name, r, &ty.docs),
-                TypeDefKind::List(t) => self.type_list(*id, name, t, &ty.docs),
-                TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
+                TypeDefKind::Record(record) => {
+                    self.as_printer().type_record(*id, name, record, &ty.docs)
+                }
+                TypeDefKind::Flags(flags) => {
+                    self.as_printer().type_flags(*id, name, flags, &ty.docs)
+                }
+                TypeDefKind::Tuple(tuple) => {
+                    self.as_printer().type_tuple(*id, name, tuple, &ty.docs)
+                }
+                TypeDefKind::Enum(enum_) => self.as_printer().type_enum(*id, name, enum_, &ty.docs),
+                TypeDefKind::Variant(variant) => {
+                    self.as_printer().type_variant(*id, name, variant, &ty.docs)
+                }
+                TypeDefKind::Option(t) => self.as_printer().type_option(*id, name, t, &ty.docs),
+                TypeDefKind::Result(r) => self.as_printer().type_result(*id, name, r, &ty.docs),
+                TypeDefKind::List(t) => self.as_printer().type_list(*id, name, t, &ty.docs),
+                TypeDefKind::Type(t) => {
+                    self.as_printer()
+                        .type_alias(*id, name, t, Some(iface_id), &ty.docs)
+                }
                 TypeDefKind::Future(_) => todo!("generate for future"),
                 TypeDefKind::Stream(_) => todo!("generate for stream"),
                 TypeDefKind::Unknown => unreachable!(),
@@ -334,101 +339,6 @@ impl<'a> TsImport<'a> {
                 TypeDefKind::Handle(_) => todo!(),
             }
         }
-    }
-
-    fn print_ty(&mut self, ty: &Type) {
-        match ty {
-            Type::Bool => self.src.push_str("boolean"),
-            Type::U8
-            | Type::S8
-            | Type::U16
-            | Type::S16
-            | Type::U32
-            | Type::S32
-            | Type::F32
-            | Type::F64 => self.src.push_str("number"),
-            Type::U64 | Type::S64 => self.src.push_str("bigint"),
-            Type::Char => self.src.push_str("string"),
-            Type::String => self.src.push_str("string"),
-            Type::Id(id) => {
-                let ty = &self.resolve.types[*id];
-                if let Some(name) = &ty.name {
-                    return self.src.push_str(&name.to_upper_camel_case());
-                }
-                match &ty.kind {
-                    TypeDefKind::Type(t) => self.print_ty(t),
-                    TypeDefKind::Tuple(t) => self.print_tuple(t),
-                    TypeDefKind::Record(_) => panic!("anonymous record"),
-                    TypeDefKind::Flags(_) => panic!("anonymous flags"),
-                    TypeDefKind::Enum(_) => panic!("anonymous enum"),
-                    TypeDefKind::Option(t) => {
-                        if maybe_null(self.resolve, t) {
-                            self.needs_ty_option = true;
-                            self.src.push_str("Option<");
-                            self.print_ty(t);
-                            self.src.push_str(">");
-                        } else {
-                            self.print_ty(t);
-                            self.src.push_str(" | undefined");
-                        }
-                    }
-                    TypeDefKind::Result(r) => {
-                        self.needs_ty_result = true;
-                        self.src.push_str("Result<");
-                        self.print_optional_ty(r.ok.as_ref());
-                        self.src.push_str(", ");
-                        self.print_optional_ty(r.err.as_ref());
-                        self.src.push_str(">");
-                    }
-                    TypeDefKind::Variant(_) => panic!("anonymous variant"),
-                    TypeDefKind::List(v) => self.print_list(v),
-                    TypeDefKind::Future(_) => todo!("anonymous future"),
-                    TypeDefKind::Stream(_) => todo!("anonymous stream"),
-                    TypeDefKind::Unknown => unreachable!(),
-                    TypeDefKind::Resource => todo!(),
-                    TypeDefKind::Handle(h) => {
-                        let ty = match h {
-                            Handle::Own(r) => r,
-                            Handle::Borrow(r) => r,
-                        };
-                        let ty = &self.resolve.types[*ty];
-                        if let Some(name) = &ty.name {
-                            return self.src.push_str(&name.to_upper_camel_case());
-                        }
-                        panic!("anonymous resource handle");
-                    }
-                }
-            }
-        }
-    }
-
-    fn print_optional_ty(&mut self, ty: Option<&Type>) {
-        match ty {
-            Some(ty) => self.print_ty(ty),
-            None => self.src.push_str("void"),
-        }
-    }
-
-    fn print_list(&mut self, ty: &Type) {
-        match array_ty(self.resolve, ty) {
-            Some("Uint8Array") => self.src.push_str("Uint8Array"),
-            Some(ty) => self.src.push_str(ty),
-            None => {
-                self.print_ty(ty);
-                self.src.push_str("[]");
-            }
-        }
-    }
-
-    fn print_tuple(&mut self, tuple: &Tuple) {
-        self.src.push_str("[");
-        for (i, ty) in tuple.types.iter().enumerate() {
-            if i > 0 {
-                self.src.push_str(", ");
-            }
-            self.print_ty(ty);
-        }
-        self.src.push_str("]");
     }
 
     fn ts_func(&mut self, func: &Function, default: bool, declaration: bool) {
@@ -447,7 +357,7 @@ impl<'a> TsImport<'a> {
             self
         };
 
-        iface.docs(&func.docs);
+        iface.as_printer().docs(&func.docs);
 
         let out_name = if default {
             "default".to_string()
@@ -518,7 +428,7 @@ impl<'a> TsImport<'a> {
             }
             iface.src.push_str(&param_name);
             iface.src.push_str(": ");
-            iface.print_ty(ty);
+            iface.as_printer().print_ty(ty);
         }
 
         iface.src.push_str(")");
@@ -528,22 +438,20 @@ impl<'a> TsImport<'a> {
         }
         iface.src.push_str(": ");
 
-        if let Some((ok_ty, _)) = func.results.throws(iface.resolve) {
-            iface.print_optional_ty(ok_ty);
-        } else {
-            match func.results.len() {
-                0 => iface.src.push_str("void"),
-                1 => iface.print_ty(func.results.iter_types().next().unwrap()),
-                _ => {
-                    iface.src.push_str("[");
-                    for (i, ty) in func.results.iter_types().enumerate() {
-                        if i != 0 {
-                            iface.src.push_str(", ");
-                        }
-                        iface.print_ty(ty);
+        match func.results.len() {
+            0 => iface.src.push_str("void"),
+            1 => iface
+                .as_printer()
+                .print_ty(func.results.iter_types().next().unwrap()),
+            _ => {
+                iface.src.push_str("[");
+                for (i, ty) in func.results.iter_types().enumerate() {
+                    if i != 0 {
+                        iface.src.push_str(", ");
                     }
-                    iface.src.push_str("]");
+                    iface.as_printer().print_ty(ty);
                 }
+                iface.src.push_str("]");
             }
         }
         iface.src.push_str(format!("{}\n", end_character).as_str());
@@ -564,9 +472,64 @@ impl<'a> TsImport<'a> {
             );
         }
     }
+}
 
-    fn resolve(&self) -> &'a Resolve {
-        self.resolve
+fn interface_goal_name(iface_name: &str) -> String {
+    let iface_name_sans_version = match iface_name.find('@') {
+        Some(version_idx) => &iface_name[0..version_idx],
+        None => iface_name,
+    };
+    iface_name_sans_version
+        .replace(['/', ':'], "-")
+        .to_kebab_case()
+}
+
+// "golem:api/host@0.2.0";
+fn interface_module_name(resolve: &Resolve, id: InterfaceId) -> String {
+    let i = &resolve.interfaces[id];
+    let i_name = i.name.as_ref().expect("interface name");
+    match i.package {
+        Some(package) => {
+            let package_name = &resolve.packages[package].name;
+            let mut s = String::new();
+            uwrite!(
+                s,
+                "{}:{}/{}",
+                package_name.namespace,
+                package_name.name,
+                i_name
+            );
+
+            if let Some(version) = package_name.version.as_ref() {
+                uwrite!(s, "@{}", version);
+            }
+
+            s
+        }
+        None => i_name.to_string(),
+    }
+}
+
+struct Printer<'a> {
+    resolve: &'a Resolve,
+    src: &'a mut Source,
+    needs_ty_option: &'a mut bool,
+    needs_ty_result: &'a mut bool,
+}
+
+impl<'a> Printer<'a> {
+    fn docs_raw(&mut self, docs: &str) {
+        self.src.push_str("/**\n");
+        for line in docs.lines() {
+            self.src.push_str(&format!(" * {}\n", line));
+        }
+        self.src.push_str(" */\n");
+    }
+
+    fn docs(&mut self, docs: &Docs) {
+        if let Some(docs) = &docs.contents {
+            self.docs_raw(docs);
+        }
     }
 
     fn type_record(&mut self, _id: TypeId, name: &str, record: &Record, docs: &Docs) {
@@ -647,7 +610,7 @@ impl<'a> TsImport<'a> {
         let name = name.to_upper_camel_case();
         self.src.push_str(&format!("export type {name} = "));
         if maybe_null(self.resolve, payload) {
-            self.needs_ty_option = true;
+            *self.needs_ty_option = true;
             self.src.push_str("Option<");
             self.print_ty(payload);
             self.src.push_str(">");
@@ -661,7 +624,7 @@ impl<'a> TsImport<'a> {
     fn type_result(&mut self, _id: TypeId, name: &str, result: &Result_, docs: &Docs) {
         self.docs(docs);
         let name = name.to_upper_camel_case();
-        self.needs_ty_result = true;
+        *self.needs_ty_result = true;
         self.src.push_str(&format!("export type {name} = Result<"));
         self.print_optional_ty(result.ok.as_ref());
         self.src.push_str(", ");
@@ -773,64 +736,99 @@ impl<'a> TsImport<'a> {
         self.print_list(ty);
         self.src.push_str(";\n");
     }
-}
 
-fn interface_goal_name(iface_name: &str) -> String {
-    let iface_name_sans_version = match iface_name.find('@') {
-        Some(version_idx) => &iface_name[0..version_idx],
-        None => iface_name,
-    };
-    iface_name_sans_version
-        .replace(['/', ':'], "-")
-        .to_kebab_case()
-}
-
-// "golem:api/host@0.2.0";
-fn interface_module_name(resolve: &Resolve, id: InterfaceId) -> String {
-    let i = &resolve.interfaces[id];
-    let i_name = i.name.as_ref().expect("interface name");
-    match i.package {
-        Some(package) => {
-            let package_name = &resolve.packages[package].name;
-            let mut s = String::new();
-            uwrite!(
-                s,
-                "{}:{}/{}",
-                package_name.namespace,
-                package_name.name,
-                i_name
-            );
-
-            if let Some(version) = package_name.version.as_ref() {
-                uwrite!(s, "@{}", version);
+    fn print_ty(&mut self, ty: &Type) {
+        match ty {
+            Type::Bool => self.src.push_str("boolean"),
+            Type::U8
+            | Type::S8
+            | Type::U16
+            | Type::S16
+            | Type::U32
+            | Type::S32
+            | Type::F32
+            | Type::F64 => self.src.push_str("number"),
+            Type::U64 | Type::S64 => self.src.push_str("bigint"),
+            Type::Char => self.src.push_str("string"),
+            Type::String => self.src.push_str("string"),
+            Type::Id(id) => {
+                let ty = &self.resolve.types[*id];
+                if let Some(name) = &ty.name {
+                    return self.src.push_str(&name.to_upper_camel_case());
+                }
+                match &ty.kind {
+                    TypeDefKind::Type(t) => self.print_ty(t),
+                    TypeDefKind::Tuple(t) => self.print_tuple(t),
+                    TypeDefKind::Record(_) => panic!("anonymous record"),
+                    TypeDefKind::Flags(_) => panic!("anonymous flags"),
+                    TypeDefKind::Enum(_) => panic!("anonymous enum"),
+                    TypeDefKind::Option(t) => {
+                        if maybe_null(self.resolve, t) {
+                            *self.needs_ty_option = true;
+                            self.src.push_str("Option<");
+                            self.print_ty(t);
+                            self.src.push_str(">");
+                        } else {
+                            self.print_ty(t);
+                            self.src.push_str(" | undefined");
+                        }
+                    }
+                    TypeDefKind::Result(r) => {
+                        *self.needs_ty_result = true;
+                        self.src.push_str("Result<");
+                        self.print_optional_ty(r.ok.as_ref());
+                        self.src.push_str(", ");
+                        self.print_optional_ty(r.err.as_ref());
+                        self.src.push_str(">");
+                    }
+                    TypeDefKind::Variant(_) => panic!("anonymous variant"),
+                    TypeDefKind::List(v) => self.print_list(v),
+                    TypeDefKind::Future(_) => todo!("anonymous future"),
+                    TypeDefKind::Stream(_) => todo!("anonymous stream"),
+                    TypeDefKind::Unknown => unreachable!(),
+                    TypeDefKind::Resource => todo!(),
+                    TypeDefKind::Handle(h) => {
+                        let ty = match h {
+                            Handle::Own(r) => r,
+                            Handle::Borrow(r) => r,
+                        };
+                        let ty = &self.resolve.types[*ty];
+                        if let Some(name) = &ty.name {
+                            return self.src.push_str(&name.to_upper_camel_case());
+                        }
+                        panic!("anonymous resource handle");
+                    }
+                }
             }
-
-            s
         }
-        None => i_name.to_string(),
-    }
-}
-
-struct TsExport<'a> {
-    src: Source,
-    resolve: &'a Resolve,
-    needs_ty_option: bool,
-    needs_ty_result: bool,
-    local_names: LocalNames,
-}
-
-impl<'a> TsExport<'a> {
-    fn docs_raw(&mut self, docs: &str) {
-        self.src.push_str("/**\n");
-        for line in docs.lines() {
-            self.src.push_str(&format!(" * {}\n", line));
-        }
-        self.src.push_str(" */\n");
     }
 
-    fn docs(&mut self, docs: &Docs) {
-        if let Some(docs) = &docs.contents {
-            self.docs_raw(docs);
+    fn print_optional_ty(&mut self, ty: Option<&Type>) {
+        match ty {
+            Some(ty) => self.print_ty(ty),
+            None => self.src.push_str("void"),
         }
+    }
+
+    fn print_list(&mut self, ty: &Type) {
+        match array_ty(self.resolve, ty) {
+            Some("Uint8Array") => self.src.push_str("Uint8Array"),
+            Some(ty) => self.src.push_str(ty),
+            None => {
+                self.print_ty(ty);
+                self.src.push_str("[]");
+            }
+        }
+    }
+
+    fn print_tuple(&mut self, tuple: &Tuple) {
+        self.src.push_str("[");
+        for (i, ty) in tuple.types.iter().enumerate() {
+            if i > 0 {
+                self.src.push_str(", ");
+            }
+            self.print_ty(ty);
+        }
+        self.src.push_str("]");
     }
 }

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use js_component_bindgen::ts_stubgen::ts_bindgen;
+use js_component_bindgen::ts_stubgen::ts_stubgen;
 
 static IS_DEBUG: bool = true;
 
@@ -29,7 +29,7 @@ fn test_ts_stubgen() {
         .0;
 
     let mut files = js_component_bindgen::files::Files::default();
-    ts_bindgen(&resolve, id, &mut files);
+    ts_stubgen(&resolve, id, &mut files);
 
     // files.iter().for_each(|(name, data)| {
     //     let name = name.to_string();
