@@ -16,16 +16,11 @@ struct TsStubgen {
     /// over time and primarily contains the main `instantiate` function as well
     /// as a type-description of the input/output interfaces.
     src: Source,
-
-    interface_names: LocalNames,
-    local_names: LocalNames,
 }
 
 pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
     let mut bindgen = TsStubgen {
         src: Source::default(),
-        interface_names: LocalNames::default(),
-        local_names: LocalNames::default(),
     };
 
     let world = &resolve.worlds[id];
@@ -85,9 +80,9 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                         TypeDefKind::Type(t) => printer.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("generate for future"),
                         TypeDefKind::Stream(_) => todo!("generate for stream"),
+                        TypeDefKind::Resource => todo!("generate for resource"),
+                        TypeDefKind::Handle(_) => todo!("generate for handle"),
                         TypeDefKind::Unknown => unreachable!(),
-                        TypeDefKind::Resource => todo!(),
-                        TypeDefKind::Handle(_) => todo!(),
                     }
                     let output = gen.finish();
                     bindgen.src.push_str(&output);
@@ -119,31 +114,6 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                     );
                     let id = *id;
                     world_exports.push(WorldExport::Interface(id));
-
-                    let i_face = &resolve.interfaces[id];
-
-                    let mut gen = TsImport::new(resolve);
-
-                    let name = i_face.name.as_ref().unwrap();
-
-                    uwriteln!(
-                        gen.src,
-                        "export interface {name} {{",
-                        name = name.to_upper_camel_case(),
-                    );
-
-                    for (_, func) in i_face.functions.iter() {
-                        gen.ts_func(func, false, true);
-                    }
-
-                    gen.types(id);
-                    gen.post_types();
-
-                    let mut src = gen.finish();
-
-                    uwriteln!(src, "}}");
-
-                    bindgen.src.push_str(&src);
                 }
                 WorldItem::Type(_) => unimplemented!("type exports"),
             }
@@ -194,8 +164,31 @@ impl TsStubgen {
                     gen.ts_func(func, false, declaration);
                 }
                 WorldExport::Interface(id) => {
-                    // let name = resolve.interfaces[*id].name.as_ref().unwrap();
-                    // self.generate_interface(name, resolve, *id, _files);
+                    let id = *id;
+                    let i_face = &resolve.interfaces[id];
+
+                    let mut gen = TsImport::new(resolve);
+
+                    let name = i_face.name.as_ref().unwrap();
+
+                    uwriteln!(
+                        gen.src,
+                        "export interface {name} {{",
+                        name = name.to_upper_camel_case(),
+                    );
+
+                    for (_, func) in i_face.functions.iter() {
+                        gen.ts_func(func, false, false);
+                    }
+
+                    gen.types(id);
+                    gen.post_types();
+
+                    let mut src = gen.finish();
+
+                    uwriteln!(src, "}}");
+
+                    self.src.push_str(&src);
                 }
             }
         }
@@ -209,35 +202,13 @@ impl TsStubgen {
         resolve: &Resolve,
         id: InterfaceId,
         files: &mut Files,
-    ) -> String {
+    ) {
         let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
         let goal_name = interface_goal_name(&id_name);
         let goal_name_kebab = goal_name.to_kebab_case();
         let file_name = &format!("interfaces/{}.d.ts", goal_name_kebab);
-        let (name, iface_exists) = self.interface_names.get_or_create(file_name, &goal_name);
-
-        let camel = name.to_upper_camel_case();
-
-        let (local_name, local_exists) = self.local_names.get_or_create(file_name, &goal_name);
-        let local_name = local_name.to_upper_camel_case();
 
         let package_name = interface_module_name(resolve, id);
-
-        if !local_exists {
-            uwriteln!(
-                self.src,
-                "import {{ {} }} from '{package_name}';",
-                if camel == local_name {
-                    camel.to_string()
-                } else {
-                    format!("{camel} as {local_name}")
-                },
-            );
-        }
-
-        if iface_exists {
-            return local_name;
-        }
 
         let mut gen = TsImport::new(resolve);
 
@@ -254,8 +225,6 @@ impl TsStubgen {
         uwriteln!(src, "}}");
 
         files.push(file_name, src.as_bytes());
-
-        local_name
     }
 }
 
