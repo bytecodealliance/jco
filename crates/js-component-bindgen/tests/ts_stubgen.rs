@@ -12,14 +12,14 @@ fn test_ts_stubgen() {
         .expect("Valid Path");
     resolve.push_path(&path).expect("Valid WIT");
 
-    println!(
-        "{:#?}",
-        resolve
-            .worlds
-            .iter()
-            .map(|(_, w)| w.name.as_str())
-            .collect::<Vec<_>>()
-    );
+    // println!(
+    //     "{:#?}",
+    //     resolve
+    //         .worlds
+    //         .iter()
+    //         .map(|(_, w)| w.name.as_str())
+    //         .collect::<Vec<_>>()
+    // );
 
     let id = resolve
         .worlds

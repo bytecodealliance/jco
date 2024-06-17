@@ -28,21 +28,6 @@ struct TsBindgen {
     export_object: Source,
 }
 
-/// Used to generate a `*.d.ts` file for each imported and exported interface for
-/// a component.
-///
-/// This generated source does not contain any actual JS runtime code, it's just
-/// typescript definitions.
-struct TsInterface<'a> {
-    src: Source,
-    is_root: bool,
-    resolve: &'a Resolve,
-    needs_ty_option: bool,
-    needs_ty_result: bool,
-    local_names: LocalNames,
-    resources: BTreeMap<String, TsInterface<'a>>,
-}
-
 pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
     let mut bindgen = TsBindgen {
         src: Source::default(),
@@ -90,7 +75,7 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
 
                     let name = ty.name.as_ref().unwrap();
 
-                    let mut gen = TsInterface::new(resolve, true);
+                    let mut gen = TsImport::new(resolve);
                     gen.docs(&ty.docs);
                     match &ty.kind {
                         TypeDefKind::Record(record) => {
@@ -124,14 +109,13 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
         // namespace imports are grouped by namespace / kebab name
         // kebab name imports are direct
         for (name, import_interfaces) in interface_imports {
+            println!("importing interfaces: {name} - {:?}", import_interfaces);
             bindgen.import_interfaces(resolve, name.as_ref(), import_interfaces, files);
         }
     }
 
     {
-        let mut funcs = Vec::new();
-        let mut seen_names = HashSet::new();
-        let mut export_aliases: Vec<(String, String)> = Vec::new();
+        let mut world_exports: Vec<WorldExport> = Vec::new();
 
         for (name, export) in world.exports.iter() {
             match export {
@@ -140,52 +124,62 @@ pub fn ts_bindgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                         WorldKey::Name(export_name) => export_name,
                         WorldKey::Interface(_) => unreachable!(),
                     };
-                    seen_names.insert(export_name.to_string());
-                    funcs.push((export_name.to_lower_camel_case(), f));
+                    world_exports.push(WorldExport::Func(export_name.to_lower_camel_case(), f));
                 }
                 WorldItem::Interface(id) => {
-                    let iface_id: String;
-                    let (export_name, iface_name): (&str, &str) = match name {
-                        WorldKey::Name(export_name) => (export_name, export_name),
-                        WorldKey::Interface(interface) => {
-                            iface_id = resolve.id_of(*interface).unwrap();
-                            let (_, _, iface) = parse_world_key(&iface_id).unwrap();
-                            let res = (iface_id.as_ref(), iface);
-                            dbg!(res)
-                        }
-                    };
-                    seen_names.insert(export_name.to_string());
-                    let local_name = bindgen.export_interface(resolve, export_name, *id, files);
-                    export_aliases.push((iface_name.to_lower_camel_case(), local_name));
+                    assert!(
+                        matches!(name, WorldKey::Interface(_)),
+                        "inline interface not supported"
+                    );
+                    let id = *id;
+                    world_exports.push(WorldExport::Interface(id));
+
+                    let i_face = &resolve.interfaces[id];
+
+                    let mut gen = TsImport::new(resolve);
+
+                    let name = i_face.name.as_ref().unwrap();
+
+                    uwriteln!(
+                        gen.src,
+                        "export interface {name} {{",
+                        name = name.to_upper_camel_case(),
+                    );
+
+                    for (_, func) in i_face.functions.iter() {
+                        gen.ts_func(func, false, true);
+                    }
+
+                    gen.types(id);
+                    gen.post_types();
+
+                    let mut src = gen.finish();
+
+                    uwriteln!(src, "}}");
+
+                    bindgen.export_object.push_str(&src);
                 }
                 WorldItem::Type(_) => unimplemented!("type exports"),
             }
         }
 
-        for (alias, local_name) in export_aliases {
-            if !seen_names.contains(&alias) {
-                uwriteln!(
-                    bindgen.export_object,
-                    "export const {}: typeof {};",
-                    alias,
-                    local_name.to_upper_camel_case()
-                );
-            }
-        }
-        if !funcs.is_empty() {
-            // TODO: t/f??/
-            bindgen.export_funcs(resolve, id, &funcs, files, false);
-        }
+        bindgen.process_exports(resolve, id, &world_exports, files, false);
     }
 
     // Add main source to files
     let camel = world.name.to_upper_camel_case();
     uwriteln!(bindgen.src, "export interface {camel} {{",);
-    bindgen.src.push_str(&bindgen.export_object);
     uwriteln!(bindgen.src, "}}");
+
+    bindgen.src.push_str(&bindgen.export_object);
 
     let name = world.name.to_kebab_case();
     files.push(&format!("{name}.d.ts"), bindgen.src.as_bytes());
+}
+
+enum WorldExport<'a> {
+    Func(String, &'a Function),
+    Interface(InterfaceId),
 }
 
 impl TsBindgen {
@@ -205,6 +199,7 @@ impl TsBindgen {
         );
         local_name
     }
+
     fn import_interfaces(
         &mut self,
         resolve: &Resolve,
@@ -243,40 +238,32 @@ impl TsBindgen {
         _files: &mut Files,
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
-        let mut gen = TsInterface::new(resolve, false);
+        let mut gen = TsImport::new(resolve);
         gen.ts_func(func, true, false);
         let src = gen.finish();
         self.import_object.push_str(&src);
         uwriteln!(self.import_object, "}},");
     }
 
-    fn export_interface(
-        &mut self,
-        resolve: &Resolve,
-        export_name: &str,
-        id: InterfaceId,
-        files: &mut Files,
-    ) -> String {
-        let local_name = self.generate_interface(export_name, resolve, id, files);
-        uwriteln!(
-            self.export_object,
-            "export const {}: typeof {local_name};",
-            maybe_quote_id(export_name)
-        );
-        local_name
-    }
-
-    fn export_funcs(
+    fn process_exports(
         &mut self,
         resolve: &Resolve,
         _world: WorldId,
-        funcs: &[(String, &Function)],
+        exports: &[WorldExport],
         _files: &mut Files,
         declaration: bool,
     ) {
-        let mut gen = TsInterface::new(resolve, false);
-        for (_, func) in funcs {
-            gen.ts_func(func, false, declaration);
+        let mut gen = TsImport::new(resolve);
+        for export in exports {
+            match export {
+                WorldExport::Func(_name, func) => {
+                    gen.ts_func(func, false, declaration);
+                }
+                WorldExport::Interface(id) => {
+                    // let name = resolve.interfaces[*id].name.as_ref().unwrap();
+                    // self.generate_interface(name, resolve, *id, _files);
+                }
+            }
         }
         let src = gen.finish();
         self.export_object.push_str(&src);
@@ -319,7 +306,7 @@ impl TsBindgen {
             return local_name;
         }
 
-        let mut gen = TsInterface::new(resolve, false);
+        let mut gen = TsImport::new(resolve);
 
         uwriteln!(gen.src, "declare module \"{package_name}\" {{");
         for (_, func) in resolve.interfaces[id].functions.iter() {
@@ -339,10 +326,23 @@ impl TsBindgen {
     }
 }
 
-impl<'a> TsInterface<'a> {
-    fn new(resolve: &'a Resolve, is_root: bool) -> Self {
-        TsInterface {
-            is_root,
+/// Used to generate a `*.d.ts` file for each imported and exported interface for
+/// a component.
+///
+/// This generated source does not contain any actual JS runtime code, it's just
+/// typescript definitions.
+struct TsImport<'a> {
+    src: Source,
+    resolve: &'a Resolve,
+    needs_ty_option: bool,
+    needs_ty_result: bool,
+    local_names: LocalNames,
+    resources: BTreeMap<String, TsImport<'a>>,
+}
+
+impl<'a> TsImport<'a> {
+    fn new(resolve: &'a Resolve) -> Self {
+        TsImport {
             src: Source::default(),
             resources: BTreeMap::new(),
             local_names: LocalNames::default(),
@@ -506,7 +506,7 @@ impl<'a> TsInterface<'a> {
             let resource = ty.name.as_ref().unwrap();
             if !self.resources.contains_key(resource) {
                 self.resources
-                    .insert(resource.to_string(), TsInterface::new(self.resolve, false));
+                    .insert(resource.to_string(), TsImport::new(self.resolve));
             }
             self.resources.get_mut(resource).unwrap()
         } else {
@@ -852,4 +852,34 @@ fn interface_goal_name(iface_name: &str) -> String {
     iface_name_sans_version
         .replace(['/', ':'], "-")
         .to_kebab_case()
+}
+
+struct TsExport<'a> {
+    src: Source,
+    resolve: &'a Resolve,
+    needs_ty_option: bool,
+    needs_ty_result: bool,
+    local_names: LocalNames,
+    // resources: BTreeMap<String, TsResourceExport>,
+}
+
+// struct TsResourceExport {
+//     name: String,
+//     src: Source,
+// }
+
+impl<'a> TsExport<'a> {
+    fn docs_raw(&mut self, docs: &str) {
+        self.src.push_str("/**\n");
+        for line in docs.lines() {
+            self.src.push_str(&format!(" * {}\n", line));
+        }
+        self.src.push_str(" */\n");
+    }
+
+    fn docs(&mut self, docs: &Docs) {
+        if let Some(docs) = &docs.contents {
+            self.docs_raw(docs);
+        }
+    }
 }
