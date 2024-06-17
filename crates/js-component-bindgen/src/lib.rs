@@ -1,5 +1,5 @@
 mod core;
-mod files;
+pub mod files;
 mod transpile_bindgen;
 mod ts_bindgen;
 
@@ -8,6 +8,7 @@ pub mod function_bindgen;
 pub mod intrinsics;
 pub mod names;
 pub mod source;
+pub mod ts_stubgen;
 pub use transpile_bindgen::{BindingsMode, InstantiationMode, TranspileOpts};
 
 use anyhow::Result;
