@@ -36,9 +36,9 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
         for (name, import) in world.imports.iter() {
             match import {
                 WorldItem::Function(_) => match name {
-                    // TODO: Is this even possible?
+                    // Happens with `using` in world.
                     WorldKey::Name(name) => {
-                        unreachable!("Function imported by name: {name}")
+                        unimplemented!("function imported by name: {name}")
                     }
                     WorldKey::Interface(id) => {
                         let import_specifier = resolve.id_of(*id).unwrap();
@@ -48,17 +48,17 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                             }
                             Entry::Occupied(_) => {
                                 unreachable!(
-                                    "Multiple imports of the same interface: {import_specifier}",
+                                    "multiple imports of the same interface: {import_specifier}",
                                     import_specifier = resolve.id_of(*id).unwrap()
                                 );
                             }
                         }
                     }
                 },
-                WorldItem::Interface(id) => match name {
+                WorldItem::Interface(_) => match name {
                     // TODO: Is this even possible?
                     WorldKey::Name(name) => {
-                        bindgen.generate_interface(name, *id);
+                        unimplemented!("interface imported by name: {name}")
                     }
                     WorldKey::Interface(id) => {
                         let import_specifier = resolve.id_of(*id).unwrap();
@@ -68,7 +68,7 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                             }
                             Entry::Occupied(_) => {
                                 unreachable!(
-                                    "Multiple imports of the same interface: {import_specifier}",
+                                    "multiple imports of the same interface: {import_specifier}",
                                     import_specifier = resolve.id_of(*id).unwrap()
                                 );
                             }
@@ -96,7 +96,9 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                 WorldItem::Function(f) => {
                     let export_name = match name {
                         WorldKey::Name(export_name) => export_name,
-                        WorldKey::Interface(_) => unreachable!(),
+                        WorldKey::Interface(_) => {
+                            unreachable!("world function export with interface")
+                        }
                     };
                     let export_name = export_name.to_lower_camel_case();
                     export_functions.push(ExportFunction {
@@ -105,17 +107,17 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                     });
                 }
                 WorldItem::Interface(id) => {
-                    assert!(
-                        matches!(name, WorldKey::Interface(_)),
-                        "inline interface not supported"
-                    );
+                    // assert!(
+                    //     matches!(name, WorldKey::Interface(_)),
+                    //     "inline interface not supported"
+                    // );
                     let id = *id;
                     export_interfaces.push(id);
                 }
 
                 WorldItem::Type(_) => {
                     unreachable!(
-                        "Type export not supported. Only functions and interfaces can be exported."
+                        "type export not supported. only functions and interfaces can be exported."
                     )
                 }
             }
@@ -148,7 +150,21 @@ impl<'a> TsStubgen<'a> {
 
         // Type defs must be first, because they can generate imports.
         for tid in types {
-            gen.type_def(*tid, None, None);
+            let tdef = &self.resolve.types[*tid];
+            match tdef.kind {
+                TypeDefKind::Resource => {}
+                _ => {
+                    gen.type_def(*tid, None, None);
+                }
+            }
+        }
+
+        let mut resources: IndexMap<TypeId, ResourceExport> = IndexMap::new();
+
+        struct ResourceExport<'a> {
+            ident_static: String,
+            ident_base: String,
+            functions: Vec<&'a Function>,
         }
 
         for id in interfaces {
@@ -163,17 +179,91 @@ impl<'a> TsStubgen<'a> {
                 name = name.to_upper_camel_case(),
             );
 
-            for (_, func) in i_face.functions.iter() {
-                gen.ts_func(func, false, None);
+            for (name, func) in i_face.functions.iter() {
+                match func.kind {
+                    FunctionKind::Freestanding => {
+                        gen.ts_import_fuc(func, false, None);
+                    }
+                    FunctionKind::Method(tid)
+                    | FunctionKind::Static(tid)
+                    | FunctionKind::Constructor(tid) => match resources.entry(tid) {
+                        Entry::Occupied(mut e) => {
+                            let resource = e.get_mut();
+                            resource.functions.push(func);
+                        }
+                        Entry::Vacant(e) => {
+                            let resource_name = name.to_upper_camel_case();
+                            let ident_static = format!("{}Static", resource_name);
+                            let ident_base = format!("{}Base", resource_name);
+                            let resource = e.insert(ResourceExport {
+                                ident_static,
+                                ident_base,
+                                functions: vec![func],
+                            });
+                            uwriteln!(gen.src, "{resource_name}: {}", resource.ident_static);
+                        }
+                    },
+                }
             }
 
-            gen.types(id);
-
             uwriteln!(gen.src, "}}");
+            gen.types(id);
         }
 
         gen.post_types();
         let mut world_src = gen.finish();
+
+        {
+            let src = &mut world_src;
+
+            if !resources.is_empty() {
+                uwriteln!(src, "")
+            }
+
+            for (_, resource) in resources {
+                let ResourceExport {
+                    ident_static,
+                    ident_base,
+                    functions,
+                } = resource;
+
+                let (method_funcs, static_func): (Vec<&Function>, Vec<&Function>) = functions
+                    .iter()
+                    .partition(|f| matches!(f.kind, FunctionKind::Method(_)));
+
+                uwriteln!(src, "// All functions must be `static` on a class");
+                uwriteln!(src, "export interface {ident_static} {{");
+                for func in static_func {
+                    match func.kind {
+                        FunctionKind::Static(_) => {
+                            let signature = with_printer(&self.resolve, |mut p| {
+                                p.ts_func_signature(func);
+                            });
+                            let f_name = func.item_name();
+                            uwriteln!(src, "{f_name}{signature},");
+                        }
+                        FunctionKind::Constructor(_) => {
+                            let params = with_printer(&self.resolve, |mut p| {
+                                p.ts_func_params(func);
+                            });
+                            uwriteln!(src, "new{params}: {ident_base},",);
+                        }
+                        _ => unreachable!("non static resource function"),
+                    }
+                }
+                uwriteln!(src, "}}");
+
+                uwriteln!(src, "export interface {ident_base} {{");
+                for func in method_funcs {
+                    let params = with_printer(&self.resolve, |mut p| {
+                        p.ts_func_signature(func);
+                    });
+                    let f_name = func.item_name();
+                    uwriteln!(src, "{f_name}{params},");
+                }
+                uwriteln!(src, "}}");
+            }
+        }
 
         let camel_world = self.world.name.to_upper_camel_case();
         let kebab_world = self.world.name.to_kebab_case();
@@ -190,27 +280,25 @@ impl<'a> TsStubgen<'a> {
             uwriteln!(world_src, "{lower_camel}: {upper_camel},",);
         }
 
-        // TODO: Fix resources.
-        // Resource functions are included in interfaces, but not in worlds.
         for func in funcs {
             match func.func.kind {
                 FunctionKind::Freestanding => {
-                    let mut gen = TsImport::new(self.resolve);
-                    gen.ts_func_signature(func.func);
-                    let signature = gen.src;
+                    let signature = with_printer(&self.resolve, |mut p| {
+                        p.ts_func_signature(func.func);
+                    });
 
                     uwriteln!(
                         world_src,
                         "{export_name}{signature},",
                         export_name = func.export_name,
-                        signature = signature.as_ref()
                     );
                 }
+                // TODO: Is this even possible?
                 FunctionKind::Method(_)
                 | FunctionKind::Static(_)
                 | FunctionKind::Constructor(_) => {
-                    unreachable!(
-                        "Resource functions not supported in world. Please use interfaces."
+                    unimplemented!(
+                        "resource functions not supported in world. please use interfaces."
                     );
                 }
             }
@@ -234,7 +322,7 @@ impl<'a> TsStubgen<'a> {
 
         uwriteln!(gen.src, "declare module \"{package_name}\" {{");
         for (_, func) in self.resolve.interfaces[id].functions.iter() {
-            gen.ts_func(func, true, None);
+            gen.ts_import_fuc(func, true, None);
         }
 
         gen.types(id);
@@ -329,7 +417,7 @@ impl<'a> TsImport<'a> {
         }
     }
 
-    fn ts_func(&mut self, func: &Function, declaration: bool, name: Option<&str>) {
+    fn ts_import_fuc(&mut self, func: &Function, declaration: bool, name: Option<&str>) {
         let iface = if let FunctionKind::Method(ty)
         | FunctionKind::Static(ty)
         | FunctionKind::Constructor(ty) = func.kind
@@ -390,67 +478,17 @@ impl<'a> TsImport<'a> {
             }
         }
 
-        iface.ts_func_signature(func);
+        iface.as_printer().ts_func_signature(func);
 
         match func.kind {
-            // Constructor doesn't need end character
             FunctionKind::Constructor(_) => {}
             _ => {
-                let end_character = if declaration { ';' } else { ',' };
-                iface.src.push_str(format!("{}\n", end_character).as_str());
+                let end_character = if declaration { ";" } else { "," };
+                iface.src.push_str(end_character);
             }
         }
-    }
 
-    fn ts_func_signature(&mut self, func: &Function) {
-        self.src.push_str("(");
-
-        let param_start = match &func.kind {
-            FunctionKind::Freestanding => 0,
-            FunctionKind::Method(_) => 1,
-            FunctionKind::Static(_) => 0,
-            FunctionKind::Constructor(_) => 0,
-        };
-
-        for (i, (name, ty)) in func.params[param_start..].iter().enumerate() {
-            if i > 0 {
-                self.src.push_str(", ");
-            }
-            let mut param_name = name.to_lower_camel_case();
-            if RESERVED_KEYWORDS
-                .binary_search(&param_name.as_str())
-                .is_ok()
-            {
-                param_name = format!("{}_", param_name);
-            }
-            self.src.push_str(&param_name);
-            self.src.push_str(": ");
-            self.as_printer().print_ty(ty);
-        }
-
-        self.src.push_str(")");
-        if matches!(func.kind, FunctionKind::Constructor(_)) {
-            self.src.push_str("\n");
-            return;
-        }
-        self.src.push_str(": ");
-
-        match func.results.len() {
-            0 => self.src.push_str("void"),
-            1 => self
-                .as_printer()
-                .print_ty(func.results.iter_types().next().unwrap()),
-            _ => {
-                self.src.push_str("[");
-                for (i, ty) in func.results.iter_types().enumerate() {
-                    if i != 0 {
-                        self.src.push_str(", ");
-                    }
-                    self.as_printer().print_ty(ty);
-                }
-                self.src.push_str("]");
-            }
-        }
+        iface.src.push_str("\n");
     }
 
     fn post_types(&mut self) {
@@ -513,6 +551,23 @@ struct Printer<'a> {
     needs_ty_result: &'a mut bool,
 }
 
+fn with_printer<'a>(resolve: &'a Resolve, f: impl FnOnce(Printer)) -> String {
+    let mut src = Source::default();
+    let mut needs_ty_option = false;
+    let mut needs_ty_result = false;
+
+    let printer = Printer {
+        resolve,
+        src: &mut src,
+        needs_ty_option: &mut needs_ty_option,
+        needs_ty_result: &mut needs_ty_result,
+    };
+
+    f(printer);
+
+    src.into()
+}
+
 impl<'a> Printer<'a> {
     fn docs_raw(&mut self, docs: &str) {
         self.src.push_str("/**\n");
@@ -526,6 +581,60 @@ impl<'a> Printer<'a> {
         if let Some(docs) = &docs.contents {
             self.docs_raw(docs);
         }
+    }
+
+    fn ts_func_signature(&mut self, func: &Function) {
+        self.ts_func_params(func);
+
+        if matches!(func.kind, FunctionKind::Constructor(_)) {
+            return;
+        }
+
+        self.src.push_str(": ");
+
+        match func.results.len() {
+            0 => self.src.push_str("void"),
+            1 => self.print_ty(func.results.iter_types().next().unwrap()),
+            _ => {
+                self.src.push_str("[");
+                for (i, ty) in func.results.iter_types().enumerate() {
+                    if i != 0 {
+                        self.src.push_str(", ");
+                    }
+                    self.print_ty(ty);
+                }
+                self.src.push_str("]");
+            }
+        }
+    }
+
+    fn ts_func_params(&mut self, func: &Function) {
+        self.src.push_str("(");
+
+        let param_start = match &func.kind {
+            FunctionKind::Freestanding => 0,
+            FunctionKind::Method(_) => 1,
+            FunctionKind::Static(_) => 0,
+            FunctionKind::Constructor(_) => 0,
+        };
+
+        for (i, (name, ty)) in func.params[param_start..].iter().enumerate() {
+            if i > 0 {
+                self.src.push_str(", ");
+            }
+            let mut param_name = name.to_lower_camel_case();
+            if RESERVED_KEYWORDS
+                .binary_search(&param_name.as_str())
+                .is_ok()
+            {
+                param_name = format!("{}_", param_name);
+            }
+            self.src.push_str(&param_name);
+            self.src.push_str(": ");
+            self.print_ty(ty);
+        }
+
+        self.src.push_str(")");
     }
 
     fn type_record(&mut self, _id: TypeId, name: &str, record: &Record, docs: &Docs) {
@@ -786,13 +895,17 @@ impl<'a> Printer<'a> {
                     TypeDefKind::Handle(h) => {
                         let ty = match h {
                             Handle::Own(r) => r,
-                            Handle::Borrow(r) => r,
+                            Handle::Borrow(r) => {
+                                // self.src.push_str("readonly");
+                                r
+                            }
                         };
                         let ty = &self.resolve.types[*ty];
                         if let Some(name) = &ty.name {
-                            return self.src.push_str(&name.to_upper_camel_case());
+                            self.src.push_str(&name.to_upper_camel_case());
+                        } else {
+                            panic!("anonymous resource handle");
                         }
-                        panic!("anonymous resource handle");
                     }
                 }
             }
