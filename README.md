@@ -25,7 +25,7 @@ Jco provides a fully native JS toolchain for working with [WebAssembly Component
 Features include:
 
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-* WASI Preview2 support in Node.js ([undergoing stabilization](https://github.com/bytecodealliance/jco/milestone/1)) & browsers (experimental).
+* WASI Preview2 support in Node.js & browsers (experimental).
 * Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments, as well as optimization helper for Components via Binaryen.
 * Run and serve commands like Wasmtime, as JS implementations of the Command and HTTP Proxy worlds.
 * "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
@@ -117,7 +117,7 @@ Options include:
 
 #### Bindgen Crate
 
-To directly call into the transpilation in Rust, the bindgen used in jco is also available on crates.io as [js-component-bindgen](https://crates.io/crates/js-component-bindgen).
+To directly call into the transpilation in Rust, the bindgen used in Jco is also available on crates.io as [js-component-bindgen](https://crates.io/crates/js-component-bindgen).
 
 ### Run & Serve
 
@@ -191,7 +191,7 @@ Add new producer metadata to a component or core Wasm binary.
 
 ## Contributing
 
-See the [Contributing](docs/src/contributing.md) chapter of the jco book.
+See the [Contributing](docs/src/contributing.md) chapter of the Jco book.
 
 # License
 
