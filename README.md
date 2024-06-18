@@ -32,8 +32,6 @@ Features include:
 
 For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
-> **Note**: This is an experimental project, no guarantees are provided for stability, security or support and breaking changes may be made without notice.
-
 ## Installation
 
 ```shell
@@ -138,6 +136,8 @@ jco serve --port 8080 server.wasm
 > [Wasmtime](https://github.com/bytecodealliance/wasmtime) generally provides the most performant implementation for executing command and proxy worlds to use. These implementations are rather for when JS virtualization is required or the most convenient approach.
 
 ### Componentize
+
+> **Note**: `jco componentize` is considered experimental, and breaking changes may be made without notice.
 
 To componentize a JS file run:
 
