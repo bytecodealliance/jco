@@ -167,8 +167,8 @@ impl<'a> TsStubgen<'a> {
 
             uwriteln!(
                 gen.src,
-                "export interface {name} {{",
-                name = name.to_upper_camel_case(),
+                "export interface {} {{",
+                AsUpperCamelCase(name.as_str())
             );
 
             for (_name, func) in i_face.functions.iter() {
@@ -267,8 +267,8 @@ impl<'a> TsStubgen<'a> {
             }
         }
 
-        let camel_world = self.world.name.to_upper_camel_case();
-        let kebab_world = self.world.name.to_kebab_case();
+        let camel_world = AsUpperCamelCase(self.world.name.as_str());
+        let kebab_world = AsKebabCase(self.world.name.as_str());
 
         uwriteln!(world_src, "");
         uwriteln!(world_src, "export interface {camel_world}Guest {{",);
@@ -277,8 +277,8 @@ impl<'a> TsStubgen<'a> {
                 .name
                 .as_ref()
                 .expect("non-inline interface");
-            let lower_camel = name.to_lower_camel_case();
-            let upper_camel = name.to_upper_camel_case();
+            let lower_camel = AsLowerCamelCase(name);
+            let upper_camel = AsUpperCamelCase(name);
             uwriteln!(world_src, "{lower_camel}: {upper_camel},",);
         }
 
@@ -446,29 +446,25 @@ impl<'a> TsImport<'a> {
             match func.kind {
                 FunctionKind::Freestanding => {
                     if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("export function {out_name}"));
+                        uwrite!(iface.src, "export function {out_name}",);
                     } else {
                         let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
-                        iface
-                            .src
-                            .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
-                        iface
-                            .src
-                            .push_str(&format!("declare function {local_name}"));
+                        uwriteln!(iface.src, "export {{ {local_name} as {out_name} }};",);
+                        uwriteln!(iface.src, "declare function {local_name};",);
                     };
                 }
                 FunctionKind::Method(_) => {
                     if is_js_identifier(&out_name) {
                         iface.src.push_str(&out_name);
                     } else {
-                        iface.src.push_str(&format!("'{out_name}'"));
+                        uwrite!(iface.src, "'{out_name}'",);
                     }
                 }
                 FunctionKind::Static(_) => {
                     if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("static {out_name}"))
+                        uwrite!(iface.src, "static {out_name}");
                     } else {
-                        iface.src.push_str(&format!("static '{out_name}'"))
+                        uwrite!(iface.src, "static '{out_name}'");
                     }
                 }
                 FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
@@ -477,7 +473,7 @@ impl<'a> TsImport<'a> {
             if is_js_identifier(&out_name) {
                 iface.src.push_str(&out_name);
             } else {
-                iface.src.push_str(&format!("'{out_name}'"));
+                uwrite!(iface.src, "'{out_name}'");
             }
         }
 
@@ -575,7 +571,7 @@ impl<'a> Printer<'a> {
     fn docs_raw(&mut self, docs: &str) {
         self.src.push_str("/**\n");
         for line in docs.lines() {
-            self.src.push_str(&format!(" * {}\n", line));
+            uwriteln!(self.src, " * {}", line);
         }
         self.src.push_str(" */\n");
     }
@@ -642,19 +638,17 @@ impl<'a> Printer<'a> {
 
     fn type_record(&mut self, _id: TypeId, name: &str, record: &Record, docs: &Docs) {
         self.docs(docs);
-        self.src.push_str(&format!(
-            "export interface {} {{\n",
-            name.to_upper_camel_case()
-        ));
+        uwriteln!(self.src, "export interface {} {{", AsUpperCamelCase(name));
         for field in record.fields.iter() {
             self.docs(&field.docs);
             let (option_str, ty) =
                 as_nullable(self.resolve, &field.ty).map_or(("", &field.ty), |ty| ("?", ty));
-            self.src.push_str(&format!(
+            uwrite!(
+                self.src,
                 "{}{}: ",
                 maybe_quote_id(&field.name.to_lower_camel_case()),
-                option_str
-            ));
+                option_str,
+            );
             self.print_ty(ty);
             self.src.push_str(",\n");
         }
@@ -663,44 +657,53 @@ impl<'a> Printer<'a> {
 
     fn type_tuple(&mut self, _id: TypeId, name: &str, tuple: &Tuple, docs: &Docs) {
         self.docs(docs);
-        self.src
-            .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
+        uwrite!(self.src, "export type {} = ", name.to_upper_camel_case());
         self.print_tuple(tuple);
         self.src.push_str(";\n");
     }
 
     fn type_flags(&mut self, _id: TypeId, name: &str, flags: &Flags, docs: &Docs) {
         self.docs(docs);
-        self.src.push_str(&format!(
-            "export interface {} {{\n",
+        uwriteln!(
+            self.src,
+            "export interface {} {{",
             name.to_upper_camel_case()
-        ));
+        );
         for flag in flags.flags.iter() {
             self.docs(&flag.docs);
-            let name = flag.name.to_lower_camel_case();
-            self.src.push_str(&format!("{name}?: boolean,\n"));
+            uwriteln!(
+                self.src,
+                "{}?: boolean,",
+                AsLowerCamelCase(flag.name.as_str())
+            );
         }
         self.src.push_str("}\n");
     }
 
     fn type_variant(&mut self, _id: TypeId, name: &str, variant: &Variant, docs: &Docs) {
         self.docs(docs);
-        self.src
-            .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
+        uwrite!(self.src, "export type {} = ", AsUpperCamelCase(name));
         for (i, case) in variant.cases.iter().enumerate() {
             if i > 0 {
                 self.src.push_str(" | ");
             }
-            self.src
-                .push_str(&format!("{}_{}", name, case.name).to_upper_camel_case());
+
+            uwrite!(
+                self.src,
+                "{}{}",
+                AsUpperCamelCase(name),
+                AsUpperCamelCase(case.name.as_str()),
+            );
         }
         self.src.push_str(";\n");
         for case in variant.cases.iter() {
             self.docs(&case.docs);
-            self.src.push_str(&format!(
-                "export interface {} {{\n",
-                format!("{}_{}", name, case.name).to_upper_camel_case()
-            ));
+            uwriteln!(
+                self.src,
+                "export interface {}{} {{",
+                AsUpperCamelCase(name),
+                AsUpperCamelCase(case.name.as_str())
+            );
             self.src.push_str("tag: '");
             self.src.push_str(&case.name);
             self.src.push_str("',\n");
@@ -716,7 +719,7 @@ impl<'a> Printer<'a> {
     fn type_option(&mut self, _id: TypeId, name: &str, payload: &Type, docs: &Docs) {
         self.docs(docs);
         let name = name.to_upper_camel_case();
-        self.src.push_str(&format!("export type {name} = "));
+        uwrite!(self.src, "export type {name} = ");
         if maybe_null(self.resolve, payload) {
             *self.needs_ty_option = true;
             self.src.push_str("Option<");
@@ -733,7 +736,7 @@ impl<'a> Printer<'a> {
         self.docs(docs);
         let name = name.to_upper_camel_case();
         *self.needs_ty_result = true;
-        self.src.push_str(&format!("export type {name} = Result<"));
+        uwrite!(self.src, "export type {name} = Result<");
         self.print_optional_ty(result.ok.as_ref());
         self.src.push_str(", ");
         self.print_optional_ty(result.err.as_ref());
@@ -829,7 +832,7 @@ impl<'a> Printer<'a> {
             }
         } else {
             self.docs(docs);
-            self.src.push_str(&format!("export type {} = ", type_name));
+            uwrite!(self.src, "export type {type_name} = ");
             self.print_ty(ty);
             self.src.push_str(";\n");
         }
@@ -837,8 +840,8 @@ impl<'a> Printer<'a> {
 
     fn type_list(&mut self, _id: TypeId, name: &str, ty: &Type, docs: &Docs) {
         self.docs(docs);
-        self.src
-            .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
+
+        uwrite!(self.src, "export type {} = ", AsUpperCamelCase(name));
         self.print_list(ty);
         self.src.push_str(";\n");
     }
