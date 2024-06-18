@@ -107,10 +107,6 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                     });
                 }
                 WorldItem::Interface(id) => {
-                    // assert!(
-                    //     matches!(name, WorldKey::Interface(_)),
-                    //     "inline interface not supported"
-                    // );
                     let id = *id;
                     export_interfaces.push(id);
                 }
@@ -162,6 +158,7 @@ impl<'a> TsStubgen<'a> {
         let mut resources: IndexMap<TypeId, ResourceExport> = IndexMap::new();
 
         struct ResourceExport<'a> {
+            ident: String,
             ident_static: String,
             ident_base: String,
             functions: Vec<&'a Function>,
@@ -179,7 +176,7 @@ impl<'a> TsStubgen<'a> {
                 name = name.to_upper_camel_case(),
             );
 
-            for (name, func) in i_face.functions.iter() {
+            for (_name, func) in i_face.functions.iter() {
                 match func.kind {
                     FunctionKind::Freestanding => {
                         gen.ts_import_fuc(func, false, None);
@@ -192,15 +189,19 @@ impl<'a> TsStubgen<'a> {
                             resource.functions.push(func);
                         }
                         Entry::Vacant(e) => {
-                            let resource_name = name.to_upper_camel_case();
-                            let ident_static = format!("{}Static", resource_name);
-                            let ident_base = format!("{}Base", resource_name);
+                            let ident = {
+                                let resource = &self.resolve.types[tid];
+                                resource.name.as_ref().unwrap().to_upper_camel_case()
+                            };
+                            let ident_static = format!("{}Static", ident);
+                            let ident_base = format!("{}Base", ident);
                             let resource = e.insert(ResourceExport {
+                                ident,
                                 ident_static,
                                 ident_base,
                                 functions: vec![func],
                             });
-                            uwriteln!(gen.src, "{resource_name}: {}", resource.ident_static);
+                            uwriteln!(gen.src, "{}: {}", resource.ident, resource.ident_static);
                         }
                     },
                 }
@@ -220,8 +221,11 @@ impl<'a> TsStubgen<'a> {
                 uwriteln!(src, "")
             }
 
+            // Replace ident with ident_base in each of the signatures.
+
             for (_, resource) in resources {
                 let ResourceExport {
+                    ident,
                     ident_static,
                     ident_base,
                     functions,
@@ -239,6 +243,7 @@ impl<'a> TsStubgen<'a> {
                             let signature = with_printer(&self.resolve, |mut p| {
                                 p.ts_func_signature(func);
                             });
+                            let signature = signature.replace(&ident, &ident_base);
                             let f_name = func.item_name();
                             uwriteln!(src, "{f_name}{signature},");
                         }
@@ -246,6 +251,7 @@ impl<'a> TsStubgen<'a> {
                             let params = with_printer(&self.resolve, |mut p| {
                                 p.ts_func_params(func);
                             });
+                            let params = params.replace(&ident, &ident_base);
                             uwriteln!(src, "new{params}: {ident_base},",);
                         }
                         _ => unreachable!("non static resource function"),
@@ -258,6 +264,7 @@ impl<'a> TsStubgen<'a> {
                     let params = with_printer(&self.resolve, |mut p| {
                         p.ts_func_signature(func);
                     });
+                    let params = params.replace(&ident, &ident_base);
                     let f_name = func.item_name();
                     uwriteln!(src, "{f_name}{params},");
                 }
@@ -348,14 +355,14 @@ struct TsImport<'a> {
     needs_ty_result: bool,
     local_names: LocalNames,
     // Resources are aggregated, because the only way to get metadata for resource is by looking up their functions.
-    resources: BTreeMap<String, TsImport<'a>>,
+    resources: IndexMap<&'a str, TsImport<'a>>,
 }
 
 impl<'a> TsImport<'a> {
     fn new(resolve: &'a Resolve) -> Self {
         TsImport {
             src: Source::default(),
-            resources: BTreeMap::new(),
+            resources: IndexMap::default(),
             local_names: LocalNames::default(),
             resolve,
             needs_ty_option: false,
@@ -424,11 +431,10 @@ impl<'a> TsImport<'a> {
         {
             let ty = &self.resolve.types[ty];
             let resource = ty.name.as_ref().unwrap();
-            if !self.resources.contains_key(resource) {
-                self.resources
-                    .insert(resource.to_string(), TsImport::new(self.resolve));
+            match self.resources.entry(resource) {
+                Entry::Occupied(e) => e.into_mut(),
+                Entry::Vacant(e) => e.insert(TsImport::new(self.resolve)),
             }
-            self.resources.get_mut(resource).unwrap()
         } else {
             self
         };
@@ -824,8 +830,6 @@ impl<'a> Printer<'a> {
                     "import type {{ {orig_name} as {type_name} }} from \"{package_name}\";",
                 );
             }
-            // TODO: Is this necessary?
-            // self.src.push_str(&format!("export {{ {} }};\n", type_name));
         } else {
             self.docs(docs);
             self.src.push_str(&format!("export type {} = ", type_name));
@@ -895,10 +899,7 @@ impl<'a> Printer<'a> {
                     TypeDefKind::Handle(h) => {
                         let ty = match h {
                             Handle::Own(r) => r,
-                            Handle::Borrow(r) => {
-                                // self.src.push_str("readonly");
-                                r
-                            }
+                            Handle::Borrow(r) => r,
                         };
                         let ty = &self.resolve.types[*ty];
                         if let Some(name) = &ty.name {
