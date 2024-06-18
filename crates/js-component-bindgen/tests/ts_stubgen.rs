@@ -210,6 +210,81 @@ fn test_export_resource() {
     test_single_file(wit, expected);
 }
 
+#[test]
+fn test_imports() {
+    let wit = &[
+        WitFile {
+            wit: "
+                package test:types;
+
+                interface types {
+                    type dimension = u32;
+                    record point {
+                        x: dimension,
+                        y: dimension,
+                    }
+                }
+            ",
+        },
+        WitFile {
+            wit: "
+                package test:canvas;
+
+                interface canvas {
+                    use test:types/types.{dimension, point};
+                    type canvas-id = u64;
+                    draw-line: func(canvas: canvas-id, origin: point, target: point, thickness: dimension);
+                }
+            ",
+        },
+        WitFile {
+            wit: "
+                package test:t-imports;
+
+                world test {
+                    import test:canvas/canvas;
+                    export run: func();
+                }
+            ",
+        },
+    ];
+
+    let expected = &[
+        ExpectedTs {
+            file_name: "test.d.ts",
+            expected: "
+            export interface TestGuest {
+                run(): void,
+            }",
+        },
+        ExpectedTs {
+            file_name: "interfaces/test-canvas-canvas.d.ts",
+            expected: r#"
+            declare module "test:canvas/canvas" {
+                import type { Dimension } from "test:types/types";
+                import type { Point } from "test:types/types";
+                export type CanvasId = bigint;
+                export function drawLine(canvas: CanvasId, origin: Point, target: Point, thickness: Dimension): void;
+            } 
+            "#,
+        },
+        ExpectedTs {
+            file_name: "interfaces/test-types-types.d.ts",
+            expected: r#"
+            declare module "test:types/types" {
+                export type Dimension = number;
+                export interface Point {
+                    x: Dimension,
+                    y: Dimension,
+                }
+            } 
+            "#,
+        },
+    ];
+
+    test_files(wit, expected);
+}
+
 struct WitFile {
     wit: &'static str,
 }
@@ -230,8 +305,6 @@ fn test_files(wit: &[WitFile], expected: &[ExpectedTs]) {
         resolver.push(package).expect("push package");
     }
 
-    let mut files = js_component_bindgen::files::Files::default();
-
     let world = resolver
         .worlds
         .iter()
@@ -239,6 +312,7 @@ fn test_files(wit: &[WitFile], expected: &[ExpectedTs]) {
         .expect("world exists")
         .0;
 
+    let mut files = js_component_bindgen::files::Files::default();
     ts_stubgen(&resolver, world, &mut files);
 
     for ExpectedTs {
@@ -246,8 +320,10 @@ fn test_files(wit: &[WitFile], expected: &[ExpectedTs]) {
         expected,
     } in expected
     {
-        let file_name = format!("{file_name}.d.ts");
-        let file = files.remove(&file_name).expect("file exists");
+        let Some(file) = files.remove(&file_name) else {
+            let all_files = files.iter().map(|(name, _)| name).collect::<Vec<_>>();
+            panic!("Expected file `{file_name}` not found in files: {all_files:?}",)
+        };
         let actual = std::str::from_utf8(&file).expect("valid utf8");
         compare_str(actual, expected);
     }
@@ -258,7 +334,7 @@ fn test_single_file(wit: &'static str, expected: &'static str) {
     test_files(
         &[WitFile { wit }],
         &[ExpectedTs {
-            file_name: "test",
+            file_name: "test.d.ts",
             expected,
         }],
     )

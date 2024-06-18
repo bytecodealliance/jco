@@ -323,11 +323,13 @@ impl<'a> TsStubgen<'a> {
         let mut gen = TsImport::new(self.resolve);
 
         uwriteln!(gen.src, "declare module \"{package_name}\" {{");
+
+        gen.types(id);
+
         for (_, func) in self.resolve.interfaces[id].functions.iter() {
             gen.ts_import_fuc(func, true, None);
         }
 
-        gen.types(id);
         gen.post_types();
 
         let mut src = gen.finish();
