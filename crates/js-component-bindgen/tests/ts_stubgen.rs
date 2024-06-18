@@ -1,48 +1,8 @@
-use std::path::PathBuf;
-
-use js_component_bindgen::ts_stubgen::ts_stubgen;
+use js_component_bindgen::{files::Files, ts_stubgen::ts_stubgen};
 use wit_parser::UnresolvedPackage;
 
-static IS_DEBUG: bool = true;
-
-#[test]
-fn test_ts_stubgen() {
-    let mut resolve = js_component_bindgen::source::wit_parser::Resolve::default();
-    let path = PathBuf::from("tests/wit/")
-        .canonicalize()
-        .expect("Valid Path");
-    resolve.push_path(&path).expect("Valid WIT");
-
-    let id = resolve
-        .worlds
-        .iter()
-        .find(|(_, w)| w.name == "caller")
-        .expect("caller world exists")
-        .0;
-
-    let mut files = js_component_bindgen::files::Files::default();
-    ts_stubgen(&resolve, id, &mut files);
-
-    // Write output to files
-    if IS_DEBUG {
-        let prefix = PathBuf::from("tests/temp/");
-
-        std::fs::remove_dir_all(&prefix).ok();
-
-        files.iter().for_each(|(name, data)| {
-            let name = name.to_string();
-            let data = String::from_utf8(data.to_vec()).unwrap();
-            let path = prefix.join(name);
-
-            // Create the parent directory if it doesn't exist
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).expect("Create parent directory");
-            }
-
-            std::fs::write(path, data).expect("Write file");
-        });
-    }
-}
+// Enable this to write the generated files to the `tests/temp` directory
+static IS_DEBUG: bool = false;
 
 #[test]
 fn test_basic_ts() {
@@ -285,6 +245,304 @@ fn test_imports() {
     test_files(wit, expected);
 }
 
+#[test]
+fn test_rpc() {
+    let wit = &[
+        WitFile {
+            wit: "
+            package golem:rpc@0.1.0;
+
+            interface types {
+                type node-index = s32;
+
+                record wit-value {
+                    nodes: list<wit-node>,
+                }
+
+                variant wit-node {
+                    record-value(list<node-index>),
+                    variant-value(tuple<u32, option<node-index>>),
+                    enum-value(u32),
+                    flags-value(list<bool>),
+                    tuple-value(list<node-index>),
+                    list-value(list<node-index>),
+                    option-value(option<node-index>),
+                    result-value(result<option<node-index>, option<node-index>>),
+                    prim-u8(u8),
+                    prim-u16(u16),
+                    prim-u32(u32),
+                    prim-u64(u64),
+                    prim-s8(s8),
+                    prim-s16(s16),
+                    prim-s32(s32),
+                    prim-s64(s64),
+                    prim-float32(float32),
+                    prim-float64(float64),
+                    prim-char(char),
+                    prim-bool(bool),
+                    prim-string(string),
+                    handle(tuple<uri, u64>)
+                }
+
+                record uri {
+                    value: string,
+                }
+
+                variant rpc-error {
+                    protocol-error(string),
+                    denied(string),
+                    not-found(string),
+                    remote-internal-error(string)
+                }
+
+                resource wasm-rpc {
+                    constructor(location: uri);
+
+                    invoke-and-await: func(function-name: string, function-params: list<wit-value>) -> result<wit-value, rpc-error>;
+                    invoke: func(function-name: string, function-params: list<wit-value>) -> result<_, rpc-error>;
+                }
+            }
+
+            world wit-value {
+                import types;
+            }
+            ",
+        },
+        // 
+        // WitFile {
+        //     wit: "
+        //     package rpc:counters;
+
+        //     interface api {
+        //         resource counter {
+        //             constructor(name: string);
+        //             inc-by: func(value: u64);
+        //             get-value: func() -> u64;
+        //         }
+
+        //         inc-global-by: func(value: u64);
+        //         get-global-value: func() -> u64;
+        //         get-all-dropped: func() -> list<tuple<string, u64>>;
+        //     }
+
+        //     world counters {
+        //         export api;
+        //     }
+        //     ",
+        // },
+        WitFile {
+            wit: "
+            package rpc:counters-stub;
+
+            interface stub-counters {
+                use golem:rpc/types@0.1.0.{uri};
+
+                resource api {
+                    constructor(location: uri);
+                    inc-global-by: func(value: u64);
+                    get-global-value: func() -> u64;
+                    get-all-dropped: func() -> list<tuple<string, u64>>;
+                }
+
+                resource counter {
+                    constructor(location: uri, name: string);
+                    inc-by: func(value: u64);
+                    get-value: func() -> u64;
+                }
+
+            }
+
+            world wasm-rpc-stub-counters {
+                export stub-counters;
+            }
+            ",
+        },
+        WitFile {
+            wit: "
+            package test:rpc;
+
+            interface api {
+                test1: func() -> list<tuple<string, u64>>;
+                test2: func() -> u64;
+                test3: func() -> u64;
+            }
+
+            world test {
+                import rpc:counters-stub/stub-counters;
+                export api;
+            }
+            "
+        }
+    ];
+
+    let expected = &[
+        ExpectedTs {
+            file_name: "test.d.ts",
+            expected: "
+            export interface Api {
+                test1(): [string, bigint][],
+                test2(): bigint,
+                test3(): bigint,
+            }
+
+            export interface TestGuest {
+                api: Api,
+            }
+            ",
+        },
+        ExpectedTs {
+            file_name: "interfaces/golem-rpc-types.d.ts",
+            expected: r#"
+            declare module "golem:rpc/types@0.1.0" {
+                export type NodeIndex = number;
+                export interface Uri {
+                    value: string,
+                }
+                export type WitNode = WitNodeRecordValue | WitNodeVariantValue | WitNodeEnumValue | WitNodeFlagsValue | WitNodeTupleValue | WitNodeListValue | WitNodeOptionValue | WitNodeResultValue | WitNodePrimU8 | WitNodePrimU16 | WitNodePrimU32 | WitNodePrimU64 | WitNodePrimS8 | WitNodePrimS16 | WitNodePrimS32 | WitNodePrimS64 | WitNodePrimFloat32 | WitNodePrimFloat64 | WitNodePrimChar | WitNodePrimBool | WitNodePrimString | WitNodeHandle;
+                export interface WitNodeRecordValue {
+                    tag: 'record-value',
+                    val: Int32Array,
+                }
+                export interface WitNodeVariantValue {
+                    tag: 'variant-value',
+                    val: [number, NodeIndex | undefined],
+                }
+                export interface WitNodeEnumValue {
+                    tag: 'enum-value',
+                    val: number,
+                }
+                export interface WitNodeFlagsValue {
+                    tag: 'flags-value',
+                    val: boolean[],
+                }
+                export interface WitNodeTupleValue {
+                    tag: 'tuple-value',
+                    val: Int32Array,
+                }
+                export interface WitNodeListValue {
+                    tag: 'list-value',
+                    val: Int32Array,
+                }
+                export interface WitNodeOptionValue {
+                    tag: 'option-value',
+                    val: NodeIndex | undefined,
+                }
+                export interface WitNodeResultValue {
+                    tag: 'result-value',
+                    val: Result<NodeIndex | undefined, NodeIndex | undefined>,
+                }
+                export interface WitNodePrimU8 {
+                    tag: 'prim-u8',
+                    val: number,
+                }
+                export interface WitNodePrimU16 {
+                    tag: 'prim-u16',
+                    val: number,
+                }
+                export interface WitNodePrimU32 {
+                    tag: 'prim-u32',
+                    val: number,
+                }
+                export interface WitNodePrimU64 {
+                    tag: 'prim-u64',
+                    val: bigint,
+                }
+                export interface WitNodePrimS8 {
+                    tag: 'prim-s8',
+                    val: number,
+                }
+                export interface WitNodePrimS16 {
+                    tag: 'prim-s16',
+                    val: number,
+                }
+                export interface WitNodePrimS32 {
+                    tag: 'prim-s32',
+                    val: number,
+                }
+                export interface WitNodePrimS64 {
+                    tag: 'prim-s64',
+                    val: bigint,
+                }
+                export interface WitNodePrimFloat32 {
+                    tag: 'prim-float32',
+                    val: number,
+                }
+                export interface WitNodePrimFloat64 {
+                    tag: 'prim-float64',
+                    val: number,
+                }
+                export interface WitNodePrimChar {
+                    tag: 'prim-char',
+                    val: string,
+                }
+                export interface WitNodePrimBool {
+                    tag: 'prim-bool',
+                    val: boolean,
+                }
+                export interface WitNodePrimString {
+                    tag: 'prim-string',
+                    val: string,
+                }
+                export interface WitNodeHandle {
+                    tag: 'handle',
+                    val: [Uri, bigint],
+                }
+                export interface WitValue {
+                    nodes: WitNode[],
+                }
+                export type RpcError = RpcErrorProtocolError | RpcErrorDenied | RpcErrorNotFound | RpcErrorRemoteInternalError;
+                export interface RpcErrorProtocolError {
+                    tag: 'protocol-error',
+                    val: string,
+                }
+                export interface RpcErrorDenied {
+                    tag: 'denied',
+                    val: string,
+                }
+                export interface RpcErrorNotFound {
+                    tag: 'not-found',
+                    val: string,
+                }
+                export interface RpcErrorRemoteInternalError {
+                    tag: 'remote-internal-error',
+                    val: string,
+                }
+                export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
+                
+                export class WasmRpc {
+                    constructor(location: Uri)
+                    invokeAndAwait(functionName: string, functionParams: WitValue[]): Result<WitValue, RpcError>;
+                    invoke(functionName: string, functionParams: WitValue[]): Result<void, RpcError>;
+                }
+            }
+            "#,
+        },
+        ExpectedTs {
+            file_name: "interfaces/rpc-counters-stub-stub-counters.d.ts",
+            expected: r#"
+            declare module "rpc:counters-stub/stub-counters" {
+                import type { Uri } from "golem:rpc/types@0.1.0";
+                
+                export class Api {
+                    constructor(location: Uri)
+                    incGlobalBy(value: bigint): void;
+                    getGlobalValue(): bigint;
+                    getAllDropped(): [string, bigint][];
+                }
+                
+                export class Counter {
+                    constructor(location: Uri, name: string)
+                    incBy(value: bigint): void;
+                    getValue(): bigint;
+                }
+            }
+            "#,
+        },
+    ];
+
+    test_files(wit, expected);
+}
+
 struct WitFile {
     wit: &'static str,
 }
@@ -312,8 +570,12 @@ fn test_files(wit: &[WitFile], expected: &[ExpectedTs]) {
         .expect("world exists")
         .0;
 
-    let mut files = js_component_bindgen::files::Files::default();
+    let mut files = Files::default();
     ts_stubgen(&resolver, world, &mut files);
+
+    if IS_DEBUG {
+        write_files(&files);
+    }
 
     for ExpectedTs {
         file_name,
@@ -359,5 +621,20 @@ fn compare_str(actual: &str, expected: &str) {
                 assert_eq!(e, a, "\nExpected:`{e:?}`\nActual:`{a:?}`\nFull:\n{actual}");
             }
         }
+    }
+}
+
+fn write_files(files: &Files) {
+    let prefix = std::path::Path::new("tests/temp");
+    std::fs::remove_dir_all(&prefix).expect("clear temp directory");
+    for (name, data) in files.iter() {
+        let name = name.to_string();
+        let data = String::from_utf8(data.to_vec()).unwrap();
+        let path = prefix.join(name);
+
+        // Create the parent directory if it doesn't exist
+        std::fs::create_dir_all(path.parent().unwrap()).expect("Create parent directory");
+
+        std::fs::write(path, data).expect("Write file");
     }
 }
