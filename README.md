@@ -25,14 +25,12 @@ Jco provides a fully native JS toolchain for working with [WebAssembly Component
 Features include:
 
 * "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-* WASI Preview2 support in Node.js ([undergoing stabilization](https://github.com/bytecodealliance/jco/milestone/1)) & browsers (experimental).
+* WASI Preview2 support in Node.js & browsers (experimental).
 * Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments, as well as optimization helper for Components via Binaryen.
 * Run and serve commands like Wasmtime, as JS implementations of the Command and HTTP Proxy worlds.
 * "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
 
 For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
-
-> **Note**: This is an experimental project, no guarantees are provided for stability, security or support and breaking changes may be made without notice.
 
 ## Installation
 
@@ -117,7 +115,7 @@ Options include:
 
 #### Bindgen Crate
 
-To directly call into the transpilation in Rust, the bindgen used in jco is also available on crates.io as [js-component-bindgen](https://crates.io/crates/js-component-bindgen).
+To directly call into the transpilation in Rust, the bindgen used in Jco is also available on crates.io as [js-component-bindgen](https://crates.io/crates/js-component-bindgen).
 
 ### Run & Serve
 
@@ -138,6 +136,8 @@ jco serve --port 8080 server.wasm
 > [Wasmtime](https://github.com/bytecodealliance/wasmtime) generally provides the most performant implementation for executing command and proxy worlds to use. These implementations are rather for when JS virtualization is required or the most convenient approach.
 
 ### Componentize
+
+> **Note**: `jco componentize` is considered experimental, and breaking changes may be made without notice.
 
 To componentize a JS file run:
 
@@ -191,7 +191,7 @@ Add new producer metadata to a component or core Wasm binary.
 
 ## Contributing
 
-See the [Contributing](docs/src/contributing.md) chapter of the jco book.
+See the [Contributing](docs/src/contributing.md) chapter of the Jco book.
 
 # License
 
