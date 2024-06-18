@@ -41,8 +41,6 @@ fn test_ts_stubgen() {
     if IS_DEBUG {
         let prefix = PathBuf::from("tests/temp/");
 
-        // delete all files in the directory
-
         std::fs::remove_dir_all(&prefix).ok();
 
         files.iter().for_each(|(name, data)| {

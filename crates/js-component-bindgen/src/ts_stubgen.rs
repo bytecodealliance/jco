@@ -10,20 +10,24 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use wit_parser::*;
 
-struct TsStubgen {
-    /// The source code for the "main" file that's going to be created for the
-    /// component we're generating bindings for. This is incrementally added to
-    /// over time and primarily contains the main `instantiate` function as well
-    /// as a type-description of the input/output interfaces.
-    src: Source,
+struct TsStubgen<'a> {
+    resolve: &'a Resolve,
+    files: &'a mut Files,
+    world: &'a World,
 }
 
-pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
-    let mut bindgen = TsStubgen {
-        src: Source::default(),
-    };
+// TODO:
+// Type export generation (what do resources look like???)
+// Result/Option in guest if needed? (Maybe just always include it?)
+// Include imports in guest file module?
 
+pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
     let world = &resolve.worlds[id];
+    let mut bindgen = TsStubgen {
+        resolve,
+        files,
+        world,
+    };
 
     {
         let mut funcs = Vec::new();
@@ -37,7 +41,7 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                 },
                 WorldItem::Interface(id) => match name {
                     WorldKey::Name(name) => {
-                        bindgen.generate_interface(name, resolve, *id, files);
+                        bindgen.generate_interface(name, *id);
                     }
                     WorldKey::Interface(id) => {
                         let import_specifier = resolve.id_of(*id).unwrap();
@@ -53,50 +57,22 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                         }
                     }
                 },
-                WorldItem::Type(tid) => {
-                    let ty = &resolve.types[*tid];
-
-                    let name = ty.name.as_ref().unwrap();
-
-                    let mut gen = TsImport::new(resolve);
-                    let mut printer = gen.as_printer();
-                    match &ty.kind {
-                        TypeDefKind::Record(record) => {
-                            printer.type_record(*tid, name, record, &ty.docs)
-                        }
-                        TypeDefKind::Flags(flags) => {
-                            printer.type_flags(*tid, name, flags, &ty.docs)
-                        }
-                        TypeDefKind::Tuple(tuple) => {
-                            printer.type_tuple(*tid, name, tuple, &ty.docs)
-                        }
-                        TypeDefKind::Enum(enum_) => printer.type_enum(*tid, name, enum_, &ty.docs),
-                        TypeDefKind::Variant(variant) => {
-                            printer.type_variant(*tid, name, variant, &ty.docs)
-                        }
-                        TypeDefKind::Option(t) => printer.type_option(*tid, name, t, &ty.docs),
-                        TypeDefKind::Result(r) => printer.type_result(*tid, name, r, &ty.docs),
-                        TypeDefKind::List(t) => printer.type_list(*tid, name, t, &ty.docs),
-                        TypeDefKind::Type(t) => printer.type_alias(*tid, name, t, None, &ty.docs),
-                        TypeDefKind::Future(_) => todo!("generate for future"),
-                        TypeDefKind::Stream(_) => todo!("generate for stream"),
-                        TypeDefKind::Resource => todo!("generate for resource"),
-                        TypeDefKind::Handle(_) => todo!("generate for handle"),
-                        TypeDefKind::Unknown => unreachable!(),
-                    }
-                    let output = gen.finish();
-                    bindgen.src.push_str(&output);
+                // TODO: Confirm this is true
+                WorldItem::Type(_) => {
+                    unreachable!("types cannot be imported")
                 }
             }
         }
 
         for (_name, import_interfaces) in interface_imports {
-            bindgen.import_interfaces(resolve, import_interfaces, files);
+            bindgen.import_interfaces(import_interfaces);
         }
     }
 
     {
-        let mut world_exports: Vec<WorldExport> = Vec::new();
+        let mut export_interfaces: Vec<InterfaceId> = Vec::new();
+        let mut export_functions: Vec<ExportFunction> = Vec::new();
+        let mut export_types: Vec<TypeId> = Vec::new();
 
         for (name, export) in world.exports.iter() {
             match export {
@@ -105,7 +81,11 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                         WorldKey::Name(export_name) => export_name,
                         WorldKey::Interface(_) => unreachable!(),
                     };
-                    world_exports.push(WorldExport::Func(export_name.to_lower_camel_case(), f));
+                    let export_name = export_name.to_lower_camel_case();
+                    export_functions.push(ExportFunction {
+                        export_name,
+                        func: f,
+                    });
                 }
                 WorldItem::Interface(id) => {
                     assert!(
@@ -113,107 +93,111 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                         "inline interface not supported"
                     );
                     let id = *id;
-                    world_exports.push(WorldExport::Interface(id));
+                    export_interfaces.push(id);
                 }
-                WorldItem::Type(_) => unimplemented!("type exports"),
+                WorldItem::Type(type_id) => {
+                    export_types.push(*type_id);
+                }
             }
         }
 
-        bindgen.process_exports(resolve, id, &world_exports, files, false);
+        bindgen.process_exports(world, &export_functions, &export_interfaces);
     }
-
-    // Add main source to files
-    let camel = world.name.to_upper_camel_case();
-    uwriteln!(bindgen.src, "export interface {camel} {{",);
-    uwriteln!(bindgen.src, "}}");
-
-    let name = world.name.to_kebab_case();
-    files.push(&format!("{name}.d.ts"), bindgen.src.as_bytes());
 }
 
-enum WorldExport<'a> {
-    Func(String, &'a Function),
-    Interface(InterfaceId),
+struct ExportFunction<'a> {
+    export_name: String,
+    func: &'a Function,
 }
 
-impl TsStubgen {
-    fn import_interfaces(
-        &mut self,
-        resolve: &Resolve,
-        ifaces: Vec<(String, InterfaceId)>,
-        files: &mut Files,
-    ) {
+impl<'a> TsStubgen<'a> {
+    fn import_interfaces(&mut self, ifaces: Vec<(String, InterfaceId)>) {
         for (_, id) in ifaces {
-            let name = resolve.interfaces[id].name.as_ref().unwrap();
-            self.generate_interface(name, resolve, id, files);
+            let name = self.resolve.interfaces[id].name.as_ref().unwrap();
+            self.generate_interface(name, id);
         }
     }
 
     fn process_exports(
         &mut self,
-        resolve: &Resolve,
-        _world: WorldId,
-        exports: &[WorldExport],
-        _files: &mut Files,
-        declaration: bool,
+        world: &World,
+        funcs: &[ExportFunction],
+        interfaces: &[InterfaceId],
     ) {
-        let mut gen = TsImport::new(resolve);
-        for export in exports {
-            match export {
-                WorldExport::Func(_name, func) => {
-                    gen.ts_func(func, false, declaration);
-                }
-                WorldExport::Interface(id) => {
-                    let id = *id;
-                    let i_face = &resolve.interfaces[id];
+        let mut world_src = Source::default();
 
-                    let mut gen = TsImport::new(resolve);
+        for id in interfaces {
+            let id = *id;
+            let i_face = &self.resolve.interfaces[id];
 
-                    let name = i_face.name.as_ref().unwrap();
+            let mut gen = TsImport::new(self.resolve);
 
-                    uwriteln!(
-                        gen.src,
-                        "export interface {name} {{",
-                        name = name.to_upper_camel_case(),
-                    );
+            let name = i_face.name.as_ref().unwrap();
 
-                    for (_, func) in i_face.functions.iter() {
-                        gen.ts_func(func, false, false);
-                    }
+            uwriteln!(
+                gen.src,
+                "export interface {name} {{",
+                name = name.to_upper_camel_case(),
+            );
 
-                    gen.types(id);
-                    gen.post_types();
-
-                    let mut src = gen.finish();
-
-                    uwriteln!(src, "}}");
-
-                    self.src.push_str(&src);
-                }
+            for (_, func) in i_face.functions.iter() {
+                gen.ts_func(func, false, false);
             }
+
+            gen.types(id);
+
+            let mut src = gen.finish();
+
+            uwriteln!(src, "}}");
+
+            world_src.push_str(&src);
         }
-        let src = gen.finish();
-        self.src.push_str(&src);
+
+        let camel_world = world.name.to_upper_camel_case();
+        let kebab_world = world.name.to_kebab_case();
+
+        uwriteln!(world_src, "export interface {camel_world}Guest {{",);
+        for id in interfaces {
+            let name = self.resolve.interfaces[*id]
+                .name
+                .as_ref()
+                .expect("non-inline interface");
+            let lower_camel = name.to_lower_camel_case();
+            let upper_camel = name.to_upper_camel_case();
+            uwriteln!(world_src, "{lower_camel}: {upper_camel},",);
+        }
+
+        for func in funcs {
+            let mut gen = TsImport::new(self.resolve);
+            gen.ts_func_signature(func.func);
+            let signature = gen.src;
+
+            uwriteln!(
+                world_src,
+                "{export_name}{signature},",
+                export_name = func.export_name,
+                signature = signature.as_ref()
+            );
+        }
+
+        uwriteln!(world_src, "}}");
+
+        self.files
+            .push(&format!("{kebab_world}.d.ts"), world_src.as_bytes());
     }
 
-    fn generate_interface(
-        &mut self,
-        name: &str,
-        resolve: &Resolve,
-        id: InterfaceId,
-        files: &mut Files,
-    ) {
-        let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
+    fn generate_interface(&mut self, name: &str, id: InterfaceId) {
+        let id_name = self.resolve.id_of(id).unwrap_or_else(|| name.to_string());
         let goal_name = interface_goal_name(&id_name);
         let goal_name_kebab = goal_name.to_kebab_case();
         let file_name = &format!("interfaces/{}.d.ts", goal_name_kebab);
 
-        let package_name = interface_module_name(resolve, id);
+        let package_name = interface_module_name(self.resolve, id);
 
-        let mut gen = TsImport::new(resolve);
+        let mut gen = TsImport::new(self.resolve);
 
         uwriteln!(gen.src, "declare module \"{package_name}\" {{");
-        for (_, func) in resolve.interfaces[id].functions.iter() {
+        for (_, func) in self.resolve.interfaces[id].functions.iter() {
             gen.ts_func(func, false, true);
         }
 
@@ -224,7 +208,7 @@ impl TsStubgen {
 
         uwriteln!(src, "}}");
 
-        files.push(file_name, src.as_bytes());
+        self.files.push(file_name, src.as_bytes());
     }
 }
 
@@ -373,9 +357,20 @@ impl<'a> TsImport<'a> {
             }
         }
 
-        let end_character = if declaration { ';' } else { ',' };
+        iface.ts_func_signature(func);
 
-        iface.src.push_str("(");
+        match func.kind {
+            // Constructor doesn't need end character
+            FunctionKind::Constructor(_) => {}
+            _ => {
+                let end_character = if declaration { ';' } else { ',' };
+                iface.src.push_str(format!("{}\n", end_character).as_str());
+            }
+        }
+    }
+
+    fn ts_func_signature(&mut self, func: &Function) {
+        self.src.push_str("(");
 
         let param_start = match &func.kind {
             FunctionKind::Freestanding => 0,
@@ -386,7 +381,7 @@ impl<'a> TsImport<'a> {
 
         for (i, (name, ty)) in func.params[param_start..].iter().enumerate() {
             if i > 0 {
-                iface.src.push_str(", ");
+                self.src.push_str(", ");
             }
             let mut param_name = name.to_lower_camel_case();
             if RESERVED_KEYWORDS
@@ -395,35 +390,34 @@ impl<'a> TsImport<'a> {
             {
                 param_name = format!("{}_", param_name);
             }
-            iface.src.push_str(&param_name);
-            iface.src.push_str(": ");
-            iface.as_printer().print_ty(ty);
+            self.src.push_str(&param_name);
+            self.src.push_str(": ");
+            self.as_printer().print_ty(ty);
         }
 
-        iface.src.push_str(")");
+        self.src.push_str(")");
         if matches!(func.kind, FunctionKind::Constructor(_)) {
-            iface.src.push_str("\n");
+            self.src.push_str("\n");
             return;
         }
-        iface.src.push_str(": ");
+        self.src.push_str(": ");
 
         match func.results.len() {
-            0 => iface.src.push_str("void"),
-            1 => iface
+            0 => self.src.push_str("void"),
+            1 => self
                 .as_printer()
                 .print_ty(func.results.iter_types().next().unwrap()),
             _ => {
-                iface.src.push_str("[");
+                self.src.push_str("[");
                 for (i, ty) in func.results.iter_types().enumerate() {
                     if i != 0 {
-                        iface.src.push_str(", ");
+                        self.src.push_str(", ");
                     }
-                    iface.as_printer().print_ty(ty);
+                    self.as_printer().print_ty(ty);
                 }
-                iface.src.push_str("]");
+                self.src.push_str("]");
             }
         }
-        iface.src.push_str(format!("{}\n", end_character).as_str());
     }
 
     fn post_types(&mut self) {
@@ -441,6 +435,14 @@ impl<'a> TsImport<'a> {
             );
         }
     }
+
+    // fn needs_ty_option(&self) -> bool {
+    //     self.needs_ty_option || self.resources.values().any(|r| r.needs_ty_option())
+    // }
+
+    // fn needs_ty_result(&self) -> bool {
+    //     self.needs_ty_result || self.resources.values().any(|r| r.needs_ty_result())
+    // }
 }
 
 fn interface_goal_name(iface_name: &str) -> String {
