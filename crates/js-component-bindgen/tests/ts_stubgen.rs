@@ -45,6 +45,130 @@ fn test_ts_stubgen() {
 }
 
 #[test]
+fn test_basic_ts() {
+    let wit = "
+        package test:t-basic;
+
+        world test {
+            export basic-test;
+        }
+
+        interface basic-test {
+            bool-test: func(a: bool) -> bool;
+            s8-test: func(a: s8) -> s8;
+            s16-test: func(a: s16) -> s16;
+            s32-test: func(a: s32) -> s32;
+            s64-test: func(a: s64) -> s64;
+            u8-test: func(a: u8) -> u8;
+            u16-test: func(a: u16) -> u16;
+            u32-test: func(a: u32) -> u32;
+            u64-test: func(a: u64) -> u64;
+            f32-test: func(a: f32) -> f32;
+            f64-test: func(a: f64) -> f64;
+            char-test: func(c: char) -> char;
+            string-test: func(s: string) -> string;
+            u8-list-test: func(a: list<u8>) -> list<u8>;
+            string-list-test: func(a: list<string>) -> list<string>;
+            option-nullable-test: func(a: option<u8>) -> option<u8>;
+            option-nested-test: func(a: option<option<u8>>) -> option<option<u8>>;
+            result-success-test: func(a: u8) -> result<u8>;
+            result-fail-test: func(a: u8) -> result<_, u8>;
+            result-both-test: func(a: u8) -> result<u8, u8>;
+            result-none-test: func() -> result;
+
+            variant variant-test {
+                none,
+                any,
+                something(string)
+            }
+
+            variant enum-test {
+                a,
+                b,
+                c,
+            }
+
+            record record-test {
+                a: u8,
+                b: string,
+                c: option<enum-test>
+            }
+
+            flags flag-test {
+                a,
+                b,
+                c,
+            }
+        }
+    ";
+
+    let expected = "
+        export interface BasicTest {
+            boolTest(a: boolean): boolean,
+            s8Test(a: number): number,
+            s16Test(a: number): number,
+            s32Test(a: number): number,
+            s64Test(a: bigint): bigint,
+            u8Test(a: number): number,
+            u16Test(a: number): number,
+            u32Test(a: number): number,
+            u64Test(a: bigint): bigint,
+            f32Test(a: number): number,
+            f64Test(a: number): number,
+            charTest(c: string): string,
+            stringTest(s: string): string,
+            u8ListTest(a: Uint8Array): Uint8Array,
+            stringListTest(a: string[]): string[],
+            optionNullableTest(a: number | undefined): number | undefined,
+            optionNestedTest(a: Option<number | undefined>): Option<number | undefined>,
+            resultSuccessTest(a: number): Result<number, void>,
+            resultFailTest(a: number): Result<void, number>,
+            resultBothTest(a: number): Result<number, number>,
+            resultNoneTest(): Result<void, void>,
+        }
+        export type VariantTest = VariantTestNone | VariantTestAny | VariantTestSomething;
+        export interface VariantTestNone {
+            tag: 'none',
+        }
+        export interface VariantTestAny {
+            tag: 'any',
+        }
+        export interface VariantTestSomething {
+            tag: 'something',
+            val: string,
+        }
+        export type EnumTest = EnumTestA | EnumTestB | EnumTestC;
+        export interface EnumTestA {
+            tag: 'a',
+        }
+        export interface EnumTestB {
+            tag: 'b',
+        }
+        export interface EnumTestC {
+            tag: 'c',
+        }
+        export interface RecordTest {
+            a: number,
+            b: string,
+            c?: EnumTest,
+        }
+        export interface FlagTest {
+            a?: boolean,
+            b?: boolean,
+            c?: boolean,
+        }
+        export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };
+        export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
+
+        export interface TestGuest {
+            basicTest: BasicTest,
+        }
+";
+
+    test_single_file(wit, expected);
+}
+
+#[test]
 fn test_export_resource() {
     let wit = "
         package test:t-resource;
@@ -141,20 +265,22 @@ fn test_single_file(wit: &'static str, expected: &'static str) {
 }
 
 #[track_caller]
-fn compare_str(expected: &str, actual: &str) {
+fn compare_str(actual: &str, expected: &str) {
     fn remove_whitespace(s: &str) -> impl Iterator<Item = &str> {
         s.lines().map(|l| l.trim()).filter(|l| !l.is_empty())
     }
 
-    let mut expected = remove_whitespace(expected);
-    let mut actual = remove_whitespace(actual);
+    let mut expected_iter = remove_whitespace(expected);
+    let mut actual_iter = remove_whitespace(actual);
 
     loop {
-        match (expected.next(), actual.next()) {
-            (Some(e), Some(a)) => assert_eq!(e, a),
+        match (expected_iter.next(), actual_iter.next()) {
             (None, None) => break,
+            (Some(e), Some(a)) => {
+                assert_eq!(e, a, "\nExpected:`{e}`\nActual:`{a}`\nFull:\n{actual}");
+            }
             (e, a) => {
-                assert_eq!(e, a, "Expected: {:?}, Actual: {:?}", e, a);
+                assert_eq!(e, a, "\nExpected:`{e:?}`\nActual:`{a:?}`\nFull:\n{actual}");
             }
         }
     }
