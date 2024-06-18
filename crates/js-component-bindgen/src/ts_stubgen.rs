@@ -6,7 +6,6 @@ use crate::{dealias, uwrite, uwriteln};
 use heck::*;
 use indexmap::map::Entry;
 use indexmap::IndexMap;
-use std::collections::BTreeMap;
 use std::fmt::Write;
 use wit_parser::*;
 
@@ -15,10 +14,6 @@ struct TsStubgen<'a> {
     files: &'a mut Files,
     world: &'a World,
 }
-
-// TODO:
-// Type export generation (what do resources look like???)
-// Resource functions are not included in world exports???
 
 pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
     let world = &resolve.worlds[id];
