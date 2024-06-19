@@ -157,7 +157,7 @@ impl<'a> TsStubgen<'a> {
         funcs: &[ExportFunction],
         interfaces: &[ExportInterface],
     ) {
-        let mut gen = TsImport::new(self.resolve);
+        let mut gen = TsInterface::new(self.resolve);
 
         // Type defs must be first, because they can generate imports.
         for tid in types {
@@ -193,7 +193,7 @@ impl<'a> TsStubgen<'a> {
             for (_name, func) in iface.functions.iter() {
                 match func.kind {
                     FunctionKind::Freestanding => {
-                        gen.ts_import_fuc(func, false, None);
+                        gen.ts_import_func(func, false);
                     }
                     FunctionKind::Method(tid)
                     | FunctionKind::Static(tid)
@@ -225,7 +225,6 @@ impl<'a> TsStubgen<'a> {
             gen.types(id);
         }
 
-        gen.post_types();
         let mut world_src = gen.finish();
 
         {
@@ -332,17 +331,15 @@ impl<'a> TsStubgen<'a> {
 
         let package_name = interface_module_name(self.resolve, id);
 
-        let mut gen = TsImport::new(self.resolve);
+        let mut gen = TsInterface::new(self.resolve);
 
         uwriteln!(gen.src, "declare module \"{package_name}\" {{");
 
         gen.types(id);
 
         for (_, func) in self.resolve.interfaces[id].functions.iter() {
-            gen.ts_import_fuc(func, true, None);
+            gen.ts_import_func(func, true);
         }
-
-        gen.post_types();
 
         let mut src = gen.finish();
 
@@ -357,19 +354,19 @@ impl<'a> TsStubgen<'a> {
 ///
 /// This generated source does not contain any actual JS runtime code, it's just
 /// typescript definitions.
-struct TsImport<'a> {
+struct TsInterface<'a> {
     src: Source,
     resolve: &'a Resolve,
     needs_ty_option: bool,
     needs_ty_result: bool,
     local_names: LocalNames,
     // Resources are aggregated, because the only way to get metadata for resource is by looking up their functions.
-    resources: IndexMap<&'a str, TsImport<'a>>,
+    resources: IndexMap<&'a str, ResourceImport<'a>>,
 }
 
-impl<'a> TsImport<'a> {
+impl<'a> TsInterface<'a> {
     fn new(resolve: &'a Resolve) -> Self {
-        TsImport {
+        TsInterface {
             src: Source::default(),
             resources: IndexMap::default(),
             local_names: LocalNames::default(),
@@ -380,15 +377,21 @@ impl<'a> TsImport<'a> {
     }
 
     fn finish(mut self) -> Source {
-        for (resource, source) in self.resources {
-            uwriteln!(
-                self.src,
-                "\nexport class {} {{",
-                resource.to_upper_camel_case()
-            );
-            self.src.push_str(&source.src);
-            uwriteln!(self.src, "}}")
+        let mut printer = Printer {
+            resolve: self.resolve,
+            src: &mut self.src,
+            needs_ty_option: &mut self.needs_ty_option,
+            needs_ty_result: &mut self.needs_ty_result,
+        };
+
+        for (name, resource) in self.resources.iter() {
+            uwriteln!(printer.src, "export class {} {{", AsUpperCamelCase(name));
+            printer.resource_import(&resource);
+            uwriteln!(printer.src, "}}")
         }
+
+        self.post_types();
+
         self.src
     }
 
@@ -433,88 +436,95 @@ impl<'a> TsImport<'a> {
         }
     }
 
-    fn ts_import_fuc(&mut self, func: &Function, declaration: bool, name: Option<&str>) {
-        let iface = if let FunctionKind::Method(ty)
-        | FunctionKind::Static(ty)
-        | FunctionKind::Constructor(ty) = func.kind
+    fn ts_import_func(&mut self, func: &'a Function, declaration: bool) {
+        // Resource conversion is delayed until because we need to aggregate all resource functions
+        // before creating the class.
+        if let FunctionKind::Method(ty) | FunctionKind::Static(ty) | FunctionKind::Constructor(ty) =
+            func.kind
         {
             let ty = &self.resolve.types[ty];
             let resource = ty.name.as_ref().unwrap();
             match self.resources.entry(resource) {
-                Entry::Occupied(e) => e.into_mut(),
-                Entry::Vacant(e) => e.insert(TsImport::new(self.resolve)),
+                Entry::Occupied(mut e) => {
+                    e.get_mut().push_func(func);
+                }
+                Entry::Vacant(e) => {
+                    let r = e.insert(Default::default());
+                    r.push_func(func);
+                }
             }
-        } else {
-            self
+            return;
         };
 
-        iface.as_printer().docs(&func.docs);
+        self.as_printer().docs(&func.docs);
 
-        let out_name = name
-            .unwrap_or_else(|| func.item_name())
-            .to_lower_camel_case();
+        let name = func.item_name().to_lower_camel_case();
 
         if declaration {
             match func.kind {
                 FunctionKind::Freestanding => {
-                    if is_js_identifier(&out_name) {
-                        uwrite!(iface.src, "export function {out_name}",);
+                    if is_js_identifier(&name) {
+                        uwrite!(self.src, "export function {name}",);
                     } else {
-                        let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
-                        uwriteln!(iface.src, "export {{ {local_name} as {out_name} }};",);
-                        uwriteln!(iface.src, "declare function {local_name};",);
+                        let (local_name, _) = self.local_names.get_or_create(&name, &name);
+                        uwriteln!(self.src, "export {{ {local_name} as {name} }};",);
+                        uwriteln!(self.src, "declare function {local_name};",);
                     };
                 }
-                FunctionKind::Method(_) => {
-                    if is_js_identifier(&out_name) {
-                        iface.src.push_str(&out_name);
-                    } else {
-                        uwrite!(iface.src, "'{out_name}'",);
-                    }
-                }
-                FunctionKind::Static(_) => {
-                    if is_js_identifier(&out_name) {
-                        uwrite!(iface.src, "static {out_name}");
-                    } else {
-                        uwrite!(iface.src, "static '{out_name}'");
-                    }
-                }
-                FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
+                _ => unreachable!("resource functions should be delayed"),
             }
         } else {
-            if is_js_identifier(&out_name) {
-                iface.src.push_str(&out_name);
+            if is_js_identifier(&name) {
+                self.src.push_str(&name);
             } else {
-                uwrite!(iface.src, "'{out_name}'");
+                uwrite!(self.src, "'{name}'");
             }
         }
 
-        iface.as_printer().ts_func_signature(func);
+        self.as_printer().ts_func_signature(func);
 
-        match func.kind {
-            FunctionKind::Constructor(_) => {}
-            _ => {
-                let end_character = if declaration { ";" } else { "," };
-                iface.src.push_str(end_character);
-            }
-        }
-
-        iface.src.push_str("\n");
+        let end_character = if declaration { ";" } else { "," };
+        self.src.push_str(end_character);
+        self.src.push_str("\n");
     }
 
     fn post_types(&mut self) {
-        let needs_ty_option =
-            self.needs_ty_option || self.resources.iter().any(|(_, r)| r.needs_ty_option);
-        let needs_ty_result =
-            self.needs_ty_result || self.resources.iter().any(|(_, r)| r.needs_ty_result);
-        if needs_ty_option {
+        if self.needs_ty_option {
             self.src
                 .push_str("export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };\n");
         }
-        if needs_ty_result {
+        if self.needs_ty_result {
             self.src.push_str(
                 "export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };\n",
             );
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct ResourceImport<'a> {
+    constructor: Option<&'a Function>,
+    method_funcs: Vec<&'a Function>,
+    static_funcs: Vec<&'a Function>,
+}
+
+impl<'a> ResourceImport<'a> {
+    fn push_func(&mut self, func: &'a Function) {
+        match func.kind {
+            FunctionKind::Method(_) => {
+                self.method_funcs.push(func);
+            }
+            FunctionKind::Static(_) => self.static_funcs.push(func),
+            FunctionKind::Constructor(_) => {
+                assert!(
+                    self.constructor.is_none(),
+                    "wit resources can only have one constructor"
+                );
+                self.constructor = Some(func);
+            }
+            FunctionKind::Freestanding => {
+                unreachable!("resource cannot have freestanding function")
+            }
         }
     }
 }
@@ -580,6 +590,39 @@ fn with_printer(resolve: &Resolve, f: impl FnOnce(Printer)) -> String {
 }
 
 impl<'a> Printer<'a> {
+    fn resource_import(&mut self, resource: &ResourceImport) {
+        if let Some(func) = resource.constructor {
+            self.docs(&func.docs);
+            self.src.push_str("constructor");
+            self.ts_func_signature(func);
+            self.src.push_str("\n");
+        }
+
+        for func in resource.method_funcs.iter() {
+            self.docs(&func.docs);
+            let name = func.item_name().to_lower_camel_case();
+            if is_js_identifier(&name) {
+                uwrite!(self.src, "{name}");
+            } else {
+                uwrite!(self.src, "'{name}'",);
+            }
+            self.ts_func_signature(func);
+            self.src.push_str(";\n");
+        }
+
+        for func in resource.static_funcs.iter() {
+            self.docs(&func.docs);
+            let name = func.item_name().to_lower_camel_case();
+            if is_js_identifier(&name) {
+                uwrite!(self.src, "static {name}");
+            } else {
+                uwrite!(self.src, "static '{name}'");
+            }
+            self.ts_func_signature(func);
+            self.src.push_str(";\n");
+        }
+    }
+
     fn docs_raw(&mut self, docs: &str) {
         self.src.push_str("/**\n");
         for line in docs.lines() {

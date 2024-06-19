@@ -172,6 +172,61 @@ fn export_resource() {
 }
 
 #[test]
+fn resource_import() {
+    let wit = &[
+        WitFile {
+            wit: "
+            package test:resource-source;
+
+            interface resource-test {
+                resource blob {
+                    constructor(init: list<u8>);
+                    write: func(bytes: list<u8>);
+                    read: func(n: u32) -> list<u8>;
+                    merge: static func(lhs: blob, rhs: blob) -> blob;
+                }
+            }
+            ",
+        },
+        WitFile {
+            wit: "
+            package test:resource-import;
+
+             world test {
+                import test:resource-source/resource-test;
+                export run: func() -> ();
+            }
+            ",
+        },
+    ];
+
+    let expected = &[
+        ExpectedTs {
+            file_name: "test.d.ts",
+            expected: "
+            export interface TestWorld {
+                run(): void,
+            }",
+        },
+        ExpectedTs {
+            file_name: "interfaces/test-resource-source-resource-test.d.ts",
+            expected: r#"
+            declare module "test:resource-source/resource-test" {
+                export class Blob {
+                    constructor(init: Uint8Array)
+                    write(bytes: Uint8Array): void;
+                    read(n: number): Uint8Array;
+                    static merge(lhs: Blob, rhs: Blob): Blob;
+                }
+            }
+            "#,
+        },
+    ];
+
+    test_files(wit, expected);
+}
+
+#[test]
 fn imports() {
     let wit = &[
         WitFile {
@@ -513,13 +568,14 @@ fn rpc() {
                     tag: 'remote-internal-error',
                     val: string,
                 }
-                export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
                 
                 export class WasmRpc {
                     constructor(location: Uri)
                     invokeAndAwait(functionName: string, functionParams: WitValue[]): Result<WitValue, RpcError>;
                     invoke(functionName: string, functionParams: WitValue[]): Result<void, RpcError>;
                 }
+
+                export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
             }
             "#,
         },
