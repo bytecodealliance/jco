@@ -29,3 +29,12 @@ impl Files {
         self.files.iter().map(|p| (p.0.as_str(), p.1.as_slice()))
     }
 }
+
+impl IntoIterator for Files {
+    type Item = (String, Vec<u8>);
+    type IntoIter = std::collections::btree_map::IntoIter<String, Vec<u8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.files.into_iter()
+    }
+}

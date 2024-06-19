@@ -1,4 +1,6 @@
-use js_component_bindgen::{files::Files, ts_stubgen::ts_stubgen};
+use std::collections::HashMap;
+
+use js_component_bindgen::generate_typescript_stubs;
 use wit_parser::UnresolvedPackage;
 
 // Enable this to write the generated files to the `tests/temp` directory
@@ -569,11 +571,13 @@ fn test_files(wit: &[WitFile], expected: &[ExpectedTs]) {
         .expect("world exists")
         .0;
 
-    let mut files = Files::default();
-    ts_stubgen(&resolver, world, &mut files);
+    let mut files = generate_typescript_stubs(resolver, world)
+        .expect("Successful generation")
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
     if IS_DEBUG {
-        write_files(&files);
+        write_files(files.iter());
     }
 
     for ExpectedTs {
@@ -581,7 +585,7 @@ fn test_files(wit: &[WitFile], expected: &[ExpectedTs]) {
         expected,
     } in expected
     {
-        let Some(file) = files.remove(&file_name) else {
+        let Some(file) = files.remove(*file_name) else {
             let all_files = files.iter().map(|(name, _)| name).collect::<Vec<_>>();
             panic!("Expected file `{file_name}` not found in files: {all_files:?}",)
         };
@@ -623,10 +627,10 @@ fn compare_str(actual: &str, expected: &str) {
     }
 }
 
-fn write_files(files: &Files) {
+fn write_files<'a>(files: impl Iterator<Item = (&'a String, &'a Vec<u8>)>) {
     let prefix = std::path::Path::new("tests/temp");
     let _ = std::fs::remove_dir_all(&prefix);
-    for (name, data) in files.iter() {
+    for (name, data) in files {
         let name = name.to_string();
         let data = String::from_utf8(data.to_vec()).unwrap();
         let path = prefix.join(name);
