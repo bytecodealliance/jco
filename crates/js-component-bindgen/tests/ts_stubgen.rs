@@ -309,7 +309,6 @@ fn rpc() {
             }
             ",
         },
-        
         WitFile {
             wit: "
             package rpc:counters;
@@ -564,7 +563,7 @@ fn rpc() {
                 }
             }
             "#,
-        }
+        },
     ];
 
     test_files(wit, expected);
