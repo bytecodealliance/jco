@@ -83,7 +83,7 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
     }
 
     {
-        let mut export_interfaces: Vec<InterfaceId> = Vec::new();
+        let mut export_interfaces: Vec<ExportInterface> = Vec::new();
         let mut export_functions: Vec<ExportFunction> = Vec::new();
 
         for (name, export) in world.exports.iter() {
@@ -103,7 +103,19 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                 }
                 WorldItem::Interface(id) => {
                     let id = *id;
-                    export_interfaces.push(id);
+                    if let WorldKey::Name(name) = name {
+                        export_interfaces.push(ExportInterface {
+                            name: name.clone(),
+                            id,
+                        })
+                    } else {
+                        let interface = &resolve.interfaces[id];
+                        let name = interface.name.as_ref().expect("interface has name").clone();
+                        export_interfaces.push(ExportInterface {
+                            name: name.clone(),
+                            id,
+                        })
+                    }
                 }
 
                 WorldItem::Type(_) => {
@@ -116,6 +128,11 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
 
         bindgen.process_exports(&world_types, &export_functions, &export_interfaces);
     }
+}
+
+struct ExportInterface {
+    name: String,
+    id: InterfaceId,
 }
 
 struct ExportFunction<'a> {
@@ -135,7 +152,7 @@ impl<'a> TsStubgen<'a> {
         &mut self,
         types: &[TypeId],
         funcs: &[ExportFunction],
-        interfaces: &[InterfaceId],
+        interfaces: &[ExportInterface],
     ) {
         let mut gen = TsImport::new(self.resolve);
 
@@ -159,11 +176,10 @@ impl<'a> TsStubgen<'a> {
             functions: Vec<&'a Function>,
         }
 
-        for id in interfaces {
+        for iface in interfaces {
+            let ExportInterface { name, id } = iface;
             let id = *id;
-            let i_face = &self.resolve.interfaces[id];
-
-            let name = i_face.name.as_ref().unwrap();
+            let iface = &self.resolve.interfaces[id];
 
             uwriteln!(
                 gen.src,
@@ -171,7 +187,7 @@ impl<'a> TsStubgen<'a> {
                 AsUpperCamelCase(name.as_str())
             );
 
-            for (_name, func) in i_face.functions.iter() {
+            for (_name, func) in iface.functions.iter() {
                 match func.kind {
                     FunctionKind::Freestanding => {
                         gen.ts_import_fuc(func, false, None);
@@ -271,11 +287,7 @@ impl<'a> TsStubgen<'a> {
 
         uwriteln!(world_src, "");
         uwriteln!(world_src, "export interface {camel_world}Guest {{",);
-        for id in interfaces {
-            let name = self.resolve.interfaces[*id]
-                .name
-                .as_ref()
-                .expect("non-inline interface");
+        for ExportInterface { name, .. } in interfaces {
             let lower_camel = AsLowerCamelCase(name);
             let upper_camel = AsUpperCamelCase(name);
             uwriteln!(world_src, "{lower_camel}: {upper_camel},",);

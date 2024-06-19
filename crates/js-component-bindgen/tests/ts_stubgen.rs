@@ -7,7 +7,7 @@ use wit_parser::UnresolvedPackage;
 static IS_DEBUG: bool = false;
 
 #[test]
-fn test_basic_ts() {
+fn basic_ts() {
     let wit = "
         package test:t-basic;
 
@@ -131,7 +131,7 @@ fn test_basic_ts() {
 }
 
 #[test]
-fn test_export_resource() {
+fn export_resource() {
     let wit = "
         package test:t-resource;
 
@@ -172,7 +172,7 @@ fn test_export_resource() {
 }
 
 #[test]
-fn test_imports() {
+fn imports() {
     let wit = &[
         WitFile {
             wit: "
@@ -247,7 +247,7 @@ fn test_imports() {
 }
 
 #[test]
-fn test_rpc() {
+fn rpc() {
     let wit = &[
         WitFile {
             wit: "
@@ -542,6 +542,32 @@ fn test_rpc() {
     ];
 
     test_files(wit, expected);
+}
+
+#[test]
+fn inline_interface() {
+    let wit = "
+
+    package test:inline;
+    
+    world test {
+        export example: interface {
+            do-nothing: func();
+        }
+    }
+    ";
+
+    let expected = "
+    export interface Example {
+        doNothing(): void,
+    }
+
+    export interface TestGuest {
+        example: Example,
+    }
+    ";
+
+    test_single_file(wit, expected);
 }
 
 struct WitFile {
