@@ -156,10 +156,7 @@ impl Guest for JsComponentBindgenComponent {
     }
 }
 
-fn resolve_package(
-    wit_opt: Wit,
-    name: Option<&str>,
-) -> Result<(Resolve, PackageId), anyhow::Error> {
+fn resolve_package(wit_opt: Wit, name: Option<&str>) -> Result<(Resolve, PackageId)> {
     let mut resolve = Resolve::default();
     let id = match wit_opt {
         Wit::Source(source) => {

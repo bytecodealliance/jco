@@ -234,7 +234,7 @@ impl<'a> TsStubgen<'a> {
                 for func in static_func {
                     match func.kind {
                         FunctionKind::Static(_) => {
-                            let signature = with_printer(&self.resolve, |mut p| {
+                            let signature = with_printer(self.resolve, |mut p| {
                                 p.ts_func_signature(func);
                             });
                             let signature = signature.replace(&ident, &ident_instance);
@@ -242,7 +242,7 @@ impl<'a> TsStubgen<'a> {
                             uwriteln!(src, "{f_name}{signature},");
                         }
                         FunctionKind::Constructor(_) => {
-                            let params = with_printer(&self.resolve, |mut p| {
+                            let params = with_printer(self.resolve, |mut p| {
                                 p.ts_func_params(func);
                             });
                             let params = params.replace(&ident, &ident_instance);
@@ -255,7 +255,7 @@ impl<'a> TsStubgen<'a> {
 
                 uwriteln!(src, "export interface {ident_instance} {{");
                 for func in method_funcs {
-                    let params = with_printer(&self.resolve, |mut p| {
+                    let params = with_printer(self.resolve, |mut p| {
                         p.ts_func_signature(func);
                     });
                     let params = params.replace(&ident, &ident_instance);
@@ -284,7 +284,7 @@ impl<'a> TsStubgen<'a> {
         for func in funcs {
             match func.func.kind {
                 FunctionKind::Freestanding => {
-                    let signature = with_printer(&self.resolve, |mut p| {
+                    let signature = with_printer(self.resolve, |mut p| {
                         p.ts_func_signature(func.func);
                     });
 
@@ -547,7 +547,7 @@ struct Printer<'a> {
     needs_ty_result: &'a mut bool,
 }
 
-fn with_printer<'a>(resolve: &'a Resolve, f: impl FnOnce(Printer)) -> String {
+fn with_printer(resolve: &Resolve, f: impl FnOnce(Printer)) -> String {
     let mut src = Source::default();
     let mut needs_ty_option = false;
     let mut needs_ty_result = false;
