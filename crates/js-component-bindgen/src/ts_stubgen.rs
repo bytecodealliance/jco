@@ -155,7 +155,7 @@ impl<'a> TsStubgen<'a> {
         struct ResourceExport<'a> {
             ident: String,
             ident_static: String,
-            ident_base: String,
+            ident_instance: String,
             functions: Vec<&'a Function>,
         }
 
@@ -189,11 +189,11 @@ impl<'a> TsStubgen<'a> {
                                 resource.name.as_ref().unwrap().to_upper_camel_case()
                             };
                             let ident_static = format!("{}Static", ident);
-                            let ident_base = format!("{}Base", ident);
+                            let ident_instance = format!("{}Instance", ident);
                             let resource = e.insert(ResourceExport {
                                 ident,
                                 ident_static,
-                                ident_base,
+                                ident_instance,
                                 functions: vec![func],
                             });
                             uwriteln!(gen.src, "{}: {}", resource.ident, resource.ident_static);
@@ -222,7 +222,7 @@ impl<'a> TsStubgen<'a> {
                 let ResourceExport {
                     ident,
                     ident_static,
-                    ident_base,
+                    ident_instance,
                     functions,
                 } = resource;
 
@@ -230,7 +230,6 @@ impl<'a> TsStubgen<'a> {
                     .iter()
                     .partition(|f| matches!(f.kind, FunctionKind::Method(_)));
 
-                uwriteln!(src, "// All functions must be `static` on a class");
                 uwriteln!(src, "export interface {ident_static} {{");
                 for func in static_func {
                     match func.kind {
@@ -238,7 +237,7 @@ impl<'a> TsStubgen<'a> {
                             let signature = with_printer(&self.resolve, |mut p| {
                                 p.ts_func_signature(func);
                             });
-                            let signature = signature.replace(&ident, &ident_base);
+                            let signature = signature.replace(&ident, &ident_instance);
                             let f_name = func.item_name();
                             uwriteln!(src, "{f_name}{signature},");
                         }
@@ -246,20 +245,20 @@ impl<'a> TsStubgen<'a> {
                             let params = with_printer(&self.resolve, |mut p| {
                                 p.ts_func_params(func);
                             });
-                            let params = params.replace(&ident, &ident_base);
-                            uwriteln!(src, "new{params}: {ident_base},",);
+                            let params = params.replace(&ident, &ident_instance);
+                            uwriteln!(src, "new{params}: {ident_instance},",);
                         }
                         _ => unreachable!("non static resource function"),
                     }
                 }
                 uwriteln!(src, "}}");
 
-                uwriteln!(src, "export interface {ident_base} {{");
+                uwriteln!(src, "export interface {ident_instance} {{");
                 for func in method_funcs {
                     let params = with_printer(&self.resolve, |mut p| {
                         p.ts_func_signature(func);
                     });
-                    let params = params.replace(&ident, &ident_base);
+                    let params = params.replace(&ident, &ident_instance);
                     let f_name = func.item_name();
                     uwriteln!(src, "{f_name}{params},");
                 }
@@ -299,9 +298,7 @@ impl<'a> TsStubgen<'a> {
                 FunctionKind::Method(_)
                 | FunctionKind::Static(_)
                 | FunctionKind::Constructor(_) => {
-                    unimplemented!(
-                        "resource functions not supported in world. please use interfaces."
-                    );
+                    unreachable!("cannot export resource in world");
                 }
             }
         }

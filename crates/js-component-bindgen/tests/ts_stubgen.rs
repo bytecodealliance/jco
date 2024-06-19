@@ -152,12 +152,11 @@ fn test_export_resource() {
             Blob: BlobStatic
         }
 
-        // All functions must be `static` on a class
         export interface BlobStatic {
-            new(init: Uint8Array): BlobBase,
-            merge(lhs: BlobBase, rhs: BlobBase): BlobBase,
+            new(init: Uint8Array): BlobInstance,
+            merge(lhs: BlobInstance, rhs: BlobInstance): BlobInstance,
         }
-        export interface BlobBase {
+        export interface BlobInstance {
             write(bytes: Uint8Array): void,
             read(n: number): Uint8Array,
         }
@@ -626,7 +625,7 @@ fn compare_str(actual: &str, expected: &str) {
 
 fn write_files(files: &Files) {
     let prefix = std::path::Path::new("tests/temp");
-    std::fs::remove_dir_all(&prefix).expect("clear temp directory");
+    let _ = std::fs::remove_dir_all(&prefix);
     for (name, data) in files.iter() {
         let name = name.to_string();
         let data = String::from_utf8(data.to_vec()).unwrap();
