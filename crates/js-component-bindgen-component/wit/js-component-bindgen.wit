@@ -83,6 +83,13 @@ world js-component-bindgen {
     map: option<maps>,
   }
 
+  record typescript-stub-options {
+    /// wit to generate typing from
+    wit: wit,
+    /// world to generate typing for
+    %world: option<string>,
+  }
+
   enum export-type {
     function,
     instance,
@@ -100,4 +107,6 @@ world js-component-bindgen {
   export generate: func(component: list<u8>, options: generate-options) -> result<transpiled, string>;
 
   export generate-types: func(name: string, options: type-generation-options) -> result<files, string>;
+
+  export generate-typescript-stubs: func(options: typescript-stub-options) -> result<files, string>;
 }

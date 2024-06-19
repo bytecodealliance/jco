@@ -2,6 +2,7 @@
 import { program, Option } from 'commander';
 import { opt } from './cmd/opt.js';
 import { transpile, types } from './cmd/transpile.js';
+import { stubgen } from './cmd/stubgen.js'
 import { run as runCmd, serve as serveCmd } from './cmd/run.js';
 import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
 import { componentize } from './cmd/componentize.js';
@@ -53,6 +54,15 @@ program.command('transpile')
   .option('--multi-memory', 'optimized output for Wasm multi-memory')
   .option('--', 'for --optimize, custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(transpile));
+
+program.command('stubgen')
+  .description("Generate typescript stubs based on a WIT component defintion")
+  .usage('<wit-path> -o <out-dir>')
+  .argument('<wit-path>', "Path to WIT definitions")
+  .requiredOption('-o, --out-dir <out-dir>', 'output directory')
+  .option('-n, --world-name <world>', 'WIT world to generate types for')
+  .option('-q, --quiet', 'disable output summary')
+  .action(asyncAction(stubgen))
 
 program.command('types')
   .description('Generate types for the given WIT')

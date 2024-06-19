@@ -2,6 +2,7 @@ mod core;
 mod files;
 mod transpile_bindgen;
 mod ts_bindgen;
+mod ts_stubgen;
 
 pub mod esm_bindgen;
 pub mod function_bindgen;
@@ -70,11 +71,18 @@ pub fn generate_types(
 
     ts_bindgen(&name, &resolve, world_id, &opts, &mut files);
 
-    let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
-    for (name, source) in files.iter() {
-        files_out.push((name.to_string(), source.to_vec()));
-    }
-    Ok(files_out)
+    Ok(files.into_iter().collect())
+}
+
+pub fn generate_typescript_stubs(
+    resolve: Resolve,
+    world_id: WorldId,
+) -> Result<Vec<(String, Vec<u8>)>, anyhow::Error> {
+    let mut files = files::Files::default();
+
+    ts_stubgen::ts_stubgen(&resolve, world_id, &mut files)?;
+
+    Ok(files.into_iter().collect())
 }
 
 /// Generate the JS transpilation bindgen for a given Wasm component binary

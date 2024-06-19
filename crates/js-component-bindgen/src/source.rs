@@ -96,6 +96,12 @@ impl From<Source> for String {
     }
 }
 
+impl AsRef<str> for Source {
+    fn as_ref(&self) -> &str {
+        &self.s
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Source;

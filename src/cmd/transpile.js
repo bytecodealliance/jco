@@ -1,9 +1,7 @@
 import { $init, generate, generateTypes } from '../../obj/js-component-bindgen-component.js';
-import { writeFile } from 'node:fs/promises';
-import { mkdir } from 'node:fs/promises';
-import { dirname, extname, basename, resolve } from 'node:path';
+import { extname, basename, resolve } from 'node:path';
 import c from 'chalk-template';
-import { readFile, sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
+import { readFile, writeFiles, spawnIOTmp, setShowSpinner, getShowSpinner} from '../common.js';
 import { optimizeComponent } from './opt.js';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
@@ -48,22 +46,6 @@ export async function typesComponent (witPath, opts) {
     tlaCompat: opts.tlaCompat ?? false,
     world: opts.worldName
   }).map(([name, file]) => [`${outDir}${name}`, file]));
-}
-
-async function writeFiles(files, summaryTitle) {
-  await Promise.all(Object.entries(files).map(async ([name, file]) => {
-    await mkdir(dirname(name), { recursive: true });
-    await writeFile(name, file);
-  }));
-  if (!summaryTitle)
-    return;
-  console.log(c`
-  {bold ${summaryTitle}:}
-  
-${table(Object.entries(files).map(([name, source]) => [
-    c` - {italic ${name}}  `,
-    c`{black.italic ${sizeStr(source.length)}}`
-  ]))}`);
 }
 
 export async function transpile (componentPath, opts, program) {
