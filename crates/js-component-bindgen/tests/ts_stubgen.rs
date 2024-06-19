@@ -309,46 +309,52 @@ fn rpc() {
             }
             ",
         },
-        // 
-        // WitFile {
-        //     wit: "
-        //     package rpc:counters;
+        
+        WitFile {
+            wit: "
+            package rpc:counters;
 
-        //     interface api {
-        //         resource counter {
-        //             constructor(name: string);
-        //             inc-by: func(value: u64);
-        //             get-value: func() -> u64;
-        //         }
+            interface api {
 
-        //         inc-global-by: func(value: u64);
-        //         get-global-value: func() -> u64;
-        //         get-all-dropped: func() -> list<tuple<string, u64>>;
-        //     }
+                record counter-value {
+                    value: u64,
+                }
 
-        //     world counters {
-        //         export api;
-        //     }
-        //     ",
-        // },
+                resource counter {
+                    constructor(name: string);
+                    inc-by: func(value: u64);
+                    get-value: func() -> counter-value;
+                }
+
+                inc-global-by: func(value: u64);
+                get-global-value: func() -> counter-value;
+                get-all-dropped: func() -> list<tuple<string, u64>>;
+            }
+
+            world counters {
+                export api;
+            }
+            ",
+        },
         WitFile {
             wit: "
             package rpc:counters-stub;
 
             interface stub-counters {
                 use golem:rpc/types@0.1.0.{uri};
+                use rpc:counters/api.{counter-value};
 
                 resource api {
                     constructor(location: uri);
                     inc-global-by: func(value: u64);
-                    get-global-value: func() -> u64;
+                    get-global-value: func() -> counter-value;
                     get-all-dropped: func() -> list<tuple<string, u64>>;
                 }
 
                 resource counter {
                     constructor(location: uri, name: string);
                     inc-by: func(value: u64);
-                    get-value: func() -> u64;
+                    get-value: func() -> counter-value;
                 }
 
             }
@@ -523,22 +529,42 @@ fn rpc() {
             expected: r#"
             declare module "rpc:counters-stub/stub-counters" {
                 import type { Uri } from "golem:rpc/types@0.1.0";
+                import type { CounterValue } from "rpc:counters/api";
                 
                 export class Api {
                     constructor(location: Uri)
                     incGlobalBy(value: bigint): void;
-                    getGlobalValue(): bigint;
+                    getGlobalValue(): CounterValue;
                     getAllDropped(): [string, bigint][];
                 }
                 
                 export class Counter {
                     constructor(location: Uri, name: string)
                     incBy(value: bigint): void;
-                    getValue(): bigint;
+                    getValue(): CounterValue;
                 }
             }
             "#,
         },
+        ExpectedTs {
+            file_name: "interfaces/rpc-counters-api.d.ts",
+            expected: r#"
+            declare module "rpc:counters/api" {
+                export interface CounterValue {
+                    value: bigint,
+                }
+                export function incGlobalBy(value: bigint): void;
+                export function getGlobalValue(): CounterValue;
+                export function getAllDropped(): [string, bigint][];
+                
+                export class Counter {
+                    constructor(name: string)
+                    incBy(value: bigint): void;
+                    getValue(): CounterValue;
+                }
+            }
+            "#,
+        }
     ];
 
     test_files(wit, expected);
@@ -617,6 +643,11 @@ fn test_files(wit: &[WitFile], expected: &[ExpectedTs]) {
         };
         let actual = std::str::from_utf8(&file).expect("valid utf8");
         compare_str(actual, expected);
+    }
+
+    if !files.is_empty() {
+        let all_files = files.iter().map(|(name, _)| name).collect::<Vec<_>>();
+        panic!("Missing expected files: {all_files:?}")
     }
 }
 
