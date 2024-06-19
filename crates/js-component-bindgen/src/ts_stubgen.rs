@@ -386,7 +386,7 @@ impl<'a> TsInterface<'a> {
 
         for (name, resource) in self.resources.iter() {
             uwriteln!(printer.src, "export class {} {{", AsUpperCamelCase(name));
-            printer.resource_import(&resource);
+            printer.resource_import(resource);
             uwriteln!(printer.src, "}}")
         }
 
@@ -865,7 +865,7 @@ impl<'a> Printer<'a> {
         let type_name = name.to_upper_camel_case();
 
         if let Some(owner_id) = owner_not_parent {
-            let orig_id = dealias(&self.resolve, id);
+            let orig_id = dealias(self.resolve, id);
             let orig_name = self.resolve.types[orig_id]
                 .name
                 .as_ref()
