@@ -122,7 +122,7 @@ fn basic_ts() {
         export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };
         export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
-        export interface TestGuest {
+        export interface TestWorld {
             basicTest: BasicTest,
         }
 ";
@@ -163,7 +163,7 @@ fn export_resource() {
             read(n: number): Uint8Array,
         }
 
-        export interface TestGuest {
+        export interface TestWorld {
             resourceTest: ResourceTest,
         }
     ";
@@ -214,7 +214,7 @@ fn imports() {
         ExpectedTs {
             file_name: "test.d.ts",
             expected: "
-            export interface TestGuest {
+            export interface TestWorld {
                 run(): void,
             }",
         },
@@ -391,7 +391,7 @@ fn rpc() {
                 test3(): bigint,
             }
 
-            export interface TestGuest {
+            export interface TestWorld {
                 api: Api,
             }
             ",
@@ -587,7 +587,7 @@ fn inline_interface() {
         doNothing(): void,
     }
 
-    export interface TestGuest {
+    export interface TestWorld {
         example: Example,
     }
     ";

@@ -289,7 +289,7 @@ impl<'a> TsStubgen<'a> {
         let kebab_world = AsKebabCase(self.world.name.as_str());
 
         uwriteln!(world_src, "");
-        uwriteln!(world_src, "export interface {camel_world}Guest {{",);
+        uwriteln!(world_src, "export interface {camel_world}World {{",);
         for ExportInterface { name, .. } in interfaces {
             let lower_camel = AsLowerCamelCase(name);
             let upper_camel = AsUpperCamelCase(name);
