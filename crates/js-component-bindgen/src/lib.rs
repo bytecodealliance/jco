@@ -80,7 +80,7 @@ pub fn generate_typescript_stubs(
 ) -> Result<Vec<(String, Vec<u8>)>, anyhow::Error> {
     let mut files = files::Files::default();
 
-    ts_stubgen::ts_stubgen(&resolve, world_id, &mut files);
+    ts_stubgen::ts_stubgen(&resolve, world_id, &mut files)?;
 
     Ok(files.into_iter().collect())
 }

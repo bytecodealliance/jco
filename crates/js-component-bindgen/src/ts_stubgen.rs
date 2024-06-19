@@ -3,6 +3,7 @@ use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::{dealias, uwrite, uwriteln};
+use anyhow::bail;
 use heck::*;
 use indexmap::map::Entry;
 use indexmap::IndexMap;
@@ -15,7 +16,7 @@ struct TsStubgen<'a> {
     world: &'a World,
 }
 
-pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
+pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) -> anyhow::Result<()> {
     let world = &resolve.worlds[id];
     let mut bindgen = TsStubgen {
         resolve,
@@ -33,7 +34,7 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                 WorldItem::Function(_) => match name {
                     // Happens with `using` in world.
                     WorldKey::Name(name) => {
-                        unimplemented!("function imported by name: {name}")
+                        bail!("Function imported by name not implemented {name}");
                     }
                     WorldKey::Interface(id) => {
                         let import_specifier = resolve.id_of(*id).unwrap();
@@ -53,7 +54,7 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
                 WorldItem::Interface(_) => match name {
                     // TODO: Is this even possible?
                     WorldKey::Name(name) => {
-                        unimplemented!("interface imported by name: {name}")
+                        bail!("Interface imported by name not implemented {name}");
                     }
                     WorldKey::Interface(id) => {
                         let import_specifier = resolve.id_of(*id).unwrap();
@@ -127,6 +128,8 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) {
         }
 
         bindgen.process_exports(&world_types, &export_functions, &export_interfaces);
+
+        Ok(())
     }
 }
 
