@@ -234,6 +234,8 @@ dependencies = [
  "anyhow",
  "base64",
  "heck 0.5.0",
+ "log",
+ "semver",
  "wasm-encoder 0.212.0",
  "wasmparser",
  "wasmtime-environ",

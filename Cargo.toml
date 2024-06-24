@@ -37,6 +37,8 @@ strip = true
 anyhow = "1.0.86"
 base64 = "0.22.1"
 heck = "0.5.0"
+log = "0.4.22"
+semver = "1.0.23"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 structopt = "0.3.26"
 wasm-encoder = "0.212.0"

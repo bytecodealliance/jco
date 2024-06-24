@@ -21,18 +21,35 @@ interface tools {
 
   type producers-fields = list<tuple<string, list<tuple<string, string>>>>;
 
+  /// Enumerate enabled features
+  variant enabled-feature-set {
+    /// Enable only the given list of features
+    %list(list<string>),
+    /// Enable all features
+    all,
+  }
+
   /// Embed a WIT type into a component.
   /// Only a singular WIT document without use resolutions is supported for this API.
   record embed-opts {
     binary: option<list<u8>>,
+
     /// Pass an inline WIT source
     wit-source: option<string>,
+
     /// Pass the file system path to WIT file
     wit-path: option<string>,
+
     string-encoding: option<string-encoding>,
+
     dummy: option<bool>,
+
     %world: option<string>,
-    metadata: option<producers-fields>
+
+    metadata: option<producers-fields>,
+
+    /// Features that should be enabled as part of feature gating
+    features: option<enabled-feature-set>,
   }
 
   component-embed: func(embed-opts: embed-opts) -> result<list<u8>, string>;

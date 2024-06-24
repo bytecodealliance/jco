@@ -7,7 +7,8 @@ use wit_component::{ComponentEncoder, DecodedWasm, WitPrinter};
 use wit_parser::Resolve;
 
 use exports::local::wasm_tools::tools::{
-    EmbedOpts, Guest, ModuleMetaType, ModuleMetadata, ProducersFields, StringEncoding,
+    EmbedOpts, EnabledFeatureSet, Guest, ModuleMetaType, ModuleMetadata, ProducersFields,
+    StringEncoding,
 };
 
 wit_bindgen::generate!({
@@ -74,6 +75,20 @@ impl Guest for WasmToolsJs {
 
         let mut resolve = Resolve::default();
 
+        // Add all features specified in embed options to the resolve
+        // (this helps identify/use feature gating properly)
+        match embed_opts.features {
+            Some(EnabledFeatureSet::List(ref features)) => {
+                for f in features.into_iter() {
+                    resolve.features.insert(f.to_string());
+                }
+            }
+            Some(EnabledFeatureSet::All) => {
+                resolve.all_features = true;
+            }
+            _ => {}
+        };
+
         let ids = if let Some(wit_source) = &embed_opts.wit_source {
             let path = PathBuf::from("component.wit");
             resolve
@@ -89,6 +104,7 @@ impl Guest for WasmToolsJs {
         };
 
         let world_string = embed_opts.world.as_ref().map(|world| world.to_string());
+
         let world = resolve
             .select_world(&ids, world_string.as_deref())
             .map_err(|e| e.to_string())?;

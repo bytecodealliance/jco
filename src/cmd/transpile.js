@@ -27,6 +27,7 @@ export async function types (witPath, opts) {
  *   instantiation?: 'async' | 'sync',
  *   tlaCompat?: bool,
  *   outDir?: string,
+ *   features?: string[] | 'all',
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
@@ -42,11 +43,20 @@ export async function typesComponent (witPath, opts) {
   let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
   if (!outDir.endsWith('/') && outDir !== '')
     outDir += '/';
+
+  let features = null;
+  if (opts.features === 'all') {
+    features = { tag: 'all' };
+  } else if (Array.isArray(opts.features)) {
+    features = { tag: 'list', val: opts.features };
+  }
+
   return Object.fromEntries(generateTypes(name, {
     wit: { tag: 'path', val: (isWindows ? '//?/' : '') + resolve(witPath) },
     instantiation,
     tlaCompat: opts.tlaCompat ?? false,
-    world: opts.worldName
+    world: opts.worldName,
+    features,
   }).map(([name, file]) => [`${outDir}${name}`, file]));
 }
 
@@ -59,7 +69,7 @@ async function writeFiles(files, summaryTitle) {
     return;
   console.log(c`
   {bold ${summaryTitle}:}
-  
+
 ${table(Object.entries(files).map(([name, source]) => [
     c` - {italic ${name}}  `,
     c`{black.italic ${sizeStr(source.length)}}`
