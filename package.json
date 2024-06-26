@@ -18,7 +18,7 @@
   },
   "type": "module",
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "^0.16.2",
+    "@bytecodealliance/preview2-shim": "^0.16.3",
     "binaryen": "^116.0.0",
     "chalk-template": "^1",
     "commander": "^12",
