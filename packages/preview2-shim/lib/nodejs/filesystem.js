@@ -700,6 +700,13 @@ function convertFsError(e) {
       return "text-file-busy";
     case "EXDEV":
       return "cross-device";
+    case "UNKNOWN":
+      switch (e.errno) {
+        case -4094:
+          return "no-such-device";
+        default:
+          throw e;
+      }
     default:
       throw e;
   }
