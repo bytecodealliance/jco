@@ -67,7 +67,7 @@ pub fn ts_bindgen(
                     WorldKey::Name(name) => funcs.push((name.to_string(), f)),
                     WorldKey::Interface(id) => funcs.push((resolve.id_of(*id).unwrap(), f)),
                 },
-                WorldItem::Interface(id) => match name {
+                WorldItem::Interface { id, stability: _ } => match name {
                     WorldKey::Name(name) => {
                         // kebab name -> direct ns namespace import
                         bindgen.import_interface(resolve, name, *id, files);
@@ -144,7 +144,7 @@ pub fn ts_bindgen(
                 seen_names.insert(export_name.to_string());
                 funcs.push((export_name.to_lower_camel_case(), f));
             }
-            WorldItem::Interface(id) => {
+            WorldItem::Interface { id, stability: _ } => {
                 let iface_id: String;
                 let (export_name, iface_name): (&str, &str) = match name {
                     WorldKey::Name(export_name) => (export_name, export_name),

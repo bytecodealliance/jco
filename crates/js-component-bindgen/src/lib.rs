@@ -16,7 +16,7 @@ use transpile_bindgen::transpile_bindgen;
 use anyhow::{bail, Context};
 use wasmtime_environ::component::Export;
 use wasmtime_environ::component::{ComponentTypesBuilder, StaticModuleIndex};
-use wasmtime_environ::wasmparser::{Validator, WasmFeatures};
+use wasmtime_environ::wasmparser::Validator;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
@@ -116,11 +116,8 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
     // that need to be executed to instantiate a component.
     let scope = ScopeVec::new();
     let tunables = Tunables::default_u32();
-    let mut types = ComponentTypesBuilder::default();
-    let mut validator = Validator::new_with_features(WasmFeatures {
-        component_model: true,
-        ..WasmFeatures::default()
-    });
+    let mut validator = Validator::default();
+    let mut types = ComponentTypesBuilder::new(&validator);
 
     let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)
         .translate(component)
