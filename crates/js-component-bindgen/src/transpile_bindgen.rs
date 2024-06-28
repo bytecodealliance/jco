@@ -260,17 +260,17 @@ impl<'a> JsBindgen<'a> {
             uwrite!(
                 output,
                 "\
-                    {}
                     export function instantiate(getCoreModule, imports, instantiateCore = {}) {{
                         {}
                         {}
+                        {}
                 ",
-                &js_intrinsics as &str,
                 match instantiation {
                     InstantiationMode::Async => "WebAssembly.instantiate",
                     InstantiationMode::Sync =>
                         "(module, importObject) => new WebAssembly.Instance(module, importObject)",
                 },
+                &js_intrinsics as &str,
                 &intrinsic_definitions as &str,
                 &compilation_promises as &str,
             );
