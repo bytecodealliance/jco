@@ -96,8 +96,6 @@ $ jco componentize cowsay.js --wit cowsay.wit -o cowsay.wasm
 OK Successfully written cowsay.wasm with imports ().
 ```
 
-> Note: For debugging, it is useful to pass `--enable-stdout` to ComponentizeJS to get error messages and enable `console.log`.
-
 ### Inspecting Component WIT
 
 As a first step, we might like to look instead this binary black box of a Component and see what it actually does.
