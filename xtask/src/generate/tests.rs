@@ -6,7 +6,7 @@ const TRACE: bool = false;
 const DENO: bool = true;
 const TEST_FILTER: &[&str] = &[];
 
-const TEST_IGNORE: &[&str] = &["nn_image_classification", "nn_image_classification_named"];
+const TEST_IGNORE: &[&str] = &["preview2_file_read_write"];
 
 const DENO_IGNORE: &[&str] = &[
     "api_read_only",
@@ -29,6 +29,7 @@ const DENO_IGNORE: &[&str] = &[
     "preview1_fd_filestat_set",
     "preview1_fd_flags_set",
     "preview1_fd_readdir",
+    "preview1_file_pread_pwrite",
     "preview1_file_read_write",
     "preview1_file_seek_tell",
     "preview1_file_truncation",
@@ -73,7 +74,7 @@ pub fn run() -> anyhow::Result<()> {
 
     // Compile wasmtime test programs
     let guard = sh.push_dir("submodules/wasmtime/crates/test-programs");
-    cmd!(sh, "cargo build --target wasm32-wasi").run()?;
+    cmd!(sh, "cargo build --target wasm32-wasip1").run()?;
     drop(guard);
 
     // Tidy up the dir and recreate it.
@@ -85,7 +86,7 @@ pub fn run() -> anyhow::Result<()> {
 
     let mut test_names = vec![];
 
-    for entry in fs::read_dir("submodules/wasmtime/target/wasm32-wasi/debug")? {
+    for entry in fs::read_dir("submodules/wasmtime/target/wasm32-wasip1/debug")? {
         let entry = entry?;
         // skip all files which don't end with `.wasm`
         if entry.path().extension().and_then(|p| p.to_str()) != Some("wasm") {
@@ -93,6 +94,10 @@ pub fn run() -> anyhow::Result<()> {
         }
         let file_name = String::from(entry.file_name().to_str().unwrap());
         let test_name = String::from(&file_name[0..file_name.len() - 5]);
+        // ignore wasi-nn tests for now
+        if test_name.starts_with("nn_") {
+            continue;
+        }
         if TEST_IGNORE.contains(&test_name.as_ref()) {
             continue;
         }
@@ -111,7 +116,7 @@ pub fn run() -> anyhow::Result<()> {
 
     let mut all_names = Vec::new();
     for test_name in test_names {
-        let path = format!("submodules/wasmtime/target/wasm32-wasi/debug/{test_name}.wasm");
+        let path = format!("submodules/wasmtime/target/wasm32-wasip1/debug/{test_name}.wasm");
         // compile into generated dir
         let dest_file = format!("./tests/gen/{test_name}.component.wasm");
 
