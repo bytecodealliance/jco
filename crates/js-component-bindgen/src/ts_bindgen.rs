@@ -249,10 +249,15 @@ pub fn ts_bindgen(
                      * on the web, for example.
                      */
                     export function instantiate(
-                        getCoreModule: (path: string) => Promise<WebAssembly.Module>,
+                        getCoreModule: (path: string) => WebAssembly.Module,
                         imports: ImportObject,
-                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => Promise<WebAssembly.Instance>
-                    ): Promise<{camel}>;
+                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
+                    ): {camel};
+                    export function instantiate(
+                        getCoreModule: (path: string) => WebAssembly.Module,
+                        imports: ImportObject,
+                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
+                    ): {camel} | Promise<{camel}>;
                 ",
             )
         }

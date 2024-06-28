@@ -256,38 +256,24 @@ impl<'a> JsBindgen<'a> {
             self.opts.instantiation.is_some(),
         );
 
-        match self.opts.instantiation {
-            Some(InstantiationMode::Async) => {
-                uwrite!(
-                    output,
-                    "\
-                        export async function instantiate(getCoreModule, imports, instantiateCore = WebAssembly.instantiate) {{
-                            {}
-                            {}
-                            {}
-                    ",
-                    &js_intrinsics as &str,
-                    &intrinsic_definitions as &str,
-                    &compilation_promises as &str,
-                )
-            }
-
-            Some(InstantiationMode::Sync) => {
-                uwrite!(
-                    output,
-                    "\
-                        export function instantiate(getCoreModule, imports, instantiateCore = (module, importObject) => new WebAssembly.Instance(module, importObject)) {{
-                            {}
-                            {}
-                            {}
-                    ",
-                    &js_intrinsics as &str,
-                    &intrinsic_definitions as &str,
-                    &compilation_promises as &str,
-                )
-            }
-
-            None => {}
+        if let Some(instantiation) = &self.opts.instantiation {
+            uwrite!(
+                output,
+                "\
+                    {}
+                    export function instantiate(getCoreModule, imports, instantiateCore = {}) {{
+                        {}
+                        {}
+                ",
+                &js_intrinsics as &str,
+                match instantiation {
+                    InstantiationMode::Async => "WebAssembly.instantiate",
+                    InstantiationMode::Sync =>
+                        "(module, importObject) => new WebAssembly.Instance(module, importObject)",
+                },
+                &intrinsic_definitions as &str,
+                &compilation_promises as &str,
+            );
         }
 
         let imports_object = if self.opts.instantiation.is_some() {
@@ -308,8 +294,31 @@ impl<'a> JsBindgen<'a> {
             uwrite!(
                 output,
                 "\
-                        {}\
-                        {};
+                        let gen = (function* init () {{
+                            {}\
+                            {};
+                        }})();
+                        let promise, resolve, reject;
+                        function runNext (value) {{
+                            try {{
+                                let done;
+                                do {{
+                                    ({{ value, done }} = gen.next(value));
+                                }} while (!(value instanceof Promise) && !done);
+                                if (done) {{
+                                    if (resolve) resolve(value);
+                                    else return value;
+                                }}
+                                if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
+                                value.then(nextVal => done ? resolve() : runNext(nextVal), reject);
+                            }}
+                            catch (e) {{
+                                if (reject) reject(e);
+                                else throw e;
+                            }}
+                        }}
+                        const maybeSyncReturn = runNext(null);
+                        return promise || maybeSyncReturn;
                     }}
                 ",
                 &self.src.js_init as &str,
@@ -340,9 +349,32 @@ impl<'a> JsBindgen<'a> {
                     {}
                     {}
                     {}
-                    {maybe_init_export}const $init = (async() => {{
-                        {}\
-                        {}\
+                    {maybe_init_export}const $init = (() => {{
+                        let gen = (function* init () {{
+                            {}\
+                            {}\
+                        }})();
+                        let promise, resolve, reject;
+                        function runNext (value) {{
+                            try {{
+                                let done;
+                                do {{
+                                    ({{ value, done }} = gen.next(value));
+                                }} while (!(value instanceof Promise) && !done);
+                                if (done) {{
+                                    if (resolve) resolve(value);
+                                    else return value;
+                                }}
+                                if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
+                                value.then(runNext, reject);
+                            }}
+                            catch (e) {{
+                                if (reject) reject(e);
+                                else throw e;
+                            }}
+                        }}
+                        const maybeSyncReturn = runNext(null);
+                        return promise || maybeSyncReturn;
                     }})();
                     {maybe_init}\
                 ",
@@ -968,7 +1000,7 @@ impl<'a> Instantiator<'a, '_> {
             Some(InstantiationMode::Async) | None => {
                 uwriteln!(
                     self.src.js_init,
-                    "({{ exports: exports{iu32} }} = await {instantiate}(await module{}{imports}));",
+                    "({{ exports: exports{iu32} }} = yield {instantiate}(yield module{}{imports}));",
                     idx.as_u32()
                 )
             }
