@@ -37,9 +37,9 @@
 //! supported because, again, Wasmtime doesn't use it at this time.
 
 use anyhow::{bail, Result};
-use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
+use wasmparser::collections::IndexMap;
 use wasmparser::*;
 use wasmtime_environ::component::CoreDef;
 use wasmtime_environ::{wasmparser, ModuleTranslation};
@@ -88,16 +88,14 @@ impl<'a> Translation<'a> {
         if multi_memory {
             return Ok(Translation::Normal(translation));
         }
-        let mut features = WasmFeatures {
-            multi_memory: false,
-            ..Default::default()
-        };
+        let mut features = WasmFeatures::default();
+        features.set(WasmFeatures::MULTI_MEMORY, false);
         match Validator::new_with_features(features).validate_all(translation.wasm) {
             // This module validates without multi-memory, no need to augment
             // it
             Ok(_) => return Ok(Translation::Normal(translation)),
             Err(e) => {
-                features.multi_memory = true;
+                features.set(WasmFeatures::MULTI_MEMORY, true);
                 match Validator::new_with_features(features).validate_all(translation.wasm) {
                     // This module validates with multi-memory, so fall through
                     // to augmentation.
@@ -364,12 +362,14 @@ impl Augmenter<'_> {
                 TypeRef::Global(g) => EntityType::Global(wasm_encoder::GlobalType {
                     mutable: g.mutable,
                     val_type: valtype(g.content_type),
+                    shared: g.shared,
                 }),
                 TypeRef::Memory(m) => EntityType::Memory(wasm_encoder::MemoryType {
                     maximum: m.maximum,
                     minimum: m.initial,
                     memory64: m.memory64,
                     shared: m.shared,
+                    page_size_log2: m.page_size_log2,
                 }),
                 TypeRef::Table(_) => unimplemented!(),
                 TypeRef::Tag(_) => unimplemented!(),
@@ -730,6 +730,7 @@ macro_rules! define_translate {
     // Individual cases of mapping one argument type to another, similar to the
     // `define_visit` macro above.
     (map $self:ident $arg:ident memarg) => {$self.memarg($arg)};
+    (map $self:ident $arg:ident ordering) => {$self.ordering($arg)};
     (map $self:ident $arg:ident blockty) => {$self.blockty($arg)};
     (map $self:ident $arg:ident hty) => {$self.heapty($arg)};
     (map $self:ident $arg:ident tag_index) => {$arg};
@@ -812,6 +813,13 @@ impl Translator<'_, '_> {
             align: ty.align.into(),
             offset: ty.offset,
             memory_index: self.augmenter.remap_memory(ty.memory),
+        }
+    }
+
+    fn ordering(&self, ty: wasmparser::Ordering) -> wasm_encoder::Ordering {
+        match ty {
+            wasmparser::Ordering::AcqRel => wasm_encoder::Ordering::AcqRel,
+            wasmparser::Ordering::SeqCst => wasm_encoder::Ordering::SeqCst,
         }
     }
 

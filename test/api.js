@@ -155,7 +155,7 @@ export async function apiTest(fixtures) {
         [
           "processed-by",
           [
-            ["wit-component", "0.202.0"],
+            ["wit-component", "0.209.1"],
             ["dummy-gen", "test"],
           ],
         ],
@@ -196,7 +196,7 @@ export async function apiTest(fixtures) {
         [
           "processed-by",
           [
-            ["wit-component", "0.202.0"],
+            ["wit-component", "0.209.1"],
             ["dummy-gen", "test"],
           ],
         ],

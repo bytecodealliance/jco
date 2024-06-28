@@ -10,11 +10,11 @@ use crate::source;
 use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
 use heck::*;
-use indexmap::IndexMap;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
+use wasmparser::collections::IndexMap;
 use wasmtime_environ::component::Transcode;
 use wasmtime_environ::{
     component,
@@ -425,7 +425,7 @@ impl<'a> Instantiator<'a, '_> {
                 .find(|(_, (impt_name, _))| impt_name == name)
             else {
                 match item {
-                    WorldItem::Interface(_) => unreachable!(),
+                    WorldItem::Interface { .. } => unreachable!(),
                     WorldItem::Function(_) => unreachable!(),
                     WorldItem::Type(ty) => {
                         assert!(!matches!(
@@ -437,12 +437,12 @@ impl<'a> Instantiator<'a, '_> {
                 continue;
             };
             match item {
-                WorldItem::Interface(iface) => {
+                WorldItem::Interface { id, stability: _ } => {
                     let TypeDef::ComponentInstance(instance) = import else {
                         unreachable!()
                     };
                     let import_ty = &self.types[*instance];
-                    let iface = &self.resolve.interfaces[*iface];
+                    let iface = &self.resolve.interfaces[*id];
                     for (ty_name, ty) in &iface.types {
                         match &import_ty.exports.get(ty_name) {
                             Some(TypeDef::Resource(resource)) => {
@@ -477,8 +477,8 @@ impl<'a> Instantiator<'a, '_> {
                 .find(|(expt_name, _)| *expt_name == name)
                 .unwrap();
             match item {
-                WorldItem::Interface(iface) => {
-                    let iface = &self.resolve.interfaces[*iface];
+                WorldItem::Interface { id, stability: _ } => {
+                    let iface = &self.resolve.interfaces[*id];
                     let Export::Instance { exports, .. } = &export else {
                         unreachable!()
                     };
@@ -1038,9 +1038,9 @@ impl<'a> Instantiator<'a, '_> {
                     assert_eq!(path.len(), 0);
                     (func, import_name, None)
                 }
-                WorldItem::Interface(i) => {
+                WorldItem::Interface { id, stability: _ } => {
                     assert_eq!(path.len(), 1);
-                    let iface = &self.resolve.interfaces[*i];
+                    let iface = &self.resolve.interfaces[*id];
                     let func = &iface.functions[&path[0]];
                     (
                         func,
@@ -1339,7 +1339,10 @@ impl<'a> Instantiator<'a, '_> {
                             self.resolve.worlds[self.world]
                                 .imports
                                 .iter()
-                                .find(|&(_, item)| *item == WorldItem::Interface(iface))
+                                .find(|&(_, item)| match item {
+                                    WorldItem::Interface { id, .. } => *id == iface,
+                                    _ => false,
+                                })
                                 .unwrap()
                                 .0
                                 .clone(),
@@ -1715,7 +1718,7 @@ impl<'a> Instantiator<'a, '_> {
                 } => {
                     let func = match item {
                         WorldItem::Function(f) => f,
-                        WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
+                        WorldItem::Interface { .. } | WorldItem::Type(_) => unreachable!(),
                     };
                     self.create_resource_fn_map(func, *func_ty, &mut resource_map);
 
@@ -1735,8 +1738,8 @@ impl<'a> Instantiator<'a, '_> {
                     .to_string();
                     self.export_bindgen(
                         &local_name,
-                        def,
-                        options,
+                        &def,
+                        &options,
                         func,
                         export_name,
                         &resource_map,
@@ -1761,7 +1764,7 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 Export::Instance { exports, .. } => {
                     let id = match item {
-                        WorldItem::Interface(id) => *id,
+                        WorldItem::Interface { id, stability: _ } => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
                     for (func_name, export) in exports {
@@ -1786,7 +1789,7 @@ impl<'a> Instantiator<'a, '_> {
                                 &self.exports_resource_types,
                             )
                         } else {
-                            self.gen.local_names.create_once(func_name)
+                            self.gen.local_names.create_once(&func_name)
                         }
                         .to_string();
 
