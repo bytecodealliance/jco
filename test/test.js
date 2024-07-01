@@ -29,11 +29,11 @@ import { preview2Test } from './preview2.js';
 import { witTest } from './wit.js';
 import { tsTest } from './typescript.js';
 
-// await codegenTest(componentFixtures);
-// tsTest();
-// await preview2Test();
-// await runtimeTest(componentFixtures);
-// await commandsTest();
-// await apiTest(componentFixtures);
-// await cliTest(componentFixtures);
+await codegenTest(componentFixtures);
+tsTest();
+await preview2Test();
+await runtimeTest(componentFixtures);
+await commandsTest();
+await apiTest(componentFixtures);
+await cliTest(componentFixtures);
 await witTest();

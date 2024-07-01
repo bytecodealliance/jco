@@ -107,8 +107,20 @@ impl Guest for WasmToolsJs {
         };
 
         let world_string = embed_opts.world.as_ref().map(|world| world.to_string());
+
+        // We expect only one package to be present
+        let pkg_id = match package_ids[..] {
+            [pkg] => pkg,
+            _ => {
+                return Err(format!(
+                    "expected 1 package after resolving, found [{}]",
+                    package_ids.len()
+                ));
+            }
+        };
+
         let world = resolve
-            .select_world(&package_ids, world_string.as_deref())
+            .select_world(pkg_id, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let string_encoding = match &embed_opts.string_encoding {

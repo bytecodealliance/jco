@@ -563,7 +563,7 @@ dependencies = [
  "wat",
  "wit-bindgen",
  "wit-component",
- "wit-parser",
+ "wit-parser 0.209.1",
 ]
 
 [[package]]
@@ -578,6 +578,18 @@ dependencies = [
  "indexmap",
  "semver",
  "serde",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.209.1"
+source = "git+https://github.com/bytecodealliance/wasm-tools?rev=10d2e21b2171cf2a2227f9de04ac89985042a5f0#10d2e21b2171cf2a2227f9de04ac89985042a5f0"
+dependencies = [
+ "ahash",
+ "bitflags 2.6.0",
+ "hashbrown",
+ "indexmap",
+ "semver",
 ]
 
 [[package]]
@@ -601,7 +613,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ceca8ae6eaa8c7c87b33c25c53bdf299f8c2a764aee1179402ff7652ef3a6859"
 dependencies = [
  "anyhow",
- "wasmparser 0.209.1",
+ "wasmparser 0.209.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -638,7 +650,7 @@ dependencies = [
  "serde_derive",
  "target-lexicon",
  "wasm-encoder 0.209.1",
- "wasmparser 0.209.1",
+ "wasmparser 0.209.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasmprinter 0.209.1",
  "wasmtime-component-util",
  "wasmtime-types",
@@ -654,7 +666,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "smallvec",
- "wasmparser 0.209.1",
+ "wasmparser 0.209.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -801,7 +813,7 @@ checksum = "1b43fbdd3497c471bbfb6973b1fb9ffe6949f158248cb43171d6f1cf3de7eaa3"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
- "wit-parser",
+ "wit-parser 0.212.0",
 ]
 
 [[package]]
@@ -861,7 +873,24 @@ dependencies = [
  "wasm-metadata",
  "wasmparser 0.212.0",
  "wat",
- "wit-parser",
+ "wit-parser 0.212.0",
+]
+
+[[package]]
+name = "wit-parser"
+version = "0.209.1"
+source = "git+https://github.com/bytecodealliance/wasm-tools?rev=10d2e21b2171cf2a2227f9de04ac89985042a5f0#10d2e21b2171cf2a2227f9de04ac89985042a5f0"
+dependencies = [
+ "anyhow",
+ "id-arena",
+ "indexmap",
+ "log",
+ "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "unicode-xid",
+ "wasmparser 0.209.1 (git+https://github.com/bytecodealliance/wasm-tools?rev=10d2e21b2171cf2a2227f9de04ac89985042a5f0)",
 ]
 
 [[package]]

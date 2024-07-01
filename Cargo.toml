@@ -49,7 +49,11 @@ wat = "1.212.0"
 wit-bindgen = "0.27.0"
 wit-bindgen-core = "0.27.0"
 wit-component = { version = "0.212.0", features = ["dummy-module"] }
-wit-parser = "0.212.0"
+#wit-parser = "0.212.0"
+# NOTE: we can't use the version of wasm-tools below *just* yet, because it 
+# uses an unreleased version of wit-parser (the only errors left are wit_parser::resolve::Resolve 
+# version inconsistencies
+wit-parser = { git = "https://github.com/bytecodealliance/wasm-tools", rev = "10d2e21b2171cf2a2227f9de04ac89985042a5f0" }
 xshell = "0.2.6"
 
 [dev-dependencies]
