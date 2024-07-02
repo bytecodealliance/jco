@@ -11,6 +11,7 @@ pub(crate) fn run() -> Result<()> {
         let preview2_wit_path = "./test/fixtures/wit";
 
         let mut resolve = Resolve::default();
+        resolve.all_features = true;
         let (_, _) = resolve.push_dir(&PathBuf::from(preview2_wit_path))?;
 
         let world_parts: Vec<&str> = world.split('/').collect();

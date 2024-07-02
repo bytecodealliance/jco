@@ -117,6 +117,7 @@ impl Guest for JsComponentBindgenComponent {
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
         let mut resolve = Resolve::default();
+        resolve.all_features = true;
         let mut pkgs = Vec::<PackageId>::new();
         match opts.wit {
             Wit::Source(source) => {

@@ -73,6 +73,7 @@ impl Guest for WasmToolsJs {
         let binary = &embed_opts.binary;
 
         let mut resolve = Resolve::default();
+        resolve.all_features = true;
         let mut package_ids = Vec::<PackageId>::new();
         if let Some(wit_source) = &embed_opts.wit_source {
             let path = PathBuf::from("component.wit");

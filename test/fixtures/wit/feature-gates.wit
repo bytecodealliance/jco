@@ -15,8 +15,8 @@ interface foo {
   @since(version = 0.2.2)
   c: func();
 
-  // @unstable(feature = fancier-foo)
-  // d: func();
+  @unstable(feature = fancier-foo)
+  d: func();
 }
 
 world imported {
