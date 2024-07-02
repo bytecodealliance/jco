@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use js_component_bindgen::{
     generate_types,
-    source::wit_parser::{Resolve, UnresolvedPackage},
+    source::wit_parser::{PackageId, Resolve, UnresolvedPackageGroup},
     transpile,
 };
 
@@ -117,16 +117,28 @@ impl Guest for JsComponentBindgenComponent {
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
         let mut resolve = Resolve::default();
-        let id = match opts.wit {
+        resolve.all_features = true;
+        let mut pkgs = Vec::<PackageId>::new();
+        match opts.wit {
             Wit::Source(source) => {
-                let pkg = UnresolvedPackage::parse(&PathBuf::from(format!("{name}.wit")), &source)
+                let UnresolvedPackageGroup {
+                    packages,
+                    source_map,
+                } = UnresolvedPackageGroup::parse(&PathBuf::from(format!("{name}.wit")), &source)
                     .map_err(|e| e.to_string())?;
-                resolve.push(pkg).map_err(|e| e.to_string())?
+
+                for unresolved_pkg in packages {
+                    pkgs.push(
+                        resolve
+                            .push(unresolved_pkg, &source_map)
+                            .map_err(|e| e.to_string())?,
+                    );
+                }
             }
             Wit::Path(path) => {
                 let path = PathBuf::from(path);
                 if path.is_dir() {
-                    resolve.push_dir(&path).map_err(|e| e.to_string())?.0
+                    pkgs = resolve.push_dir(&path).map_err(|e| e.to_string())?.0;
                 } else {
                     let contents = std::fs::read(&path)
                         .with_context(|| format!("failed to read file {path:?}"))
@@ -135,8 +147,17 @@ impl Guest for JsComponentBindgenComponent {
                         Ok(s) => s,
                         Err(_) => return Err("input file is not valid utf-8".into()),
                     };
-                    let pkg = UnresolvedPackage::parse(&path, text).map_err(|e| e.to_string())?;
-                    resolve.push(pkg).map_err(|e| e.to_string())?
+                    let UnresolvedPackageGroup {
+                        packages,
+                        source_map,
+                    } = UnresolvedPackageGroup::parse(&path, text).map_err(|e| e.to_string())?;
+                    for unresolved_pkg in packages {
+                        pkgs.push(
+                            resolve
+                                .push(unresolved_pkg, &source_map)
+                                .map_err(|e| e.to_string())?,
+                        );
+                    }
                 }
             }
             Wit::Binary(_) => todo!(),
@@ -144,7 +165,7 @@ impl Guest for JsComponentBindgenComponent {
 
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
-            .select_world(id, world_string.as_deref())
+            .select_world(&pkgs, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let opts = js_component_bindgen::TranspileOpts {

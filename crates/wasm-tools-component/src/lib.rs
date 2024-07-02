@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use wasm_encoder::{Encode, Section};
 use wasm_metadata::Producers;
 use wit_component::{ComponentEncoder, DecodedWasm, WitPrinter};
-use wit_parser::{Resolve, UnresolvedPackage};
+use wit_parser::{PackageId, Resolve, UnresolvedPackageGroup};
 
 use exports::local::wasm_tools::tools::{
     EmbedOpts, Guest, ModuleMetaType, ModuleMetadata, ProducersFields, StringEncoding,
@@ -58,12 +58,12 @@ impl Guest for WasmToolsJs {
         // let world = decode_world("component", &binary);
 
         let doc = match &decoded {
-            DecodedWasm::WitPackage(_resolve, _pkg) => panic!("Unexpected wit package"),
+            DecodedWasm::WitPackages(_resolve, _pkg) => panic!("Unexpected wit package"),
             DecodedWasm::Component(resolve, world) => resolve.worlds[*world].package.unwrap(),
         };
 
         let output = WitPrinter::default()
-            .print(decoded.resolve(), doc)
+            .print(decoded.resolve(), &[doc])
             .map_err(|e| format!("Unable to print wit\n${:?}", e))?;
 
         Ok(output)
@@ -73,24 +73,55 @@ impl Guest for WasmToolsJs {
         let binary = &embed_opts.binary;
 
         let mut resolve = Resolve::default();
-
-        let id = if let Some(wit_source) = &embed_opts.wit_source {
+        resolve.all_features = true;
+        let mut package_ids = Vec::<PackageId>::new();
+        if let Some(wit_source) = &embed_opts.wit_source {
             let path = PathBuf::from("component.wit");
-            let pkg = UnresolvedPackage::parse(&path, wit_source).map_err(|e| e.to_string())?;
-            resolve.push(pkg).map_err(|e| e.to_string())?
+            let UnresolvedPackageGroup {
+                packages,
+                source_map,
+            } = UnresolvedPackageGroup::parse(&path, wit_source).map_err(|e| e.to_string())?;
+            for unresolved_pkg in packages {
+                package_ids.push(
+                    resolve
+                        .push(unresolved_pkg, &source_map)
+                        .map_err(|e| e.to_string())?,
+                );
+            }
         } else {
             let wit_path = &PathBuf::from(embed_opts.wit_path.as_ref().unwrap());
             if metadata(wit_path).unwrap().is_file() {
-                let pkg = UnresolvedPackage::parse_file(wit_path).map_err(|e| e.to_string())?;
-                resolve.push(pkg).map_err(|e| e.to_string())?
+                let UnresolvedPackageGroup {
+                    packages,
+                    source_map,
+                } = UnresolvedPackageGroup::parse_file(wit_path).map_err(|e| e.to_string())?;
+                for unresolved_pkg in packages {
+                    package_ids.push(
+                        resolve
+                            .push(unresolved_pkg, &source_map)
+                            .map_err(|e| e.to_string())?,
+                    );
+                }
             } else {
-                resolve.push_dir(wit_path).map_err(|e| e.to_string())?.0
+                package_ids = resolve.push_dir(wit_path).map_err(|e| e.to_string())?.0;
             }
         };
 
         let world_string = embed_opts.world.as_ref().map(|world| world.to_string());
+
+        // We expect only one package to be present
+        let pkg_id = match package_ids[..] {
+            [pkg] => pkg,
+            _ => {
+                return Err(format!(
+                    "expected 1 package after resolving, found [{}]",
+                    package_ids.len()
+                ));
+            }
+        };
+
         let world = resolve
-            .select_world(id, world_string.as_deref())
+            .select_world(&[pkg_id], world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let string_encoding = match &embed_opts.string_encoding {

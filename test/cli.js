@@ -7,11 +7,13 @@ import {
   writeFile,
   mkdtemp,
 } from "node:fs/promises";
-import { fileURLToPath, pathToFileURL } from "url";
-import { exec, jcoPath } from "./helpers.js";
 import { tmpdir, EOL } from "node:os";
 import { resolve, normalize, sep } from "node:path";
 import { execArgv } from "node:process";
+
+import { fileURLToPath, pathToFileURL } from "url";
+
+import { exec, jcoPath, getTmpDir } from "./helpers.js";
 
 const multiMemory = execArgv.includes("--experimental-wasm-multi-memory")
   ? ["--multi-memory"]
@@ -19,15 +21,6 @@ const multiMemory = execArgv.includes("--experimental-wasm-multi-memory")
 
 export async function cliTest(fixtures) {
   suite("CLI", () => {
-    /**
-     * Securely creates a temporary directory and returns its path.
-     *
-     * The new directory is created using `fsPromises.mkdtemp()`.
-     */
-    async function getTmpDir() {
-      return await mkdtemp(normalize(tmpdir() + sep));
-    }
-
     var tmpDir;
     var outDir;
     var outFile;

@@ -1,27 +1,27 @@
-mod core;
-mod files;
-mod transpile_bindgen;
-mod ts_bindgen;
-
-pub mod esm_bindgen;
-pub mod function_bindgen;
-pub mod intrinsics;
-pub mod names;
-pub mod source;
-pub use transpile_bindgen::{BindingsMode, InstantiationMode, TranspileOpts};
-
-use anyhow::Result;
-use transpile_bindgen::transpile_bindgen;
-
-use anyhow::{bail, Context};
+use anyhow::{bail, Context, Result};
 use wasmtime_environ::component::Export;
 use wasmtime_environ::component::{ComponentTypesBuilder, StaticModuleIndex};
 use wasmtime_environ::wasmparser::Validator;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
+mod core;
+mod files;
+
+pub mod esm_bindgen;
+pub mod function_bindgen;
+pub mod intrinsics;
+pub mod names;
+pub mod source;
+
+mod transpile_bindgen;
+use transpile_bindgen::transpile_bindgen;
+pub use transpile_bindgen::{BindingsMode, InstantiationMode, TranspileOpts};
+
+mod ts_bindgen;
 use ts_bindgen::ts_bindgen;
-use wit_parser::{Resolve, Type, TypeDefKind, TypeId, WorldId};
+
+use wit_bindgen_core::wit_parser::{Resolve, Type, TypeDefKind, TypeId, WorldId};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -96,7 +96,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .context("failed to extract interface information from component")?;
 
     let (resolve, world_id) = match decoded {
-        DecodedWasm::WitPackage(..) => bail!("unexpected wit package as input"),
+        DecodedWasm::WitPackages(..) => bail!("unexpected wit package as input"),
         DecodedWasm::Component(resolve, world_id) => (resolve, world_id),
     };
 
@@ -128,7 +128,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .map(|(_i, module)| core::Translation::new(module, opts.multi_memory))
         .collect::<Result<_>>()?;
 
-    let types = types.finish(&PrimaryMap::new(), Vec::new(), Vec::new());
+    let types = types.finish(&wasmtime_environ::component::Component::default());
 
     // Insert all core wasm modules into the generated `Files` which will
     // end up getting used in the `generate_instantiate` method.

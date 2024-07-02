@@ -39,7 +39,6 @@
 use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
-use wasmparser::collections::IndexMap;
 use wasmparser::*;
 use wasmtime_environ::component::CoreDef;
 use wasmtime_environ::{wasmparser, ModuleTranslation};
@@ -91,8 +90,7 @@ impl<'a> Translation<'a> {
         let mut features = WasmFeatures::default();
         features.set(WasmFeatures::MULTI_MEMORY, false);
         match Validator::new_with_features(features).validate_all(translation.wasm) {
-            // This module validates without multi-memory, no need to augment
-            // it
+            // This module validates without multi-memory, no need to augment it
             Ok(_) => return Ok(Translation::Normal(translation)),
             Err(e) => {
                 features.set(WasmFeatures::MULTI_MEMORY, true);
@@ -190,7 +188,7 @@ impl<'a> Translation<'a> {
 
     /// Returns the exports of this module, which are not modified by
     /// augmentation.
-    pub fn exports(&self) -> &IndexMap<String, EntityIndex> {
+    pub fn exports(&self) -> &wasmparser::collections::IndexMap<String, EntityIndex> {
         match self {
             Translation::Normal(translation) => &translation.module.exports,
             Translation::Augmented { original, .. } => &original.module.exports,
@@ -704,10 +702,10 @@ macro_rules! define_translate {
     });
     (mk CallIndirect $ty:ident $table:ident $table_byte:ident) => ({
         let _ = $table_byte;
-        CallIndirect { ty: $ty, table: $table }
+        CallIndirect { type_index: $ty, table_index: $table }
     });
     (mk ReturnCallIndirect $ty:ident $table:ident) => (
-        ReturnCallIndirect { ty: $ty, table: $table }
+        ReturnCallIndirect { type_index: $ty, table_index: $table }
     );
     (mk I32Const $v:ident) => (I32Const($v));
     (mk I64Const $v:ident) => (I64Const($v));

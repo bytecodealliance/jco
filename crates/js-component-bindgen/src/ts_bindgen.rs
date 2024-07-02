@@ -8,7 +8,11 @@ use heck::*;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
-use wit_parser::*;
+
+use wit_bindgen_core::wit_parser::{
+    Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
+    Tuple, Type, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem, WorldKey,
+};
 
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the
@@ -70,7 +74,7 @@ pub fn ts_bindgen(
                 WorldItem::Interface { id, stability: _ } => match name {
                     WorldKey::Name(name) => {
                         // kebab name -> direct ns namespace import
-                        bindgen.import_interface(resolve, name, *id, files);
+                        bindgen.import_interface(resolve, &name, *id, files);
                     }
                     // namespaced ns:pkg/iface
                     // TODO: map support
