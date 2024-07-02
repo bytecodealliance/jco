@@ -120,7 +120,7 @@ impl Guest for WasmToolsJs {
         };
 
         let world = resolve
-            .select_world(pkg_id, world_string.as_deref())
+            .select_world(&[pkg_id], world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let string_encoding = match &embed_opts.string_encoding {
