@@ -119,7 +119,7 @@ async function wasm2Js (source) {
  * @param {{
  *   name: string,
  *   instantiation?: 'async' | 'sync',
- *   importBindings?: 'js' | 'optimized', 'hybrid', 'direct-optimized',
+ *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
  *   map?: Record<string, string>,
  *   validLiftingOptimization?: bool,
  *   tracing?: bool,
