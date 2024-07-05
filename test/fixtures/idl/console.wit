@@ -1,0 +1,30 @@
+package idl:console@0.0.1;
+
+interface console {
+    
+        assert: func(condition: option<bool>, data: string);
+        clear: func();
+        debug: func(data: string);
+        error: func(data: string);
+        info: func(data: string);
+        log: func(data: string);
+        table: func(tabular-data: option<string>, properties: option<list<string>>);
+        trace: func(data: string);
+        warn: func(data: string);
+        dir: func(item: option<string>);
+        dirxml: func(data: string);
+        count: func(label: option<string>);
+        count-reset: func(label: option<string>);
+        group: func(data: string);
+        group-collapsed: func(data: string);
+        group-end: func();
+        time: func(label: option<string>);
+        time-log: func(label: option<string>, data: string);
+        time-end: func(label: option<string>);
+    }
+
+world idl {
+    import console;
+    /// for testing (in reality this should be an included world for the test)
+    export test: func() -> result<_, string>;
+}

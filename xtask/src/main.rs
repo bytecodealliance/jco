@@ -36,6 +36,8 @@ enum Generate {
     Tests,
     /// Generate the WASI Preview 2 types
     WasiTypes,
+    /// Generate web IDL definitions
+    Idl,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -53,6 +55,7 @@ fn main() -> anyhow::Result<()> {
         Opts::Test(Platform::Node) => test::run(false),
         Opts::Test(Platform::Deno) => test::run(true),
         Opts::Generate(Generate::Tests) => generate::tests::run(),
+        Opts::Generate(Generate::Idl) => generate::idl::run(),
         Opts::Generate(Generate::WasiTypes) => generate::wasi_types::run(),
     }
 }
