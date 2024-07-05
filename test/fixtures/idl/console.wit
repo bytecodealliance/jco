@@ -1,0 +1,30 @@
+
+                package webidl:console@0.0.1;
+
+interface global-console {
+  assert: func(condition: option<bool>, data: list<string>);
+  clear: func();
+  debug: func(data: list<string>);
+  error: func(data: list<string>);
+  info: func(data: list<string>);
+  log: func(data: list<string>);
+  table: func(tabular-data: option<string>, properties: option<list<string>>);
+  trace: func(data: list<string>);
+  warn: func(data: list<string>);
+  dir: func(item: option<string>);
+  dirxml: func(data: list<string>);
+  count: func(label: option<string>);
+  count-reset: func(label: option<string>);
+  group: func(data: list<string>);
+  group-collapsed: func(data: list<string>);
+  group-end: func();
+  time: func(label: option<string>);
+  time-log: func(label: option<string>, data: list<string>);
+  time-end: func(label: option<string>);
+}
+
+                world console-test {
+                    import global-console;
+                    export test: func();
+                }
+            

@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "url";
 import { exec, jcoPath } from "./helpers.js";
-import { tmpdir, EOL } from "node:os";
+import { tmpdir } from "node:os";
 import { resolve, normalize, sep } from "node:path";
 import { execArgv } from "node:process";
 

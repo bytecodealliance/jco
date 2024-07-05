@@ -33,9 +33,11 @@ enum Build {
 #[derive(StructOpt)]
 enum Generate {
     /// Generate WASI conformance tests from Wasmtime
-    Tests,
+    Preview2Tests,
     /// Generate the WASI Preview 2 types
     WasiTypes,
+    /// Generate WebIDL tests
+    WebidlTests,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -52,7 +54,8 @@ fn main() -> anyhow::Result<()> {
         }
         Opts::Test(Platform::Node) => test::run(false),
         Opts::Test(Platform::Deno) => test::run(true),
-        Opts::Generate(Generate::Tests) => generate::tests::run(),
+        Opts::Generate(Generate::Preview2Tests) => generate::preview2_tests::run(),
+        Opts::Generate(Generate::WebidlTests) => generate::webidl_tests::run(),
         Opts::Generate(Generate::WasiTypes) => generate::wasi_types::run(),
     }
 }

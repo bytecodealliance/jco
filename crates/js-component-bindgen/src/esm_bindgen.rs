@@ -1,5 +1,6 @@
 use heck::ToLowerCamelCase;
 
+use crate::intrinsics::Intrinsic;
 use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source::Source;
 use crate::{uwrite, uwriteln, TranspileOpts};
@@ -208,14 +209,29 @@ impl EsmBindgen {
     ) {
         let mut iface_imports = Vec::new();
         for (specifier, binding) in &self.imports {
-            if imports_object.is_some() {
+            let idl_binding = if specifier.starts_with("webidl:") {
+                let iface_idx = specifier.find('/').unwrap() + 1;
+                let iface_name = if let Some(version_idx) = specifier.find('@') {
+                    &specifier[iface_idx..version_idx]
+                } else {
+                    &specifier[iface_idx..]
+                };
+                Some(if iface_name.starts_with("global-") {
+                    &iface_name[7..]
+                } else {
+                    ""
+                })
+            } else {
+                None
+            };
+            if imports_object.is_some() || idl_binding.is_some() {
                 uwrite!(output, "const ");
             } else {
                 uwrite!(output, "import ");
             }
             match binding {
                 Binding::Interface(bindings) => {
-                    if imports_object.is_none() && bindings.len() == 1 {
+                    if imports_object.is_none() && idl_binding.is_none() && bindings.len() == 1 {
                         let (import_name, import) = bindings.iter().next().unwrap();
                         if import_name == "default" {
                             let local_name = match import {
@@ -252,7 +268,7 @@ impl EsmBindgen {
                         };
                         if external_name == local_name {
                             uwrite!(output, "{external_name}");
-                        } else if imports_object.is_some() {
+                        } else if imports_object.is_some() || idl_binding.is_some() {
                             uwrite!(output, "{external_name}: {local_name}");
                         } else {
                             uwrite!(output, "{external_name} as {local_name}");
@@ -267,6 +283,14 @@ impl EsmBindgen {
                             "}} = {imports_object}{};",
                             maybe_quote_member(specifier)
                         );
+                    } else if let Some(idl_binding) = idl_binding {
+                        uwrite!(output, "}} = {}()", Intrinsic::GlobalThisIdlProxy.name());
+                        if idl_binding != "" {
+                            for segment in idl_binding.split('-') {
+                                uwrite!(output, ".{}()", segment.to_lowercase());
+                            }
+                        }
+                        uwrite!(output, ";\n");
                     } else {
                         uwriteln!(output, "}} from '{specifier}';");
                     }

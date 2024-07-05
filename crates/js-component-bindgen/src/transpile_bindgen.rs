@@ -1286,6 +1286,9 @@ impl<'a> Instantiator<'a, '_> {
         import_binding: Option<String>,
         local_name: String,
     ) {
+        if import_specifier.starts_with("webidl:") {
+            self.gen.intrinsic(Intrinsic::GlobalThisIdlProxy);
+        }
         // add the function import to the ESM bindgen
         if let Some(_iface_name) = iface_name {
             // mapping can be used to construct virtual nested namespaces

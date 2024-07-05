@@ -26,6 +26,7 @@ import { apiTest } from './api.js';
 import { cliTest } from './cli.js';
 import { preview2Test } from './preview2.js';
 import { tsTest } from './typescript.js';
+import { browserTest } from './browser.js';
 
 await codegenTest(componentFixtures);
 tsTest();
@@ -34,3 +35,4 @@ await runtimeTest(componentFixtures);
 await commandsTest();
 await apiTest(componentFixtures);
 await cliTest(componentFixtures);
+await browserTest();

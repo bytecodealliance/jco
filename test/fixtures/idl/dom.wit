@@ -1,0 +1,421 @@
+
+                package webidl:dom@0.0.1;
+
+world window {
+  import dom;
+}
+
+interface dom {
+  resource console {
+    assert: func(condition: option<bool>, data: list<string>);
+    clear: func();
+    debug: func(data: list<string>);
+    error: func(data: list<string>);
+    info: func(data: list<string>);
+    log: func(data: list<string>);
+    table: func(tabular-data: option<string>, properties: option<list<string>>);
+    trace: func(data: list<string>);
+    warn: func(data: list<string>);
+    dir: func(item: option<string>);
+    dirxml: func(data: list<string>);
+    count: func(label: option<string>);
+    count-reset: func(label: option<string>);
+    group: func(data: list<string>);
+    group-collapsed: func(data: list<string>);
+    group-end: func();
+    time: func(label: option<string>);
+    time-log: func(label: option<string>, data: list<string>);
+    time-end: func(label: option<string>);
+  }
+  resource node {
+    node-type: func() -> u16;
+    node-name: func() -> string;
+    base-uri: func() -> string;
+    is-connected: func() -> bool;
+    owner-document: func() -> option<document>;
+    get-root-node: func(options: option<get-root-node-options>) -> node;
+    parent-node: func() -> option<node>;
+    parent-element: func() -> option<element>;
+    has-child-nodes: func() -> bool;
+    child-nodes: func() -> node-list;
+    first-child: func() -> option<node>;
+    last-child: func() -> option<node>;
+    previous-sibling: func() -> option<node>;
+    next-sibling: func() -> option<node>;
+    node-value: func() -> string;
+    set-node-value: func(node-value: string);
+    text-content: func() -> string;
+    set-text-content: func(text-content: string);
+    normalize: func();
+    clone-node: func(deep: option<bool>) -> node;
+    is-equal-node: func(other-node: option<borrow<node>>) -> bool;
+    is-same-node: func(other-node: option<borrow<node>>) -> bool;
+    compare-document-position: func(other: borrow<node>) -> u16;
+    contains: func(other: option<borrow<node>>) -> bool;
+    lookup-prefix: func(namespace: string) -> string;
+    lookup-namespace-uri: func(prefix: string) -> string;
+    is-default-namespace: func(namespace: string) -> bool;
+    insert-before: func(node: borrow<node>, child: option<borrow<node>>) -> node;
+    append-child: func(node: borrow<node>) -> node;
+    replace-child: func(node: borrow<node>, child: borrow<node>) -> node;
+    remove-child: func(child: borrow<node>) -> node;
+  }
+  record get-root-node-options {
+    composed: option<bool>,
+  }
+  resource element {
+    namespace-uri: func() -> string;
+    prefix: func() -> string;
+    local-name: func() -> string;
+    tag-name: func() -> string;
+    id: func() -> string;
+    set-id: func(id: string);
+    class-name: func() -> string;
+    set-class-name: func(class-name: string);
+    class-list: func() -> dom-token-list;
+    slot: func() -> string;
+    set-slot: func(slot: string);
+    has-attributes: func() -> bool;
+    attributes: func() -> named-node-map;
+    get-attribute-names: func() -> list<string>;
+    get-attribute: func(qualified-name: string) -> string;
+    get-attribute-ns: func(namespace: string, local-name: string) -> string;
+    set-attribute: func(qualified-name: string, value: string);
+    set-attribute-ns: func(namespace: string, qualified-name: string, value: string);
+    remove-attribute: func(qualified-name: string);
+    remove-attribute-ns: func(namespace: string, local-name: string);
+    toggle-attribute: func(qualified-name: string, force: option<bool>) -> bool;
+    has-attribute: func(qualified-name: string) -> bool;
+    has-attribute-ns: func(namespace: string, local-name: string) -> bool;
+    get-attribute-node: func(qualified-name: string) -> option<attr>;
+    get-attribute-node-ns: func(namespace: string, local-name: string) -> option<attr>;
+    set-attribute-node: func(attr: borrow<attr>) -> option<attr>;
+    set-attribute-node-ns: func(attr: borrow<attr>) -> option<attr>;
+    remove-attribute-node: func(attr: borrow<attr>) -> attr;
+    attach-shadow: func(init: shadow-root-init) -> shadow-root;
+    shadow-root: func() -> option<shadow-root>;
+    closest: func(selectors: string) -> option<element>;
+    matches: func(selectors: string) -> bool;
+    webkit-matches-selector: func(selectors: string) -> bool;
+    get-elements-by-tag-name: func(qualified-name: string) -> html-collection;
+    get-elements-by-tag-name-ns: func(namespace: string, local-name: string) -> html-collection;
+    get-elements-by-class-name: func(class-names: string) -> html-collection;
+    insert-adjacent-element: func(where: string, element: borrow<element>) -> option<element>;
+    insert-adjacent-text: func(where: string, data: string);
+  }
+  record shadow-root-init {
+    mode: shadow-root-mode,
+    delegates-focus: option<bool>,
+    slot-assignment: option<slot-assignment-mode>,
+    clonable: option<bool>,
+    serializable: option<bool>,
+  }
+  resource shadow-root {
+    mode: func() -> shadow-root-mode;
+    delegates-focus: func() -> bool;
+    slot-assignment: func() -> slot-assignment-mode;
+    clonable: func() -> bool;
+    serializable: func() -> bool;
+    host: func() -> element;
+  }
+  enum shadow-root-mode {
+    open,
+    closed,
+  }
+  enum slot-assignment-mode {
+    manual,
+    named,
+  }
+  resource document-fragment {
+    constructor();
+  }
+  resource html-element {
+    constructor();
+    title: func() -> string;
+    set-title: func(title: string);
+    lang: func() -> string;
+    set-lang: func(lang: string);
+    translate: func() -> bool;
+    set-translate: func(translate: bool);
+    dir: func() -> string;
+    set-dir: func(dir: string);
+    hidden: func() -> bool-or-f64-or-string;
+    set-hidden: func(hidden: bool-or-f64-or-string);
+    inert: func() -> bool;
+    set-inert: func(inert: bool);
+    click: func();
+    access-key: func() -> string;
+    set-access-key: func(access-key: string);
+    access-key-label: func() -> string;
+    draggable: func() -> bool;
+    set-draggable: func(draggable: bool);
+    spellcheck: func() -> bool;
+    set-spellcheck: func(spellcheck: bool);
+    writing-suggestions: func() -> string;
+    set-writing-suggestions: func(writing-suggestions: string);
+    autocapitalize: func() -> string;
+    set-autocapitalize: func(autocapitalize: string);
+    inner-text: func() -> string;
+    set-inner-text: func(inner-text: string);
+    outer-text: func() -> string;
+    set-outer-text: func(outer-text: string);
+    inner-html: func() -> string;
+    set-inner-html: func(inner-html: string);
+    attach-internals: func() -> element-internals;
+    show-popover: func();
+    hide-popover: func();
+    toggle-popover: func(force: option<bool>) -> bool;
+    popover: func() -> string;
+    set-popover: func(popover: string);
+  }
+  variant bool-or-f64-or-string {
+    %bool(bool),
+    %f64(f64),
+    %string(string),
+  }
+  resource element-internals {
+    shadow-root: func() -> option<shadow-root>;
+    set-form-value: func(value: form-data-or-string, state: form-data-or-string);
+    set-validity: func(%flags: option<validity-state-flags>, message: option<string>, anchor: option<borrow<html-element>>);
+    will-validate: func() -> bool;
+    validity: func() -> validity-state;
+    validation-message: func() -> string;
+    check-validity: func() -> bool;
+    report-validity: func() -> bool;
+    labels: func() -> node-list;
+  }
+  variant form-data-or-string {
+    form-data(borrow<form-data>),
+    %string(string),
+  }
+  resource validity-state {
+    value-missing: func() -> bool;
+    type-mismatch: func() -> bool;
+    pattern-mismatch: func() -> bool;
+    too-long: func() -> bool;
+    too-short: func() -> bool;
+    range-underflow: func() -> bool;
+    range-overflow: func() -> bool;
+    step-mismatch: func() -> bool;
+    bad-input: func() -> bool;
+    custom-error: func() -> bool;
+    valid: func() -> bool;
+  }
+  type form-data-entry-value = string;
+  resource form-data {
+    constructor();
+    append: func(name: string, value: string);
+    delete: func(name: string);
+    get: func(name: string) -> option<form-data-entry-value>;
+    get-all: func(name: string) -> list<form-data-entry-value>;
+    has: func(name: string) -> bool;
+    set: func(name: string, value: string);
+  }
+  record validity-state-flags {
+    value-missing: option<bool>,
+    type-mismatch: option<bool>,
+    pattern-mismatch: option<bool>,
+    too-long: option<bool>,
+    too-short: option<bool>,
+    range-underflow: option<bool>,
+    range-overflow: option<bool>,
+    step-mismatch: option<bool>,
+    bad-input: option<bool>,
+    custom-error: option<bool>,
+  }
+  resource html-unknown-element {
+  }
+  enum document-ready-state {
+    loading,
+    interactive,
+    complete,
+  }
+  enum document-visibility-state {
+    visible,
+    hidden,
+  }
+  resource html-script-element {
+    constructor();
+    src: func() -> string;
+    set-src: func(src: string);
+    %type: func() -> string;
+    set-type: func(%type: string);
+    no-module: func() -> bool;
+    set-no-module: func(no-module: bool);
+    async: func() -> bool;
+    set-async: func(async: bool);
+    defer: func() -> bool;
+    set-defer: func(defer: bool);
+    cross-origin: func() -> string;
+    set-cross-origin: func(cross-origin: string);
+    text: func() -> string;
+    set-text: func(text: string);
+    integrity: func() -> string;
+    set-integrity: func(integrity: string);
+    referrer-policy: func() -> string;
+    set-referrer-policy: func(referrer-policy: string);
+    blocking: func() -> dom-token-list;
+    fetch-priority: func() -> string;
+    set-fetch-priority: func(fetch-priority: string);
+    supports: static func(%type: string) -> bool;
+  }
+  resource html-head-element {
+    constructor();
+  }
+  resource dom-string-list {
+    length: func() -> u32;
+    item: func(index: u32) -> string;
+    contains: func(%string: string) -> bool;
+  }
+  resource location {
+    href: func() -> string;
+    set-href: func(href: string);
+    origin: func() -> string;
+    protocol: func() -> string;
+    set-protocol: func(protocol: string);
+    host: func() -> string;
+    set-host: func(host: string);
+    hostname: func() -> string;
+    set-hostname: func(hostname: string);
+    port: func() -> string;
+    set-port: func(port: string);
+    pathname: func() -> string;
+    set-pathname: func(pathname: string);
+    search: func() -> string;
+    set-search: func(search: string);
+    hash: func() -> string;
+    set-hash: func(hash: string);
+    assign: func(url: string);
+    replace: func(url: string);
+    reload: func();
+    ancestor-origins: func() -> dom-string-list;
+  }
+  resource document {
+    parse-html-unsafe: static func(html: string) -> document;
+    location: func() -> option<location>;
+    domain: func() -> string;
+    set-domain: func(domain: string);
+    referrer: func() -> string;
+    cookie: func() -> string;
+    set-cookie: func(cookie: string);
+    last-modified: func() -> string;
+    ready-state: func() -> document-ready-state;
+    title: func() -> string;
+    set-title: func(title: string);
+    dir: func() -> string;
+    set-dir: func(dir: string);
+    body: func() -> option<html-element>;
+    set-body: func(body: option<html-element>);
+    head: func() -> option<html-head-element>;
+    images: func() -> html-collection;
+    embeds: func() -> html-collection;
+    plugins: func() -> html-collection;
+    links: func() -> html-collection;
+    forms: func() -> html-collection;
+    scripts: func() -> html-collection;
+    get-elements-by-name: func(element-name: string) -> node-list;
+    current-script: func() -> option<html-element>;
+    open: func(url: string, name: string, features: string) -> option<window-proxy>;
+    close: func();
+    write: func(text: list<string>);
+    writeln: func(text: list<string>);
+    default-view: func() -> option<window-proxy>;
+    has-focus: func() -> bool;
+    design-mode: func() -> string;
+    set-design-mode: func(design-mode: string);
+    exec-command: func(command-id: string, show-ui: option<bool>, value: option<string>) -> bool;
+    query-command-enabled: func(command-id: string) -> bool;
+    query-command-indeterm: func(command-id: string) -> bool;
+    query-command-state: func(command-id: string) -> bool;
+    query-command-supported: func(command-id: string) -> bool;
+    query-command-value: func(command-id: string) -> string;
+    hidden: func() -> bool;
+    visibility-state: func() -> document-visibility-state;
+  }
+  resource attr {
+    namespace-uri: func() -> string;
+    prefix: func() -> string;
+    local-name: func() -> string;
+    name: func() -> string;
+    value: func() -> string;
+    set-value: func(value: string);
+    owner-element: func() -> option<element>;
+    specified: func() -> bool;
+  }
+  resource html-collection {
+    length: func() -> u32;
+    item: func(index: u32) -> option<element>;
+    named-item: func(name: string) -> option<element>;
+  }
+  resource node-list {
+    item: func(index: u32) -> option<node>;
+    length: func() -> u32;
+  }
+  resource named-node-map {
+    length: func() -> u32;
+    item: func(index: u32) -> option<attr>;
+    get-named-item: func(qualified-name: string) -> option<attr>;
+    get-named-item-ns: func(namespace: string, local-name: string) -> option<attr>;
+    set-named-item: func(attr: borrow<attr>) -> option<attr>;
+    set-named-item-ns: func(attr: borrow<attr>) -> option<attr>;
+    remove-named-item: func(qualified-name: string) -> attr;
+    remove-named-item-ns: func(namespace: string, local-name: string) -> attr;
+  }
+  resource dom-token-list {
+    length: func() -> u32;
+    item: func(index: u32) -> string;
+    contains: func(token: string) -> bool;
+    add: func(tokens: list<string>);
+    remove: func(tokens: list<string>);
+    toggle: func(token: string, force: option<bool>) -> bool;
+    replace: func(token: string, new-token: string) -> bool;
+    supports: func(token: string) -> bool;
+    value: func() -> string;
+    set-value: func(value: string);
+  }
+  resource bar-prop {
+    visible: func() -> bool;
+  }
+  resource window {
+    console: func() -> console;
+    set-console: func(console: console);
+    window: func() -> window-proxy;
+    self: func() -> window-proxy;
+    document: func() -> document;
+    name: func() -> string;
+    set-name: func(name: string);
+    location: func() -> location;
+    locationbar: func() -> bar-prop;
+    menubar: func() -> bar-prop;
+    personalbar: func() -> bar-prop;
+    scrollbars: func() -> bar-prop;
+    statusbar: func() -> bar-prop;
+    toolbar: func() -> bar-prop;
+    status: func() -> string;
+    set-status: func(status: string);
+    close: func();
+    closed: func() -> bool;
+    stop: func();
+    focus: func();
+    blur: func();
+    frames: func() -> window-proxy;
+    length: func() -> u32;
+    top: func() -> option<window-proxy>;
+    parent: func() -> option<window-proxy>;
+    frame-element: func() -> option<element>;
+    open: func(url: option<string>, target: option<string>, features: option<string>) -> option<window-proxy>;
+    origin-agent-cluster: func() -> bool;
+    alert: func(message: string);
+    confirm: func(message: option<string>) -> bool;
+    prompt: func(message: option<string>, default: option<string>) -> string;
+    print: func();
+  }
+  type window-proxy = window;
+  get-window: func() -> window;
+}
+
+                world window-test {
+                include window;
+                export test: func();
+            }
+            
