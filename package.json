@@ -7,7 +7,10 @@
     "jco": "src/jco.js"
   },
   "exports": {
-    "browser": "./src/browser.js",
+    "browser": {
+      "types": "./obj/js-component-bindgen-component.d.ts",
+      "default": "./src/browser.js"
+    },
     "default": "./src/api.js"
   },
   "imports": {
