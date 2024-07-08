@@ -18,6 +18,7 @@ pub enum Intrinsic {
     FinalizationRegistryCreate,
     GetErrorPayload,
     GetErrorPayloadString,
+    GlobalThisIdlProxy,
     HandleTables,
     HasOwnProperty,
     I32ToF32,
@@ -208,6 +209,57 @@ pub fn render_intrinsics(
                     }}
                 ")
             },
+
+            Intrinsic::GlobalThisIdlProxy => output.push_str(r#"
+                const idlRemap = {
+                    'HtmlElement': 'HTMLElement',
+                };
+                function globalThisIdlProxy (ns) {
+                    const INNER = Symbol('inner');
+                    const IS_PROXY = Symbol('isProxy');
+                    function proxy(target, fake = {}) {
+                        const origTarget = target;
+                        return new Proxy(fake, {
+                            get: (_, prop, receiver) => {
+                                // if (idlRemap[prop]) prop = idlRemap[prop];
+                                if (prop === INNER) return origTarget;
+                                if (prop === IS_PROXY) return true;
+                                if (prop.toString().startsWith('as')) {
+                                    return function () {
+                                        return this;
+                                    }
+                                }
+                                const res = Reflect.get(origTarget, prop);
+                                return maybeProxy(res);
+                            },
+                            apply: (_, thisArg, args) => {
+                                const res = Reflect.apply(origTarget, proxyInner(thisArg), args.map(a =>  a[IS_PROXY] ? proxyInner(a) : a));
+                                return typeof res === 'object' ? proxy(res) : res;
+                            },
+                            getPrototypeOf: _ => Reflect.getPrototypeOf(origTarget),
+                            construct: (_, argArray, newTarget) => maybeProxy(Reflect.construct(origTarget, argArray, newTarget)),
+                            defineProperty: (_, property, attributes) => maybeProxy(Reflect.defineProperty(origTarget, property, attributes)),
+                            deleteProperty: (_, p) => maybeProxy(Reflect.deleteProperty(origTarget, p)),
+                            getOwnPropertyDescriptor: (_, p) => Reflect.getOwnPropertyDescriptor(origTarget, p),
+                            has: (_, p) => maybeProxy(Reflect.has(origTarget, p)),
+                            isExtensible: (_) => maybeProxy(Reflect.isExtensible(origTarget)),
+                            ownKeys: _ => maybeProxy(Reflect.ownKeys(origTarget)),
+                            preventExtensions: _ => maybeProxy(Reflect.preventExtensions(origTarget)),
+                            set: (_, p, newValue, receiver) => maybeProxy(Reflect.set(origTarget, p, newValue, receiver)),
+                            setPrototypeOf: (_, v) => maybeProxy(Reflect.setPrototypeOf(origTarget, v)),
+                        });
+                    }
+                    function maybeProxy(res) {
+                        if (typeof res === 'function')
+                            return proxy(res, () => {});
+                        if (typeof res === 'object' && res !== null)
+                            return () => proxy(res);
+                        return res;
+                    }
+                    const proxyInner = proxy => proxy ? proxy[INNER] : proxy;
+                    return proxy(globalThis[ns]);
+                };
+            "#),
 
             Intrinsic::HandleTables => output.push_str("
                 const handleTables = [];
@@ -608,6 +660,7 @@ impl Intrinsic {
             "fetchCompile",
             "finalizationRegistryCreate",
             "getErrorPayload",
+            "globalThisIdlProxy",
             "handleTables",
             "hasOwnProperty",
             "i32ToF32",
@@ -687,6 +740,7 @@ impl Intrinsic {
             Intrinsic::FinalizationRegistryCreate => "finalizationRegistryCreate",
             Intrinsic::GetErrorPayload => "getErrorPayload",
             Intrinsic::GetErrorPayloadString => "getErrorPayloadString",
+            Intrinsic::GlobalThisIdlProxy => "globalThisIdlProxy",
             Intrinsic::HandleTables => "handleTables",
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::I32ToF32 => "i32ToF32",
