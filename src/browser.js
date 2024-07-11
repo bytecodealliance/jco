@@ -1,8 +1,8 @@
-import { $init, generate, generateTypes as _generateTypes } from '../obj/js-component-bindgen-component.js';
+import { $init, generate as _generate, generateTypes as _generateTypes } from '../obj/js-component-bindgen-component.js';
 
 export async function generate () {
   await $init;
-  return generate.apply(this, arguments);
+  return _generate.apply(this, arguments);
 }
 
 export async function generateTypes () {
