@@ -9,8 +9,8 @@ anyhow = { workspace = true }
 js-component-bindgen = { workspace = true, features = ["idl-imports"] }
 semver = "1.0.23"
 structopt = { workspace = true }
-webidl2wit = { git = "https://github.com/guybedford/webidl2wit", branch = "top-level-convention" }
+webidl2wit = { git = "https://github.com/guybedford/webidl2wit", branch = "interface-mode" }
 weedle = "0.13.0"
 wit-component = { workspace = true }
-wit-encoder = { git = "https://github.com/bytecodealliance/wasm-tools.git" }
+wit-encoder = "0.213.0"
 xshell = { workspace = true }

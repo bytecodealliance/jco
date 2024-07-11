@@ -1,11 +1,7 @@
-package idl:console-idl@0.0.1;
 
-world console-idl {
-  import console;
-  export test: func();
-}
+                package idl:console-idl@0.0.1;
 
-interface console {
+interface global-console {
   assert: func(condition: option<bool>, data: list<string>);
   clear: func();
   debug: func(data: list<string>);
@@ -26,3 +22,9 @@ interface console {
   time-log: func(label: option<string>, data: list<string>);
   time-end: func(label: option<string>);
 }
+
+                world console-test {
+                    import global-console;
+                    export test: func();
+                }
+            

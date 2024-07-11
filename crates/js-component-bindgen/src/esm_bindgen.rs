@@ -210,7 +210,16 @@ impl EsmBindgen {
         let mut iface_imports = Vec::new();
         for (specifier, binding) in &self.imports {
             let idl_binding = if let Some(idx) = specifier.find("-idl/") {
-                Some(&specifier[idx + 5..])
+                let iface_name = if let Some(version_idx) = specifier[idx + 5..].find('@') {
+                    &specifier[idx + 5..version_idx]
+                } else {
+                    &specifier[idx + 5..]
+                };
+                Some(if iface_name.starts_with("global-") {
+                    &iface_name[7..]
+                } else {
+                    ""
+                })
             } else {
                 None
             };
@@ -275,8 +284,10 @@ impl EsmBindgen {
                         );
                     } else if let Some(idl_binding) = idl_binding {
                         uwrite!(output, "}} = {}()", Intrinsic::GlobalThisIdlProxy.name());
-                        for segment in idl_binding.split('-') {
-                            uwrite!(output, ".{}()", segment.to_lowercase());
+                        if idl_binding != "" {
+                            for segment in idl_binding.split('-') {
+                                uwrite!(output, ".{}()", segment.to_lowercase());
+                            }
                         }
                         uwrite!(output, ";\n");
                     } else {

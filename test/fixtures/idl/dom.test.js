@@ -1,5 +1,4 @@
-import { getWindow } from 'idl:dom/dom@0.0.1';
-// import { window } from 'idl:web-idl/navigator-gpu@0.0.1';
+import { getWindow } from 'idl:dom-idl/dom@0.0.1';
 
 export function test() {
   const window = getWindow();

@@ -1,5 +1,5 @@
 
-                package idl:dom@0.0.1;
+                package idl:dom-idl@0.0.1;
 
 world window {
   import dom;
@@ -415,7 +415,7 @@ interface dom {
 }
 
                 world window-test {
-                    include window;
-                    export test: func();
-                }
+                include window;
+                export test: func();
+            }
             
