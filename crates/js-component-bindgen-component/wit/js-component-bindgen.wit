@@ -62,6 +62,10 @@ world js-component-bindgen {
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
     multi-memory: option<bool>,
+
+    /// Enable zero-runtime IDL import bindings when imports use the
+    /// package name suffix `-idl`
+    idl-imports: option<bool>,
   }
 
   variant wit {

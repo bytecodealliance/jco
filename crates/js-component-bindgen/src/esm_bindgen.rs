@@ -209,15 +209,19 @@ impl EsmBindgen {
     ) {
         let mut iface_imports = Vec::new();
         for (specifier, binding) in &self.imports {
-            let idl_binding = specifier.starts_with("idl:");
-            if imports_object.is_some() || idl_binding {
+            let idl_binding = if let Some(idx) = specifier.find("-idl/") {
+                Some(&specifier[idx + 5..])
+            } else {
+                None
+            };
+            if imports_object.is_some() || idl_binding.is_some() {
                 uwrite!(output, "const ");
             } else {
                 uwrite!(output, "import ");
             }
             match binding {
                 Binding::Interface(bindings) => {
-                    if imports_object.is_none() && !idl_binding && bindings.len() == 1 {
+                    if imports_object.is_none() && idl_binding.is_none() && bindings.len() == 1 {
                         let (import_name, import) = bindings.iter().next().unwrap();
                         if import_name == "default" {
                             let local_name = match import {
@@ -254,7 +258,7 @@ impl EsmBindgen {
                         };
                         if external_name == local_name {
                             uwrite!(output, "{external_name}");
-                        } else if imports_object.is_some() || idl_binding {
+                        } else if imports_object.is_some() || idl_binding.is_some() {
                             uwrite!(output, "{external_name}: {local_name}");
                         } else {
                             uwrite!(output, "{external_name} as {local_name}");
@@ -269,13 +273,12 @@ impl EsmBindgen {
                             "}} = {imports_object}{};",
                             maybe_quote_member(specifier)
                         );
-                    } else if idl_binding {
-                        uwriteln!(
-                            output,
-                            "}} = {}('{}');",
-                            Intrinsic::GlobalThisIdlProxy.name(),
-                            specifier.split('/').last().unwrap()
-                        );
+                    } else if let Some(idl_binding) = idl_binding {
+                        uwrite!(output, "}} = {}()", Intrinsic::GlobalThisIdlProxy.name());
+                        for segment in idl_binding.split('-') {
+                            uwrite!(output, ".{}()", segment.to_lowercase());
+                        }
+                        uwrite!(output, ";\n");
                     } else {
                         uwriteln!(output, "}} from '{specifier}';");
                     }

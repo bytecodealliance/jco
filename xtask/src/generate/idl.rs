@@ -2,8 +2,8 @@ use std::fs::{read_dir, read_to_string, write};
 
 use anyhow::Result;
 
-use webidl2wit::{webidl_to_wit, ConversionOptions};
-use wit_encoder::{Interface, PackageName};
+use webidl2wit::{webidl_to_wit, ConversionOptions, HandleUnsupported};
+use wit_encoder::PackageName;
 
 const IDL_VERSION_MAJOR: u64 = 0;
 const IDL_VERSION_MINOR: u64 = 0;
@@ -18,6 +18,7 @@ pub(crate) fn run() -> Result<()> {
             continue;
         };
         let name = name.to_string();
+        let interface_name = name.to_string();
         let idl_source = read_to_string(file.path())?;
         let idl = weedle::parse(&idl_source).unwrap();
         let wit = webidl_to_wit(
@@ -34,7 +35,8 @@ pub(crate) fn run() -> Result<()> {
                         build: semver::BuildMetadata::default(),
                     }),
                 ),
-                interface: Interface::new(Some(name.clone())),
+                interface: interface_name.clone(),
+                unsupported_features: HandleUnsupported::Bail,
             },
         )?;
 
@@ -44,16 +46,14 @@ pub(crate) fn run() -> Result<()> {
         write(
             &output_file,
             format!(
-                "{}\nworld idl {{
-    import {name};
-    /// for testing (in reality this should be an included world for the test)
-    export test: func() -> result<_, string>;
-}}\n",
-                // fudging to turn the top-level resource into a top-level interface
-                wit_str
-                    .replace(&format!("resource {name} {{"), "")
-                    .strip_suffix("}\n")
-                    .unwrap()
+                "
+                {}
+                world window-test {{
+                    include window;
+                    export test: func();
+                }}
+            ",
+                wit_str.replace("f64(", "%f64(").replace("-%", "-") // .replace("window-proxy", "window")
             ),
         )
         .unwrap();

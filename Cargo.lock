@@ -374,22 +374,22 @@ checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
 
 [[package]]
 name = "serde"
-version = "1.0.203"
+version = "1.0.204"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7253ab4de971e72fb7be983802300c30b5a7f0c2e56fab8abfc6a214307c0094"
+checksum = "bc76f558e0cbb2a839d37354c575f1dc3fdc6546b5be373ba43d95f231bf7c12"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.203"
+version = "1.0.204"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "500cbc0ebeb6f46627f50f3f5811ccf6bf00643be300b4c3eabc0ef55dc5b5ba"
+checksum = "e0cd7e117be63d3c3678776753929474f3b04a43a080c744d6b0ae2a8c28e222"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.68",
+ "syn 2.0.70",
 ]
 
 [[package]]
@@ -464,9 +464,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.68"
+version = "2.0.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "901fa70d88b9d6c98022e23b4136f9f3e54e4662c3bc1bd1d84a42a9a0f0c1e9"
+checksum = "2f0209b68b3613b093e0ec905354eccaedcfe83b8cb37cbdeae64026c3064c16"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -475,9 +475,9 @@ dependencies = [
 
 [[package]]
 name = "target-lexicon"
-version = "0.12.14"
+version = "0.12.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1fc403891a21bcfb7c37834ba66a547a8f402146eba7265b5a6d88059c9ff2f"
+checksum = "4873307b7c257eddcb50c9bedf158eb669578359fb28428bef438fec8e6ba7c2"
 
 [[package]]
 name = "textwrap"
@@ -664,7 +664,7 @@ dependencies = [
 [[package]]
 name = "webidl2wit"
 version = "0.1.0"
-source = "git+https://github.com/wasi-gfx/webidl2wit?rev=9d606461b638570b65fbb2be074a1f038e1104f2#9d606461b638570b65fbb2be074a1f038e1104f2"
+source = "git+https://github.com/guybedford/webidl2wit?branch=top-level-convention#0a9d7ea31fa93382f17c2a0013ebedbd5df0ae68"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
@@ -675,8 +675,9 @@ dependencies = [
 
 [[package]]
 name = "weedle"
-version = "0.12.0"
-source = "git+https://github.com/rustwasm/weedle.git#c704b30c7bb8c041ab4a9a47637378e02192ab6f"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfde6c0c0dc6d6c8b4f13afc35b46793e5a62890bcafa1a9d4c2c2301fa2f829"
 dependencies = [
  "nom",
 ]
@@ -756,7 +757,7 @@ dependencies = [
  "anyhow",
  "proc-macro2",
  "quote",
- "syn 2.0.68",
+ "syn 2.0.70",
  "wit-bindgen-core",
  "wit-bindgen-rust",
 ]
@@ -783,8 +784,8 @@ dependencies = [
 
 [[package]]
 name = "wit-encoder"
-version = "0.204.0"
-source = "git+https://github.com/MendyBerger/wasm-tools.git?rev=67637756f69937d7f1e29565174fd4a59c4314a5#67637756f69937d7f1e29565174fd4a59c4314a5"
+version = "0.212.0"
+source = "git+https://github.com/bytecodealliance/wasm-tools.git#a265ec17ab8ee9081e9390387eafda7d92107f27"
 dependencies = [
  "pretty_assertions",
  "semver",
@@ -861,5 +862,5 @@ checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.68",
+ "syn 2.0.70",
 ]

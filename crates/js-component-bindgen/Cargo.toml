@@ -19,6 +19,10 @@ crate-type = ["lib"]
 [features]
 default = ["transpile-bindgen"]
 transpile-bindgen = []
+unstable = [
+  "idl-imports"
+]
+idl-imports = []
 
 [dependencies]
 anyhow = { workspace = true }

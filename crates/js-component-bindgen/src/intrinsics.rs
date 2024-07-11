@@ -211,29 +211,35 @@ pub fn render_intrinsics(
             },
 
             Intrinsic::GlobalThisIdlProxy => output.push_str(r#"
-                const idlRemap = {
-                    'HtmlElement': 'HTMLElement',
-                };
-                function globalThisIdlProxy (ns) {
-                    const INNER = Symbol('inner');
-                    const IS_PROXY = Symbol('isProxy');
+                var idlProxy;
+                function globalThisIdlProxy () {
+                    if (idlProxy) return idlProxy;
+                    const innerSymbol = Symbol('inner');
+                    const isProxySymbol = Symbol('isProxy');
+                    const uppercaseRegex = /html|Html|dom|Dom/g;
+                    const globalNames = ['Window', 'WorkerGlobalScope'];
                     function proxy(target, fake = {}) {
                         const origTarget = target;
                         return new Proxy(fake, {
                             get: (_, prop, receiver) => {
-                                // if (idlRemap[prop]) prop = idlRemap[prop];
-                                if (prop === INNER) return origTarget;
-                                if (prop === IS_PROXY) return true;
-                                if (prop.toString().startsWith('as')) {
-                                    return function () {
-                                        return this;
-                                    }
+                                if (prop === innerSymbol) return origTarget;
+                                if (prop === isProxySymbol) return true;
+                                if (typeof prop !== 'string') return maybeProxy(Reflect.get(origTarget, prop));
+                                if (origTarget === globalThis && prop.startsWith('get') && globalNames.includes(prop.slice(3))) {
+                                    return () => receiver;
                                 }
+                                prop = prop.replaceAll(uppercaseRegex, x => x.toUpperCase());
+                                if (prop.startsWith('set')) return val => Reflect.set(origTarget, `${prop[3].toLowerCase()}${prop.slice(4)}`, val);
+                                if (prop.startsWith('as')) return () => receiver;
                                 const res = Reflect.get(origTarget, prop);
+                                if (res === undefined && prop[0].toUpperCase() === prop[0]) {
+                                    return Object.getPrototypeOf(globalThis[`${prop[0].toLowerCase()}${prop.slice(1)}`]).constructor;
+                                }
                                 return maybeProxy(res);
                             },
                             apply: (_, thisArg, args) => {
-                                const res = Reflect.apply(origTarget, proxyInner(thisArg), args.map(a =>  a[IS_PROXY] ? proxyInner(a) : a));
+                                if (args.length === 1 && Array.isArray(args[0]) && origTarget.length === 0) args = args[0];
+                                const res = Reflect.apply(origTarget, proxyInner(thisArg), args.map(a =>  a[isProxySymbol] ? proxyInner(a) : a));
                                 return typeof res === 'object' ? proxy(res) : res;
                             },
                             getPrototypeOf: _ => Reflect.getPrototypeOf(origTarget),
@@ -256,8 +262,8 @@ pub fn render_intrinsics(
                             return () => proxy(res);
                         return res;
                     }
-                    const proxyInner = proxy => proxy ? proxy[INNER] : proxy;
-                    return proxy(globalThis[ns]);
+                    const proxyInner = proxy => proxy ? proxy[innerSymbol] : proxy;
+                    return (idlProxy = proxy(globalThis));
                 };
             "#),
 

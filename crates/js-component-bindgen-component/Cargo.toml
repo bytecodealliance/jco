@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = { workspace = true }
-js-component-bindgen = { path = "../js-component-bindgen" }
+js-component-bindgen = { path = "../js-component-bindgen", features = ["idl-imports"] }
 wasmtime-environ = { workspace = true }
 wit-bindgen = { workspace = true }
 wat = { workspace = true }

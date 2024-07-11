@@ -6,11 +6,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-js-component-bindgen = { workspace = true }
+js-component-bindgen = { workspace = true, features = ["idl-imports"] }
 semver = "1.0.23"
 structopt = { workspace = true }
-webidl2wit = { git = "https://github.com/wasi-gfx/webidl2wit", rev = "9d606461b638570b65fbb2be074a1f038e1104f2" }
-weedle = { git = "https://github.com/rustwasm/weedle.git" }
+webidl2wit = { git = "https://github.com/guybedford/webidl2wit", branch = "top-level-convention" }
+weedle = "0.13.0"
 wit-component = { workspace = true }
-wit-encoder = { git = "https://github.com/MendyBerger/wasm-tools.git", rev = "67637756f69937d7f1e29565174fd4a59c4314a5" }
+wit-encoder = { git = "https://github.com/bytecodealliance/wasm-tools.git" }
 xshell = { workspace = true }

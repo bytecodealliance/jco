@@ -69,6 +69,9 @@ pub struct TranspileOpts {
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
     pub multi_memory: bool,
+    /// Enables zero-runtime experimental WebIDL import bindings
+    #[cfg(feature = "idl-imports")]
+    pub idl_imports: bool,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -1286,7 +1289,7 @@ impl<'a> Instantiator<'a, '_> {
         import_binding: Option<String>,
         local_name: String,
     ) {
-        if import_specifier.starts_with("idl:") {
+        if import_specifier.contains("-idl/") {
             self.gen.intrinsic(Intrinsic::GlobalThisIdlProxy);
         }
         // add the function import to the ESM bindgen

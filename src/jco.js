@@ -51,6 +51,7 @@ program.command('transpile')
   .option('-q, --quiet', 'disable output summary')
   .option('--no-namespaced-exports', 'disable namespaced exports for typescript compatibility')
   .option('--multi-memory', 'optimized output for Wasm multi-memory')
+  .option('--experimental-idl-imports', 'enables zero-runtime experimental IDL import bindings for package names ending in "-idl"')
   .option('--', 'for --optimize, custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(transpile));
 
