@@ -104,7 +104,7 @@ jobs:
       run: cargo install wasm-tools
     - name: Generate WASI Tests
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: cargo xtask generate tests
+      run: cargo xtask generate preview2-tests
     - name: Upload Generated WASI Tests
       uses: actions/upload-artifact@v4
       with:
