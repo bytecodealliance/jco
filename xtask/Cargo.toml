@@ -14,3 +14,8 @@ weedle = "0.13.0"
 wit-component = { workspace = true }
 wit-encoder = "0.214.0"
 xshell = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+js-component-bindgen = { workspace = true }
+wit-component = { workspace = true }
