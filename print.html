@@ -172,7 +172,62 @@
 and exports the component exports.</p>
 <p><a href="transpiling.html#instantiation">Instantiation mode</a> allows dynamically providing the imports for the component instantiation, as well as for instantiating a component multiple times.</p>
 <p>For the default output, you will likely want to ensure there is a package.json file with a <code>{ &quot;type&quot;: &quot;module&quot; }</code> set for Node.js ES module support (although this is not needed for browser module loading or JS build tooling).</p>
-<h2 id="export-conventions"><a class="header" href="#export-conventions">Export Conventions</a></h2>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<p>To transpile a component into JS:</p>
+<pre><code>jco transpile component.wasm -o out-dir
+</code></pre>
+<p>The resultant file can be imported providing the bindings of the component as if it were imported directly:</p>
+<p>app.js</p>
+<pre><code>import { fn } from './out-dir/component.js';
+
+fn();
+</code></pre>
+<p>Imports can be remapped using the <code>--map</code> flag, or to provide imports as an argument use the <code>--instantiation</code> option.</p>
+<p>Components relying on WASI bindings will contain external WASI imports, which are automatically updated
+to the <code>@bytecodealliance/preview2-shim</code> package. This package can be installed from npm separately for
+runtime usage. This shim layer supports both Node.js and browsers.</p>
+<h2 id="options"><a class="header" href="#options">Options</a></h2>
+<p>Options include:</p>
+<ul>
+<li><code>--name</code>: Give a custom name for the component JS file in <code>out-dir/[name].js</code></li>
+<li><code>--minify</code>: Minify the component JS</li>
+<li><code>--optimize</code>: Runs the internal core Wasm files through Binaryen for optimization. Optimization options can be passed with a <code>-- &lt;binaryen options&gt;</code> flag separator.</li>
+<li><code>--tla-compat</code>: Instead of relying on top-level-await, requires an <code>$init</code> promise to be imported and awaited first.</li>
+<li><code>--js</code>: Converts core Wasm files to JavaScript for environments that don't even support core Wasm.</li>
+<li><code>--base64-cutoff=&lt;number&gt;</code>: Sets the maximum number of bytes for inlining Wasm files into the JS using base64 encoding. Set to zero to disable base64 inlining entirely.</li>
+<li><code>--no-wasi-shim</code>: Disable the WASI shim mapping to <code>@bytecodealliance/preview2-shim</code>.</li>
+<li><code>--map</code>: Provide custom mappings for world imports. Supports both wildcard mappings (<code>*</code> similarly as in the package.json &quot;exports&quot; field) as well as <code>#</code> mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like <code>--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*</code> to map <code>import as * filesystem from 'wasi:filesystem/types'</code> to <code>import { types } from '@bytecodealliance/preview2-shim/filesystem</code>.</li>
+<li><code>--no-nodejs-compat</code>: Disables Node.js compat in the output to load core Wasm with FS methods.</li>
+<li><code>--instantiation [mode]</code>: Instead of a direct ES module, export an <code>instantiate</code> function which can take the imports as an argument instead of implicit imports. The <code>instantiate</code> function can be async (with <code>--instantiation</code> or <code>--instantiation async</code>), or sync (with <code>--instantiation sync</code>).</li>
+<li><code>--valid-lifting-optimization</code>: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.</li>
+<li><code>--tracing</code>: Emit tracing calls for all function entry and exits.</li>
+<li><code>--no-namespaced-exports</code>: Removes exports of the type <code>test as &quot;test:flavorful/test&quot;</code> which are not compatible with typescript</li>
+</ul>
+<h2 id="browser-support"><a class="header" href="#browser-support">Browser Support</a></h2>
+<p>Jco itself can be used in the browser, which provides the simpler Jco API that is just exactly the same
+as the internal <a href="https://github.com/bytecodealliance/jco/blob/main/crates/js-component-bindgen-component/wit/js-component-bindgen.wit">Jco component</a> Jco uses to self-host.</p>
+<p>To use this browser-supported internal component build, import the <code>/component</code> subpath directly:</p>
+<pre><code class="language-js">import { transpile } from '@bytecodealliance/jco/component';
+</code></pre>
+<p>Most JS build tools should then correctly work with such code bundled for the browser.</p>
+<h3 id="experimental-webidl-imports"><a class="header" href="#experimental-webidl-imports">Experimental WebIDL Imports</a></h3>
+<p>Jco has experimental support for zero-runtime and zero-configuration WEbIDL bindings, when using the
+<code>webidl:</code> interface.</p>
+<p>A canonical WebIDL resource is not yet available, but some examples of these IDLs and WITs can be found
+in the <a href="https://github.com/bytecodealliance/jco/tree/main/test/fixtures/idl/">IDL fixtures directory</a>.</p>
+<p>Whenever the <code>webidl:</code> namespace is used, Jco will automatically bind such imports to the global object.</p>
+<p>Two top-level conventions are then provided for global access:</p>
+<ol>
+<li>A top-level <code>getWindow</code> function can be used (or for any singleton global name) to obtain the global object.</li>
+<li>If the imported interface name starts with <code>global-</code> such as <code>global-console</code>, then the interface is bound
+to that object name on the global object, with dashes replaced with <code>.</code> access, ie <code>globalThis.console</code>.</li>
+</ol>
+<p>Under these conventions, many WebIDL files can be directly supported for components without any additional
+runtime configuration needed. A WebIDL to WIT converter is in development at https://github.com/wasi-gfx/webidl2wit.</p>
+<p>This work is highly experimental, and contributors and improvements would be welcome to help steer this
+feature to stability.</p>
+<h2 id="transpilation-semantics"><a class="header" href="#transpilation-semantics">Transpilation Semantics</a></h2>
+<h3 id="export-conventions"><a class="header" href="#export-conventions">Export Conventions</a></h3>
 <p>Components can represent both bundles of modules and individual modules. Compponents export the direct export interface as well as the canonical named interface for the implementation to represent both of these cases.</p>
 <p>For example a component that imports an interface will be output as:</p>
 <pre><code class="language-js">export { interface, interface as 'my:pkg/interface@version' }
@@ -181,7 +236,7 @@ and exports the component exports.</p>
 <p>If not needing this disambiguation feature, and since support for string exports in JS can be limited, this feature can be disabled with the <code>--no-namespaced-exports</code> flag to instead output only:</p>
 <pre><code class="language-js">export { interface }
 </code></pre>
-<h2 id="import-conventions"><a class="header" href="#import-conventions">Import Conventions</a></h2>
+<h3 id="import-conventions"><a class="header" href="#import-conventions">Import Conventions</a></h3>
 <p>When using the ESM integration default transpilation output bindings are output directly in the <code>registry:name/interface</code> form, but with versions removed.</p>
 <p>For example an import to <code>my:pkg/interface@1.2.3</code> will become an import to <code>import { fn } from 'my:pkg/interface';</code>.</p>
 <h3 id="map-configuration"><a class="header" href="#map-configuration">Map Configuration</a></h3>
@@ -215,6 +270,7 @@ and exports the component exports.</p>
 </code></pre>
 <p>For all subsystems - <code>cli</code>, <code>clocks</code>, <code>filesystem</code>, <code>http</code>, <code>io</code>, <code>random</code> and <code>sockets</code>.</p>
 <p>To disable this automatic WASI handling the <code>--no-wasi-shim</code> flag can be provided and WASI will be treated like any other import without special handling.</p>
+<p>Note that browser support for WASI is currently experimental.</p>
 <h3 id="interface-implementation-example"><a class="header" href="#interface-implementation-example">Interface Implementation Example</a></h3>
 <p>Here's an example of implementing a custom WIT interface in JavaScript:</p>
 <p>example.wit</p>
@@ -261,7 +317,7 @@ export { test }
 <blockquote>
 <p>Note: Top-level results are turned into JS exceptions, all other results are treated as tagged objects <code>{ tag: 'ok' | 'err', val }</code>.</p>
 </blockquote>
-<h3 id="wasi-proposals"><a class="header" href="#wasi-proposals">WASI Proposals</a></h3>
+<h2 id="wasi-proposals"><a class="header" href="#wasi-proposals">WASI Proposals</a></h2>
 <p><strong>Jco will always take PRs to support all open WASI proposals.</strong></p>
 <p>These PRs can be implemented by extending the <a href="https://github.com/bytecodealliance/jco/blob/main/src/cmd/transpile.js#L110">default map configuration provided by Jco</a> to support the new <code>--map wasi:subsytem/*=shimpkg/subsystem#*</code> for the WASI subsystem being implemented.</p>
 <blockquote>
