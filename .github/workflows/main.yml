@@ -51,7 +51,7 @@ jobs:
           - os: macos-latest
             node: 18.x
           - os: windows-latest
-            node: 22.x
+            node: latest
           - os: windows-latest
             node: 18.x
     runs-on: ${{ matrix.os }}
