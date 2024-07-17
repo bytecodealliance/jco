@@ -212,6 +212,9 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 [[package]]
 name = "jco"
 version = "1.3.0"
+dependencies = [
+ "anyhow",
+]
 
 [[package]]
 name = "js-component-bindgen"
@@ -667,7 +670,7 @@ dependencies = [
 [[package]]
 name = "webidl2wit"
 version = "0.1.0"
-source = "git+https://github.com/guybedford/webidl2wit?branch=fixups#f8bf1f7a24684ddba23bbe6bcaf6dd625c952543"
+source = "git+https://github.com/wasi-gfx/webidl2wit?rev=9cf1e53c5393e02e4b5ecc437012caf23ef1002f#9cf1e53c5393e02e4b5ecc437012caf23ef1002f"
 dependencies = [
  "anyhow",
  "heck 0.5.0",

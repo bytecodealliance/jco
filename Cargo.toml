@@ -53,3 +53,6 @@ wit-bindgen-core = "0.26.0"
 wit-component = { version = "0.209.1", features = ["dummy-module"] }
 wit-parser = "0.209.1"
 xshell = "0.2.6"
+
+[dev-dependencies]
+anyhow = { workspace = true }
