@@ -12,7 +12,85 @@ and exports the component exports.
 
 For the default output, you will likely want to ensure there is a package.json file with a `{ "type": "module" }` set for Node.js ES module support (although this is not needed for browser module loading or JS build tooling).
 
-## Export Conventions
+## Usage
+
+To transpile a component into JS:
+
+```
+jco transpile component.wasm -o out-dir
+```
+
+The resultant file can be imported providing the bindings of the component as if it were imported directly:
+
+app.js
+```
+import { fn } from './out-dir/component.js';
+
+fn();
+```
+
+Imports can be remapped using the `--map` flag, or to provide imports as an argument use the `--instantiation` option.
+
+Components relying on WASI bindings will contain external WASI imports, which are automatically updated
+to the `@bytecodealliance/preview2-shim` package. This package can be installed from npm separately for
+runtime usage. This shim layer supports both Node.js and browsers.
+
+## Options
+
+Options include:
+
+* `--name`: Give a custom name for the component JS file in `out-dir/[name].js`
+* `--minify`: Minify the component JS
+* `--optimize`: Runs the internal core Wasm files through Binaryen for optimization. Optimization options can be passed with a `-- <binaryen options>` flag separator.
+* `--tla-compat`: Instead of relying on top-level-await, requires an `$init` promise to be imported and awaited first.
+* `--js`: Converts core Wasm files to JavaScript for environments that don't even support core Wasm.
+* `--base64-cutoff=<number>`: Sets the maximum number of bytes for inlining Wasm files into the JS using base64 encoding. Set to zero to disable base64 inlining entirely.
+* `--no-wasi-shim`: Disable the WASI shim mapping to `@bytecodealliance/preview2-shim`.
+* `--map`: Provide custom mappings for world imports. Supports both wildcard mappings (`*` similarly as in the package.json "exports" field) as well as `#` mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like `--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*` to map `import as * filesystem from 'wasi:filesystem/types'` to `import { types } from '@bytecodealliance/preview2-shim/filesystem`.
+* `--no-nodejs-compat`: Disables Node.js compat in the output to load core Wasm with FS methods.
+* `--instantiation [mode]`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports. The `instantiate` function can be async (with `--instantiation` or `--instantiation async`), or sync (with `--instantiation sync`).
+* `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
+* `--tracing`: Emit tracing calls for all function entry and exits.
+* `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
+
+## Browser Support
+
+Jco itself can be used in the browser, which provides the simpler Jco API that is just exactly the same
+as the internal [Jco component](https://github.com/bytecodealliance/jco/blob/main/crates/js-component-bindgen-component/wit/js-component-bindgen.wit) Jco uses to self-host.
+
+To use this browser-supported internal component build, import the `/component` subpath directly:
+
+```js
+import { transpile } from '@bytecodealliance/jco/component';
+```
+
+Most JS build tools should then correctly work with such code bundled for the browser.
+
+### Experimental WebIDL Imports
+
+Jco has experimental support for zero-runtime and zero-configuration WEbIDL bindings, when using the
+`webidl:` interface.
+
+A canonical WebIDL resource is not yet available, but some examples of these IDLs and WITs can be found
+in the [IDL fixtures directory](https://github.com/bytecodealliance/jco/tree/main/test/fixtures/idl/).
+
+Whenever the `webidl:` namespace is used, Jco will automatically bind such imports to the global object.
+
+Two top-level conventions are then provided for global access:
+
+1. A top-level `getWindow` function can be used (or for any singleton global name) to obtain the global object.
+2. If the imported interface name starts with `global-` such as `global-console`, then the interface is bound
+  to that object name on the global object, with dashes replaced with `.` access, ie `globalThis.console`.
+
+Under these conventions, many WebIDL files can be directly supported for components without any additional
+runtime configuration needed. A WebIDL to WIT converter is in development at https://github.com/wasi-gfx/webidl2wit.
+
+This work is highly experimental, and contributors and improvements would be welcome to help steer this
+feature to stability.
+
+## Transpilation Semantics
+
+### Export Conventions
 
 Components can represent both bundles of modules and individual modules. Compponents export the direct export interface as well as the canonical named interface for the implementation to represent both of these cases.
 
@@ -30,7 +108,7 @@ If not needing this disambiguation feature, and since support for string exports
 export { interface }
 ```
 
-## Import Conventions
+### Import Conventions
 
 When using the ESM integration default transpilation output bindings are output directly in the `registry:name/interface` form, but with versions removed.
 
@@ -92,6 +170,8 @@ For all subsystems - `cli`, `clocks`, `filesystem`, `http`, `io`, `random` and `
 
 To disable this automatic WASI handling the `--no-wasi-shim` flag can be provided and WASI will be treated like any other import without special handling.
 
+Note that browser support for WASI is currently experimental.
+
 ### Interface Implementation Example
 
 Here's an example of implementing a custom WIT interface in JavaScript:
@@ -151,7 +231,7 @@ export const iface = {
 
 > Note: Top-level results are turned into JS exceptions, all other results are treated as tagged objects `{ tag: 'ok' | 'err', val }`.
 
-### WASI Proposals
+## WASI Proposals
 
 **Jco will always take PRs to support all open WASI proposals.**
 

@@ -38,7 +38,9 @@
     "@typescript-eslint/eslint-plugin": "^5.41.0",
     "@typescript-eslint/parser": "^5.41.0",
     "eslint": "^8.30.0",
+    "mime": "^4.0.4",
     "mocha": "^10.2.0",
+    "puppeteer": "^22.13.0",
     "terser": "^5.16.1",
     "typescript": "^5.3.3"
   },

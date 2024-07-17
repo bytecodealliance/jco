@@ -36,14 +36,17 @@ strip = true
 [workspace.dependencies]
 anyhow = "1.0.86"
 base64 = "0.22.1"
-heck =  "0.5.0"
+heck = "0.5.0"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 structopt = "0.3.26"
 wasm-encoder = "0.209.1"
 wasm-metadata = "0.209.1"
 wasmparser = "0.209.1"
 wasmprinter = "0.209.1"
-wasmtime-environ = { version = "22.0.0", features = ["component-model", "compile"] }
+wasmtime-environ = { version = "22.0.0", features = [
+    "component-model",
+    "compile",
+] }
 wat = "1.209.1"
 wit-bindgen = "0.26.0"
 wit-bindgen-core = "0.26.0"
@@ -53,4 +56,3 @@ xshell = "0.2.6"
 
 [dev-dependencies]
 anyhow = { workspace = true }
-xshell = { workspace = true }
