@@ -254,7 +254,7 @@ pub fn ts_bindgen(
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
                     ): {camel};
                     export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module,
+                        getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
                         imports: ImportObject,
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
                     ): {camel} | Promise<{camel}>;
