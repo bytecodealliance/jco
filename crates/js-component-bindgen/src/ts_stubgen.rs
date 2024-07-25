@@ -256,7 +256,7 @@ impl<'a> TsStubgen<'a> {
                                 p.ts_func_signature(func);
                             });
                             let signature = signature.replace(&ident, &ident_instance);
-                            let f_name = func.item_name();
+                            let f_name = AsLowerCamelCase(func.item_name());
                             uwriteln!(src, "{f_name}{signature},");
                         }
                         FunctionKind::Constructor(_) => {
@@ -277,7 +277,7 @@ impl<'a> TsStubgen<'a> {
                         p.ts_func_signature(func);
                     });
                     let params = params.replace(&ident, &ident_instance);
-                    let f_name = func.item_name();
+                    let f_name = AsLowerCamelCase(func.item_name());
                     uwriteln!(src, "{f_name}{params},");
                 }
                 uwriteln!(src, "}}");

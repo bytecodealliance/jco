@@ -145,6 +145,7 @@ fn export_resource() {
                 write: func(bytes: list<u8>);
                 read: func(n: u32) -> list<u8>;
                 merge: static func(lhs: blob, rhs: blob) -> blob;
+                some-optional: func(a: option<u8>) -> option<u8>;
             }
         }
     ";
@@ -161,6 +162,7 @@ fn export_resource() {
         export interface BlobInstance {
             write(bytes: Uint8Array): void,
             read(n: number): Uint8Array,
+            someOptional(a: number | undefined): number | undefined,
         }
 
         export interface TestWorld {
