@@ -1,11 +1,7 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
-use js_component_bindgen::{
-    generate_types,
-    source::wit_parser::{Resolve, UnresolvedPackage},
-    transpile,
-};
+use anyhow::Result;
+use js_component_bindgen::{generate_types, source::wit_parser::Resolve, transpile};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -117,26 +113,16 @@ impl Guest for JsComponentBindgenComponent {
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
         let mut resolve = Resolve::default();
-        let id = match opts.wit {
-            Wit::Source(source) => {
-                let pkg = UnresolvedPackage::parse(&PathBuf::from(format!("{name}.wit")), &source)
-                    .map_err(|e| e.to_string())?;
-                resolve.push(pkg).map_err(|e| e.to_string())?
-            }
+        let ids = match opts.wit {
+            Wit::Source(source) => resolve
+                .push_str(format!("{name}.wit"), &source)
+                .map_err(|e| e.to_string())?,
             Wit::Path(path) => {
                 let path = PathBuf::from(path);
                 if path.is_dir() {
                     resolve.push_dir(&path).map_err(|e| e.to_string())?.0
                 } else {
-                    let contents = std::fs::read(&path)
-                        .with_context(|| format!("failed to read file {path:?}"))
-                        .map_err(|e| e.to_string())?;
-                    let text = match std::str::from_utf8(&contents) {
-                        Ok(s) => s,
-                        Err(_) => return Err("input file is not valid utf-8".into()),
-                    };
-                    let pkg = UnresolvedPackage::parse(&path, text).map_err(|e| e.to_string())?;
-                    resolve.push(pkg).map_err(|e| e.to_string())?
+                    resolve.push_file(&path).map_err(|e| e.to_string())?
                 }
             }
             Wit::Binary(_) => todo!(),
@@ -144,7 +130,7 @@ impl Guest for JsComponentBindgenComponent {
 
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
-            .select_world(id, world_string.as_deref())
+            .select_world(&ids, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let opts = js_component_bindgen::TranspileOpts {

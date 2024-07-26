@@ -7,7 +7,7 @@ import * as assert from 'node:assert';
 
 async function run() {
   const wasm = await instantiate(helpers.loadWasm, {
-    testwasi: helpers,
+    ...helpers.wasi,
     'test:records/test': {
       multipleResults() { return [4, 5]; },
       swapTuple([a, b]) { return [b, a]; },

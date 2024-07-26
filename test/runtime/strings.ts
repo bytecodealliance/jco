@@ -8,7 +8,7 @@ import * as assert from 'assert';
 
 async function run() {
   const wasm = await instantiate(helpers.loadWasm, {
-    testwasi: helpers,
+    ...helpers.wasi,
     'test:strings/imports': {
       takeBasic(s: string) {
         assert.strictEqual(s, 'latin utf16');

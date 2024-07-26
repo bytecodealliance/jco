@@ -1,4 +1,4 @@
-package example:protocol
+package example:protocol;
 
 world my-world {
   record point {
@@ -6,9 +6,9 @@ world my-world {
     y: s32,
   }
 
-  import print: func(msg: string)
-  import import-point: func(pnt: point) -> point
+  import print: func(msg: string);
+  import import-point: func(pnt: point) -> point;
 
-  export run: func()
-  export move-point: func(pnt: point) -> point
+  export run: func();
+  export move-point: func(pnt: point) -> point;
 }

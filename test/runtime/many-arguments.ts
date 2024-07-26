@@ -15,7 +15,7 @@ function assert(x: boolean) {
 
 async function run() {
   const wasm = await instantiate(helpers.loadWasm, {
-    testwasi: helpers,
+    ...helpers.wasi,
     imports: {
       manyArguments(
         a1,
