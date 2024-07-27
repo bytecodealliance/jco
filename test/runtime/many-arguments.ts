@@ -14,6 +14,7 @@ function assert(x: boolean) {
 }
 
 async function run() {
+  // @ts-ignore
   const wasm = await instantiate(helpers.loadWasm, {
     ...helpers.wasi,
     imports: {

@@ -29,6 +29,7 @@ world root {
 
 async function run() {
   let scalar = 0;
+  // @ts-ignore
   const wasm = await instantiate(helpers.loadWasm, {
     ...helpers.wasi,
     'test:numbers/test': {

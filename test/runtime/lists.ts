@@ -1,5 +1,6 @@
 // Flags: --instantiation
 
+// @ts-ignore
 import * as helpers from "./helpers.js";
 import { instantiate } from "../output/lists/lists.js";
 
@@ -7,6 +8,7 @@ import { instantiate } from "../output/lists/lists.js";
 import * as assert from 'assert';
 
 async function run() {
+  // @ts-ignore
   const wasm = await instantiate(helpers.loadWasm, {
     ...helpers.wasi,
     'test:lists/test': {
