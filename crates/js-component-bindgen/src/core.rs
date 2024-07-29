@@ -79,7 +79,6 @@ pub enum AugmentedOp {
     I64Store,
     F32Store,
     F64Store,
-
     MemorySize,
 }
 
@@ -533,7 +532,7 @@ macro_rules! define_visit {
     (augment $self:ident I32Store16 $memarg:ident) => {
         $self.0.augment_op($memarg.memory, AugmentedOp::I32Store16);
     };
-    (augment $self:ident MemorySize $mem:ident $byte:ident) => {
+    (augment $self:ident MemorySize $mem:ident) => {
         $self.0.augment_op($mem, AugmentedOp::MemorySize);
     };
 
@@ -672,7 +671,7 @@ macro_rules! define_translate {
     (translate $self:ident F64Store $memarg:ident) => {{
         $self.augment(AugmentedOp::F64Store, F64Store, $memarg)
     }};
-    (translate $self:ident MemorySize $mem:ident $byte:ident) => {{
+    (translate $self:ident MemorySize $mem:ident) => {{
         if $mem < 1 {
             $self.func.instruction(&MemorySize($mem));
         } else {
@@ -707,7 +706,7 @@ macro_rules! define_translate {
         CallIndirect { ty: $ty, table: $table }
     });
     (mk ReturnCallIndirect $ty:ident $table:ident) => (
-        ReturnCallIndirect { ty: $ty, table: $table }
+        ReturnCallIndirect { type_index: $ty, table_index: $table }
     );
     (mk I32Const $v:ident) => (I32Const($v));
     (mk I64Const $v:ident) => (I64Const($v));

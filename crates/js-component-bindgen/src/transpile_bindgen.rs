@@ -14,8 +14,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
-use wasmparser::collections::IndexMap;
-use wasmtime_environ::component::Transcode;
+use wasmtime_environ::component::{ExportIndex, NameMap, NameMapNoIntern, Transcode};
 use wasmtime_environ::{
     component,
     component::{
@@ -192,11 +191,22 @@ pub fn transpile_bindgen(
         .iter()
         .map(|(export_name, canon_export_name)| {
             let export = if canon_export_name.contains(':') {
-                &instantiator.component.exports[*canon_export_name]
+                instantiator
+                    .component
+                    .exports
+                    .get(canon_export_name, &NameMapNoIntern)
+                    .unwrap()
             } else {
-                &instantiator.component.exports[&canon_export_name.to_kebab_case()]
+                instantiator
+                    .component
+                    .exports
+                    .get(&canon_export_name.to_kebab_case(), &NameMapNoIntern)
+                    .unwrap()
             };
-            (export_name.to_string(), export.clone())
+            (
+                export_name.to_string(),
+                instantiator.component.export_items[*export].clone(),
+            )
         })
         .collect();
 
@@ -502,12 +512,13 @@ impl<'a> Instantiator<'a, '_> {
         self.exports_resource_types = self.imports_resource_types.clone();
         for (key, item) in &self.resolve.worlds[self.world].exports {
             let name = &self.resolve.name_world_key(key);
-            let (_, export) = self
+            let (_, export_idx) = self
                 .component
                 .exports
-                .iter()
+                .raw_iter()
                 .find(|(expt_name, _)| *expt_name == name)
                 .unwrap();
+            let export = &self.component.export_items[*export_idx];
             match item {
                 WorldItem::Interface { id, stability: _ } => {
                     let iface = &self.resolve.interfaces[*id];
@@ -515,10 +526,12 @@ impl<'a> Instantiator<'a, '_> {
                         unreachable!()
                     };
                     for (ty_name, ty) in &iface.types {
-                        match exports.get(ty_name).unwrap() {
+                        match self.component.export_items
+                            [*exports.get(ty_name, &NameMapNoIntern).unwrap()]
+                        {
                             Export::Type(TypeDef::Resource(resource)) => {
                                 let ty = crate::dealias(self.resolve, *ty);
-                                let resource_idx = self.types[*resource].ty;
+                                let resource_idx = self.types[resource].ty;
                                 self.exports_resource_types.insert(ty, resource_idx);
                             }
                             Export::Type(_) => {}
@@ -1740,8 +1753,9 @@ impl<'a> Instantiator<'a, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    fn exports(&mut self, exports: &IndexMap<String, Export>) {
-        for (export_name, export) in exports.iter() {
+    fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
+        for (export_name, export_idx) in exports.raw_iter() {
+            let export = &self.component.export_items[*export_idx];
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut resource_map = ResourceMap::new();
@@ -1802,7 +1816,8 @@ impl<'a> Instantiator<'a, '_> {
                         WorldItem::Interface { id, stability: _ } => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    for (func_name, export) in exports {
+                    for (func_name, export_idx) in exports.raw_iter() {
+                        let export = &self.component.export_items[*export_idx];
                         let (def, options, func_ty) = match export {
                             Export::LiftedFunction { func, options, ty } => (func, options, ty),
                             Export::Type(_) => continue, // ignored
@@ -1862,8 +1877,7 @@ impl<'a> Instantiator<'a, '_> {
                 Export::Type(_) => {}
 
                 // This can't be tested at this time so leave it unimplemented
-                Export::ModuleStatic(_) => unimplemented!(),
-                Export::ModuleImport { .. } => unimplemented!(),
+                Export::ModuleStatic { .. } | Export::ModuleImport { .. } => unimplemented!(),
             }
         }
         self.gen.esm_bindgen.populate_export_aliases();

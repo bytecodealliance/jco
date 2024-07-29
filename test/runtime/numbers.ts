@@ -29,8 +29,9 @@ world root {
 
 async function run() {
   let scalar = 0;
+  // @ts-ignore
   const wasm = await instantiate(helpers.loadWasm, {
-    testwasi: helpers,
+    ...helpers.wasi,
     'test:numbers/test': {
       roundtripU8(x) { return x; },
       roundtripS8(x) { return x; },
@@ -40,8 +41,8 @@ async function run() {
       roundtripS32(x) { return x; },
       roundtripU64(x) { return x; },
       roundtripS64(x) { return x; },
-      roundtripFloat32(x) { return x; },
-      roundtripFloat64(x) { return x; },
+      roundtripF32(x) { return x; },
+      roundtripF64(x) { return x; },
       roundtripChar(x) { return x; },
       setScalar(x) { scalar = x; },
       getScalar() { return scalar; },
@@ -80,15 +81,15 @@ async function run() {
   strictEqual(wasm.test.roundtripS64((1n << 63n) - 1n), (1n << 63n) - 1n);
   strictEqual(wasm.test.roundtripS64(-(1n << 63n)), -(1n << 63n));
 
-  strictEqual(wasm.test.roundtripFloat32(1), 1);
-  strictEqual(wasm.test.roundtripFloat32(Infinity), Infinity);
-  strictEqual(wasm.test.roundtripFloat32(-Infinity), -Infinity);
-  assert(Number.isNaN(wasm.test.roundtripFloat32(NaN)));
+  strictEqual(wasm.test.roundtripF32(1), 1);
+  strictEqual(wasm.test.roundtripF32(Infinity), Infinity);
+  strictEqual(wasm.test.roundtripF32(-Infinity), -Infinity);
+  assert(Number.isNaN(wasm.test.roundtripF32(NaN)));
 
-  strictEqual(wasm.test.roundtripFloat64(1), 1);
-  strictEqual(wasm.test.roundtripFloat64(Infinity), Infinity);
-  strictEqual(wasm.test.roundtripFloat64(-Infinity), -Infinity);
-  assert(Number.isNaN(wasm.test.roundtripFloat64(NaN)));
+  strictEqual(wasm.test.roundtripF64(1), 1);
+  strictEqual(wasm.test.roundtripF64(Infinity), Infinity);
+  strictEqual(wasm.test.roundtripF64(-Infinity), -Infinity);
+  assert(Number.isNaN(wasm.test.roundtripF64(NaN)));
 
   strictEqual(wasm.test.roundtripChar('a'), 'a');
   strictEqual(wasm.test.roundtripChar(' '), ' ');

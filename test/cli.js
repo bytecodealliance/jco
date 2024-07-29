@@ -228,7 +228,7 @@ export async function cliTest(fixtures) {
         "--name",
         name,
         "--map",
-        "testwasi=./wasi.js",
+        "test:flavorful/test=./flavorful.js",
         "--valid-lifting-optimization",
         "--tla-compat",
         "--js",
@@ -238,8 +238,7 @@ export async function cliTest(fixtures) {
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/${name}.js`, "utf8");
-      ok(source.includes("./wasi.js"));
-      ok(source.includes("testwasi"));
+      ok(source.includes("./flavorful.js"));
       ok(source.includes("FUNCTION_TABLE"));
       ok(source.includes("export {\n  $init"));
     });
@@ -413,7 +412,7 @@ export async function cliTest(fixtures) {
           [
             "processed-by",
             [
-              ["wit-component", "0.209.1"],
+              ["wit-component", "0.212.0"],
               ["dummy-gen", "test"],
             ],
           ],

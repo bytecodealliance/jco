@@ -6,14 +6,15 @@ import { instantiate, ImportObject } from "../output/records/records.js";
 import * as assert from 'node:assert';
 
 async function run() {
+  // @ts-ignore
   const wasm = await instantiate(helpers.loadWasm, {
-    testwasi: helpers,
+    ...helpers.wasi,
     'test:records/test': {
       multipleResults() { return [4, 5]; },
       swapTuple([a, b]) { return [b, a]; },
       roundtripFlags1(x) { return x; },
       roundtripFlags2(x) { return x; },
-      roundtripFlags3(r0, r1, r2, r3) { return [r0, r1, r2, r3]; },
+      roundtripFlags3(r0, r1, r2) { return [r0, r1, r2]; },
       roundtripRecord1(x) { return x; },
       tuple1([x]) { return [x]; },
     }

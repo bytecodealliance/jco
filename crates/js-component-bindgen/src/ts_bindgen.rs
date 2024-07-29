@@ -426,16 +426,27 @@ impl TsBindgen {
         let local_name = local_name.to_upper_camel_case();
 
         if !local_exists {
-            uwriteln!(
-                self.src,
-                "import {{ {} }} from './{}.js';",
-                if camel == local_name {
-                    camel.to_string()
-                } else {
-                    format!("{camel} as {local_name}")
-                },
-                &file_name[0..file_name.len() - 5]
-            );
+            // TypeScript doesn't work with empty namespaces, so we don't import in this case,
+            // just define them as empty.
+            let is_empty_interface = resolve.interfaces[id].functions.len() == 0
+                && resolve.interfaces[id]
+                    .types
+                    .iter()
+                    .all(|(_, ty)| !matches!(resolve.types[*ty].kind, TypeDefKind::Resource));
+            if is_empty_interface {
+                uwriteln!(self.src, "declare const {local_name}: {{}};");
+            } else {
+                uwriteln!(
+                    self.src,
+                    "import {{ {} }} from './{}.js';",
+                    if camel == local_name {
+                        camel.to_string()
+                    } else {
+                        format!("{camel} as {local_name}")
+                    },
+                    &file_name[0..file_name.len() - 5]
+                );
+            }
         }
 
         if iface_exists {
@@ -445,6 +456,7 @@ impl TsBindgen {
         let mut gen = self.ts_interface(resolve, false);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
+
         for (_, func) in resolve.interfaces[id].functions.iter() {
             gen.ts_func(func, false, true);
         }
@@ -459,6 +471,7 @@ impl TsBindgen {
                 }
             }
         }
+
         uwriteln!(gen.src, "}}");
 
         gen.types(id);

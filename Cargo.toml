@@ -39,19 +39,19 @@ base64 = "0.22.1"
 heck = "0.5.0"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 structopt = "0.3.26"
-wasm-encoder = "0.209.1"
-wasm-metadata = "0.209.1"
-wasmparser = "0.209.1"
-wasmprinter = "0.209.1"
-wasmtime-environ = { version = "22.0.0", features = [
+wasm-encoder = "0.212.0"
+wasm-metadata = "0.212.0"
+wasmparser = "0.212.0"
+wasmprinter = "0.212.0"
+wasmtime-environ = { version = "23.0.1", features = [
     "component-model",
     "compile",
 ] }
-wat = "1.209.1"
-wit-bindgen = "0.26.0"
-wit-bindgen-core = "0.26.0"
-wit-component = { version = "0.209.1", features = ["dummy-module"] }
-wit-parser = "0.209.1"
+wat = "1.212.0"
+wit-bindgen = "0.27.0"
+wit-bindgen-core = "0.27.0"
+wit-component = { version = "0.212.0", features = ["dummy-module"] }
+wit-parser = "0.212.0"
 xshell = "0.2.6"
 
 [dev-dependencies]
