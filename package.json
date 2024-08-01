@@ -33,7 +33,7 @@
     "terser": "^5"
   },
   "devDependencies": {
-    "@golemcloud/componentize-js": "0.8.3-golem.2",
+    "@golemcloud/componentize-js": "0.10.2-golem.1",
     "@types/node": "^20.14.12",
     "@typescript-eslint/eslint-plugin": "^7.17.0",
     "@typescript-eslint/parser": "^7.17.0",
