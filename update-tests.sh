@@ -1,9 +1,6 @@
 #!/bin/bash
 set -ex
 
-# update dependencies
-git submodule foreach git pull origin main
-git submodule update --init --recursive
 cd submodules/wit-bindgen
 
 # build tests
@@ -13,8 +10,8 @@ cargo test -p wit-bindgen-cli --no-default-features -F rust -F c
 for t in target/runtime-tests/*/rust.wasm
 do
   name="$(basename $(dirname $t))"
-  echo "cp $t ../test/fixtures/components/${name}.component.wasm"
-  cp $t ../test/fixtures/components/${name}.component.wasm
+  echo "cp $t ../../test/fixtures/components/${name}.component.wasm"
+  cp $t ../../test/fixtures/components/${name}.component.wasm
 done
 
 # copy over the C-based wit-bindgen tests to our repo.
@@ -23,12 +20,12 @@ for t in target/runtime-tests/*/c-*/*.component.wasm
 do
   name="$(basename $(dirname $t))"
   name=${name:2}
-  echo "cp $t ../test/fixtures/components/${name}.component.wasm"
+  echo "cp $t ../../test/fixtures/components/${name}.component.wasm"
   cp $t ../../test/fixtures/components/${name}.component.wasm
 done
 
 # copy flavorful wit case
-cp tests/runtime/flavorful/world.wit ../../test/fixtures/wit/flavorful.wit
+cp tests/runtime/flavorful/world.wit ../../test/fixtures/wit/deps/flavorful/flavorful.wit
 cd ../..
 
 # convert the js test fixtures into a wasm component

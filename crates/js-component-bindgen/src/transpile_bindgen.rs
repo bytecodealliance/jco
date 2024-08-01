@@ -10,12 +10,11 @@ use crate::source;
 use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
 use heck::*;
-use indexmap::IndexMap;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
-use wasmtime_environ::component::Transcode;
+use wasmtime_environ::component::{ExportIndex, NameMap, NameMapNoIntern, Transcode};
 use wasmtime_environ::{
     component,
     component::{
@@ -192,11 +191,22 @@ pub fn transpile_bindgen(
         .iter()
         .map(|(export_name, canon_export_name)| {
             let export = if canon_export_name.contains(':') {
-                &instantiator.component.exports[*canon_export_name]
+                instantiator
+                    .component
+                    .exports
+                    .get(canon_export_name, &NameMapNoIntern)
+                    .unwrap()
             } else {
-                &instantiator.component.exports[&canon_export_name.to_kebab_case()]
+                instantiator
+                    .component
+                    .exports
+                    .get(&canon_export_name.to_kebab_case(), &NameMapNoIntern)
+                    .unwrap()
             };
-            (export_name.to_string(), export.clone())
+            (
+                export_name.to_string(),
+                instantiator.component.export_items[*export].clone(),
+            )
         })
         .collect();
 
@@ -256,38 +266,24 @@ impl<'a> JsBindgen<'a> {
             self.opts.instantiation.is_some(),
         );
 
-        match self.opts.instantiation {
-            Some(InstantiationMode::Async) => {
-                uwrite!(
-                    output,
-                    "\
-                        export async function instantiate(getCoreModule, imports, instantiateCore = WebAssembly.instantiate) {{
-                            {}
-                            {}
-                            {}
-                    ",
-                    &js_intrinsics as &str,
-                    &intrinsic_definitions as &str,
-                    &compilation_promises as &str,
-                )
-            }
-
-            Some(InstantiationMode::Sync) => {
-                uwrite!(
-                    output,
-                    "\
-                        export function instantiate(getCoreModule, imports, instantiateCore = (module, importObject) => new WebAssembly.Instance(module, importObject)) {{
-                            {}
-                            {}
-                            {}
-                    ",
-                    &js_intrinsics as &str,
-                    &intrinsic_definitions as &str,
-                    &compilation_promises as &str,
-                )
-            }
-
-            None => {}
+        if let Some(instantiation) = &self.opts.instantiation {
+            uwrite!(
+                output,
+                "\
+                    export function instantiate(getCoreModule, imports, instantiateCore = {}) {{
+                        {}
+                        {}
+                        {}
+                ",
+                match instantiation {
+                    InstantiationMode::Async => "WebAssembly.instantiate",
+                    InstantiationMode::Sync =>
+                        "(module, importObject) => new WebAssembly.Instance(module, importObject)",
+                },
+                &js_intrinsics as &str,
+                &intrinsic_definitions as &str,
+                &compilation_promises as &str,
+            );
         }
 
         let imports_object = if self.opts.instantiation.is_some() {
@@ -308,8 +304,31 @@ impl<'a> JsBindgen<'a> {
             uwrite!(
                 output,
                 "\
-                        {}\
-                        {};
+                        let gen = (function* init () {{
+                            {}\
+                            {};
+                        }})();
+                        let promise, resolve, reject;
+                        function runNext (value) {{
+                            try {{
+                                let done;
+                                do {{
+                                    ({{ value, done }} = gen.next(value));
+                                }} while (!(value instanceof Promise) && !done);
+                                if (done) {{
+                                    if (resolve) resolve(value);
+                                    else return value;
+                                }}
+                                if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
+                                value.then(nextVal => done ? resolve() : runNext(nextVal), reject);
+                            }}
+                            catch (e) {{
+                                if (reject) reject(e);
+                                else throw e;
+                            }}
+                        }}
+                        const maybeSyncReturn = runNext(null);
+                        return promise || maybeSyncReturn;
                     }}
                 ",
                 &self.src.js_init as &str,
@@ -340,9 +359,32 @@ impl<'a> JsBindgen<'a> {
                     {}
                     {}
                     {}
-                    {maybe_init_export}const $init = (async() => {{
-                        {}\
-                        {}\
+                    {maybe_init_export}const $init = (() => {{
+                        let gen = (function* init () {{
+                            {}\
+                            {}\
+                        }})();
+                        let promise, resolve, reject;
+                        function runNext (value) {{
+                            try {{
+                                let done;
+                                do {{
+                                    ({{ value, done }} = gen.next(value));
+                                }} while (!(value instanceof Promise) && !done);
+                                if (done) {{
+                                    if (resolve) resolve(value);
+                                    else return value;
+                                }}
+                                if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
+                                value.then(runNext, reject);
+                            }}
+                            catch (e) {{
+                                if (reject) reject(e);
+                                else throw e;
+                            }}
+                        }}
+                        const maybeSyncReturn = runNext(null);
+                        return promise || maybeSyncReturn;
                     }})();
                     {maybe_init}\
                 ",
@@ -425,7 +467,7 @@ impl<'a> Instantiator<'a, '_> {
                 .find(|(_, (impt_name, _))| impt_name == name)
             else {
                 match item {
-                    WorldItem::Interface(_) => unreachable!(),
+                    WorldItem::Interface { .. } => unreachable!(),
                     WorldItem::Function(_) => unreachable!(),
                     WorldItem::Type(ty) => {
                         assert!(!matches!(
@@ -437,12 +479,12 @@ impl<'a> Instantiator<'a, '_> {
                 continue;
             };
             match item {
-                WorldItem::Interface(iface) => {
+                WorldItem::Interface { id, stability: _ } => {
                     let TypeDef::ComponentInstance(instance) = import else {
                         unreachable!()
                     };
                     let import_ty = &self.types[*instance];
-                    let iface = &self.resolve.interfaces[*iface];
+                    let iface = &self.resolve.interfaces[*id];
                     for (ty_name, ty) in &iface.types {
                         match &import_ty.exports.get(ty_name) {
                             Some(TypeDef::Resource(resource)) => {
@@ -470,23 +512,26 @@ impl<'a> Instantiator<'a, '_> {
         self.exports_resource_types = self.imports_resource_types.clone();
         for (key, item) in &self.resolve.worlds[self.world].exports {
             let name = &self.resolve.name_world_key(key);
-            let (_, export) = self
+            let (_, export_idx) = self
                 .component
                 .exports
-                .iter()
+                .raw_iter()
                 .find(|(expt_name, _)| *expt_name == name)
                 .unwrap();
+            let export = &self.component.export_items[*export_idx];
             match item {
-                WorldItem::Interface(iface) => {
-                    let iface = &self.resolve.interfaces[*iface];
+                WorldItem::Interface { id, stability: _ } => {
+                    let iface = &self.resolve.interfaces[*id];
                     let Export::Instance { exports, .. } = &export else {
                         unreachable!()
                     };
                     for (ty_name, ty) in &iface.types {
-                        match exports.get(ty_name).unwrap() {
+                        match self.component.export_items
+                            [*exports.get(ty_name, &NameMapNoIntern).unwrap()]
+                        {
                             Export::Type(TypeDef::Resource(resource)) => {
                                 let ty = crate::dealias(self.resolve, *ty);
-                                let resource_idx = self.types[*resource].ty;
+                                let resource_idx = self.types[resource].ty;
                                 self.exports_resource_types.insert(ty, resource_idx);
                             }
                             Export::Type(_) => {}
@@ -968,7 +1013,7 @@ impl<'a> Instantiator<'a, '_> {
             Some(InstantiationMode::Async) | None => {
                 uwriteln!(
                     self.src.js_init,
-                    "({{ exports: exports{iu32} }} = await {instantiate}(await module{}{imports}));",
+                    "({{ exports: exports{iu32} }} = yield {instantiate}(yield module{}{imports}));",
                     idx.as_u32()
                 )
             }
@@ -1038,9 +1083,9 @@ impl<'a> Instantiator<'a, '_> {
                     assert_eq!(path.len(), 0);
                     (func, import_name, None)
                 }
-                WorldItem::Interface(i) => {
+                WorldItem::Interface { id, stability: _ } => {
                     assert_eq!(path.len(), 1);
-                    let iface = &self.resolve.interfaces[*i];
+                    let iface = &self.resolve.interfaces[*id];
                     let func = &iface.functions[&path[0]];
                     (
                         func,
@@ -1254,6 +1299,9 @@ impl<'a> Instantiator<'a, '_> {
         import_binding: Option<String>,
         local_name: String,
     ) {
+        if import_specifier.starts_with("webidl:") {
+            self.gen.intrinsic(Intrinsic::GlobalThisIdlProxy);
+        }
         // add the function import to the ESM bindgen
         if let Some(_iface_name) = iface_name {
             // mapping can be used to construct virtual nested namespaces
@@ -1339,7 +1387,10 @@ impl<'a> Instantiator<'a, '_> {
                             self.resolve.worlds[self.world]
                                 .imports
                                 .iter()
-                                .find(|&(_, item)| *item == WorldItem::Interface(iface))
+                                .find(|&(_, item)| match item {
+                                    WorldItem::Interface { id, .. } => *id == iface,
+                                    _ => false,
+                                })
                                 .unwrap()
                                 .0
                                 .clone(),
@@ -1702,8 +1753,9 @@ impl<'a> Instantiator<'a, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    fn exports(&mut self, exports: &IndexMap<String, Export>) {
-        for (export_name, export) in exports.iter() {
+    fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
+        for (export_name, export_idx) in exports.raw_iter() {
+            let export = &self.component.export_items[*export_idx];
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut resource_map = ResourceMap::new();
@@ -1715,7 +1767,7 @@ impl<'a> Instantiator<'a, '_> {
                 } => {
                     let func = match item {
                         WorldItem::Function(f) => f,
-                        WorldItem::Interface(_) | WorldItem::Type(_) => unreachable!(),
+                        WorldItem::Interface { .. } | WorldItem::Type(_) => unreachable!(),
                     };
                     self.create_resource_fn_map(func, *func_ty, &mut resource_map);
 
@@ -1735,8 +1787,8 @@ impl<'a> Instantiator<'a, '_> {
                     .to_string();
                     self.export_bindgen(
                         &local_name,
-                        def,
-                        options,
+                        &def,
+                        &options,
                         func,
                         export_name,
                         &resource_map,
@@ -1761,10 +1813,11 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 Export::Instance { exports, .. } => {
                     let id = match item {
-                        WorldItem::Interface(id) => *id,
+                        WorldItem::Interface { id, stability: _ } => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    for (func_name, export) in exports {
+                    for (func_name, export_idx) in exports.raw_iter() {
+                        let export = &self.component.export_items[*export_idx];
                         let (def, options, func_ty) = match export {
                             Export::LiftedFunction { func, options, ty } => (func, options, ty),
                             Export::Type(_) => continue, // ignored
@@ -1786,7 +1839,7 @@ impl<'a> Instantiator<'a, '_> {
                                 &self.exports_resource_types,
                             )
                         } else {
-                            self.gen.local_names.create_once(func_name)
+                            self.gen.local_names.create_once(&func_name)
                         }
                         .to_string();
 
@@ -1824,8 +1877,7 @@ impl<'a> Instantiator<'a, '_> {
                 Export::Type(_) => {}
 
                 // This can't be tested at this time so leave it unimplemented
-                Export::ModuleStatic(_) => unimplemented!(),
-                Export::ModuleImport { .. } => unimplemented!(),
+                Export::ModuleStatic { .. } | Export::ModuleImport { .. } => unimplemented!(),
             }
         }
         self.gen.esm_bindgen.populate_export_aliases();

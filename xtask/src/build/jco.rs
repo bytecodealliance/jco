@@ -7,12 +7,12 @@ use xshell::{cmd, Shell};
 pub(crate) fn run(release: bool) -> Result<()> {
     let build = if release { "release" } else { "debug" };
     transpile(
-        &format!("target/wasm32-wasi/{build}/js_component_bindgen_component.wasm"),
+        &format!("target/wasm32-wasip1/{build}/js_component_bindgen_component.wasm"),
         "js-component-bindgen-component".to_string(),
         release,
     )?;
     transpile(
-        &format!("target/wasm32-wasi/{build}/wasm_tools_js.wasm"),
+        &format!("target/wasm32-wasip1/{build}/wasm_tools_js.wasm"),
         "wasm-tools".to_string(),
         release,
     )?;

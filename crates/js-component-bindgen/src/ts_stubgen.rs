@@ -51,7 +51,7 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) -> anyhow::
                         }
                     }
                 },
-                WorldItem::Interface(_) => match name {
+                WorldItem::Interface{..} => match name {
                     // TODO: Is this even possible?
                     WorldKey::Name(name) => {
                         bail!("Interface imported by name not implemented {name}");
@@ -102,7 +102,7 @@ pub fn ts_stubgen(resolve: &Resolve, id: WorldId, files: &mut Files) -> anyhow::
                         func: f,
                     });
                 }
-                WorldItem::Interface(id) => {
+                WorldItem::Interface{id, ..} => {
                     let id = *id;
                     if let WorldKey::Name(name) = name {
                         export_interfaces.push(ExportInterface {

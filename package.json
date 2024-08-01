@@ -1,14 +1,20 @@
 {
   "name": "@golemcloud/jco",
-  "version": "1.2.4-golem.4",
+  "version": "1.4.0-golem.1",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "author": "Guy Bedford",
   "bin": {
     "jco": "src/jco.js"
   },
   "exports": {
-    "browser": "./src/browser.js",
-    "default": "./src/api.js"
+    ".": {
+      "browser": "./src/browser.js",
+      "default": "./src/api.js"
+    },
+    "./component": {
+      "types": "./obj/js-component-bindgen-component.d.ts",
+      "default": "./src/browser.js"
+    }
   },
   "imports": {
     "#ora": {
@@ -18,8 +24,8 @@
   },
   "type": "module",
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "^0.16.2",
-    "binaryen": "^116.0.0",
+    "@bytecodealliance/preview2-shim": "^0.16.4",
+    "binaryen": "^118.0.0",
     "chalk-template": "^1",
     "commander": "^12",
     "mkdirp": "^3",
@@ -28,13 +34,15 @@
   },
   "devDependencies": {
     "@golemcloud/componentize-js": "0.8.3-golem.2",
-    "@types/node": "^18.11.17",
-    "@typescript-eslint/eslint-plugin": "^5.41.0",
-    "@typescript-eslint/parser": "^5.41.0",
-    "eslint": "^8.30.0",
-    "mocha": "^10.2.0",
+    "@types/node": "^20.14.12",
+    "@typescript-eslint/eslint-plugin": "^7.17.0",
+    "@typescript-eslint/parser": "^7.17.0",
+    "eslint": "^8.56.0",
+    "mime": "^4.0.4",
+    "mocha": "^10.7.0",
+    "puppeteer": "^22.14.0",
     "terser": "^5.16.1",
-    "typescript": "^5.3.3"
+    "typescript": "^5.5.4"
   },
   "repository": {
     "type": "git",
@@ -56,7 +64,7 @@
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
     "lint": "eslint -c eslintrc.cjs src/**/*.js packages/*/lib/**/*.js",
     "test:lts": "mocha -u tdd test/test.js --timeout 30000",
-    "test": "node --stack-trace-limit=100 --experimental-wasm-multi-memory node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000",
+    "test": "node --stack-trace-limit=100 node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000",
     "prepublishOnly": "cargo xtask build release && npm run test"
   },
   "files": [

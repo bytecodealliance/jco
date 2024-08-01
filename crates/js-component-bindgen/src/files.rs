@@ -25,7 +25,7 @@ impl Files {
         self.files.remove(name)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &[u8])> {
+    pub fn iter(&self) -> impl Iterator<Item = (&'_ str, &'_ [u8])> {
         self.files.iter().map(|p| (p.0.as_str(), p.1.as_slice()))
     }
 }

@@ -7,11 +7,10 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 js-component-bindgen = { workspace = true }
+semver = "1.0.23"
 structopt = { workspace = true }
+webidl2wit = { git = "https://github.com/wasi-gfx/webidl2wit", rev = "9cf1e53c5393e02e4b5ecc437012caf23ef1002f" }
+weedle = "0.13.0"
 wit-component = { workspace = true }
-xshell = "0.2"
-
-[build-dependencies]
-anyhow = { workspace = true }
-js-component-bindgen = { workspace = true }
-wit-component = { workspace = true }
+wit-encoder = "0.214.0"
+xshell = { workspace = true }

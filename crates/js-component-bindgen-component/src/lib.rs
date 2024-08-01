@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use js_component_bindgen::{
     generate_types, generate_typescript_stubs,
-    source::wit_parser::{PackageId, Resolve, UnresolvedPackage},
+    source::wit_parser::{PackageId, Resolve},
     transpile,
 };
 
@@ -116,11 +116,11 @@ impl Guest for JsComponentBindgenComponent {
         name: String,
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
-        let (resolve, id) =
-            resolve_package(opts.wit, Some(name.as_str())).map_err(|e| e.to_string())?;
+        let (resolve, ids) =
+            resolve_package(opts.wit, Some(&name))?;
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
-            .select_world(id, world_string.as_deref())
+            .select_world(&ids, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let opts = js_component_bindgen::TranspileOpts {
@@ -144,10 +144,10 @@ impl Guest for JsComponentBindgenComponent {
     }
 
     fn generate_typescript_stubs(opts: TypescriptStubOptions) -> Result<Files, String> {
-        let (resolve, id) = resolve_package(opts.wit, None).map_err(|e| e.to_string())?;
+        let (resolve, ids) = resolve_package(opts.wit, None).map_err(|e| e.to_string())?;
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
-            .select_world(id, world_string.as_deref())
+            .select_world(&ids, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let files = generate_typescript_stubs(resolve, world).map_err(|e| e.to_string())?;
@@ -156,31 +156,23 @@ impl Guest for JsComponentBindgenComponent {
     }
 }
 
-fn resolve_package(wit_opt: Wit, name: Option<&str>) -> Result<(Resolve, PackageId)> {
+fn resolve_package(wit_opt: Wit, name: Option<&str>) -> Result<(Resolve, Vec<PackageId>), String> {
+    let name = name.unwrap_or("world");
     let mut resolve = Resolve::default();
-    let id = match wit_opt {
-        Wit::Source(source) => {
-            let name = name.unwrap_or("world");
-            let pkg = UnresolvedPackage::parse(&PathBuf::from(format!("{name}.wit")), &source)?;
-            resolve.push(pkg)?
-        }
+    let ids = match wit_opt {
+        Wit::Source(source) => resolve
+            .push_str(format!("{name}.wit"), &source)
+            .map_err(|e| e.to_string())?,
         Wit::Path(path) => {
             let path = PathBuf::from(path);
             if path.is_dir() {
-                resolve.push_dir(&path)?.0
+                resolve.push_dir(&path).map_err(|e| e.to_string())?.0
             } else {
-                let contents = std::fs::read(&path)
-                    .with_context(|| format!("failed to read file {path:?}"))?;
-                let text = match std::str::from_utf8(&contents) {
-                    Ok(s) => s,
-                    Err(_) => anyhow::bail!("input file is not valid utf-8"),
-                };
-                let pkg = UnresolvedPackage::parse(&path, text)?;
-                resolve.push(pkg)?
+                resolve.push_file(&path).map_err(|e| e.to_string())?
             }
         }
         Wit::Binary(_) => todo!(),
     };
 
-    Ok((resolve, id))
+    Ok((resolve, ids))
 }

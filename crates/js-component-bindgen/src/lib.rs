@@ -15,9 +15,8 @@ use anyhow::Result;
 use transpile_bindgen::transpile_bindgen;
 
 use anyhow::{bail, Context};
-use wasmtime_environ::component::Export;
-use wasmtime_environ::component::{ComponentTypesBuilder, StaticModuleIndex};
-use wasmtime_environ::wasmparser::{Validator, WasmFeatures};
+use wasmtime_environ::component::{ComponentTypesBuilder, Export, StaticModuleIndex};
+use wasmtime_environ::wasmparser::Validator;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
@@ -89,7 +88,7 @@ pub fn generate_typescript_stubs(
 /// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
 pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
-    use wasmtime_environ::component::Translator;
+    use wasmtime_environ::component::{Component, Translator};
 
     let name = opts.name.clone();
     let mut files = files::Files::default();
@@ -104,7 +103,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .context("failed to extract interface information from component")?;
 
     let (resolve, world_id) = match decoded {
-        DecodedWasm::WitPackage(..) => bail!("unexpected wit package as input"),
+        DecodedWasm::WitPackages(_, _) => bail!("unexpected wit package as input"),
         DecodedWasm::Component(resolve, world_id) => (resolve, world_id),
     };
 
@@ -124,11 +123,8 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
     // that need to be executed to instantiate a component.
     let scope = ScopeVec::new();
     let tunables = Tunables::default_u32();
-    let mut types = ComponentTypesBuilder::default();
-    let mut validator = Validator::new_with_features(WasmFeatures {
-        component_model: true,
-        ..WasmFeatures::default()
-    });
+    let mut validator = Validator::default();
+    let mut types = ComponentTypesBuilder::new(&validator);
 
     let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)
         .translate(component)
@@ -139,7 +135,8 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .map(|(_i, module)| core::Translation::new(module, opts.multi_memory))
         .collect::<Result<_>>()?;
 
-    let types = types.finish(&PrimaryMap::new(), Vec::new(), Vec::new());
+    let mut wasmtime_component = Component::default();
+    let types = types.finish(&mut wasmtime_component);
 
     // Insert all core wasm modules into the generated `Files` which will
     // end up getting used in the `generate_instantiate` method.

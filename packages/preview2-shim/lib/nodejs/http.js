@@ -262,7 +262,7 @@ class OutgoingRequest {
       if (
         extra.length ||
         (port !== undefined &&
-          (portNum.toString() !== port || portNum > 9999)) ||
+          (portNum.toString() !== port || portNum > 65535)) ||
         !host.match(/^[a-zA-Z0-9-.]+$/)
       )
         throw undefined;

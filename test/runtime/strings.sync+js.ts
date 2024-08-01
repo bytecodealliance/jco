@@ -7,8 +7,9 @@ import { instantiate } from '../output/strings.sync+js/strings.sync+js.js';
 import * as assert from 'assert';
 
 function run() {
+  // @ts-ignore
   const wasm = instantiate(helpers.loadWasmSync, {
-    testwasi: helpers,
+    ...helpers.wasi,
     'test:strings/imports': {
       takeBasic(s: string) {
         assert.strictEqual(s, 'latin utf16');

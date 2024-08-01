@@ -6,8 +6,9 @@ import { instantiate } from "../output/variants/variants.js";
 import * as assert from 'assert';
 
 async function run() {
+  // @ts-ignore
   const wasm = await instantiate(helpers.loadWasm, {
-    testwasi: helpers,
+    ...helpers.wasi,
     'test:variants/test': {
       roundtripOption(x) { return x; },
       roundtripResult(x) {

@@ -1142,7 +1142,6 @@ impl Bindgen for FunctionBindgen<'_> {
                                     drop(rsc[{symbol_resource_handle}]);
                                     delete rsc[{symbol_resource_handle}];
                                 }}
-                                {cur_resource_borrows}[i][{symbol_resource_handle}] = null;
                             }}
                             {cur_resource_borrows} = [];"
                         );
