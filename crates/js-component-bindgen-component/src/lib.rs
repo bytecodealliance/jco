@@ -116,8 +116,7 @@ impl Guest for JsComponentBindgenComponent {
         name: String,
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
-        let (resolve, ids) =
-            resolve_package(opts.wit, Some(&name))?;
+        let (resolve, ids) = resolve_package(opts.wit, Some(&name))?;
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
             .select_world(&ids, world_string.as_deref())
