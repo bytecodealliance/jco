@@ -23,8 +23,8 @@ jobs:
       run: rustup update stable --no-self-update && rustup default stable
     - name: Install wasm32-unknown-unknown target
       run: rustup target add wasm32-unknown-unknown
-    - name: Install wasm32-wasi target
-      run: rustup target add wasm32-wasi
+    - name: Install wasm32-wasip1 target
+      run: rustup target add wasm32-wasip1
     - name: Install NPM packages
       run: npm install
     - name: Build
@@ -51,7 +51,7 @@ jobs:
           - os: macos-latest
             node: 18.x
           - os: windows-latest
-            node: 20.x
+            node: latest
           - os: windows-latest
             node: 18.x
     runs-on: ${{ matrix.os }}
@@ -96,15 +96,15 @@ jobs:
     - name: Install wasm32-unknown-unknown target
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
       run: rustup target add wasm32-unknown-unknown
-    - name: Install wasm32-wasi target
+    - name: Install wasm32-wasip1 target
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup target add wasm32-wasi
+      run: rustup target add wasm32-wasip1
     - name: Install wasm-tools
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
       run: cargo install wasm-tools
     - name: Generate WASI Tests
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: cargo xtask generate tests
+      run: cargo xtask generate preview2-tests
     - name: Upload Generated WASI Tests
       uses: actions/upload-artifact@v4
       with:

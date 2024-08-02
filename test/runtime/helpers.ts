@@ -32,3 +32,39 @@ export function log (bytes: Uint8Array) {
 export function logErr (bytes: Uint8Array) {
   stderr.write(bytes);
 }
+
+export const wasi = {
+  'wasi:cli/stderr': {
+    getStderr () {
+
+    }
+  },
+  'wasi:cli/stdin': {
+    getStdin () {
+
+    }
+  },
+  'wasi:cli/stdout': {
+    getStdout () {
+
+    }
+  },
+  'wasi:filesystem/preopens': {
+    getDirectores () {
+
+    }
+  },
+  'wasi:filesystem/types': {
+    Descriptor: class Descriptor {},
+    filsystemErrorCode () {
+      return 0;
+    }
+  },
+  'wasi:io/error': {
+    Error: class WasiError {}
+  },
+  'wasi:io/streams': {
+    InputStream: class InputStream {},
+    OutputStream: class OutputStream {}
+  }
+};

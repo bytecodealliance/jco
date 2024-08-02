@@ -101,7 +101,7 @@ async function wasm2Js (source) {
  * @param {{
  *   name: string,
  *   instantiation?: 'async' | 'sync',
- *   importBindings?: 'js' | 'optimized', 'hybrid', 'direct-optimized',
+ *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
  *   map?: Record<string, string>,
  *   validLiftingOptimization?: bool,
  *   tracing?: bool,
@@ -114,6 +114,7 @@ async function wasm2Js (source) {
  *   namespacedExports?: bool,
  *   outDir?: string,
  *   multiMemory?: bool,
+ *   experimentalIdlImports?: bool,
  *   optArgs?: string[],
  * }} opts
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
@@ -165,6 +166,7 @@ export async function transpileComponent (component, opts = {}) {
     base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000,
     noNamespacedExports: opts.namespacedExports === false,
     multiMemory: opts.multiMemory === true,
+    idlImports: opts.experimentalIdlImports === true,
   });
 
   let outDir = (opts.outDir ?? '').replace(/\\/g, '/');

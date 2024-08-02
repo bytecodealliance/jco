@@ -24,7 +24,7 @@ export async function apiTest(fixtures) {
         `test/fixtures/components/${name}.component.wasm`
       );
       const { files, imports, exports } = await transpile(component, { name });
-      strictEqual(imports.length, 2);
+      strictEqual(imports.length, 4);
       strictEqual(exports.length, 3);
       deepStrictEqual(exports[0], ["test", "instance"]);
       ok(files[name + ".js"]);
@@ -43,10 +43,10 @@ export async function apiTest(fixtures) {
         optimize: true,
         base64Cutoff: 0,
       });
-      strictEqual(imports.length, 2);
+      strictEqual(imports.length, 4);
       strictEqual(exports.length, 3);
       deepStrictEqual(exports[0], ["test", "instance"]);
-      ok(files[name + ".js"].length < 11_000);
+      ok(files[name + ".js"].length < 28_000);
     });
 
     test("Transpile to JS", async () => {
@@ -56,7 +56,7 @@ export async function apiTest(fixtures) {
       );
       const { files, imports, exports } = await transpile(component, {
         map: {
-          "test*": "./*.js",
+          "test:flavorful/*": "./*.js",
         },
         name,
         validLiftingOptimization: true,
@@ -64,14 +64,13 @@ export async function apiTest(fixtures) {
         base64Cutoff: 0,
         js: true,
       });
-      strictEqual(imports.length, 2);
+      strictEqual(imports.length, 4);
       strictEqual(exports.length, 3);
       deepStrictEqual(exports[0], ["test", "instance"]);
       deepStrictEqual(exports[1], ["test:flavorful/test", "instance"]);
       deepStrictEqual(exports[2], ["testImports", "function"]);
       const source = Buffer.from(files[name + ".js"]).toString();
-      ok(source.includes("./wasi.js"));
-      ok(source.includes("testwasi"));
+      ok(source.includes("./test.js"));
       ok(source.includes("FUNCTION_TABLE"));
       for (let i = 0; i < 2; i++) ok(source.includes(exports[i][0]));
     });
@@ -87,7 +86,7 @@ export async function apiTest(fixtures) {
           "test:flavorful/*": "#*import",
         },
       });
-      strictEqual(imports.length, 2);
+      strictEqual(imports.length, 4);
       strictEqual(imports[0], "#testimport");
       const source = Buffer.from(files[name + ".js"]).toString();
       ok(source.includes("'#testimport'"));
@@ -155,7 +154,7 @@ export async function apiTest(fixtures) {
         [
           "processed-by",
           [
-            ["wit-component", "0.202.0"],
+            ["wit-component", "0.212.0"],
             ["dummy-gen", "test"],
           ],
         ],
@@ -196,7 +195,7 @@ export async function apiTest(fixtures) {
         [
           "processed-by",
           [
-            ["wit-component", "0.202.0"],
+            ["wit-component", "0.212.0"],
             ["dummy-gen", "test"],
           ],
         ],
