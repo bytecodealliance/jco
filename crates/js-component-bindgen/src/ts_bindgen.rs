@@ -4,6 +4,7 @@ use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWOR
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, InstantiationMode, TranspileOpts};
 use crate::{dealias, feature_gate_allowed, uwrite, uwriteln};
+use anyhow::{Context as _, Result};
 use heck::*;
 use log::debug;
 use std::collections::btree_map::Entry;
@@ -51,7 +52,7 @@ pub fn ts_bindgen(
     id: WorldId,
     opts: &TranspileOpts,
     files: &mut Files,
-) {
+) -> Result<()> {
     let mut bindgen = TsBindgen {
         src: Source::default(),
         interface_names: LocalNames::default(),
@@ -66,9 +67,9 @@ pub fn ts_bindgen(
         .get(
             world
                 .package
-                .expect("unexpectedly missing package in world"),
+                .context("unexpectedly missing package in world")?,
         )
-        .expect("unexpectedly missing package in world for ID");
+        .context("unexpectedly missing package in world for ID")?;
 
     {
         let mut funcs = Vec::new();
@@ -76,8 +77,8 @@ pub fn ts_bindgen(
         for (name, import) in world.imports.iter() {
             match import {
                 WorldItem::Function(f) => {
-                    if !feature_gate_allowed(resolve, package, &f.stability)
-                        .expect("failed to check feature gate for imported function")
+                    if !feature_gate_allowed(resolve, package, &f.stability, &f.name)
+                        .context("failed to check feature gate for imported function")?
                     {
                         debug!("skipping imported function [{}] feature gate due to feature gate visibility", f.name);
                         continue;
@@ -89,8 +90,13 @@ pub fn ts_bindgen(
                     }
                 }
                 WorldItem::Interface { id, stability } => {
-                    if !feature_gate_allowed(resolve, package, &stability)
-                        .expect("failed to check feature gate for imported interface")
+                    let iface_name = &resolve.interfaces[*id]
+                        .name
+                        .as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("<unnamed>");
+                    if !feature_gate_allowed(resolve, package, &stability, iface_name)
+                        .context("failed to check feature gate for imported interface")?
                     {
                         let import_specifier = resolve.id_of(*id).unwrap();
                         let (_, _, iface) = parse_world_key(&import_specifier).unwrap();
@@ -124,8 +130,8 @@ pub fn ts_bindgen(
                     let ty = &resolve.types[*tid];
                     let name = ty.name.as_ref().unwrap();
 
-                    if !feature_gate_allowed(resolve, package, &ty.stability)
-                        .expect("failed to check feature gate for imported type")
+                    if !feature_gate_allowed(resolve, package, &ty.stability, name)
+                        .context("failed to check feature gate for imported type")?
                     {
                         debug!("skipping imported type [{name}] feature gate due to feature gate visibility");
                         continue;
@@ -180,8 +186,8 @@ pub fn ts_bindgen(
                     WorldKey::Name(export_name) => export_name,
                     WorldKey::Interface(_) => unreachable!(),
                 };
-                if !feature_gate_allowed(resolve, package, &f.stability)
-                    .expect("failed to check feature gate for export")
+                if !feature_gate_allowed(resolve, package, &f.stability, &f.name)
+                    .context("failed to check feature gate for export")?
                 {
                     debug!("skipping exported interface [{export_name}] feature gate due to feature gate visibility");
                     continue;
@@ -200,8 +206,8 @@ pub fn ts_bindgen(
                     }
                 };
 
-                if !feature_gate_allowed(resolve, package, &stability)
-                    .expect("failed to check feature gate for export")
+                if !feature_gate_allowed(resolve, package, &stability, iface_name)
+                    .context("failed to check feature gate for export")?
                 {
                     debug!("skipping exported interface [{export_name}] feature gate due to feature gate visibility");
                     continue;
@@ -351,6 +357,7 @@ pub fn ts_bindgen(
     }
 
     files.push(&format!("{name}.d.ts"), bindgen.src.as_bytes());
+    Ok(())
 }
 
 impl TsBindgen {
@@ -519,7 +526,7 @@ impl TsBindgen {
         uwriteln!(gen.src, "export namespace {camel} {{");
         for (_, func) in resolve.interfaces[id].functions.iter() {
             // Ensure that the function  the world item for stability guarantees and exclude if they do not match
-            if !feature_gate_allowed(resolve, package, &func.stability)
+            if !feature_gate_allowed(resolve, package, &func.stability, &func.name)
                 .expect("failed to check feature gate for function")
             {
                 continue;
