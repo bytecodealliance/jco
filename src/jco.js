@@ -24,7 +24,7 @@ function myParseInt(value) {
 * @param {string[]} previous - the existing list of values
 */
 function collectOptions(value, previous) {
-  previous.concat([value]);
+  return previous.concat([value]);
 }
 
 program.command('componentize')
@@ -74,7 +74,7 @@ program.command('types')
   .option('--tla-compat', 'generates types for the TLA compat output with an async $init promise export')
   .addOption(new Option('-I, --instantiation [mode]', 'type output for custom module instantiation').choices(['async', 'sync']).preset('async'))
   .option('-q, --quiet', 'disable output summary')
-  .option('--feature', 'enable one specific WIT feature (repeatable)', collectOptions, [])
+  .option('--feature <feature>', 'enable one specific WIT feature (repeatable)', collectOptions, [])
   .option('--all-features', 'enable all features')
   .action(asyncAction(types));
 

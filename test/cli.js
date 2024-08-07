@@ -187,6 +187,64 @@ export async function cliTest(fixtures) {
       ok(source.includes("export const test"));
     });
 
+    test("Type generation (specific features)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--feature",
+        "enable-c",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`, "utf8");
+      ok(source.includes("export function a(): void;"));
+      ok(!source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
+    });
+
+    test("Type generation (all features)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--all-features",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`, "utf8");
+      ok(source.includes("export function a(): void;"));
+      ok(source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
+    });
+
+    // NOTE: enabling all features and a specific feature means --all-features takes precedence
+    test("Type generation (all features + feature)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--all-features",
+        "--feature",
+        "enable-c",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`, "utf8");
+      ok(source.includes("export function a(): void;"));
+      ok(source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
+    });
+
     test("TypeScript naming checks", async () => {
       const { stderr } = await exec(
         jcoPath,

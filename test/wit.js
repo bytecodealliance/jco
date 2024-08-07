@@ -224,7 +224,7 @@ export async function witTest() {
     test("Feature gates (types, single feature enabled)", async () => {
       const files = await types(featureGatesWitPath, {
         worldName: 'import-and-export',
-        features: ['fancier-foo'],
+        feature: ['fancier-foo'],
       });
       ok(files['import-and-export.d.ts'], "component js was generated");
       ok(files['interfaces/test-feature-gates-foo.d.ts'], "interface typings were generated");
@@ -241,7 +241,7 @@ export async function witTest() {
     test("Feature gates (types, all features enabled)", async () => {
       const files = await types(featureGatesWitPath, {
         worldName: 'import-and-export',
-        features: 'all',
+        allFeatures: true,
       });
       ok(files['import-and-export.d.ts'], "component js was generated");
       ok(files['interfaces/test-feature-gates-foo.d.ts'], "interface typings were generated");

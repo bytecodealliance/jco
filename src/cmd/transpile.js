@@ -47,8 +47,8 @@ export async function typesComponent (witPath, opts) {
   let features = null;
   if (opts.allFeatures) {
     features = { tag: 'all' };
-  } else if (Array.isArray(opts.features)) {
-    features = { tag: 'list', val: opts.features };
+  } else if (Array.isArray(opts.feature)) {
+    features = { tag: 'list', val: opts.feature };
   }
 
   return Object.fromEntries(generateTypes(name, {
