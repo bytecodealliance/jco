@@ -113,6 +113,20 @@ impl Guest for JsComponentBindgenComponent {
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
         let mut resolve = Resolve::default();
+
+        // Add features if specified
+        match opts.features {
+            Some(EnabledFeatureSet::List(ref features)) => {
+                for f in features.into_iter() {
+                    resolve.features.insert(f.to_string());
+                }
+            }
+            Some(EnabledFeatureSet::All) => {
+                resolve.all_features = true;
+            }
+            _ => {}
+        }
+
         let ids = match opts.wit {
             Wit::Source(source) => resolve
                 .push_str(format!("{name}.wit"), &source)

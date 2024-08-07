@@ -25,6 +25,7 @@ import { commandsTest } from './commands.js';
 import { apiTest } from './api.js';
 import { cliTest } from './cli.js';
 import { preview2Test } from './preview2.js';
+import { witTest } from './wit.js';
 import { tsTest } from './typescript.js';
 
 await codegenTest(componentFixtures);
@@ -34,7 +35,7 @@ await runtimeTest(componentFixtures);
 await commandsTest();
 await apiTest(componentFixtures);
 await cliTest(componentFixtures);
-
+await witTest();
 if (versions.node.split('.')[0] !== '22') {
   const { browserTest } = await import('./browser.js');
   await browserTest();

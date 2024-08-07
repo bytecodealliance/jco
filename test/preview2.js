@@ -3,22 +3,15 @@ import { readFile, rm, writeFile, mkdtemp } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { normalize, resolve, sep } from "node:path";
+
 import { fileURLToPath, pathToFileURL } from "url";
-import { componentNew, preview1AdapterCommandPath } from "../src/api.js";
-import { exec, jcoPath } from "./helpers.js";
 import { HTTPServer } from "@bytecodealliance/preview2-shim/http";
+
+import { componentNew, preview1AdapterCommandPath } from "../src/api.js";
+import { exec, jcoPath, getTmpDir } from "./helpers.js";
 
 export async function preview2Test() {
   suite("Preview 2", () => {
-    /**
-     * Securely creates a temporary directory and returns its path.
-     *
-     * The new directory is created using `fsPromises.mkdtemp()`.
-     */
-    async function getTmpDir() {
-      return await mkdtemp(normalize(tmpdir() + sep));
-    }
-
     var tmpDir;
     var outFile;
     suiteSetup(async function () {

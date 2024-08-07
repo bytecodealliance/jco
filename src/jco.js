@@ -17,6 +17,16 @@ function myParseInt(value) {
   return parseInt(value, 10);
 }
 
+/**
+* Option parsing that allows for collecting repeated arguments
+*
+* @param {string} value - the new value that is added
+* @param {string[]} previous - the existing list of values
+*/
+function collectOptions(value, previous) {
+  return previous.concat([value]);
+}
+
 program.command('componentize')
   .description('Create a component from a JavaScript module')
   .usage('<js-source> --wit wit-world.wit -o <component-path>')
@@ -64,6 +74,8 @@ program.command('types')
   .option('--tla-compat', 'generates types for the TLA compat output with an async $init promise export')
   .addOption(new Option('-I, --instantiation [mode]', 'type output for custom module instantiation').choices(['async', 'sync']).preset('async'))
   .option('-q, --quiet', 'disable output summary')
+  .option('--feature <feature>', 'enable one specific WIT feature (repeatable)', collectOptions, [])
+  .option('--all-features', 'enable all features')
   .action(asyncAction(types));
 
 program.command('run')
