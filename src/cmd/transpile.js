@@ -45,7 +45,7 @@ export async function typesComponent (witPath, opts) {
     outDir += '/';
 
   let features = null;
-  if (opts.features === 'all') {
+  if (opts.allFeatures) {
     features = { tag: 'all' };
   } else if (Array.isArray(opts.features)) {
     features = { tag: 'list', val: opts.features };
