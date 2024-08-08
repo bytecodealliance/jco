@@ -1,0 +1,15 @@
+package test:issue;
+
+interface types {
+  variant value {
+    foo,
+    bar,
+    baz
+  }
+
+  foobarbaz: func() -> list<option<value>>;
+}
+
+world issue {
+  import types;
+}
