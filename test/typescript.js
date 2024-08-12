@@ -49,5 +49,29 @@ export function tsTest() {
         )
       );
     });
+
+    test(`TS types`, async () => {
+      const component = await componentNew(
+        await componentEmbed({
+          witSource: await readFile(
+            `test/fixtures/wits/issue-480/issue-480.wit`,
+            "utf8"
+          ),
+          dummy: true,
+        }),
+      );
+
+      const { files } = await transpile(component, { name: "issue" });
+
+      const dtsSource = new TextDecoder().decode(
+        files["interfaces/test-issue-types.d.ts"]
+      );
+
+      ok(
+        dtsSource.includes(
+          `export function foobarbaz(): Array<Value | undefined>;`
+        )
+      );
+    });
   });
 }
