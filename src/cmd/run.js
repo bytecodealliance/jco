@@ -1,6 +1,6 @@
 import { getTmpDir } from '../common.js';
 import { transpile } from './transpile.js';
-import { rm, stat, mkdir, writeFile, symlink } from 'node:fs/promises';
+import { rm, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import process from 'node:process';
@@ -85,21 +85,11 @@ async function runComponent (componentPath, args, opts, executor) {
 
     await writeFile(resolve(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
 
-    let preview2ShimPath = fileURLToPath(new URL('../../node_modules/@bytecodealliance/preview2-shim', import.meta.url));
-    while (true) {
-      try {
-        if ((await stat(preview2ShimPath)).isDirectory()) {
-          break;
-        }
-      }
-      catch {
-        // empty
-      }
-      let len = preview2ShimPath.length;
-      preview2ShimPath = resolve(preview2ShimPath, '..', '..', '..', 'node_modules', '@bytecodealliance', 'preview2-shim');
-      if (preview2ShimPath.length === len) {
-        throw c`Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`;
-      }
+    let preview2ShimPath
+    try {
+      preview2ShimPath = fileURLToPath(new URL('../..', import.meta.resolve('@bytecodealliance/preview2-shim')));
+    } catch {
+      throw c`Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`;
     }
 
     const modulesDir = resolve(outDir, 'node_modules', '@bytecodealliance');
