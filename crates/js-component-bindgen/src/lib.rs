@@ -13,14 +13,14 @@ pub use transpile_bindgen::{BindingsMode, InstantiationMode, TranspileOpts};
 use anyhow::Result;
 use transpile_bindgen::transpile_bindgen;
 
-use anyhow::{bail, Context};
+use anyhow::{bail, ensure, Context};
 use wasmtime_environ::component::{ComponentTypesBuilder, Export, StaticModuleIndex};
 use wasmtime_environ::wasmparser::Validator;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
 use ts_bindgen::ts_bindgen;
-use wit_parser::{Resolve, Type, TypeDefKind, TypeId, WorldId};
+use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -67,7 +67,8 @@ pub fn generate_types(
 ) -> Result<Vec<(String, Vec<u8>)>, anyhow::Error> {
     let mut files = files::Files::default();
 
-    ts_bindgen(&name, &resolve, world_id, &opts, &mut files);
+    ts_bindgen(&name, &resolve, world_id, &opts, &mut files)
+        .context("failed to generate Typescript bindings")?;
 
     let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
     for (name, source) in files.iter() {
@@ -137,7 +138,8 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
     }
 
     if !opts.no_typescript {
-        ts_bindgen(&name, &resolve, world_id, &opts, &mut files);
+        ts_bindgen(&name, &resolve, world_id, &opts, &mut files)
+            .context("failed to generate Typescript bindings")?;
     }
 
     let (imports, exports) = transpile_bindgen(
@@ -171,4 +173,37 @@ pub fn dealias(resolve: &Resolve, mut id: TypeId) -> TypeId {
             _ => break id,
         }
     }
+}
+
+/// Check if an item (usually some form of [`WorldItem`]) should be allowed through the feature gate
+/// of a given package.
+fn feature_gate_allowed(
+    resolve: &Resolve,
+    package: &Package,
+    stability: &Stability,
+    item_name: &str,
+) -> Result<bool> {
+    Ok(match stability {
+        Stability::Unknown => true,
+        Stability::Stable { since, .. } => {
+            let Some(package_version) = package.name.version.as_ref() else {
+                // If the package version is missing (we're likely dealing with an unresolved package)
+                // and we can't really check much.
+                return Ok(true);
+            };
+
+            ensure!(
+                package_version >= since,
+                "feature gate on [{item_name}] refers to an unreleased (future) package version [{since}] (current package version is [{package_version}])"
+            );
+
+            // Stabilization (@since annotation) overrides features and deprecation
+            true
+        }
+        Stability::Unstable { feature } => {
+            // If a @unstable feature is present but the related feature was not enabled
+            // or all features was not selected, exclude
+            resolve.all_features || resolve.features.contains(feature)
+        }
+    })
 }

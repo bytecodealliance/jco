@@ -1,0 +1,16 @@
+package test:feature-gates-unstable@0.1.0;
+
+interface foo {
+  @since(version = 0.1.0)
+  a: func();
+
+  @unstable(feature = enable-b)
+  b: func();
+
+  @unstable(feature = enable-c)
+  c: func();
+}
+
+world gated {
+  export foo;
+}
