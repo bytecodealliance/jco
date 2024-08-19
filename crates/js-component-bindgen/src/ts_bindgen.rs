@@ -712,8 +712,9 @@ impl<'a> TsInterface<'a> {
             Some("Uint8Array") => self.src.push_str("Uint8Array"),
             Some(ty) => self.src.push_str(ty),
             None => {
+                self.src.push_str("Array<");
                 self.print_ty(ty);
-                self.src.push_str("[]");
+                self.src.push_str(">");
             }
         }
     }
