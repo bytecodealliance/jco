@@ -9,15 +9,22 @@ use std::fmt::Write;
 
 type LocalName = String;
 
-enum Binding {
-    Interface(BTreeMap<String, Binding>),
+enum ImportBinding {
+    Interface(BTreeMap<String, ImportBinding>),
+    // an import binding can have multiple local names,
+    // used in eg multi-version workflows
+    Local(Vec<LocalName>),
+}
+
+enum ExportBinding {
+    Interface(BTreeMap<String, ExportBinding>),
     Local(LocalName),
 }
 
 #[derive(Default)]
 pub struct EsmBindgen {
-    imports: BTreeMap<String, Binding>,
-    exports: BTreeMap<String, Binding>,
+    imports: BTreeMap<String, ImportBinding>,
+    exports: BTreeMap<String, ExportBinding>,
     export_aliases: BTreeMap<String, String>,
 }
 
@@ -30,20 +37,36 @@ impl EsmBindgen {
         let mut iface = &mut self.imports;
         for i in 0..path.len() - 1 {
             if !iface.contains_key(&path[i]) {
-                iface.insert(path[i].to_string(), Binding::Interface(BTreeMap::new()));
+                iface.insert(
+                    path[i].to_string(),
+                    ImportBinding::Interface(BTreeMap::new()),
+                );
             }
             iface = match iface.get_mut(&path[i]).unwrap() {
-                Binding::Interface(iface) => iface,
-                Binding::Local(_) => panic!(
+                ImportBinding::Interface(iface) => iface,
+                ImportBinding::Local(_) => panic!(
                     "Imported interface {} cannot be both a function and an interface",
                     &path[0..i].join(".")
                 ),
             };
         }
-        iface.insert(
-            path[path.len() - 1].to_string(),
-            Binding::Local(binding_name),
-        );
+        if let Some(ref mut existing) = iface.get_mut(&path[path.len() - 1]) {
+            match existing {
+                ImportBinding::Interface(_) => {
+                    unreachable!("Multi-version interfaces must have the same shape")
+                }
+                ImportBinding::Local(ref mut local_names) => {
+                    if !local_names.contains(&binding_name) {
+                        local_names.push(binding_name);
+                    }
+                }
+            }
+        } else {
+            iface.insert(
+                path[path.len() - 1].to_string(),
+                ImportBinding::Local(vec![binding_name]),
+            );
+        }
     }
 
     /// add an exported function binding, optionally on an interface id or kebab name
@@ -64,18 +87,18 @@ impl EsmBindgen {
             if !iface.contains_key(&iface_id_or_kebab) {
                 iface.insert(
                     iface_id_or_kebab.to_string(),
-                    Binding::Interface(BTreeMap::new()),
+                    ExportBinding::Interface(BTreeMap::new()),
                 );
             }
             iface = match iface.get_mut(&iface_id_or_kebab).unwrap() {
-                Binding::Interface(iface) => iface,
-                Binding::Local(_) => panic!(
+                ExportBinding::Interface(iface) => iface,
+                ExportBinding::Local(_) => panic!(
                     "Exported interface {} cannot be both a function and an interface",
                     iface_id_or_kebab
                 ),
             };
         }
-        iface.insert(func_name, Binding::Local(local_name));
+        iface.insert(func_name, ExportBinding::Local(local_name));
     }
 
     /// once all exports have been created, aliases can be populated for interface
@@ -132,14 +155,14 @@ impl EsmBindgen {
         // we currently only support first-level nesting so there is no ordering to figure out
         // in the process we also populate the alias info
         for (export_name, export) in self.exports.iter() {
-            let Binding::Interface(iface) = export else {
+            let ExportBinding::Interface(iface) = export else {
                 continue;
             };
             let (local_name, _) =
                 local_names.get_or_create(&format!("export:{export_name}"), export_name);
             uwriteln!(output, "const {local_name} = {{");
             for (func_name, export) in iface {
-                let Binding::Local(local_name) = export else {
+                let ExportBinding::Local(local_name) = export else {
                     panic!("Unsupported nested export interface");
                 };
                 uwriteln!(output, "{}: {local_name},", maybe_quote_id(func_name));
@@ -157,8 +180,8 @@ impl EsmBindgen {
                 first = false
             }
             let local_name = match &self.exports[export_name] {
-                Binding::Local(local_name) => local_name,
-                Binding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
+                ExportBinding::Local(local_name) => local_name,
+                ExportBinding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
             };
             let alias_maybe_quoted = maybe_quote_id(alias);
             if local_name == alias_maybe_quoted {
@@ -177,8 +200,8 @@ impl EsmBindgen {
                 first = false
             }
             let local_name = match export {
-                Binding::Local(local_name) => local_name,
-                Binding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
+                ExportBinding::Local(local_name) => local_name,
+                ExportBinding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
             };
             let export_name_maybe_quoted = maybe_quote_id(export_name);
             if local_name == export_name_maybe_quoted {
@@ -230,49 +253,72 @@ impl EsmBindgen {
                 uwrite!(output, "import ");
             }
             match binding {
-                Binding::Interface(bindings) => {
+                ImportBinding::Interface(bindings) => {
                     if imports_object.is_none() && idl_binding.is_none() && bindings.len() == 1 {
                         let (import_name, import) = bindings.iter().next().unwrap();
                         if import_name == "default" {
-                            let local_name = match import {
-                                Binding::Interface(iface) => {
+                            match import {
+                                ImportBinding::Interface(iface) => {
                                     let iface_local_name = local_names.create_once(specifier);
                                     iface_imports.push((iface_local_name.to_string(), iface));
-                                    iface_local_name
+                                    uwriteln!(output, "{iface_local_name} from '{specifier}';");
                                 }
-                                Binding::Local(local_name) => local_name,
+                                ImportBinding::Local(local_names) => {
+                                    let local_name = &local_names[0];
+                                    uwriteln!(output, "{local_name} from '{specifier}';");
+                                    for other_local_name in &local_names[1..] {
+                                        uwriteln!(
+                                            output,
+                                            "const {other_local_name} = {local_name};"
+                                        );
+                                    }
+                                }
                             };
-                            uwriteln!(output, "{local_name} from '{specifier}';");
                             continue;
                         }
                     }
                     uwrite!(output, "{{");
                     let mut first = true;
                     for (external_name, import) in bindings {
-                        if first {
-                            output.push_str(" ");
-                            first = false;
-                        } else {
-                            output.push_str(", ");
-                        }
-                        let local_name = match import {
-                            Binding::Interface(iface) => {
+                        match import {
+                            ImportBinding::Interface(iface) => {
+                                if first {
+                                    output.push_str(" ");
+                                    first = false;
+                                } else {
+                                    output.push_str(", ");
+                                }
                                 let (iface_local_name, _) = local_names.get_or_create(
                                     &format!("import:{specifier}#{external_name}"),
                                     external_name,
                                 );
                                 iface_imports.push((iface_local_name.to_string(), iface));
-                                iface_local_name
+                                if external_name == iface_local_name {
+                                    uwrite!(output, "{external_name}");
+                                } else if imports_object.is_some() || idl_binding.is_some() {
+                                    uwrite!(output, "{external_name}: {iface_local_name}");
+                                } else {
+                                    uwrite!(output, "{external_name} as {iface_local_name}");
+                                }
                             }
-                            Binding::Local(local_name) => local_name,
+                            ImportBinding::Local(local_names) => {
+                                for local_name in local_names {
+                                    if first {
+                                        output.push_str(" ");
+                                        first = false;
+                                    } else {
+                                        output.push_str(", ");
+                                    }
+                                    if external_name == local_name {
+                                        uwrite!(output, "{external_name}");
+                                    } else if imports_object.is_some() || idl_binding.is_some() {
+                                        uwrite!(output, "{external_name}: {local_name}");
+                                    } else {
+                                        uwrite!(output, "{external_name} as {local_name}");
+                                    }
+                                }
+                            }
                         };
-                        if external_name == local_name {
-                            uwrite!(output, "{external_name}");
-                        } else if imports_object.is_some() || idl_binding.is_some() {
-                            uwrite!(output, "{external_name}: {local_name}");
-                        } else {
-                            uwrite!(output, "{external_name} as {local_name}");
-                        }
                     }
                     if !first {
                         output.push_str(" ");
@@ -295,7 +341,8 @@ impl EsmBindgen {
                         uwriteln!(output, "}} from '{specifier}';");
                     }
                 }
-                Binding::Local(local_name) => {
+                ImportBinding::Local(local_names) => {
+                    let local_name = &local_names[0];
                     if let Some(imports_object) = imports_object {
                         uwriteln!(
                             output,
@@ -305,6 +352,9 @@ impl EsmBindgen {
                     } else {
                         uwriteln!(output, "{local_name} from '{specifier}';");
                     }
+                    for other_local_name in &local_names[1..] {
+                        uwriteln!(output, "const {other_local_name} = {local_name};");
+                    }
                 }
             }
         }
@@ -313,19 +363,21 @@ impl EsmBindgen {
             uwrite!(output, "const {{");
             let mut first = true;
             for (member_name, binding) in iface_imports {
-                let Binding::Local(local_name) = binding else {
+                let ImportBinding::Local(local_names) = binding else {
                     continue;
                 };
-                if first {
-                    output.push_str(" ");
-                    first = false;
-                } else {
-                    output.push_str(",\n");
-                }
-                if member_name == local_name {
-                    output.push_str(local_name);
-                } else {
-                    uwrite!(output, "{member_name}: {local_name}");
+                for local_name in local_names {
+                    if first {
+                        output.push_str(" ");
+                        first = false;
+                    } else {
+                        output.push_str(",\n");
+                    }
+                    if member_name == local_name {
+                        output.push_str(local_name);
+                    } else {
+                        uwrite!(output, "{member_name}: {local_name}");
+                    }
                 }
             }
             if !first {
