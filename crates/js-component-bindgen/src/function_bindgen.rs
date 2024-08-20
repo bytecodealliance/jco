@@ -1153,38 +1153,40 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::Return { amt, .. } => {
                 if *amt == 0 {
                     if let Some(f) = &self.post_return {
-                        uwriteln!(self.src, "{f}()");
+                        uwriteln!(self.src, "{f}();");
                     }
-                    return;
-                }
-                let ret_assign = if self.post_return.is_some() {
-                    "const retVal ="
-                } else {
-                    "return"
-                };
-                if *amt == 1 {
-                    if self.err == ErrHandling::ThrowResultErr {
-                        let component_err = self.intrinsic(Intrinsic::ComponentError);
-                        let op = &operands[0];
-                        uwriteln!(
-                            self.src,
-                            "if (typeof {op} === 'object' && {op}.tag === 'err') {{
-                                throw new {component_err}({op}.val);
-                            }}
-                            {ret_assign} {op}.val;"
-                        );
-                    } else {
-                        uwriteln!(self.src, "{ret_assign} {};", operands[0]);
+                } else if *amt == 1 && self.err == ErrHandling::ThrowResultErr {
+                    let component_err = self.intrinsic(Intrinsic::ComponentError);
+                    let op = &operands[0];
+                    uwriteln!(self.src, "const retVal = {op};");
+                    if let Some(f) = &self.post_return {
+                        uwriteln!(self.src, "{f}(ret);");
                     }
-                } else {
-                    uwriteln!(self.src, "{ret_assign} [{}];", operands.join(", "));
-                }
-                if let Some(f) = &self.post_return {
                     uwriteln!(
                         self.src,
-                        "{f}(ret);
-                        return retVal;"
+                        "if (typeof retVal === 'object' && retVal.tag === 'err') {{
+                            throw new {component_err}(retVal.val);
+                        }}
+                        return retVal.val;"
                     );
+                } else {
+                    let ret_assign = if self.post_return.is_some() {
+                        "const retVal ="
+                    } else {
+                        "return"
+                    };
+                    if *amt == 1 {
+                        uwriteln!(self.src, "{ret_assign} {};", operands[0]);
+                    } else {
+                        uwriteln!(self.src, "{ret_assign} [{}];", operands.join(", "));
+                    }
+                    if let Some(f) = &self.post_return {
+                        uwriteln!(
+                            self.src,
+                            "{f}(ret);
+                            return retVal;"
+                        );
+                    }
                 }
             }
 
