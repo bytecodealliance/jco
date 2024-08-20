@@ -1151,10 +1151,18 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::Return { amt, .. } => {
-                if let Some(f) = &self.post_return {
-                    uwriteln!(self.src, "{f}({});", if *amt > 0 { "ret" } else { "" });
+                if *amt == 0 {
+                    if let Some(f) = &self.post_return {
+                        uwriteln!(self.src, "{f}()");
+                    }
+                    return;
                 }
-
+                assert!(*amt == 1, "Unexpected multiple return");
+                let ret_assign = if self.post_return.is_some() {
+                    "const retVal ="
+                } else {
+                    "return"
+                };
                 if self.err == ErrHandling::ThrowResultErr {
                     let component_err = self.intrinsic(Intrinsic::ComponentError);
                     let op = &operands[0];
@@ -1163,14 +1171,17 @@ impl Bindgen for FunctionBindgen<'_> {
                         "if ({op}.tag === 'err') {{
                             throw new {component_err}({op}.val);
                         }}
-                        return {op}.val;"
+                        {ret_assign} {op}.val;"
                     );
                 } else {
-                    match amt {
-                        0 => {}
-                        1 => uwriteln!(self.src, "return {};", operands[0]),
-                        _ => uwriteln!(self.src, "return [{}];", operands.join(", ")),
-                    }
+                    uwriteln!(self.src, "{ret_assign} {};", operands[0]);
+                }
+                if let Some(f) = &self.post_return {
+                    uwriteln!(
+                        self.src,
+                        "{f}(ret);
+                        return retVal;"
+                    );
                 }
             }
 
