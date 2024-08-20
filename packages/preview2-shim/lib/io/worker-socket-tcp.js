@@ -270,7 +270,7 @@ export function socketTcpShutdown(id, shutdownType) {
   if (socket.state !== SOCKET_STATE_CONNECTION) throw "invalid-state";
   // Node.js only supports a write shutdown, which is triggered on end
   if (shutdownType === "send" || shutdownType === "both") {
-    if (!winOrMac && socket.tcpSocket.destroySoon)
+    if (winOrMac && socket.tcpSocket.destroySoon)
       socket.tcpSocket.destroySoon();
     else
       socket.tcpSocket.destroy();
