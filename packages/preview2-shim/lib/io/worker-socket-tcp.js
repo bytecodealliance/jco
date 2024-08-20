@@ -10,7 +10,6 @@ import {
 } from "./worker-thread.js";
 import process from "node:process";
 const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
-const { ShutdownWrap } = process.binding('stream_wrap');
 import {
   convertSocketError,
   convertSocketErrorCode,
