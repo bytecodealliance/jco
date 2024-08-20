@@ -1155,8 +1155,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     if let Some(f) = &self.post_return {
                         uwriteln!(self.src, "{f}();");
                     }
-                }
-                else if *amt == 1 && self.err == ErrHandling::ThrowResultErr {
+                } else if *amt == 1 && self.err == ErrHandling::ThrowResultErr {
                     let component_err = self.intrinsic(Intrinsic::ComponentError);
                     let op = &operands[0];
                     uwriteln!(self.src, "const retVal = {op}.val;");
