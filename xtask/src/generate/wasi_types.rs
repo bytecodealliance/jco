@@ -23,7 +23,7 @@ pub(crate) fn run() -> Result<()> {
             .unwrap()
             .1;
 
-        let world = resolve.select_world(&[preview2], Some(world_name))?;
+        let world = resolve.select_world(preview2, Some(world_name))?;
 
         let opts = js_component_bindgen::TranspileOpts {
             name: "component".to_string(),

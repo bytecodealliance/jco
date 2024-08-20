@@ -6,7 +6,15 @@ const TRACE: bool = false;
 const DENO: bool = true;
 const TEST_FILTER: &[&str] = &[];
 
-const TEST_IGNORE: &[&str] = &["preview2_file_read_write"];
+const TEST_IGNORE: &[&str] = &[
+    // Wasmtime run supports a `wasmtime run --argv0=...` argument to customize the argv0
+    // which this test assumes is being used. We don't support this feature.
+    "cli_argv0",
+];
+
+// we don't currently support these subsystems, but if someone wants to work on them we
+// can add these anytime!
+const KEYWORD_IGNORE: &[&str] = &["nn_", "keyvalue", "runtime_config"];
 
 const DENO_IGNORE: &[&str] = &[
     "api_read_only",
@@ -51,6 +59,7 @@ const DENO_IGNORE: &[&str] = &[
     "preview2_tcp_sample_application",
     "preview2_tcp_sockopts",
     "preview2_tcp_states",
+    "preview2_tcp_streams",
     "preview2_udp_bind",
     "preview2_udp_connect",
     "preview2_udp_sample_application",
@@ -94,8 +103,10 @@ pub fn run() -> anyhow::Result<()> {
         }
         let file_name = String::from(entry.file_name().to_str().unwrap());
         let test_name = String::from(&file_name[0..file_name.len() - 5]);
-        // ignore wasi-nn tests for now
-        if test_name.starts_with("nn_") {
+        if KEYWORD_IGNORE
+            .iter()
+            .any(|keyword_ignore| test_name.contains(keyword_ignore))
+        {
             continue;
         }
         if TEST_IGNORE.contains(&test_name.as_ref()) {

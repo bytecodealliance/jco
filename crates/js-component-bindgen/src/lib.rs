@@ -96,7 +96,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .context("failed to extract interface information from component")?;
 
     let (resolve, world_id) = match decoded {
-        DecodedWasm::WitPackages(_, _) => bail!("unexpected wit package as input"),
+        DecodedWasm::WitPackage(_, _) => bail!("unexpected wit package as input"),
         DecodedWasm::Component(resolve, world_id) => (resolve, world_id),
     };
 
@@ -200,7 +200,10 @@ fn feature_gate_allowed(
             // Stabilization (@since annotation) overrides features and deprecation
             true
         }
-        Stability::Unstable { feature } => {
+        Stability::Unstable {
+            feature,
+            deprecated: _,
+        } => {
             // If a @unstable feature is present but the related feature was not enabled
             // or all features was not selected, exclude
             resolve.all_features || resolve.features.contains(feature)
