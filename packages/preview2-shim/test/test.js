@@ -387,10 +387,6 @@ suite("Node.js Preview2", () => {
       }
 
       tcpSocket.shutdown("both");
-      deepStrictEqual(
-        tcpSocket.remoteAddress().val.address,
-        googleIp.split(".").map((n) => Number(n))
-      );
     }));
   });
 

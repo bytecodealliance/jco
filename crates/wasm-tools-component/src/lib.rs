@@ -59,12 +59,12 @@ impl Guest for WasmToolsJs {
         // let world = decode_world("component", &binary);
 
         let doc = match &decoded {
-            DecodedWasm::WitPackages(_resolve, _pkg) => panic!("Unexpected wit package"),
+            DecodedWasm::WitPackage(_, _) => panic!("Unexpected wit package"),
             DecodedWasm::Component(resolve, world) => resolve.worlds[*world].package.unwrap(),
         };
 
         let output = WitPrinter::default()
-            .print(decoded.resolve(), &[doc])
+            .print(decoded.resolve(), doc, &[])
             .map_err(|e| format!("Unable to print wit\n${:?}", e))?;
 
         Ok(output)
@@ -106,7 +106,7 @@ impl Guest for WasmToolsJs {
         let world_string = embed_opts.world.as_ref().map(|world| world.to_string());
 
         let world = resolve
-            .select_world(&ids, world_string.as_deref())
+            .select_world(ids, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let string_encoding = match &embed_opts.string_encoding {

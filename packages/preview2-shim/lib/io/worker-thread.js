@@ -583,7 +583,7 @@ function handle(call, id, payload) {
         Math.min(stream.stream.readableLength, Number(payload))
       );
       if (res) return res;
-      if (stream.stream.readableEnded) return { tag: "closed" };
+      if (stream.stream.readableEnded) throw { tag: "closed" };
       return new Uint8Array();
     }
     case INPUT_STREAM_BLOCKING_READ: {
