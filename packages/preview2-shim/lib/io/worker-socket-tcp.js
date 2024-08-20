@@ -31,6 +31,8 @@ import {
 } from "./worker-sockets.js";
 import { Socket, Server } from "node:net";
 
+const winOrMac = process.platform === 'win32' || process.platform === 'darwin';
+
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
  * @typedef {import("../../../types/interfaces/wasi-sockets-tcp.js").IpAddressFamily} IpAddressFamily
@@ -268,7 +270,7 @@ export function socketTcpShutdown(id, shutdownType) {
   if (socket.state !== SOCKET_STATE_CONNECTION) throw "invalid-state";
   // Node.js only supports a write shutdown, which is triggered on end
   if (shutdownType === "send" || shutdownType === "both") {
-    if (socket.tcpSocket.destroySoon)
+    if (!winOrMac && socket.tcpSocket.destroySoon)
       socket.tcpSocket.destroySoon();
     else
       socket.tcpSocket.destroy();
