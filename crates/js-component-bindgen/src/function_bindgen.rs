@@ -1157,24 +1157,27 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                     return;
                 }
-                assert!(*amt == 1, "Unexpected multiple return");
                 let ret_assign = if self.post_return.is_some() {
                     "const retVal ="
                 } else {
                     "return"
                 };
-                if self.err == ErrHandling::ThrowResultErr {
-                    let component_err = self.intrinsic(Intrinsic::ComponentError);
-                    let op = &operands[0];
-                    uwriteln!(
-                        self.src,
-                        "if ({op}.tag === 'err') {{
-                            throw new {component_err}({op}.val);
-                        }}
-                        {ret_assign} {op}.val;"
-                    );
+                if *amt == 1 {
+                    if self.err == ErrHandling::ThrowResultErr {
+                        let component_err = self.intrinsic(Intrinsic::ComponentError);
+                        let op = &operands[0];
+                        uwriteln!(
+                            self.src,
+                            "if (typeof {op} === 'object' && {op}.tag === 'err') {{
+                                throw new {component_err}({op}.val);
+                            }}
+                            {ret_assign} {op}.val;"
+                        );
+                    } else {
+                        uwriteln!(self.src, "{ret_assign} {};", operands[0]);
+                    }
                 } else {
-                    uwriteln!(self.src, "{ret_assign} {};", operands[0]);
+                    uwriteln!(self.src, "{ret_assign} [{}];", operands.join(", "));
                 }
                 if let Some(f) = &self.post_return {
                     uwriteln!(
