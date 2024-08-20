@@ -1307,13 +1307,6 @@ impl<'a> Instantiator<'a, '_> {
             // mapping can be used to construct virtual nested namespaces
             // which is used eg to support WASI interface groupings
             if let Some(iface_member) = iface_member {
-                // if local_name.starts_with("Poll") {
-                //     dbg!( &[
-                //         &import_specifier,
-                //         &iface_member.to_lower_camel_case(),
-                //         &import_binding.as_ref().unwrap().to_string(),
-                //     ], &local_name);
-                // }
                 self.gen.esm_bindgen.add_import_binding(
                     &[
                         import_specifier,
