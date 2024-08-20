@@ -1158,16 +1158,16 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else if *amt == 1 && self.err == ErrHandling::ThrowResultErr {
                     let component_err = self.intrinsic(Intrinsic::ComponentError);
                     let op = &operands[0];
-                    uwriteln!(self.src, "const retVal = {op}.val;");
+                    uwriteln!(self.src, "const retVal = {op};");
                     if let Some(f) = &self.post_return {
                         uwriteln!(self.src, "{f}(ret);");
                     }
                     uwriteln!(
                         self.src,
-                        "if (typeof {op} === 'object' && {op}.tag === 'err') {{
-                            throw new {component_err}(retVal);
+                        "if (typeof retVal === 'object' && retVal.tag === 'err') {{
+                            throw new {component_err}(retVal.val);
                         }}
-                        return retVal;"
+                        return retVal.val;"
                     );
                 } else {
                     let ret_assign = if self.post_return.is_some() {
