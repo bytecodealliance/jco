@@ -540,7 +540,7 @@ class Fields {
     }
     try {
       validateHeaderValue(name, new TextDecoder().decode(value));
-    } catch (e) {
+    } catch {
       throw { tag: "invalid-syntax" };
     }
     const lowercased = name.toLowerCase();
