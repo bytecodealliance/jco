@@ -82,6 +82,8 @@ export async function preview2Test() {
           "test/fixtures/componentize/wasi-http-proxy/source.js",
           "-w",
           "test/fixtures/wit",
+          "-e",
+          "http",
           "--world-name",
           "test:jco/command-extended",
           "-o",

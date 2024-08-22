@@ -352,7 +352,7 @@ class Descriptor {
         let isSymlink = false;
         try {
           isSymlink = lstatSync(fullPath).isSymbolicLink();
-        } catch (e) {
+        } catch {
           //
         }
         if (isSymlink) throw openFlags.directory ? "not-directory" : "loop";
@@ -361,7 +361,7 @@ class Descriptor {
         let isFile = false;
         try {
           isFile = !statSync(fullPath).isDirectory();
-        } catch (e) {
+        } catch {
           //
         }
         if (isFile) throw "not-directory";
@@ -430,7 +430,7 @@ class Descriptor {
         let isDir = false;
         try {
           isDir = statSync(fullPath).isDirectory();
-        } catch (_) {
+        } catch {
           //
         }
         if (!isDir) throw isWindows ? "no-entry" : "not-directory";
@@ -449,7 +449,7 @@ class Descriptor {
         let isDir = false;
         try {
           isDir = statSync(fullPath).isDirectory();
-        } catch (e) {
+        } catch {
           //
         }
         throw isDir ? (isWindows ? "access" : (isMac ? "not-permitted" : "is-directory")) : "not-directory";
