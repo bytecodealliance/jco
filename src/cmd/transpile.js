@@ -1,7 +1,9 @@
 import { $init, generate, generateTypes } from '../../obj/js-component-bindgen-component.js';
-import { extname, basename, resolve } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
+import { dirname, extname, basename, resolve } from 'node:path';
 import c from 'chalk-template';
-import { readFile, writeFiles, spawnIOTmp, setShowSpinner, getShowSpinner} from '../common.js';
+import { readFile, sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import { optimizeComponent } from './opt.js';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
