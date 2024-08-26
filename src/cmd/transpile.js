@@ -25,6 +25,7 @@ export async function types (witPath, opts) {
  *   instantiation?: 'async' | 'sync',
  *   tlaCompat?: bool,
  *   outDir?: string,
+ *   features?: string[] | 'all',
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
@@ -40,12 +41,37 @@ export async function typesComponent (witPath, opts) {
   let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
   if (!outDir.endsWith('/') && outDir !== '')
     outDir += '/';
+
+  let features = null;
+  if (opts.allFeatures) {
+    features = { tag: 'all' };
+  } else if (Array.isArray(opts.feature)) {
+    features = { tag: 'list', val: opts.feature };
+  }
+
   return Object.fromEntries(generateTypes(name, {
     wit: { tag: 'path', val: (isWindows ? '//?/' : '') + resolve(witPath) },
     instantiation,
     tlaCompat: opts.tlaCompat ?? false,
-    world: opts.worldName
+    world: opts.worldName,
+    features,
   }).map(([name, file]) => [`${outDir}${name}`, file]));
+}
+
+async function writeFiles(files, summaryTitle) {
+  await Promise.all(Object.entries(files).map(async ([name, file]) => {
+    await mkdir(dirname(name), { recursive: true });
+    await writeFile(name, file);
+  }));
+  if (!summaryTitle)
+    return;
+  console.log(c`
+  {bold ${summaryTitle}:}
+
+${table(Object.entries(files).map(([name, source]) => [
+    c` - {italic ${name}}  `,
+    c`{black.italic ${sizeStr(source.length)}}`
+  ]))}`);
 }
 
 export async function transpile (componentPath, opts, program) {

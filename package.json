@@ -1,6 +1,6 @@
 {
   "name": "@golemcloud/jco",
-  "version": "1.4.0-golem.1",
+  "version": "1.4.4-golem.1",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "author": "Guy Bedford",
   "bin": {
@@ -24,7 +24,7 @@
   },
   "type": "module",
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "^0.16.4",
+    "@bytecodealliance/preview2-shim": "^0.16.5",
     "binaryen": "^118.0.0",
     "chalk-template": "^1",
     "commander": "^12",
@@ -35,13 +35,12 @@
   "devDependencies": {
     "@golemcloud/componentize-js": "0.10.2-golem.1",
     "@types/node": "^20.14.12",
-    "@typescript-eslint/eslint-plugin": "^7.17.0",
-    "@typescript-eslint/parser": "^7.17.0",
-    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^8.2.0",
+    "@typescript-eslint/parser": "^8.2.0",
+    "eslint": "^9.9.0",
     "mime": "^4.0.4",
     "mocha": "^10.7.0",
     "puppeteer": "^22.14.0",
-    "terser": "^5.16.1",
     "typescript": "^5.5.4"
   },
   "repository": {

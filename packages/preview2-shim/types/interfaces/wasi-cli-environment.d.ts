@@ -9,11 +9,11 @@ export namespace WasiCliEnvironment {
    * in the component model, this import function should return the same
    * values each time it is called.
    */
-  export function getEnvironment(): [string, string][];
+  export function getEnvironment(): Array<[string, string]>;
   /**
    * Get the POSIX-style arguments to the program.
    */
-  export function getArguments(): string[];
+  export function getArguments(): Array<string>;
   /**
    * Return a path that programs should use as their initial current working
    * directory, interpreting `.` as shorthand for this.

@@ -12,10 +12,20 @@ program
   .name('jco')
   .description(c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`)
   .usage('<command> [options]')
-  .version('1.4.0');
+  .version('1.4.4');
 
 function myParseInt(value) {
   return parseInt(value, 10);
+}
+
+/**
+* Option parsing that allows for collecting repeated arguments
+*
+* @param {string} value - the new value that is added
+* @param {string[]} previous - the existing list of values
+*/
+function collectOptions(value, previous) {
+  return previous.concat([value]);
 }
 
 program.command('componentize')
@@ -24,7 +34,8 @@ program.command('componentize')
   .argument('<js-source>', 'JS source file to build')
   .requiredOption('-w, --wit <path>', 'WIT path to build with')
   .option('-n, --world-name <name>', 'WIT world to build')
-  .addOption(new Option('-d, --disable <feature...>', 'disable WASI features').choices(['stdio', 'random', 'clocks', 'http']))
+  .addOption(new Option('-d, --disable <feature...>', 'disable WASI features').choices(['stdio', 'random', 'clocks', 'all']))
+  .addOption(new Option('-e, --enable <feature...>', 'enable WASI features').choices(['http']))
   .option('--preview2-adapter <adapter>', 'provide a custom preview2 adapter path')
   .requiredOption('-o, --out <out>', 'output component file')
   .action(asyncAction(componentize));
@@ -74,6 +85,8 @@ program.command('types')
   .option('--tla-compat', 'generates types for the TLA compat output with an async $init promise export')
   .addOption(new Option('-I, --instantiation [mode]', 'type output for custom module instantiation').choices(['async', 'sync']).preset('async'))
   .option('-q, --quiet', 'disable output summary')
+  .option('--feature <feature>', 'enable one specific WIT feature (repeatable)', collectOptions, [])
+  .option('--all-features', 'enable all features')
   .action(asyncAction(types));
 
 program.command('run')

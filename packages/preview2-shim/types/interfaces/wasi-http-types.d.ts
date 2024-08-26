@@ -324,14 +324,14 @@ export class Fields {
   * An error result will be returned if any header or value was
   * syntactically invalid, or if a header was forbidden.
   */
-  static fromList(entries: [FieldKey, FieldValue][]): Fields;
+  static fromList(entries: Array<[FieldKey, FieldValue]>): Fields;
   /**
   * Get all of the values corresponding to a key. If the key is not present
   * in this `fields`, an empty list is returned. However, if the key is
   * present but empty, this is represented by a list with one or more
   * empty field-values present.
   */
-  get(name: FieldKey): FieldValue[];
+  get(name: FieldKey): Array<FieldValue>;
   /**
   * Returns `true` when the key is present in this `fields`. If the key is
   * syntactically invalid, `false` is returned.
@@ -343,7 +343,7 @@ export class Fields {
   * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
   */
-  set(name: FieldKey, value: FieldValue[]): void;
+  set(name: FieldKey, value: Array<FieldValue>): void;
   /**
   * Delete all values for a key. Does nothing if no values for the key
   * exist.
@@ -366,7 +366,7 @@ export class Fields {
   * which have multiple values are represented by multiple entries in this
   * list with the same key.
   */
-  entries(): [FieldKey, FieldValue][];
+  entries(): Array<[FieldKey, FieldValue]>;
   /**
   * Make a deep copy of the Fields. Equivelant in behavior to calling the
   * `fields` constructor on the return value of `entries`. The resulting

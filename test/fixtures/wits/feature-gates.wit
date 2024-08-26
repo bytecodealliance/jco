@@ -1,0 +1,26 @@
+/// This WIT is used to test/ensure that JCO does not
+/// generate exports/imports for interfaces that are invalid
+/// on the feature-gating feature of WIT
+///
+/// see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#feature-gates
+
+package test:feature-gates@0.2.1;
+
+interface foo {
+  a: func();
+
+  @since(version = 0.2.1)
+  b: func();
+
+  @since(version = 0.2.1, feature = gated)
+  c: func();
+
+  @unstable(feature = fancier-foo)
+  d: func();
+}
+
+world import-and-export {
+  import foo;
+  export foo;
+}
+

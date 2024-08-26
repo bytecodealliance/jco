@@ -116,10 +116,10 @@ impl Guest for JsComponentBindgenComponent {
         name: String,
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
-        let (resolve, ids) = resolve_package(opts.wit, Some(&name))?;
+        let (resolve, id) = resolve_package(opts.wit, opts.features, Some(&name))?;
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
-            .select_world(&ids, world_string.as_deref())
+            .select_world(id, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let opts = js_component_bindgen::TranspileOpts {
@@ -143,10 +143,10 @@ impl Guest for JsComponentBindgenComponent {
     }
 
     fn generate_typescript_stubs(opts: TypescriptStubOptions) -> Result<Files, String> {
-        let (resolve, ids) = resolve_package(opts.wit, None).map_err(|e| e.to_string())?;
+        let (resolve, id) = resolve_package(opts.wit, None, None).map_err(|e| e.to_string())?;
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
-            .select_world(&ids, world_string.as_deref())
+            .select_world(id, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let files = generate_typescript_stubs(resolve, world).map_err(|e| e.to_string())?;
@@ -155,10 +155,24 @@ impl Guest for JsComponentBindgenComponent {
     }
 }
 
-fn resolve_package(wit_opt: Wit, name: Option<&str>) -> Result<(Resolve, Vec<PackageId>), String> {
+fn resolve_package(wit: Wit, features: Option<EnabledFeatureSet>, name: Option<&str>) -> Result<(Resolve, PackageId), String> {
     let name = name.unwrap_or("world");
     let mut resolve = Resolve::default();
-    let ids = match wit_opt {
+
+    // Add features if specified
+    match features {
+        Some(EnabledFeatureSet::List(ref features)) => {
+            for f in features.into_iter() {
+                resolve.features.insert(f.to_string());
+            }
+        }
+        Some(EnabledFeatureSet::All) => {
+            resolve.all_features = true;
+        }
+        _ => {}
+    }
+
+    let id = match wit {
         Wit::Source(source) => resolve
             .push_str(format!("{name}.wit"), &source)
             .map_err(|e| e.to_string())?,
@@ -173,5 +187,5 @@ fn resolve_package(wit_opt: Wit, name: Option<&str>) -> Result<(Resolve, Vec<Pac
         Wit::Binary(_) => todo!(),
     };
 
-    Ok((resolve, ids))
+    Ok((resolve, id))
 }
