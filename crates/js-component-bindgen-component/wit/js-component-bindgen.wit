@@ -73,6 +73,14 @@ world js-component-bindgen {
     path(string),
   }
 
+  /// Enumerate enabled features
+  variant enabled-feature-set {
+    /// Enable only the given list of features
+    %list(list<string>),
+    /// Enable all features
+    all,
+  }
+
   record type-generation-options {
     /// wit to generate typing from
     wit: wit,
@@ -81,6 +89,8 @@ world js-component-bindgen {
     tla-compat: option<bool>,
     instantiation: option<instantiation-mode>,
     map: option<maps>,
+    /// Features that should be enabled as part of feature gating
+    features: option<enabled-feature-set>,
   }
 
   record typescript-stub-options {

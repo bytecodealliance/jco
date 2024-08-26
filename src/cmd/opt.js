@@ -9,7 +9,7 @@ import ora from '#ora';
 let WASM_OPT;
 try {
   WASM_OPT = fileURLToPath(new URL('../../node_modules/binaryen/bin/wasm-opt', import.meta.url));
-} catch (e) {
+} catch {
   WASM_OPT = new URL('../../node_modules/binaryen/bin/wasm-opt', import.meta.url);
 }
 

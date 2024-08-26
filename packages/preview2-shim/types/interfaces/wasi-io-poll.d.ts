@@ -20,7 +20,7 @@ export namespace WasiIoPoll {
    * the pollables has an error, it is indicated by marking the source as
    * being reaedy for I/O.
    */
-  export function poll(in_: Pollable[]): Uint32Array;
+  export function poll(in_: Array<Pollable>): Uint32Array;
 }
 
 export class Pollable {

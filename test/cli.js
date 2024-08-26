@@ -1,3 +1,6 @@
+import { resolve, normalize, sep } from "node:path";
+import { execArgv } from "node:process";
+import { tmpdir, EOL } from "node:os";
 import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import {
   mkdir,
@@ -7,11 +10,9 @@ import {
   writeFile,
   mkdtemp,
 } from "node:fs/promises";
+
 import { fileURLToPath, pathToFileURL } from "url";
-import { exec, jcoPath } from "./helpers.js";
-import { tmpdir } from "node:os";
-import { resolve, normalize, sep } from "node:path";
-import { execArgv } from "node:process";
+import { exec, jcoPath, getTmpDir } from "./helpers.js";
 
 const multiMemory = execArgv.includes("--experimental-wasm-multi-memory")
   ? ["--multi-memory"]
@@ -19,15 +20,6 @@ const multiMemory = execArgv.includes("--experimental-wasm-multi-memory")
 
 export async function cliTest(fixtures) {
   suite("CLI", () => {
-    /**
-     * Securely creates a temporary directory and returns its path.
-     *
-     * The new directory is created using `fsPromises.mkdtemp()`.
-     */
-    async function getTmpDir() {
-      return await mkdtemp(normalize(tmpdir() + sep));
-    }
-
     var tmpDir;
     var outDir;
     var outFile;
@@ -193,6 +185,64 @@ export async function cliTest(fixtures) {
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/flavorful.d.ts`, "utf8");
       ok(source.includes("export const test"));
+    });
+
+    test("Type generation (specific features)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--feature",
+        "enable-c",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`, "utf8");
+      ok(source.includes("export function a(): void;"));
+      ok(!source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
+    });
+
+    test("Type generation (all features)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--all-features",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`, "utf8");
+      ok(source.includes("export function a(): void;"));
+      ok(source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
+    });
+
+    // NOTE: enabling all features and a specific feature means --all-features takes precedence
+    test("Type generation (all features + feature)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--all-features",
+        "--feature",
+        "enable-c",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`, "utf8");
+      ok(source.includes("export function a(): void;"));
+      ok(source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
     });
 
     test("TypeScript naming checks", async () => {
@@ -412,7 +462,7 @@ export async function cliTest(fixtures) {
           [
             "processed-by",
             [
-              ["wit-component", "0.212.0"],
+              ["wit-component", "0.215.0"],
               ["dummy-gen", "test"],
             ],
           ],
@@ -461,11 +511,7 @@ export async function cliTest(fixtures) {
         "componentize",
         "test/fixtures/componentize/source.js",
         "-d",
-        "clocks",
-        "-d",
-        "random",
-        "-d",
-        "stdio",
+        "all",
         "-w",
         "test/fixtures/componentize/source.wit",
         "-o",

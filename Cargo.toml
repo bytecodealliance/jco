@@ -19,7 +19,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "1.4.0"
+version = "1.4.4"
 
 [profile.release]
 codegen-units = 1
@@ -37,22 +37,24 @@ strip = true
 anyhow = "1.0.86"
 base64 = "0.22.1"
 heck = "0.5.0"
-indexmap = "2.2"
+indexmap = "2.4.0"
+log = "0.4.22"
+semver = "1.0.23"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 structopt = "0.3.26"
-wasm-encoder = "0.212.0"
-wasm-metadata = "0.212.0"
-wasmparser = "0.212.0"
-wasmprinter = "0.212.0"
-wasmtime-environ = { version = "23.0.1", features = [
+wasm-encoder = "0.215.0"
+wasm-metadata = "0.215.0"
+wasmparser = "0.215.0"
+wasmprinter = "0.215.0"
+wasmtime-environ = { version = "24.0.0", features = [
     "component-model",
     "compile",
 ] }
-wat = "1.212.0"
-wit-bindgen = "0.27.0"
-wit-bindgen-core = "0.27.0"
-wit-component = { version = "0.212.0", features = ["dummy-module"] }
-wit-parser = "0.212.0"
+wat = "1.215.0"
+wit-bindgen = "0.30.0"
+wit-bindgen-core = "0.30.0"
+wit-component = { version = "0.215.0", features = ["dummy-module"] }
+wit-parser = "0.215.0"
 xshell = "0.2.6"
 
 [dev-dependencies]
