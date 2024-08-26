@@ -155,7 +155,11 @@ impl Guest for JsComponentBindgenComponent {
     }
 }
 
-fn resolve_package(wit: Wit, features: Option<EnabledFeatureSet>, name: Option<&str>) -> Result<(Resolve, PackageId), String> {
+fn resolve_package(
+    wit: Wit,
+    features: Option<EnabledFeatureSet>,
+    name: Option<&str>,
+) -> Result<(Resolve, PackageId), String> {
     let name = name.unwrap_or("world");
     let mut resolve = Resolve::default();
 
