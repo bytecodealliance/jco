@@ -3,7 +3,7 @@
 - [Introduction](./introduction.md)
 - [Transpiling](./transpiling.md)
 - [Example](./example.md)
-- Advanced
+- [Advanced](#)
     - [Optimized Host Bindings](./optimized-host-bindings.md)
 - [Contributor Guide](#)
     - [Contributing to the Codebase](./contributing.md)

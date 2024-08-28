@@ -11,7 +11,7 @@ program
   .name('jco')
   .description(c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`)
   .usage('<command> [options]')
-  .version('1.4.4');
+  .version('1.5.0');
 
 function myParseInt(value) {
   return parseInt(value, 10);
