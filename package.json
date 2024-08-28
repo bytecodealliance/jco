@@ -33,7 +33,7 @@
     "terser": "^5"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.10.4",
+    "@bytecodealliance/componentize-js": "^0.11.0",
     "@types/node": "^20.14.12",
     "@typescript-eslint/eslint-plugin": "^8.2.0",
     "@typescript-eslint/parser": "^8.2.0",

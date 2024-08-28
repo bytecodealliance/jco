@@ -12,7 +12,7 @@ export async function componentize (jsSource, opts) {
     throw e;
   }
   if (opts.disable?.includes('all')) {
-    opts.disable = ['stdio', 'random', 'clocks'];
+    opts.disable = ['stdio', 'random', 'clocks', 'http'];
   }
   const source = await readFile(jsSource, 'utf8');
   const { component } = await componentizeFn(source, {
