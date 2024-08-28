@@ -168,7 +168,7 @@ export async function apiTest(fixtures) {
         witPath:
           (isWindows ? "//?/" : "") +
           fileURLToPath(
-            new URL("./fixtures/componentize/source.wit", import.meta.url)
+            new URL("./fixtures/componentize/cli/source.wit", import.meta.url)
           ),
         metadata: [
           ["language", [["javascript", ""]]],

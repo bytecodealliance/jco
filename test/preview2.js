@@ -138,5 +138,38 @@ export async function preview2Test() {
 
       server.stop();
     });
+
+    test("http test", async () => {
+      const { componentize } = await import(
+        "@bytecodealliance/componentize-js"
+      );
+      const { component } = await componentize(
+        await readFile("test/fixtures/componentize/http/source.js", "utf8"),
+        `
+          package local:test;
+          world test {
+            export test: func () -> result<string, string>;
+          }
+        `
+      );
+      await writeFile(outFile, component);
+      const outDir = fileURLToPath(
+        new URL(`./output/http-test`, import.meta.url)
+      );
+      {
+        const { stderr } = await exec(
+          jcoPath,
+          "transpile",
+          outFile,
+          "--name",
+          "http-test",
+          "-o",
+          outDir
+        );
+        strictEqual(stderr, "");
+      }
+      const mod = await import(`./output/http-test/http-test.js`);
+      mod.test();
+    });
   });
 }
