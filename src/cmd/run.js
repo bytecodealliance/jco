@@ -85,9 +85,9 @@ async function runComponent (componentPath, args, opts, executor) {
 
     await writeFile(resolve(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
 
-    let preview2ShimPath
+    let preview2ShimPath;
     try {
-      preview2ShimPath = fileURLToPath(new URL('../..', import.meta.resolve('@bytecodealliance/preview2-shim')));
+      preview2ShimPath = resolve(fileURLToPath(import.meta.resolve('@bytecodealliance/preview2-shim')), '../../../');
     } catch {
       throw c`Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`;
     }
