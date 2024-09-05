@@ -9,6 +9,7 @@ export async function componentize (jsSource, opts) {
   }
   const source = await readFile(jsSource, 'utf8');
   const { component } = await componentizeFn(source, {
+    enableAot: opts.aot,
     sourceName: basename(jsSource),
     witPath: resolve(opts.wit),
     worldName: opts.worldName,
