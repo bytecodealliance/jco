@@ -68,10 +68,10 @@ jobs:
       with:
         name: jco-build
         path: obj
-    - name: Check node_modules
-      run: ls node_modules
-    - name: Check node_modules/@bytecodealliance
-      run: ls node_modules/@bytecodealliance
+    - name: Check node_modules/@bytecodealliance/componentize-js
+      run: ls node_modules/@bytecodealliance/componentize-js
+    - name: Check node_modules/@bytecodealliance/componentize-js/package.json
+      run: cat node_modules/@bytecodealliance/componentize-js/package.json
     - name: Test LTS Node.js
       run: npm run test:lts
       if: matrix.node == '18.x' || matrix.node == '20.x'
