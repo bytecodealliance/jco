@@ -25,7 +25,7 @@
   "type": "module",
   "dependencies": {
     "@bytecodealliance/componentize-js": "^0.12.0",
-    "@bytecodealliance/preview2-shim": "^0.16.6",
+    "@bytecodealliance/preview2-shim": "^0.16.7",
     "binaryen": "^118.0.0",
     "chalk-template": "^1",
     "commander": "^12",
