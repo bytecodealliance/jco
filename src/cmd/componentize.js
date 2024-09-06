@@ -1,9 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, basename } from 'node:path';
 import c from 'chalk-template';
+import { componentize as componentizeFn } from '@bytecodealliance/componentize-js';
 
 export async function componentize (jsSource, opts) {
-  const { componentize: componentizeFn } = await eval('import("@bytecodealliance/componentize-js")');
+  // const { componentize: componentizeFn } = await eval('import("@bytecodealliance/componentize-js")');
   if (opts.disable?.includes('all')) {
     opts.disable = ['stdio', 'random', 'clocks', 'http'];
   }
