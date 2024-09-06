@@ -73,8 +73,5 @@
     "obj/*.js",
     "obj/*.ts",
     "obj/interfaces"
-  ],
-  "workspaces": [
-    "packages/preview2-shim"
   ]
 }
