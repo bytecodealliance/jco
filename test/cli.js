@@ -512,6 +512,7 @@ export async function cliTest(fixtures) {
         "test/fixtures/componentize/source.js",
         "-d",
         "all",
+        "--aot",
         "-w",
         "test/fixtures/componentize/source.wit",
         "-o",

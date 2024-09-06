@@ -26,7 +26,7 @@ jobs:
     - name: Install wasm32-wasip1 target
       run: rustup target add wasm32-wasip1
     - name: Install NPM packages
-      run: npm install
+      run: npm ci
     - name: Build
       run: npm run build
     - name: Upload Jco Build
@@ -61,8 +61,10 @@ jobs:
     - uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node }}
+    - name: Setup pnpm
+      run: npm install -g pnpm
     - name: Install NPM packages
-      run: npm install
+      run: pnpm install
     - name: Download Build
       uses: actions/download-artifact@v4
       with:
@@ -124,7 +126,7 @@ jobs:
       with:
         deno-version: v1.x
     - name: Install NPM packages
-      run: npm install
+      run: npm ci
     - name: Download Build
       uses: actions/download-artifact@v4
       with:
@@ -165,7 +167,7 @@ jobs:
       with:
         node-version: ${{ matrix.node }}
     - name: Install NPM packages
-      run: npm install
+      run: npm ci
     - name: Download Build
       uses: actions/download-artifact@v4
       with:
@@ -185,7 +187,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install NPM packages
-      run: npm install
+      run: npm ci
     - name: Test Workspaces
       run: npm run test --workspaces
 
@@ -195,7 +197,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install NPM packages
-      run: npm install
+      run: npm ci
     - name: Lint
       run: npm run lint
 
