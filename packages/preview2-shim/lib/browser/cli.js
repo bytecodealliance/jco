@@ -4,7 +4,7 @@ const { InputStream, OutputStream } = streams;
 
 const symbolDispose = Symbol.dispose ?? Symbol.for('dispose');
 
-let _env = [], _args = [], _cwd = null;
+let _env = [], _args = [], _cwd = "/";
 export function _setEnv (envObj) {
   _env = Object.entries(envObj);
 }
