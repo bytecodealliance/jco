@@ -3,7 +3,7 @@ import { environment } from './cli.js';
 
 const { InputStream, OutputStream } = streams;
 
-let _cwd = null;
+let _cwd = "/";
 
 export function _setCwd (cwd) {
   _cwd = cwd;
