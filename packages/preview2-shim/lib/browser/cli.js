@@ -75,6 +75,10 @@ const stdinStream = new InputStream({
 let textDecoder = new TextDecoder();
 const stdoutStream = new OutputStream({
   write (contents) {
+    if (contents[contents.length - 1] == 10) {
+      // console.log already appends a new line
+      contents = contents.subarray(0, contents.length - 1);
+    }
     console.log(textDecoder.decode(contents));
   },
   blockingFlush () {
@@ -84,10 +88,13 @@ const stdoutStream = new OutputStream({
 });
 const stderrStream = new OutputStream({
   write (contents) {
+    if (contents[contents.length - 1] == 10) {
+      // console.error already appends a new line
+      contents = contents.subarray(0, contents.length - 1);
+    }
     console.error(textDecoder.decode(contents));
   },
   blockingFlush () {
-
   },
   [symbolDispose] () {
 
