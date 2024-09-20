@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use js_component_bindgen::generate_typescript_stubs;
-use wit_parser::UnresolvedPackage;
 
 // Enable this to write the generated files to the `tests/temp` directory
 static IS_DEBUG: bool = false;
@@ -653,6 +652,62 @@ fn inline_interface() {
     test_single_file(wit, expected);
 }
 
+#[test]
+fn reserved_keywords() {
+    let wit = &[
+        WitFile {
+            wit: "
+                package test:kv;
+
+                interface kv {
+                    type key = string;
+                    type value = string;
+
+                    get: func(key: key) -> value;
+                    set: func(key: key, value: value);
+                    delete: func(key: key);
+                }
+            ",
+        },
+        WitFile {
+            wit: "
+                package test:reserved;
+
+                world test {
+                    import test:kv/kv;
+
+                    export run: func();
+                }
+            ",
+        },
+    ];
+
+    let expected = &[
+        ExpectedTs {
+            file_name: "test.d.ts",
+            expected: "
+            export interface TestWorld {
+                run(): void,
+            }",
+        },
+        ExpectedTs {
+            file_name: "interfaces/test-kv-kv.d.ts",
+            expected: r#"
+            declare module "test:kv/kv" {
+                export type Key = string;
+                export type Value = string;
+                export function get(key: Key): Value;
+                export function set(key: Key, value: Value): void;
+                export { _delete as delete };
+                declare function _delete(key: Key): void;
+            }
+            "#,
+        },
+    ];
+
+    test_files(wit, expected);
+}
+
 struct WitFile {
     wit: &'static str,
 }
@@ -669,10 +724,18 @@ fn test_files(wit: &[WitFile], expected: &[ExpectedTs]) {
     for (ii, wit_file) in wit.iter().enumerate() {
         let file_name = format!("tests{ii}.wit");
         let package =
-            UnresolvedPackage::parse(file_name.as_ref(), wit_file.wit).expect("valid wit");
-        resolver.push(package).expect("push package");
+            wit_parser::UnresolvedPackageGroup::parse(&file_name, wit_file.wit).expect("valid wit");
+        resolver.push_group(package).expect("push package");
     }
 
+    test_resolved_world(resolver, expected);
+}
+
+#[track_caller]
+fn test_resolved_world(
+    resolver: js_component_bindgen::source::wit_parser::Resolve,
+    expected: &[ExpectedTs],
+) {
     let world = resolver
         .worlds
         .iter()
