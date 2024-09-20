@@ -113,8 +113,6 @@ jco componentize app.js --wit wit -n world-name -o component.wasm
 
 Creates a component from a JS module implementing a WIT world definition, via a Spidermonkey engine embedding.
 
-Currently requires an explicit install of the componentize-js engine via `npm install @bytecodealliance/componentize-js`.
-
 See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
 
 ## API

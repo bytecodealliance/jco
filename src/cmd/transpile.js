@@ -102,20 +102,15 @@ export async function transpile (componentPath, opts, program) {
   await writeFiles(files, opts.quiet ? false : 'Transpiled JS Component Files');
 }
 
-let WASM_2_JS;
-try {
-  WASM_2_JS = fileURLToPath(new URL('../../node_modules/binaryen/bin/wasm2js', import.meta.url));
-} catch {
-  WASM_2_JS = new URL('../../node_modules/binaryen/bin/wasm2js', import.meta.url);
-}
-
 /**
  * @param {Uint8Array} source
  * @returns {Promise<Uint8Array>}
  */
 async function wasm2Js (source) {
+  const wasm2jsPath = fileURLToPath(import.meta.resolve('binaryen/bin/wasm2js'));
+
   try {
-    return await spawnIOTmp(WASM_2_JS, source, ['-Oz', '-o']);
+    return await spawnIOTmp(wasm2jsPath, source, ['-Oz', '-o']);
   } catch (e) {
     if (e.toString().includes('BasicBlock requested'))
       return wasm2Js(source);

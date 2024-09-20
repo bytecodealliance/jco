@@ -6,13 +6,6 @@ import c from 'chalk-template';
 import { readFile, sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
 import ora from '#ora';
 
-let WASM_OPT;
-try {
-  WASM_OPT = fileURLToPath(new URL('../../node_modules/binaryen/bin/wasm-opt', import.meta.url));
-} catch {
-  WASM_OPT = new URL('../../node_modules/binaryen/bin/wasm-opt', import.meta.url);
-}
-
 export async function opt (componentPath, opts, program) {
   await $init;
   const varIdx = program.parent.rawArgs.indexOf('--');
@@ -139,9 +132,11 @@ export async function optimizeComponent (componentBytes, opts) {
  * @param {Uint8Array} source 
  * @returns {Promise<Uint8Array>}
  */
-async function wasmOpt (source, args = ['-O1', '--low-memory-unused', '--enable-bulk-memory']) {
+async function wasmOpt(source, args = ['-O1', '--low-memory-unused', '--enable-bulk-memory']) {
+  const wasmOptPath = fileURLToPath(import.meta.resolve('binaryen/bin/wasm-opt'));
+
   try {
-    return await spawnIOTmp(WASM_OPT, source, [
+    return await spawnIOTmp(wasmOptPath, source, [
       ...args, '-o'
     ]);
   } catch (e) {
