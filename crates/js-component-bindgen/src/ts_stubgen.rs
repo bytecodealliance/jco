@@ -468,7 +468,7 @@ impl<'a> TsInterface<'a> {
                     } else {
                         let (local_name, _) = self.local_names.get_or_create(&name, &name);
                         uwriteln!(self.src, "export {{ {local_name} as {name} }};",);
-                        uwriteln!(self.src, "declare function {local_name};",);
+                        uwrite!(self.src, "declare function {local_name}",);
                     };
                 }
                 _ => unreachable!("resource functions should be delayed"),
