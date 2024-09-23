@@ -12,7 +12,7 @@
  * When the runtime test is present, the flags in the runtime host.ts file will be used
  * as the flags of the code generation step.
  */
-import { env } from 'node:process';
+import { env, platform } from 'node:process';
 import { readdir } from 'node:fs/promises';
 
 const componentFixtures = env.COMPONENT_FIXTURES
@@ -37,4 +37,6 @@ await commandsTest();
 await apiTest(componentFixtures);
 await cliTest(componentFixtures);
 await witTest();
-await browserTest();
+
+if (platform !== 'win32')
+  await browserTest();
