@@ -79,6 +79,7 @@ export async function browserTest() {
 
     async function testBrowserPage (hash) {
       const page = await browser.newPage();
+
       ok((await page.goto(`http://localhost:8080/test/browser.html#${hash}`)).ok());
 
       const body = await page.locator('body').waitHandle();

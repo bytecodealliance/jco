@@ -40,7 +40,7 @@
     "eslint": "^9.9.0",
     "mime": "^4.0.4",
     "mocha": "^10.7.0",
-    "puppeteer": "^22.14.0",
+    "puppeteer": "^23.4.0",
     "typescript": "^5.5.4"
   },
   "repository": {
