@@ -1,8 +1,7 @@
 import { strictEqual } from "node:assert";
-import { readFile, rm, writeFile, mkdtemp } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
-import { normalize, resolve, sep } from "node:path";
+import { resolve } from "node:path";
 
 import { fileURLToPath, pathToFileURL } from "url";
 import { HTTPServer } from "@bytecodealliance/preview2-shim/http";
