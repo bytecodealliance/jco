@@ -887,17 +887,18 @@ impl Bindgen for FunctionBindgen<'_> {
                 let memory = self.memory.as_ref().unwrap();
                 let realloc = self.realloc.unwrap();
 
-                let size = self.sizes.size(element);
-                let align = self.sizes.align(element);
+                let size = self.sizes.size(element).size_wasm32();
+                let align = ArchitectureSize::from(self.sizes.align(element)).size_wasm32();
                 uwriteln!(self.src, "var val{tmp} = {};", operands[0]);
                 if matches!(element, Type::U8) {
                     uwriteln!(self.src, "var len{tmp} = val{tmp}.byteLength;");
                 } else {
                     uwriteln!(self.src, "var len{tmp} = val{tmp}.length;");
                 }
+
                 uwriteln!(
                     self.src,
-                    "var ptr{tmp} = {realloc}(0, 0, {align}, len{tmp} * {size});"
+                    "var ptr{tmp} = {realloc}(0, 0, {align}, len{tmp} * {size});",
                 );
                 // TODO: this is the wrong endianness
                 if matches!(element, Type::U8) {
@@ -928,7 +929,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {}));",
-                    self.sizes.size(element),
+                    self.sizes.size(element).size_wasm32(),
                 );
                 results.push(format!("result{tmp}"));
             }
@@ -993,8 +994,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let vec = format!("vec{}", tmp);
                 let result = format!("result{}", tmp);
                 let len = format!("len{}", tmp);
-                let size = self.sizes.size(element);
-                let align = self.sizes.align(element);
+                let size = self.sizes.size(element).size_wasm32();
+                let align = ArchitectureSize::from(self.sizes.align(element)).size_wasm32();
 
                 // first store our vec-to-lower in a temporary since we'll
                 // reference it multiple times.
@@ -1023,7 +1024,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::ListLift { element, .. } => {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 let tmp = self.tmp();
-                let size = self.sizes.size(element);
+                let size = self.sizes.size(element).size_wasm32();
                 let len = format!("len{tmp}");
                 uwriteln!(self.src, "var {len} = {};", operands[1]);
                 let base = format!("base{tmp}");

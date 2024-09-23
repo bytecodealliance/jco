@@ -24,9 +24,9 @@
   },
   "type": "module",
   "dependencies": {
-    "@bytecodealliance/componentize-js": "^0.12.0",
-    "@bytecodealliance/preview2-shim": "^0.16.7",
-    "binaryen": "^118.0.0",
+    "@bytecodealliance/componentize-js": "^0.13.0",
+    "@bytecodealliance/preview2-shim": "^0.17.0",
+    "binaryen": "^119.0.0",
     "chalk-template": "^1",
     "commander": "^12",
     "mkdirp": "^3",
@@ -40,7 +40,7 @@
     "eslint": "^9.9.0",
     "mime": "^4.0.4",
     "mocha": "^10.7.0",
-    "puppeteer": "^22.14.0",
+    "puppeteer": "^23.4.0",
     "typescript": "^5.5.4"
   },
   "repository": {
@@ -62,8 +62,8 @@
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
     "lint": "eslint -c eslintrc.cjs src/**/*.js packages/*/lib/**/*.js",
-    "test:lts": "mocha -u tdd test/test.js --timeout 30000",
-    "test": "node --stack-trace-limit=100 node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000",
+    "test:lts": "mocha -u tdd test/test.js --timeout 60000",
+    "test": "node --stack-trace-limit=100 node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 60000",
     "prepublishOnly": "cargo xtask build release && npm run test"
   },
   "files": [

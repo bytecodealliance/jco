@@ -42,4 +42,5 @@ rm -r ../../test/fixtures/wit/deps/io
 rm -r ../../test/fixtures/wit/deps/random
 rm -r ../../test/fixtures/wit/deps/sockets
 cp -r crates/wasi/wit/deps ../../test/fixtures/wit/
+cp -r crates/wasi-http/wit/deps/http ../../test/fixtures/wit/deps/
 mv ../../test/fixtures/wit/flavorful ../../test/fixtures/wit/deps/

@@ -265,16 +265,13 @@ export function socketTcpGetRemoteAddress(id) {
   return ipSocketAddress(out.family.toLowerCase(), out.address, out.port);
 }
 
-export function socketTcpShutdown(id, shutdownType) {
+export function socketTcpShutdown(id, _shutdownType) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_CONNECTION) throw "invalid-state";
-  // Node.js only supports a write shutdown, which is triggered on end
-  if (shutdownType === "send" || shutdownType === "both") {
-    if (winOrMac && socket.tcpSocket.destroySoon)
-      socket.tcpSocket.destroySoon();
-    else
-      socket.tcpSocket.destroy();
-  }
+  if (winOrMac && socket.tcpSocket.destroySoon)
+    socket.tcpSocket.destroySoon();
+  else
+    socket.tcpSocket.destroy();
 }
 
 export function socketTcpSetKeepAlive(id, { keepAlive, keepAliveIdleTime }) {

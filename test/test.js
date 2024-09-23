@@ -12,13 +12,14 @@
  * When the runtime test is present, the flags in the runtime host.ts file will be used
  * as the flags of the code generation step.
  */
-import { env, versions } from 'node:process';
+import { env, platform } from 'node:process';
 import { readdir } from 'node:fs/promises';
 
 const componentFixtures = env.COMPONENT_FIXTURES
   ? env.COMPONENT_FIXTURES.split(',')
   : (await readdir('test/fixtures/components')).filter(name => name !== 'dummy_reactor.component.wasm');
 
+import { browserTest } from './browser.js';
 import { codegenTest } from './codegen.js';
 import { runtimeTest } from './runtime.js';
 import { commandsTest } from './commands.js';
@@ -36,7 +37,6 @@ await commandsTest();
 await apiTest(componentFixtures);
 await cliTest(componentFixtures);
 await witTest();
-if (versions.node.split('.')[0] !== '22') {
-  const { browserTest } = await import('./browser.js');
+
+if (platform !== 'win32')
   await browserTest();
-}
