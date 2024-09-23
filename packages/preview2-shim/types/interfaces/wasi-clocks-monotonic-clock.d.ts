@@ -13,13 +13,12 @@ export namespace WasiClocksMonotonicClock {
   export function resolution(): Duration;
   /**
    * Create a `pollable` which will resolve once the specified instant
-   * occured.
+   * has occurred.
    */
   export function subscribeInstant(when: Instant): Pollable;
   /**
-   * Create a `pollable` which will resolve once the given duration has
-   * elapsed, starting at the time at which this function was called.
-   * occured.
+   * Create a `pollable` that will resolve after the specified duration has
+   * elapsed from the time this function is invoked.
    */
   export function subscribeDuration(when: Duration): Pollable;
 }

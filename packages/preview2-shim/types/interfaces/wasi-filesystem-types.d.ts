@@ -95,7 +95,7 @@ export interface DescriptorFlags {
    */
   dataIntegritySync?: boolean,
   /**
-   * Requests that reads be performed at the same level of integrety
+   * Requests that reads be performed at the same level of integrity
    * requested for writes. This is similar to `O_RSYNC` in POSIX.
    * 
    * The precise semantics of this operation have not yet been defined for

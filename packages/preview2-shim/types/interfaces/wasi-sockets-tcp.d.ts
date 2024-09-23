@@ -79,7 +79,7 @@ export class TcpSocket {
   * Connect to a remote endpoint.
   * 
   * On success:
-  * - the socket is transitioned into the `connection` state.
+  * - the socket is transitioned into the `connected` state.
   * - a pair of streams is returned that can be used to read & write to the connection
   * 
   * After a failed connection attempt, the socket will be in the `closed`
@@ -329,8 +329,8 @@ export class TcpSocket {
   * `subscribe` only has to be called once per socket and can then be
   * (re)used for the remainder of the socket's lifetime.
   * 
-  * See <https://github.com/WebAssembly/wasi-sockets/TcpSocketOperationalSemantics.md#Pollable-readiness>
-  * for a more information.
+  * See <https://github.com/WebAssembly/wasi-sockets/blob/main/TcpSocketOperationalSemantics.md#pollable-readiness>
+  * for more information.
   * 
   * Note: this function is here for WASI Preview2 only.
   * It's planned to be removed when `future` is natively supported in Preview3.
@@ -347,7 +347,7 @@ export class TcpSocket {
   * associated with this socket will be closed and a FIN packet will be sent.
   * - `both`: Same effect as `receive` & `send` combined.
   * 
-  * This function is idempotent. Shutting a down a direction more than once
+  * This function is idempotent; shutting down a direction more than once
   * has no effect and returns `ok`.
   * 
   * The shutdown function does not close (drop) the socket.
