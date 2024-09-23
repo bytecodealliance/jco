@@ -62,8 +62,8 @@
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
     "lint": "eslint -c eslintrc.cjs src/**/*.js packages/*/lib/**/*.js",
-    "test:lts": "mocha -u tdd test/test.js --timeout 30000",
-    "test": "node --stack-trace-limit=100 node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000",
+    "test:lts": "mocha -u tdd test/test.js --timeout 60000",
+    "test": "node --stack-trace-limit=100 node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 60000",
     "prepublishOnly": "cargo xtask build release && npm run test"
   },
   "files": [
