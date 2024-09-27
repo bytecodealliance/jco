@@ -316,7 +316,7 @@ impl<'a> JsBindgen<'a> {
                                     ({{ value, done }} = gen.next(value));
                                 }} while (!(value instanceof Promise) && !done);
                                 if (done) {{
-                                    if (resolve) resolve(value);
+                                    if (resolve) return resolve(value);
                                     else return value;
                                 }}
                                 if (!promise) promise = new Promise((_resolve, _reject) => (resolve = _resolve, reject = _reject));
