@@ -10,6 +10,8 @@ const TEST_IGNORE: &[&str] = &[
     // Wasmtime run supports a `wasmtime run --argv0=...` argument to customize the argv0
     // which this test assumes is being used. We don't support this feature.
     "cli_argv0",
+    // We don't have interrupts.
+    "cli_sleep_forever",
 ];
 
 // we don't currently support these subsystems, but if someone wants to work on them we

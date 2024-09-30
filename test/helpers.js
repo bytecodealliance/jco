@@ -5,10 +5,6 @@ import { normalize, sep } from "node:path";
 import { mkdtemp } from "node:fs/promises";
 
 export const jcoPath = "src/jco.js";
-const multiMemory =
-  Number(process.versions.node.split(".")[0]) >= 21
-    ? ["--experimental-wasm-multi-memory"]
-    : [];
 
 export async function exec(cmd, ...args) {
   let stdout = "",

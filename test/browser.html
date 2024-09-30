@@ -48,7 +48,7 @@
           ['wasi:sockets/*', '@bytecodealliance/preview2-shim/sockets#*']
         ]
       });
-      const source = output.files[4][1];
+      const source = output.files[5][1];
       const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
       const mod = await import(url);
       ok();
