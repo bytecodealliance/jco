@@ -1,6 +1,6 @@
-import { normalize, resolve, sep } from 'node:path';
+import { dirname, normalize, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readFile, writeFile, rm, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, rm, mkdir, mkdtemp } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { argv0 } from 'node:process';
 import c from 'chalk-template';
@@ -107,4 +107,20 @@ export async function spawnIOTmp (cmd, input, args) {
   } finally {
     await rm(tmpDir, { recursive: true });
   }
+}
+
+export async function writeFiles(files, summaryTitle) {
+  await Promise.all(Object.entries(files).map(async ([name, file]) => {
+    await mkdir(dirname(name), { recursive: true });
+    await writeFile(name, file);
+  }));
+  if (!summaryTitle)
+    return;
+  console.log(c`
+  {bold ${summaryTitle}:}
+  
+${table(Object.entries(files).map(([name, source]) => [
+    c` - {italic ${name}}  `,
+    c`{black.italic ${sizeStr(source.length)}}`
+  ]))}`);
 }

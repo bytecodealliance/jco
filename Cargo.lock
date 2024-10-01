@@ -231,6 +231,7 @@ name = "jco"
 version = "1.7.0"
 dependencies = [
  "anyhow",
+ "xshell",
 ]
 
 [[package]]
@@ -240,6 +241,7 @@ dependencies = [
  "anyhow",
  "base64",
  "heck 0.5.0",
+ "indexmap",
  "log",
  "semver",
  "wasm-encoder",

@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use js_component_bindgen::{generate_types, source::wit_parser::Resolve, transpile};
+use js_component_bindgen::{
+    generate_types, generate_typescript_stubs,
+    source::wit_parser::{PackageId, Resolve},
+    transpile,
+};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -112,39 +116,10 @@ impl Guest for JsComponentBindgenComponent {
         name: String,
         opts: TypeGenerationOptions,
     ) -> Result<Vec<(String, Vec<u8>)>, String> {
-        let mut resolve = Resolve::default();
-
-        // Add features if specified
-        match opts.features {
-            Some(EnabledFeatureSet::List(ref features)) => {
-                for f in features.into_iter() {
-                    resolve.features.insert(f.to_string());
-                }
-            }
-            Some(EnabledFeatureSet::All) => {
-                resolve.all_features = true;
-            }
-            _ => {}
-        }
-
-        let ids = match opts.wit {
-            Wit::Source(source) => resolve
-                .push_str(format!("{name}.wit"), &source)
-                .map_err(|e| e.to_string())?,
-            Wit::Path(path) => {
-                let path = PathBuf::from(path);
-                if path.is_dir() {
-                    resolve.push_dir(&path).map_err(|e| e.to_string())?.0
-                } else {
-                    resolve.push_file(&path).map_err(|e| e.to_string())?
-                }
-            }
-            Wit::Binary(_) => todo!(),
-        };
-
+        let (resolve, id) = resolve_package(opts.wit, opts.features, Some(&name))?;
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
-            .select_world(ids, world_string.as_deref())
+            .select_world(id, world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let opts = js_component_bindgen::TranspileOpts {
@@ -166,4 +141,55 @@ impl Guest for JsComponentBindgenComponent {
 
         Ok(files)
     }
+
+    fn generate_typescript_stubs(opts: TypescriptStubOptions) -> Result<Files, String> {
+        let (resolve, id) = resolve_package(opts.wit, None, None).map_err(|e| e.to_string())?;
+        let world_string = opts.world.map(|world| world.to_string());
+        let world = resolve
+            .select_world(id, world_string.as_deref())
+            .map_err(|e| e.to_string())?;
+
+        let files = generate_typescript_stubs(resolve, world).map_err(|e| e.to_string())?;
+
+        Ok(files)
+    }
+}
+
+fn resolve_package(
+    wit: Wit,
+    features: Option<EnabledFeatureSet>,
+    name: Option<&str>,
+) -> Result<(Resolve, PackageId), String> {
+    let name = name.unwrap_or("world");
+    let mut resolve = Resolve::default();
+
+    // Add features if specified
+    match features {
+        Some(EnabledFeatureSet::List(ref features)) => {
+            for f in features.into_iter() {
+                resolve.features.insert(f.to_string());
+            }
+        }
+        Some(EnabledFeatureSet::All) => {
+            resolve.all_features = true;
+        }
+        _ => {}
+    }
+
+    let id = match wit {
+        Wit::Source(source) => resolve
+            .push_str(format!("{name}.wit"), &source)
+            .map_err(|e| e.to_string())?,
+        Wit::Path(path) => {
+            let path = PathBuf::from(path);
+            if path.is_dir() {
+                resolve.push_dir(&path).map_err(|e| e.to_string())?.0
+            } else {
+                resolve.push_file(&path).map_err(|e| e.to_string())?
+            }
+        }
+        Wit::Binary(_) => todo!(),
+    };
+
+    Ok((resolve, id))
 }

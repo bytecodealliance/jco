@@ -37,6 +37,7 @@ strip = true
 anyhow = "1.0.89"
 base64 = "0.22.1"
 heck = "0.5.0"
+indexmap = "2.4.0"
 log = "0.4.22"
 semver = "1.0.23"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
@@ -58,3 +59,4 @@ xshell = "0.2.6"
 
 [dev-dependencies]
 anyhow = { workspace = true }
+xshell = { workspace = true }
