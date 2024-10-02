@@ -1,0 +1,13 @@
+///
+/// NOTE: The WIT types in this file are a copy of the
+/// types and interfaces in the string-reverse example.
+///
+/// They are copied here so that we can use them in `component.wit`,
+/// which defines a *different* package, `examples:string-reverse-upper`
+///
+package example:string-reverse@0.1.0;
+
+@since(version = 0.1.0)
+interface reverse {
+    reverse-string: func(s: string) -> string;
+}

@@ -1,0 +1,72 @@
+name: examples
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: ${{ matrix.project.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        wac:
+          - version: 0.6.0
+        node:
+          - version: 22.5.1
+        project:
+          - name: add
+            dir: ./examples/components/add
+          - name: string-reverse
+            dir: ./examples/components/string-reverse
+          - name: string-reverse-upper
+            dir: ./examples/components/string-reverse-upper
+            is-composed: true
+    steps:
+      - uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # 4.2.0
+        with:
+          sparse-checkout: |
+            examples
+
+      - uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # 4.0.4
+        with:
+          node-version: ${{ matrix.node.version }}
+          cache: 'npm'
+
+      - name: install wac
+        if: ${{ matrix.project.is-composed }}
+        uses: jaxxstorm/action-install-gh-release@25d5e2dd555cd74f1fab9ac1e6ea117acde2c0c4 # 1.2.0
+        with:
+          repo: bytecodealliance/wac
+          tag: v${{ matrix.wac.version }}
+          extension-matching: disable
+          rename-to: wac
+          chmod: 0755
+
+      - name: install (${{ matrix.project.name }})
+        working-directory: ${{ matrix.project.dir }}
+        run: |
+          npm install
+
+      - name: build (${{ matrix.project.name }})
+        working-directory: ${{ matrix.project.dir }}
+        run: |
+          npm run build
+
+      - name: compose (${{ matrix.project.name }})
+        if: ${{ matrix.project.is-composed }}
+        working-directory: ${{ matrix.project.dir }}
+        run: |
+          npm run compose
+
+      - name: transpile (${{ matrix.project.name }})
+        working-directory: ${{ matrix.project.dir }}
+        run: |
+          npm run transpile
+
+      - name: run transpiled js (${{ matrix.project.name }})
+        if: ${{ matrix.project.composed }}
+        working-directory: ${{ matrix.project.dir }}
+        run: |
+          npm run transpiled-js

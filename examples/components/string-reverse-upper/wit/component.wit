@@ -1,0 +1,16 @@
+package example:string-reverse-upper@0.1.0;
+
+@since(version = 0.1.0)
+interface reversed-upper {
+    reverse-and-uppercase: func(s: string) -> string;
+}
+
+world revup {
+    //
+    // NOTE, the import below translates to:
+    // <namespace>:<package>/<interface>@<package version>
+    //
+    import example:string-reverse/reverse@0.1.0;
+
+    export reversed-upper;
+}

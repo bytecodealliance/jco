@@ -1,0 +1,10 @@
+package example:string-reverse@0.1.0;
+
+@since(version = 0.1.0)
+interface reverse {
+    reverse-string: func(s: string) -> string;
+}
+
+world component {
+    export reverse;
+}

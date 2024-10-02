@@ -1,0 +1,15 @@
+{
+  "name": "add-wasm",
+  "description": "Simple codebase for compiling an add function to WebAssembly with jco",
+  "type": "module",
+  "scripts": {
+    "build": "jco componentize add.mjs --wit wit/component.wit --world-name component --out add.wasm --disable all",
+    "transpile": "jco transpile add.wasm -o dist/transpiled && cp dist/transpiled/add.js dist/transpiled/add.mjs",
+    "start": "cargo run --manifest-path=../../../example-host/Cargo.toml --release -- 1 2 add.wasm",
+    "transpiled-js": "node run-transpiled.js"
+  },
+  "devDependencies": {
+    "@bytecodealliance/jco": "1.7.0",
+    "@bytecodealliance/componentize-js": "0.13.0"
+  }
+}
