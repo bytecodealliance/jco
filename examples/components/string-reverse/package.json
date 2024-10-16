@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "jco componentize string-reverse.mjs --wit wit/component.wit --world-name component --out string-reverse.wasm --disable all",
-    "transpile": "jco transpile string-reverse.wasm -o dist/transpiled && mv dist/transpiled/string-reverse.js dist/transpiled/string-reverse.mjs",
+    "transpile": "jco transpile string-reverse.wasm -o dist/transpiled ; mv dist/transpiled/string-reverse.js dist/transpiled/string-reverse.mjs",
     "transpiled-js": "node run-transpiled.js"
   },
   "devDependencies": {

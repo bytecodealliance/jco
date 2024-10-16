@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "jco componentize add.mjs --wit wit/component.wit --world-name component --out add.wasm --disable all",
-    "transpile": "jco transpile add.wasm -o dist/transpiled && cp dist/transpiled/add.js dist/transpiled/add.mjs",
+    "transpile": "jco transpile add.wasm -o dist/transpiled ; cp dist/transpiled/add.js dist/transpiled/add.mjs",
     "start": "cargo run --manifest-path=../../../example-host/Cargo.toml --release -- 1 2 add.wasm",
     "transpiled-js": "node run-transpiled.js"
   },
