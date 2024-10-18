@@ -509,12 +509,12 @@ export async function cliTest(fixtures) {
       const { stdout, stderr } = await exec(
         jcoPath,
         "componentize",
-        "test/fixtures/componentize/source.js",
+        "test/fixtures/componentize/cli/source.js",
         "-d",
         "all",
         "--aot",
         "-w",
-        "test/fixtures/componentize/source.wit",
+        "test/fixtures/componentize/cli/source.wit",
         "-o",
         outFile
       );
