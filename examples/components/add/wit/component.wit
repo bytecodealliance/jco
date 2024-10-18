@@ -1,0 +1,5 @@
+package example:adder;
+
+world component {
+    export add: func(x: s32, y: s32) -> s32;
+}
