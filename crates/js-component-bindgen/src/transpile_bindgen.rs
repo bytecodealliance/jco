@@ -11,7 +11,7 @@ use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
 use heck::*;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
 use wasmtime_environ::component::{ExportIndex, NameMap, NameMapNoIntern, Transcode};
@@ -68,6 +68,23 @@ pub struct TranspileOpts {
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
     pub multi_memory: bool,
+    /// Configure whether to use `async` imports or exports with
+    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    pub async_mode: Option<AsyncMode>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub enum AsyncMode {
+    #[default]
+    Sync,
+    JavaScriptPromiseIntegration {
+        imports: Vec<String>,
+        exports: Vec<String>,
+    },
+    Asyncify {
+        imports: Vec<String>,
+        exports: Vec<String>,
+    },
 }
 
 #[derive(Default, Clone, Debug)]
@@ -144,6 +161,20 @@ pub fn transpile_bindgen(
     // bindings is the actual `instantiate` method itself, created by this
     // structure.
 
+    let (use_asyncify, async_imports, async_exports) = match opts.async_mode.clone() {
+        None | Some(AsyncMode::Sync) => (false, Default::default(), Default::default()),
+        Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => (
+            false,
+            imports.into_iter().collect(),
+            exports.into_iter().collect(),
+        ),
+        Some(AsyncMode::Asyncify { imports, exports }) => (
+            true,
+            imports.into_iter().collect(),
+            exports.into_iter().collect(),
+        ),
+    };
+
     let mut instantiator = Instantiator {
         src: Source::default(),
         sizes: SizeAlign::default(),
@@ -155,6 +186,9 @@ pub fn transpile_bindgen(
         translation: component,
         component: &component.component,
         types,
+        use_asyncify,
+        async_imports,
+        async_exports,
         imports: Default::default(),
         exports: Default::default(),
         lowering_options: Default::default(),
@@ -441,6 +475,9 @@ struct Instantiator<'a, 'b> {
     /// Instance flags which references have been emitted externally at least once.
     used_instance_flags: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
     defined_resource_classes: BTreeSet<String>,
+    use_asyncify: bool,
+    async_imports: HashSet<String>,
+    async_exports: HashSet<String>,
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
 }
@@ -1079,6 +1116,14 @@ impl<'a> Instantiator<'a, '_> {
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, import_name);
 
+        uwrite!(self.src.js, "\n// import_name = {import_name:?}");
+        uwrite!(self.src.js, "\n// world_key = {world_key:?}");
+        uwrite!(self.src.js, "\n// import_specifier = {import_specifier:?}");
+        uwrite!(
+            self.src.js,
+            "\n// maybe_iface_member = {maybe_iface_member:?}"
+        );
+
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
@@ -1097,6 +1142,18 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 WorldItem::Type(_) => unreachable!(),
             };
+
+        uwrite!(self.src.js, "\n// func = {func:?}");
+        uwrite!(self.src.js, "\n// func_name = {func_name:?}");
+        uwrite!(self.src.js, "\n// iface_name = {iface_name:?}");
+
+        let is_async = self
+            .async_imports
+            .contains(&format!("{import_name}#{func_name}"))
+            || self
+                .async_imports
+                .contains(&format!("{import_specifier}#{func_name}"));
+        uwrite!(self.src.js, "\n// is_async = {is_async:?}\n");
 
         let mut resource_map = ResourceMap::new();
         self.create_resource_fn_map(func, func_ty, &mut resource_map);
@@ -1156,7 +1213,18 @@ impl<'a> Instantiator<'a, '_> {
             .len();
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
+                if is_async {
+                    // TODO
+                    if !self.use_asyncify {
+                        uwrite!(
+                            self.src.js,
+                            "\nconst trampoline{} = new WebAssembly.Suspending(async function",
+                            trampoline.as_u32()
+                        );
+                    }
+                } else {
+                    uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
+                }
                 self.bindgen(
                     nparams,
                     call_type,
@@ -1170,8 +1238,13 @@ impl<'a> Instantiator<'a, '_> {
                     func,
                     &resource_map,
                     AbiVariant::GuestImport,
+                    is_async,
                 );
-                uwriteln!(self.src.js, "");
+                if is_async {
+                    uwriteln!(self.src.js, ");");
+                } else {
+                    uwriteln!(self.src.js, "");
+                }
             }
             Some(BindingsMode::Optimized) | Some(BindingsMode::DirectOptimized) => {
                 uwriteln!(self.src.js, "let trampoline{};", trampoline.as_u32());
@@ -1521,7 +1594,9 @@ impl<'a> Instantiator<'a, '_> {
         func: &Function,
         resource_map: &ResourceMap,
         abi: AbiVariant,
+        is_async: bool,
     ) {
+        let use_asyncify = self.use_asyncify;
         let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
         let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
         let post_return = opts
@@ -1615,6 +1690,8 @@ impl<'a> Instantiator<'a, '_> {
             },
             src: source::Source::default(),
             resolve: self.resolve,
+            is_async,
+            use_asyncify,
         };
         abi::call(
             self.resolve,
@@ -1895,14 +1972,27 @@ impl<'a> Instantiator<'a, '_> {
         export_name: &String,
         resource_map: &ResourceMap,
     ) {
+        let is_async = self.async_exports.contains(local_name)
+            || self
+                .async_exports
+                .contains(&format!("{export_name}#{local_name}"))
+            || export_name
+                .find('@')
+                .map(|i| {
+                    self.async_exports
+                        .contains(&format!("{}#{local_name}", export_name.get(0..i).unwrap()))
+                })
+                .unwrap_or(false);
+        let if_async = if is_async { "async " } else { "" };
+
         match func.kind {
-            FunctionKind::Freestanding => uwrite!(self.src.js, "\nfunction {local_name}"),
+            FunctionKind::Freestanding => uwrite!(self.src.js, "\n{if_async}function {local_name}"),
             FunctionKind::Method(_) => {
                 self.ensure_local_resource_class(local_name.to_string());
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.prototype.{method_name} = function {}",
+                    "\n{local_name}.prototype.{method_name} = {if_async}function {}",
                     if !is_js_reserved_word(&method_name) {
                         method_name.to_string()
                     } else {
@@ -1915,7 +2005,7 @@ impl<'a> Instantiator<'a, '_> {
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.{method_name} = function {}",
+                    "\n{local_name}.{method_name} = {if_async}function {}",
                     if !is_js_reserved_word(&method_name) {
                         method_name.to_string()
                     } else {
@@ -1953,6 +2043,7 @@ impl<'a> Instantiator<'a, '_> {
             func,
             resource_map,
             AbiVariant::GuestExport,
+            is_async,
         );
         match func.kind {
             FunctionKind::Freestanding => self.src.js("\n"),

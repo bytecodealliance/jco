@@ -53,6 +53,16 @@ impl From<BindingsMode> for js_component_bindgen::BindingsMode {
     }
 }
 
+impl From<AsyncMode> for js_component_bindgen::AsyncMode {
+    fn from(value: AsyncMode) -> Self {
+        match value {
+            AsyncMode::Sync => js_component_bindgen::AsyncMode::Sync,
+            AsyncMode::JavaScriptPromiseIntegration(AsyncImportsExports{ imports, exports }) => js_component_bindgen::AsyncMode::JavaScriptPromiseIntegration { imports, exports },
+            AsyncMode::Asyncify(AsyncImportsExports{ imports, exports }) => js_component_bindgen::AsyncMode::Asyncify { imports, exports },
+        }
+    }
+}
+
 struct JsComponentBindgenComponent;
 
 export!(JsComponentBindgenComponent);
@@ -75,6 +85,7 @@ impl Guest for JsComponentBindgenComponent {
             no_namespaced_exports: options.no_namespaced_exports.unwrap_or(false),
             multi_memory: options.multi_memory.unwrap_or(false),
             import_bindings: options.import_bindings.map(Into::into),
+            async_mode: options.async_mode.map(Into::into),
         };
 
         let js_component_bindgen::Transpiled {
@@ -160,6 +171,7 @@ impl Guest for JsComponentBindgenComponent {
             no_namespaced_exports: false,
             multi_memory: false,
             import_bindings: None,
+            async_mode: None,
         };
 
         let files = generate_types(name, resolve, world, opts).map_err(|e| e.to_string())?;

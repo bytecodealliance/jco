@@ -86,6 +86,8 @@ pub struct FunctionBindgen<'a> {
     pub callee: &'a str,
     pub callee_resource_dynamic: bool,
     pub resolve: &'a Resolve,
+    pub is_async: bool,
+    pub use_asyncify: bool,
 }
 
 impl FunctionBindgen<'_> {
@@ -1048,7 +1050,14 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::CallWasm { sig, .. } => {
                 let sig_results_length = sig.results.len();
                 self.bind_results(sig_results_length, results);
-                uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+                if self.is_async {
+                    if self.use_asyncify {
+                    } else {
+                        uwriteln!(self.src, "await WebAssembly.promising({})({});", self.callee, operands.join(", "));
+                    }
+                } else {
+                    uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
+                }
 
                 if let Some(prefix) = self.tracing_prefix {
                     let to_result_string = self.intrinsic(Intrinsic::ToResultString);
@@ -1066,15 +1075,16 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallInterface { func } => {
                 let results_length = func.results.len();
+                let if_async_await = if self.is_async { "await " } else { "" };
                 let call = if self.callee_resource_dynamic {
                     format!(
-                        "{}.{}({})",
+                        "{if_async_await}{}.{}({})",
                         operands[0],
                         self.callee,
                         operands[1..].join(", ")
                     )
                 } else {
-                    format!("{}({})", self.callee, operands.join(", "))
+                    format!("{if_async_await}{}({})", self.callee, operands.join(", "))
                 };
                 if self.err == ErrHandling::ResultCatchHandler {
                     // result<_, string> allows JS error coercion only, while
