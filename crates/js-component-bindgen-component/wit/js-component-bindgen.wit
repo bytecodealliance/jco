@@ -74,10 +74,10 @@ world js-component-bindgen {
   }
 
   variant async-mode {
-    /// the default sync mode
+    /// default to sync mode
     sync,
     /// use JavaScript Promise Integration (JSPI)
-    java-script-promise-integration(async-imports-exports),
+    jspi(async-imports-exports),
     /// use Asyncify
     asyncify(async-imports-exports),
   }

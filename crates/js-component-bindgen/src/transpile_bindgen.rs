@@ -1116,14 +1116,6 @@ impl<'a> Instantiator<'a, '_> {
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, import_name);
 
-        uwrite!(self.src.js, "\n// import_name = {import_name:?}");
-        uwrite!(self.src.js, "\n// world_key = {world_key:?}");
-        uwrite!(self.src.js, "\n// import_specifier = {import_specifier:?}");
-        uwrite!(
-            self.src.js,
-            "\n// maybe_iface_member = {maybe_iface_member:?}"
-        );
-
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
@@ -1143,17 +1135,12 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        uwrite!(self.src.js, "\n// func = {func:?}");
-        uwrite!(self.src.js, "\n// func_name = {func_name:?}");
-        uwrite!(self.src.js, "\n// iface_name = {iface_name:?}");
-
         let is_async = self
             .async_imports
             .contains(&format!("{import_name}#{func_name}"))
             || self
                 .async_imports
                 .contains(&format!("{import_specifier}#{func_name}"));
-        uwrite!(self.src.js, "\n// is_async = {is_async:?}\n");
 
         let mut resource_map = ResourceMap::new();
         self.create_resource_fn_map(func, func_ty, &mut resource_map);
@@ -1215,7 +1202,8 @@ impl<'a> Instantiator<'a, '_> {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
                 if is_async {
                     // TODO
-                    if !self.use_asyncify {
+                    if self.use_asyncify {
+                    } else {
                         uwrite!(
                             self.src.js,
                             "\nconst trampoline{} = new WebAssembly.Suspending(async function",
