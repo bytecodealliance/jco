@@ -1053,7 +1053,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 if self.is_async {
                     if self.use_asyncify {
                     } else {
-                        uwriteln!(self.src, "await WebAssembly.promising({})({});", self.callee, operands.join(", "));
+                        uwriteln!(
+                            self.src,
+                            "await WebAssembly.promising({})({});",
+                            self.callee,
+                            operands.join(", ")
+                        );
                     }
                 } else {
                     uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
