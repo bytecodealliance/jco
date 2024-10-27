@@ -1203,6 +1203,11 @@ impl<'a> Instantiator<'a, '_> {
                 if is_async {
                     // TODO
                     if self.use_asyncify {
+                        uwrite!(
+                            self.src.js,
+                            "\nasync function trampoline{}",
+                            trampoline.as_u32()
+                        );
                     } else {
                         uwrite!(
                             self.src.js,
@@ -1228,7 +1233,7 @@ impl<'a> Instantiator<'a, '_> {
                     AbiVariant::GuestImport,
                     is_async,
                 );
-                if is_async {
+                if is_async && !self.use_asyncify {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");

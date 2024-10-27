@@ -1052,6 +1052,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 self.bind_results(sig_results_length, results);
                 if self.is_async {
                     if self.use_asyncify {
+                        uwriteln!(
+                            self.src,
+                            "await {}({});",
+                            self.callee,
+                            operands.join(", ")
+                        );
                     } else {
                         uwriteln!(
                             self.src,
