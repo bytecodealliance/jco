@@ -31,7 +31,7 @@ import {
 } from "./worker-sockets.js";
 import { Socket, Server } from "node:net";
 
-const winOrMac = process.platform === 'win32' || process.platform === 'darwin';
+const win = process.platform === 'win32';
 
 /**
  * @typedef {import("../../types/interfaces/wasi-sockets-network.js").IpSocketAddress} IpSocketAddress
@@ -268,7 +268,7 @@ export function socketTcpGetRemoteAddress(id) {
 export function socketTcpShutdown(id, _shutdownType) {
   const socket = tcpSockets.get(id);
   if (socket.state !== SOCKET_STATE_CONNECTION) throw "invalid-state";
-  if (winOrMac && socket.tcpSocket.destroySoon)
+  if (win && socket.tcpSocket.destroySoon)
     socket.tcpSocket.destroySoon();
   else
     socket.tcpSocket.destroy();

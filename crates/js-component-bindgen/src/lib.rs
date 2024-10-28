@@ -15,7 +15,6 @@ use transpile_bindgen::transpile_bindgen;
 
 use anyhow::{bail, ensure, Context};
 use wasmtime_environ::component::{ComponentTypesBuilder, Export, StaticModuleIndex};
-use wasmtime_environ::wasmparser::Validator;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
@@ -81,6 +80,7 @@ pub fn generate_types(
 /// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
 pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
+    use wasmparser::Validator;
     use wasmtime_environ::component::{Component, Translator};
 
     let name = opts.name.clone();
