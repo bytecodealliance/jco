@@ -157,6 +157,7 @@ jobs:
             node: 20.x
           - os: windows-latest
             node: 18.x
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     needs: [build, build-wasi-tests]
     steps:
