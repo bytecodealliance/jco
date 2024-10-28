@@ -584,7 +584,93 @@ impl<'a> Instantiator<'a, '_> {
     }
     fn instantiate(&mut self) {
         if self.use_asyncify {
-            uwriteln!(self.src.js, "// HERE");
+            let (if_async, if_async_await) =
+                if let Some(InstantiationMode::Sync) = self.gen.opts.instantiation {
+                    ("", "")
+                } else {
+                    ("async ", "await ")
+                };
+            uwrite!(self.src.js, "
+                let asyncifyPromise;
+                let asyncifyResolved;
+                const asyncifyModules = [];
+
+                {if_async}function asyncifyInstantiate(module, imports) {{
+                  const instance = {if_async_await}instantiateCore(module, imports);
+                  const memory = instance.exports.memory || (imports && imports.env && imports.env.memory);
+                  const realloc = instance.exports.cabi_realloc || instance.exports.cabi_export_realloc;
+
+                  if (instance.exports.asyncify_get_state && memory && realloc) {{
+                    const address = realloc(0, 0, 4, 4096);
+                    new Int32Array(memory.buffer, address).set([address + 8, address + 4096]);
+                    asyncifyModules.push({{ instance, memory, address }});
+                  }}
+
+                  return instance;
+                }}
+
+                function asyncifyState() {{
+                  return asyncifyModules[0]?.instance.exports.asyncify_get_state();
+                }}
+                function asyncifyAssertNoneState() {{
+                  let state = asyncifyState();
+                  if (state !== 0) {{
+                    throw new Error(`reentrancy not supported, expected asyncify state '0' but found '${{state}}'`);
+                  }}
+                }}
+                function asyncifyWrapImport(fn) {{
+                  return (...args) => {{
+                    if (asyncifyState() === 2) {{
+                      asyncifyModules.forEach(({{ instance }}) => {{
+                        instance.exports.asyncify_stop_rewind();
+                      }});
+
+                      const ret = asyncifyResolved;
+                      asyncifyResolved = undefined;
+                      return ret;
+                    }}
+                    asyncifyAssertNoneState();
+                    let value = fn(...args);
+
+                    asyncifyModules.forEach(({{ instance, address }}) => {{
+                      instance.exports.asyncify_start_unwind(address);
+                    }});
+
+                    asyncifyPromise = value;
+                  }};
+                }}
+
+                function asyncifyWrapExport(fn) {{
+                  return async (...args) => {{
+                    if (asyncifyModules.length === 0) {{
+                        throw new Error(`none of the Wasm modules were processed with wasm-opt asyncify`);
+                    }}
+                    asyncifyAssertNoneState();
+
+                    let result = fn(...args);
+
+                    while (asyncifyState() === 1) {{ // unwinding
+                      asyncifyModules.forEach(({{ instance }}) => {{
+                        instance.exports.asyncify_stop_unwind();
+                      }});
+
+                      asyncifyResolved = await asyncifyPromise;
+                      asyncifyPromise = undefined;
+                      asyncifyAssertNoneState();
+
+                      asyncifyModules.forEach(({{ instance, address }}) => {{
+                        instance.exports.asyncify_start_rewind(address);
+                      }});
+
+                      result = fn(...args);
+                    }}
+
+                    asyncifyAssertNoneState();
+
+                    return result;
+                  }};
+                }}
+            ");
         }
 
         for (i, trampoline) in self.translation.trampolines.iter() {
@@ -1049,7 +1135,12 @@ impl<'a> Instantiator<'a, '_> {
 
         let i = self.instances.push(idx);
         let iu32 = i.as_u32();
-        let instantiate = self.gen.intrinsic(Intrinsic::InstantiateCore);
+        let instantiate = if self.use_asyncify {
+            self.gen.all_intrinsics.insert(Intrinsic::InstantiateCore);
+            "asyncifyInstantiate"
+        } else {
+            &self.gen.intrinsic(Intrinsic::InstantiateCore)
+        };
         uwriteln!(self.src.js, "let exports{iu32};");
 
         match self.gen.opts.instantiation {
@@ -1206,12 +1297,6 @@ impl<'a> Instantiator<'a, '_> {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
                 if is_async {
                     if self.use_asyncify {
-                        uwriteln!(self.src.js, "// import_name = {import_name:?}");
-                        uwriteln!(self.src.js, "// callee_name = {callee_name:?}");
-                        uwriteln!(self.src.js, "// options = {options:?}");
-                        uwriteln!(self.src.js, "// func = {func:?}");
-                        uwriteln!(self.src.js, "// resource_map = {resource_map:?}");
-
                         uwrite!(
                             self.src.js,
                             "\nconst trampoline{} = asyncifyWrapImport(async function",
