@@ -12,6 +12,9 @@ const TEST_IGNORE: &[&str] = &[
     "cli_argv0",
     // We don't have interrupts.
     "cli_sleep_forever",
+    // Don't currently support WASI config store.
+    "config_get",
+    "cli_serve_config",
 ];
 
 // we don't currently support these subsystems, but if someone wants to work on them we
@@ -26,6 +29,7 @@ const DENO_IGNORE: &[&str] = &[
     "cli_file_read",
     "cli_splice_stdin",
     "cli_stdin",
+    "cli_stdin_empty",
     "cli_stdio_write_flushes",
     "http_outbound_request_get",
     "http_outbound_request_invalid_dnsname",
@@ -204,6 +208,7 @@ fn generate_test(test_name: &str, windows_skip: bool, deno: bool) -> String {
 
     let should_error = match test_name {
         "cli_exit_failure"
+        | "cli_exit_with_code"
         | "cli_exit_panic"
         | "preview2_stream_pollable_traps"
         | "preview2_pollable_traps" => true,

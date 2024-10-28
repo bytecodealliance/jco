@@ -332,7 +332,7 @@ export class TcpSocket {
   * See <https://github.com/WebAssembly/wasi-sockets/blob/main/TcpSocketOperationalSemantics.md#pollable-readiness>
   * for more information.
   * 
-  * Note: this function is here for WASI Preview2 only.
+  * Note: this function is here for WASI 0.2 only.
   * It's planned to be removed when `future` is natively supported in Preview3.
   */
   subscribe(): Pollable;

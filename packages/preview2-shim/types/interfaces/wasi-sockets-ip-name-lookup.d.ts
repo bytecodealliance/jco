@@ -53,7 +53,7 @@ export class ResolveAddressStream {
   /**
   * Create a `pollable` which will resolve once the stream is ready for I/O.
   * 
-  * Note: this function is here for WASI Preview2 only.
+  * Note: this function is here for WASI 0.2 only.
   * It's planned to be removed when `future` is natively supported in Preview3.
   */
   subscribe(): Pollable;

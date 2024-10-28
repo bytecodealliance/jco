@@ -47,6 +47,9 @@ export const exit = {
   exit(status) {
     process.exit(status.tag === "err" ? 1 : 0);
   },
+  exitWithCode(code) {
+    process.exit(code);
+  }
 };
 
 // Stdin is created as a FILE descriptor
