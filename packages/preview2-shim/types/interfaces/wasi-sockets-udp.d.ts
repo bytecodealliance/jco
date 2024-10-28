@@ -82,7 +82,7 @@ export class IncomingDatagramStream {
   /**
   * Create a `pollable` which will resolve once the stream is ready to receive again.
   * 
-  * Note: this function is here for WASI Preview2 only.
+  * Note: this function is here for WASI 0.2 only.
   * It's planned to be removed when `future` is natively supported in Preview3.
   */
   subscribe(): Pollable;
@@ -143,7 +143,7 @@ export class OutgoingDatagramStream {
   /**
   * Create a `pollable` which will resolve once the stream is ready to send again.
   * 
-  * Note: this function is here for WASI Preview2 only.
+  * Note: this function is here for WASI 0.2 only.
   * It's planned to be removed when `future` is natively supported in Preview3.
   */
   subscribe(): Pollable;
@@ -290,7 +290,7 @@ export class UdpSocket {
       /**
       * Create a `pollable` which will resolve once the socket is ready for I/O.
       * 
-      * Note: this function is here for WASI Preview2 only.
+      * Note: this function is here for WASI 0.2 only.
       * It's planned to be removed when `future` is natively supported in Preview3.
       */
       subscribe(): Pollable;

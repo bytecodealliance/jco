@@ -255,7 +255,7 @@ export interface ErrorCodeInternalError {
  */
 export type HeaderError = HeaderErrorInvalidSyntax | HeaderErrorForbidden | HeaderErrorImmutable;
 /**
- * This error indicates that a `field-key` or `field-value` was
+ * This error indicates that a `field-name` or `field-value` was
  * syntactically invalid when used with an operation that sets headers in a
  * `fields`.
  */
@@ -263,7 +263,7 @@ export interface HeaderErrorInvalidSyntax {
   tag: 'invalid-syntax',
 }
 /**
- * This error indicates that a forbidden `field-key` was used when trying
+ * This error indicates that a forbidden `field-name` was used when trying
  * to set a header in a `fields`.
  */
 export interface HeaderErrorForbidden {
@@ -278,8 +278,22 @@ export interface HeaderErrorImmutable {
 }
 /**
  * Field keys are always strings.
+ * 
+ * Field keys should always be treated as case insensitive by the `fields`
+ * resource for the purposes of equality checking.
+ * 
+ * # Deprecation
+ * 
+ * This type has been deprecated in favor of the `field-name` type.
  */
 export type FieldKey = string;
+/**
+ * Field names are always strings.
+ * 
+ * Field names should always be treated as case insensitive by the `fields`
+ * resource for the purposes of equality checking.
+ */
+export type FieldName = FieldKey;
 /**
  * Field values should always be ASCII strings. However, in
  * reality, HTTP implementations often have to interpret malformed values,
@@ -312,68 +326,71 @@ export class Fields {
   * 
   * The resulting `fields` is mutable.
   * 
-  * The list represents each key-value pair in the Fields. Keys
+  * The list represents each name-value pair in the Fields. Names
   * which have multiple values are represented by multiple entries in this
-  * list with the same key.
+  * list with the same name.
   * 
-  * The tuple is a pair of the field key, represented as a string, and
+  * The tuple is a pair of the field name, represented as a string, and
   * Value, represented as a list of bytes.
   * 
-  * An error result will be returned if any `field-key` or `field-value` is
+  * An error result will be returned if any `field-name` or `field-value` is
   * syntactically invalid, or if a field is forbidden.
   */
-  static fromList(entries: Array<[FieldKey, FieldValue]>): Fields;
+  static fromList(entries: Array<[FieldName, FieldValue]>): Fields;
   /**
-  * Get all of the values corresponding to a key. If the key is not present
+  * Get all of the values corresponding to a name. If the name is not present
   * in this `fields` or is syntactically invalid, an empty list is returned.
-  * However, if the key is present but empty, this is represented by a list
+  * However, if the name is present but empty, this is represented by a list
   * with one or more empty field-values present.
   */
-  get(name: FieldKey): Array<FieldValue>;
+  get(name: FieldName): Array<FieldValue>;
   /**
-  * Returns `true` when the key is present in this `fields`. If the key is
+  * Returns `true` when the name is present in this `fields`. If the name is
   * syntactically invalid, `false` is returned.
   */
-  has(name: FieldKey): boolean;
+  has(name: FieldName): boolean;
   /**
-  * Set all of the values for a key. Clears any existing values for that
-  * key, if they have been set.
+  * Set all of the values for a name. Clears any existing values for that
+  * name, if they have been set.
   * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
   * 
-  * Fails with `header-error.invalid-syntax` if the `field-key` or any of
+  * Fails with `header-error.invalid-syntax` if the `field-name` or any of
   * the `field-value`s are syntactically invalid.
   */
-  set(name: FieldKey, value: Array<FieldValue>): void;
+  set(name: FieldName, value: Array<FieldValue>): void;
   /**
-  * Delete all values for a key. Does nothing if no values for the key
+  * Delete all values for a name. Does nothing if no values for the name
   * exist.
   * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
   * 
-  * Fails with `header-error.invalid-syntax` if the `field-key` is
+  * Fails with `header-error.invalid-syntax` if the `field-name` is
   * syntactically invalid.
   */
-  'delete'(name: FieldKey): void;
+  'delete'(name: FieldName): void;
   /**
-  * Append a value for a key. Does not change or delete any existing
-  * values for that key.
+  * Append a value for a name. Does not change or delete any existing
+  * values for that name.
   * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
   * 
-  * Fails with `header-error.invalid-syntax` if the `field-key` or
+  * Fails with `header-error.invalid-syntax` if the `field-name` or
   * `field-value` are syntactically invalid.
   */
-  append(name: FieldKey, value: FieldValue): void;
+  append(name: FieldName, value: FieldValue): void;
   /**
-  * Retrieve the full set of keys and values in the Fields. Like the
-  * constructor, the list represents each key-value pair.
+  * Retrieve the full set of names and values in the Fields. Like the
+  * constructor, the list represents each name-value pair.
   * 
-  * The outer list represents each key-value pair in the Fields. Keys
+  * The outer list represents each name-value pair in the Fields. Names
   * which have multiple values are represented by multiple entries in this
-  * list with the same key.
+  * list with the same name.
+  * 
+  * The names and values are always returned in the original casing and in
+  * the order in which they will be serialized for transport.
   */
-  entries(): Array<[FieldKey, FieldValue]>;
+  entries(): Array<[FieldName, FieldValue]>;
   /**
   * Make a deep copy of the Fields. Equivalent in behavior to calling the
   * `fields` constructor on the return value of `entries`. The resulting

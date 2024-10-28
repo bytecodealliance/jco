@@ -393,8 +393,9 @@ function handle(call, id, payload) {
       return;
     }
     case HTTP_OUTGOING_BODY_DISPOSE:
-      if (!streams.delete(id))
-        throw new Error("wasi-io trap: stream not found to dispose");
+      if (debug && !streams.has(id))
+        console.warn(`wasi-io: stream ${id} not found to dispose`);
+      streams.delete(id);  
       return;
     case HTTP_SERVER_START:
       return startHttpServer(id, payload);

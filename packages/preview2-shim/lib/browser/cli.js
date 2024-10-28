@@ -29,16 +29,19 @@ export const environment = {
 };
 
 class ComponentExit extends Error {
-  constructor(ok) {
-    super(`Component exited ${ok ? 'successfully' : 'with error'}`);
+  constructor(code) {
+    super(`Component exited ${code === 0 ? 'successfully' : 'with error'}`);
     this.exitError = true;
-    this.ok = ok;
+    this.code = code;
   }
 }
 
 export const exit = {
   exit (status) {
-    throw new ComponentExit(status.tag === 'err' ? true : false);
+    throw new ComponentExit(status.tag === 'err' ? 1 : 0);
+  },
+  exitWithCode (code) {
+    throw new ComponentExit(code);
   }
 };
 

@@ -16,7 +16,7 @@ import { platform } from "node:process";
 
 const isWindows = platform === "win32";
 
-export async function apiTest(fixtures) {
+export async function apiTest(_fixtures) {
   suite("API", () => {
     test("Transpile", async () => {
       const name = "flavorful";
@@ -154,7 +154,7 @@ export async function apiTest(fixtures) {
         [
           "processed-by",
           [
-            ["wit-component", "0.217.0"],
+            ["wit-component", "0.218.0"],
             ["dummy-gen", "test"],
           ],
         ],
@@ -195,7 +195,7 @@ export async function apiTest(fixtures) {
         [
           "processed-by",
           [
-            ["wit-component", "0.217.0"],
+            ["wit-component", "0.218.0"],
             ["dummy-gen", "test"],
           ],
         ],
