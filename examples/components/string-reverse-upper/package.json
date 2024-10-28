@@ -3,14 +3,15 @@
   "description": "Simple codebase for reversing a string and upper-casing it via WebAssembly with jco",
   "type": "module",
   "scripts": {
-    "build": "jco componentize string-reverse-upper.mjs --wit wit/ --world-name revup --out string-reverse-upper.incomplete.wasm --disable all",
+    "build": "jco componentize string-reverse-upper.js --wit wit/ --world-name revup --out string-reverse-upper.incomplete.wasm --disable all",
     "build:dep": "cd ../string-reverse ; npm run build",
     "compose": "npm run build:dep && wac plug --plug ../string-reverse/string-reverse.wasm string-reverse-upper.incomplete.wasm -o string-reverse-upper.wasm",
-    "transpile": "jco transpile string-reverse-upper.wasm -o dist/transpiled ; mv dist/transpiled/string-reverse-upper.js dist/transpiled/string-reverse-upper.mjs",
-    "transpiled-js": "node run-transpiled.js"
+    "transpile": "jco transpile string-reverse-upper.wasm -o dist/transpiled",
+    "transpiled-js": "node run-transpiled.js",
+    "all": "npm run build:dep ; npm run build ; npm run compose ; npm run transpile ; npm run transpiled-js"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "1.7.0",
-    "@bytecodealliance/componentize-js": "0.13.0"
+    "@bytecodealliance/jco": "1.7.1",
+    "@bytecodealliance/componentize-js": "0.13.1"
   }
 }

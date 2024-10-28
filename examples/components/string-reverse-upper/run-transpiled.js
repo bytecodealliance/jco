@@ -5,7 +5,7 @@
  * npm run build && npm run compose && npm run transpile`
  * ```
  */
-import { reversedUpper } from "./dist/transpiled/string-reverse-upper.mjs";
+import { reversedUpper } from "./dist/transpiled/string-reverse-upper.js";
 
 const result = reversedUpper.reverseAndUppercase("!dlroW olleH");
 
