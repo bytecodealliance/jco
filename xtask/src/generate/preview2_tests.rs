@@ -14,7 +14,7 @@ const TEST_IGNORE: &[&str] = &[
     "cli_sleep_forever",
     // Don't currently support WASI config store.
     "config_get",
-    "serve_config",
+    "cli_serve_config",
 ];
 
 // we don't currently support these subsystems, but if someone wants to work on them we
