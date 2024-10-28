@@ -243,14 +243,14 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jco"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "js-component-bindgen"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "anyhow",
  "base64",
@@ -267,7 +267,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen-component"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
