@@ -14,6 +14,9 @@ export type StreamError = StreamErrorLastOperationFailed | StreamErrorClosed;
  * The last operation (a write or flush) failed before completion.
  * 
  * More information is available in the `error` payload.
+ * 
+ * After this, the stream will be closed. All future operations return
+ * `stream-error::closed`.
  */
 export interface StreamErrorLastOperationFailed {
   tag: 'last-operation-failed',

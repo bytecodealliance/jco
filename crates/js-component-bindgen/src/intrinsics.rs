@@ -176,7 +176,7 @@ pub fn render_intrinsics(
                     let _fs;
                     async function fetchCompile (url) {
                         if (isNode) {
-                            _fs = _fs || await import('fs/promises');
+                            _fs = _fs || await import('node:fs/promises');
                             return WebAssembly.compile(await _fs.readFile(url));
                         }
                         return fetch(url).then(WebAssembly.compileStreaming);

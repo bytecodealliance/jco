@@ -1,6 +1,5 @@
-import { resolve, normalize, sep } from "node:path";
+import { resolve } from "node:path";
 import { execArgv } from "node:process";
-import { tmpdir, EOL } from "node:os";
 import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import {
   mkdir,
@@ -8,7 +7,6 @@ import {
   rm,
   symlink,
   writeFile,
-  mkdtemp,
 } from "node:fs/promises";
 
 import { fileURLToPath, pathToFileURL } from "url";
@@ -18,7 +16,7 @@ const multiMemory = execArgv.includes("--experimental-wasm-multi-memory")
   ? ["--multi-memory"]
   : [];
 
-export async function cliTest(fixtures) {
+export async function cliTest(_fixtures) {
   suite("CLI", () => {
     var tmpDir;
     var outDir;
@@ -462,7 +460,7 @@ export async function cliTest(fixtures) {
           [
             "processed-by",
             [
-              ["wit-component", "0.217.0"],
+              ["wit-component", "0.218.0"],
               ["dummy-gen", "test"],
             ],
           ],

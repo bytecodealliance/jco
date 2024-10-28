@@ -42,8 +42,7 @@ use wasm_encoder::*;
 use wasmparser::collections::IndexMap;
 use wasmparser::*;
 use wasmtime_environ::component::CoreDef;
-use wasmtime_environ::{wasmparser, ModuleTranslation};
-use wasmtime_environ::{EntityIndex, MemoryIndex, PrimaryMap};
+use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};
 
 fn unimplemented_try_table() -> wasm_encoder::Instruction<'static> {
     unimplemented!()
@@ -345,7 +344,7 @@ impl Augmenter<'_> {
         // before.
         let mut types = TypeSection::new();
         for ty in &self.types {
-            types.function(
+            types.ty().function(
                 ty.params().iter().map(|v| valtype(*v)),
                 ty.results().iter().map(|v| valtype(*v)),
             );
@@ -479,7 +478,7 @@ fn valtype(ty: wasmparser::ValType) -> wasm_encoder::ValType {
 struct CollectMemOps<'a, 'b>(&'a mut Augmenter<'b>);
 
 macro_rules! define_visit {
-    ($(@$p:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident)*) => {
+    ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*))*) => {
         $(
             #[allow(unreachable_code)]
             fn $visit(&mut self $( $( ,$arg: $argty)* )?) {
@@ -569,35 +568,35 @@ impl AugmentedOp {
             | AugmentedOp::I32Load8S
             | AugmentedOp::I32Load16U
             | AugmentedOp::I32Load16S => {
-                section.function([I32, I32], [I32]);
+                section.ty().function([I32, I32], [I32]);
             }
             AugmentedOp::I64Load => {
-                section.function([I32, I32], [I64]);
+                section.ty().function([I32, I32], [I64]);
             }
             AugmentedOp::F32Load => {
-                section.function([I32, I32], [F32]);
+                section.ty().function([I32, I32], [F32]);
             }
             AugmentedOp::F64Load => {
-                section.function([I32, I32], [F64]);
+                section.ty().function([I32, I32], [F64]);
             }
 
             // Stores, like loads, take an additional argument than usual which
             // is the static offset on the store instruction.
             AugmentedOp::I32Store | AugmentedOp::I32Store8 | AugmentedOp::I32Store16 => {
-                section.function([I32, I32, I32], []);
+                section.ty().function([I32, I32, I32], []);
             }
             AugmentedOp::I64Store => {
-                section.function([I32, I64, I32], []);
+                section.ty().function([I32, I64, I32], []);
             }
             AugmentedOp::F32Store => {
-                section.function([I32, F32, I32], []);
+                section.ty().function([I32, F32, I32], []);
             }
             AugmentedOp::F64Store => {
-                section.function([I32, F64, I32], []);
+                section.ty().function([I32, F64, I32], []);
             }
 
             AugmentedOp::MemorySize => {
-                section.function([], [I32]);
+                section.ty().function([], [I32]);
             }
         }
     }
@@ -614,8 +613,9 @@ macro_rules! define_translate {
     // This is the base case where all methods are defined and the body of each
     // method delegates to a recursive invocation of this macro to hit one of
     // the cases below.
-    ($(@$p:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident)*) => {
+    ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*))*) => {
         $(
+            #[allow(unreachable_code)]
             #[allow(dropping_copy_types)]
             fn $visit(&mut self $(, $($arg: $argty),*)?)  {
                 #[allow(unused_imports)]
@@ -768,6 +768,12 @@ macro_rules! define_translate {
     (map $self:ident $arg:ident array_type_index_src) => ($self.remap(Item::Type, $arg).unwrap());
     (map $self:ident $arg:ident from_ref_type) => ($self.refty(&$arg).unwrap());
     (map $self:ident $arg:ident to_ref_type) => ($self.refty(&$arg).unwrap());
+    (map $self:ident $arg:ident cont_type_index) => ($self.remap(Item::Type, $arg).unwrap());
+    (map $self:ident $arg:ident argument_index) => ($self.remap(Item::Type, $arg).unwrap());
+    (map $self:ident $arg:ident result_index) => ($self.remap(Item::Type, $arg).unwrap());
+    (map $self:ident $arg:ident resume_table) => ((
+        unimplemented!()
+    ));
 }
 
 impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
