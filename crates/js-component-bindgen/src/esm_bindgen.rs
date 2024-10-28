@@ -159,7 +159,7 @@ impl EsmBindgen {
                 continue;
             };
             let (local_name, _) =
-                local_names.get_or_create(&format!("export:{export_name}"), export_name);
+                local_names.get_or_create(format!("export:{export_name}"), export_name);
             uwriteln!(output, "const {local_name} = {{");
             for (func_name, export) in iface {
                 let ExportBinding::Local(local_name) = export else {
@@ -181,7 +181,7 @@ impl EsmBindgen {
             }
             let local_name = match &self.exports[export_name] {
                 ExportBinding::Local(local_name) => local_name,
-                ExportBinding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
+                ExportBinding::Interface(_) => local_names.get(format!("export:{}", export_name)),
             };
             let alias_maybe_quoted = maybe_quote_id(alias);
             if local_name == alias_maybe_quoted {
@@ -201,7 +201,7 @@ impl EsmBindgen {
             }
             let local_name = match export {
                 ExportBinding::Local(local_name) => local_name,
-                ExportBinding::Interface(_) => local_names.get(&format!("export:{}", export_name)),
+                ExportBinding::Interface(_) => local_names.get(format!("export:{}", export_name)),
             };
             let export_name_maybe_quoted = maybe_quote_id(export_name);
             if local_name == export_name_maybe_quoted {
@@ -220,7 +220,7 @@ impl EsmBindgen {
         uwrite!(output, " }}");
     }
 
-    fn contains_js_quote(&self, js_string: &String) -> bool {
+    fn contains_js_quote(&self, js_string: &str) -> bool {
         js_string.contains("\"") || js_string.contains("'") || js_string.contains("`")
     }
 
@@ -239,11 +239,7 @@ impl EsmBindgen {
                 } else {
                     &specifier[iface_idx..]
                 };
-                Some(if iface_name.starts_with("global-") {
-                    &iface_name[7..]
-                } else {
-                    ""
-                })
+                Some(iface_name.strip_prefix("global-").unwrap_or_default())
             } else {
                 None
             };
@@ -289,7 +285,7 @@ impl EsmBindgen {
                                     output.push_str(", ");
                                 }
                                 let (iface_local_name, _) = local_names.get_or_create(
-                                    &format!("import:{specifier}#{external_name}"),
+                                    format!("import:{specifier}#{external_name}"),
                                     external_name,
                                 );
                                 iface_imports.push((iface_local_name.to_string(), iface));
@@ -331,7 +327,7 @@ impl EsmBindgen {
                         );
                     } else if let Some(idl_binding) = idl_binding {
                         uwrite!(output, "}} = {}()", Intrinsic::GlobalThisIdlProxy.name());
-                        if idl_binding != "" {
+                        if !idl_binding.is_empty() {
                             for segment in idl_binding.split('-') {
                                 uwrite!(output, ".{}()", segment.to_lowercase());
                             }

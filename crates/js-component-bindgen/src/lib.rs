@@ -128,8 +128,8 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
         .map(|(_i, module)| core::Translation::new(module, opts.multi_memory))
         .collect::<Result<_>>()?;
 
-    let mut wasmtime_component = Component::default();
-    let types = types.finish(&mut wasmtime_component);
+    let wasmtime_component = Component::default();
+    let types = types.finish(&wasmtime_component);
 
     // Insert all core wasm modules into the generated `Files` which will
     // end up getting used in the `generate_instantiate` method.

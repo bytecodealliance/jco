@@ -117,6 +117,7 @@ struct JsBindgen<'a> {
     all_intrinsics: BTreeSet<Intrinsic>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn transpile_bindgen(
     name: &str,
     component: &ComponentTranslation,
@@ -336,7 +337,7 @@ impl<'a> JsBindgen<'a> {
             );
         } else {
             let (maybe_init_export, maybe_init) =
-                if self.opts.tla_compat && matches!(opts.instantiation, None) {
+                if self.opts.tla_compat && opts.instantiation.is_none() {
                     uwriteln!(self.src.js_init, "_initialized = true;");
                     (
                         "\
@@ -1104,7 +1105,7 @@ impl<'a> Instantiator<'a, '_> {
                 self.gen
                     .local_names
                     .get_or_create(
-                        &format!(
+                        format!(
                             "import:{}-{}-{}",
                             import_specifier,
                             maybe_iface_member.as_deref().unwrap_or(""),
@@ -1124,7 +1125,7 @@ impl<'a> Instantiator<'a, '_> {
                 format!(
                     "{}.{}",
                     Instantiator::resource_name(
-                        &self.resolve,
+                        self.resolve,
                         &mut self.gen.local_names,
                         resource_id,
                         &self.imports_resource_types
@@ -1137,7 +1138,7 @@ impl<'a> Instantiator<'a, '_> {
                 format!(
                     "new {}",
                     Instantiator::resource_name(
-                        &self.resolve,
+                        self.resolve,
                         &mut self.gen.local_names,
                         resource_id,
                         &self.imports_resource_types
@@ -1198,7 +1199,7 @@ impl<'a> Instantiator<'a, '_> {
                 FunctionKind::Method(resource_id) => format!(
                     "{}.prototype.{callee_name}",
                     Instantiator::resource_name(
-                        &self.resolve,
+                        self.resolve,
                         &mut self.gen.local_names,
                         resource_id,
                         &self.imports_resource_types
@@ -1220,14 +1221,14 @@ impl<'a> Instantiator<'a, '_> {
                     resource_tables.push(*tid);
                 }
 
-                if resource_tables.len() == 0 {
+                if resource_tables.is_empty() {
                     "".to_string()
                 } else {
                     format!(
                         " resourceTables: [{}],",
                         resource_tables
                             .iter()
-                            .map(|x| format!("handleTable{}", x.as_u32().to_string()))
+                            .map(|x| format!("handleTable{}", x.as_u32()))
                             .collect::<Vec<String>>()
                             .join(", ")
                     )
@@ -1268,7 +1269,7 @@ impl<'a> Instantiator<'a, '_> {
                 (
                     ty.name.as_ref().unwrap().to_upper_camel_case(),
                     Instantiator::resource_name(
-                        &self.resolve,
+                        self.resolve,
                         &mut self.gen.local_names,
                         tid,
                         &self.imports_resource_types,
@@ -1508,6 +1509,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn bindgen(
         &mut self,
         nparams: usize,
@@ -1566,7 +1568,7 @@ impl<'a> Instantiator<'a, '_> {
 
         if self.gen.opts.tla_compat
             && matches!(abi, AbiVariant::GuestExport)
-            && matches!(self.gen.opts.instantiation, None)
+            && self.gen.opts.instantiation.is_none()
         {
             let throw_uninitialized = self.gen.intrinsic(Intrinsic::ThrowUninitialized);
             uwrite!(
@@ -1578,7 +1580,7 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let mut f = FunctionBindgen {
-            resource_map: &resource_map,
+            resource_map,
             cur_resource_borrows: false,
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
@@ -1776,7 +1778,7 @@ impl<'a> Instantiator<'a, '_> {
                     | FunctionKind::Static(resource_id) = func.kind
                     {
                         Instantiator::resource_name(
-                            &self.resolve,
+                            self.resolve,
                             &mut self.gen.local_names,
                             resource_id,
                             &self.exports_resource_types,
@@ -1787,8 +1789,8 @@ impl<'a> Instantiator<'a, '_> {
                     .to_string();
                     self.export_bindgen(
                         &local_name,
-                        &def,
-                        &options,
+                        def,
+                        options,
                         func,
                         export_name,
                         &resource_map,
@@ -1833,20 +1835,20 @@ impl<'a> Instantiator<'a, '_> {
                         | FunctionKind::Static(resource_id) = func.kind
                         {
                             Instantiator::resource_name(
-                                &self.resolve,
+                                self.resolve,
                                 &mut self.gen.local_names,
                                 resource_id,
                                 &self.exports_resource_types,
                             )
                         } else {
-                            self.gen.local_names.create_once(&func_name)
+                            self.gen.local_names.create_once(func_name)
                         }
                         .to_string();
 
                         self.export_bindgen(
                             &local_name,
-                            &def,
-                            &options,
+                            def,
+                            options,
                             func,
                             export_name,
                             &resource_map,
