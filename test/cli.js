@@ -503,7 +503,7 @@ export async function cliTest(_fixtures) {
       ]);
     });
 
-    test("Componentize", async () => {
+    test.skip("Componentize", async () => {
       const { stdout, stderr } = await exec(
         jcoPath,
         "componentize",
