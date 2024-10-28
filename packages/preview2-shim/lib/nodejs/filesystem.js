@@ -368,19 +368,16 @@ class Descriptor {
       }
     }
     try {
-      const fd = openSync(fullPath, fsOpenFlags);
+      const fd = openSync(fullPath.endsWith('/') ? fullPath.slice(0, -1) : fullPath, fsOpenFlags);
       const descriptor = descriptorCreate(
         fd,
         descriptorFlags,
         fullPath,
         preopenEntries
       );
-      if (fullPath.endsWith("/") && isWindows) {
-        // check if its a directory
-        if (descriptor.getType() !== "directory") {
-          descriptor[symbolDispose]();
-          throw "not-directory";
-        }
+      if (fullPath.endsWith('/') && descriptor.getType() !== 'directory') {
+        descriptor[symbolDispose]();
+        throw "not-directory";
       }
       return descriptor;
     } catch (e) {
@@ -671,6 +668,7 @@ function convertFsError(e) {
     case "ENOSPC":
       return "insufficient-space";
     case "ENOTDIR":
+    case 'ERR_FS_EISDIR':
       return "not-directory";
     case "ENOTEMPTY":
       return "not-empty";
