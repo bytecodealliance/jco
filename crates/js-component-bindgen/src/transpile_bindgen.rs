@@ -1244,15 +1244,15 @@ impl<'a> Instantiator<'a, '_> {
                     let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
                     if !self.gen.opts.valid_lifting_optimization {
                         uwriteln!(self.src.js_init, "if (!{callee_name}[{symbol_cabi_lower}]) {{
-                            throw new TypeError('import for \"{import_name}\" does not define a Symbol.for('cabiLower') optimized binding');
+                            throw new TypeError('import for \"{import_name}\" does not define a Symbol.for(\"cabiLower\") optimized binding');
                         }}");
                     }
-                    uwriteln!(self.src.js_init, "trampoline{} = {callee_name}[{symbol_cabi_lower}]({memory}{realloc}{post_return}{string_encoding}{resource_tables});", trampoline.as_u32());
+                    uwriteln!(self.src.js_init, "trampoline{} = {callee_name}[{symbol_cabi_lower}]({{{memory}{realloc}{post_return}{string_encoding}{resource_tables}}});", trampoline.as_u32());
                 }
                 Some(BindingsMode::DirectOptimized) => {
                     uwriteln!(
                         self.src.js_init,
-                        "trampoline{} = {callee_name}({memory}{realloc}{post_return}{string_encoding});",
+                        "trampoline{} = {callee_name}({{{memory}{realloc}{post_return}{string_encoding}}});",
                         trampoline.as_u32()
                     );
                 }
