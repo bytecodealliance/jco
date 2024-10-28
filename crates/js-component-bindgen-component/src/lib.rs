@@ -117,7 +117,7 @@ impl Guest for JsComponentBindgenComponent {
         // Add features if specified
         match opts.features {
             Some(EnabledFeatureSet::List(ref features)) => {
-                for f in features.into_iter() {
+                for f in features.iter() {
                     resolve.features.insert(f.to_string());
                 }
             }

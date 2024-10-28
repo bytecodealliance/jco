@@ -1,7 +1,7 @@
 use heck::ToLowerCamelCase;
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{BuildHasher, Hash};
 
 #[derive(Default)]
 pub struct LocalNames {
@@ -43,9 +43,7 @@ impl<'a> LocalNames {
     }
 
     pub fn get<H: Hash>(&'a self, unique_id: H) -> &'a str {
-        let mut new_s = self.random_state.build_hasher();
-        unique_id.hash(&mut new_s);
-        let hash = new_s.finish();
+        let hash = self.random_state.hash_one(&unique_id);
         if !self.local_name_ids.contains_key(&hash) {
             panic!("Internal error, no name defined in local names map");
         }
@@ -53,9 +51,7 @@ impl<'a> LocalNames {
     }
 
     pub fn try_get<H: Hash>(&'a self, unique_id: H) -> Option<&'a str> {
-        let mut new_s = self.random_state.build_hasher();
-        unique_id.hash(&mut new_s);
-        let hash = new_s.finish();
+        let hash = self.random_state.hash_one(&unique_id);
         if !self.local_name_ids.contains_key(&hash) {
             return None;
         }
@@ -64,10 +60,9 @@ impl<'a> LocalNames {
 
     /// get or create a unique identifier for a string while storing the lookup by unique id
     pub fn get_or_create<H: Hash>(&'a mut self, unique_id: H, goal_name: &str) -> (&'a str, bool) {
-        let mut new_s = self.random_state.build_hasher();
-        unique_id.hash(&mut new_s);
-        let hash = new_s.finish();
+        let hash = self.random_state.hash_one(&unique_id);
         let mut seen = true;
+        #[allow(clippy::map_entry)]
         if !self.local_name_ids.contains_key(&hash) {
             let goal = self.create_once(goal_name).to_string();
             self.local_name_ids.insert(hash, goal);
@@ -123,7 +118,7 @@ pub fn is_js_identifier(s: &str) -> bool {
             return false;
         }
     }
-    !is_js_reserved_word(&s)
+    !is_js_reserved_word(s)
 }
 
 pub fn is_js_reserved_word(s: &str) -> bool {

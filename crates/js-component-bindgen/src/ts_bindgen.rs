@@ -92,10 +92,9 @@ pub fn ts_bindgen(
                 WorldItem::Interface { id, stability } => {
                     let iface_name = &resolve.interfaces[*id]
                         .name
-                        .as_ref()
-                        .map(String::as_str)
+                        .as_deref()
                         .unwrap_or("<unnamed>");
-                    if !feature_gate_allowed(resolve, package, &stability, iface_name)
+                    if !feature_gate_allowed(resolve, package, stability, iface_name)
                         .context("failed to check feature gate for imported interface")?
                     {
                         let import_specifier = resolve.id_of(*id).unwrap();
@@ -107,7 +106,7 @@ pub fn ts_bindgen(
                     match name {
                         WorldKey::Name(name) => {
                             // kebab name -> direct ns namespace import
-                            bindgen.import_interface(resolve, &name, *id, files);
+                            bindgen.import_interface(resolve, name, *id, files);
                         }
                         // namespaced ns:pkg/iface
                         // TODO: map support
@@ -206,7 +205,7 @@ pub fn ts_bindgen(
                     }
                 };
 
-                if !feature_gate_allowed(resolve, package, &stability, iface_name)
+                if !feature_gate_allowed(resolve, package, stability, iface_name)
                     .context("failed to check feature gate for export")?
                 {
                     debug!("skipping exported interface [{export_name}] feature gate due to feature gate visibility");
@@ -273,7 +272,7 @@ pub fn ts_bindgen(
         bindgen.src.push_str(&bindgen.export_object);
     }
 
-    if opts.tla_compat && matches!(opts.instantiation, None) {
+    if opts.tla_compat && opts.instantiation.is_none() {
         uwriteln!(
             bindgen.src,
             "
@@ -496,7 +495,7 @@ impl TsBindgen {
         if !local_exists {
             // TypeScript doesn't work with empty namespaces, so we don't import in this case,
             // just define them as empty.
-            let is_empty_interface = resolve.interfaces[id].functions.len() == 0
+            let is_empty_interface = resolve.interfaces[id].functions.is_empty()
                 && resolve.interfaces[id]
                     .types
                     .iter()
@@ -786,12 +785,10 @@ impl<'a> TsInterface<'a> {
                 }
                 FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
             }
+        } else if is_js_identifier(&out_name) {
+            iface.src.push_str(&out_name);
         } else {
-            if is_js_identifier(&out_name) {
-                iface.src.push_str(&out_name);
-            } else {
-                iface.src.push_str(&format!("'{out_name}'"));
-            }
+            iface.src.push_str(&format!("'{out_name}'"));
         }
 
         let end_character = if declaration { ';' } else { ',' };
@@ -1036,7 +1033,7 @@ impl<'a> TsInterface<'a> {
         let type_name = name.to_upper_camel_case();
         match owner_not_parent {
             Some(owned_interface_name) => {
-                let orig_id = dealias(&self.resolve, id);
+                let orig_id = dealias(self.resolve, id);
                 let orig_name = self.resolve.types[orig_id]
                     .name
                     .as_ref()

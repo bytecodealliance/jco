@@ -79,7 +79,7 @@ impl Guest for WasmToolsJs {
         // (this helps identify/use feature gating properly)
         match embed_opts.features {
             Some(EnabledFeatureSet::List(ref features)) => {
-                for f in features.into_iter() {
+                for f in features.iter() {
                     resolve.features.insert(f.to_string());
                 }
             }
