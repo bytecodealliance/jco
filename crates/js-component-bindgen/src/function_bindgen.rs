@@ -1054,7 +1054,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     if self.use_asyncify {
                         uwriteln!(
                             self.src,
-                            "await {}({});",
+                            "await asyncifyWrapExport({})({});",
                             self.callee,
                             operands.join(", ")
                         );

@@ -583,6 +583,10 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
     fn instantiate(&mut self) {
+        if self.use_asyncify {
+            uwriteln!(self.src.js, "// HERE");
+        }
+
         for (i, trampoline) in self.translation.trampolines.iter() {
             let Trampoline::LowerImport {
                 index,
@@ -1201,11 +1205,16 @@ impl<'a> Instantiator<'a, '_> {
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
                 if is_async {
-                    // TODO
                     if self.use_asyncify {
+                        uwriteln!(self.src.js, "// import_name = {import_name:?}");
+                        uwriteln!(self.src.js, "// callee_name = {callee_name:?}");
+                        uwriteln!(self.src.js, "// options = {options:?}");
+                        uwriteln!(self.src.js, "// func = {func:?}");
+                        uwriteln!(self.src.js, "// resource_map = {resource_map:?}");
+
                         uwrite!(
                             self.src.js,
-                            "\nasync function trampoline{}",
+                            "\nconst trampoline{} = asyncifyWrapImport(async function",
                             trampoline.as_u32()
                         );
                     } else {
@@ -1233,7 +1242,7 @@ impl<'a> Instantiator<'a, '_> {
                     AbiVariant::GuestImport,
                     is_async,
                 );
-                if is_async && !self.use_asyncify {
+                if is_async {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");
