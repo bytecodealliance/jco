@@ -89,7 +89,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: tests/gen
-        key: wasi-${{ hashFiles('xtask/src/generate/tests.rs', 'submodules/wasmtime/Cargo.lock') }}
+        key: wasi-${{ hashFiles('xtask/src/generate/preview2_tests.rs', 'submodules/wasmtime/Cargo.lock') }}
     - name: Install Rust
       if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
       run: rustup update stable --no-self-update && rustup default stable
