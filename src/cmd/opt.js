@@ -68,7 +68,7 @@ export async function optimizeComponent (componentBytes, opts) {
     }
 
     const args = opts?.optArgs ? [...opts.optArgs] : ['-Os', '--low-memory-unused', '--enable-bulk-memory'];
-    if (opts.asyncMode === 'asyncify') args.push('--asyncify');
+    if (opts?.asyncMode === 'asyncify') args.push('--asyncify');
 
     const optimizedCoreModules = await Promise.all(coreModules.map(async ([coreModuleStart, coreModuleEnd]) => {
       const optimized = wasmOpt(componentBytes.subarray(coreModuleStart, coreModuleEnd), args);

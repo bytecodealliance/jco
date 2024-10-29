@@ -1233,9 +1233,13 @@ impl<'a> Instantiator<'a, '_> {
         let is_async = self
             .async_imports
             .contains(&format!("{import_name}#{func_name}"))
-            || self
-                .async_imports
-                .contains(&format!("{import_specifier}#{func_name}"));
+            || import_name
+                .find('@')
+                .map(|i| {
+                    self.async_imports
+                        .contains(&format!("{}#{func_name}", import_name.get(0..i).unwrap()))
+                })
+                .unwrap_or(false);
 
         let mut resource_map = ResourceMap::new();
         self.create_resource_fn_map(func, func_ty, &mut resource_map);

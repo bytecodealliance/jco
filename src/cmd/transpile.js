@@ -14,6 +14,22 @@ import { platform } from 'node:process';
 
 const isWindows = platform === 'win32';
 
+const DEFAULT_ASYNC_IMPORTS = [
+  "wasi:io/poll#poll",
+  "wasi:io/poll#[method]pollable.block",
+  "wasi:io/streams#[method]input-stream.blocking-read",
+  "wasi:io/streams#[method]input-stream.blocking-skip",
+  "wasi:io/streams#[method]output-stream.blocking-flush",
+  "wasi:io/streams#[method]output-stream.blocking-write-and-flush",
+  "wasi:io/streams#[method]output-stream.blocking-write-zeroes-and-flush",
+  "wasi:io/streams#[method]output-stream.blocking-splice",
+];
+
+const DEFAULT_ASYNC_EXPORTS = [
+  "wasi:cli/run#run",
+  "wasi:http/incoming-handler#handle",
+];
+
 export async function types (witPath, opts) {
   const files = await typesComponent(witPath, opts);
   await writeFiles(files, opts.quiet ? false : 'Generated Type Files');
@@ -101,6 +117,11 @@ export async function transpile (componentPath, opts, program) {
     opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
   if (opts.map)
     opts.map = Object.fromEntries(opts.map.map(mapping => mapping.split('=')));
+
+  if (opts.defaultAsyncImports)
+    opts.asyncImports = DEFAULT_ASYNC_IMPORTS.concat(opts.asyncImports || []);
+  if (opts.defaultAsyncExports)
+    opts.asyncExports = DEFAULT_ASYNC_EXPORTS.concat(opts.asyncExports || []);
 
   const { files } = await transpileComponent(component, opts);
   await writeFiles(files, opts.quiet ? false : 'Transpiled JS Component Files');
