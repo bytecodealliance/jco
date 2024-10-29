@@ -84,7 +84,7 @@ export async function optimizeComponent (componentBytes, opts) {
     const optimizedModulesTotalSize = optimizedCoreModules.reduce((total, buf) => total + buf.byteLength, 0);
     const sizeChange = optimizedModulesTotalSize - previousModulesTotalSize;
 
-    let outComponentBytes = new Uint8Array(componentBytes.byteLength + sizeChange);
+    let outComponentBytes = new Uint8Array(sizeChange > 0 ? componentBytes.byteLength + sizeChange : componentBytes.byteLength);
     let nextReadPos = 0, nextWritePos = 0;
     for (let i = 0; i < coreModules.length; i++) {
       const [coreModuleStart, coreModuleEnd] = coreModules[i];
