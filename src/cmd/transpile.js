@@ -26,6 +26,9 @@ export async function types (witPath, opts) {
  *   worldName?: string,
  *   instantiation?: 'async' | 'sync',
  *   tlaCompat?: bool,
+ *   asyncMode?: string,
+ *   asyncImports?: string[],
+ *   asyncExports?: string[],
  *   outDir?: string,
  *   features?: string[] | 'all',
  * }} opts
@@ -98,6 +101,7 @@ export async function transpile (componentPath, opts, program) {
     opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
   if (opts.map)
     opts.map = Object.fromEntries(opts.map.map(mapping => mapping.split('=')));
+
   const { files } = await transpileComponent(component, opts);
   await writeFiles(files, opts.quiet ? false : 'Transpiled JS Component Files');
 }
@@ -126,6 +130,9 @@ async function wasm2Js (source) {
  *   instantiation?: 'async' | 'sync',
  *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
  *   map?: Record<string, string>,
+ *   asyncMode?: string,
+ *   asyncImports?: string[],
+ *   asyncExports?: string[],
  *   validLiftingOptimization?: bool,
  *   tracing?: bool,
  *   nodejsCompat?: bool,
@@ -148,7 +155,7 @@ export async function transpileComponent (component, opts = {}) {
 
   let spinner;
   const showSpinner = getShowSpinner();
-  if (opts.optimize) {
+  if (opts.optimize || opts.asyncMode === 'asyncify') {
     if (showSpinner) setShowSpinner(true);
     ({ component } = await optimizeComponent(component, opts));
   }
@@ -176,10 +183,21 @@ export async function transpileComponent (component, opts = {}) {
     instantiation = { tag: 'async' };
   }
 
+  const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync' ?
+    null :
+    {
+      tag: opts.asyncMode,
+      val: {
+        imports: opts.asyncImports || [],
+        exports: opts.asyncExports || [],
+      },
+    };
+
   let { files, imports, exports } = generate(component, {
     name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? {}),
     instantiation,
+    asyncMode,
     importBindings: opts.importBindings ? { tag: opts.importBindings } : null,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     tracing: opts.tracing ?? false,
