@@ -67,7 +67,7 @@ export async function optimizeComponent (componentBytes, opts) {
       spinner.text = spinnerText();
     }
 
-    const args = opts?.optArgs ? [...opts.optArgs] : ['-Os', '--low-memory-unused', '--enable-bulk-memory'];
+    const args = opts?.optArgs ? [...opts.optArgs] : ['-Oz', '--low-memory-unused', '--enable-bulk-memory'];
     if (opts?.asyncMode === 'asyncify') args.push('--asyncify');
 
     const optimizedCoreModules = await Promise.all(coreModules.map(async ([coreModuleStart, coreModuleEnd]) => {
@@ -84,7 +84,8 @@ export async function optimizeComponent (componentBytes, opts) {
     const optimizedModulesTotalSize = optimizedCoreModules.reduce((total, buf) => total + buf.byteLength, 0);
     const sizeChange = optimizedModulesTotalSize - previousModulesTotalSize;
 
-    let outComponentBytes = new Uint8Array(sizeChange > 0 ? componentBytes.byteLength + sizeChange : componentBytes.byteLength);
+    // Adds an extra 100 bytes to be safe. Sometimes an extra byte appears to be required.
+    let outComponentBytes = new Uint8Array(componentBytes.byteLength + sizeChange + 100);
     let nextReadPos = 0, nextWritePos = 0;
     for (let i = 0; i < coreModules.length; i++) {
       const [coreModuleStart, coreModuleEnd] = coreModules[i];
@@ -112,11 +113,11 @@ export async function optimizeComponent (componentBytes, opts) {
       nextReadPos = coreModuleEnd;
     }
 
-    outComponentBytes.set(componentBytes.subarray(nextReadPos, componentBytes.byteLength), nextWritePos);
+    outComponentBytes.set(componentBytes.subarray(nextReadPos), nextWritePos);
     nextWritePos += componentBytes.byteLength - nextReadPos;
-    nextReadPos += componentBytes.byteLength - nextReadPos;
 
-    outComponentBytes = outComponentBytes.subarray(0, outComponentBytes.length + nextWritePos - nextReadPos);
+    // truncate to the bytes written
+    outComponentBytes = outComponentBytes.subarray(0, nextWritePos);
 
     // verify it still parses ok
     try {
