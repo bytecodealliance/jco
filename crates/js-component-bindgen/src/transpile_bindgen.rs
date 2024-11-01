@@ -600,9 +600,16 @@ impl<'a> Instantiator<'a, '_> {
                   const memory = instance.exports.memory || (imports && imports.env && imports.env.memory);
                   const realloc = instance.exports.cabi_realloc || instance.exports.cabi_export_realloc;
 
-                  if (instance.exports.asyncify_get_state && memory && realloc) {{
-                    const address = realloc(0, 0, 4, 4096);
-                    new Int32Array(memory.buffer, address).set([address + 8, address + 4096]);
+                  if (instance.exports.asyncify_get_state && memory) {{
+                    let address;
+                    if (realloc) {{
+                        address = realloc(0, 0, 4, 1024);
+                        new Int32Array(memory.buffer, address).set([address + 8, address + 1024]);
+                    }} else {{
+                        address = 16;
+                        new Int32Array(memory.buffer, address).set([address + 8, address + 1024]);
+                    }}
+
                     asyncifyModules.push({{ instance, memory, address }});
                   }}
 
