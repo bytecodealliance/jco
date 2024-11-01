@@ -467,14 +467,26 @@ impl TsBindgen {
     fn export_funcs(
         &mut self,
         resolve: &Resolve,
-        _world: WorldId,
+        world: WorldId,
         funcs: &[(String, &Function)],
         _files: &mut Files,
         declaration: bool,
     ) {
+        let async_exports = self.async_exports.clone();
+        let id_name = &resolve.worlds[world].name;
         let mut gen = self.ts_interface(resolve, false);
         for (_, func) in funcs {
-            gen.ts_func(func, false, declaration, false);
+            let func_name = &func.name;
+            let is_async = async_exports.contains(func_name)
+                || async_exports.contains(&format!("{id_name}#{func_name}"))
+                || id_name
+                    .find('@')
+                    .map(|i| {
+                        async_exports
+                            .contains(&format!("{}#{func_name}", id_name.get(0..i).unwrap()))
+                    })
+                    .unwrap_or(false);
+            gen.ts_func(func, false, declaration, is_async);
         }
         let src = gen.finish();
         self.export_object.push_str(&src);
@@ -821,9 +833,9 @@ impl<'a> TsInterface<'a> {
                 FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
             }
         } else if is_js_identifier(&out_name) {
-            iface.src.push_str(&out_name);
+            iface.src.push_str(&format!("{if_async}{out_name}"));
         } else {
-            iface.src.push_str(&format!("'{out_name}'"));
+            iface.src.push_str(&format!("{if_async}'{out_name}'"));
         }
 
         let end_character = if declaration { ';' } else { ',' };
