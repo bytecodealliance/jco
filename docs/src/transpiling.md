@@ -52,6 +52,9 @@ Options include:
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
 * `--tracing`: Emit tracing calls for all function entry and exits.
 * `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
+* `--async-mode [mode]`: For the component imports and exports, functions and methods on resources can be specified as `async`. The two options are `jspi` (JavaScript Promise Integration) and `asyncify` (Binaryen's `wasm-opt --asyncify`).
+* `--async-imports <imports...>`: Specify the component imports as `async`. Used with `--async-mode`.
+* `--async-exports <exports...>`: Specify the component exports as `async`. Used with `--async-mode`.
 
 ## Browser Support
 
