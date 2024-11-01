@@ -3,12 +3,13 @@
   "description": "Simple codebase for reversing a string via WebAssembly with jco",
   "type": "module",
   "scripts": {
-    "build": "jco componentize string-reverse.mjs --wit wit/component.wit --world-name component --out string-reverse.wasm --disable all",
-    "transpile": "jco transpile string-reverse.wasm -o dist/transpiled ; mv dist/transpiled/string-reverse.js dist/transpiled/string-reverse.mjs",
-    "transpiled-js": "node run-transpiled.js"
+    "build": "jco componentize string-reverse.js --wit wit/component.wit --world-name component --out string-reverse.wasm --disable all",
+    "transpile": "jco transpile string-reverse.wasm -o dist/transpiled",
+    "transpiled-js": "node run-transpiled.js",
+    "all": "npm run build; npm run transpile; npm run transpiled-js"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "1.7.0",
-    "@bytecodealliance/componentize-js": "0.13.0"
+    "@bytecodealliance/jco": "1.7.1",
+    "@bytecodealliance/componentize-js": "0.13.1"
   }
 }

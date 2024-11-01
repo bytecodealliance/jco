@@ -135,7 +135,7 @@ dist
     ├── string-reverse-upper.core2.wasm
     ├── string-reverse-upper.core.wasm
     ├── string-reverse-upper.d.ts
-    └── string-reverse-upper.mjs
+    └── string-reverse-upper.js
 ```
 
 With this transpiled code available, we can now run native NodeJS code that will *use* the WebAssembly module:

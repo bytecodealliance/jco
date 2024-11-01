@@ -1,6 +1,9 @@
 name: examples
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -49,24 +52,7 @@ jobs:
         run: |
           npm install
 
-      - name: build (${{ matrix.project.name }})
+      - name: run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
         run: |
-          npm run build
-
-      - name: compose (${{ matrix.project.name }})
-        if: ${{ matrix.project.is-composed }}
-        working-directory: ${{ matrix.project.dir }}
-        run: |
-          npm run compose
-
-      - name: transpile (${{ matrix.project.name }})
-        working-directory: ${{ matrix.project.dir }}
-        run: |
-          npm run transpile
-
-      - name: run transpiled js (${{ matrix.project.name }})
-        if: ${{ matrix.project.composed }}
-        working-directory: ${{ matrix.project.dir }}
-        run: |
-          npm run transpiled-js
+          npm run all
