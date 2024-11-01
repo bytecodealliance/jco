@@ -597,17 +597,18 @@ impl<'a> Instantiator<'a, '_> {
             self.instantiation_global_initializer(init);
         }
 
-        // Trampolines after initializers so we have static module indices
-        for (i, trampoline) in self.translation.trampolines.iter() {
-            self.trampoline(i, trampoline);
-        }
-
         if self.gen.opts.instantiation.is_some() {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
         }
 
         self.exports(&self.component.exports);
+
+        // Trampolines here so we have static module indices, and resource maps populated
+        // (both imports and exports may still be populting resource map)
+        for (i, trampoline) in self.translation.trampolines.iter() {
+            self.trampoline(i, trampoline);
+        }
     }
 
     fn ensure_local_resource_class(&mut self, local_name: String) {
@@ -1348,8 +1349,8 @@ impl<'a> Instantiator<'a, '_> {
             .is_none();
 
         let resource_id = crate::dealias(self.resolve, t);
-
         let resource = self.types[tid].ty;
+
         if let Some(resource_idx) = self.component.defined_resource_index(resource) {
             let resource_def = self
                 .component
