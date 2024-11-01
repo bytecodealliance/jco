@@ -16,6 +16,8 @@ const multiMemory = execArgv.includes("--experimental-wasm-multi-memory")
   ? ["--multi-memory"]
   : [];
 
+const AsyncFunction = (async () => {}).constructor;
+
 export async function cliTest(_fixtures) {
   suite("CLI", () => {
     var tmpDir;
@@ -117,6 +119,45 @@ export async function cliTest(_fixtures) {
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/${name}.js`);
       ok(source.toString().includes("export { test"));
+    });
+
+    test("Transpile & Asyncify", async () => {
+      const name = "async_call";
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/components/${name}.component.wasm`,
+        `--name=${name}`,
+        "--valid-lifting-optimization",
+        "--tla-compat",
+        "--instantiation=async",
+        "--base64-cutoff=0",
+        "--async-mode=asyncify",
+        "--async-imports=something:test/test-interface#call-async",
+        "--async-exports=run-async",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      await writeFile(
+        `${outDir}/package.json`,
+        JSON.stringify({ type: "module" })
+      );
+      const m = await import(`${outDir}/${name}.js`);
+      const inst = await m.instantiate(
+        (fileName) => readFile(`${outDir}/${fileName}`).then((file) => WebAssembly.compile(file)),
+        {
+          'something:test/test-interface': {
+            callAsync: async () => "called async",
+            callSync: () => "called sync",
+          },
+        },
+      );
+      strictEqual(inst.runSync instanceof AsyncFunction, false);
+      strictEqual(inst.runAsync instanceof AsyncFunction, true);
+
+      strictEqual(inst.runSync(), "called sync");
+      strictEqual(await inst.runAsync(), "called async");
     });
 
     test("Transpile & Optimize & Minify", async () => {
