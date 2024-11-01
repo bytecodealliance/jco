@@ -175,7 +175,7 @@ impl Guest for JsComponentBindgenComponent {
             no_namespaced_exports: false,
             multi_memory: false,
             import_bindings: None,
-            async_mode: None,
+            async_mode: opts.async_mode.map(Into::into),
         };
 
         let files = generate_types(name, resolve, world, opts).map_err(|e| e.to_string())?;

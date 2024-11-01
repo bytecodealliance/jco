@@ -109,6 +109,9 @@ world js-component-bindgen {
     map: option<maps>,
     /// Features that should be enabled as part of feature gating
     features: option<enabled-feature-set>,
+    /// Configure whether to use `async` imports or exports with
+    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    async-mode: option<async-mode>,
   }
 
   enum export-type {

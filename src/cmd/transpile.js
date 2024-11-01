@@ -70,12 +70,28 @@ export async function typesComponent (witPath, opts) {
     features = { tag: 'list', val: opts.feature };
   }
 
+  if (opts.defaultAsyncImports)
+    opts.asyncImports = DEFAULT_ASYNC_IMPORTS.concat(opts.asyncImports || []);
+  if (opts.defaultAsyncExports)
+    opts.asyncExports = DEFAULT_ASYNC_EXPORTS.concat(opts.asyncExports || []);
+
+  const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync' ?
+    null :
+    {
+      tag: opts.asyncMode,
+      val: {
+        imports: opts.asyncImports || [],
+        exports: opts.asyncExports || [],
+      },
+    };
+
   return Object.fromEntries(generateTypes(name, {
     wit: { tag: 'path', val: (isWindows ? '//?/' : '') + resolve(witPath) },
     instantiation,
     tlaCompat: opts.tlaCompat ?? false,
     world: opts.worldName,
     features,
+    asyncMode,
   }).map(([name, file]) => [`${outDir}${name}`, file]));
 }
 
