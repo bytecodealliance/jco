@@ -2070,15 +2070,18 @@ impl<'a> Instantiator<'a, '_> {
         export_name: &String,
         resource_map: &ResourceMap,
     ) {
-        let is_async = self.async_exports.contains(local_name)
+        let is_async = self.async_exports.contains(&func.name)
             || self
                 .async_exports
-                .contains(&format!("{export_name}#{local_name}"))
+                .contains(&format!("{export_name}#{}", func.name))
             || export_name
                 .find('@')
                 .map(|i| {
-                    self.async_exports
-                        .contains(&format!("{}#{local_name}", export_name.get(0..i).unwrap()))
+                    self.async_exports.contains(&format!(
+                        "{}#{}",
+                        export_name.get(0..i).unwrap(),
+                        func.name
+                    ))
                 })
                 .unwrap_or(false);
         let if_async = if is_async { "async " } else { "" };
