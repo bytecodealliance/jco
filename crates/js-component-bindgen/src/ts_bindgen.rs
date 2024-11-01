@@ -795,7 +795,7 @@ impl<'a> TsInterface<'a> {
             func.item_name().to_lower_camel_case()
         };
 
-        let if_async = if is_async { "async " } else { "" };
+        let maybe_async = if is_async { "async " } else { "" };
 
         if declaration {
             match func.kind {
@@ -803,7 +803,7 @@ impl<'a> TsInterface<'a> {
                     if is_js_identifier(&out_name) {
                         iface
                             .src
-                            .push_str(&format!("export {if_async}function {out_name}"));
+                            .push_str(&format!("export {maybe_async}function {out_name}"));
                     } else {
                         let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
                         iface
@@ -811,31 +811,33 @@ impl<'a> TsInterface<'a> {
                             .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
                         iface
                             .src
-                            .push_str(&format!("declare {if_async}function {local_name}"));
+                            .push_str(&format!("declare {maybe_async}function {local_name}"));
                     };
                 }
                 FunctionKind::Method(_) => {
                     if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("{if_async}{out_name}"));
+                        iface.src.push_str(&format!("{maybe_async}{out_name}"));
                     } else {
-                        iface.src.push_str(&format!("{if_async}'{out_name}'"));
+                        iface.src.push_str(&format!("{maybe_async}'{out_name}'"));
                     }
                 }
                 FunctionKind::Static(_) => {
                     if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("static {if_async}{out_name}"))
+                        iface
+                            .src
+                            .push_str(&format!("static {maybe_async}{out_name}"))
                     } else {
                         iface
                             .src
-                            .push_str(&format!("static {if_async}'{out_name}'"))
+                            .push_str(&format!("static {maybe_async}'{out_name}'"))
                     }
                 }
                 FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
             }
         } else if is_js_identifier(&out_name) {
-            iface.src.push_str(&format!("{if_async}{out_name}"));
+            iface.src.push_str(&format!("{maybe_async}{out_name}"));
         } else {
-            iface.src.push_str(&format!("{if_async}'{out_name}'"));
+            iface.src.push_str(&format!("{maybe_async}'{out_name}'"));
         }
 
         let end_character = if declaration { ';' } else { ',' };

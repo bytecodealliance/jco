@@ -584,7 +584,7 @@ impl<'a> Instantiator<'a, '_> {
     }
     fn instantiate(&mut self) {
         if self.use_asyncify {
-            let (if_async, if_async_await) =
+            let (maybe_async, maybe_async_await) =
                 if let Some(InstantiationMode::Sync) = self.gen.opts.instantiation {
                     ("", "")
                 } else {
@@ -595,8 +595,8 @@ impl<'a> Instantiator<'a, '_> {
                 let asyncifyResolved;
                 const asyncifyModules = [];
 
-                {if_async}function asyncifyInstantiate(module, imports) {{
-                  const instance = {if_async_await}instantiateCore(module, imports);
+                {maybe_async}function asyncifyInstantiate(module, imports) {{
+                  const instance = {maybe_async_await}instantiateCore(module, imports);
                   const memory = instance.exports.memory || (imports && imports.env && imports.env.memory);
                   const realloc = instance.exports.cabi_realloc || instance.exports.cabi_export_realloc;
 
@@ -2084,16 +2084,18 @@ impl<'a> Instantiator<'a, '_> {
                     ))
                 })
                 .unwrap_or(false);
-        let if_async = if is_async { "async " } else { "" };
+        let maybe_async = if is_async { "async " } else { "" };
 
         match func.kind {
-            FunctionKind::Freestanding => uwrite!(self.src.js, "\n{if_async}function {local_name}"),
+            FunctionKind::Freestanding => {
+                uwrite!(self.src.js, "\n{maybe_async}function {local_name}")
+            }
             FunctionKind::Method(_) => {
                 self.ensure_local_resource_class(local_name.to_string());
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.prototype.{method_name} = {if_async}function {}",
+                    "\n{local_name}.prototype.{method_name} = {maybe_async}function {}",
                     if !is_js_reserved_word(&method_name) {
                         method_name.to_string()
                     } else {
@@ -2106,7 +2108,7 @@ impl<'a> Instantiator<'a, '_> {
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.{method_name} = {if_async}function {}",
+                    "\n{local_name}.{method_name} = {maybe_async}function {}",
                     if !is_js_reserved_word(&method_name) {
                         method_name.to_string()
                     } else {

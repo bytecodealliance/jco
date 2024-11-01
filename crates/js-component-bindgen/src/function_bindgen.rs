@@ -1086,16 +1086,20 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallInterface { func } => {
                 let results_length = func.results.len();
-                let if_async_await = if self.is_async { "await " } else { "" };
+                let maybe_async_await = if self.is_async { "await " } else { "" };
                 let call = if self.callee_resource_dynamic {
                     format!(
-                        "{if_async_await}{}.{}({})",
+                        "{maybe_async_await}{}.{}({})",
                         operands[0],
                         self.callee,
                         operands[1..].join(", ")
                     )
                 } else {
-                    format!("{if_async_await}{}({})", self.callee, operands.join(", "))
+                    format!(
+                        "{maybe_async_await}{}({})",
+                        self.callee,
+                        operands.join(", ")
+                    )
                 };
                 if self.err == ErrHandling::ResultCatchHandler {
                     // result<_, string> allows JS error coercion only, while
