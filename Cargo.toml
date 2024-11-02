@@ -19,7 +19,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "1.7.1"
+version = "1.7.2"
 
 [profile.release]
 codegen-units = 1
