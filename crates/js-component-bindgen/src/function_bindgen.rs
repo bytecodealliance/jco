@@ -1052,9 +1052,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 self.bind_results(sig_results_length, results);
                 if self.is_async {
                     if self.use_asyncify {
+                        let asyncify_wrap_export = self.intrinsic(Intrinsic::AsyncifyWrapExport);
                         uwriteln!(
                             self.src,
-                            "await asyncifyWrapExport({})({});",
+                            "await {}({})({});",
+                            asyncify_wrap_export,
                             self.callee,
                             operands.join(", ")
                         );

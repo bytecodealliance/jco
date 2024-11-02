@@ -41,6 +41,7 @@ export async function types (witPath, opts) {
  *   name?: string,
  *   worldName?: string,
  *   instantiation?: 'async' | 'sync',
+ *   esmImports?: bool,
  *   tlaCompat?: bool,
  *   asyncMode?: string,
  *   asyncImports?: string[],
@@ -88,6 +89,7 @@ export async function typesComponent (witPath, opts) {
   return Object.fromEntries(generateTypes(name, {
     wit: { tag: 'path', val: (isWindows ? '//?/' : '') + resolve(witPath) },
     instantiation,
+    esmImports: opts.esmImports,
     tlaCompat: opts.tlaCompat ?? false,
     world: opts.worldName,
     features,
@@ -165,6 +167,7 @@ async function wasm2Js (source) {
  * @param {{
  *   name: string,
  *   instantiation?: 'async' | 'sync',
+ *   esmImports?: bool,
  *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
  *   map?: Record<string, string>,
  *   asyncMode?: string,
@@ -234,6 +237,7 @@ export async function transpileComponent (component, opts = {}) {
     name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? {}),
     instantiation,
+    esmImports: opts.esmImports,
     asyncMode,
     importBindings: opts.importBindings ? { tag: opts.importBindings } : null,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,

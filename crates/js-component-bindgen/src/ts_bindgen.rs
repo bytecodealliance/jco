@@ -270,7 +270,7 @@ pub fn ts_bindgen(
     // With the current representation of a "world" this is an import object
     // per-imported-interface where the type of that field is defined by the
     // interface itbindgen.
-    if opts.instantiation.is_some() {
+    if opts.instantiation.is_some() && !opts.esm_imports {
         uwriteln!(bindgen.src, "export interface ImportObject {{");
         bindgen.src.push_str(&bindgen.import_object);
         uwriteln!(bindgen.src, "}}");
@@ -296,6 +296,11 @@ pub fn ts_bindgen(
 
     // Generate the TypeScript definition of the `instantiate` function
     // which is the main workhorse of the generated bindings.
+    let maybe_imports_obj = if opts.esm_imports {
+        ""
+    } else {
+        "\nimports: ImportObject,"
+    };
     match opts.instantiation {
         Some(InstantiationMode::Async) => {
             uwriteln!(
@@ -321,13 +326,11 @@ pub fn ts_bindgen(
                      * on the web, for example.
                      */
                     export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module,
-                        imports: ImportObject,
+                        getCoreModule: (path: string) => WebAssembly.Module,{maybe_imports_obj}
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
                     ): {camel};
                     export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
-                        imports: ImportObject,
+                        getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,{maybe_imports_obj}
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
                     ): {camel} | Promise<{camel}>;
                 ",
@@ -358,8 +361,7 @@ pub fn ts_bindgen(
                      * `WebAssembly.Module` constructor on the web, for example.
                      */
                     export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module,
-                        imports: ImportObject,
+                        getCoreModule: (path: string) => WebAssembly.Module,{maybe_imports_obj}
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
                     ): {camel};
                 ",

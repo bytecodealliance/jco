@@ -30,6 +30,7 @@ pub(crate) fn run() -> Result<()> {
             no_typescript: false,
             no_nodejs_compat: false,
             instantiation: None,
+            esm_imports: false,
             map: None,
             tla_compat: false,
             valid_lifting_optimization: false,

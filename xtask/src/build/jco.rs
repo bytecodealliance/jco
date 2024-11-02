@@ -75,6 +75,7 @@ fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
         name,
         no_typescript: false,
         instantiation: None,
+        esm_imports: false,
         map: Some(import_map),
         no_nodejs_compat: false,
         base64_cutoff: 5000_usize,

@@ -28,6 +28,10 @@ world js-component-bindgen {
     /// of the direct importable native ESM output.
     instantiation: option<instantiation-mode>,
 
+    /// If `instantiation` is set, instead of providing an import object, use
+    /// ESM imports.
+    esm-imports: option<bool>,
+
     /// Import bindings generation mode
     import-bindings: option<bindings-mode>,
 
@@ -106,6 +110,9 @@ world js-component-bindgen {
     %world: option<string>,
     tla-compat: option<bool>,
     instantiation: option<instantiation-mode>,
+    /// If `instantiation` is set, instead of providing an import object, use
+    /// ESM imports.
+    esm-imports: option<bool>,
     map: option<maps>,
     /// Features that should be enabled as part of feature gating
     features: option<enabled-feature-set>,
