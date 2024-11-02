@@ -87,7 +87,6 @@ pub struct FunctionBindgen<'a> {
     pub callee_resource_dynamic: bool,
     pub resolve: &'a Resolve,
     pub is_async: bool,
-    pub use_asyncify: bool,
 }
 
 impl FunctionBindgen<'_> {
@@ -1050,27 +1049,13 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::CallWasm { sig, .. } => {
                 let sig_results_length = sig.results.len();
                 self.bind_results(sig_results_length, results);
-                if self.is_async {
-                    if self.use_asyncify {
-                        let asyncify_wrap_export = self.intrinsic(Intrinsic::AsyncifyWrapExport);
-                        uwriteln!(
-                            self.src,
-                            "await {}({})({});",
-                            asyncify_wrap_export,
-                            self.callee,
-                            operands.join(", ")
-                        );
-                    } else {
-                        uwriteln!(
-                            self.src,
-                            "await WebAssembly.promising({})({});",
-                            self.callee,
-                            operands.join(", ")
-                        );
-                    }
-                } else {
-                    uwriteln!(self.src, "{}({});", self.callee, operands.join(", "));
-                }
+                let maybe_async_await = if self.is_async { "await " } else { "" };
+                uwriteln!(
+                    self.src,
+                    "{maybe_async_await}{}({});",
+                    self.callee,
+                    operands.join(", ")
+                );
 
                 if let Some(prefix) = self.tracing_prefix {
                     let to_result_string = self.intrinsic(Intrinsic::ToResultString);
