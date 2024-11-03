@@ -144,7 +144,7 @@ export async function cliTest(_fixtures) {
           `${outDir}/package.json`,
           JSON.stringify({ type: "module" })
         );
-        const m = await import(`${outDir}/${name}.js`);
+        const m = await import(`${pathToFileURL(outDir)}/${name}.js`);
         const inst = await m.instantiate(
           undefined,
           {
@@ -184,7 +184,7 @@ export async function cliTest(_fixtures) {
         `${outDir}/package.json`,
         JSON.stringify({ type: "module" })
       );
-      const m = await import(`${outDir}/${name}.js`);
+      const m = await import(`${pathToFileURL(outDir)}/${name}.js`);
       const inst = await m.instantiate(
         undefined,
         {
