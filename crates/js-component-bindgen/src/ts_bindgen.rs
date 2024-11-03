@@ -326,10 +326,6 @@ pub fn ts_bindgen(
                      * on the web, for example.
                      */
                     export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module,{maybe_imports_obj}
-                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
-                    ): {camel};
-                    export function instantiate(
                         getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,{maybe_imports_obj}
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
                     ): {camel} | Promise<{camel}>;
