@@ -8,7 +8,9 @@ pub mod function_bindgen;
 pub mod intrinsics;
 pub mod names;
 pub mod source;
-pub use transpile_bindgen::{AsyncMode, BindingsMode, InstantiationMode, TranspileOpts};
+pub use transpile_bindgen::{
+    AsyncMode, BindingsMode, InstantiationMode, StaticWasmSourceImportsMode, TranspileOpts,
+};
 
 use anyhow::Result;
 use transpile_bindgen::transpile_bindgen;

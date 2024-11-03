@@ -167,6 +167,8 @@ async function wasm2Js (source) {
  * @param {{
  *   name: string,
  *   instantiation?: 'async' | 'sync',
+ *   cacheWasmCompile?: bool,
+ *   staticWasmSourceImports?: 'proposed-standard-import-source' | 'non-standard-import',
  *   esmImports?: bool,
  *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
  *   map?: Record<string, string>,
@@ -223,6 +225,11 @@ export async function transpileComponent (component, opts = {}) {
     instantiation = { tag: 'async' };
   }
 
+  let staticWasmSourceImports = null;
+  if (opts.staticWasmSourceImports) {
+    staticWasmSourceImports = { tag: opts.staticWasmSourceImports };
+  }
+
   const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync' ?
     null :
     {
@@ -237,6 +244,8 @@ export async function transpileComponent (component, opts = {}) {
     name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? {}),
     instantiation,
+    cacheWasmCompile: opts.cacheWasmCompile,
+    staticWasmSourceImports,
     esmImports: opts.esmImports,
     asyncMode,
     importBindings: opts.importBindings ? { tag: opts.importBindings } : null,

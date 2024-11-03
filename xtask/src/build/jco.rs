@@ -75,6 +75,8 @@ fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
         name,
         no_typescript: false,
         instantiation: None,
+        cache_wasm_compile: false,
+        static_wasm_source_imports: None,
         esm_imports: false,
         map: Some(import_map),
         no_nodejs_compat: false,

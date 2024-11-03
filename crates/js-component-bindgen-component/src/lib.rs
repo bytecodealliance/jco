@@ -42,6 +42,19 @@ impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
     }
 }
 
+impl From<StaticWasmSourceImportsMode> for js_component_bindgen::StaticWasmSourceImportsMode {
+    fn from(value: StaticWasmSourceImportsMode) -> Self {
+        match value {
+            StaticWasmSourceImportsMode::ProposedStandardImportSource => {
+                js_component_bindgen::StaticWasmSourceImportsMode::ProposedStandardImportSource
+            }
+            StaticWasmSourceImportsMode::NonStandardImport => {
+                js_component_bindgen::StaticWasmSourceImportsMode::NonStandardImport
+            }
+        }
+    }
+}
+
 impl From<BindingsMode> for js_component_bindgen::BindingsMode {
     fn from(value: BindingsMode) -> Self {
         match value {
@@ -78,6 +91,8 @@ impl Guest for JsComponentBindgenComponent {
             name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),
             instantiation: options.instantiation.map(Into::into),
+            cache_wasm_compile: options.cache_wasm_compile.unwrap_or(false),
+            static_wasm_source_imports: options.static_wasm_source_imports.map(Into::into),
             esm_imports: options.esm_imports.unwrap_or(false),
             map: options.map.map(|map| map.into_iter().collect()),
             no_nodejs_compat: options.no_nodejs_compat.unwrap_or(false),
@@ -168,6 +183,8 @@ impl Guest for JsComponentBindgenComponent {
             no_typescript: false,
             no_nodejs_compat: false,
             instantiation: opts.instantiation.map(Into::into),
+            cache_wasm_compile: false,
+            static_wasm_source_imports: None,
             esm_imports: opts.esm_imports.unwrap_or(false),
             map: opts.map.map(|map| map.into_iter().collect()),
             tla_compat: opts.tla_compat.unwrap_or(false),

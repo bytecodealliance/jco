@@ -43,6 +43,12 @@ pub struct TranspileOpts {
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
     pub instantiation: Option<InstantiationMode>,
+    /// If `instantiation` is set, on the first `instantiate` call the compiled
+    /// Wasm modules are cached for subsequent `instantiate` calls.
+    pub cache_wasm_compile: bool,
+    /// Static import of Wasm module with the proposed standard source phase
+    /// imports or use the non-standard import syntax.
+    pub static_wasm_source_imports: Option<StaticWasmSourceImportsMode>,
     /// If `instantiation` is set, instead of providing an import object, use
     /// ESM imports.
     pub esm_imports: bool,
@@ -88,6 +94,13 @@ pub enum AsyncMode {
         imports: Vec<String>,
         exports: Vec<String>,
     },
+}
+
+#[derive(Default, Clone, Debug)]
+pub enum StaticWasmSourceImportsMode {
+    #[default]
+    ProposedStandardImportSource,
+    NonStandardImport,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -288,16 +301,46 @@ impl<'a> JsBindgen<'a> {
             }
         }
 
+        // adds a default implementation of `getCoreModule`
+        if self.opts.static_wasm_source_imports.is_none()
+            && matches!(self.opts.instantiation, Some(InstantiationMode::Async))
+        {
+            uwriteln!(
+                compilation_promises,
+                "if (!getCoreModule) getCoreModule = (name) => {}(new URL(`./${{name}}`, import.meta.url));",
+                self.intrinsic(Intrinsic::FetchCompile)
+            );
+        }
+
         // Setup the compilation data and compilation promises
         let mut removed = BTreeSet::new();
+        let mut module_cache_declarations = source::Source::default();
         for i in 0..self.core_module_cnt {
             let local_name = format!("module{}", i);
             let mut name_idx = core_file_name(name, i as u32);
-            if self.opts.instantiation.is_some() {
-                uwriteln!(
-                    compilation_promises,
-                    "const {local_name} = getCoreModule('{name_idx}');"
-                );
+            if let Some(mode) = &self.opts.static_wasm_source_imports {
+                match mode {
+                    StaticWasmSourceImportsMode::ProposedStandardImportSource => {
+                        uwriteln!(output, "import source {local_name} from './{name_idx}';",);
+                    }
+                    StaticWasmSourceImportsMode::NonStandardImport => {
+                        uwriteln!(output, "import {local_name} from './{name_idx}';",);
+                    }
+                }
+            } else if self.opts.instantiation.is_some() {
+                if self.opts.cache_wasm_compile {
+                    let cache_name = self.local_names.create_once(&format!("cached{local_name}"));
+                    uwriteln!(module_cache_declarations, "let {cache_name};");
+                    uwriteln!(
+                        compilation_promises,
+                        "const {local_name} = {cache_name} || ({cache_name} = getCoreModule('{name_idx}'));"
+                    );
+                } else {
+                    uwriteln!(
+                        compilation_promises,
+                        "const {local_name} = getCoreModule('{name_idx}');"
+                    );
+                }
             } else if files.get_size(&name_idx).unwrap() < self.opts.base64_cutoff {
                 assert!(removed.insert(i));
                 let data = files.remove(&name_idx).unwrap();
@@ -335,6 +378,9 @@ impl<'a> JsBindgen<'a> {
                 self.esm_bindgen
                     .render_imports(&mut output, None, &mut self.local_names);
             }
+            if self.opts.cache_wasm_compile {
+                uwrite!(output, "\n{}", &module_cache_declarations as &str);
+            }
 
             uwrite!(
                 output,
@@ -347,7 +393,7 @@ impl<'a> JsBindgen<'a> {
                 if self.opts.esm_imports {
                     ""
                 } else {
-                    ", imports"
+                    ", imports = {}"
                 },
                 match instantiation {
                     InstantiationMode::Async => "WebAssembly.instantiate",
@@ -645,7 +691,7 @@ impl<'a> Instantiator<'a, '_> {
         if let Some(InstantiationMode::Async) = self.gen.opts.instantiation {
             // To avoid uncaught promise rejection errors, we attach an intermediate
             // Promise.all with a rejection handler, if there are multiple promises.
-            if self.modules.len() > 1 {
+            if self.modules.len() > 1 && self.gen.opts.static_wasm_source_imports.is_none() {
                 self.src.js_init.push_str("Promise.all([");
                 for i in 0..self.modules.len() {
                     if i > 0 {
@@ -1098,12 +1144,17 @@ impl<'a> Instantiator<'a, '_> {
             Some(InstantiationMode::Async) | None => {
                 uwriteln!(
                     self.src.js_init,
-                    "({{ exports: exports{iu32} }} = yield {instantiate}(yield module{}{imports}));",
+                    "({{ exports: exports{iu32} }} = yield {instantiate}({maybe_async_module}module{}{imports}));",
                     idx.as_u32(),
                     instantiate = if self.use_asyncify {
                         self.gen.intrinsic(Intrinsic::AsyncifyAsyncInstantiate)
                     } else {
                         instantiate
+                    },
+                    maybe_async_module = if self.gen.opts.static_wasm_source_imports.is_some() {
+                        ""
+                    } else {
+                        "yield "
                     },
                 )
             }

@@ -9,6 +9,11 @@ world js-component-bindgen {
     sync,
   }
 
+  variant static-wasm-source-imports-mode {
+    proposed-standard-import-source,
+    non-standard-import,
+  }
+
   variant bindings-mode {
     js,
     hybrid,
@@ -27,6 +32,14 @@ world js-component-bindgen {
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
     instantiation: option<instantiation-mode>,
+
+    /// If `instantiation` is set, on the first `instantiate` call the compiled
+    /// Wasm modules are cached for subsequent `instantiate` calls.
+    cache-wasm-compile: option<bool>,
+
+    /// Static import of Wasm module with the proposed standard source phase
+    /// imports or use the non-standard import syntax.
+    static-wasm-source-imports: option<static-wasm-source-imports-mode>,
 
     /// If `instantiation` is set, instead of providing an import object, use
     /// ESM imports.
