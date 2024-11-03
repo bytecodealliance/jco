@@ -145,7 +145,7 @@ export async function cliTest(_fixtures) {
       );
       const m = await import(`${outDir}/${name}.js`);
       const inst = await m.instantiate(
-        (fileName) => readFile(`${outDir}/${fileName}`).then((file) => WebAssembly.compile(file)),
+        undefined,
         {
           'something:test/test-interface': {
             callAsync: async () => "called async",
