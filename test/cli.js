@@ -121,7 +121,46 @@ export async function cliTest(_fixtures) {
       ok(source.toString().includes("export { test"));
     });
 
-    test("Transpile & Asyncify", async () => {
+    test("Transpile with Async Mode for JSPI", async () => {
+      const name = "async_call";
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/components/${name}.component.wasm`,
+        `--name=${name}`,
+        "--valid-lifting-optimization",
+        "--tla-compat",
+        "--instantiation=async",
+        "--base64-cutoff=0",
+        "--async-mode=jspi",
+        "--async-imports=something:test/test-interface#call-async",
+        "--async-exports=run-async",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      await writeFile(
+        `${outDir}/package.json`,
+        JSON.stringify({ type: "module" })
+      );
+      const m = await import(`${outDir}/${name}.js`);
+      const inst = await m.instantiate(
+        undefined,
+        {
+          'something:test/test-interface': {
+            callAsync: async () => "called async",
+            callSync: () => "called sync",
+          },
+        },
+      );
+      strictEqual(inst.runSync instanceof AsyncFunction, false);
+      strictEqual(inst.runAsync instanceof AsyncFunction, true);
+
+      strictEqual(inst.runSync(), "called sync");
+      strictEqual(await inst.runAsync(), "called async");
+    });
+
+    test("Transpile with Async Mode for Asyncify", async () => {
       const name = "async_call";
       const { stderr } = await exec(
         jcoPath,
