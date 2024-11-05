@@ -1,8 +1,7 @@
+import { InputStream, OutputStream } from './io/streams.js';
 import { _setCwd as fsSetCwd } from './filesystem.js';
-import { streams } from './io.js';
-const { InputStream, OutputStream } = streams;
 
-const symbolDispose = Symbol.dispose ?? Symbol.for('dispose');
+const textDecoder = new TextDecoder();
 
 let _env = [], _args = [], _cwd = "/";
 export function _setEnv (envObj) {
@@ -45,82 +44,55 @@ export const exit = {
   }
 };
 
-/**
- * @param {import('../common/io.js').InputStreamHandler} handler 
- */
-export function _setStdin (handler) {
-  stdinStream.handler = handler;
-}
-/**
- * @param {import('../common/io.js').OutputStreamHandler} handler 
- */
-export function _setStderr (handler) {
-  stderrStream.handler = handler;
-}
-/**
- * @param {import('../common/io.js').OutputStreamHandler} handler 
- */
-export function _setStdout (handler) {
-  stdoutStream.handler = handler;
-}
-
-const stdinStream = new InputStream({
-  blockingRead (_len) {
-    // TODO
-  },
-  subscribe () {
-    // TODO
-  },
-  [symbolDispose] () {
-    // TODO
-  }
-});
-const textDecoder = new TextDecoder();
-const stdoutStream = new OutputStream({
-  write (contents) {
-    if (contents[contents.length - 1] == 10) {
-      // console.log already appends a new line
-      contents = contents.subarray(0, contents.length - 1);
-    }
-    console.log(textDecoder.decode(contents));
-  },
-  blockingFlush () {
-  },
-  [symbolDispose] () {
-  }
-});
-const stderrStream = new OutputStream({
-  write (contents) {
-    if (contents[contents.length - 1] == 10) {
-      // console.error already appends a new line
-      contents = contents.subarray(0, contents.length - 1);
-    }
-    console.error(textDecoder.decode(contents));
-  },
-  blockingFlush () {
-  },
-  [symbolDispose] () {
-
-  }
-});
-
+let stdinStream;
 export const stdin = {
   InputStream,
   getStdin () {
+    if (!stdinStream) {
+      stdinStream = new InputStream();
+    }
     return stdinStream;
   }
 };
 
+let stdoutStream;
 export const stdout = {
   OutputStream,
   getStdout () {
+    if (!stdoutStream) {
+      stdoutStream = new OutputStream(
+        new WritableStream({
+          write: (contents) => {
+            // console.log() inserts a '\n' (which is 10) so try to skip that
+            if (contents[contents.length - 1] === 10) {
+              contents = contents.subarray(0, contents.length - 1);
+            }
+            console.log(textDecoder.decode(contents));
+          },
+        })
+      );
+    }
     return stdoutStream;
   }
 };
 
+let stderrStream;
 export const stderr = {
   OutputStream,
   getStderr () {
+    if (!stderrStream) {
+      stderrStream = new OutputStream(
+        new WritableStream({
+          write: (contents) => {
+            // console.log() inserts a '\n' (which is 10) so try to skip that
+            if (contents[contents.length - 1] === 10) {
+              contents = contents.subarray(0, contents.length - 1);
+            }
+            console.error(textDecoder.decode(contents));
+          },
+        })
+      );
+    }
     return stderrStream;
   }
 };
@@ -160,3 +132,4 @@ export const terminalStdout = {
     return terminalStdoutInstance;
   }
 };
+

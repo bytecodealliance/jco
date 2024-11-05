@@ -193,7 +193,7 @@ async function wasm2Js (source) {
  */
 export async function transpileComponent (component, opts = {}) {
   await $init;
-  if (opts.instantiation) opts.wasiShim = false;
+  if (opts.instantiation && !opts.esmImports) opts.wasiShim = false; // TODO double check
 
   let spinner;
   const showSpinner = getShowSpinner();
@@ -203,14 +203,15 @@ export async function transpileComponent (component, opts = {}) {
   }
 
   if (opts.wasiShim !== false) {
+    const maybeAsync = !opts.asyncMode || opts.asyncMode === 'sync' ? '' : 'async/';
     opts.map = Object.assign({
-      'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
-      'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
-      'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
-      'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
-      'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
-      'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
-      'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
+      'wasi:cli/*': `@bytecodealliance/preview2-shim/${maybeAsync}cli#*`,
+      'wasi:clocks/*': `@bytecodealliance/preview2-shim/${maybeAsync}clocks#*`,
+      'wasi:filesystem/*': `@bytecodealliance/preview2-shim/${maybeAsync}filesystem#*`,
+      'wasi:http/*': `@bytecodealliance/preview2-shim/${maybeAsync}http#*`,
+      'wasi:io/*': `@bytecodealliance/preview2-shim/${maybeAsync}io#*`,
+      'wasi:random/*': `@bytecodealliance/preview2-shim/${maybeAsync}random#*`,
+      'wasi:sockets/*': `@bytecodealliance/preview2-shim/${maybeAsync}sockets#*`,
     }, opts.map || {});
   }
 
