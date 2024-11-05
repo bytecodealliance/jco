@@ -676,7 +676,7 @@ export class FutureIncomingResponse {
   }
 
   subscribe() {
-    return new PollablePromise(this.#promise);
+    return new Pollable(this.#promise);
   }
   get() {
     if (!this.#ready) return;
