@@ -3,6 +3,7 @@ import { _setCwd as fsSetCwd } from './filesystem.js';
 
 const textDecoder = new TextDecoder();
 
+let stdinStream, stdoutStream, stderrStream;
 let _env = [], _args = [], _cwd = "/";
 export function _setEnv (envObj) {
   _env = Object.entries(envObj);
@@ -10,10 +11,13 @@ export function _setEnv (envObj) {
 export function _setArgs (args) {
   _args = args;
 }
-
 export function _setCwd (cwd) {
   fsSetCwd(_cwd = cwd);
 }
+export function _setStdin (stream) {
+  stdinStream = stream;
+}
+
 
 export const environment = {
   getEnvironment () {
@@ -44,7 +48,6 @@ export const exit = {
   }
 };
 
-let stdinStream;
 export const stdin = {
   InputStream,
   getStdin () {
@@ -55,7 +58,6 @@ export const stdin = {
   }
 };
 
-let stdoutStream;
 export const stdout = {
   OutputStream,
   getStdout () {
@@ -76,7 +78,6 @@ export const stdout = {
   }
 };
 
-let stderrStream;
 export const stderr = {
   OutputStream,
   getStderr () {
