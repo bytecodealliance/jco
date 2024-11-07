@@ -42,7 +42,7 @@ world revup {
 
 ## Dependencies
 
-First, install required dependencies:
+First, install required project-level dependencies:
 
 ```console
 npm install
@@ -50,6 +50,11 @@ npm install
 
 > [!NOTE]
 > As this is a regular NodeJS project, you can use your package manager of choice (e.g. `yarn`, `pnpm`)
+
+Along with projet related dependencies, since this is a *compound* component (this component is composed with another),
+we'll need to install the [WebAssembly Composition tool (`wac`)][wac], which we will use later to compose components.
+
+[wac]: https://github.com/bytecodealliance/wac
 
 ## Building the WebAssembly binary (pre-composition)
 
@@ -96,6 +101,9 @@ The component we will be composing with our as-of-yet incomplete binary *must* s
 ```console
 npm run compose
 ```
+
+> [!WARN]
+> This step is the one that uses [`wac`][wac] -- ensure it's installed!
 
 Running the command above will produce a `string-reverse-upper.wasm` file (this time, that is *complete*).
 
