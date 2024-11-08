@@ -45,6 +45,15 @@ jobs:
             macos-latest
         ]
         node: [18.x, 20.x, latest]
+        weval-version:
+          - 'v0.3.2'
+        include:
+          - os: windows-latest
+            weval-bin-path: .weval-bin/weval.exe
+          - os: ubuntu-latest
+            weval-bin-path: .weval-bin/weval
+          - os: macos-latest
+            weval-bin-path: .weval-bin/weval
         exclude:
           - os: macos-latest
             node: 20.x
@@ -61,19 +70,52 @@ jobs:
     - uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node }}
+
+    # Use cached weval bin if present
+    - name: Cache weval bin
+      id: cache-weval-bin
+      uses: actions/cache@v4
+      with:
+        path: .weval-bin
+        key: weval-bin-${{ matrix.weval-version }}-${{ matrix.os }}
+
+    # (no cached weval bin) download weval release
+    - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'ubuntu-latest' }}
+      run: |
+        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ matrix.weval-version }}/weval-${{ matrix.weval-version }}-x86_64-linux.tar.xz
+        tar -xvJf weval-${{ matrix.weval-version }}-x86_64-linux.tar.xz
+        mv weval-${{ matrix.weval-version }}-x86_64-linux/weval .weval-bin
+    - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'windows-latest' }}
+      run: |
+        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ matrix.weval-version }}/weval-${{ matrix.weval-version }}-x86_64-windows.zip
+        unzip weval-${{ matrix.weval-version }}-x86_64-windows.zip
+        mv weval-${{ matrix.weval-version }}-x86_64-windows .weval-bin
+    - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'macos-latest' }}
+      run: |
+        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ matrix.weval-version }}/weval-${{ matrix.weval-version }}-aarch64-macos.tar.xz
+        tar -xvJf weval-${{ matrix.weval-version }}-aarch64-macos.tar.xz
+        mkdir .weval-bin
+        mv weval-${{ matrix.weval-version }}-aarch64-macos/weval .weval-bin/
+
+    # Perform NPM install
     - name: Install NPM packages
       run: npm ci
+
     - name: Download Build
       uses: actions/download-artifact@v4
       with:
         name: jco-build
         path: obj
+
     - name: Test LTS Node.js
       run: npm run test:lts
       if: matrix.node == '18.x' || matrix.node == '20.x'
+
     - name: Test Latest Node.js
-      run: npm run test
       if: matrix.node == 'latest'
+      env:
+        WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
+      run: npm run test
 
   build-wasi-tests:
     name: WASI Test Generation

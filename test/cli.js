@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { execArgv } from "node:process";
+import { execArgv, env } from "node:process";
 import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import {
   mkdir,
@@ -504,7 +504,7 @@ export async function cliTest(_fixtures) {
     });
 
     test("Componentize", async () => {
-      const { stdout, stderr } = await exec(
+      const args = [
         jcoPath,
         "componentize",
         "test/fixtures/componentize/source.js",
@@ -515,7 +515,12 @@ export async function cliTest(_fixtures) {
         "test/fixtures/componentize/source.wit",
         "-o",
         outFile
-      );
+      ];
+      if (env.WEVAL_BIN_PATH) {
+        args.push("--weval-bin", env.WEVAL_BIN_PATH);
+      }
+
+      const { stdout, stderr } = await exec(...args);
       strictEqual(stderr, "");
       {
         const { stderr } = await exec(
