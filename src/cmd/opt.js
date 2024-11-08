@@ -67,7 +67,7 @@ export async function optimizeComponent (componentBytes, opts) {
       spinner.text = spinnerText();
     }
 
-    const args = opts?.optArgs ? [...opts.optArgs] : ['-Oz', '--low-memory-unused', '--enable-bulk-memory'];
+    const args = opts?.optArgs ? [...opts.optArgs] : ['-Oz', '--low-memory-unused', '--enable-bulk-memory', '--strip-debug'];
     if (opts?.asyncMode === 'asyncify') args.push('--asyncify');
 
     const optimizedCoreModules = await Promise.all(coreModules.map(async ([coreModuleStart, coreModuleEnd]) => {
