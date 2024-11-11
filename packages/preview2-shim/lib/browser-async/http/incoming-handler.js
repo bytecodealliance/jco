@@ -10,7 +10,7 @@ export const getHandler = (handle) => async (req) => {
   const responseOut = new ResponseOutparam();
   await handle(IncomingRequest.fromRequest(req), responseOut);
   const result = await responseOut.promise;
-  if (result.tag === 'ok') {
+  if (result.tag === "ok") {
     return result.val.toResponse();
   } else {
     throw result; // error

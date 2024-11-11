@@ -267,7 +267,12 @@ export class Fields {
    */
   get(name) {
     const enc = new TextEncoder();
-    return this.headers.get(name)?.split(', ').map((val) => enc.encode(val)) || [];
+    return (
+      this.headers
+        .get(name)
+        ?.split(", ")
+        .map((val) => enc.encode(val)) || []
+    );
   }
   /**
    * @param {FieldKey} name
@@ -282,17 +287,17 @@ export class Fields {
    */
   set(name, value) {
     if (this.immutable) {
-      throw { tag: 'immutable' };
+      throw { tag: "immutable" };
     }
     const dec = new TextDecoder();
-    this.headers.set(name, value.map((val) => dec.decode(val)).join(', '));
+    this.headers.set(name, value.map((val) => dec.decode(val)).join(", "));
   }
   /**
    * @param {FieldKey} name
    */
-  'delete'(name) {
+  delete(name) {
     if (this.immutable) {
-      throw { tag: 'immutable' };
+      throw { tag: "immutable" };
     }
     this.headers.delete(name);
   }
@@ -302,7 +307,7 @@ export class Fields {
    */
   append(name, value) {
     if (this.immutable) {
-      throw { tag: 'immutable' };
+      throw { tag: "immutable" };
     }
     const dec = new TextDecoder();
     this.headers.append(name, dec.decode(value));
@@ -332,7 +337,6 @@ export class Fields {
 
 //export type Headers = Fields;
 //export type Trailers = Fields;
-
 
 export class IncomingRequest {
   #method;
@@ -398,8 +402,7 @@ export class IncomingRequest {
     }
     throw undefined;
   }
-  [symbolDispose]() {
-  }
+  [symbolDispose]() {}
 
   /**
    * @param {Request} req
@@ -414,7 +417,14 @@ export class IncomingRequest {
     const headers = new Fields(req.headers, true);
     const body = new IncomingBody(new InputStream(req.body));
 
-    return new IncomingRequest(method, pathWithQuery, scheme, authority, headers, body);
+    return new IncomingRequest(
+      method,
+      pathWithQuery,
+      scheme,
+      authority,
+      headers,
+      body,
+    );
   }
 }
 
@@ -432,7 +442,7 @@ export class OutgoingRequest {
   constructor(headers) {
     headers.immutable = true;
     this.#headers = headers;
-    this.#body = new OutgoingBody;
+    this.#body = new OutgoingBody();
   }
   /**
    * @returns {OutgoingBody}
@@ -444,7 +454,7 @@ export class OutgoingRequest {
    * @returns {Method}
    */
   method() {
-    return this.#method || { tag: 'get' };
+    return this.#method || { tag: "get" };
   }
   /**
    * @param {Method} method
@@ -481,20 +491,32 @@ export class OutgoingRequest {
   }
 
   toRequest() {
-    if (this.#scheme && this.#scheme.tag === 'other' || !this.#authority) {
-      throw { tag: 'destination-not-found' };
+    if ((this.#scheme && this.#scheme.tag === "other") || !this.#authority) {
+      throw { tag: "destination-not-found" };
     }
-    const path = this.#pathWithQuery ?
-      (this.#pathWithQuery.startsWith('/') ? this.#pathWithQuery : `/${this.#pathWithQuery}`)
-      : '';
+    const path = this.#pathWithQuery
+      ? this.#pathWithQuery.startsWith("/")
+        ? this.#pathWithQuery
+        : `/${this.#pathWithQuery}`
+      : "";
 
-    const method = (this.#method ? this.#method.tag : 'get');
-    const body = method === 'get' || method === 'head' ? undefined : this.#body.stream.readable;
-    return new Request(`${this.#scheme ? this.#scheme.tag : 'HTTPS'}://${this.#authority}${path}`, {
-      method,
-      headers: this.#headers.headers,
-      body,
-    });
+    const method = this.#method ? this.#method.tag : "get";
+    const body =
+      method === "get" || method === "head"
+        ? undefined
+        : this.#body.stream.readable;
+    // see: https://fetch.spec.whatwg.org/#ref-for-dom-requestinit-duplex
+    // see: https://developer.chrome.com/docs/capabilities/web-apis/fetch-streaming-requests#half_duplex
+    const duplex = body ? "half" : undefined;
+    return new Request(
+      `${this.#scheme ? this.#scheme.tag : "HTTPS"}://${this.#authority}${path}`,
+      {
+        method,
+        headers: this.#headers.headers,
+        body,
+        duplex,
+      },
+    );
   }
 }
 
@@ -572,8 +594,7 @@ export class IncomingBody {
   static finish(_body) {
     return new FutureTrailers();
   }
-  [symbolDispose]() {
-  }
+  [symbolDispose]() {}
 }
 
 export class FutureTrailers {
@@ -589,9 +610,9 @@ export class FutureTrailers {
   }
   get() {
     if (this.#errCode) {
-      return { tag: 'ok', val: { tag: 'err', val: this.#errCode } };
+      return { tag: "ok", val: { tag: "err", val: this.#errCode } };
     }
-    return { tag: 'ok', val: { tag: 'ok', val: this.#trailers } };
+    return { tag: "ok", val: { tag: "ok", val: this.#trailers } };
   }
 }
 
@@ -617,17 +638,13 @@ export class OutgoingResponse {
   body() {
     return this.#body;
   }
-  [symbolDispose]() {
-  }
+  [symbolDispose]() {}
 
   toResponse() {
-    return new Response(
-      this.#body.stream.readable,
-      {
-        status: this.#statusCode,
-        headers: this.#headers.headers,
-      },
-    );
+    return new Response(this.#body.stream.readable, {
+      status: this.#statusCode,
+      headers: this.#headers.headers,
+    });
   }
 }
 
@@ -645,7 +662,7 @@ export class OutgoingBody {
   static finish(body, trailers) {
     // trailers not supported
     if (trailers) {
-      throw { tag: 'HTTP-request-trailer-section-size' };
+      throw { tag: "HTTP-request-trailer-section-size" };
     }
     body.stream.close();
     body.finished = true;
@@ -668,10 +685,11 @@ export class FutureIncomingResponse {
         this.#resolvedResponse = response;
       });
     } catch (err) {
+      console.error(err);
       this.#promise = Promise.resolve();
       this.#ready = true;
       // TODO better error handling
-      this.#error = { tag: 'internal-error', val: err.toString() };
+      this.#error = { tag: "internal-error", val: err.toString() };
     }
   }
 
@@ -680,14 +698,14 @@ export class FutureIncomingResponse {
   }
   get() {
     if (!this.#ready) return;
-    if (this.#error) return { tag: 'err', val: this.#error };
+    if (this.#error) return { tag: "err", val: this.#error };
 
     const res = this.#resolvedResponse;
 
     return {
-      tag: 'ok',
+      tag: "ok",
       val: {
-        tag: 'ok',
+        tag: "ok",
         val: new IncomingResponse(
           res.status,
           new Fields(res.headers, true),
