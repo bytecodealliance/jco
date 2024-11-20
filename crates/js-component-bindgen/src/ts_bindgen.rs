@@ -155,7 +155,7 @@ pub fn ts_bindgen(
                         TypeDefKind::Future(_) => todo!("generate for future"),
                         TypeDefKind::Stream(_) => todo!("generate for stream"),
                         TypeDefKind::Unknown => unreachable!(),
-                        TypeDefKind::Resource => todo!(),
+                        TypeDefKind::Resource => {}
                         TypeDefKind::Handle(_) => todo!(),
                     }
                     let output = gen.finish();
