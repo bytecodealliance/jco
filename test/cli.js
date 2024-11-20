@@ -455,12 +455,12 @@ export async function cliTest(_fixtures) {
         );
         strictEqual(stderr, "");
         const meta = JSON.parse(stdout);
-        deepStrictEqual(meta[0].metaType, { tag: "component", val: 4 });
+        deepStrictEqual(meta[0].metaType, { tag: "component", val: 5 });
         deepStrictEqual(meta[1].producers, [
           [
             "processed-by",
             [
-              ["wit-component", "0.218.0"],
+              ["wit-component", "0.219.1"],
               ["dummy-gen", "test"],
             ],
           ],
