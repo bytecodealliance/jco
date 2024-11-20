@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use wasm_encoder::{Encode, Section};
 use wasm_metadata::Producers;
 use wit_component::{ComponentEncoder, DecodedWasm, WitPrinter};
-use wit_parser::Resolve;
+use wit_parser::{Mangling, Resolve};
 
 use exports::local::wasm_tools::tools::{
     EmbedOpts, EnabledFeatureSet, Guest, ModuleMetaType, ModuleMetadata, ProducersFields,
@@ -122,7 +122,7 @@ impl Guest for WasmToolsJs {
                 ..
             }
         ) {
-            wit_component::dummy_module(&resolve, world)
+            wit_component::dummy_module(&resolve, world, Mangling::Standard32)
         } else {
             if binary.is_none() {
                 return Err(

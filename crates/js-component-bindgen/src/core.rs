@@ -218,9 +218,6 @@ impl Augmenter<'_> {
         // records various bits of information about the module within `self`.
         for payload in Parser::new(0).parse_all(self.translation.wasm) {
             match payload? {
-                Payload::Version { .. } => {}
-                Payload::End(_) => {}
-
                 Payload::TypeSection(s) => {
                     for grp in s.into_iter_err_on_gc_types() {
                         self.types.push(grp?);
@@ -246,28 +243,21 @@ impl Augmenter<'_> {
                         self.imports.push(i);
                     }
                 }
-
                 Payload::ExportSection(s) => {
                     for e in s {
                         let e = e?;
                         self.exports.push(e);
                     }
                 }
-
                 Payload::FunctionSection(s) => {
                     for ty in s {
                         let ty = ty?;
                         self.local_func_tys.push(ty);
                     }
                 }
-
-                Payload::CodeSectionStart { .. } => {}
                 Payload::CodeSectionEntry(body) => {
                     self.local_funcs.push(body);
                 }
-
-                // Ignore all custom sections for now
-                Payload::CustomSection(_) => {}
 
                 // NB: these sections are theoretically possible to handle but
                 // are not required at this time.
@@ -297,6 +287,8 @@ impl Augmenter<'_> {
                 | Payload::ComponentTypeSection(_) => {
                     bail!("component section found in module using multiple memories")
                 }
+
+                _ => {}
             }
         }
 

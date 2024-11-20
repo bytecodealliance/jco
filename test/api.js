@@ -148,13 +148,13 @@ export async function apiTest(_fixtures) {
       const meta = await metadataShow(newComponent);
       deepStrictEqual(meta[0].metaType, {
         tag: "component",
-        val: 4,
+        val: 5,
       });
       deepStrictEqual(meta[1].producers, [
         [
           "processed-by",
           [
-            ["wit-component", "0.218.0"],
+            ["wit-component", "0.219.1"],
             ["dummy-gen", "test"],
           ],
         ],
@@ -189,13 +189,13 @@ export async function apiTest(_fixtures) {
       const meta = await metadataShow(newComponent);
       deepStrictEqual(meta[0].metaType, {
         tag: "component",
-        val: 1,
+        val: 2,
       });
       deepStrictEqual(meta[1].producers, [
         [
           "processed-by",
           [
-            ["wit-component", "0.218.0"],
+            ["wit-component", "0.219.1"],
             ["dummy-gen", "test"],
           ],
         ],
