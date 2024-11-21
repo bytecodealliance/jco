@@ -75,6 +75,9 @@ fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
         name,
         no_typescript: false,
         instantiation: None,
+        cache_wasm_compile: false,
+        static_wasm_source_imports: None,
+        esm_imports: false,
         map: Some(import_map),
         no_nodejs_compat: false,
         base64_cutoff: 5000_usize,
@@ -84,6 +87,7 @@ fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
         no_namespaced_exports: true,
         multi_memory: true,
         import_bindings: Some(BindingsMode::Js),
+        async_mode: None,
     };
 
     let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;

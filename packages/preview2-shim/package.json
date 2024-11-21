@@ -15,10 +15,18 @@
       "types": "./types/*.d.ts",
       "node": "./lib/nodejs/*.js",
       "default": "./lib/browser/*.js"
+    },
+    "./async": {
+      "types": "./types-async/index.d.ts",
+      "default": "./lib/browser-async/index.js"
+    },
+    "./async/*": {
+      "types": "./types/*.d.ts",
+      "default": "./lib/browser-async/*.js"
     }
   },
   "scripts": {
-    "test": "node --expose-gc ../../node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000"
+    "test": "node --experimental-wasm-jspi --expose-gc ../../node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000"
   },
   "files": [
     "types",

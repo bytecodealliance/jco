@@ -11,7 +11,7 @@ use crate::{uwrite, uwriteln};
 use base64::{engine::general_purpose, Engine as _};
 use heck::*;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
 use wasmtime_environ::component::{ExportIndex, NameMap, NameMapNoIntern, Transcode};
@@ -43,6 +43,15 @@ pub struct TranspileOpts {
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
     pub instantiation: Option<InstantiationMode>,
+    /// If `instantiation` is set, on the first `instantiate` call the compiled
+    /// Wasm modules are cached for subsequent `instantiate` calls.
+    pub cache_wasm_compile: bool,
+    /// Static import of Wasm module with the proposed standard source phase
+    /// imports or use the non-standard import syntax.
+    pub static_wasm_source_imports: Option<StaticWasmSourceImportsMode>,
+    /// If `instantiation` is set, instead of providing an import object, use
+    /// ESM imports.
+    pub esm_imports: bool,
     /// Configure how import bindings are provided, as high-level JS bindings,
     /// or as hybrid optimized bindings.
     pub import_bindings: Option<BindingsMode>,
@@ -68,6 +77,30 @@ pub struct TranspileOpts {
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
     pub multi_memory: bool,
+    /// Configure whether to use `async` imports or exports with
+    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    pub async_mode: Option<AsyncMode>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub enum AsyncMode {
+    #[default]
+    Sync,
+    JavaScriptPromiseIntegration {
+        imports: Vec<String>,
+        exports: Vec<String>,
+    },
+    Asyncify {
+        imports: Vec<String>,
+        exports: Vec<String>,
+    },
+}
+
+#[derive(Default, Clone, Debug)]
+pub enum StaticWasmSourceImportsMode {
+    #[default]
+    ProposedStandardImportSource,
+    NonStandardImport,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -115,6 +148,12 @@ struct JsBindgen<'a> {
 
     /// List of all intrinsics emitted to `src` so far.
     all_intrinsics: BTreeSet<Intrinsic>,
+
+    /// List of all core Wasm exported functions (and if is async) referenced in
+    /// `src` so far.
+    all_core_exported_funcs: Vec<(String, bool)>,
+
+    use_asyncify: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -128,6 +167,20 @@ pub fn transpile_bindgen(
     opts: TranspileOpts,
     files: &mut Files,
 ) -> (Vec<String>, Vec<(String, Export)>) {
+    let (use_asyncify, async_imports, async_exports) = match opts.async_mode.clone() {
+        None | Some(AsyncMode::Sync) => (false, Default::default(), Default::default()),
+        Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => (
+            false,
+            imports.into_iter().collect(),
+            exports.into_iter().collect(),
+        ),
+        Some(AsyncMode::Asyncify { imports, exports }) => (
+            true,
+            imports.into_iter().collect(),
+            exports.into_iter().collect(),
+        ),
+    };
+
     let mut bindgen = JsBindgen {
         local_names: LocalNames::default(),
         src: Source::default(),
@@ -135,6 +188,8 @@ pub fn transpile_bindgen(
         core_module_cnt: 0,
         opts: &opts,
         all_intrinsics: BTreeSet::new(),
+        all_core_exported_funcs: Vec::new(),
+        use_asyncify,
     };
     bindgen
         .local_names
@@ -155,6 +210,9 @@ pub fn transpile_bindgen(
         translation: component,
         component: &component.component,
         types,
+        use_asyncify,
+        async_imports,
+        async_exports,
         imports: Default::default(),
         exports: Default::default(),
         lowering_options: Default::default(),
@@ -224,17 +282,65 @@ impl<'a> JsBindgen<'a> {
     ) {
         let mut output = source::Source::default();
         let mut compilation_promises = source::Source::default();
+        let mut core_exported_funcs = source::Source::default();
+
+        let async_wrap_fn = if self.use_asyncify {
+            &self.intrinsic(Intrinsic::AsyncifyWrapExport)
+        } else {
+            "WebAssembly.promising"
+        };
+        for (core_export_fn, is_async) in self.all_core_exported_funcs.iter() {
+            let local_name = self.local_names.get(core_export_fn);
+            if *is_async {
+                uwriteln!(
+                    core_exported_funcs,
+                    "{local_name} = {async_wrap_fn}({core_export_fn});",
+                );
+            } else {
+                uwriteln!(core_exported_funcs, "{local_name} = {core_export_fn};",);
+            }
+        }
+
+        // adds a default implementation of `getCoreModule`
+        if self.opts.static_wasm_source_imports.is_none()
+            && matches!(self.opts.instantiation, Some(InstantiationMode::Async))
+        {
+            uwriteln!(
+                compilation_promises,
+                "if (!getCoreModule) getCoreModule = (name) => {}(new URL(`./${{name}}`, import.meta.url));",
+                self.intrinsic(Intrinsic::FetchCompile)
+            );
+        }
 
         // Setup the compilation data and compilation promises
         let mut removed = BTreeSet::new();
+        let mut module_cache_declarations = source::Source::default();
         for i in 0..self.core_module_cnt {
             let local_name = format!("module{}", i);
             let mut name_idx = core_file_name(name, i as u32);
-            if self.opts.instantiation.is_some() {
-                uwriteln!(
-                    compilation_promises,
-                    "const {local_name} = getCoreModule('{name_idx}');"
-                );
+            if let Some(mode) = &self.opts.static_wasm_source_imports {
+                match mode {
+                    StaticWasmSourceImportsMode::ProposedStandardImportSource => {
+                        uwriteln!(output, "import source {local_name} from './{name_idx}';",);
+                    }
+                    StaticWasmSourceImportsMode::NonStandardImport => {
+                        uwriteln!(output, "import {local_name} from './{name_idx}';",);
+                    }
+                }
+            } else if self.opts.instantiation.is_some() {
+                if self.opts.cache_wasm_compile {
+                    let cache_name = self.local_names.create_once(&format!("cached{local_name}"));
+                    uwriteln!(module_cache_declarations, "let {cache_name};");
+                    uwriteln!(
+                        compilation_promises,
+                        "const {local_name} = {cache_name} || ({cache_name} = getCoreModule('{name_idx}'));"
+                    );
+                } else {
+                    uwriteln!(
+                        compilation_promises,
+                        "const {local_name} = getCoreModule('{name_idx}');"
+                    );
+                }
             } else if files.get_size(&name_idx).unwrap() < self.opts.base64_cutoff {
                 assert!(removed.insert(i));
                 let data = files.remove(&name_idx).unwrap();
@@ -268,14 +374,27 @@ impl<'a> JsBindgen<'a> {
         );
 
         if let Some(instantiation) = &self.opts.instantiation {
+            if self.opts.esm_imports {
+                self.esm_bindgen
+                    .render_imports(&mut output, None, &mut self.local_names);
+            }
+            if self.opts.cache_wasm_compile {
+                uwrite!(output, "\n{}", &module_cache_declarations as &str);
+            }
+
             uwrite!(
                 output,
                 "\
-                    export function instantiate(getCoreModule, imports, instantiateCore = {}) {{
+                    export function instantiate(getCoreModule{}, instantiateCore = {}) {{
                         {}
                         {}
                         {}
                 ",
+                if self.opts.esm_imports {
+                    ""
+                } else {
+                    ", imports = {}"
+                },
                 match instantiation {
                     InstantiationMode::Async => "WebAssembly.instantiate",
                     InstantiationMode::Sync =>
@@ -285,17 +404,22 @@ impl<'a> JsBindgen<'a> {
                 &intrinsic_definitions as &str,
                 &compilation_promises as &str,
             );
+
+            if !self.opts.esm_imports {
+                let imports_obj = &self.intrinsic(Intrinsic::Imports);
+                self.esm_bindgen.render_imports(
+                    &mut output,
+                    Some(imports_obj),
+                    &mut self.local_names,
+                );
+            }
+        } else {
+            self.esm_bindgen
+                .render_imports(&mut output, None, &mut self.local_names);
         }
 
-        let imports_object = if self.opts.instantiation.is_some() {
-            Some("imports")
-        } else {
-            None
-        };
-        self.esm_bindgen
-            .render_imports(&mut output, imports_object, &mut self.local_names);
-
         if self.opts.instantiation.is_some() {
+            uwrite!(&mut self.src.js, "{}", &core_exported_funcs as &str);
             self.esm_bindgen.render_exports(
                 &mut self.src.js,
                 self.opts.instantiation.is_some(),
@@ -364,6 +488,7 @@ impl<'a> JsBindgen<'a> {
                         let gen = (function* init () {{
                             {}\
                             {}\
+                            {}\
                         }})();
                         let promise, resolve, reject;
                         function runNext (value) {{
@@ -394,6 +519,7 @@ impl<'a> JsBindgen<'a> {
                 &self.src.js as &str,
                 &compilation_promises as &str,
                 &self.src.js_init as &str,
+                &core_exported_funcs as &str,
             );
 
             self.esm_bindgen.render_exports(
@@ -441,6 +567,9 @@ struct Instantiator<'a, 'b> {
     /// Instance flags which references have been emitted externally at least once.
     used_instance_flags: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
     defined_resource_classes: BTreeSet<String>,
+    use_asyncify: bool,
+    async_imports: HashSet<String>,
+    async_exports: HashSet<String>,
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
 }
@@ -562,7 +691,7 @@ impl<'a> Instantiator<'a, '_> {
         if let Some(InstantiationMode::Async) = self.gen.opts.instantiation {
             // To avoid uncaught promise rejection errors, we attach an intermediate
             // Promise.all with a rejection handler, if there are multiple promises.
-            if self.modules.len() > 1 {
+            if self.modules.len() > 1 && self.gen.opts.static_wasm_source_imports.is_none() {
                 self.src.js_init.push_str("Promise.all([");
                 for i in 0..self.modules.len() {
                     if i > 0 {
@@ -1015,8 +1144,18 @@ impl<'a> Instantiator<'a, '_> {
             Some(InstantiationMode::Async) | None => {
                 uwriteln!(
                     self.src.js_init,
-                    "({{ exports: exports{iu32} }} = yield {instantiate}(yield module{}{imports}));",
-                    idx.as_u32()
+                    "({{ exports: exports{iu32} }} = yield {instantiate}({maybe_async_module}module{}{imports}));",
+                    idx.as_u32(),
+                    instantiate = if self.use_asyncify {
+                        self.gen.intrinsic(Intrinsic::AsyncifyAsyncInstantiate)
+                    } else {
+                        instantiate
+                    },
+                    maybe_async_module = if self.gen.opts.static_wasm_source_imports.is_some() {
+                        ""
+                    } else {
+                        "yield "
+                    },
                 )
             }
 
@@ -1024,7 +1163,12 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js_init,
                     "({{ exports: exports{iu32} }} = {instantiate}(module{}{imports}));",
-                    idx.as_u32()
+                    idx.as_u32(),
+                    instantiate = if self.use_asyncify {
+                        self.gen.intrinsic(Intrinsic::AsyncifySyncInstantiate)
+                    } else {
+                        instantiate
+                    },
                 )
             }
         }
@@ -1098,6 +1242,17 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
+        let is_async = self
+            .async_imports
+            .contains(&format!("{import_name}#{func_name}"))
+            || import_name
+                .find('@')
+                .map(|i| {
+                    self.async_imports
+                        .contains(&format!("{}#{func_name}", import_name.get(0..i).unwrap()))
+                })
+                .unwrap_or(false);
+
         let mut resource_map = ResourceMap::new();
         self.create_resource_fn_map(func, func_ty, &mut resource_map);
 
@@ -1156,7 +1311,24 @@ impl<'a> Instantiator<'a, '_> {
             .len();
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
+                if is_async {
+                    if self.use_asyncify {
+                        uwrite!(
+                            self.src.js,
+                            "\nconst trampoline{} = {}(async function",
+                            trampoline.as_u32(),
+                            self.gen.intrinsic(Intrinsic::AsyncifyWrapImport),
+                        );
+                    } else {
+                        uwrite!(
+                            self.src.js,
+                            "\nconst trampoline{} = new WebAssembly.Suspending(async function",
+                            trampoline.as_u32()
+                        );
+                    }
+                } else {
+                    uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
+                }
                 self.bindgen(
                     nparams,
                     call_type,
@@ -1170,8 +1342,13 @@ impl<'a> Instantiator<'a, '_> {
                     func,
                     &resource_map,
                     AbiVariant::GuestImport,
+                    is_async,
                 );
-                uwriteln!(self.src.js, "");
+                if is_async {
+                    uwriteln!(self.src.js, ");");
+                } else {
+                    uwriteln!(self.src.js, "");
+                }
             }
             Some(BindingsMode::Optimized) | Some(BindingsMode::DirectOptimized) => {
                 uwriteln!(self.src.js, "let trampoline{};", trampoline.as_u32());
@@ -1521,6 +1698,7 @@ impl<'a> Instantiator<'a, '_> {
         func: &Function,
         resource_map: &ResourceMap,
         abi: AbiVariant,
+        is_async: bool,
     ) {
         let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
         let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
@@ -1615,6 +1793,7 @@ impl<'a> Instantiator<'a, '_> {
             },
             src: source::Source::default(),
             resolve: self.resolve,
+            is_async,
         };
         abi::call(
             self.resolve,
@@ -1895,14 +2074,50 @@ impl<'a> Instantiator<'a, '_> {
         export_name: &String,
         resource_map: &ResourceMap,
     ) {
+        let is_async = self.async_exports.contains(&func.name)
+            || self
+                .async_exports
+                .contains(&format!("{export_name}#{}", func.name))
+            || export_name
+                .find('@')
+                .map(|i| {
+                    self.async_exports.contains(&format!(
+                        "{}#{}",
+                        export_name.get(0..i).unwrap(),
+                        func.name
+                    ))
+                })
+                .unwrap_or(false);
+
+        let maybe_async = if is_async { "async " } else { "" };
+
+        let core_export_fn = self.core_def(def);
+        let callee = match self
+            .gen
+            .local_names
+            .get_or_create(&core_export_fn, &core_export_fn)
+        {
+            (local_name, true) => local_name.to_string(),
+            (local_name, false) => {
+                let local_name = local_name.to_string();
+                uwriteln!(self.src.js, "let {local_name};");
+                self.gen
+                    .all_core_exported_funcs
+                    .push((core_export_fn.clone(), is_async));
+                local_name
+            }
+        };
+
         match func.kind {
-            FunctionKind::Freestanding => uwrite!(self.src.js, "\nfunction {local_name}"),
+            FunctionKind::Freestanding => {
+                uwrite!(self.src.js, "\n{maybe_async}function {local_name}")
+            }
             FunctionKind::Method(_) => {
                 self.ensure_local_resource_class(local_name.to_string());
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.prototype.{method_name} = function {}",
+                    "\n{local_name}.prototype.{method_name} = {maybe_async}function {}",
                     if !is_js_reserved_word(&method_name) {
                         method_name.to_string()
                     } else {
@@ -1915,7 +2130,7 @@ impl<'a> Instantiator<'a, '_> {
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.{method_name} = function {}",
+                    "\n{local_name}.{method_name} = {maybe_async}function {}",
                     if !is_js_reserved_word(&method_name) {
                         method_name.to_string()
                     } else {
@@ -1936,7 +2151,6 @@ impl<'a> Instantiator<'a, '_> {
                 self.defined_resource_classes.insert(local_name.to_string());
             }
         }
-        let callee = self.core_def(def);
         self.bindgen(
             func.params.len(),
             match func.kind {
@@ -1953,6 +2167,7 @@ impl<'a> Instantiator<'a, '_> {
             func,
             resource_map,
             AbiVariant::GuestExport,
+            is_async,
         );
         match func.kind {
             FunctionKind::Freestanding => self.src.js("\n"),

@@ -49,9 +49,13 @@ Options include:
 * `--map`: Provide custom mappings for world imports. Supports both wildcard mappings (`*` similarly as in the package.json "exports" field) as well as `#` mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like `--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*` to map `import as * filesystem from 'wasi:filesystem/types'` to `import { types } from '@bytecodealliance/preview2-shim/filesystem`.
 * `--no-nodejs-compat`: Disables Node.js compat in the output to load core Wasm with FS methods.
 * `--instantiation [mode]`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports. The `instantiate` function can be async (with `--instantiation` or `--instantiation async`), or sync (with `--instantiation sync`).
+* `--esm-imports`: If `--instantiation` is set, use ESM imports instead of providing an import object.
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
 * `--tracing`: Emit tracing calls for all function entry and exits.
 * `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
+* `--async-mode [mode]`: For the component imports and exports, functions and methods on resources can be specified as `async`. The two options are `jspi` (JavaScript Promise Integration) and `asyncify` (Binaryen's `wasm-opt --asyncify`).
+* `--async-imports <imports...>`: Specify the component imports as `async`. Used with `--async-mode`.
+* `--async-exports <exports...>`: Specify the component exports as `async`. Used with `--async-mode`.
 
 ## Browser Support
 

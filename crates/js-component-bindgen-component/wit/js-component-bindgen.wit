@@ -9,6 +9,11 @@ world js-component-bindgen {
     sync,
   }
 
+  variant static-wasm-source-imports-mode {
+    proposed-standard-import-source,
+    non-standard-import,
+  }
+
   variant bindings-mode {
     js,
     hybrid,
@@ -27,6 +32,18 @@ world js-component-bindgen {
     /// Provide a custom JS instantiation API for the component instead
     /// of the direct importable native ESM output.
     instantiation: option<instantiation-mode>,
+
+    /// If `instantiation` is set, on the first `instantiate` call the compiled
+    /// Wasm modules are cached for subsequent `instantiate` calls.
+    cache-wasm-compile: option<bool>,
+
+    /// Static import of Wasm module with the proposed standard source phase
+    /// imports or use the non-standard import syntax.
+    static-wasm-source-imports: option<static-wasm-source-imports-mode>,
+
+    /// If `instantiation` is set, instead of providing an import object, use
+    /// ESM imports.
+    esm-imports: option<bool>,
 
     /// Import bindings generation mode
     import-bindings: option<bindings-mode>,
@@ -62,6 +79,24 @@ world js-component-bindgen {
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
     multi-memory: option<bool>,
+
+    /// Configure whether to use `async` imports or exports with
+    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    async-mode: option<async-mode>,
+  }
+
+  record async-imports-exports {
+    imports: list<string>,
+    exports: list<string>,
+  }
+
+  variant async-mode {
+    /// default to sync mode
+    sync,
+    /// use JavaScript Promise Integration (JSPI)
+    jspi(async-imports-exports),
+    /// use Asyncify
+    asyncify(async-imports-exports),
   }
 
   variant wit {
@@ -88,9 +123,15 @@ world js-component-bindgen {
     %world: option<string>,
     tla-compat: option<bool>,
     instantiation: option<instantiation-mode>,
+    /// If `instantiation` is set, instead of providing an import object, use
+    /// ESM imports.
+    esm-imports: option<bool>,
     map: option<maps>,
     /// Features that should be enabled as part of feature gating
     features: option<enabled-feature-set>,
+    /// Configure whether to use `async` imports or exports with
+    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    async-mode: option<async-mode>,
   }
 
   enum export-type {

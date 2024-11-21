@@ -42,6 +42,19 @@ impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
     }
 }
 
+impl From<StaticWasmSourceImportsMode> for js_component_bindgen::StaticWasmSourceImportsMode {
+    fn from(value: StaticWasmSourceImportsMode) -> Self {
+        match value {
+            StaticWasmSourceImportsMode::ProposedStandardImportSource => {
+                js_component_bindgen::StaticWasmSourceImportsMode::ProposedStandardImportSource
+            }
+            StaticWasmSourceImportsMode::NonStandardImport => {
+                js_component_bindgen::StaticWasmSourceImportsMode::NonStandardImport
+            }
+        }
+    }
+}
+
 impl From<BindingsMode> for js_component_bindgen::BindingsMode {
     fn from(value: BindingsMode) -> Self {
         match value {
@@ -49,6 +62,20 @@ impl From<BindingsMode> for js_component_bindgen::BindingsMode {
             BindingsMode::DirectOptimized => js_component_bindgen::BindingsMode::DirectOptimized,
             BindingsMode::Optimized => js_component_bindgen::BindingsMode::Optimized,
             BindingsMode::Hybrid => js_component_bindgen::BindingsMode::Hybrid,
+        }
+    }
+}
+
+impl From<AsyncMode> for js_component_bindgen::AsyncMode {
+    fn from(value: AsyncMode) -> Self {
+        match value {
+            AsyncMode::Sync => js_component_bindgen::AsyncMode::Sync,
+            AsyncMode::Jspi(AsyncImportsExports { imports, exports }) => {
+                js_component_bindgen::AsyncMode::JavaScriptPromiseIntegration { imports, exports }
+            }
+            AsyncMode::Asyncify(AsyncImportsExports { imports, exports }) => {
+                js_component_bindgen::AsyncMode::Asyncify { imports, exports }
+            }
         }
     }
 }
@@ -64,6 +91,9 @@ impl Guest for JsComponentBindgenComponent {
             name: options.name,
             no_typescript: options.no_typescript.unwrap_or(false),
             instantiation: options.instantiation.map(Into::into),
+            cache_wasm_compile: options.cache_wasm_compile.unwrap_or(false),
+            static_wasm_source_imports: options.static_wasm_source_imports.map(Into::into),
+            esm_imports: options.esm_imports.unwrap_or(false),
             map: options.map.map(|map| map.into_iter().collect()),
             no_nodejs_compat: options.no_nodejs_compat.unwrap_or(false),
             base64_cutoff: options.base64_cutoff.unwrap_or(5000) as usize,
@@ -75,6 +105,7 @@ impl Guest for JsComponentBindgenComponent {
             no_namespaced_exports: options.no_namespaced_exports.unwrap_or(false),
             multi_memory: options.multi_memory.unwrap_or(false),
             import_bindings: options.import_bindings.map(Into::into),
+            async_mode: options.async_mode.map(Into::into),
         };
 
         let js_component_bindgen::Transpiled {
@@ -152,6 +183,9 @@ impl Guest for JsComponentBindgenComponent {
             no_typescript: false,
             no_nodejs_compat: false,
             instantiation: opts.instantiation.map(Into::into),
+            cache_wasm_compile: false,
+            static_wasm_source_imports: None,
+            esm_imports: opts.esm_imports.unwrap_or(false),
             map: opts.map.map(|map| map.into_iter().collect()),
             tla_compat: opts.tla_compat.unwrap_or(false),
             valid_lifting_optimization: false,
@@ -160,6 +194,7 @@ impl Guest for JsComponentBindgenComponent {
             no_namespaced_exports: false,
             multi_memory: false,
             import_bindings: None,
+            async_mode: opts.async_mode.map(Into::into),
         };
 
         let files = generate_types(name, resolve, world, opts).map_err(|e| e.to_string())?;

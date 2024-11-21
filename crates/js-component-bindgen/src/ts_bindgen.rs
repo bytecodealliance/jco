@@ -2,7 +2,7 @@ use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
-use crate::transpile_bindgen::{parse_world_key, InstantiationMode, TranspileOpts};
+use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
 use crate::{dealias, feature_gate_allowed, uwrite, uwriteln};
 use anyhow::{Context as _, Result};
 use heck::*;
@@ -29,6 +29,9 @@ struct TsBindgen {
     import_object: Source,
     /// TypeScript definitions which will become the export object
     export_object: Source,
+
+    async_imports: HashSet<String>,
+    async_exports: HashSet<String>,
 }
 
 /// Used to generate a `*.d.ts` file for each imported and exported interface for
@@ -53,12 +56,23 @@ pub fn ts_bindgen(
     opts: &TranspileOpts,
     files: &mut Files,
 ) -> Result<()> {
+    let (async_imports, async_exports) = match opts.async_mode.clone() {
+        None | Some(AsyncMode::Sync) => (Default::default(), Default::default()),
+        Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => {
+            (imports.into_iter().collect(), exports.into_iter().collect())
+        }
+        Some(AsyncMode::Asyncify { imports, exports }) => {
+            (imports.into_iter().collect(), exports.into_iter().collect())
+        }
+    };
     let mut bindgen = TsBindgen {
         src: Source::default(),
         interface_names: LocalNames::default(),
         local_names: LocalNames::default(),
         import_object: Source::default(),
         export_object: Source::default(),
+        async_imports,
+        async_exports,
     };
 
     let world = &resolve.worlds[id];
@@ -256,7 +270,7 @@ pub fn ts_bindgen(
     // With the current representation of a "world" this is an import object
     // per-imported-interface where the type of that field is defined by the
     // interface itbindgen.
-    if opts.instantiation.is_some() {
+    if opts.instantiation.is_some() && !opts.esm_imports {
         uwriteln!(bindgen.src, "export interface ImportObject {{");
         bindgen.src.push_str(&bindgen.import_object);
         uwriteln!(bindgen.src, "}}");
@@ -282,6 +296,11 @@ pub fn ts_bindgen(
 
     // Generate the TypeScript definition of the `instantiate` function
     // which is the main workhorse of the generated bindings.
+    let maybe_imports_obj = if opts.esm_imports {
+        ""
+    } else {
+        "\nimports?: ImportObject,"
+    };
     match opts.instantiation {
         Some(InstantiationMode::Async) => {
             uwriteln!(
@@ -307,13 +326,7 @@ pub fn ts_bindgen(
                      * on the web, for example.
                      */
                     export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module,
-                        imports: ImportObject,
-                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
-                    ): {camel};
-                    export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
-                        imports: ImportObject,
+                        getCoreModule?: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,{maybe_imports_obj}
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>
                     ): {camel} | Promise<{camel}>;
                 ",
@@ -344,8 +357,7 @@ pub fn ts_bindgen(
                      * `WebAssembly.Module` constructor on the web, for example.
                      */
                     export function instantiate(
-                        getCoreModule: (path: string) => WebAssembly.Module,
-                        imports: ImportObject,
+                        getCoreModule: (path: string) => WebAssembly.Module,{maybe_imports_obj}
                         instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance
                     ): {camel};
                 ",
@@ -368,7 +380,7 @@ impl TsBindgen {
         files: &mut Files,
     ) -> String {
         // in case an imported type is used as an exported type
-        let local_name = self.generate_interface(name, resolve, id, files);
+        let local_name = self.generate_interface(name, resolve, id, files, false);
         uwriteln!(
             self.import_object,
             "{}: typeof {local_name},",
@@ -388,7 +400,7 @@ impl TsBindgen {
             if iface_name == "*" {
                 uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
                 let name = resolve.interfaces[id].name.as_ref().unwrap();
-                let local_name = self.generate_interface(name, resolve, id, files);
+                let local_name = self.generate_interface(name, resolve, id, files, false);
                 uwriteln!(self.import_object, "typeof {local_name},",);
                 return;
             }
@@ -396,7 +408,7 @@ impl TsBindgen {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         for (iface_name, &id) in ifaces {
             let name = resolve.interfaces[id].name.as_ref().unwrap();
-            let local_name = self.generate_interface(name, resolve, id, files);
+            let local_name = self.generate_interface(name, resolve, id, files, false);
             uwriteln!(
                 self.import_object,
                 "{}: typeof {local_name},",
@@ -415,7 +427,7 @@ impl TsBindgen {
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         let mut gen = self.ts_interface(resolve, false);
-        gen.ts_func(func, true, false);
+        gen.ts_func(func, true, false, false);
         let src = gen.finish();
         self.import_object.push_str(&src);
         uwriteln!(self.import_object, "}},");
@@ -429,7 +441,7 @@ impl TsBindgen {
         files: &mut Files,
         instantiation: bool,
     ) -> String {
-        let local_name = self.generate_interface(export_name, resolve, id, files);
+        let local_name = self.generate_interface(export_name, resolve, id, files, true);
         if instantiation {
             uwriteln!(
                 self.export_object,
@@ -453,14 +465,26 @@ impl TsBindgen {
     fn export_funcs(
         &mut self,
         resolve: &Resolve,
-        _world: WorldId,
+        world: WorldId,
         funcs: &[(String, &Function)],
         _files: &mut Files,
         declaration: bool,
     ) {
+        let async_exports = self.async_exports.clone();
+        let id_name = &resolve.worlds[world].name;
         let mut gen = self.ts_interface(resolve, false);
         for (_, func) in funcs {
-            gen.ts_func(func, false, declaration);
+            let func_name = &func.name;
+            let is_async = async_exports.contains(func_name)
+                || async_exports.contains(&format!("{id_name}#{func_name}"))
+                || id_name
+                    .find('@')
+                    .map(|i| {
+                        async_exports
+                            .contains(&format!("{}#{func_name}", id_name.get(0..i).unwrap()))
+                    })
+                    .unwrap_or(false);
+            gen.ts_func(func, false, declaration, is_async);
         }
         let src = gen.finish();
         self.export_object.push_str(&src);
@@ -472,6 +496,7 @@ impl TsBindgen {
         resolve: &Resolve,
         id: InterfaceId,
         files: &mut Files,
+        is_world_export: bool,
     ) -> String {
         let iface = resolve
             .interfaces
@@ -520,6 +545,11 @@ impl TsBindgen {
             return local_name;
         }
 
+        let async_funcs = if is_world_export {
+            self.async_exports.clone()
+        } else {
+            self.async_imports.clone()
+        };
         let mut gen = self.ts_interface(resolve, false);
 
         uwriteln!(gen.src, "export namespace {camel} {{");
@@ -530,7 +560,16 @@ impl TsBindgen {
             {
                 continue;
             }
-            gen.ts_func(func, false, true);
+            let func_name = &func.name;
+            let is_async = is_world_export && async_funcs.contains(func_name)
+                || async_funcs.contains(&format!("{id_name}#{func_name}"))
+                || id_name
+                    .find('@')
+                    .map(|i| {
+                        async_funcs.contains(&format!("{}#{func_name}", id_name.get(0..i).unwrap()))
+                    })
+                    .unwrap_or(false);
+            gen.ts_func(func, false, true, is_async);
         }
         // Export resources for the interface
         for (_, ty) in resolve.interfaces[id].types.iter() {
@@ -729,7 +768,7 @@ impl<'a> TsInterface<'a> {
         self.src.push_str("]");
     }
 
-    fn ts_func(&mut self, func: &Function, default: bool, declaration: bool) {
+    fn ts_func(&mut self, func: &Function, default: bool, declaration: bool, is_async: bool) {
         let iface = if let FunctionKind::Method(ty)
         | FunctionKind::Static(ty)
         | FunctionKind::Constructor(ty) = func.kind
@@ -754,11 +793,15 @@ impl<'a> TsInterface<'a> {
             func.item_name().to_lower_camel_case()
         };
 
+        let maybe_async = if is_async { "async " } else { "" };
+
         if declaration {
             match func.kind {
                 FunctionKind::Freestanding => {
                     if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("export function {out_name}"));
+                        iface
+                            .src
+                            .push_str(&format!("export {maybe_async}function {out_name}"));
                     } else {
                         let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
                         iface
@@ -766,29 +809,33 @@ impl<'a> TsInterface<'a> {
                             .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
                         iface
                             .src
-                            .push_str(&format!("declare function {local_name}"));
+                            .push_str(&format!("declare {maybe_async}function {local_name}"));
                     };
                 }
                 FunctionKind::Method(_) => {
                     if is_js_identifier(&out_name) {
-                        iface.src.push_str(&out_name);
+                        iface.src.push_str(&format!("{maybe_async}{out_name}"));
                     } else {
-                        iface.src.push_str(&format!("'{out_name}'"));
+                        iface.src.push_str(&format!("{maybe_async}'{out_name}'"));
                     }
                 }
                 FunctionKind::Static(_) => {
                     if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("static {out_name}"))
+                        iface
+                            .src
+                            .push_str(&format!("static {maybe_async}{out_name}"))
                     } else {
-                        iface.src.push_str(&format!("static '{out_name}'"))
+                        iface
+                            .src
+                            .push_str(&format!("static {maybe_async}'{out_name}'"))
                     }
                 }
                 FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
             }
         } else if is_js_identifier(&out_name) {
-            iface.src.push_str(&out_name);
+            iface.src.push_str(&format!("{maybe_async}{out_name}"));
         } else {
-            iface.src.push_str(&format!("'{out_name}'"));
+            iface.src.push_str(&format!("{maybe_async}'{out_name}'"));
         }
 
         let end_character = if declaration { ';' } else { ',' };
@@ -825,6 +872,10 @@ impl<'a> TsInterface<'a> {
         }
         iface.src.push_str(": ");
 
+        if is_async {
+            iface.src.push_str("Promise<");
+        }
+
         if let Some((ok_ty, _)) = func.results.throws(iface.resolve) {
             iface.print_optional_ty(ok_ty);
         } else {
@@ -843,6 +894,12 @@ impl<'a> TsInterface<'a> {
                 }
             }
         }
+
+        if is_async {
+            // closes `Promise<>`
+            iface.src.push_str(">");
+        }
+
         iface.src.push_str(format!("{}\n", end_character).as_str());
     }
 

@@ -30,6 +30,9 @@ pub(crate) fn run() -> Result<()> {
             no_typescript: false,
             no_nodejs_compat: false,
             instantiation: None,
+            cache_wasm_compile: false,
+            static_wasm_source_imports: None,
+            esm_imports: false,
             map: None,
             tla_compat: false,
             valid_lifting_optimization: false,
@@ -38,6 +41,7 @@ pub(crate) fn run() -> Result<()> {
             no_namespaced_exports: true,
             multi_memory: false,
             import_bindings: Some(BindingsMode::Js),
+            async_mode: None,
         };
 
         let files = generate_types(name, resolve, world, opts)?;
