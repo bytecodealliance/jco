@@ -44,10 +44,14 @@ impl EsmBindgen {
             }
             iface = match iface.get_mut(&path[i]).unwrap() {
                 ImportBinding::Interface(iface) => iface,
-                ImportBinding::Local(_) => panic!(
-                    "Imported interface {} cannot be both a function and an interface",
-                    &path[0..i].join(".")
-                ),
+                ImportBinding::Local(local) => {
+                    panic!(
+                        "Internal bindgen error: Import '{}' cannot be both an interface '{}' and a function '{}'",
+                        &path[0..i + 1].join("."),
+                        &path[i + 1..].join("."),
+                        &local[0],
+                    );
+                }
             };
         }
         if let Some(ref mut existing) = iface.get_mut(&path[path.len() - 1]) {

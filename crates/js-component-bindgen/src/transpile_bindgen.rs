@@ -1407,8 +1407,8 @@ impl<'a> Instantiator<'a, '_> {
                 wit_parser::TypeOwner::Interface(iface) => {
                     match &self.resolve.interfaces[iface].name {
                         Some(name) => (WorldKey::Interface(iface), Some(name.as_str())),
-                        None => (
-                            self.resolve.worlds[self.world]
+                        None => {
+                            let key = self.resolve.worlds[self.world]
                                 .imports
                                 .iter()
                                 .find(|&(_, item)| match item {
@@ -1416,10 +1416,15 @@ impl<'a> Instantiator<'a, '_> {
                                     _ => false,
                                 })
                                 .unwrap()
-                                .0
-                                .clone(),
-                            None,
-                        ),
+                                .0;
+                            (
+                                key.clone(),
+                                match key {
+                                    WorldKey::Name(ref name) => Some(name.as_str()),
+                                    WorldKey::Interface(_) => None,
+                                },
+                            )
+                        }
                     }
                 }
                 wit_parser::TypeOwner::None => unimplemented!(),
