@@ -1076,9 +1076,6 @@ impl<'a> Instantiator<'a, '_> {
         let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
 
-        // nested interfaces only currently possible through mapping
-        let (import_specifier, maybe_iface_member) = map_import(&self.gen.opts.map, import_name);
-
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
@@ -1097,6 +1094,27 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 WorldItem::Type(_) => unreachable!(),
             };
+
+        let resource_prefix = if iface_name.is_some() {
+            None
+        } else {
+            match func.kind {
+                FunctionKind::Method(_) => Some("[method]"),
+                FunctionKind::Static(_) => Some("[static]"),
+                FunctionKind::Constructor(_) => Some("[constructor]"),
+                FunctionKind::Freestanding => None,
+            }
+        };
+
+        // nested interfaces only currently possible through mapping
+        let (import_specifier, maybe_iface_member) = map_import(
+            &self.gen.opts.map,
+            if resource_prefix.is_some() {
+                import_name.strip_prefix(resource_prefix.unwrap()).unwrap()
+            } else {
+                import_name
+            },
+        );
 
         let mut resource_map = ResourceMap::new();
         self.create_resource_fn_map(func, func_ty, &mut resource_map);
@@ -1327,6 +1345,10 @@ impl<'a> Instantiator<'a, '_> {
             self.gen
                 .esm_bindgen
                 .add_import_binding(&[import_specifier, import_binding], local_name);
+        } else if let Some(iface_member) = iface_member {
+            self.gen
+                .esm_bindgen
+                .add_import_binding(&[import_specifier, iface_member.into()], local_name);
         } else {
             self.gen
                 .esm_bindgen
@@ -1385,8 +1407,8 @@ impl<'a> Instantiator<'a, '_> {
                 wit_parser::TypeOwner::Interface(iface) => {
                     match &self.resolve.interfaces[iface].name {
                         Some(name) => (WorldKey::Interface(iface), Some(name.as_str())),
-                        None => (
-                            self.resolve.worlds[self.world]
+                        None => {
+                            let key = self.resolve.worlds[self.world]
                                 .imports
                                 .iter()
                                 .find(|&(_, item)| match item {
@@ -1394,10 +1416,15 @@ impl<'a> Instantiator<'a, '_> {
                                     _ => false,
                                 })
                                 .unwrap()
-                                .0
-                                .clone(),
-                            None,
-                        ),
+                                .0;
+                            (
+                                key.clone(),
+                                match key {
+                                    WorldKey::Name(ref name) => Some(name.as_str()),
+                                    WorldKey::Interface(_) => None,
+                                },
+                            )
+                        }
                     }
                 }
                 wit_parser::TypeOwner::None => unimplemented!(),
@@ -1416,7 +1443,11 @@ impl<'a> Instantiator<'a, '_> {
                 import_specifier,
                 iface_name,
                 maybe_iface_member.as_deref(),
-                Some(resource_name),
+                if iface_name.is_some() {
+                    Some(resource_name)
+                } else {
+                    None
+                },
                 local_name_str.to_string(),
             );
 
