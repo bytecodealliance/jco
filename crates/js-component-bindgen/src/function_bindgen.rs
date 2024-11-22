@@ -1131,7 +1131,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         uwriteln!(
                             self.src,
                             "for (const rsc of {cur_resource_borrows}) {{
-                                rsc[{symbol_resource_handle}] = null;
+                                rsc[{symbol_resource_handle}] = undefined;
                             }}
                             {cur_resource_borrows} = [];"
                         );
@@ -1141,7 +1141,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             "for (const {{ rsc, drop }} of {cur_resource_borrows}) {{
                                 if (rsc[{symbol_resource_handle}]) {{
                                     drop(rsc[{symbol_resource_handle}]);
-                                    delete rsc[{symbol_resource_handle}];
+                                    rsc[{symbol_resource_handle}] = undefined;
                                 }}
                             }}
                             {cur_resource_borrows} = [];"
@@ -1263,7 +1263,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                             finalizationRegistry{tid}.unregister({rsc});
                                             {rsc_table_remove}(handleTable{tid}, {handle});
                                             {rsc}[{symbol_dispose}] = {empty_func};
-                                            {rsc}[{symbol_resource_handle}] = null;
+                                            {rsc}[{symbol_resource_handle}] = undefined;
                                             {dtor}(handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag});
                                         }}}});"
                                     );
@@ -1396,7 +1396,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     }}
                                     finalizationRegistry{tid}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
-                                    {op}[{symbol_resource_handle}] = null;",
+                                    {op}[{symbol_resource_handle}] = undefined;",
                                 );
                             } else {
                                 // When expecting a borrow, the JS resource provided will always be an own

@@ -1095,24 +1095,26 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        let resource_prefix = if iface_name.is_some() {
-            None
-        } else {
-            match func.kind {
-                FunctionKind::Method(_) => Some("[method]"),
-                FunctionKind::Static(_) => Some("[static]"),
-                FunctionKind::Constructor(_) => Some("[constructor]"),
-                FunctionKind::Freestanding => None,
-            }
-        };
-
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
             &self.gen.opts.map,
-            if resource_prefix.is_some() {
-                import_name.strip_prefix(resource_prefix.unwrap()).unwrap()
-            } else {
+            if iface_name.is_some() {
                 import_name
+            } else {
+                match func.kind {
+                    FunctionKind::Method(_) => {
+                        let stripped = import_name.strip_prefix("[method]").unwrap();
+                        &stripped[0..stripped.find(".").unwrap()]
+                    }
+                    FunctionKind::Static(_) => {
+                        let stripped = import_name.strip_prefix("[static]").unwrap();
+                        &stripped[0..stripped.find(".").unwrap()]
+                    }
+                    FunctionKind::Constructor(_) => {
+                        import_name.strip_prefix("[constructor]").unwrap()
+                    }
+                    FunctionKind::Freestanding => import_name,
+                }
             },
         );
 
@@ -1341,14 +1343,14 @@ impl<'a> Instantiator<'a, '_> {
                     local_name,
                 );
             }
-        } else if let Some(import_binding) = import_binding {
-            self.gen
-                .esm_bindgen
-                .add_import_binding(&[import_specifier, import_binding], local_name);
         } else if let Some(iface_member) = iface_member {
             self.gen
                 .esm_bindgen
                 .add_import_binding(&[import_specifier, iface_member.into()], local_name);
+        } else if let Some(import_binding) = import_binding {
+            self.gen
+                .esm_bindgen
+                .add_import_binding(&[import_specifier, import_binding], local_name);
         } else {
             self.gen
                 .esm_bindgen
