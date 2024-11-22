@@ -1141,7 +1141,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             "for (const {{ rsc, drop }} of {cur_resource_borrows}) {{
                                 if (rsc[{symbol_resource_handle}]) {{
                                     drop(rsc[{symbol_resource_handle}]);
-                                    delete rsc[{symbol_resource_handle}];
+                                    rsc[{symbol_resource_handle}] = null;
                                 }}
                             }}
                             {cur_resource_borrows} = [];"
@@ -1330,7 +1330,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwrite!(
                                     self.src,
                                     "repTable.delete({handle});
-                                     delete {rsc}[{symbol_resource_handle}];
+                                     {rsc}[{symbol_resource_handle}] = null;
                                      finalizationRegistry_export${prefix}{lower_camel}.unregister({rsc});
                                     "
                                 );
