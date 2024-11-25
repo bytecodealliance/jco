@@ -45,8 +45,6 @@ jobs:
             macos-latest
         ]
         node: [18.x, 20.x, latest]
-        weval-version:
-          - 'v0.3.2'
         include:
           - os: windows-latest
             weval-bin-path: .weval-bin/weval.exe
@@ -71,31 +69,40 @@ jobs:
       with:
         node-version: ${{ matrix.node }}
 
+    # Determine weval version
+    - name: Determine weval version
+      id: weval-meta
+      shell: bash
+      run: |
+        export WEVAL_LATEST_URL=`curl -Ls -o /dev/null -w %{url_effective} https://github.com/bytecodealliance/weval/releases/latest`
+        export WEVAL_VERSION=${WEVAL_LATEST_URL#https://github.com/bytecodealliance/weval/releases/tag/}
+        echo -e "version=$WEVAL_VERSION" >> $GITHUB_OUTPUT
+
     # Use cached weval bin if present
     - name: Cache weval bin
       id: cache-weval-bin
       uses: actions/cache@v4
       with:
         path: .weval-bin
-        key: weval-bin-${{ matrix.weval-version }}-${{ matrix.os }}
+        key: weval-bin-${{ steps.weval-meta.outputs.version }}-${{ matrix.os }}
 
     # (no cached weval bin) download weval release
     - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'ubuntu-latest' }}
       run: |
-        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ matrix.weval-version }}/weval-${{ matrix.weval-version }}-x86_64-linux.tar.xz
-        tar -xvJf weval-${{ matrix.weval-version }}-x86_64-linux.tar.xz
-        mv weval-${{ matrix.weval-version }}-x86_64-linux/weval .weval-bin
+        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
+        tar -xvJf weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
+        mv weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux/weval .weval-bin
     - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'windows-latest' }}
       run: |
-        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ matrix.weval-version }}/weval-${{ matrix.weval-version }}-x86_64-windows.zip
-        unzip weval-${{ matrix.weval-version }}-x86_64-windows.zip
-        mv weval-${{ matrix.weval-version }}-x86_64-windows .weval-bin
+        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows.zip
+        unzip weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows.zip
+        mv weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows .weval-bin
     - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'macos-latest' }}
       run: |
-        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ matrix.weval-version }}/weval-${{ matrix.weval-version }}-aarch64-macos.tar.xz
-        tar -xvJf weval-${{ matrix.weval-version }}-aarch64-macos.tar.xz
+        curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos.tar.xz
+        tar -xvJf weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos.tar.xz
         mkdir .weval-bin
-        mv weval-${{ matrix.weval-version }}-aarch64-macos/weval .weval-bin/
+        mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
 
     # Perform NPM install
     - name: Install NPM packages
