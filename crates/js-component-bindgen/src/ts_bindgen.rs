@@ -106,7 +106,7 @@ pub fn ts_bindgen(
                     match name {
                         WorldKey::Name(name) => {
                             // kebab name -> direct ns namespace import
-                            bindgen.import_interface(resolve, name, *id, files);
+                            bindgen.import_interface(resolve, name, *id, files, opts.guest);
                         }
                         // namespaced ns:pkg/iface
                         // TODO: map support
@@ -170,7 +170,7 @@ pub fn ts_bindgen(
         // namespace imports are grouped by namespace / kebab name
         // kebab name imports are direct
         for (name, import_interfaces) in interface_imports {
-            bindgen.import_interfaces(resolve, name.as_ref(), import_interfaces, files);
+            bindgen.import_interfaces(resolve, name.as_ref(), import_interfaces, files, opts.guest);
         }
     }
 
@@ -219,6 +219,7 @@ pub fn ts_bindgen(
                     *id,
                     files,
                     opts.instantiation.is_some(),
+                    opts.guest,
                 );
                 export_aliases.push((iface_name.to_lower_camel_case(), local_name));
             }
@@ -366,9 +367,10 @@ impl TsBindgen {
         name: &str,
         id: InterfaceId,
         files: &mut Files,
+        guest: bool,
     ) -> String {
         // in case an imported type is used as an exported type
-        let local_name = self.generate_interface(name, resolve, id, files);
+        let local_name = self.generate_interface(name, resolve, id, files, guest);
         uwriteln!(
             self.import_object,
             "{}: typeof {local_name},",
@@ -382,13 +384,14 @@ impl TsBindgen {
         import_name: &str,
         ifaces: Vec<(String, &InterfaceId)>,
         files: &mut Files,
+        guest: bool,
     ) {
         if ifaces.len() == 1 {
             let (iface_name, &id) = ifaces.first().unwrap();
             if iface_name == "*" {
                 uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
                 let name = resolve.interfaces[id].name.as_ref().unwrap();
-                let local_name = self.generate_interface(name, resolve, id, files);
+                let local_name = self.generate_interface(name, resolve, id, files, guest);
                 uwriteln!(self.import_object, "typeof {local_name},",);
                 return;
             }
@@ -396,7 +399,7 @@ impl TsBindgen {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         for (iface_name, &id) in ifaces {
             let name = resolve.interfaces[id].name.as_ref().unwrap();
-            let local_name = self.generate_interface(name, resolve, id, files);
+            let local_name = self.generate_interface(name, resolve, id, files, guest);
             uwriteln!(
                 self.import_object,
                 "{}: typeof {local_name},",
@@ -428,8 +431,9 @@ impl TsBindgen {
         id: InterfaceId,
         files: &mut Files,
         instantiation: bool,
+        guest: bool,
     ) -> String {
-        let local_name = self.generate_interface(export_name, resolve, id, files);
+        let local_name = self.generate_interface(export_name, resolve, id, files, guest);
         if instantiation {
             uwriteln!(
                 self.export_object,
@@ -472,6 +476,7 @@ impl TsBindgen {
         resolve: &Resolve,
         id: InterfaceId,
         files: &mut Files,
+        guest: bool,
     ) -> String {
         let iface = resolve
             .interfaces
@@ -522,7 +527,15 @@ impl TsBindgen {
 
         let mut gen = self.ts_interface(resolve, false);
 
-        uwriteln!(gen.src, "export namespace {camel} {{");
+        uwriteln!(
+            gen.src,
+            "{}",
+            if guest {
+                format!("declare module '{id_name}' {{")
+            } else {
+                format!("export namespace {camel} {{")
+            }
+        );
         for (_, func) in resolve.interfaces[id].functions.iter() {
             // Ensure that the function  the world item for stability guarantees and exclude if they do not match
             if !feature_gate_allowed(resolve, package, &func.stability, &func.name)

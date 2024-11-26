@@ -79,6 +79,7 @@ program.command('types')
   .option('-q, --quiet', 'disable output summary')
   .option('--feature <feature>', 'enable one specific WIT feature (repeatable)', collectOptions, [])
   .option('--all-features', 'enable all features')
+  .option('--guest', 'generate types to be consumed by a guest component (module declarations)')
   .action(asyncAction(types));
 
 program.command('run')

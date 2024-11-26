@@ -98,8 +98,20 @@ export async function apiTest(_fixtures) {
       });
      strictEqual(Object.keys(files).length, 2);
      strictEqual(Object.keys(files)[0], 'flavorful.d.ts');
+     strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
      ok(Buffer.from(files[Object.keys(files)[0]]).includes('export const test'));
+     ok(Buffer.from(files[Object.keys(files)[1]]).includes('export namespace TestFlavorfulTest {'));
     });
+    
+    test('Type generation (declare imports)', async () => {
+      const files = await types('test/fixtures/wit', {
+        worldName: 'test:flavorful/flavorful',
+        guest: true,
+      });
+     strictEqual(Object.keys(files).length, 2);
+     strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
+     ok(Buffer.from(files[Object.keys(files)[1]]).includes('declare module \'test:flavorful/test\' {'));
+    })
 
     test("Optimize", async () => {
       const component = await readFile(
@@ -108,7 +120,7 @@ export async function apiTest(_fixtures) {
       const { component: optimizedComponent } = await opt(component);
       ok(optimizedComponent.byteLength < component.byteLength);
     });
-
+    
     test("Print & Parse", async () => {
       const component = await readFile(
         `test/fixtures/components/flavorful.component.wasm`
