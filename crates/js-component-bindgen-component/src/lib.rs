@@ -75,6 +75,7 @@ impl Guest for JsComponentBindgenComponent {
             no_namespaced_exports: options.no_namespaced_exports.unwrap_or(false),
             multi_memory: options.multi_memory.unwrap_or(false),
             import_bindings: options.import_bindings.map(Into::into),
+            guest: options.guest.unwrap_or(false),
         };
 
         let js_component_bindgen::Transpiled {
@@ -160,6 +161,7 @@ impl Guest for JsComponentBindgenComponent {
             no_namespaced_exports: false,
             multi_memory: false,
             import_bindings: None,
+            guest: opts.guest.unwrap_or(false),
         };
 
         let files = generate_types(name, resolve, world, opts).map_err(|e| e.to_string())?;
