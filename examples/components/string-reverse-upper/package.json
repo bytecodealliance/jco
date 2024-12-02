@@ -11,7 +11,7 @@
     "all": "npm run build:dep ; npm run build ; npm run compose ; npm run transpile ; npm run transpiled-js"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "1.7.1",
-    "@bytecodealliance/componentize-js": "0.13.1"
+    "@bytecodealliance/jco": "1.8.1",
+    "@bytecodealliance/componentize-js": "0.15.0"
   }
 }
