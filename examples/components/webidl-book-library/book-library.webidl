@@ -1,0 +1,66 @@
+// This WebIDL file will be used to automatically generate WIT,
+// using the `webidl2wit` tool.
+//
+// see: https://github.com/MendyBerger/webidl2wit/tree/main
+
+// WebIDL enums are converted as standard WIT enums
+enum BookGenre {
+  "fiction",
+  "non-fiction",
+  "mystery",
+  "fantasy",
+  "science-fiction",
+  "biography"
+};
+
+// WebIDL typedefs are converted into WIT type aliases
+typedef BookTitle DOMString;
+
+// WebIDL dictionaries are turned into WIT structs
+dictionary Book {
+  required BookTitle title;
+  required DOMString author;
+  BookGenre genre;
+  unsigned short pages;
+};
+
+// WebIDL Callbakcs are turned into functions
+callback FilterCallback = boolean (Book book);
+
+// WebIDL interfaces become WIT resources
+interface Library {
+  readonly attribute unsigned long totalBooks;
+
+  // Add a Book
+  boolean addBook(Book book);
+
+  // Remove a book
+  boolean removeBook(DOMString title);
+
+  // Retrieve a book by title (if present)
+  Book? getBookByTitle(DOMString title);
+
+  // List all the books
+  sequence<Book>? listBooks();
+};
+
+interface AdvancedLibrary : Library {
+  FrozenArray<Book> filterBooks(FilterCallback callback);
+};
+
+partial interface Library {
+  readonly attribute LibraryName libraryName;
+
+  // Rename this library
+  void renameLibrary(LibraryName newName);
+};
+
+typedef LibraryName DOMString;
+
+// WebIDL interfaces become WIT resources
+interface BookManager {
+  readonly attribute Library library;
+
+  // Initialize a library
+  void initLibrary(LibraryName name);
+};
