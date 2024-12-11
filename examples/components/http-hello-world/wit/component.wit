@@ -1,0 +1,5 @@
+package example:http-hello-world;
+
+world component {
+    export wasi:http/incoming-handler@0.2.2;
+}
