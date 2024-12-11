@@ -100,13 +100,13 @@ One way fo doing this is *downloading* the WIT from Bytecode Alliance repositori
 Since WASI is a growing standard, and well integrated we can generally follow the error messages:
 
 ```console
-wkg get wasi:http@0.2.0
-wkg get wasi:random@0.2.0
-wkg get wasi:cli@0.2.0
-wkg get wasi:filesystem@0.2.0
-wkg get wasi:sockets@0.2.0
-wkg get wasi:io@0.2.0
-wkg get wasi:clocks@0.2.0
+wkg get wasi:http@0.2.2
+wkg get wasi:random@0.2.2
+wkg get wasi:cli@0.2.2
+wkg get wasi:filesystem@0.2.2
+wkg get wasi:sockets@0.2.2
+wkg get wasi:io@0.2.2
+wkg get wasi:clocks@0.2.2
 ```
 
 > [!NOTE]

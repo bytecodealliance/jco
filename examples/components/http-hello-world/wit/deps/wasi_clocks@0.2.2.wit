@@ -1,4 +1,4 @@
-package wasi:clocks@0.2.0;
+package wasi:clocks@0.2.2;
 
 /// WASI Monotonic Clock is a clock API intended to let users measure elapsed
 /// time.
@@ -8,36 +8,41 @@ package wasi:clocks@0.2.0;
 ///
 /// A monotonic clock is a clock which has an unspecified initial value, and
 /// successive reads of the clock will produce non-decreasing values.
-///
-/// It is intended for measuring elapsed time.
+@since(version = 0.2.0)
 interface monotonic-clock {
-  use wasi:io/poll@0.2.0.{pollable};
+  @since(version = 0.2.0)
+  use wasi:io/poll@0.2.2.{pollable};
 
   /// An instant in time, in nanoseconds. An instant is relative to an
   /// unspecified initial value, and can only be compared to instances from
   /// the same monotonic-clock.
+  @since(version = 0.2.0)
   type instant = u64;
 
   /// A duration of time, in nanoseconds.
+  @since(version = 0.2.0)
   type duration = u64;
 
   /// Read the current value of the clock.
   ///
   /// The clock is monotonic, therefore calling this function repeatedly will
   /// produce a sequence of non-decreasing values.
+  @since(version = 0.2.0)
   now: func() -> instant;
 
   /// Query the resolution of the clock. Returns the duration of time
   /// corresponding to a clock tick.
+  @since(version = 0.2.0)
   resolution: func() -> duration;
 
   /// Create a `pollable` which will resolve once the specified instant
-  /// occured.
+  /// has occurred.
+  @since(version = 0.2.0)
   subscribe-instant: func(when: instant) -> pollable;
 
-  /// Create a `pollable` which will resolve once the given duration has
-  /// elapsed, starting at the time at which this function was called.
-  /// occured.
+  /// Create a `pollable` that will resolve after the specified duration has
+  /// elapsed from the time this function is invoked.
+  @since(version = 0.2.0)
   subscribe-duration: func(when: duration) -> pollable;
 }
 
@@ -55,8 +60,10 @@ interface monotonic-clock {
 /// monotonic, making it unsuitable for measuring elapsed time.
 ///
 /// It is intended for reporting the current date and time for humans.
+@since(version = 0.2.0)
 interface wall-clock {
   /// A time and date in seconds plus nanoseconds.
+  @since(version = 0.2.0)
   record datetime {
     seconds: u64,
     nanoseconds: u32,
@@ -75,16 +82,22 @@ interface wall-clock {
   ///
   /// [POSIX's Seconds Since the Epoch]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xbd_chap04.html#tag_21_04_16
   /// [Unix Time]: https://en.wikipedia.org/wiki/Unix_time
+  @since(version = 0.2.0)
   now: func() -> datetime;
 
   /// Query the resolution of the clock.
   ///
   /// The nanoseconds field of the output is always less than 1000000000.
+  @since(version = 0.2.0)
   resolution: func() -> datetime;
 }
 
+@since(version = 0.2.0)
 world imports {
-  import wasi:io/poll@0.2.0;
+  @since(version = 0.2.0)
+  import wasi:io/poll@0.2.2;
+  @since(version = 0.2.0)
   import monotonic-clock;
+  @since(version = 0.2.0)
   import wall-clock;
 }
