@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "generate:wit": "webidl2wit book-library.webidl",
-    "generate:types": "jco types wit",
-    "build": "jco componentize book-library.js --wit wit/ --world-name revup --out book-library.incomplete.wasm --disable all",
+    "build": "jco componentize book-library.js --wit wit/ --world-name revup --out book-library.wasm --disable all",
     "all": "npm run generate:wit && npm run generate:types && npm run build"
   },
   "devDependencies": {
