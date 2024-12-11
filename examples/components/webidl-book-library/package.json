@@ -1,0 +1,15 @@
+{
+  "name": "webidl-book-library-wasm",
+  "description": "Example WebAssembly component showcasing WIT interfaces auto-generated from WebIDL",
+  "type": "module",
+  "scripts": {
+    "generate:wit": "webidl2wit --webidl-interface global-book-library -i book-library.webidl -o wit/deps/book-library.wit",
+    "generate:types": "jco types wit -o dist/generated/types",
+    "build": "jco componentize librarian.js --wit wit/ --world-name component --out librarian.wasm --disable all",
+    "transpile": "jco transpile librarian.wasm -o dist/transpiled",
+    "all": "npm run generate:wit && npm run generate:types && npm run build && npm run transpile"
+  },
+  "devDependencies": {
+    "@bytecodealliance/jco": "1.10.2"
+  }
+}
