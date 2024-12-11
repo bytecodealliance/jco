@@ -3,7 +3,6 @@
   "description": "Simple codebase for reversing a string via WebAssembly with jco",
   "type": "module",
   "scripts": {
-    "generate:types": "jco types wit/ -o types/",
     "build": "jco componentize http-hello-world.js --wit wit/ --world-name component --out http-hello-world.wasm",
     "serve": "jco serve http-hello-world.wasm",
     "all": "npm run build"

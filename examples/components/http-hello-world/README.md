@@ -120,40 +120,6 @@ mkdir wit/deps
 mv *.wit wit/deps
 ```
 
-### Typescript support
-
-While this component is written completely in Javascript with no typing, Typescript support can be easily
-added by using the `jco types` subcommand, by providing the WIT directory as input (`wit/`), now that we
-have the required WIT dependencies in place.
-
-
-Running `jco types` (possible also via the node script) should look similar to the following:
-
-```
-jco types wit/ -o types/
-
-
-  Generated Type Files:
-
- - types/interfaces/wasi-clocks-monotonic-clock.d.ts  1.15 KiB
- - types/interfaces/wasi-http-incoming-handler.d.ts   0.88 KiB
- - types/interfaces/wasi-http-types.d.ts              24.1 KiB
- - types/interfaces/wasi-io-error.d.ts                0.41 KiB
- - types/interfaces/wasi-io-poll.d.ts                 1.33 KiB
- - types/interfaces/wasi-io-streams.d.ts              8.91 KiB
- - types/wit.d.ts                                     0.47 KiB
-```
-
-Note that while we're generating types to match the WIT interfaces, the *implementations* of those interfaces
-are not bound yet, and likely will not be until runtime.
-
-The generated types can serve as a good reference for pure JS code.
-
-> [!NOTE]
-> To get a feel for what the generated types refer to, see the [`wasi:http` WIT interface repository][wasi-http].
-
-[wkg]: https://github.com/bytecodealliance/wasm-pkg-tools
-
 ## Building our component
 
 To turn our JS into a WebAssembly component, we can use `jco componentize`:
