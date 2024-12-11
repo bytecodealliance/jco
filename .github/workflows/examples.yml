@@ -26,6 +26,8 @@ jobs:
           - name: string-reverse-upper
             dir: ./examples/components/string-reverse-upper
             is-composed: true
+          - name: webidl-book-library
+            dir: ./examples/components/webidl-book-library
     steps:
       - uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # 4.2.0
         with:
@@ -36,6 +38,10 @@ jobs:
         with:
           node-version: ${{ matrix.node.version }}
           cache: 'npm'
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: webidl2wit-cli
 
       - name: install wac
         if: ${{ matrix.project.is-composed }}
