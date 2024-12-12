@@ -29,6 +29,9 @@ struct TsBindgen {
     import_object: Source,
     /// TypeScript definitions which will become the export object
     export_object: Source,
+
+    /// Whether or not the types should be generated for a guest module
+    guest: bool,
 }
 
 /// Used to generate a `*.d.ts` file for each imported and exported interface for
@@ -59,6 +62,7 @@ pub fn ts_bindgen(
         local_names: LocalNames::default(),
         import_object: Source::default(),
         export_object: Source::default(),
+        guest: opts.guest,
     };
 
     let world = &resolve.worlds[id];
@@ -520,9 +524,15 @@ impl TsBindgen {
             return local_name;
         }
 
+        let module_or_namespace = if self.guest {
+            format!("declare module '{id_name}' {{")
+        } else {
+            format!("export namespace {camel} {{")
+        };
+
         let mut gen = self.ts_interface(resolve, false);
 
-        uwriteln!(gen.src, "export namespace {camel} {{");
+        uwriteln!(gen.src, "{module_or_namespace}");
         for (_, func) in resolve.interfaces[id].functions.iter() {
             // Ensure that the function  the world item for stability guarantees and exclude if they do not match
             if !feature_gate_allowed(resolve, package, &func.stability, &func.name)

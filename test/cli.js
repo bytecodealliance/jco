@@ -3,6 +3,7 @@ import { execArgv, env } from "node:process";
 import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import {
   mkdir,
+  readdir,
   readFile,
   rm,
   symlink,
@@ -183,6 +184,8 @@ export async function cliTest(_fixtures) {
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/flavorful.d.ts`, "utf8");
       ok(source.includes("export const test"));
+      const iface = await readFile(`${outDir}/interfaces/test-flavorful-test.d.ts`, "utf8");
+      ok(iface.includes("export namespace TestFlavorfulTest {"));
     });
 
     test("Type generation (specific features)", async () => {
@@ -241,6 +244,21 @@ export async function cliTest(_fixtures) {
       ok(source.includes("export function a(): void;"));
       ok(source.includes("export function b(): void;"));
       ok(source.includes("export function c(): void;"));
+    });
+
+    test("Type generation (declare imports)", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "guest-types",
+        "test/fixtures/wit",
+        "--world-name",
+        "test:flavorful/flavorful",
+        "-o",
+        outDir
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/interfaces/test-flavorful-test.d.ts`, "utf8");
+      ok(source.includes("declare module 'test:flavorful/test' {"));
     });
 
     test("TypeScript naming checks", async () => {
