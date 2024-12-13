@@ -58,6 +58,9 @@ world js-component-bindgen {
     /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
     /// These exports can break typescript builds.
     no-namespaced-exports: option<bool>,
+    
+    /// Whether to generate module declarations like `declare module "local:package/foo" {...`.
+    guest: option<bool>,
 
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
@@ -91,6 +94,8 @@ world js-component-bindgen {
     map: option<maps>,
     /// Features that should be enabled as part of feature gating
     features: option<enabled-feature-set>,
+    /// Whether to generate module declarations like `declare module "local:package/foo" {...`.
+    guest: option<bool>,
   }
 
   enum export-type {

@@ -60,6 +60,7 @@ Commands:
   componentize [options] <js-source>    Create a component from a JavaScript module
   transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
   types [options] <wit-path>            Generate types for the given WIT
+  guest-types [options] <wit-path>      (experimental) Generate guest types for the given WIT
   run [options] <command> [args...]     Run a WASI Command component
   serve [options] <server> [args...]    Serve a WASI HTTP component
   opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations

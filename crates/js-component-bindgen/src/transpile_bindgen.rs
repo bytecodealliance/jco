@@ -68,6 +68,8 @@ pub struct TranspileOpts {
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
     pub multi_memory: bool,
+    /// Whether to generate types for a guest module using module declarations.
+    pub guest: bool,
 }
 
 #[derive(Default, Clone, Debug)]

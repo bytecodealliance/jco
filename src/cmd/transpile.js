@@ -19,6 +19,11 @@ export async function types (witPath, opts) {
   await writeFiles(files, opts.quiet ? false : 'Generated Type Files');
 }
 
+export async function guestTypes (witPath, opts) {
+  const files = await typesComponent(witPath, { ...opts, guest: true });
+  await writeFiles(files, opts.quiet ? false : 'Generated Guest Typescript Definition Files (.d.ts)');
+}
+
 /**
  * @param {string} witPath
  * @param {{
@@ -28,6 +33,7 @@ export async function types (witPath, opts) {
  *   tlaCompat?: bool,
  *   outDir?: string,
  *   features?: string[] | 'all',
+ *   guest?: bool,
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
@@ -57,6 +63,7 @@ export async function typesComponent (witPath, opts) {
     tlaCompat: opts.tlaCompat ?? false,
     world: opts.worldName,
     features,
+    guest: opts.guest ?? false,
   }).map(([name, file]) => [`${outDir}${name}`, file]));
 }
 

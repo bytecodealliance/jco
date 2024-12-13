@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { program, Option } from 'commander';
 import { opt } from './cmd/opt.js';
-import { transpile, types } from './cmd/transpile.js';
+import { transpile, types, guestTypes } from './cmd/transpile.js';
 import { run as runCmd, serve as serveCmd } from './cmd/run.js';
 import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
 import { componentize } from './cmd/componentize.js';
@@ -80,6 +80,18 @@ program.command('types')
   .option('--feature <feature>', 'enable one specific WIT feature (repeatable)', collectOptions, [])
   .option('--all-features', 'enable all features')
   .action(asyncAction(types));
+
+program.command('guest-types')
+  .description('(experimental) Generate guest types for the given WIT')
+  .usage('<wit-path> -o <out-dir>')
+  .argument('<wit-path>', 'path to a WIT file or directory')
+  .option('--name <name>', 'custom output name')
+  .option('-n, --world-name <world>', 'WIT world to generate types for')
+  .requiredOption('-o, --out-dir <out-dir>', 'output directory')
+  .option('-q, --quiet', 'disable output summary')
+  .option('--feature <feature>', 'enable one specific WIT feature (repeatable)', collectOptions, [])
+  .option('--all-features', 'enable all features')
+  .action(asyncAction(guestTypes));
 
 program.command('run')
   .description('Run a WASI Command component')
