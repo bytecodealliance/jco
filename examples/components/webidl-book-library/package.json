@@ -3,7 +3,7 @@
   "description": "Example WebAssembly component showcasing WIT interfaces auto-generated from WebIDL",
   "type": "module",
   "scripts": {
-    "generate:wit": "webidl2wit book-library.webidl",
+    "generate:wit": "webidl2wit book-library.webidl -o wit/book-library.wit",
     "build": "jco componentize book-library.js --wit wit/ --world-name revup --out book-library.wasm --disable all",
     "all": "npm run generate:wit && npm run generate:types && npm run build"
   },

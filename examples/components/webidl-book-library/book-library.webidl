@@ -24,9 +24,6 @@ dictionary Book {
   unsigned short pages;
 };
 
-// WebIDL Callbakcs are turned into functions
-callback FilterCallback = boolean (Book book);
-
 // WebIDL interfaces become WIT resources
 interface Library {
   readonly attribute unsigned long totalBooks;
@@ -45,7 +42,7 @@ interface Library {
 };
 
 interface AdvancedLibrary : Library {
-  FrozenArray<Book> filterBooks(FilterCallback callback);
+  FrozenArray<Book> filterBooks(DOMString name);
 };
 
 partial interface Library {
