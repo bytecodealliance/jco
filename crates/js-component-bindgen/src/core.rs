@@ -188,7 +188,9 @@ impl<'a> Translation<'a> {
 
     /// Returns the exports of this module, which are not modified by
     /// augmentation.
-    pub fn exports(&self) -> &IndexMap<String, EntityIndex> {
+    pub fn exports(
+        &self,
+    ) -> &wasmtime_environ::wasmparser::collections::IndexMap<String, EntityIndex> {
         match self {
             Translation::Normal(translation) => &translation.module.exports,
             Translation::Augmented { original, .. } => &original.module.exports,
@@ -546,7 +548,7 @@ macro_rules! define_visit {
 impl<'a> VisitOperator<'a> for CollectMemOps<'_, 'a> {
     type Output = ();
 
-    wasmparser::for_each_visit_operator!(define_visit);
+    wasmparser::for_each_operator!(define_visit);
 }
 
 impl AugmentedOp {
@@ -772,7 +774,7 @@ macro_rules! define_translate {
 impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
     type Output = ();
 
-    wasmparser::for_each_visit_operator!(define_translate);
+    wasmparser::for_each_operator!(define_translate);
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]

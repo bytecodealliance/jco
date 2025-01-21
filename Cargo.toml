@@ -41,19 +41,19 @@ log = "0.4.22"
 semver = "1.0.25"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 structopt = "0.3.26"
-wasm-encoder = "0.221.2"
-wasm-metadata = "0.221.2"
-wasmparser = "0.221.2"
-wasmprinter = "0.221.2"
+wasm-encoder = "0.220.0"
+wasm-metadata = "0.220.0"
+wasmparser = "0.220.0"
+wasmprinter = "0.220.0"
 wasmtime-environ = { version = "29.0.0", features = [
     "component-model",
     "compile",
 ] }
-wat = "1.221.2"
+wat = "1.220.0"
 wit-bindgen = "0.36.0"
 wit-bindgen-core = "0.36.0"
-wit-component = { version = "0.221.2", features = ["dummy-module"] }
-wit-parser = "=0.221.2"
+wit-component = { version = "0.220.0", features = ["dummy-module"] }
+wit-parser = "0.220.0"
 xshell = "0.2.6"
 
 [dev-dependencies]
