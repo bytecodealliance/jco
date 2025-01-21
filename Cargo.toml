@@ -34,26 +34,26 @@ rpath = false
 strip = true
 
 [workspace.dependencies]
-anyhow = "1.0.91"
+anyhow = "1.0.95"
 base64 = "0.22.1"
 heck = "0.5.0"
 log = "0.4.22"
-semver = "1.0.23"
+semver = "1.0.25"
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
 structopt = "0.3.26"
-wasm-encoder = "0.219.1"
-wasm-metadata = "0.219.1"
-wasmparser = "0.219.1"
-wasmprinter = "0.219.1"
-wasmtime-environ = { version = "27.0.0", features = [
+wasm-encoder = "0.221.2"
+wasm-metadata = "0.221.2"
+wasmparser = "0.221.2"
+wasmprinter = "0.221.2"
+wasmtime-environ = { version = "29.0.0", features = [
     "component-model",
     "compile",
 ] }
-wat = "1.218.0"
-wit-bindgen = "0.34.0"
-wit-bindgen-core = "0.34.0"
-wit-component = { version = "0.219.1", features = ["dummy-module"] }
-wit-parser = "0.219.1"
+wat = "1.221.2"
+wit-bindgen = "0.36.0"
+wit-bindgen-core = "0.36.0"
+wit-component = { version = "0.221.2", features = ["dummy-module"] }
+wit-parser = "=0.221.2"
 xshell = "0.2.6"
 
 [dev-dependencies]
