@@ -1,6 +1,6 @@
 export namespace WasiFilesystemPreopens {
   /**
-   * Return the set of preopened directories, and their path.
+   * Return the set of preopened directories, and their paths.
    */
   export function getDirectories(): Array<[Descriptor, string]>;
 }
