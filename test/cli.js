@@ -478,7 +478,7 @@ export async function cliTest(_fixtures) {
           [
             "processed-by",
             [
-              ["wit-component", "0.219.1"],
+              ["wit-component", "0.220.0"],
               ["dummy-gen", "test"],
             ],
           ],
