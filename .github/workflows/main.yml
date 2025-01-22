@@ -40,7 +40,7 @@ jobs:
     strategy:
       matrix:
         os: [
-            ubuntu-latest,
+            ubuntu-22.04, # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
             windows-latest,
             macos-latest
         ]
@@ -48,7 +48,7 @@ jobs:
         include:
           - os: windows-latest
             weval-bin-path: .weval-bin/weval.exe
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             weval-bin-path: .weval-bin/weval
           - os: macos-latest
             weval-bin-path: .weval-bin/weval

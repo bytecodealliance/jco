@@ -15,6 +15,8 @@ const TEST_IGNORE: &[&str] = &[
     // Don't currently support WASI config store.
     "config_get",
     "cli_serve_config",
+    // TODO: Support these tests
+    "cli_multiple_preopens",
 ];
 
 // we don't currently support these subsystems, but if someone wants to work on them we

@@ -80,7 +80,6 @@ pub fn generate_types(
 /// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
 pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
-    use wasmparser::Validator;
     use wasmtime_environ::component::{Component, Translator};
 
     let name = opts.name.clone();
@@ -116,7 +115,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
     // that need to be executed to instantiate a component.
     let scope = ScopeVec::new();
     let tunables = Tunables::default_u32();
-    let mut validator = Validator::default();
+    let mut validator = wasmtime_environ::wasmparser::Validator::default();
     let mut types = ComponentTypesBuilder::new(&validator);
 
     let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)

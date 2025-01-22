@@ -188,7 +188,9 @@ impl<'a> Translation<'a> {
 
     /// Returns the exports of this module, which are not modified by
     /// augmentation.
-    pub fn exports(&self) -> &IndexMap<String, EntityIndex> {
+    pub fn exports(
+        &self,
+    ) -> &wasmtime_environ::wasmparser::collections::IndexMap<String, EntityIndex> {
         match self {
             Translation::Normal(translation) => &translation.module.exports,
             Translation::Augmented { original, .. } => &original.module.exports,
@@ -523,6 +525,7 @@ macro_rules! define_visit {
     (augment $self:ident I32Store16 $memarg:ident) => {
         $self.0.augment_op($memarg.memory, AugmentedOp::I32Store16);
     };
+
     (augment $self:ident MemorySize $mem:ident) => {
         $self.0.augment_op($mem, AugmentedOp::MemorySize);
     };
