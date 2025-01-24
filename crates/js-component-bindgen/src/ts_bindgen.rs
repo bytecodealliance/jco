@@ -43,6 +43,7 @@ struct TsInterface<'a> {
     src: Source,
     is_root: bool,
     resolve: &'a Resolve,
+    has_constructor: bool,
     needs_ty_option: bool,
     needs_ty_result: bool,
     local_names: LocalNames,
@@ -140,7 +141,7 @@ pub fn ts_bindgen(
                         continue;
                     }
 
-                    let mut gen = bindgen.ts_interface(resolve, true);
+                    let mut gen = TsInterface::new(resolve, true);
                     gen.docs(&ty.docs);
                     match &ty.kind {
                         TypeDefKind::Record(record) => {
@@ -418,7 +419,7 @@ impl TsBindgen {
         _files: &mut Files,
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
-        let mut gen = self.ts_interface(resolve, false);
+        let mut gen = TsInterface::new(resolve, false);
         gen.ts_func(func, true, false);
         let src = gen.finish();
         self.import_object.push_str(&src);
@@ -462,7 +463,7 @@ impl TsBindgen {
         _files: &mut Files,
         declaration: bool,
     ) {
-        let mut gen = self.ts_interface(resolve, false);
+        let mut gen = TsInterface::new(resolve, false);
         for (_, func) in funcs {
             gen.ts_func(func, false, declaration);
         }
@@ -530,7 +531,7 @@ impl TsBindgen {
             format!("export namespace {camel} {{")
         };
 
-        let mut gen = self.ts_interface(resolve, false);
+        let mut gen = TsInterface::new(resolve, false);
 
         uwriteln!(gen.src, "{module_or_namespace}");
         for (_, func) in resolve.interfaces[id].functions.iter() {
@@ -566,18 +567,6 @@ impl TsBindgen {
 
         local_name
     }
-
-    fn ts_interface<'b>(&'b mut self, resolve: &'b Resolve, is_root: bool) -> TsInterface<'b> {
-        TsInterface {
-            is_root,
-            src: Source::default(),
-            resources: BTreeMap::new(),
-            local_names: LocalNames::default(),
-            resolve,
-            needs_ty_option: false,
-            needs_ty_result: false,
-        }
-    }
 }
 
 impl<'a> TsInterface<'a> {
@@ -588,6 +577,7 @@ impl<'a> TsInterface<'a> {
             resources: BTreeMap::new(),
             local_names: LocalNames::default(),
             resolve,
+            has_constructor: false,
             needs_ty_option: false,
             needs_ty_result: false,
         }
@@ -600,6 +590,12 @@ impl<'a> TsInterface<'a> {
                 "\nexport class {} {{",
                 resource.to_upper_camel_case()
             );
+            if !source.has_constructor {
+                uwriteln!(self.src, "/**");
+                uwriteln!(self.src, " * This type does not have a public constructor.");
+                uwriteln!(self.src, " */");
+                uwriteln!(self.src, "private constructor();");
+            }
             self.src.push_str(&source.src);
             uwriteln!(self.src, "}}")
         }
@@ -793,7 +789,10 @@ impl<'a> TsInterface<'a> {
                         iface.src.push_str(&format!("static '{out_name}'"))
                     }
                 }
-                FunctionKind::Constructor(_) => iface.src.push_str("constructor"),
+                FunctionKind::Constructor(_) => {
+                    iface.has_constructor = true;
+                    iface.src.push_str("constructor");
+                }
             }
         } else if is_js_identifier(&out_name) {
             iface.src.push_str(&out_name);
