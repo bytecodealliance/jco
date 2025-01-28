@@ -68,41 +68,43 @@ export async function asyncTest(_fixtures) {
       ok(source.toString().includes("export { test"));
     });
 
-    test("Transpile async (NodeJS, JSPI)", async () => {
-      const { instance, cleanup, component } = await setupAsyncTest({
-        asyncMode: "jspi",
-        component: {
-          name: "async_call",
-          path: resolve("test/fixtures/components/async_call.component.wasm"),
-          imports: {
-            'something:test/test-interface': {
-              callAsync: async () => "called async",
-              callSync: () => "called sync",
+    if (typeof WebAssembly?.Suspending === "function") {
+      test("Transpile async (NodeJS, JSPI)", async () => {
+        const { instance, cleanup, component } = await setupAsyncTest({
+          asyncMode: "jspi",
+          component: {
+            name: "async_call",
+            path: resolve("test/fixtures/components/async_call.component.wasm"),
+            imports: {
+              'something:test/test-interface': {
+                callAsync: async () => "called async",
+                callSync: () => "called sync",
+              },
             },
           },
-        },
-        jco: {
-          transpile: {
-            extraArgs: {
-              asyncImports: [
-                "something:test/test-interface#call-async",
-              ],
-              asyncExports: [
-                "run-async",
-              ],
+          jco: {
+            transpile: {
+              extraArgs: {
+                asyncImports: [
+                  "something:test/test-interface#call-async",
+                ],
+                asyncExports: [
+                  "run-async",
+                ],
+              },
             },
           },
-        },
+        });
+
+        strictEqual(instance.runSync instanceof AsyncFunction, false, "runSync() should be a sync function");
+        strictEqual(instance.runAsync instanceof AsyncFunction, true, "runAsync() should be an async function");
+
+        strictEqual(instance.runSync(), "called sync");
+        strictEqual(await instance.runAsync(), "called async");
+
+        await cleanup();
       });
-
-      strictEqual(instance.runSync instanceof AsyncFunction, false, "runSync() should be a sync function");
-      strictEqual(instance.runAsync instanceof AsyncFunction, true, "runAsync() should be an async function");
-
-      strictEqual(instance.runSync(), "called sync");
-      strictEqual(await instance.runAsync(), "called async");
-
-      await cleanup();
-    });
+    }
 
     test("Transpile async (NodeJS, Asyncify)", async () => {
       const { instance, cleanup } = await setupAsyncTest({
