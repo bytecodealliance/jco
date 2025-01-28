@@ -58,13 +58,31 @@ world js-component-bindgen {
     /// Whether to generate namespaced exports like `foo as "local:package/foo"`.
     /// These exports can break typescript builds.
     no-namespaced-exports: option<bool>,
-    
+
     /// Whether to generate module declarations like `declare module "local:package/foo" {...`.
     guest: option<bool>,
 
     /// Whether to output core Wasm utilizing multi-memory or to polyfill
     /// this handling.
     multi-memory: option<bool>,
+
+    /// Configure whether to use `async` imports or exports with
+    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    async-mode: option<async-mode>,
+  }
+
+  record async-imports-exports {
+    imports: list<string>,
+    exports: list<string>,
+  }
+
+  variant async-mode {
+    /// default to sync mode
+    sync,
+    /// use JavaScript Promise Integration (JSPI)
+    jspi(async-imports-exports),
+    /// use Asyncify
+    asyncify(async-imports-exports),
   }
 
   variant wit {
@@ -96,6 +114,9 @@ world js-component-bindgen {
     features: option<enabled-feature-set>,
     /// Whether to generate module declarations like `declare module "local:package/foo" {...`.
     guest: option<bool>,
+    /// Configure whether to use `async` imports or exports with
+    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    async-mode: option<async-mode>,
   }
 
   enum export-type {
