@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!--
+
+This page tests a component with the following WIT interface:
+
+```
+package something:test;
+
+interface test-interface {
+  call-async: func() -> string;
+  call-sync: func() -> string;
+}
+
+world component {
+  import test-interface;
+
+  export run-async: func() -> string;
+  export run-sync: func() -> string;
+}
+```
+
+The component must be transpiled with async (JSPI/Asyncify) enabled, and is loaded by this page,
+then executed by the browser with an async function.
+-->
+<!-- The script below loads and instantiates the module -->
+<script type="module">
+ // OK/Error states for the test function
+ // (the test harness should check for body contents)
+ function ok(msg) { document.body.innerHTML = typeof msg === "object" ? JSON.stringify(msg) : `${err}`; }
+ function err(err) { document.body.innerHTML = typeof err === "object" ? JSON.stringify(err) : `${err}`; }
+
+ // Prefix used in URL hash to direct the backend test server to serve up
+ // a specific (transpiled) JS lib
+ const HASH_PREFIX_DYNAMIC_COMPONENT = 'transpiled:'
+
+ ok({ responseText: "after hash" });
+
+ const testName = window.location.hash.slice(1);
+ document.body.innerHTML = '<h1>Running</h1>';
+
+ if (testName.startsWith(HASH_PREFIX_DYNAMIC_COMPONENT)) {
+   // We expect to be called with a hash prefix noting the path to the component we should load
+   await runTranspiledModuleTest(testName.slice(HASH_PREFIX_DYNAMIC_COMPONENT.length));
+ } else {
+   err(`Unknown test case "${testName}"`);
+ }
+
+ async function runTranspiledModuleTest(moduleName) {
+   // Run tests on components in the tmpdir directory (as reflected by the backing web server)
+   const testModule = `/transpiled/${moduleName}`;
+   try {
+     /* Load the module */
+     const mod = await import(testModule);
+
+     // Instantiate the module, with the WASI browser shim
+     let instantiated;
+     try {
+       instantiated = await mod.instantiate(undefined, {
+         "something:test/test-interface": {
+           callAsync: async () => {
+             return new Promise(resolve => setTimeout(resolve("callAsync"), 2000));
+           },
+           callSync: () => {
+             return "callSync";
+           }
+         },
+       });
+     } catch (e) {
+       err(`ERROR while instantiating [${testModule}]:\n\n${e}\n${e.stack}`);
+       return;
+     }
+
+     // Ensure the module conforms to `wasi:http/incoming-handler#handle`, or at least has a `handle` function
+     const fn = instantiated?.runAsync;
+     if (!fn) {
+       throw new Error(`Expected test module "${testModule}" to export a "runAsync" function. It only contains keys [${Object.keys(instantiated)}]`);
+     }
+
+     // Before running the function, we start off a separate task that will count every 50ms
+     // which we expect to run (without being blocked on WebAssembly)
+     let count = 0;
+     const wake = setInterval(() => {
+       count += 1;
+     }, 50);
+
+     // Run the exported function (which will call the async host import above),
+     // get response
+     const responseText = await fn();
+
+     if (count <= 20) {
+       err(`ERROR setTimeout did not run unimpeded, only completed [${count}] 50ms increments (expected ~20)`);
+     }
+
+     ok({ responseText });
+   } catch (e) {
+     err(`ERROR while running [${testModule}]:\n\n${e}\n${e.stack}`);
+   }
+ }
+
+</script>

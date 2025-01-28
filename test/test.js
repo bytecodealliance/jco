@@ -25,6 +25,8 @@ const componentFixtures = env.COMPONENT_FIXTURES
       )
       .map((f) => f.name);
 
+import { asyncBrowserTest } from './async.browser.js';
+import { asyncTest } from './async.js';
 import { browserTest } from './browser.js';
 import { codegenTest } from './codegen.js';
 import { runtimeTest } from './runtime.js';
@@ -43,6 +45,8 @@ await commandsTest();
 await apiTest(componentFixtures);
 await cliTest(componentFixtures);
 await witTest();
+await asyncTest();
+await asyncBrowserTest();
 
 if (platform !== 'win32')
   await browserTest();

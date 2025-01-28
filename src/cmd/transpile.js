@@ -14,6 +14,22 @@ import { platform } from 'node:process';
 
 const isWindows = platform === 'win32';
 
+const DEFAULT_ASYNC_IMPORTS = [
+  "wasi:io/poll#poll",
+  "wasi:io/poll#[method]pollable.block",
+  "wasi:io/streams#[method]input-stream.blocking-read",
+  "wasi:io/streams#[method]input-stream.blocking-skip",
+  "wasi:io/streams#[method]output-stream.blocking-flush",
+  "wasi:io/streams#[method]output-stream.blocking-write-and-flush",
+  "wasi:io/streams#[method]output-stream.blocking-write-zeroes-and-flush",
+  "wasi:io/streams#[method]output-stream.blocking-splice",
+];
+
+const DEFAULT_ASYNC_EXPORTS = [
+  "wasi:cli/run#run",
+  "wasi:http/incoming-handler#handle",
+];
+
 export async function types (witPath, opts) {
   const files = await typesComponent(witPath, opts);
   await writeFiles(files, opts.quiet ? false : 'Generated Type Files');
@@ -31,6 +47,9 @@ export async function guestTypes (witPath, opts) {
  *   worldName?: string,
  *   instantiation?: 'async' | 'sync',
  *   tlaCompat?: bool,
+ *   asyncMode?: string,
+ *   asyncImports?: string[],
+ *   asyncExports?: string[],
  *   outDir?: string,
  *   features?: string[] | 'all',
  *   guest?: bool,
@@ -57,6 +76,21 @@ export async function typesComponent (witPath, opts) {
     features = { tag: 'list', val: opts.feature };
   }
 
+  if (opts.defaultAsyncImports)
+    opts.asyncImports = DEFAULT_ASYNC_IMPORTS.concat(opts.asyncImports || []);
+  if (opts.defaultAsyncExports)
+    opts.asyncExports = DEFAULT_ASYNC_EXPORTS.concat(opts.asyncExports || []);
+
+  const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync' ?
+    null :
+    {
+      tag: opts.asyncMode,
+      val: {
+        imports: opts.asyncImports || [],
+        exports: opts.asyncExports || [],
+      },
+    };
+
   return Object.fromEntries(generateTypes(name, {
     wit: { tag: 'path', val: (isWindows ? '//?/' : '') + resolve(witPath) },
     instantiation,
@@ -64,6 +98,7 @@ export async function typesComponent (witPath, opts) {
     world: opts.worldName,
     features,
     guest: opts.guest ?? false,
+    asyncMode,
   }).map(([name, file]) => [`${outDir}${name}`, file]));
 }
 
@@ -105,6 +140,12 @@ export async function transpile (componentPath, opts, program) {
     opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
   if (opts.map)
     opts.map = Object.fromEntries(opts.map.map(mapping => mapping.split('=')));
+
+  if (opts.defaultAsyncImports)
+    opts.asyncImports = DEFAULT_ASYNC_IMPORTS.concat(opts.asyncImports || []);
+  if (opts.defaultAsyncExports)
+    opts.asyncExports = DEFAULT_ASYNC_EXPORTS.concat(opts.asyncExports || []);
+
   const { files } = await transpileComponent(component, opts);
   await writeFiles(files, opts.quiet ? false : 'Transpiled JS Component Files');
 }
@@ -133,6 +174,9 @@ async function wasm2Js (source) {
  *   instantiation?: 'async' | 'sync',
  *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
  *   map?: Record<string, string>,
+ *   asyncMode?: string,
+ *   asyncImports?: string[],
+ *   asyncExports?: string[],
  *   validLiftingOptimization?: bool,
  *   tracing?: bool,
  *   nodejsCompat?: bool,
@@ -141,11 +185,13 @@ async function wasm2Js (source) {
  *   js?: bool,
  *   minify?: bool,
  *   optimize?: bool,
+ *   preoptimized?: bool,
  *   namespacedExports?: bool,
  *   outDir?: string,
  *   multiMemory?: bool,
  *   experimentalIdlImports?: bool,
  *   optArgs?: string[],
+ *   wasmOptBinPath?: string,
  * }} opts
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
@@ -155,20 +201,27 @@ export async function transpileComponent (component, opts = {}) {
 
   let spinner;
   const showSpinner = getShowSpinner();
-  if (opts.optimize) {
+
+  // We must perform optimization if it's requested, or if the component has *not*
+  // already been built with already optimized code before wizer init, if using asyncify.
+  //
+  // Preoptimized is generally used internally (users cannot pass it in as a CLI option),
+  // but they may pass in asyncMode
+  if (opts.optimize || !opts.preoptimized && opts.asyncMode === 'asyncify') {
     if (showSpinner) setShowSpinner(true);
     ({ component } = await optimizeComponent(component, opts));
   }
 
   if (opts.wasiShim !== false) {
+    const maybeAsync = ''; // TODO: !opts.asyncMode || opts.asyncMode === 'sync' ? '' : 'async/';
     opts.map = Object.assign({
-      'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
-      'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
-      'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
-      'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
-      'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
-      'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
-      'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
+      'wasi:cli/*': `@bytecodealliance/preview2-shim/${maybeAsync}cli#*`,
+      'wasi:clocks/*': `@bytecodealliance/preview2-shim/${maybeAsync}clocks#*`,
+      'wasi:filesystem/*': `@bytecodealliance/preview2-shim/${maybeAsync}filesystem#*`,
+      'wasi:http/*': `@bytecodealliance/preview2-shim/${maybeAsync}http#*`,
+      'wasi:io/*': `@bytecodealliance/preview2-shim/${maybeAsync}io#*`,
+      'wasi:random/*': `@bytecodealliance/preview2-shim/${maybeAsync}random#*`,
+      'wasi:sockets/*': `@bytecodealliance/preview2-shim/${maybeAsync}sockets#*`,
     }, opts.map || {});
   }
 
@@ -183,10 +236,21 @@ export async function transpileComponent (component, opts = {}) {
     instantiation = { tag: 'async' };
   }
 
+  const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync' ?
+    null :
+    {
+      tag: opts.asyncMode,
+      val: {
+        imports: opts.asyncImports || [],
+        exports: opts.asyncExports || [],
+      },
+    };
+
   let { files, imports, exports } = generate(component, {
     name: opts.name ?? 'component',
     map: Object.entries(opts.map ?? {}),
     instantiation,
+    asyncMode,
     importBindings: opts.importBindings ? { tag: opts.importBindings } : null,
     validLiftingOptimization: opts.validLiftingOptimization ?? false,
     tracing: opts.tracing ?? false,
