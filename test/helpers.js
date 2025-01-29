@@ -10,7 +10,9 @@ export async function exec(cmd, ...args) {
   let stdout = "",
     stderr = "";
   await new Promise((resolve, reject) => {
-    const cp = spawn(argv[0], ["--no-warnings", ...execArgv, cmd, ...args], {
+    const processCmd = argv[0];
+    const cmdArgs = ["--no-warnings", ...execArgv, cmd, ...args];
+    const cp = spawn(processCmd, cmdArgs, {
       stdio: "pipe",
     });
     cp.stdout.on("data", (chunk) => {
@@ -20,9 +22,16 @@ export async function exec(cmd, ...args) {
       stderr += chunk;
     });
     cp.on("error", reject);
-    cp.on("exit", (code) =>
-      code === 0 ? resolve() : reject(new Error((stderr || stdout).toString()))
-    );
+    cp.on("exit", (code) => {
+      if (code !== 0) {
+        const output = (stderr || stdout).toString();
+        reject(
+          new Error(`error while executing [${cmd} ${cmdArgs}]:\n${output}`),
+        );
+        return;
+      }
+      resolve();
+    });
   });
   return { stdout, stderr };
 }
