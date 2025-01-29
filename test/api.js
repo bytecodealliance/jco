@@ -235,7 +235,6 @@ export async function apiTest(_fixtures) {
 
       deepStrictEqual(meta, [
         {
-          isComponent: false,
           metaType: { tag: "module" },
           producers: [],
           name: undefined,
