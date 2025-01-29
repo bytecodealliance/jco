@@ -39,7 +39,6 @@
 use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
-use wasmparser::collections::IndexMap;
 use wasmparser::*;
 use wasmtime_environ::component::CoreDef;
 use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};

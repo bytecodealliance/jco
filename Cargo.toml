@@ -50,6 +50,7 @@ wasmtime-environ = { version = "29.0.0", features = [
     "compile",
 ] }
 wat = "1.220.0"
+webidl2wit = "0.1.0"
 wit-bindgen = "0.36.0"
 wit-bindgen-core = "0.36.0"
 wit-component = { version = "0.220.0", features = ["dummy-module"] }

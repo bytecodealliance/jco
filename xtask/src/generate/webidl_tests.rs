@@ -6,7 +6,6 @@ use std::{
 use anyhow::Result;
 
 use webidl2wit::{webidl_to_wit, ConversionOptions, HandleUnsupported};
-use wit_encoder::PackageName;
 
 const IDL_VERSION_MAJOR: u64 = 0;
 const IDL_VERSION_MINOR: u64 = 0;
@@ -29,7 +28,7 @@ pub(crate) fn run() -> Result<()> {
         let wit = webidl_to_wit(
             idl,
             ConversionOptions {
-                package_name: PackageName::new(
+                package_name: webidl2wit::PackageName::new(
                     "webidl",
                     name.to_string(),
                     Some(semver::Version {
@@ -52,6 +51,7 @@ pub(crate) fn run() -> Result<()> {
                     None
                 },
                 global_singletons,
+                ..Default::default()
             },
         )?;
 
