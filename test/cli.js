@@ -254,7 +254,7 @@ export async function cliTest(_fixtures) {
       const source = await readFile(`${outDir}/flavorful.d.ts`, "utf8");
       ok(source.includes("export const test"));
       const iface = await readFile(`${outDir}/interfaces/test-flavorful-test.d.ts`, "utf8");
-      ok(iface.includes("export namespace TestFlavorfulTest {"));
+      ok(source.includes("declare module 'test:flavorful/test' {"));
     });
 
     test("Type generation (specific features)", async () => {
@@ -337,7 +337,7 @@ export async function cliTest(_fixtures) {
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/interfaces/test-flavorful-test.d.ts`, "utf8");
       // NOTE: generation of guest types *no longer* produces an explicitly exported module
-      // but rather contains an typescript ambient module (w/ opt-in for producing explicit 
+      // but rather contains an typescript ambient module (w/ opt-in for producing explicit
       // module declarations if necessary)
       //
       // see: https://github.com/bytecodealliance/jco/pull/528
