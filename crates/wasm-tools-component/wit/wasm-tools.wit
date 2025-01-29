@@ -65,6 +65,7 @@ interface tools {
     meta-type: module-meta-type,
     range: tuple<u32, u32>,
     producers: producers-fields,
+    is-component: bool,
   }
 
   /// Extract the metadata for a component
