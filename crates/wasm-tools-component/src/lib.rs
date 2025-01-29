@@ -190,7 +190,6 @@ impl Guest for WasmToolsJs {
         let mut to_flatten: VecDeque<wasm_metadata::Metadata> = VecDeque::new();
         to_flatten.push_back(metadata);
         while let Some(metadata) = to_flatten.pop_front() {
-            let mut is_component = false;
             let (name, producers, meta_type, range) = match metadata {
                 wasm_metadata::Metadata::Component {
                     name,
@@ -199,7 +198,6 @@ impl Guest for WasmToolsJs {
                     range,
                     registry_metadata: _,
                 } => {
-                    is_component = true;
                     let children_len = children.len();
                     for child in children {
                         to_flatten.push_back(*child);
@@ -235,7 +233,6 @@ impl Guest for WasmToolsJs {
                 name,
                 meta_type,
                 producers: metadata,
-                is_component,
                 range: (range.start as u32, range.end as u32),
             });
         }

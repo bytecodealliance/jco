@@ -72,7 +72,7 @@ export async function optimizeComponent(componentBytes, opts) {
   try {
     const coreModules = metadataShow(componentBytes)
       .slice(1, -1)
-      .filter(({ isComponent }) => !isComponent)
+      .filter(({ metaType }) => metaType.tag === "module")
       .map(({ range }) => range);
 
     let completed = 0;
@@ -142,11 +142,13 @@ export async function optimizeComponent(componentBytes, opts) {
     outComponentBytes = outComponentBytes.subarray(0, nextWritePos);
 
     // verify it still parses ok
-    if (!noVerify) {
+    if (!opts?.noVerify) {
       try {
         await print(outComponentBytes);
       } catch (e) {
-        throw new Error(`Internal error performing optimization.\n${e.message}`);
+        throw new Error(
+          `Internal error performing optimization.\n${e.message}`
+        );
       }
     }
 
