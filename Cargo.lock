@@ -187,6 +187,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashlink"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
+dependencies = [
+ "hashbrown 0.14.5",
+]
+
+[[package]]
 name = "heck"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -263,7 +272,7 @@ dependencies = [
  "wasmtime-environ",
  "wit-bindgen-core",
  "wit-component",
- "wit-parser",
+ "wit-parser 0.220.0",
 ]
 
 [[package]]
@@ -650,7 +659,7 @@ dependencies = [
  "wat",
  "wit-bindgen",
  "wit-component",
- "wit-parser",
+ "wit-parser 0.220.0",
 ]
 
 [[package]]
@@ -769,13 +778,16 @@ dependencies = [
 [[package]]
 name = "webidl2wit"
 version = "0.1.0"
-source = "git+https://github.com/wasi-gfx/webidl2wit?rev=9cf1e53c5393e02e4b5ecc437012caf23ef1002f#9cf1e53c5393e02e4b5ecc437012caf23ef1002f"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5b1ccfd70bb63fe9733d3a65a47dbbc5511fb229a1c8e4ab637f0a366b7cf09"
 dependencies = [
  "anyhow",
+ "hashlink",
  "heck 0.5.0",
  "itertools",
  "weedle",
- "wit-encoder",
+ "wit-encoder 0.221.2",
+ "wit-parser 0.221.2",
 ]
 
 [[package]]
@@ -909,7 +921,7 @@ checksum = "b632a5a0fa2409489bd49c9e6d99fcc61bb3d4ce9d1907d44662e75a28c71172"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
- "wit-parser",
+ "wit-parser 0.220.0",
 ]
 
 [[package]]
@@ -969,7 +981,7 @@ dependencies = [
  "wasm-metadata",
  "wasmparser 0.220.0",
  "wat",
- "wit-parser",
+ "wit-parser 0.220.0",
 ]
 
 [[package]]
@@ -981,6 +993,16 @@ dependencies = [
  "pretty_assertions",
  "semver",
  "serde",
+]
+
+[[package]]
+name = "wit-encoder"
+version = "0.221.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c2921dd7e71ae11b6e28b33d42cc0eed4fa6ad3fe3ed1f9c5df80dacfec6a28"
+dependencies = [
+ "pretty_assertions",
+ "semver",
 ]
 
 [[package]]
@@ -999,6 +1021,20 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser 0.220.0",
+]
+
+[[package]]
+name = "wit-parser"
+version = "0.221.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbe1538eea6ea5ddbe5defd0dc82539ad7ba751e1631e9185d24a931f0a5adc8"
+dependencies = [
+ "anyhow",
+ "id-arena",
+ "indexmap",
+ "log",
+ "semver",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -1027,7 +1063,7 @@ dependencies = [
  "webidl2wit",
  "weedle",
  "wit-component",
- "wit-encoder",
+ "wit-encoder 0.214.0",
  "xshell",
 ]
 
