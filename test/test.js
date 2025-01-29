@@ -16,8 +16,14 @@ import { env, platform } from 'node:process';
 import { readdir } from 'node:fs/promises';
 
 const componentFixtures = env.COMPONENT_FIXTURES
-  ? env.COMPONENT_FIXTURES.split(',')
-  : (await readdir('test/fixtures/components')).filter(name => name !== 'dummy_reactor.component.wasm');
+  ? env.COMPONENT_FIXTURES.split(",")
+  : (await readdir("test/fixtures/components", { withFileTypes: true }))
+      .filter(
+        (f) =>
+          f.isFile() &&
+          f.name !== "dummy_reactor.component.wasm",
+      )
+      .map((f) => f.name);
 
 import { browserTest } from './browser.js';
 import { codegenTest } from './codegen.js';
