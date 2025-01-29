@@ -1310,12 +1310,26 @@ impl Bindgen for FunctionBindgen<'_> {
                             );
                             if is_own {
                                 // An own lifting is a transfer to JS, so existing own handle is implicitly dropped.
+                                //
+                                // For Host resources that are imported *and* owned (the code below),
+                                // if we can only attempt to remove the resource from the handle table if it was successfully created
+                                // (with a nonzero rep) in the first place.
+                                //
+                                // It is possible to have a zeroed resource rep as output from the constructor when a mapped host import
+                                // collides perfectly with a component's type, and the local constructor is used (despite not being used
+                                // elsewhere).
+                                //
+                                // TODO: while this enables creating import-mapped resources (with arbitrary internals),
+                                // they cannot be manipulated by components that are built against the original
+                                // WIT definition -- any function that *uses/consumes* a resource will fail (in lowering?)
+                                //
                                 uwriteln!(
                                     self.src,
                                     "else {{
                                         captureTable{rid}.delete({rep});
                                     }}
-                                    {rsc_table_remove}(handleTable{tid}, {handle});"
+                                    if ({rep} !== 0) {{ {rsc_table_remove}(handleTable{tid}, {handle}); }}
+                                    "
                                 );
                             }
                         }
