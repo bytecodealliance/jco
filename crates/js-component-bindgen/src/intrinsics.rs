@@ -5,10 +5,6 @@ use std::fmt::Write;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Intrinsic {
-    AsyncifyAsyncInstantiate,
-    AsyncifySyncInstantiate,
-    AsyncifyWrapExport,
-    AsyncifyWrapImport,
     Base64Compile,
     ClampGuest,
     ComponentError,
@@ -119,117 +115,6 @@ pub fn render_intrinsics(
 
     for i in intrinsics.iter() {
         match i {
-            Intrinsic::AsyncifyAsyncInstantiate => output.push_str("
-                const asyncifyModules = [];
-                let asyncifyPromise;
-                let asyncifyResolved;
-                async function asyncifyInstantiate(module, imports) {
-                  const instance = await instantiateCore(module, imports);
-                  const memory = instance.exports.memory || (imports && imports.env && imports.env.memory);
-                  const realloc = instance.exports.cabi_realloc || instance.exports.cabi_export_realloc;
-                  if (instance.exports.asyncify_get_state && memory) {
-                    let address;
-                    if (realloc) {
-                        address = realloc(0, 0, 4, 1024);
-                        new Int32Array(memory.buffer, address).set([address + 8, address + 1024]);
-                    } else {
-                        address = 16;
-                        new Int32Array(memory.buffer, address).set([address + 8, address + 1024]);
-                    }
-                    asyncifyModules.push({ instance, memory, address });
-                  }
-                  return instance;
-                }
-                function asyncifyState() {
-                  return asyncifyModules[0]?.instance.exports.asyncify_get_state();
-                }
-                function asyncifyAssertNoneState() {
-                  let state = asyncifyState();
-                  if (state !== 0) {
-                    throw new Error(`reentrancy not supported, expected asyncify state '0' but found '${state}'`);
-                  }
-                }
-            "),
-
-            Intrinsic::AsyncifySyncInstantiate => output.push_str("
-                const asyncifyModules = [];
-                let asyncifyPromise;
-                let asyncifyResolved;
-                function asyncifyInstantiate(module, imports) {
-                  const instance = instantiateCore(module, imports);
-                  const memory = instance.exports.memory || (imports && imports.env && imports.env.memory);
-                  const realloc = instance.exports.cabi_realloc || instance.exports.cabi_export_realloc;
-                  if (instance.exports.asyncify_get_state && memory) {
-                    let address;
-                    if (realloc) {
-                        address = realloc(0, 0, 4, 1024);
-                        new Int32Array(memory.buffer, address).set([address + 8, address + 1024]);
-                    } else {
-                        address = 16;
-                        new Int32Array(memory.buffer, address).set([address + 8, address + 1024]);
-                    }
-                    asyncifyModules.push({ instance, memory, address });
-                  }
-                  return instance;
-                }
-                function asyncifyState() {
-                  return asyncifyModules[0]?.instance.exports.asyncify_get_state();
-                }
-                function asyncifyAssertNoneState() {
-                  let state = asyncifyState();
-                  if (state !== 0) {
-                    throw new Error(`reentrancy not supported, expected asyncify state '0' but found '${state}'`);
-                  }
-                }
-            "),
-
-            Intrinsic::AsyncifyWrapExport => output.push_str("
-                function asyncifyWrapExport(fn) {
-                  return async (...args) => {
-                    if (asyncifyModules.length === 0) {
-                        throw new Error(`none of the Wasm modules were processed with wasm-opt asyncify`);
-                    }
-                    asyncifyAssertNoneState();
-                    let result = fn(...args);
-                    while (asyncifyState() === 1) {
-                      asyncifyModules.forEach(({ instance }) => {
-                        instance.exports.asyncify_stop_unwind();
-                      });
-                      asyncifyResolved = await asyncifyPromise;
-                      asyncifyPromise = undefined;
-                      asyncifyAssertNoneState();
-                      asyncifyModules.forEach(({ instance, address }) => {
-                        instance.exports.asyncify_start_rewind(address);
-                      });
-                      result = fn(...args);
-                    }
-                    asyncifyAssertNoneState();
-                    return result;
-                  };
-                }
-            "),
-
-            Intrinsic::AsyncifyWrapImport => output.push_str("
-                function asyncifyWrapImport(fn) {
-                  return (...args) => {
-                    if (asyncifyState() === 2) {
-                      asyncifyModules.forEach(({ instance }) => {
-                        instance.exports.asyncify_stop_rewind();
-                      });
-                      const ret = asyncifyResolved;
-                      asyncifyResolved = undefined;
-                      return ret;
-                    }
-                    asyncifyAssertNoneState();
-                    let value = fn(...args);
-                    asyncifyModules.forEach(({ instance, address }) => {
-                      instance.exports.asyncify_start_unwind(address);
-                    });
-                    asyncifyPromise = value;
-                  };
-                }
-            "),
-
             Intrinsic::Base64Compile => if !no_nodejs_compat {
                 output.push_str("
                     const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
@@ -772,14 +657,6 @@ impl Intrinsic {
     pub fn get_global_names() -> &'static [&'static str] {
         &[
             // Intrinsic list exactly as below
-            "asyncifyAssertNoneState",
-            "asyncifyInstantiate",
-            "asyncifyModules",
-            "asyncifyPromise",
-            "asyncifyResolved",
-            "asyncifyState",
-            "asyncifyWrapExport",
-            "asyncifyWrapImport",
             "base64Compile",
             "clampGuest",
             "ComponentError",
@@ -860,10 +737,6 @@ impl Intrinsic {
 
     pub fn name(&self) -> &'static str {
         match self {
-            Intrinsic::AsyncifyAsyncInstantiate => "asyncifyInstantiate",
-            Intrinsic::AsyncifySyncInstantiate => "asyncifyInstantiate",
-            Intrinsic::AsyncifyWrapExport => "asyncifyWrapExport",
-            Intrinsic::AsyncifyWrapImport => "asyncifyWrapImport",
             Intrinsic::Base64Compile => "base64Compile",
             Intrinsic::ClampGuest => "clampGuest",
             Intrinsic::ComponentError => "ComponentError",

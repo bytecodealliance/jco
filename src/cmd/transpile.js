@@ -202,18 +202,13 @@ export async function transpileComponent (component, opts = {}) {
   let spinner;
   const showSpinner = getShowSpinner();
 
-  // We must perform optimization if it's requested, or if the component has *not*
-  // already been built with already optimized code before wizer init, if using asyncify.
-  //
-  // Preoptimized is generally used internally (users cannot pass it in as a CLI option),
-  // but they may pass in asyncMode
-  if (opts.optimize || !opts.preoptimized && opts.asyncMode === 'asyncify') {
+  if (opts.optimize) {
     if (showSpinner) setShowSpinner(true);
     ({ component } = await optimizeComponent(component, opts));
   }
 
   if (opts.wasiShim !== false) {
-    const maybeAsync = ''; // TODO: !opts.asyncMode || opts.asyncMode === 'sync' ? '' : 'async/';
+    const maybeAsync = ''; // TODO: change with async WASI P2 shims !opts.asyncMode || opts.asyncMode === 'sync' ? '' : 'async/';
     opts.map = Object.assign({
       'wasi:cli/*': `@bytecodealliance/preview2-shim/${maybeAsync}cli#*`,
       'wasi:clocks/*': `@bytecodealliance/preview2-shim/${maybeAsync}clocks#*`,

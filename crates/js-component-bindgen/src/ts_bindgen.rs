@@ -65,9 +65,6 @@ pub fn ts_bindgen(
         Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => {
             (imports.into_iter().collect(), exports.into_iter().collect())
         }
-        Some(AsyncMode::Asyncify { imports, exports }) => {
-            (imports.into_iter().collect(), exports.into_iter().collect())
-        }
     };
     let mut bindgen = TsBindgen {
         src: Source::default(),

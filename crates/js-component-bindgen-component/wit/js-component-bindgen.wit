@@ -67,7 +67,7 @@ world js-component-bindgen {
     multi-memory: option<bool>,
 
     /// Configure whether to use `async` imports or exports with
-    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    /// JavaScript Promise Integration (JSPI).
     async-mode: option<async-mode>,
   }
 
@@ -81,8 +81,6 @@ world js-component-bindgen {
     sync,
     /// use JavaScript Promise Integration (JSPI)
     jspi(async-imports-exports),
-    /// use Asyncify
-    asyncify(async-imports-exports),
   }
 
   variant wit {
@@ -115,7 +113,7 @@ world js-component-bindgen {
     /// Whether to generate module declarations like `declare module "local:package/foo" {...`.
     guest: option<bool>,
     /// Configure whether to use `async` imports or exports with
-    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    /// JavaScript Promise Integration (JSPI).
     async-mode: option<async-mode>,
   }
 

@@ -71,7 +71,7 @@ pub struct TranspileOpts {
     /// Whether to generate types for a guest module using module declarations.
     pub guest: bool,
     /// Configure whether to use `async` imports or exports with
-    /// JavaScript Promise Integration (JSPI) or Asyncify.
+    /// JavaScript Promise Integration (JSPI).
     pub async_mode: Option<AsyncMode>,
 }
 
@@ -80,10 +80,6 @@ pub enum AsyncMode {
     #[default]
     Sync,
     JavaScriptPromiseIntegration {
-        imports: Vec<String>,
-        exports: Vec<String>,
-    },
-    Asyncify {
         imports: Vec<String>,
         exports: Vec<String>,
     },
@@ -138,8 +134,6 @@ struct JsBindgen<'a> {
     /// List of all core Wasm exported functions (and if is async) referenced in
     /// `src` so far.
     all_core_exported_funcs: Vec<(String, bool)>,
-
-    use_asyncify: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -153,18 +147,11 @@ pub fn transpile_bindgen(
     opts: TranspileOpts,
     files: &mut Files,
 ) -> (Vec<String>, Vec<(String, Export)>) {
-    let (use_asyncify, async_imports, async_exports) = match opts.async_mode.clone() {
-        None | Some(AsyncMode::Sync) => (false, Default::default(), Default::default()),
-        Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => (
-            false,
-            imports.into_iter().collect(),
-            exports.into_iter().collect(),
-        ),
-        Some(AsyncMode::Asyncify { imports, exports }) => (
-            true,
-            imports.into_iter().collect(),
-            exports.into_iter().collect(),
-        ),
+    let (async_imports, async_exports) = match opts.async_mode.clone() {
+        None | Some(AsyncMode::Sync) => (Default::default(), Default::default()),
+        Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => {
+            (imports.into_iter().collect(), exports.into_iter().collect())
+        }
     };
 
     let mut bindgen = JsBindgen {
@@ -175,7 +162,6 @@ pub fn transpile_bindgen(
         opts: &opts,
         all_intrinsics: BTreeSet::new(),
         all_core_exported_funcs: Vec::new(),
-        use_asyncify,
     };
     bindgen
         .local_names
@@ -196,7 +182,6 @@ pub fn transpile_bindgen(
         translation: component,
         component: &component.component,
         types,
-        use_asyncify,
         async_imports,
         async_exports,
         imports: Default::default(),
@@ -270,17 +255,12 @@ impl JsBindgen<'_> {
         let mut compilation_promises = source::Source::default();
         let mut core_exported_funcs = source::Source::default();
 
-        let async_wrap_fn = if self.use_asyncify {
-            &self.intrinsic(Intrinsic::AsyncifyWrapExport)
-        } else {
-            "WebAssembly.promising"
-        };
         for (core_export_fn, is_async) in self.all_core_exported_funcs.iter() {
             let local_name = self.local_names.get(core_export_fn);
             if *is_async {
                 uwriteln!(
                     core_exported_funcs,
-                    "{local_name} = {async_wrap_fn}({core_export_fn});",
+                    "{local_name} = WebAssembly.promising({core_export_fn});",
                 );
             } else {
                 uwriteln!(core_exported_funcs, "{local_name} = {core_export_fn};",);
@@ -515,7 +495,6 @@ struct Instantiator<'a, 'b> {
     /// Instance flags which references have been emitted externally at least once.
     used_instance_flags: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
     defined_resource_classes: BTreeSet<String>,
-    use_asyncify: bool,
     async_imports: HashSet<String>,
     async_exports: HashSet<String>,
     lowering_options:
@@ -1094,11 +1073,6 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js_init,
                     "({{ exports: exports{iu32} }} = yield {instantiate}(yield module{}{imports}));",
                     idx.as_u32(),
-                    instantiate = if self.use_asyncify {
-                        self.gen.intrinsic(Intrinsic::AsyncifyAsyncInstantiate)
-                    } else {
-                        instantiate
-                    },
                 )
             }
 
@@ -1107,11 +1081,6 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js_init,
                     "({{ exports: exports{iu32} }} = {instantiate}(module{}{imports}));",
                     idx.as_u32(),
-                    instantiate = if self.use_asyncify {
-                        self.gen.intrinsic(Intrinsic::AsyncifySyncInstantiate)
-                    } else {
-                        instantiate
-                    },
                 )
             }
         }
@@ -1275,20 +1244,11 @@ impl<'a> Instantiator<'a, '_> {
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
                 if is_async {
-                    if self.use_asyncify {
-                        uwrite!(
-                            self.src.js,
-                            "\nconst trampoline{} = {}(async function",
-                            trampoline.as_u32(),
-                            self.gen.intrinsic(Intrinsic::AsyncifyWrapImport),
-                        );
-                    } else {
-                        uwrite!(
-                            self.src.js,
-                            "\nconst trampoline{} = new WebAssembly.Suspending(async function",
-                            trampoline.as_u32()
-                        );
-                    }
+                    uwrite!(
+                        self.src.js,
+                        "\nconst trampoline{} = new WebAssembly.Suspending(async function",
+                        trampoline.as_u32()
+                    );
                 } else {
                     uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
                 }

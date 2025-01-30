@@ -60,9 +60,6 @@ impl From<AsyncMode> for js_component_bindgen::AsyncMode {
             AsyncMode::Jspi(AsyncImportsExports { imports, exports }) => {
                 js_component_bindgen::AsyncMode::JavaScriptPromiseIntegration { imports, exports }
             }
-            AsyncMode::Asyncify(AsyncImportsExports { imports, exports }) => {
-                js_component_bindgen::AsyncMode::Asyncify { imports, exports }
-            }
         }
     }
 }

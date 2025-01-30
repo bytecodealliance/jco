@@ -115,8 +115,7 @@ export async function getTmpDir() {
  * @param {object[]} args.component.wit.deps - Dependencies (ex. WASI) that should be included during component build
  */
 export async function setupAsyncTest(args) {
-  const { asyncMode: _asyncMode, testFn, jco, component } = args;
-  const asyncMode = _asyncMode || "asyncify";
+  const { asyncMode, testFn, jco, component } = args;
   const jcoBinPath = jco?.binPath || jcoPath;
 
   let componentName = component.name;

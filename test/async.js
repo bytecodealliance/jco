@@ -105,41 +105,5 @@ export async function asyncTest(_fixtures) {
         await cleanup();
       });
     }
-
-    test("Transpile async (NodeJS, Asyncify)", async () => {
-      const { instance, cleanup } = await setupAsyncTest({
-        asyncMode: "asyncify",
-        component: {
-          name: "async_call",
-          path: resolve("test/fixtures/components/async_call.component.wasm"),
-          imports: {
-            'something:test/test-interface': {
-              callAsync: async () => "called async",
-              callSync: () => "called sync",
-            },
-          },
-        },
-        jco: {
-          transpile: {
-            extraArgs: {
-              asyncImports: [
-                "something:test/test-interface#call-async",
-              ],
-              asyncExports: [
-                "run-async",
-              ],
-            },
-          },
-        },
-      });
-
-      strictEqual(instance.runSync instanceof AsyncFunction, false, "runSync() should be a sync function");
-      strictEqual(instance.runAsync instanceof AsyncFunction, true, "runAsync() should be an async function");
-
-      strictEqual(instance.runSync(), "called sync");
-      strictEqual(await instance.runAsync(), "called async");
-
-      await cleanup();
-    });
   });
 }
