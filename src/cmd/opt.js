@@ -60,9 +60,23 @@ ${table(
 }
 
 /**
+ * Counts the byte length for the LEB128 encoding of a number.
+ * @param {number} val
+ * @returns {number}
+ */
+function byteLengthLEB128(val) {
+  let len = 0;
+  do {
+    val >>>= 7;
+    len++;
+  } while (val !== 0);
+  return len;
+}
+
+/**
  *
  * @param {Uint8Array} componentBytes
- * @param {{ quiet: boolean, optArgs?: string[], noVerify?: boolean }} options?
+ * @param {{ quiet: boolean, asyncify?: boolean, optArgs?: string[], noVerify?: boolean }} opts?
  * @returns {Promise<{ component: Uint8Array, compressionInfo: { beforeBytes: number, afterBytes: number }[] >}
  */
 export async function optimizeComponent(componentBytes, opts) {
@@ -70,11 +84,18 @@ export async function optimizeComponent(componentBytes, opts) {
   const showSpinner = getShowSpinner();
   let spinner;
   try {
-    const coreModules = metadataShow(componentBytes)
-      .slice(1, -1)
-      .filter(({ metaType }) => metaType.tag === "module")
-      .map(({ range }) => range);
+    let componentMetadata = metadataShow(componentBytes);
+    componentMetadata.forEach((metadata, index) => {
+        // add index to the metadata object
+        metadata.index = index;
+        const size = metadata.range[1] - metadata.range[0];
+        // compute previous LEB128 encoding length
+        metadata.prevLEBLen = byteLengthLEB128(size);
+    });
+    const coreModules = componentMetadata
+      .filter(({ metaType }) => metaType.tag === "module");
 
+    // log number of core Wasm modules to be run with wasm-opt
     let completed = 0;
     const spinnerText = () =>
       c`{cyan ${completed} / ${coreModules.length}} Running Binaryen on WebAssembly Component Internal Core Modules \n`;
@@ -86,60 +107,116 @@ export async function optimizeComponent(componentBytes, opts) {
       spinner.text = spinnerText();
     }
 
-    const optimizedCoreModules = await Promise.all(
-      coreModules.map(async ([coreModuleStart, coreModuleEnd]) => {
-        const optimized = wasmOpt(
-          componentBytes.subarray(coreModuleStart, coreModuleEnd),
-          opts?.optArgs
-        );
-        if (spinner) {
-          completed++;
-          spinner.text = spinnerText();
+    // gather the options for wasm-opt. optionally, adding the asyncify flag
+    const args = opts?.optArgs ?
+      [...opts.optArgs] :
+      ['-Oz', '--low-memory-unused', '--enable-bulk-memory', '--strip-debug'];
+    if (opts?.asyncify) args.push('--asyncify');
+
+
+    // process core Wasm modules with wasm-opt
+    await Promise.all(
+      coreModules.map(async (metadata) => {
+        if (metadata.metaType.tag === "module") {
+          // store the wasm-opt processed module in the metadata 
+          metadata.optimized = await wasmOpt(
+            componentBytes.subarray(metadata.range[0], metadata.range[1]),
+            args);
+
+          // compute the size change, including the change to
+          // the LEB128 encoding of the size change
+          const prevModuleSize = metadata.range[1] - metadata.range[0];
+          const newModuleSize = metadata.optimized.byteLength;
+          metadata.newLEBLen = byteLengthLEB128(newModuleSize);
+          metadata.sizeChange = newModuleSize - prevModuleSize;
+
+          if (spinner) {
+            completed++;
+            spinner.text = spinnerText();
+          }
         }
-        return optimized;
-      })
-    );
+      }));
 
-    let outComponentBytes = new Uint8Array(componentBytes.byteLength);
-    let nextReadPos = 0,
-      nextWritePos = 0;
-    for (let i = 0; i < coreModules.length; i++) {
-      const [coreModuleStart, coreModuleEnd] = coreModules[i];
-      const optimizedCoreModule = optimizedCoreModules[i];
+    // organize components in modules into tree parent and children
+    const nodes = componentMetadata.slice(1);
+    const getChildren = (parentIndex) => {
+      const children = [];
+      for (let i = 0; i < nodes.length; i++) {
+        const metadata = nodes[i];
+        if (metadata.parentIndex === parentIndex) {
+          nodes.splice(i, 1); // remove from nodes
+          i--;
+          metadata.children = getChildren(metadata.index);
+          metadata.sizeChange = metadata.children
+            .reduce((total, {prevLEBLen, newLEBLen, sizeChange}) => {
+              return sizeChange ?
+                total + sizeChange + newLEBLen - prevLEBLen :
+                total;
+            },
+            metadata.sizeChange || 0);
+          const prevSize = metadata.range[1] - metadata.range[0];
+          metadata.newLEBLen = byteLengthLEB128(prevSize + metadata.sizeChange);
+          children.push(metadata);
+        }
+      }
+      return children;
+    };
+    const componentTree = getChildren(0);
 
-      let lebByteLen = 1;
-      while (componentBytes[coreModuleStart - 1 - lebByteLen] & 0x80)
-        lebByteLen++;
+    // compute the total size change in the component binary
+    const sizeChange = componentTree
+      .reduce((total, {prevLEBLen, newLEBLen, sizeChange}) => {
+        return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
+      }, 0);
 
-      // Write from the last read to the LEB byte start of the core module
+    let outComponentBytes = new Uint8Array(
+      componentBytes.byteLength + sizeChange);
+    let nextReadPos = 0, nextWritePos = 0;
+
+    const write = ({prevLEBLen, range, optimized, children, sizeChange}) => {
+      // write from the last read to the LEB byte start
       outComponentBytes.set(
-        componentBytes.subarray(nextReadPos, coreModuleStart - lebByteLen),
+        componentBytes.subarray(nextReadPos, range[0] - prevLEBLen),
         nextWritePos
       );
-      nextWritePos += coreModuleStart - lebByteLen - nextReadPos;
+      nextWritePos += range[0] - prevLEBLen - nextReadPos;
 
-      // Write the new LEB bytes
-      let val = optimizedCoreModule.byteLength;
+      // write the new LEB bytes
+      let val = range[1] - range[0] + sizeChange;
       do {
         const byte = val & 0x7f;
         val >>>= 7;
         outComponentBytes[nextWritePos++] = val === 0 ? byte : byte | 0x80;
       } while (val !== 0);
 
-      // Write the core module
-      outComponentBytes.set(optimizedCoreModule, nextWritePos);
-      nextWritePos += optimizedCoreModule.byteLength;
+      if (optimized) {
+        // write the core module
+        outComponentBytes.set(optimized, nextWritePos);
+        nextReadPos = range[1];
+        nextWritePos += optimized.byteLength;
+      } else if (children.length > 0) {
+        // write child components / modules
+        nextReadPos = range[0];
+        children.forEach(write);
+      } else {
+        // write component
+        outComponentBytes.set(
+          componentBytes.subarray(range[0], range[1]),
+          nextWritePos
+        );
+        nextReadPos = range[1];
+        nextWritePos += range[1] - range[0];
+      }
+    };
 
-      nextReadPos = coreModuleEnd;
-    }
+    // write each top-level component / module
+    componentTree.forEach(write);
 
+    // write remaining
     outComponentBytes.set(
-      componentBytes.subarray(nextReadPos, componentBytes.byteLength),
+      componentBytes.subarray(nextReadPos),
       nextWritePos
     );
-    nextWritePos += componentBytes.byteLength - nextReadPos;
-
-    outComponentBytes = outComponentBytes.subarray(0, nextWritePos);
 
     // verify it still parses ok
     if (!opts?.noVerify) {
@@ -154,9 +231,9 @@ export async function optimizeComponent(componentBytes, opts) {
 
     return {
       component: outComponentBytes,
-      compressionInfo: coreModules.map(([s, e], i) => ({
-        beforeBytes: e - s,
-        afterBytes: optimizedCoreModules[i].byteLength,
+      compressionInfo: coreModules.map(({range, optimized}) => ({
+        beforeBytes: range[1] - range[0],
+        afterBytes: optimized?.byteLength,
       })),
     };
   } finally {
@@ -166,12 +243,10 @@ export async function optimizeComponent(componentBytes, opts) {
 
 /**
  * @param {Uint8Array} source
+ * @param {Array<string>} args
  * @returns {Promise<Uint8Array>}
  */
-async function wasmOpt(
-  source,
-  args = ["-O1", "--low-memory-unused", "--enable-bulk-memory"]
-) {
+async function wasmOpt(source, args) {
   const wasmOptPath = fileURLToPath(
     import.meta.resolve("binaryen/bin/wasm-opt")
   );

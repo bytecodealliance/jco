@@ -144,6 +144,7 @@ program.command('opt')
   .usage('<component-file> -o <output-file>')
   .argument('<component-file>', 'Wasm component binary filepath')
   .requiredOption('-o, --output <output-file>', 'optimized component output filepath')
+  .option('--asyncify', 'runs Asyncify pass in wasm-opt')
   .option('-q, --quiet')
   .option('--', 'custom wasm-opt arguments (defaults to best size optimization)')
   .action(asyncAction(opt));

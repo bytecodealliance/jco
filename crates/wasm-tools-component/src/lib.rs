@@ -187,9 +187,9 @@ impl Guest for WasmToolsJs {
         let metadata =
             wasm_metadata::Metadata::from_binary(&binary).map_err(|e| format!("{:?}", e))?;
         let mut module_metadata: Vec<ModuleMetadata> = Vec::new();
-        let mut to_flatten: VecDeque<wasm_metadata::Metadata> = VecDeque::new();
-        to_flatten.push_back(metadata);
-        while let Some(metadata) = to_flatten.pop_front() {
+        let mut to_flatten: VecDeque<(Option<u32>, wasm_metadata::Metadata)> = VecDeque::new();
+        to_flatten.push_back((None, metadata));
+        while let Some((parent_index, metadata)) = to_flatten.pop_front() {
             let (name, producers, meta_type, range) = match metadata {
                 wasm_metadata::Metadata::Component {
                     name,
@@ -200,7 +200,7 @@ impl Guest for WasmToolsJs {
                 } => {
                     let children_len = children.len();
                     for child in children {
-                        to_flatten.push_back(*child);
+                        to_flatten.push_back((Some(module_metadata.len() as u32), *child));
                     }
                     (
                         name,
@@ -230,6 +230,7 @@ impl Guest for WasmToolsJs {
                 }
             }
             module_metadata.push(ModuleMetadata {
+                parent_index,
                 name,
                 meta_type,
                 producers: metadata,

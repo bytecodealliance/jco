@@ -369,6 +369,41 @@ export async function cliTest(_fixtures) {
       ok(optimizedComponent.byteLength < component.byteLength);
     });
 
+    test("Optimize nested component", async () => {
+      const component = await readFile(
+        `test/fixtures/components/simple-nested.component.wasm`
+      );
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "opt",
+        `test/fixtures/components/simple-nested.component.wasm`,
+        "-o",
+        outFile
+      );
+      strictEqual(stderr, "");
+      ok(stdout.includes("Core Module 1:"));
+      const optimizedComponent = await readFile(outFile);
+      ok(optimizedComponent.byteLength < component.byteLength);
+    });
+
+    test("Optimize component with Asyncify pass", async () => {
+      const component = await readFile(
+        `test/fixtures/components/simple-nested-optimized.component.wasm`
+      );
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "opt",
+        `test/fixtures/components/simple-nested-optimized.component.wasm`,
+        "--asyncify",
+        "-o",
+        outFile,
+      );
+      strictEqual(stderr, "");
+      ok(stdout.includes("Core Module 1:"));
+      const asyncifiedComponent = await readFile(outFile);
+      ok(asyncifiedComponent.byteLength > component.byteLength); // should be larger
+    });
+
     test("Print & Parse", async () => {
       const { stderr, stdout } = await exec(
         jcoPath,

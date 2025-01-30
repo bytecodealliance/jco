@@ -61,6 +61,7 @@ interface tools {
   }
 
   record module-metadata {
+    parent-index: option<u32>,
     name: option<string>,
     meta-type: module-meta-type,
     range: tuple<u32, u32>,
