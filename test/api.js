@@ -238,6 +238,7 @@ export async function apiTest(_fixtures) {
           metaType: { tag: "module" },
           producers: [],
           name: undefined,
+          parentIndex: undefined,
           range: [0, 262],
         },
       ]);

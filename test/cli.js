@@ -386,14 +386,14 @@ export async function cliTest(_fixtures) {
       ok(optimizedComponent.byteLength < component.byteLength);
     });
 
-    test("Optimize nested component with Asyncify pass", async () => {
+    test("Optimize component with Asyncify pass", async () => {
       const component = await readFile(
-        `test/fixtures/components/simple-nested.component.wasm`
+        `test/fixtures/components/simple-nested-optimized.component.wasm`
       );
       const { stderr, stdout } = await exec(
         jcoPath,
         "opt",
-        `test/fixtures/components/simple-nested.component.wasm`,
+        `test/fixtures/components/simple-nested-optimized.component.wasm`,
         "--asyncify",
         "-o",
         outFile,
