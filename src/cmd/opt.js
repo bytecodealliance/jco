@@ -62,7 +62,7 @@ ${table(
 /**
  *
  * @param {Uint8Array} componentBytes
- * @param {{ quiet: boolean, optArgs?: string[], noVerify?: boolean }} options?
+ * @param {{ quiet: boolean, asyncify?: boolean, optArgs?: string[], noVerify?: boolean }} opts?
  * @returns {Promise<{ component: Uint8Array, compressionInfo: { beforeBytes: number, afterBytes: number }[] >}
  */
 export async function optimizeComponent(componentBytes, opts) {
@@ -86,23 +86,28 @@ export async function optimizeComponent(componentBytes, opts) {
       spinner.text = spinnerText();
     }
 
-    const optimizedCoreModules = await Promise.all(
-      coreModules.map(async ([coreModuleStart, coreModuleEnd]) => {
-        const optimized = wasmOpt(
-          componentBytes.subarray(coreModuleStart, coreModuleEnd),
-          opts?.optArgs
-        );
-        if (spinner) {
-          completed++;
-          spinner.text = spinnerText();
-        }
-        return optimized;
-      })
-    );
+    const args = opts?.optArgs ? [...opts.optArgs] : ['-Oz', '--low-memory-unused', '--enable-bulk-memory', '--strip-debug'];
+    if (opts?.asyncify) args.push('--asyncify');
 
-    let outComponentBytes = new Uint8Array(componentBytes.byteLength);
+    const optimizedCoreModules = await Promise.all(coreModules.map(async ([coreModuleStart, coreModuleEnd]) => {
+      const optimized = wasmOpt(componentBytes.subarray(coreModuleStart, coreModuleEnd), args);
+      if (spinner) {
+        completed++;
+        spinner.text = spinnerText();
+      }
+      return optimized;
+    }));
+
+    // With the optional asyncify pass, the size may increase rather than shrink
+    const previousModulesTotalSize = coreModules.reduce((total, [coreModuleStart, coreModuleEnd]) => total + (coreModuleEnd - coreModuleStart), 0);
+    const optimizedModulesTotalSize = optimizedCoreModules.reduce((total, buf) => total + buf.byteLength, 0);
+    const sizeChange = optimizedModulesTotalSize - previousModulesTotalSize;
+
+    // Adds an extra 100 bytes to be safe for LEB byte size increases.
+    let outComponentBytes = new Uint8Array(componentBytes.byteLength + sizeChange + 100);
     let nextReadPos = 0,
       nextWritePos = 0;
+
     for (let i = 0; i < coreModules.length; i++) {
       const [coreModuleStart, coreModuleEnd] = coreModules[i];
       const optimizedCoreModule = optimizedCoreModules[i];
@@ -134,11 +139,12 @@ export async function optimizeComponent(componentBytes, opts) {
     }
 
     outComponentBytes.set(
-      componentBytes.subarray(nextReadPos, componentBytes.byteLength),
+      componentBytes.subarray(nextReadPos),
       nextWritePos
     );
     nextWritePos += componentBytes.byteLength - nextReadPos;
 
+    // truncate to the bytes written
     outComponentBytes = outComponentBytes.subarray(0, nextWritePos);
 
     // verify it still parses ok
@@ -166,12 +172,10 @@ export async function optimizeComponent(componentBytes, opts) {
 
 /**
  * @param {Uint8Array} source
+ * @param {Array<string>} args
  * @returns {Promise<Uint8Array>}
  */
-async function wasmOpt(
-  source,
-  args = ["-O1", "--low-memory-unused", "--enable-bulk-memory"]
-) {
+async function wasmOpt(source, args) {
   const wasmOptPath = fileURLToPath(
     import.meta.resolve("binaryen/bin/wasm-opt")
   );
