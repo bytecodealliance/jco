@@ -104,6 +104,40 @@ export async function asyncTest(_fixtures) {
 
         await cleanup();
       });
+
+      test("Transpile async import and export (NodeJS, JSPI)", async () => {
+        const testMessage = "Hello from Async Function!";
+        const { instance, cleanup, component } = await setupAsyncTest({
+          asyncMode: "jspi",
+          component: {
+            name: "async_call",
+            path: resolve("test/fixtures/components/simple-nested.component.wasm"),
+            imports: {
+              'calvinrp:test-async-funcs/hello': {
+                helloWorld: async () => await Promise.resolve(testMessage),
+              },
+            },
+          },
+          jco: {
+            transpile: {
+              extraArgs: {
+                asyncImports: [
+                  "calvinrp:test-async-funcs/hello#hello-world",
+                ],
+                asyncExports: [
+                  "hello-world",
+                ],
+              },
+            },
+          },
+        });
+
+        strictEqual(instance.hello.helloWorld instanceof AsyncFunction, true, "helloWorld() should be an async function");
+
+        strictEqual(await instance.hello.helloWorld(), testMessage);
+
+        await cleanup();
+      });
     }
   });
 }
