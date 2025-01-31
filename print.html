@@ -189,19 +189,54 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
 <p>Options include:</p>
 <ul>
-<li><code>--name</code>: Give a custom name for the component JS file in <code>out-dir/[name].js</code></li>
-<li><code>--minify</code>: Minify the component JS</li>
-<li><code>--optimize</code>: Runs the internal core Wasm files through Binaryen for optimization. Optimization options can be passed with a <code>-- &lt;binaryen options&gt;</code> flag separator.</li>
-<li><code>--tla-compat</code>: Instead of relying on top-level-await, requires an <code>$init</code> promise to be imported and awaited first.</li>
-<li><code>--js</code>: Converts core Wasm files to JavaScript for environments that don't even support core Wasm.</li>
-<li><code>--base64-cutoff=&lt;number&gt;</code>: Sets the maximum number of bytes for inlining Wasm files into the JS using base64 encoding. Set to zero to disable base64 inlining entirely.</li>
-<li><code>--no-wasi-shim</code>: Disable the WASI shim mapping to <code>@bytecodealliance/preview2-shim</code>.</li>
-<li><code>--map</code>: Provide custom mappings for world imports. Supports both wildcard mappings (<code>*</code> similarly as in the package.json &quot;exports&quot; field) as well as <code>#</code> mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like <code>--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*</code> to map <code>import as * filesystem from 'wasi:filesystem/types'</code> to <code>import { types } from '@bytecodealliance/preview2-shim/filesystem</code>.</li>
-<li><code>--no-nodejs-compat</code>: Disables Node.js compat in the output to load core Wasm with FS methods.</li>
-<li><code>--instantiation [mode]</code>: Instead of a direct ES module, export an <code>instantiate</code> function which can take the imports as an argument instead of implicit imports. The <code>instantiate</code> function can be async (with <code>--instantiation</code> or <code>--instantiation async</code>), or sync (with <code>--instantiation sync</code>).</li>
-<li><code>--valid-lifting-optimization</code>: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.</li>
-<li><code>--tracing</code>: Emit tracing calls for all function entry and exits.</li>
-<li><code>--no-namespaced-exports</code>: Removes exports of the type <code>test as &quot;test:flavorful/test&quot;</code> which are not compatible with typescript</li>
+<li>
+<p><code>--name</code>: Give a custom name for the component JS file in <code>out-dir/[name].js</code></p>
+</li>
+<li>
+<p><code>--minify</code>: Minify the component JS</p>
+</li>
+<li>
+<p><code>--optimize</code>: Runs the internal core Wasm files through Binaryen for optimization. Optimization options can be passed with a <code>-- &lt;binaryen options&gt;</code> flag separator.</p>
+</li>
+<li>
+<p><code>--tla-compat</code>: Instead of relying on top-level-await, requires an <code>$init</code> promise to be imported and awaited first.</p>
+</li>
+<li>
+<p><code>--js</code>: Converts core Wasm files to JavaScript for environments that don't even support core Wasm.</p>
+</li>
+<li>
+<p><code>--base64-cutoff=&lt;number&gt;</code>: Sets the maximum number of bytes for inlining Wasm files into the JS using base64 encoding. Set to zero to disable base64 inlining entirely.</p>
+</li>
+<li>
+<p><code>--no-wasi-shim</code>: Disable the WASI shim mapping to <code>@bytecodealliance/preview2-shim</code>.</p>
+</li>
+<li>
+<p><code>--map</code>: Provide custom mappings for world imports. Supports both wildcard mappings (<code>*</code> similarly as in the package.json &quot;exports&quot; field) as well as <code>#</code> mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like <code>--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*</code> to map <code>import as * filesystem from 'wasi:filesystem/types'</code> to <code>import { types } from '@bytecodealliance/preview2-shim/filesystem</code>.</p>
+</li>
+<li>
+<p><code>--no-nodejs-compat</code>: Disables Node.js compat in the output to load core Wasm with FS methods.</p>
+</li>
+<li>
+<p><code>--instantiation [mode]</code>: Instead of a direct ES module, export an <code>instantiate</code> function which can take the imports as an argument instead of implicit imports. The <code>instantiate</code> function can be async (with <code>--instantiation</code> or <code>--instantiation async</code>), or sync (with <code>--instantiation sync</code>).</p>
+</li>
+<li>
+<p><code>--valid-lifting-optimization</code>: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.</p>
+</li>
+<li>
+<p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
+</li>
+<li>
+<p><code>--no-namespaced-exports</code>: Removes exports of the type <code>test as &quot;test:flavorful/test&quot;</code> which are not compatible with typescript</p>
+</li>
+<li>
+<p><code>--async-mode [mode]</code>: EXPERIMENTAL: For the component imports and exports, functions and methods on resources can be specified as <code>async</code>. The only option is <code>jspi</code> (JavaScript Promise Integration).</p>
+</li>
+<li>
+<p><code>--async-imports &lt;imports...&gt;</code>: EXPERIMENTAL: Specify the component imports as <code>async</code>. Used with <code>--async-mode</code>.</p>
+</li>
+<li>
+<p><code>--async-exports &lt;exports...&gt;</code>: EXPERIMENTAL: Specify the component exports as <code>async</code>. Used with <code>--async-mode</code>.</p>
+</li>
 </ul>
 <h2 id="browser-support"><a class="header" href="#browser-support">Browser Support</a></h2>
 <p>Jco itself can be used in the browser, which provides the simpler Jco API that is just exactly the same
