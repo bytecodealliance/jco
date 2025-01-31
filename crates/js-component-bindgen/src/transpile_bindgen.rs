@@ -267,15 +267,6 @@ impl JsBindgen<'_> {
             }
         }
 
-        // adds a default implementation of `getCoreModule`
-        if matches!(self.opts.instantiation, Some(InstantiationMode::Async)) {
-            uwriteln!(
-                compilation_promises,
-                "if (!getCoreModule) getCoreModule = (name) => {}(new URL(`./${{name}}`, import.meta.url));",
-                self.intrinsic(Intrinsic::FetchCompile)
-            );
-        }
-
         // Setup the compilation data and compilation promises
         let mut removed = BTreeSet::new();
         for i in 0..self.core_module_cnt {
@@ -316,6 +307,12 @@ impl JsBindgen<'_> {
             &mut self.all_intrinsics,
             self.opts.no_nodejs_compat,
             self.opts.instantiation.is_some(),
+        );
+
+        uwriteln!(
+            js_intrinsics,
+            "if (!getCoreModule) getCoreModule = (name) => {}(new URL(`./${{name}}`, import.meta.url));",
+            self.intrinsic(Intrinsic::FetchCompile)
         );
 
         if let Some(instantiation) = &self.opts.instantiation {

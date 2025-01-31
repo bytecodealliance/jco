@@ -76,9 +76,9 @@ export async function typesComponent (witPath, opts) {
     features = { tag: 'list', val: opts.feature };
   }
 
-  if (opts.defaultAsyncImports)
+  if (opts.asyncWasiImports)
     opts.asyncImports = DEFAULT_ASYNC_IMPORTS.concat(opts.asyncImports || []);
-  if (opts.defaultAsyncExports)
+  if (opts.asyncWasiExports)
     opts.asyncExports = DEFAULT_ASYNC_EXPORTS.concat(opts.asyncExports || []);
 
   const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync' ?
@@ -141,9 +141,9 @@ export async function transpile (componentPath, opts, program) {
   if (opts.map)
     opts.map = Object.fromEntries(opts.map.map(mapping => mapping.split('=')));
 
-  if (opts.defaultAsyncImports)
+  if (opts.asyncWasiImports)
     opts.asyncImports = DEFAULT_ASYNC_IMPORTS.concat(opts.asyncImports || []);
-  if (opts.defaultAsyncExports)
+  if (opts.asyncWasiExports)
     opts.asyncExports = DEFAULT_ASYNC_EXPORTS.concat(opts.asyncExports || []);
 
   const { files } = await transpileComponent(component, opts);
