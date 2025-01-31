@@ -217,12 +217,6 @@ export async function setupAsyncTest(args) {
     ...(jco?.transpile?.extraArgs || {}),
   };
 
-  // If we used a pre-optimized build, then we can set that before transpiling
-  if (["yes", "true"].includes(env.TEST_CUSTOM_ENGINE_PREOPTIMIZED)) {
-    log("using preoptimized engine build!");
-    transpileOpts.preoptimized = true;
-  }
-
   const componentBytes = await readFile(componentPath);
 
   // Perform transpilation, write out files

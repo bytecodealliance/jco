@@ -185,13 +185,11 @@ async function wasm2Js (source) {
  *   js?: bool,
  *   minify?: bool,
  *   optimize?: bool,
- *   preoptimized?: bool,
  *   namespacedExports?: bool,
  *   outDir?: string,
  *   multiMemory?: bool,
  *   experimentalIdlImports?: bool,
  *   optArgs?: string[],
- *   wasmOptBinPath?: string,
  * }} opts
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
