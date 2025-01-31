@@ -671,6 +671,7 @@ impl Intrinsic {
             "hasOwnProperty",
             "i32ToF32",
             "i64ToF64",
+            "imports",
             "instantiateCore",
             "isLE",
             "resourceCallBorrows",
