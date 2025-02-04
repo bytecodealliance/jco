@@ -1,23 +1,26 @@
 use std::collections::VecDeque;
 use std::fs::metadata;
 use std::path::PathBuf;
+
 use wasm_encoder::{Encode, Section};
 use wasm_metadata::Producers;
 use wit_component::{ComponentEncoder, DecodedWasm, WitPrinter};
-use wit_parser::{Mangling, Resolve};
+use wit_parser::Resolve;
 
-use exports::local::wasm_tools::tools::{
+mod bindings {
+    use super::WasmToolsJs;
+    wit_bindgen::generate!({
+        world: "wasm-tools"
+    });
+    export!(WasmToolsJs);
+}
+
+use bindings::exports::local::wasm_tools::tools::{
     EmbedOpts, EnabledFeatureSet, Guest, ModuleMetaType, ModuleMetadata, ProducersFields,
     StringEncoding,
 };
 
-wit_bindgen::generate!({
-    world: "wasm-tools"
-});
-
 struct WasmToolsJs;
-
-export!(WasmToolsJs);
 
 impl Guest for WasmToolsJs {
     fn parse(wat: String) -> Result<Vec<u8>, String> {
@@ -63,11 +66,12 @@ impl Guest for WasmToolsJs {
             DecodedWasm::Component(resolve, world) => resolve.worlds[*world].package.unwrap(),
         };
 
-        let output = WitPrinter::default()
+        let mut printer = WitPrinter::default();
+        printer
             .print(decoded.resolve(), doc, &[])
             .map_err(|e| format!("Unable to print wit\n${:?}", e))?;
 
-        Ok(output)
+        Ok(printer.output.to_string())
     }
 
     fn component_embed(embed_opts: EmbedOpts) -> Result<Vec<u8>, String> {
@@ -122,7 +126,7 @@ impl Guest for WasmToolsJs {
                 ..
             }
         ) {
-            wit_component::dummy_module(&resolve, world, Mangling::Standard32)
+            wit_component::dummy_module(&resolve, world, wit_parser::ManglingAndAbi::Standard32)
         } else {
             if binary.is_none() {
                 return Err(
@@ -184,23 +188,26 @@ impl Guest for WasmToolsJs {
     }
 
     fn metadata_show(binary: Vec<u8>) -> Result<Vec<ModuleMetadata>, String> {
-        let metadata =
-            wasm_metadata::Metadata::from_binary(&binary).map_err(|e| format!("{:?}", e))?;
+        let payload =
+            wasm_metadata::Payload::from_binary(&binary).map_err(|e| format!("{:?}", e))?;
         let mut module_metadata: Vec<ModuleMetadata> = Vec::new();
-        let mut to_flatten: VecDeque<(Option<u32>, wasm_metadata::Metadata)> = VecDeque::new();
-        to_flatten.push_back((None, metadata));
-        while let Some((parent_index, metadata)) = to_flatten.pop_front() {
-            let (name, producers, meta_type, range) = match metadata {
-                wasm_metadata::Metadata::Component {
-                    name,
-                    producers,
+        let mut to_flatten: VecDeque<(Option<u32>, wasm_metadata::Payload)> = VecDeque::new();
+        to_flatten.push_back((None, payload));
+        while let Some((parent_index, payload)) = to_flatten.pop_front() {
+            let (name, producers, meta_type, range) = match payload {
+                wasm_metadata::Payload::Component {
+                    metadata:
+                        wasm_metadata::Metadata {
+                            name,
+                            producers,
+                            range,
+                            ..
+                        },
                     children,
-                    range,
-                    registry_metadata: _,
                 } => {
                     let children_len = children.len();
                     for child in children {
-                        to_flatten.push_back((Some(module_metadata.len() as u32), *child));
+                        to_flatten.push_back((Some(module_metadata.len() as u32), child));
                     }
                     (
                         name,
@@ -209,12 +216,12 @@ impl Guest for WasmToolsJs {
                         range,
                     )
                 }
-                wasm_metadata::Metadata::Module {
+                wasm_metadata::Payload::Module(wasm_metadata::Metadata {
                     name,
                     producers,
                     range,
-                    registry_metadata: _,
-                } => (name, producers, ModuleMetaType::Module, range),
+                    ..
+                }) => (name, producers, ModuleMetaType::Module, range),
             };
 
             let mut metadata: Vec<(String, Vec<(String, String)>)> = Vec::new();

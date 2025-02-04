@@ -1,15 +1,17 @@
-use crate::intrinsics::Intrinsic;
-use crate::source;
-use crate::{uwrite, uwriteln};
-use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
+
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
-use wit_parser::*;
+use wit_parser::{ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId};
+
+use crate::intrinsics::Intrinsic;
+use crate::source;
+use crate::{uwrite, uwriteln};
 
 #[derive(PartialEq)]
 pub enum ErrHandling {
@@ -1071,7 +1073,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::CallInterface { func } => {
+            Instruction::CallInterface { func, .. } => {
                 let results_length = func.results.len();
                 let maybe_async_await = if self.is_async { "await " } else { "" };
                 let call = if self.callee_resource_dynamic {
@@ -1512,6 +1514,32 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 results.push(handle);
             }
+
+            // For most non-Promise objects, flushing or evaluating the object is a no-op,
+            // so until async is implemented, we can only pass through objects without modification
+            //
+            // During async implementation this flush should check for Promises and await them
+            // as necessary
+            Instruction::Flush { amt } => {
+                for n in 0..*amt {
+                    results.push(operands[n].clone());
+                }
+            }
+
+            // TODO: implement async
+            Instruction::FutureLower { .. }
+            | Instruction::FutureLift { .. }
+            | Instruction::StreamLower { .. }
+            | Instruction::StreamLift { .. }
+            | Instruction::AsyncMalloc { .. }
+            | Instruction::AsyncCallWasm { .. }
+            | Instruction::AsyncPostCallInterface { .. }
+            | Instruction::AsyncCallReturn { .. }
+            | Instruction::ErrorContextLift { .. }
+            | Instruction::ErrorContextLower { .. } => {
+                uwrite!(self.src, "throw new Error('async is not yet implemented');");
+            }
+
             Instruction::GuestDeallocate { .. }
             | Instruction::GuestDeallocateString
             | Instruction::GuestDeallocateList { .. }

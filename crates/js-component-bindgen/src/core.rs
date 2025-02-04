@@ -36,10 +36,17 @@
 //! Additionally core wasm sections such as data sections and tables are not
 //! supported because, again, Wasmtime doesn't use it at this time.
 
-use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet};
-use wasm_encoder::*;
-use wasmparser::*;
+
+use anyhow::{bail, Result};
+use wasm_encoder::{
+    CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
+    Module, TypeSection,
+};
+use wasmparser::{
+    Export, ExternalKind, FunctionBody, Import, Parser, Payload, TypeRef, Validator, VisitOperator,
+    VisitSimdOperator, WasmFeatures,
+};
 use wasmtime_environ::component::CoreDef;
 use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};
 
@@ -547,12 +554,16 @@ macro_rules! define_visit {
 impl<'a> VisitOperator<'a> for CollectMemOps<'_, 'a> {
     type Output = ();
 
-    wasmparser::for_each_operator!(define_visit);
+    wasmparser::for_each_visit_operator!(define_visit);
+}
+
+impl<'a> VisitSimdOperator<'a> for CollectMemOps<'_, 'a> {
+    wasmparser::for_each_visit_simd_operator!(define_visit);
 }
 
 impl AugmentedOp {
     fn encode_type(&self, section: &mut TypeSection) {
-        use wasm_encoder::ValType::*;
+        use wasm_encoder::ValType::{F32, F64, I32, I64};
         match self {
             // Loads take two arguments: the first is the address being loaded
             // from and the second is the static offset that was listed on the
@@ -773,7 +784,11 @@ macro_rules! define_translate {
 impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
     type Output = ();
 
-    wasmparser::for_each_operator!(define_translate);
+    wasmparser::for_each_visit_operator!(define_translate);
+}
+
+impl<'a> VisitSimdOperator<'a> for Translator<'_, 'a> {
+    wasmparser::for_each_visit_simd_operator!(define_translate);
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
@@ -828,7 +843,7 @@ impl Translator<'_, '_> {
         insn: fn(wasm_encoder::MemArg) -> wasm_encoder::Instruction<'static>,
         memarg: wasmparser::MemArg,
     ) {
-        use wasm_encoder::Instruction::*;
+        use wasm_encoder::Instruction::{Call, I32Const};
         if memarg.memory < 1 {
             self.func.instruction(&insn(self.memarg(memarg)));
             return;

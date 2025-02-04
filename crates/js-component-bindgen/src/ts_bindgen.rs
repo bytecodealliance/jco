@@ -1,19 +1,21 @@
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, HashSet};
+use std::fmt::Write;
+
+use anyhow::{Context as _, Result};
+use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
+use log::debug;
+use wit_bindgen_core::wit_parser::{
+    Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
+    Tuple, Type, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem, WorldKey,
+};
+
 use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
 use crate::{dealias, feature_gate_allowed, uwrite, uwriteln};
-use anyhow::{Context as _, Result};
-use heck::*;
-use log::debug;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashSet};
-use std::fmt::Write;
-use wit_bindgen_core::wit_parser::{
-    Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
-    Tuple, Type, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem, WorldKey,
-};
 
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the
@@ -168,8 +170,11 @@ pub fn ts_bindgen(
                         TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
                         TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
                         TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
-                        TypeDefKind::Future(_) => todo!("generate for future"),
-                        TypeDefKind::Stream(_) => todo!("generate for stream"),
+                        TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
+                        TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
+                        TypeDefKind::ErrorContext => {
+                            todo!("(async impl) generate for error-context")
+                        }
                         TypeDefKind::Unknown => unreachable!(),
                         TypeDefKind::Resource => {}
                         TypeDefKind::Handle(_) => todo!(),
@@ -669,8 +674,11 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Result(r) => self.type_result(*id, name, r, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(*id, name, t, &ty.docs),
                 TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
-                TypeDefKind::Future(_) => todo!("generate for future"),
-                TypeDefKind::Stream(_) => todo!("generate for stream"),
+                TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
+                TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
+                TypeDefKind::ErrorContext { .. } => {
+                    todo!("(async impl) generate for error-context")
+                }
                 TypeDefKind::Unknown => unreachable!(),
                 TypeDefKind::Resource => {}
                 TypeDefKind::Handle(_) => todo!(),
@@ -739,6 +747,7 @@ impl<'a> TsInterface<'a> {
                         }
                         panic!("anonymous resource handle");
                     }
+                    TypeDefKind::ErrorContext => todo!("(async impl) anonymous error-context)"),
                 }
             }
         }
