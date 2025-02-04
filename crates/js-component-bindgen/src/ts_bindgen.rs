@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
 
 use anyhow::{Context as _, Result};
-use heck::{ToKebabCase, ToUpperCamelCase, ToLowerCamelCase};
+use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use log::debug;
 use wit_bindgen_core::wit_parser::{
     Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
