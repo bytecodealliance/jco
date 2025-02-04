@@ -1515,6 +1515,17 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(handle);
             }
 
+            // For most non-Promise objects, flushing or evaluating the object is a no-op,
+            // so until async is implemented, we can only pass through objects without modification
+            //
+            // During async implementation this flush should check for Promises and await them
+            // as necessary
+            Instruction::Flush { amt } => {
+                for n in 0..*amt {
+                    results.push(operands[n].clone());
+                }
+            }
+
             // TODO: implement async
             Instruction::FutureLower { .. }
             | Instruction::FutureLift { .. }
@@ -1524,13 +1535,9 @@ impl Bindgen for FunctionBindgen<'_> {
             | Instruction::AsyncCallWasm { .. }
             | Instruction::AsyncPostCallInterface { .. }
             | Instruction::AsyncCallReturn { .. }
-            | Instruction::Flush { .. }
             | Instruction::ErrorContextLift { .. }
             | Instruction::ErrorContextLower { .. } => {
-                uwrite!(
-                    self.src,
-                    "throw new Error('async is not yet implemented');"
-                );
+                uwrite!(self.src, "throw new Error('async is not yet implemented');");
             }
 
             Instruction::GuestDeallocate { .. }
