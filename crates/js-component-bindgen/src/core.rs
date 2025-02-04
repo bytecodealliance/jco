@@ -36,10 +36,14 @@
 //! Additionally core wasm sections such as data sections and tables are not
 //! supported because, again, Wasmtime doesn't use it at this time.
 
-use anyhow::{bail, Result};
 use std::collections::{HashMap, HashSet};
+
+use anyhow::{bail, Result};
 use wasm_encoder::*;
-use wasmparser::*;
+use wasmparser::{
+    Export, ExternalKind, FunctionBody, Import, Parser, Payload, TypeRef, Validator, VisitOperator,
+    VisitSimdOperator, WasmFeatures,
+};
 use wasmtime_environ::component::CoreDef;
 use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};
 
@@ -547,7 +551,13 @@ macro_rules! define_visit {
 impl<'a> VisitOperator<'a> for CollectMemOps<'_, 'a> {
     type Output = ();
 
-    wasmparser::for_each_operator!(define_visit);
+    wasmparser::for_each_visit_operator!(define_visit);
+}
+
+impl<'a> VisitorSimdOperator<'a> for CollectMemOps<'_, 'a> {
+    type Output = ();
+
+    wasmparser::for_each_visit_simd_operator!(define_visit);
 }
 
 impl AugmentedOp {
@@ -773,7 +783,11 @@ macro_rules! define_translate {
 impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
     type Output = ();
 
-    wasmparser::for_each_operator!(define_translate);
+    wasmparser::for_each_visit_operator!(define_translate);
+}
+
+impl<'a> VisitSimdOperator<'a> for Translator<'_, 'a> {
+    wasmparser::for_each_visit_simd_operator!(define_simd_translate);
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
