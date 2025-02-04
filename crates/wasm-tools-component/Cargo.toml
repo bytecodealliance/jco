@@ -14,8 +14,8 @@ anyhow = { workspace = true }
 wasm-encoder = { workspace = true }
 wasm-metadata = { workspace = true }
 wasmparser = { workspace = true }
-wasmprinter = { workspace = true }
+wasmprinter = { workspace = true, features = ["component-model"] }
 wat = { workspace = true }
-wit-bindgen = { workspace = true }
+wit-bindgen = { workspace = true, features = ["macros"] }
 wit-component = { workspace = true }
 wit-parser = { workspace = true }

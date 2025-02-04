@@ -1,8 +1,9 @@
 [package]
 name = "jco"
-version = { workspace = true }
-edition = { workspace = true }
 publish = false
+
+version.workspace = true
+edition.workspace = true
 
 [[bin]]
 name = "dummy"
@@ -34,28 +35,28 @@ rpath = false
 strip = true
 
 [workspace.dependencies]
-anyhow = "1.0.95"
-base64 = "0.22.1"
-heck = "0.5.0"
-log = "0.4.22"
-semver = "1.0.25"
+anyhow = { version = "1.0.95", default-features = false }
+base64 = { version = "0.22.1", default-features = false }
+heck = { version = "0.5.0", default-features = false }
+log = { version = "0.4.22", default-features = false }
+semver = { version = "1.0.25", default-features = false }
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
-structopt = "0.3.26"
-wasm-encoder = "0.220.0"
-wasm-metadata = "0.220.0"
-wasmparser = "0.220.0"
-wasmprinter = "0.220.0"
+structopt = { version = "0.3.26", default-features = false }
+wasm-encoder = { version = "0.220.0", default-features = false }
+wasm-metadata = { version = "0.220.0", default-features = false }
+wasmparser = { version = "0.220.0", default-features = false }
+wasmprinter = { version = "0.220.0", default-features = false }
 wasmtime-environ = { version = "29.0.0", features = [
     "component-model",
     "compile",
 ] }
-wat = "1.220.0"
-webidl2wit = "0.1.0"
-wit-bindgen = "0.36.0"
-wit-bindgen-core = "0.36.0"
+wat = { version = "1.220.0", default-features = false }
+webidl2wit = { version = "0.1.0", default-features = false }
+wit-bindgen = { version = "0.36.0", default-features = false }
+wit-bindgen-core = { version = "0.36.0", default-features = false }
 wit-component = { version = "0.220.0", features = ["dummy-module"] }
-wit-parser = "0.220.0"
-xshell = "0.2.6"
+wit-parser = { version = "0.220.0", default-features = false }
+xshell = { version = "0.2.6", default-features = false }
 
 [dev-dependencies]
 anyhow = { workspace = true }

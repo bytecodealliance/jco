@@ -22,12 +22,12 @@ transpile-bindgen = []
 
 [dependencies]
 anyhow = { workspace = true }
-base64 = { workspace = true }
+base64 = { workspace = true, features = [ "alloc" ] }
 heck = { workspace = true }
 log = { workspace = true }
 semver = { workspace = true }
 wasm-encoder = { workspace = true }
-wasmparser = { workspace = true }
+wasmparser = { workspace = true, features = [ "features", "component-model" ] }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
 wit-bindgen-core = { workspace = true }
 wit-component = { workspace = true }
