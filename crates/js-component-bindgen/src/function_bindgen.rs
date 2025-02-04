@@ -1526,7 +1526,12 @@ impl Bindgen for FunctionBindgen<'_> {
             | Instruction::AsyncCallReturn { .. }
             | Instruction::Flush { .. }
             | Instruction::ErrorContextLift { .. }
-            | Instruction::ErrorContextLower { .. } => unimplemented!("async not yet implemented"),
+            | Instruction::ErrorContextLower { .. } => {
+                uwrite!(
+                    self.src,
+                    "throw new Error('async is not yet implemented');"
+                );
+            }
 
             Instruction::GuestDeallocate { .. }
             | Instruction::GuestDeallocateString
