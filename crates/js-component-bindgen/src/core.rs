@@ -563,7 +563,7 @@ impl<'a> VisitSimdOperator<'a> for CollectMemOps<'_, 'a> {
 
 impl AugmentedOp {
     fn encode_type(&self, section: &mut TypeSection) {
-        use wasm_encoder::ValType::*;
+        use wasm_encoder::ValType::{F32, F64, I32, I64};
         match self {
             // Loads take two arguments: the first is the address being loaded
             // from and the second is the static offset that was listed on the
@@ -843,7 +843,7 @@ impl Translator<'_, '_> {
         insn: fn(wasm_encoder::MemArg) -> wasm_encoder::Instruction<'static>,
         memarg: wasmparser::MemArg,
     ) {
-        use wasm_encoder::Instruction::*;
+        use wasm_encoder::Instruction::{Call, I32Const};
         if memarg.memory < 1 {
             self.func.instruction(&insn(self.memarg(memarg)));
             return;

@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::mem;
 
 use base64::{engine::general_purpose, Engine as _};
-use heck::*;
+use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{ExportIndex, NameMap, NameMapNoIntern, Transcode};
 use wasmtime_environ::{
     component,
@@ -1746,7 +1746,6 @@ impl<'a> Instantiator<'a, '_> {
                 AbiVariant::GuestImportAsync => todo!("async not yet implemented"),
                 AbiVariant::GuestExportAsync => todo!("async not yet implemented"),
                 AbiVariant::GuestExportAsyncStackful => todo!("async not yet implemented"),
-
             },
             func,
             &mut f,

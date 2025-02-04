@@ -1,19 +1,21 @@
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, HashSet};
+use std::fmt::Write;
+
+use anyhow::{Context as _, Result};
+use heck::{ToKebabCase, ToUpperCamelCase, ToLowerCamelCase};
+use log::debug;
+use wit_bindgen_core::wit_parser::{
+    Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
+    Tuple, Type, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem, WorldKey,
+};
+
 use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
 use crate::{dealias, feature_gate_allowed, uwrite, uwriteln};
-use anyhow::{Context as _, Result};
-use heck::*;
-use log::debug;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashSet};
-use std::fmt::Write;
-use wit_bindgen_core::wit_parser::{
-    Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
-    Tuple, Type, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem, WorldKey,
-};
 
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the

@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
 
-use heck::*;
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
-use wit_parser::*;
+use wit_parser::{ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId};
 
 use crate::intrinsics::Intrinsic;
 use crate::source;
