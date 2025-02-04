@@ -16,6 +16,9 @@ import { platform } from "node:process";
 
 const isWindows = platform === "win32";
 
+// - (2025/02/04) incrased due to incoming implementations of async and new flush impl
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 28_500;
+
 export async function apiTest(_fixtures) {
   suite("API", () => {
     test("Transpile", async () => {
@@ -46,7 +49,7 @@ export async function apiTest(_fixtures) {
       strictEqual(imports.length, 4);
       strictEqual(exports.length, 3);
       deepStrictEqual(exports[0], ["test", "instance"]);
-      ok(files[name + ".js"].length < 28_000);
+      ok(files[name + ".js"].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
     });
 
     test("Transpile to JS", async () => {
