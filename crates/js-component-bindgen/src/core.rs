@@ -39,7 +39,10 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{bail, Result};
-use wasm_encoder::*;
+use wasm_encoder::{
+    CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
+    Module, TypeSection,
+};
 use wasmparser::{
     Export, ExternalKind, FunctionBody, Import, Parser, Payload, TypeRef, Validator, VisitOperator,
     VisitSimdOperator, WasmFeatures,
@@ -554,9 +557,7 @@ impl<'a> VisitOperator<'a> for CollectMemOps<'_, 'a> {
     wasmparser::for_each_visit_operator!(define_visit);
 }
 
-impl<'a> VisitorSimdOperator<'a> for CollectMemOps<'_, 'a> {
-    type Output = ();
-
+impl<'a> VisitSimdOperator<'a> for CollectMemOps<'_, 'a> {
     wasmparser::for_each_visit_simd_operator!(define_visit);
 }
 
@@ -787,7 +788,7 @@ impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
 }
 
 impl<'a> VisitSimdOperator<'a> for Translator<'_, 'a> {
-    wasmparser::for_each_visit_simd_operator!(define_simd_translate);
+    wasmparser::for_each_visit_simd_operator!(define_translate);
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]

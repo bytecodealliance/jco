@@ -1,19 +1,10 @@
-use crate::core;
-use crate::esm_bindgen::EsmBindgen;
-use crate::files::Files;
-use crate::function_bindgen::{
-    ErrHandling, FunctionBindgen, ResourceData, ResourceMap, ResourceTable,
-};
-use crate::intrinsics::{render_intrinsics, Intrinsic};
-use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
-use crate::source;
-use crate::{uwrite, uwriteln};
-use base64::{engine::general_purpose, Engine as _};
-use heck::*;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
+
+use base64::{engine::general_purpose, Engine as _};
+use heck::*;
 use wasmtime_environ::component::{ExportIndex, NameMap, NameMapNoIntern, Transcode};
 use wasmtime_environ::{
     component,
@@ -33,6 +24,17 @@ use wit_parser::{
     Function, FunctionKind, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId, WorldId,
     WorldItem, WorldKey,
 };
+
+use crate::core;
+use crate::esm_bindgen::EsmBindgen;
+use crate::files::Files;
+use crate::function_bindgen::{
+    ErrHandling, FunctionBindgen, ResourceData, ResourceMap, ResourceTable,
+};
+use crate::intrinsics::{render_intrinsics, Intrinsic};
+use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
+use crate::source;
+use crate::{uwrite, uwriteln};
 
 #[derive(Default, Clone)]
 pub struct TranspileOpts {
@@ -1705,6 +1707,9 @@ impl<'a> Instantiator<'a, '_> {
                 match abi {
                     AbiVariant::GuestExport => ErrHandling::ThrowResultErr,
                     AbiVariant::GuestImport => ErrHandling::ResultCatchHandler,
+                    AbiVariant::GuestImportAsync => todo!("async not yet implemented"),
+                    AbiVariant::GuestExportAsync => todo!("async not yet implemented"),
+                    AbiVariant::GuestExportAsyncStackful => todo!("async not yet implemented"),
                 }
             } else {
                 ErrHandling::None
@@ -1738,9 +1743,15 @@ impl<'a> Instantiator<'a, '_> {
             match abi {
                 AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
                 AbiVariant::GuestExport => LiftLower::LowerArgsLiftResults,
+                AbiVariant::GuestImportAsync => todo!("async not yet implemented"),
+                AbiVariant::GuestExportAsync => todo!("async not yet implemented"),
+                AbiVariant::GuestExportAsyncStackful => todo!("async not yet implemented"),
+
             },
             func,
             &mut f,
+            // TODO: implement async
+            false,
         );
         self.src.js(&f.src);
         self.src.js("}");

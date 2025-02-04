@@ -1,15 +1,17 @@
-use crate::intrinsics::Intrinsic;
-use crate::source;
-use crate::{uwrite, uwriteln};
-use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
+
+use heck::*;
 use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
 use wit_parser::*;
+
+use crate::intrinsics::Intrinsic;
+use crate::source;
+use crate::{uwrite, uwriteln};
 
 #[derive(PartialEq)]
 pub enum ErrHandling {
@@ -1071,7 +1073,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::CallInterface { func } => {
+            Instruction::CallInterface { func, .. } => {
                 let results_length = func.results.len();
                 let maybe_async_await = if self.is_async { "await " } else { "" };
                 let call = if self.callee_resource_dynamic {
@@ -1512,6 +1514,20 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 results.push(handle);
             }
+
+            // TODO: implement async
+            Instruction::FutureLower { .. }
+            | Instruction::FutureLift { .. }
+            | Instruction::StreamLower { .. }
+            | Instruction::StreamLift { .. }
+            | Instruction::AsyncMalloc { .. }
+            | Instruction::AsyncCallWasm { .. }
+            | Instruction::AsyncPostCallInterface { .. }
+            | Instruction::AsyncCallReturn { .. }
+            | Instruction::Flush { .. }
+            | Instruction::ErrorContextLift { .. }
+            | Instruction::ErrorContextLower { .. } => unimplemented!("async not yet implemented"),
+
             Instruction::GuestDeallocate { .. }
             | Instruction::GuestDeallocateString
             | Instruction::GuestDeallocateList { .. }
