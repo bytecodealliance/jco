@@ -1,4 +1,4 @@
-export namespace WasiIoPoll {
+declare module 'wasi:io/poll@0.2.2' {
   export { Pollable };
   /**
    * Poll for completion on a set of pollables.
@@ -9,8 +9,9 @@ export namespace WasiIoPoll {
    * The result `list<u32>` contains one or more indices of handles in the
    * argument list that is ready for I/O.
    * 
-   * If the list contains more elements than can be indexed with a `u32`
-   * value, this function traps.
+   * This function traps if either:
+   * - the list is empty, or:
+   * - the list contains more elements than can be indexed with a `u32` value.
    * 
    * A timeout can be implemented by adding a pollable from the
    * wasi-clocks API to the list.
@@ -18,7 +19,7 @@ export namespace WasiIoPoll {
    * This function does not return a `result`; polling in itself does not
    * do any I/O so it doesn't fail. If any of the I/O sources identified by
    * the pollables has an error, it is indicated by marking the source as
-   * being reaedy for I/O.
+   * being ready for I/O.
    */
   export function poll(in_: Array<Pollable>): Uint32Array;
 }

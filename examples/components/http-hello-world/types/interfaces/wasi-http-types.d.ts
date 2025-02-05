@@ -1,4 +1,4 @@
-export namespace WasiHttpTypes {
+declare module 'wasi:http/types@0.2.2' {
   export { Fields };
   export { IncomingRequest };
   export { OutgoingRequest };
@@ -255,7 +255,7 @@ export interface ErrorCodeInternalError {
  */
 export type HeaderError = HeaderErrorInvalidSyntax | HeaderErrorForbidden | HeaderErrorImmutable;
 /**
- * This error indicates that a `field-key` or `field-value` was
+ * This error indicates that a `field-name` or `field-value` was
  * syntactically invalid when used with an operation that sets headers in a
  * `fields`.
  */
@@ -263,7 +263,7 @@ export interface HeaderErrorInvalidSyntax {
   tag: 'invalid-syntax',
 }
 /**
- * This error indicates that a forbidden `field-key` was used when trying
+ * This error indicates that a forbidden `field-name` was used when trying
  * to set a header in a `fields`.
  */
 export interface HeaderErrorForbidden {
@@ -278,8 +278,22 @@ export interface HeaderErrorImmutable {
 }
 /**
  * Field keys are always strings.
+ * 
+ * Field keys should always be treated as case insensitive by the `fields`
+ * resource for the purposes of equality checking.
+ * 
+ * # Deprecation
+ * 
+ * This type has been deprecated in favor of the `field-name` type.
  */
 export type FieldKey = string;
+/**
+ * Field names are always strings.
+ * 
+ * Field names should always be treated as case insensitive by the `fields`
+ * resource for the purposes of equality checking.
+ */
+export type FieldName = FieldKey;
 /**
  * Field values should always be ASCII strings. However, in
  * reality, HTTP implementations often have to interpret malformed values,
@@ -312,63 +326,73 @@ export class Fields {
   * 
   * The resulting `fields` is mutable.
   * 
-  * The list represents each key-value pair in the Fields. Keys
+  * The list represents each name-value pair in the Fields. Names
   * which have multiple values are represented by multiple entries in this
-  * list with the same key.
+  * list with the same name.
   * 
-  * The tuple is a pair of the field key, represented as a string, and
-  * Value, represented as a list of bytes. In a valid Fields, all keys
-  * and values are valid UTF-8 strings. However, values are not always
-  * well-formed, so they are represented as a raw list of bytes.
+  * The tuple is a pair of the field name, represented as a string, and
+  * Value, represented as a list of bytes.
   * 
-  * An error result will be returned if any header or value was
-  * syntactically invalid, or if a header was forbidden.
+  * An error result will be returned if any `field-name` or `field-value` is
+  * syntactically invalid, or if a field is forbidden.
   */
-  static fromList(entries: Array<[FieldKey, FieldValue]>): Fields;
+  static fromList(entries: Array<[FieldName, FieldValue]>): Fields;
   /**
-  * Get all of the values corresponding to a key. If the key is not present
-  * in this `fields`, an empty list is returned. However, if the key is
-  * present but empty, this is represented by a list with one or more
-  * empty field-values present.
+  * Get all of the values corresponding to a name. If the name is not present
+  * in this `fields` or is syntactically invalid, an empty list is returned.
+  * However, if the name is present but empty, this is represented by a list
+  * with one or more empty field-values present.
   */
-  get(name: FieldKey): Array<FieldValue>;
+  get(name: FieldName): Array<FieldValue>;
   /**
-  * Returns `true` when the key is present in this `fields`. If the key is
+  * Returns `true` when the name is present in this `fields`. If the name is
   * syntactically invalid, `false` is returned.
   */
-  has(name: FieldKey): boolean;
+  has(name: FieldName): boolean;
   /**
-  * Set all of the values for a key. Clears any existing values for that
-  * key, if they have been set.
+  * Set all of the values for a name. Clears any existing values for that
+  * name, if they have been set.
   * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
+  * 
+  * Fails with `header-error.invalid-syntax` if the `field-name` or any of
+  * the `field-value`s are syntactically invalid.
   */
-  set(name: FieldKey, value: Array<FieldValue>): void;
+  set(name: FieldName, value: Array<FieldValue>): void;
   /**
-  * Delete all values for a key. Does nothing if no values for the key
+  * Delete all values for a name. Does nothing if no values for the name
   * exist.
   * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
+  * 
+  * Fails with `header-error.invalid-syntax` if the `field-name` is
+  * syntactically invalid.
   */
-  'delete'(name: FieldKey): void;
+  'delete'(name: FieldName): void;
   /**
-  * Append a value for a key. Does not change or delete any existing
-  * values for that key.
+  * Append a value for a name. Does not change or delete any existing
+  * values for that name.
   * 
   * Fails with `header-error.immutable` if the `fields` are immutable.
-  */
-  append(name: FieldKey, value: FieldValue): void;
-  /**
-  * Retrieve the full set of keys and values in the Fields. Like the
-  * constructor, the list represents each key-value pair.
   * 
-  * The outer list represents each key-value pair in the Fields. Keys
-  * which have multiple values are represented by multiple entries in this
-  * list with the same key.
+  * Fails with `header-error.invalid-syntax` if the `field-name` or
+  * `field-value` are syntactically invalid.
   */
-  entries(): Array<[FieldKey, FieldValue]>;
+  append(name: FieldName, value: FieldValue): void;
   /**
-  * Make a deep copy of the Fields. Equivelant in behavior to calling the
+  * Retrieve the full set of names and values in the Fields. Like the
+  * constructor, the list represents each name-value pair.
+  * 
+  * The outer list represents each name-value pair in the Fields. Names
+  * which have multiple values are represented by multiple entries in this
+  * list with the same name.
+  * 
+  * The names and values are always returned in the original casing and in
+  * the order in which they will be serialized for transport.
+  */
+  entries(): Array<[FieldName, FieldValue]>;
+  /**
+  * Make a deep copy of the Fields. Equivalent in behavior to calling the
   * `fields` constructor on the return value of `entries`. The resulting
   * `fields` is mutable.
   */
@@ -378,7 +402,7 @@ export class Fields {
 export class FutureIncomingResponse {
   /**
   * Returns a pollable which becomes ready when either the Response has
-  * been received, or an error has occured. When this pollable is ready,
+  * been received, or an error has occurred. When this pollable is ready,
   * the `get` method will return `some`.
   */
   subscribe(): Pollable;
@@ -393,8 +417,8 @@ export class FutureIncomingResponse {
   * is `some`, and error on subsequent calls.
   * 
   * The inner `result` represents that either the incoming HTTP Response
-  * status and headers have recieved successfully, or that an error
-  * occured. Errors may also occur while consuming the response body,
+  * status and headers have received successfully, or that an error
+  * occurred. Errors may also occur while consuming the response body,
   * but those will be reported by the `incoming-body` and its
   * `output-stream` child.
   */
@@ -404,12 +428,12 @@ export class FutureIncomingResponse {
 export class FutureTrailers {
   /**
   * Returns a pollable which becomes ready when either the trailers have
-  * been received, or an error has occured. When this pollable is ready,
+  * been received, or an error has occurred. When this pollable is ready,
   * the `get` method will return `some`.
   */
   subscribe(): Pollable;
   /**
-  * Returns the contents of the trailers, or an error which occured,
+  * Returns the contents of the trailers, or an error which occurred,
   * once the future is ready.
   * 
   * The outer `option` represents future readiness. Users can wait on this
@@ -421,7 +445,7 @@ export class FutureTrailers {
   * 
   * The inner `result` represents that either the HTTP Request or Response
   * body, as well as any trailers, were received successfully, or that an
-  * error occured receiving them. The optional `trailers` indicates whether
+  * error occurred receiving them. The optional `trailers` indicates whether
   * or not trailers were present in the body.
   * 
   * When some `trailers` are returned by this method, the `trailers`
@@ -472,7 +496,7 @@ export class IncomingRequest {
   */
   scheme(): Scheme | undefined;
   /**
-  * Returns the authority from the request, if it was present.
+  * Returns the authority of the Request's target URI, if present.
   */
   authority(): string | undefined;
   /**
@@ -597,16 +621,16 @@ export class OutgoingRequest {
   */
   setScheme(scheme: Scheme | undefined): void;
   /**
-  * Get the HTTP Authority for the Request. A value of `none` may be used
-  * with Related Schemes which do not require an Authority. The HTTP and
+  * Get the authority of the Request's target URI. A value of `none` may be used
+  * with Related Schemes which do not require an authority. The HTTP and
   * HTTPS schemes always require an authority.
   */
   authority(): string | undefined;
   /**
-  * Set the HTTP Authority for the Request. A value of `none` may be used
-  * with Related Schemes which do not require an Authority. The HTTP and
+  * Set the authority of the Request's target URI. A value of `none` may be used
+  * with Related Schemes which do not require an authority. The HTTP and
   * HTTPS schemes always require an authority. Fails if the string given is
-  * not a syntactically valid uri authority.
+  * not a syntactically valid URI authority.
   */
   setAuthority(authority: string | undefined): void;
   /**
@@ -616,7 +640,7 @@ export class OutgoingRequest {
   * `delete` operations will fail with `header-error.immutable`.
   * 
   * This headers resource is a child: it must be dropped before the parent
-  * `outgoing-request` is dropped, or its ownership is transfered to
+  * `outgoing-request` is dropped, or its ownership is transferred to
   * another component by e.g. `outgoing-handler.handle`.
   */
   headers(): Headers;
@@ -647,7 +671,7 @@ export class OutgoingResponse {
   * `delete` operations will fail with `header-error.immutable`.
   * 
   * This headers resource is a child: it must be dropped before the parent
-  * `outgoing-request` is dropped, or its ownership is transfered to
+  * `outgoing-request` is dropped, or its ownership is transferred to
   * another component by e.g. `outgoing-handler.handle`.
   */
   headers(): Headers;

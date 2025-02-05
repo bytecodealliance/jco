@@ -1,4 +1,4 @@
-export namespace WasiHttpIncomingHandler {
+declare module 'wasi:http/incoming-handler@0.2.2' {
   /**
    * This function is invoked with an incoming HTTP Request, and a resource
    * `response-outparam` which provides the capability to reply with an HTTP

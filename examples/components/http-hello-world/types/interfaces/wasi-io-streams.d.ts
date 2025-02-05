@@ -1,4 +1,4 @@
-export namespace WasiIoStreams {
+declare module 'wasi:io/streams@0.2.2' {
   export { InputStream };
   export { OutputStream };
 }
@@ -14,6 +14,9 @@ export type StreamError = StreamErrorLastOperationFailed | StreamErrorClosed;
  * The last operation (a write or flush) failed before completion.
  * 
  * More information is available in the `error` payload.
+ * 
+ * After this, the stream will be closed. All future operations return
+ * `stream-error::closed`.
  */
 export interface StreamErrorLastOperationFailed {
   tag: 'last-operation-failed',
@@ -162,7 +165,7 @@ export class OutputStream {
     blockingFlush(): void;
     /**
     * Create a `pollable` which will resolve once the output-stream
-    * is ready for more writing, or an error has occured. When this
+    * is ready for more writing, or an error has occurred. When this
     * pollable is ready, `check-write` will return `ok(n)` with n>0, or an
     * error.
     * 
@@ -212,7 +215,7 @@ export class OutputStream {
       /**
       * Read from one stream and write to another.
       * 
-      * The behavior of splice is equivelant to:
+      * The behavior of splice is equivalent to:
       * 1. calling `check-write` on the `output-stream`
       * 2. calling `read` on the `input-stream` with the smaller of the
       * `check-write` permitted length and the `len` provided to `splice`
