@@ -8,7 +8,7 @@ which means installing [`jco`][jco] and related tooling.
 
 > [!NOTE]
 > [Typescript][ts] can *also* be used, given that it is transpiled to JS first by relevant tooling (`tsc`).
-> `jco` includes a `jco types` subcommand for generating typings that can be used with a Typescript codebase.
+> `jco` includes a `jco guest-types` subcommand for generating typings that can be used with a Typescript component.
 
 [jco]: https://github.com/bytecodealliance/jco
 [ts]: https://typescriptlang.org
