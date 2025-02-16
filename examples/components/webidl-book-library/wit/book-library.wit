@@ -1,0 +1,38 @@
+package examples:book-library;
+
+interface default {
+  enum book-genre {
+    fiction,
+    non-fiction,
+    mystery,
+    fantasy,
+    science-fiction,
+    biography,
+  }
+  type dom-string = book-title;
+  record book {
+    title: book-title,
+    author: string,
+    genre: option<book-genre>,
+    pages: option<u16>,
+  }
+  resource library {
+    total-books: func() -> u32;
+    add-book: func(book: book) -> bool;
+    remove-book: func(title: string) -> bool;
+    get-book-by-title: func(title: string) -> option<book>;
+    list-books: func() -> option<list<book>>;
+    as-advanced-library: func() -> option<advanced-library>;
+    library-name: func() -> library-name;
+    rename-library: func(new-name: library-name) -> void;
+  }
+  resource advanced-library {
+    as-library: func() -> library;
+    filter-books: func(name: string) -> list<book>;
+  }
+  type dom-string = library-name;
+  resource book-manager {
+    library: func() -> library;
+    init-library: func(name: library-name) -> void;
+  }
+}
