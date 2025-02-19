@@ -87,9 +87,8 @@ checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 
 [[package]]
 name = "cranelift-bitset"
-version = "0.118.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b265bed7c51e1921fdae6419791d31af77d33662ee56d7b0fa0704dc8d231cab"
+version = "0.121.0"
+source = "git+https://github.com/bytecodealliance/wasip3-prototyping.git?rev=6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63#6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63"
 dependencies = [
  "serde",
  "serde_derive",
@@ -97,9 +96,8 @@ dependencies = [
 
 [[package]]
 name = "cranelift-entity"
-version = "0.118.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c2c67d95507c51b4a1ff3f3555fe4bfec36b9e13c1b684ccc602736f5d5f4a2"
+version = "0.121.0"
+source = "git+https://github.com/bytecodealliance/wasip3-prototyping.git?rev=6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63#6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63"
 dependencies = [
  "cranelift-bitset",
  "serde",
@@ -815,22 +813,22 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "wasm-encoder"
-version = "0.226.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7d81b727619aec227dce83e7f7420d4e56c79acd044642a356ea045b98d4e13"
-dependencies = [
- "leb128fmt",
- "wasmparser 0.226.0",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.227.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80bb72f02e7fbf07183443b27b0f3d4144abf8c114189f2e088ed95b696a7822"
 dependencies = [
  "leb128fmt",
  "wasmparser 0.227.1",
+]
+
+[[package]]
+name = "wasm-encoder"
+version = "0.230.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4349d0943718e6e434b51b9639e876293093dca4b96384fb136ab5bd5ce6660"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.230.0",
 ]
 
 [[package]]
@@ -869,19 +867,6 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.226.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc28600dcb2ba68d7e5f1c3ba4195c2bddc918c0243fd702d0b6dbd05689b681"
-dependencies = [
- "bitflags 2.8.0",
- "hashbrown 0.15.2",
- "indexmap",
- "semver",
- "serde",
-]
-
-[[package]]
-name = "wasmparser"
 version = "0.227.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f51cad774fb3c9461ab9bccc9c62dfb7388397b5deda31bf40e8108ccd678b2"
@@ -893,14 +878,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasmprinter"
-version = "0.226.0"
+name = "wasmparser"
+version = "0.230.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "753a0516fa6c01756ee861f36878dfd9875f273aea9409d9ea390a333c5bcdc2"
+checksum = "808198a69b5a0535583370a51d459baa14261dfab04800c4864ee9e1a14346ed"
 dependencies = [
- "anyhow",
- "termcolor",
- "wasmparser 0.226.0",
+ "bitflags 2.8.0",
+ "hashbrown 0.15.2",
+ "indexmap",
+ "semver",
+ "serde",
 ]
 
 [[package]]
@@ -915,16 +902,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasmtime-component-util"
-version = "31.0.0"
+name = "wasmprinter"
+version = "0.230.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f292ef5eb2cf3d414c2bde59c7fa0feeba799c8db9a8c5a656ad1d1a1d05e10b"
+checksum = "9dc8e9a1e48f4b2247b006b3a9b0a02ba62a2e52cfcfd4bc4c70785a6104fc32"
+dependencies = [
+ "anyhow",
+ "termcolor",
+ "wasmparser 0.230.0",
+]
+
+[[package]]
+name = "wasmtime-component-util"
+version = "34.0.0"
+source = "git+https://github.com/bytecodealliance/wasip3-prototyping.git?rev=6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63#6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63"
 
 [[package]]
 name = "wasmtime-environ"
-version = "31.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b6b4bf08e371edf262cccb62de10e214bd4aaafaa069f1cd49c9c1c3a5ae8e4"
+version = "34.0.0"
+source = "git+https://github.com/bytecodealliance/wasip3-prototyping.git?rev=6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63#6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63"
 dependencies = [
  "anyhow",
  "cranelift-bitset",
@@ -939,9 +935,9 @@ dependencies = [
  "serde_derive",
  "smallvec",
  "target-lexicon",
- "wasm-encoder 0.226.0",
- "wasmparser 0.226.0",
- "wasmprinter 0.226.0",
+ "wasm-encoder 0.230.0",
+ "wasmparser 0.230.0",
+ "wasmprinter 0.230.0",
  "wasmtime-component-util",
 ]
 

@@ -778,10 +778,18 @@ impl<'a> TsInterface<'a> {
                         self.print_optional_ty(r.err.as_ref());
                         self.src.push_str(">");
                     }
-                    TypeDefKind::Variant(_) => panic!("anonymous variant"),
+                    TypeDefKind::Variant(_) => panic!("[print_ty()] anonymous variant"),
                     TypeDefKind::List(v) => self.print_list(v),
-                    TypeDefKind::Future(_) => todo!("anonymous future"),
-                    TypeDefKind::Stream(_) => todo!("anonymous stream"),
+                    TypeDefKind::Future(maybe_ty) => {
+                        self.src.push_str("Promise<");
+                        self.print_optional_ty(maybe_ty.as_ref());
+                        self.src.push_str(">");
+                    }
+                    TypeDefKind::Stream(maybe_ty) => {
+                        self.src.push_str("ReadableStream<");
+                        self.print_optional_ty(maybe_ty.as_ref());
+                        self.src.push_str(">");
+                    }
                     TypeDefKind::Unknown => unreachable!(),
                     TypeDefKind::Resource => todo!(),
                     TypeDefKind::Handle(h) => {
