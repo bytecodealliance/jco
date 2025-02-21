@@ -28,7 +28,7 @@ interface console { // but see namespace object requirements below
   undefined timeEnd(optional DOMString label = "default");
 };
 
-interface Node : EventTarget {
+interface Node {
   // const unsigned short ELEMENT_NODE = 1;
   // const unsigned short ATTRIBUTE_NODE = 2;
   // const unsigned short TEXT_NODE = 3;
@@ -459,7 +459,7 @@ interface BarProp {
 [Global=Window,
  Exposed=Window,
  LegacyUnenumerableNamedProperties]
-interface Window : EventTarget {
+interface Window {
   attribute Console console;
   // the current browsing context
   [LegacyUnforgeable] readonly attribute WindowProxy window;

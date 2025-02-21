@@ -28,7 +28,6 @@ interface dom {
     time-end: func(label: option<string>);
   }
   resource node {
-    as-event-target: func() -> event-target;
     node-type: func() -> u16;
     node-name: func() -> string;
     base-uri: func() -> string;
@@ -395,7 +394,6 @@ interface dom {
     visible: func() -> bool;
   }
   resource window {
-    as-event-target: func() -> event-target;
     console: func() -> console;
     set-console: func(console: console);
     window: func() -> window-proxy;
