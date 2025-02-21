@@ -24,6 +24,9 @@ async function run() {
       emptyStringResult() {
         return "";
       },
+      listParamLarge(a) {
+        assert.strictEqual(a.length, 1000);
+      },
       listParam(a) {
         assert.deepStrictEqual(Array.from(a), [1, 2, 3, 4]);
       },
@@ -126,6 +129,7 @@ async function run() {
   wasm.test.emptyListParam(new Uint8Array([]));
   wasm.test.emptyStringParam("");
   wasm.test.listParam(new Uint8Array([1, 2, 3, 4]));
+  wasm.test.listParamLarge('blah '.repeat(1000).slice(0, -1).split(' '));
   wasm.test.listParam2("foo");
   wasm.test.listParam3(["foo", "bar", "baz"]);
   wasm.test.listParam4([["foo", "bar"], ["baz"]]);
