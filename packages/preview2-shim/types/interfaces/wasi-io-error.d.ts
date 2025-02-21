@@ -4,6 +4,10 @@ export namespace WasiIoError {
 
 export class Error {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Returns a string that is suitable to assist humans in debugging
   * this error.
   * 

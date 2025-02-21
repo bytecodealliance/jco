@@ -28,6 +28,7 @@ interface dom {
     time-end: func(label: option<string>);
   }
   resource node {
+    as-event-target: func() -> event-target;
     node-type: func() -> u16;
     node-name: func() -> string;
     base-uri: func() -> string;
@@ -42,30 +43,34 @@ interface dom {
     last-child: func() -> option<node>;
     previous-sibling: func() -> option<node>;
     next-sibling: func() -> option<node>;
-    node-value: func() -> string;
-    set-node-value: func(node-value: string);
-    text-content: func() -> string;
-    set-text-content: func(text-content: string);
+    node-value: func() -> option<string>;
+    set-node-value: func(node-value: option<string>);
+    text-content: func() -> option<string>;
+    set-text-content: func(text-content: option<string>);
     normalize: func();
     clone-node: func(deep: option<bool>) -> node;
     is-equal-node: func(other-node: option<borrow<node>>) -> bool;
     is-same-node: func(other-node: option<borrow<node>>) -> bool;
     compare-document-position: func(other: borrow<node>) -> u16;
     contains: func(other: option<borrow<node>>) -> bool;
-    lookup-prefix: func(namespace: string) -> string;
-    lookup-namespace-uri: func(prefix: string) -> string;
-    is-default-namespace: func(namespace: string) -> bool;
+    lookup-prefix: func(namespace: option<string>) -> option<string>;
+    lookup-namespace-uri: func(prefix: option<string>) -> option<string>;
+    is-default-namespace: func(namespace: option<string>) -> bool;
     insert-before: func(node: borrow<node>, child: option<borrow<node>>) -> node;
     append-child: func(node: borrow<node>) -> node;
     replace-child: func(node: borrow<node>, child: borrow<node>) -> node;
     remove-child: func(child: borrow<node>) -> node;
+    as-element: func() -> option<element>;
+    as-document-fragment: func() -> option<document-fragment>;
+    as-attr: func() -> option<attr>;
   }
   record get-root-node-options {
     composed: option<bool>,
   }
   resource element {
-    namespace-uri: func() -> string;
-    prefix: func() -> string;
+    as-node: func() -> node;
+    namespace-uri: func() -> option<string>;
+    prefix: func() -> option<string>;
     local-name: func() -> string;
     tag-name: func() -> string;
     id: func() -> string;
@@ -78,17 +83,17 @@ interface dom {
     has-attributes: func() -> bool;
     attributes: func() -> named-node-map;
     get-attribute-names: func() -> list<string>;
-    get-attribute: func(qualified-name: string) -> string;
-    get-attribute-ns: func(namespace: string, local-name: string) -> string;
+    get-attribute: func(qualified-name: string) -> option<string>;
+    get-attribute-ns: func(namespace: option<string>, local-name: string) -> option<string>;
     set-attribute: func(qualified-name: string, value: string);
-    set-attribute-ns: func(namespace: string, qualified-name: string, value: string);
+    set-attribute-ns: func(namespace: option<string>, qualified-name: string, value: string);
     remove-attribute: func(qualified-name: string);
-    remove-attribute-ns: func(namespace: string, local-name: string);
+    remove-attribute-ns: func(namespace: option<string>, local-name: string);
     toggle-attribute: func(qualified-name: string, force: option<bool>) -> bool;
     has-attribute: func(qualified-name: string) -> bool;
-    has-attribute-ns: func(namespace: string, local-name: string) -> bool;
+    has-attribute-ns: func(namespace: option<string>, local-name: string) -> bool;
     get-attribute-node: func(qualified-name: string) -> option<attr>;
-    get-attribute-node-ns: func(namespace: string, local-name: string) -> option<attr>;
+    get-attribute-node-ns: func(namespace: option<string>, local-name: string) -> option<attr>;
     set-attribute-node: func(attr: borrow<attr>) -> option<attr>;
     set-attribute-node-ns: func(attr: borrow<attr>) -> option<attr>;
     remove-attribute-node: func(attr: borrow<attr>) -> attr;
@@ -98,10 +103,11 @@ interface dom {
     matches: func(selectors: string) -> bool;
     webkit-matches-selector: func(selectors: string) -> bool;
     get-elements-by-tag-name: func(qualified-name: string) -> html-collection;
-    get-elements-by-tag-name-ns: func(namespace: string, local-name: string) -> html-collection;
+    get-elements-by-tag-name-ns: func(namespace: option<string>, local-name: string) -> html-collection;
     get-elements-by-class-name: func(class-names: string) -> html-collection;
     insert-adjacent-element: func(where: string, element: borrow<element>) -> option<element>;
     insert-adjacent-text: func(where: string, data: string);
+    as-html-element: func() -> option<html-element>;
   }
   record shadow-root-init {
     mode: shadow-root-mode,
@@ -111,12 +117,14 @@ interface dom {
     serializable: option<bool>,
   }
   resource shadow-root {
+    as-document-fragment: func() -> document-fragment;
     mode: func() -> shadow-root-mode;
     delegates-focus: func() -> bool;
     slot-assignment: func() -> slot-assignment-mode;
     clonable: func() -> bool;
     serializable: func() -> bool;
     host: func() -> element;
+    constructor();
   }
   enum shadow-root-mode {
     open,
@@ -127,9 +135,12 @@ interface dom {
     named,
   }
   resource document-fragment {
+    as-node: func() -> node;
+    as-shadow-root: func() -> option<shadow-root>;
     constructor();
   }
   resource html-element {
+    as-element: func() -> element;
     constructor();
     title: func() -> string;
     set-title: func(title: string);
@@ -139,8 +150,8 @@ interface dom {
     set-translate: func(translate: bool);
     dir: func() -> string;
     set-dir: func(dir: string);
-    hidden: func() -> bool-or-f64-or-string;
-    set-hidden: func(hidden: bool-or-f64-or-string);
+    hidden: func() -> option<bool-or-f64-or-string>;
+    set-hidden: func(hidden: option<bool-or-f64-or-string>);
     inert: func() -> bool;
     set-inert: func(inert: bool);
     click: func();
@@ -165,8 +176,11 @@ interface dom {
     show-popover: func();
     hide-popover: func();
     toggle-popover: func(force: option<bool>) -> bool;
-    popover: func() -> string;
-    set-popover: func(popover: string);
+    popover: func() -> option<string>;
+    set-popover: func(popover: option<string>);
+    as-html-unknown-element: func() -> option<html-unknown-element>;
+    as-html-script-element: func() -> option<html-script-element>;
+    as-html-head-element: func() -> option<html-head-element>;
   }
   variant bool-or-f64-or-string {
     %bool(bool),
@@ -175,7 +189,7 @@ interface dom {
   }
   resource element-internals {
     shadow-root: func() -> option<shadow-root>;
-    set-form-value: func(value: form-data-or-string, state: form-data-or-string);
+    set-form-value: func(value: option<form-data-or-string>, state: option<form-data-or-string>);
     set-validity: func(%flags: option<validity-state-flags>, message: option<string>, anchor: option<borrow<html-element>>);
     will-validate: func() -> bool;
     validity: func() -> validity-state;
@@ -224,6 +238,7 @@ interface dom {
     custom-error: option<bool>,
   }
   resource html-unknown-element {
+    as-html-element: func() -> html-element;
   }
   enum document-ready-state {
     loading,
@@ -235,6 +250,7 @@ interface dom {
     hidden,
   }
   resource html-script-element {
+    as-html-element: func() -> html-element;
     constructor();
     src: func() -> string;
     set-src: func(src: string);
@@ -246,8 +262,8 @@ interface dom {
     set-async: func(async: bool);
     defer: func() -> bool;
     set-defer: func(defer: bool);
-    cross-origin: func() -> string;
-    set-cross-origin: func(cross-origin: string);
+    cross-origin: func() -> option<string>;
+    set-cross-origin: func(cross-origin: option<string>);
     text: func() -> string;
     set-text: func(text: string);
     integrity: func() -> string;
@@ -260,11 +276,12 @@ interface dom {
     supports: static func(%type: string) -> bool;
   }
   resource html-head-element {
+    as-html-element: func() -> html-element;
     constructor();
   }
   resource dom-string-list {
     length: func() -> u32;
-    item: func(index: u32) -> string;
+    item: func(index: u32) -> option<string>;
     contains: func(%string: string) -> bool;
   }
   resource location {
@@ -333,8 +350,9 @@ interface dom {
     visibility-state: func() -> document-visibility-state;
   }
   resource attr {
-    namespace-uri: func() -> string;
-    prefix: func() -> string;
+    as-node: func() -> node;
+    namespace-uri: func() -> option<string>;
+    prefix: func() -> option<string>;
     local-name: func() -> string;
     name: func() -> string;
     value: func() -> string;
@@ -355,15 +373,15 @@ interface dom {
     length: func() -> u32;
     item: func(index: u32) -> option<attr>;
     get-named-item: func(qualified-name: string) -> option<attr>;
-    get-named-item-ns: func(namespace: string, local-name: string) -> option<attr>;
+    get-named-item-ns: func(namespace: option<string>, local-name: string) -> option<attr>;
     set-named-item: func(attr: borrow<attr>) -> option<attr>;
     set-named-item-ns: func(attr: borrow<attr>) -> option<attr>;
     remove-named-item: func(qualified-name: string) -> attr;
-    remove-named-item-ns: func(namespace: string, local-name: string) -> attr;
+    remove-named-item-ns: func(namespace: option<string>, local-name: string) -> attr;
   }
   resource dom-token-list {
     length: func() -> u32;
-    item: func(index: u32) -> string;
+    item: func(index: u32) -> option<string>;
     contains: func(token: string) -> bool;
     add: func(tokens: list<string>);
     remove: func(tokens: list<string>);
@@ -377,6 +395,7 @@ interface dom {
     visible: func() -> bool;
   }
   resource window {
+    as-event-target: func() -> event-target;
     console: func() -> console;
     set-console: func(console: console);
     window: func() -> window-proxy;
@@ -407,7 +426,7 @@ interface dom {
     origin-agent-cluster: func() -> bool;
     alert: func(message: string);
     confirm: func(message: option<string>) -> bool;
-    prompt: func(message: option<string>, default: option<string>) -> string;
+    prompt: func(message: option<string>, default: option<string>) -> option<string>;
     print: func();
   }
   type window-proxy = window;

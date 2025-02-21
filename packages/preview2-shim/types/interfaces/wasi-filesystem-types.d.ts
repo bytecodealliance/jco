@@ -396,6 +396,10 @@ export interface MetadataHashValue {
 
 export class Descriptor {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Return a stream for reading from a file, if available.
   * 
   * May fail with an error-code describing why the file cannot be read.
@@ -641,12 +645,12 @@ export class Descriptor {
   * 
   * Implementations are encouraged to provide the following properties:
   * 
-  * - If the file is not modified or replaced, the computed hash value should
-  * usually not change.
-  * - If the object is modified or replaced, the computed hash value should
-  * usually change.
-  * - The inputs to the hash should not be easily computable from the
-  * computed hash.
+  *  - If the file is not modified or replaced, the computed hash value should
+  *    usually not change.
+  *  - If the object is modified or replaced, the computed hash value should
+  *    usually change.
+  *  - The inputs to the hash should not be easily computable from the
+  *    computed hash.
   * 
   * However, none of these is required.
   */
@@ -661,6 +665,10 @@ export class Descriptor {
 }
 
 export class DirectoryEntryStream {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
   /**
   * Read a single directory entry from a `directory-entry-stream`.
   */

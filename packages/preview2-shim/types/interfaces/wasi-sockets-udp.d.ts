@@ -54,6 +54,10 @@ export interface OutgoingDatagram {
 
 export class IncomingDatagramStream {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Receive messages on the socket.
   * 
   * This function attempts to receive up to `max-results` datagrams on the socket without blocking.
@@ -89,6 +93,10 @@ export class IncomingDatagramStream {
 }
 
 export class OutgoingDatagramStream {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
   /**
   * Check readiness for sending. This function never blocks.
   * 
@@ -151,6 +159,10 @@ export class OutgoingDatagramStream {
 
 export class UdpSocket {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Bind the socket to a specific network on the provided IP address and port.
   * 
   * If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
@@ -198,10 +210,10 @@ export class UdpSocket {
   * The POSIX equivalent in pseudo-code is:
   * ```text
   * if (was previously connected) {
-    * connect(s, AF_UNSPEC)
+    * 	connect(s, AF_UNSPEC)
     * }
     * if (remote_address is Some) {
-      * connect(s, remote_address)
+      * 	connect(s, remote_address)
       * }
       * ```
       * 
