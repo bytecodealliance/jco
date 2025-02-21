@@ -33,6 +33,10 @@ export interface StreamErrorClosed {
 
 export class InputStream {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Perform a non-blocking read from the stream.
   * 
   * When the source of a `read` is binary data, the bytes from the source
@@ -91,6 +95,10 @@ export class InputStream {
 
 export class OutputStream {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Check readiness for writing. This function never blocks.
   * 
   * Returns the number of bytes permitted for the next call to `write`,
@@ -129,13 +137,13 @@ export class OutputStream {
   * ```text
   * let pollable = this.subscribe();
   * while !contents.is_empty() {
-    * // Wait for the stream to become writable
-    * pollable.block();
-    * let Ok(n) = this.check-write(); // eliding error handling
-    * let len = min(n, contents.len());
-    * let (chunk, rest) = contents.split_at(len);
-    * this.write(chunk  );            // eliding error handling
-    * contents = rest;
+    *     // Wait for the stream to become writable
+    *     pollable.block();
+    *     let Ok(n) = this.check-write(); // eliding error handling
+    *     let len = min(n, contents.len());
+    *     let (chunk, rest) = contents.split_at(len);
+    *     this.write(chunk  );            // eliding error handling
+    *     contents = rest;
     * }
     * this.flush();
     * // Wait for completion of `flush`
@@ -197,12 +205,12 @@ export class OutputStream {
     * ```text
     * let pollable = this.subscribe();
     * while num_zeroes != 0 {
-      * // Wait for the stream to become writable
-      * pollable.block();
-      * let Ok(n) = this.check-write(); // eliding error handling
-      * let len = min(n, num_zeroes);
-      * this.write-zeroes(len);         // eliding error handling
-      * num_zeroes -= len;
+      *     // Wait for the stream to become writable
+      *     pollable.block();
+      *     let Ok(n) = this.check-write(); // eliding error handling
+      *     let len = min(n, num_zeroes);
+      *     this.write-zeroes(len);         // eliding error handling
+      *     num_zeroes -= len;
       * }
       * this.flush();
       * // Wait for completion of `flush`

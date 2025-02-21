@@ -35,6 +35,10 @@ export { IpAddress };
 
 export class ResolveAddressStream {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Returns the next address from the resolver.
   * 
   * This function should be called multiple times. On each call, it will

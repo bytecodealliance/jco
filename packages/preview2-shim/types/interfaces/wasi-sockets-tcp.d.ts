@@ -34,6 +34,10 @@ export type ShutdownType = 'receive' | 'send' | 'both';
 
 export class TcpSocket {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Bind the socket to a specific network on the provided IP address and port.
   * 
   * If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is left to the implementation to decide which
@@ -340,11 +344,11 @@ export class TcpSocket {
   * Initiate a graceful shutdown.
   * 
   * - `receive`: The socket is not expecting to receive any data from
-  * the peer. The `input-stream` associated with this socket will be
-  * closed. Any data still in the receive queue at time of calling
-  * this method will be discarded.
+  *   the peer. The `input-stream` associated with this socket will be
+  *   closed. Any data still in the receive queue at time of calling
+  *   this method will be discarded.
   * - `send`: The socket has no more data to send to the peer. The `output-stream`
-  * associated with this socket will be closed and a FIN packet will be sent.
+  *   associated with this socket will be closed and a FIN packet will be sent.
   * - `both`: Same effect as `receive` & `send` combined.
   * 
   * This function is idempotent; shutting down a direction more than once

@@ -107,7 +107,7 @@ export interface FieldSizePayload {
 }
 /**
  * These cases are inspired by the IANA HTTP Proxy Error Types:
- * <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
+ *   <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
  */
 export type ErrorCode = ErrorCodeDnsTimeout | ErrorCodeDnsError | ErrorCodeDestinationNotFound | ErrorCodeDestinationUnavailable | ErrorCodeDestinationIpProhibited | ErrorCodeDestinationIpUnroutable | ErrorCodeConnectionRefused | ErrorCodeConnectionTerminated | ErrorCodeConnectionTimeout | ErrorCodeConnectionReadTimeout | ErrorCodeConnectionWriteTimeout | ErrorCodeConnectionLimitReached | ErrorCodeTlsProtocolError | ErrorCodeTlsCertificateError | ErrorCodeTlsAlertReceived | ErrorCodeHttpRequestDenied | ErrorCodeHttpRequestLengthRequired | ErrorCodeHttpRequestBodySize | ErrorCodeHttpRequestMethodInvalid | ErrorCodeHttpRequestUriInvalid | ErrorCodeHttpRequestUriTooLong | ErrorCodeHttpRequestHeaderSectionSize | ErrorCodeHttpRequestHeaderSize | ErrorCodeHttpRequestTrailerSectionSize | ErrorCodeHttpRequestTrailerSize | ErrorCodeHttpResponseIncomplete | ErrorCodeHttpResponseHeaderSectionSize | ErrorCodeHttpResponseHeaderSize | ErrorCodeHttpResponseBodySize | ErrorCodeHttpResponseTrailerSectionSize | ErrorCodeHttpResponseTrailerSize | ErrorCodeHttpResponseTransferCoding | ErrorCodeHttpResponseContentCoding | ErrorCodeHttpResponseTimeout | ErrorCodeHttpUpgradeFailed | ErrorCodeHttpProtocolError | ErrorCodeLoopDetected | ErrorCodeConfigurationError | ErrorCodeInternalError;
 export interface ErrorCodeDnsTimeout {
@@ -401,6 +401,10 @@ export class Fields {
 
 export class FutureIncomingResponse {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Returns a pollable which becomes ready when either the Response has
   * been received, or an error has occurred. When this pollable is ready,
   * the `get` method will return `some`.
@@ -426,6 +430,10 @@ export class FutureIncomingResponse {
 }
 
 export class FutureTrailers {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
   /**
   * Returns a pollable which becomes ready when either the trailers have
   * been received, or an error has occurred. When this pollable is ready,
@@ -458,6 +466,10 @@ export class FutureTrailers {
 
 export class IncomingBody {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Returns the contents of the body, as a stream of bytes.
   * 
   * Returns success on first call: the stream representing the contents
@@ -483,6 +495,10 @@ export class IncomingBody {
 }
 
 export class IncomingRequest {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
   /**
   * Returns the method of the incoming request.
   */
@@ -519,6 +535,10 @@ export class IncomingRequest {
 
 export class IncomingResponse {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Returns the status code from the incoming response.
   */
   status(): StatusCode;
@@ -540,6 +560,10 @@ export class IncomingResponse {
 }
 
 export class OutgoingBody {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
   /**
   * Returns a stream for writing the body contents.
   * 
@@ -722,6 +746,10 @@ export class RequestOptions {
 }
 
 export class ResponseOutparam {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
   /**
   * Set the value of the `response-outparam` to either send a response,
   * or indicate an error.

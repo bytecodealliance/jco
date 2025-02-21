@@ -808,9 +808,7 @@ impl<'a> Instantiator<'a, '_> {
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
         let i = i.as_u32();
         match trampoline {
-            // these are hoisted before initialization
             Trampoline::LowerImport { .. } => {}
-
             Trampoline::AlwaysTrap => {
                 uwrite!(
                     self.src.js,
@@ -820,7 +818,6 @@ impl<'a> Instantiator<'a, '_> {
                 "
                 );
             }
-
             Trampoline::Transcoder {
                 op,
                 from,
@@ -836,12 +833,12 @@ impl<'a> Instantiator<'a, '_> {
                 match op {
                     Transcode::Copy(FixedEncoding::Utf8) => {
                         uwriteln!(
-                            self.src.js,
-                            "function trampoline{i} (from_ptr, len, to_ptr) {{
+                                    self.src.js,
+                                    "function trampoline{i} (from_ptr, len, to_ptr) {{
                                 new Uint8Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
                             }}
                             "
-                        );
+                                );
                     }
                     Transcode::Copy(FixedEncoding::Utf16) => unimplemented!("utf16 copier"),
                     Transcode::Copy(FixedEncoding::Latin1) => unimplemented!("latin1 copier"),
@@ -862,7 +859,6 @@ impl<'a> Instantiator<'a, '_> {
                     Transcode::Utf8ToUtf16 => unimplemented!("utf8 to utf16 transcoder"),
                 };
             }
-
             Trampoline::ResourceNew(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
@@ -925,7 +921,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.gen.local_names.try_get(resource_ty.ty)
                     {
                         format!(
-                            "
+                                    "
                             const rsc = captureTable{rid}.get(handleEntry.rep);
                             if (rsc) {{
                                 if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
@@ -933,7 +929,7 @@ impl<'a> Instantiator<'a, '_> {
                             }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
                                 {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
                             }}"
-                        )
+                                )
                     } else {
                         // if not, then capture / disposal paths are never called
                         "throw new TypeError('unreachable resource trampoline')".into()
@@ -996,6 +992,45 @@ impl<'a> Instantiator<'a, '_> {
                     ",
                 );
             }
+            Trampoline::TaskBackpressure { instance: _ } => todo!(),
+            Trampoline::TaskReturn => todo!(),
+            Trampoline::TaskWait {
+                instance: _,
+                async_: _,
+                memory: _,
+            } => todo!(),
+            Trampoline::TaskPoll {
+                instance: _,
+                async_: _,
+                memory: _,
+            } => todo!(),
+            Trampoline::TaskYield { async_: _ } => todo!(),
+            Trampoline::SubtaskDrop { instance: _ } => todo!(),
+            Trampoline::StreamNew { ty: _ } => todo!(),
+            Trampoline::StreamRead { ty: _, options: _ } => todo!(),
+            Trampoline::StreamWrite { ty: _, options: _ } => todo!(),
+            Trampoline::StreamCancelRead { ty: _, async_: _ } => todo!(),
+            Trampoline::StreamCancelWrite { ty: _, async_: _ } => todo!(),
+            Trampoline::StreamCloseReadable { ty: _ } => todo!(),
+            Trampoline::StreamCloseWritable { ty: _ } => todo!(),
+            Trampoline::FutureNew { ty: _ } => todo!(),
+            Trampoline::FutureRead { ty: _, options: _ } => todo!(),
+            Trampoline::FutureWrite { ty: _, options: _ } => todo!(),
+            Trampoline::FutureCancelRead { ty: _, async_: _ } => todo!(),
+            Trampoline::FutureCancelWrite { ty: _, async_: _ } => todo!(),
+            Trampoline::FutureCloseReadable { ty: _ } => todo!(),
+            Trampoline::FutureCloseWritable { ty: _ } => todo!(),
+            Trampoline::ErrorContextNew { ty: _, options: _ } => todo!(),
+            Trampoline::ErrorContextDebugMessage { ty: _, options: _ } => todo!(),
+            Trampoline::ErrorContextDrop { ty: _ } => todo!(),
+            Trampoline::AsyncEnterCall => todo!(),
+            Trampoline::AsyncExitCall {
+                callback: _,
+                post_return: _,
+            } => todo!(),
+            Trampoline::FutureTransfer => todo!(),
+            Trampoline::StreamTransfer => todo!(),
+            Trampoline::ErrorContextTransfer => todo!(),
         }
     }
 
@@ -1030,6 +1065,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
             }
             GlobalInitializer::Resource(_) => {}
+            GlobalInitializer::ExtractCallback(_) => todo!(),
         }
     }
 

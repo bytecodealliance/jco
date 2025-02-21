@@ -159,4 +159,8 @@ export interface IpSocketAddressIpv6 {
 }
 
 export class Network {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
 }

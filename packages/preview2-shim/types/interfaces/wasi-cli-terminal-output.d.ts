@@ -3,4 +3,8 @@ export namespace WasiCliTerminalOutput {
 }
 
 export class TerminalOutput {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
 }

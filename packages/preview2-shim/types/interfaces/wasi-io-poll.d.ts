@@ -26,6 +26,10 @@ export namespace WasiIoPoll {
 
 export class Pollable {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Return the readiness of a pollable. This function never blocks.
   * 
   * Returns `true` when the pollable is ready, and `false` otherwise.
