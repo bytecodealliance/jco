@@ -76,6 +76,7 @@ Jco represents tuples as lists (arrays), so some examples:
 record person {
     name: string,
     age: u32,
+    favorite-color: option<string>,
 }
 ```
 
@@ -89,6 +90,7 @@ Given the WIT record above, you can expect to deal with an object similar to the
 interface Person {
   person: string;
   age: number;
+  favoriteColor?: number;
 }
 ```
 
