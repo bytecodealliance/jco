@@ -21,11 +21,11 @@ More complicated types that are built into WIT but require more work to translat
 | `u8`     | `number`  |
 | `u16`    | `number`  |
 | `u32`    | `number`  |
-| `u64`    | `number`  |
+| `u64`    | `BigInt`  |
 | `s8`     | `number`  |
 | `s16`    | `number`  |
 | `s32`    | `number`  |
-| `s64`    | `number`  |
+| `s64`    | `BigInt`  |
 | `f32`    | `number`  |
 | `f64`    | `number`  |
 | `bool`   | `boolean` |
