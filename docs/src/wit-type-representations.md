@@ -256,7 +256,7 @@ Tuples can be combined with type renaming to produce types that carry some seman
 type point = tuple<u32,u32>
 ```
 
-Note that `tuple`s can be combined with custom user-defined types like `record`s and `variants`. For example:
+Note that `tuple`s can be combined with custom user-defined types like `record`s and `variants`, `option`s and `result`s. For example:
 
 ```wit
 variant example-var {
@@ -269,7 +269,11 @@ record example-rec {
     snd: u32,
 }
 
-type examples = tuple<example-rec, example-var>;
+type maybe-num = option<u32>;
+
+type num-or-err-str = result<u32, string>;
+
+type examples = tuple<example-rec, example-var, maybe-num, num-or-err-str>;
 ```
 
 ### WIT Syntax
