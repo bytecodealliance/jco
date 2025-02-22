@@ -645,7 +645,7 @@ export async function cliTest(_fixtures) {
       await writeFile(`${outDir}/foo.js`, `export class Bar {}`);
       const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
       strictEqual(m.hello(), "world");
-      // strictEqual(m.consumeBar(m.createBar()), 'bar1');
+      strictEqual(m.consumeBar(m.createBar()), 'bar1');
     });
   });
 }
