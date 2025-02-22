@@ -43,7 +43,7 @@ list<string>
 
 ### Jco Representation
 
-Jco represents lists with native Javscript Arrays, with some exceptions:
+Jco represents lists with native Javscript Arrays, with the exception of a `list<u8>`:
 
 | Type       | Representation (TS) | Example                      |
 |------------|---------------------|------------------------------|
