@@ -32,74 +32,6 @@ More complicated types that are built into WIT but require more work to translat
 | `char`   | `string`  |
 | `string` | `string`  |
 
-## List (`list`)
-
-### WIT Syntax
-
-```
-list<u8>
-list<string>
-```
-
-### Jco Representation
-
-Jco represents lists with native Javscript Arrays, with the exception of a `list<u8>`:
-
-| Type       | Representation (TS) | Example                      |
-|------------|---------------------|------------------------------|
-| `list<u8>` | `Uint8Array`        | `list<u8>` -> `Uint8Array`   |
-| `list<t>`  | `T[]`               | `list<string>` -> `string[]` |
-
-## Tuples (`tuple`)
-
-### WIT Syntax
-
-```wit
-tuple<u32, u32>
-tuple<string, u32>
-```
-
-### Jco Representation
-
-Jco represents tuples as lists (arrays), so some examples:
-
-| Type                 | Representation (TS) | Example                                    |
-|----------------------|---------------------|--------------------------------------------|
-| `tuple<u32, u32>`    | `[number, number]`  | `tuple<u32, u32>` -> `[number, number]`    |
-| `tuple<string, u32>` | `[string, number]`  | `tuple<string, u32>` -> `[string, number]` |
-
-## Records (`record`)
-
-### WIT Syntax
-
-```wit
-record person {
-    name: string,
-    age: u32,
-    favorite-color: option<string>,
-}
-```
-
-### Jco Representation
-
-Jco represents records as the [Javascript Object basic data type][mdn-js-obj]:
-
-Given the WIT record above, you can expect to deal with an object similar to the following Typescript:
-
-```ts
-interface Person {
-  person: string;
-  age: number;
-  favoriteColor?: number;
-}
-```
-
-> [!NOTE]
-> If using `jco guest-types` or `jco types`, you will be able to use Typescript types that
-> properly constrain the Typescript code you write.
-
-[mdn-js-obj]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
-
 ## Variants (`variant`)
 
 > [!NOTE]
@@ -155,6 +87,43 @@ For example, pseudo Typescript for the of the above `filter` variant would look 
 >
 > You can work around this limitation of variants by having the contained type be a *tuple*,
 > (e.g. `tuple<string, u32, string>`), or using a named record as the related data.
+
+## Tuples (`tuple`)
+
+### WIT Syntax
+
+```wit
+tuple<u32, u32>
+tuple<string, u32>
+```
+
+### Jco Representation
+
+Jco represents tuples as lists (arrays), so some examples:
+
+| Type                 | Representation (TS) | Example                                    |
+|----------------------|---------------------|--------------------------------------------|
+| `tuple<u32, u32>`    | `[number, number]`  | `tuple<u32, u32>` -> `[number, number]`    |
+| `tuple<string, u32>` | `[string, number]`  | `tuple<string, u32>` -> `[string, number]` |
+
+## Options (`option`)
+
+### WIT Syntax
+
+```wit
+option<u32, u32>
+option<string, u32>
+```
+
+### Jco Representation
+
+Jco represents options as as an optional (arrays), so some examples:
+
+| Type          | Representation (TS)  | Example                               |
+|---------------|----------------------|---------------------------------------|
+| `option<u32>` | `number | undefined` | `option<u32>` -> `number | undefined` |
+
+When used in the context of a `record` (which becomes a [JS Object][mdn-js-obj]), optional values are represented as optional properties (i.e in TS a `propName?: value`).
 
 ## Result (`result`)
 
@@ -216,6 +185,56 @@ interface Result {
   data: null
 }
 ```
+
+## List (`list`)
+
+### WIT Syntax
+
+```
+list<u8>
+list<string>
+```
+
+### Jco Representation
+
+Jco represents lists with native Javscript Arrays, with the exception of a `list<u8>`:
+
+| Type       | Representation (TS) | Example                      |
+|------------|---------------------|------------------------------|
+| `list<u8>` | `Uint8Array`        | `list<u8>` -> `Uint8Array`   |
+| `list<t>`  | `T[]`               | `list<string>` -> `string[]` |
+
+## Records (`record`)
+
+### WIT Syntax
+
+```wit
+record person {
+    name: string,
+    age: u32,
+    favorite-color: option<string>,
+}
+```
+
+### Jco Representation
+
+Jco represents records as the [Javascript Object basic data type][mdn-js-obj]:
+
+Given the WIT record above, you can expect to deal with an object similar to the following Typescript:
+
+```ts
+interface Person {
+  person: string;
+  age: number;
+  favoriteColor?: number;
+}
+```
+
+> [!NOTE]
+> If using `jco guest-types` or `jco types`, you will be able to use Typescript types that
+> properly constrain the Typescript code you write.
+
+[mdn-js-obj]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
 
 ## Resources (`resource`)
 
