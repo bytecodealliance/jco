@@ -16,29 +16,31 @@ Here is a basic table of conversions between WIT types and JS types:
 
 More complicated types that are built into WIT but require more work to translate are explained below.
 
-| WIT type | JS Type   |
-|----------|-----------|
-| `u8`     | `number`  |
-| `u16`    | `number`  |
-| `u32`    | `number`  |
-| `u64`    | `BigInt`  |
-| `s8`     | `number`  |
-| `s16`    | `number`  |
-| `s32`    | `number`  |
-| `s64`    | `BigInt`  |
-| `f32`    | `number`  |
-| `f64`    | `number`  |
-| `bool`   | `boolean` |
-| `char`   | `string`  |
-| `string` | `string`  |
+| WIT type | JS Type                   |
+|----------|---------------------------|
+| `u8`     | `number`                  |
+| `u16`    | `number`                  |
+| `u32`    | `number`                  |
+| `u64`    | [`BigInt`][mdn-js-bigint] |
+| `s8`     | `number`                  |
+| `s16`    | `number`                  |
+| `s32`    | `number`                  |
+| `s64`    | [`BigInt`][mdn-js-bigint] |
+| `f32`    | `number`                  |
+| `f64`    | `number`                  |
+| `bool`   | `boolean`                 |
+| `char`   | `string`                  |
+| `string` | `string`                  |
+
+[mdn-js-bigint]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt
 
 ## Variants (`variant`)
 
 > [!NOTE]
 > See the [Variant section of the WIT IDL](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#item-variant-one-of-a-set-of-types) for more information on Variants
 
-Variants are an enum-with-data type in WIT -- this means that alternative values may also hold *different*
-kinds of data. For example:
+Variants are like basic enums in most languages with one exception; members of the variant can hold a single data type.
+Alternative variant members may hold *different* types to represent different cases. For example:
 
 ```wit
 variant exit-code {
@@ -88,23 +90,37 @@ For example, pseudo Typescript for the of the above `filter` variant would look 
 > You can work around this limitation of variants by having the contained type be a *tuple*,
 > (e.g. `tuple<string, u32, string>`), or using a named record as the related data.
 
-## Tuples (`tuple`)
+## Records (`record`)
 
 ### WIT Syntax
 
 ```wit
-tuple<u32, u32>
-tuple<string, u32>
+record person {
+    name: string,
+    age: u32,
+    favorite-color: option<string>,
+}
 ```
 
 ### Jco Representation
 
-Jco represents tuples as lists (arrays), so some examples:
+Jco represents records as the [Javascript Object basic data type][mdn-js-obj]:
 
-| Type                 | Representation (TS) | Example                                    |
-|----------------------|---------------------|--------------------------------------------|
-| `tuple<u32, u32>`    | `[number, number]`  | `tuple<u32, u32>` -> `[number, number]`    |
-| `tuple<string, u32>` | `[string, number]`  | `tuple<string, u32>` -> `[string, number]` |
+Given the WIT record above, you can expect to deal with an object similar to the following Typescript:
+
+```ts
+interface Person {
+  person: string;
+  age: number;
+  favoriteColor?: number;
+}
+```
+
+> [!NOTE]
+> If using `jco guest-types` or `jco types`, you will be able to use Typescript types that
+> properly constrain the Typescript code you write.
+
+[mdn-js-obj]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
 
 ## Options (`option`)
 
@@ -130,12 +146,56 @@ When used in the context of a `record` (which becomes a [JS Object][mdn-js-obj])
 > [!NOTE]
 > See the [Basic types section of the WIT IDL](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#types) for more information on Resources
 
-Result represent a result that *may or may not* be present, due to a failure. A result value either contains
+
+`Result` types, as a general concept represent a result that *may or may not* be present, due to a failure. A result value either contains
 a value that represents a completed computation, or some "error" that indicates a failure. You can think
 of the type of a result as:
 
 ```
 Result<SuccessType, ErrorType>
+```
+
+In Jco, by default a `result` has two representations depending on whether it is the return type of a function or a nested type. When a result is returned directly from a function,
+any thrown error of the function is treated as the result error type, while any direct return value is treated as the result success type.
+
+Consider the following interface:
+
+```wit
+interface fallible {
+    f: func(n: u32) -> result<string, string>;
+}
+```
+
+An implementation of the function `fallible.f` would look like the following Typescript:
+
+```ts
+function f(n: number): string {
+  if (n == 42) { return "correct"; }
+  throw "not correct";
+}
+```
+
+On the other hand, a `result` stored inside a type or used in another context will look like a variant type of the form `{ tag: 'ok', val: SuccessType } | { tag: 'err', val: ErrorType }`. For example:
+
+```wit
+interface fallible-reaction {
+    r: func(r: result<string, string>) -> string;
+}
+```
+
+An implementation of thef function `fallible-reaction.r` would look like the following Typescript:
+
+```ts
+type Result<T,E> = { tag: 'ok', val: SuccessType } | { tag: 'err', val: ErrorType };
+
+function f(input: Result<string, string>): string {
+  switch (input.tag) {
+    case 'ok': return `SUCCESS, returned: [${input.val}]";
+    case 'err': return `ERROR, returned: [${input.val}]";
+    // We we should never reach the case below
+    default: throw Error("something has gone seriously wrong");
+  }
+}
 ```
 
 ### WIT representation
@@ -186,6 +246,48 @@ interface Result {
 }
 ```
 
+## Tuples (`tuple`)
+
+Tuples are a container type that has a fixed size, types somewhat analogous to a fixed size list.
+
+Tuples can be combined with type renaming to produce types that carry some semantic meaning. For example:
+
+```wit
+type point = tuple<u32,u32>
+```
+
+Note that `tuple`s can be combined with custom user-defined types like `record`s and `variants`. For example:
+
+```wit
+variant example-var {
+    nothing,
+    value(u64),
+}
+
+record example-rec {
+    fst: string,
+    snd: u32,
+}
+
+type examples = tuple<example-rec, example-var>;
+```
+
+### WIT Syntax
+
+```wit
+tuple<u32, u32>
+tuple<string, u32>
+```
+
+### Jco Representation
+
+Jco represents tuples as lists (arrays), so some examples:
+
+| Type                 | Representation (TS) | Example                                    |
+|----------------------|---------------------|--------------------------------------------|
+| `tuple<u32, u32>`    | `[number, number]`  | `tuple<u32, u32>` -> `[number, number]`    |
+| `tuple<string, u32>` | `[string, number]`  | `tuple<string, u32>` -> `[string, number]` |
+
 ## List (`list`)
 
 ### WIT Syntax
@@ -203,38 +305,6 @@ Jco represents lists with native Javscript Arrays, with the exception of a `list
 |------------|---------------------|------------------------------|
 | `list<u8>` | `Uint8Array`        | `list<u8>` -> `Uint8Array`   |
 | `list<t>`  | `T[]`               | `list<string>` -> `string[]` |
-
-## Records (`record`)
-
-### WIT Syntax
-
-```wit
-record person {
-    name: string,
-    age: u32,
-    favorite-color: option<string>,
-}
-```
-
-### Jco Representation
-
-Jco represents records as the [Javascript Object basic data type][mdn-js-obj]:
-
-Given the WIT record above, you can expect to deal with an object similar to the following Typescript:
-
-```ts
-interface Person {
-  person: string;
-  age: number;
-  favoriteColor?: number;
-}
-```
-
-> [!NOTE]
-> If using `jco guest-types` or `jco types`, you will be able to use Typescript types that
-> properly constrain the Typescript code you write.
-
-[mdn-js-obj]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
 
 ## Resources (`resource`)
 
