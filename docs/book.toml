@@ -1,6 +1,14 @@
 [book]
-authors = ["Guy Bedford", "Yosh Wuyts"]
+title = "jco"
+authors = ["Guy Bedford", "Yosh Wuyts", "Victor Adossi"]
 language = "en"
 multilingual = false
+
 src = "src"
-title = "jco"
+
+[output.html]
+git-repository-url = "https://github.com/bytecodealliance/jco"
+
+[preprocessor.alerts]
+
+[output.linkcheck]
