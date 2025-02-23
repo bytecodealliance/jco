@@ -37,6 +37,8 @@ program.command('componentize')
   .addOption(new Option('-d, --disable <feature...>', 'disable WASI features').choices(['stdio', 'random', 'clocks', 'all']))
   .addOption(new Option('-e, --enable <feature...>', 'enable WASI features').choices(['http']))
   .option('--preview2-adapter <adapter>', 'provide a custom preview2 adapter path')
+  .option('--bind-functions-to-interface', 'bind functions to interface')
+  .option('--expect-top-level-resource-classes', 'expect top-level resource classes')
   .requiredOption('-o, --out <out>', 'output component file')
   .action(asyncAction(componentize));
 
