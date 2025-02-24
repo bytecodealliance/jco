@@ -647,7 +647,7 @@ function handle(call, id, payload) {
       stream.pollState.ready = false;
       return (stream.flushPromise = new Promise((resolve, reject) => {
         if (stream.stream === stdout || stream.stream === stderr) {
-          // NOTE: given that inside workers, NodeJS actually queues writes destined for
+          // Inside workers, NodeJS actually queues writes destined for
           // stdout/stderr in a port that is only flushed on exit of the worker.
           //
           // In this case, we cannot attempt to wait for the promise.
@@ -676,7 +676,7 @@ function handle(call, id, payload) {
       stream.pollState.ready = false;
       stream.flushPromise = new Promise((resolve, reject) => {
         if (stream.stream === stdout || stream.stream === stderr) {
-          // NOTE: given that inside workers, NodeJS actually queues writes destined for
+          // Inside workers, NodeJS actually queues writes destined for
           // stdout/stderr in a port that is only flushed on exit of the worker.
           //
           // In this case, we cannot attempt to wait for the promise.
@@ -708,6 +708,16 @@ function handle(call, id, payload) {
       if (stream.flushPromise) return stream.flushPromise;
       return new Promise((resolve, reject) => {
         if (stream.stream === stdout || stream.stream === stderr) {
+          // Inside workers, NodeJS actually queues writes destined for
+          // stdout/stderr in a port that is only flushed on exit of the worker.
+          //
+          // In this case, we cannot attempt to wait for the promise.
+          //
+          // This code may have to be reworked for browsers.
+          //
+          // see: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker/io.js#L288
+          // see: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker.js#L303
+          // see: https://github.com/nodejs/node/blob/v22.12.0/typings/internalBinding/messaging.d.ts#L27
           stream.stream.write(new Uint8Array([]));
           resolve();
         } else {
