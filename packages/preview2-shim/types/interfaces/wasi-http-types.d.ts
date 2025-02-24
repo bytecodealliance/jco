@@ -1,40 +1,23 @@
-export namespace WasiHttpTypes {
-  /**
-   * Attempts to extract a http-related `error` from the wasi:io `error`
-   * provided.
-   * 
-   * Stream operations which return
-   * `wasi:io/stream/stream-error::last-operation-failed` have a payload of
-   * type `wasi:io/error/error` with more information about the operation
-   * that failed. This payload can be passed through to this function to see
-   * if there's http-related information about the error to return.
-   * 
-   * Note that this function is fallible because not all io-errors are
-   * http-related errors.
-   */
-  export function httpErrorCode(err: IoError): ErrorCode | undefined;
-  export { Fields };
-  export { IncomingRequest };
-  export { OutgoingRequest };
-  export { RequestOptions };
-  export { ResponseOutparam };
-  export { IncomingResponse };
-  export { IncomingBody };
-  export { FutureTrailers };
-  export { OutgoingResponse };
-  export { OutgoingBody };
-  export { FutureIncomingResponse };
-}
-import type { Duration } from './wasi-clocks-monotonic-clock.js';
-export { Duration };
-import type { InputStream } from './wasi-io-streams.js';
-export { InputStream };
-import type { OutputStream } from './wasi-io-streams.js';
-export { OutputStream };
-import type { Error as IoError } from './wasi-io-error.js';
-export { IoError };
-import type { Pollable } from './wasi-io-poll.js';
-export { Pollable };
+// interface wasi:http/types@0.2.3
+/**
+ * Attempts to extract a http-related `error` from the wasi:io `error`
+ * provided.
+ * 
+ * Stream operations which return
+ * `wasi:io/stream/stream-error::last-operation-failed` have a payload of
+ * type `wasi:io/error/error` with more information about the operation
+ * that failed. This payload can be passed through to this function to see
+ * if there's http-related information about the error to return.
+ * 
+ * Note that this function is fallible because not all io-errors are
+ * http-related errors.
+ */
+export function httpErrorCode(err: IoError): ErrorCode | undefined;
+export type Duration = import('./wasi-clocks-monotonic-clock.js').Duration;
+export type InputStream = import('./wasi-io-streams.js').InputStream;
+export type OutputStream = import('./wasi-io-streams.js').OutputStream;
+export type IoError = import('./wasi-io-error.js').Error;
+export type Pollable = import('./wasi-io-poll.js').Pollable;
 /**
  * This type corresponds to HTTP standard Methods.
  */

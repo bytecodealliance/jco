@@ -1,15 +1,7 @@
-import type * as WasiCli from "./cli.d.ts";
-import type * as WasiClocks from './clocks.d.ts';
-import type * as WasiFilesystem from './filesystem.d.ts';
-import type * as WasiHttp from "./http.d.ts";
-import type * as WasiIo from "./io.d.ts";
-import type * as WasiRandom from "./random.d.ts";
-import type * as WasiSockets from "./sockets.d.ts";
-
-export const cli: typeof WasiCli;
-export const clocks: typeof WasiClocks;
-export const filesystem: typeof WasiFilesystem;
-export const http: typeof WasiHttp;
-export const io: typeof WasiIo;
-export const random: typeof WasiRandom;
-export const sockets: typeof WasiSockets;
+export type * as cli from "./cli.d.ts";
+export type * as clocks from './clocks.d.ts';
+export type * as filesystem from './filesystem.d.ts';
+export type * as http from "./http.d.ts";
+export type * as io from "./io.d.ts";
+export type * as random from "./random.d.ts";
+export type * as sockets from "./sockets.d.ts";
