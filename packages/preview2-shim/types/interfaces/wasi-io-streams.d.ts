@@ -1,11 +1,6 @@
-export namespace WasiIoStreams {
-  export { InputStream };
-  export { OutputStream };
-}
-import type { Error } from './wasi-io-error.js';
-export { Error };
-import type { Pollable } from './wasi-io-poll.js';
-export { Pollable };
+// interface wasi:io/streams@0.2.3
+export type Error = import('./wasi-io-error.js').Error;
+export type Pollable = import('./wasi-io-poll.js').Pollable;
 /**
  * An error for input-stream and output-stream operations.
  */

@@ -1,28 +1,21 @@
-export namespace WasiFilesystemTypes {
-  export { Descriptor };
-  export { DirectoryEntryStream };
-  /**
-   * Attempts to extract a filesystem-related `error-code` from the stream
-   * `error` provided.
-   * 
-   * Stream operations which return `stream-error::last-operation-failed`
-   * have a payload with more information about the operation that failed.
-   * This payload can be passed through to this function to see if there's
-   * filesystem-related information about the error to return.
-   * 
-   * Note that this function is fallible because not all stream-related
-   * errors are filesystem-related errors.
-   */
-  export function filesystemErrorCode(err: Error): ErrorCode | undefined;
-}
-import type { InputStream } from './wasi-io-streams.js';
-export { InputStream };
-import type { OutputStream } from './wasi-io-streams.js';
-export { OutputStream };
-import type { Error } from './wasi-io-streams.js';
-export { Error };
-import type { Datetime } from './wasi-clocks-wall-clock.js';
-export { Datetime };
+// interface wasi:filesystem/types@0.2.3
+/**
+ * Attempts to extract a filesystem-related `error-code` from the stream
+ * `error` provided.
+ * 
+ * Stream operations which return `stream-error::last-operation-failed`
+ * have a payload with more information about the operation that failed.
+ * This payload can be passed through to this function to see if there's
+ * filesystem-related information about the error to return.
+ * 
+ * Note that this function is fallible because not all stream-related
+ * errors are filesystem-related errors.
+ */
+export function filesystemErrorCode(err: Error): ErrorCode | undefined;
+export type InputStream = import('./wasi-io-streams.js').InputStream;
+export type OutputStream = import('./wasi-io-streams.js').OutputStream;
+export type Error = import('./wasi-io-streams.js').Error;
+export type Datetime = import('./wasi-clocks-wall-clock.js').Datetime;
 /**
  * File size or length of a region within a file.
  */

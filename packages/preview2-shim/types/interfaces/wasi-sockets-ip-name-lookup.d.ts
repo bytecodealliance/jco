@@ -1,37 +1,31 @@
-export namespace WasiSocketsIpNameLookup {
-  /**
-   * Resolve an internet host name to a list of IP addresses.
-   * 
-   * Unicode domain names are automatically converted to ASCII using IDNA encoding.
-   * If the input is an IP address string, the address is parsed and returned
-   * as-is without making any external requests.
-   * 
-   * See the wasi-socket proposal README.md for a comparison with getaddrinfo.
-   * 
-   * This function never blocks. It either immediately fails or immediately
-   * returns successfully with a `resolve-address-stream` that can be used
-   * to (asynchronously) fetch the results.
-   * 
-   * # Typical errors
-   * - `invalid-argument`: `name` is a syntactically invalid domain name or IP address.
-   * 
-   * # References:
-   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
-   * - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
-   * - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
-   * - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
-   */
-  export function resolveAddresses(network: Network, name: string): ResolveAddressStream;
-  export { ResolveAddressStream };
-}
-import type { Pollable } from './wasi-io-poll.js';
-export { Pollable };
-import type { Network } from './wasi-sockets-network.js';
-export { Network };
-import type { ErrorCode } from './wasi-sockets-network.js';
-export { ErrorCode };
-import type { IpAddress } from './wasi-sockets-network.js';
-export { IpAddress };
+// interface wasi:sockets/ip-name-lookup@0.2.3
+/**
+ * Resolve an internet host name to a list of IP addresses.
+ * 
+ * Unicode domain names are automatically converted to ASCII using IDNA encoding.
+ * If the input is an IP address string, the address is parsed and returned
+ * as-is without making any external requests.
+ * 
+ * See the wasi-socket proposal README.md for a comparison with getaddrinfo.
+ * 
+ * This function never blocks. It either immediately fails or immediately
+ * returns successfully with a `resolve-address-stream` that can be used
+ * to (asynchronously) fetch the results.
+ * 
+ * # Typical errors
+ * - `invalid-argument`: `name` is a syntactically invalid domain name or IP address.
+ * 
+ * # References:
+ * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
+ * - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
+ * - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
+ * - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
+ */
+export function resolveAddresses(network: Network, name: string): ResolveAddressStream;
+export type Pollable = import('./wasi-io-poll.js').Pollable;
+export type Network = import('./wasi-sockets-network.js').Network;
+export type ErrorCode = import('./wasi-sockets-network.js').ErrorCode;
+export type IpAddress = import('./wasi-sockets-network.js').IpAddress;
 
 export class ResolveAddressStream {
   /**

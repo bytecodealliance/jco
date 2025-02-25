@@ -102,17 +102,18 @@ export async function apiTest(_fixtures) {
      strictEqual(Object.keys(files).length, 2);
      strictEqual(Object.keys(files)[0], 'flavorful.d.ts');
      strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
-     ok(Buffer.from(files[Object.keys(files)[0]]).includes('export const test'));
-     ok(Buffer.from(files[Object.keys(files)[1]]).includes('export namespace TestFlavorfulTest {'));
+     ok(Buffer.from(files[Object.keys(files)[0]]).includes('export * as test from \'./interfaces/test-flavorful-test.js\''));
+     ok(Buffer.from(files[Object.keys(files)[1]]).includes('export type ListInAlias = '));
     });
-    
-    test('Type generation (declare imports)', async () => {
+
+    test('Type generation (guest)', async () => {
       const files = await types('test/fixtures/wit', {
         worldName: 'test:flavorful/flavorful',
         guest: true,
       });
      strictEqual(Object.keys(files).length, 2);
      strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
+     ok(Buffer.from(files[Object.keys(files)[0]]).includes('declare module \'test:flavorful/flavorful\' {'));
      ok(Buffer.from(files[Object.keys(files)[1]]).includes('declare module \'test:flavorful/test\' {'));
     })
 

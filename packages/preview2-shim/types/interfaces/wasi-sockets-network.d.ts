@@ -1,6 +1,4 @@
-export namespace WasiSocketsNetwork {
-  export { Network };
-}
+// interface wasi:sockets/network@0.2.3
 /**
  * Error codes.
  * 

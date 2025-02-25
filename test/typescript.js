@@ -45,7 +45,7 @@ export function tsTest() {
 
       ok(
         dtsSource.includes(
-          `import type { Bar } from './interfaces/test-issue-types.js';`
+          `export type Bar = import('./interfaces/test-issue-types.js').Bar;`
         )
       );
     });
