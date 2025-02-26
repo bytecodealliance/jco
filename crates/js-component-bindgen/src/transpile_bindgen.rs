@@ -655,6 +655,15 @@ impl<'a> Instantiator<'a, '_> {
             self.instantiation_global_initializer(init);
         }
 
+        for (i, trampoline) in self
+            .translation
+            .trampolines
+            .iter()
+            .filter(|(_, t)| Instantiator::is_early_trampoline(t))
+        {
+            self.trampoline(i, trampoline);
+        }
+
         if self.gen.opts.instantiation.is_some() {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
@@ -664,7 +673,12 @@ impl<'a> Instantiator<'a, '_> {
 
         // Trampolines here so we have static module indices, and resource maps populated
         // (both imports and exports may still be populting resource map)
-        for (i, trampoline) in self.translation.trampolines.iter() {
+        for (i, trampoline) in self
+            .translation
+            .trampolines
+            .iter()
+            .filter(|(_, t)| !Instantiator::is_early_trampoline(t))
+        {
             self.trampoline(i, trampoline);
         }
     }
@@ -803,6 +817,21 @@ impl<'a> Instantiator<'a, '_> {
                 | wasmtime_environ::component::FLAG_MAY_ENTER);
         }
         self.src.js_init.prepend_str(&instance_flag_defs);
+    }
+
+    // Trampolines defined in trampoline() below that use:
+    //   const trampoline{} = ...
+    // require early initialization since their bindings aren't auto-hoisted
+    // like JS functions are in the JS runtime.
+    fn is_early_trampoline(trampoline: &Trampoline) -> bool {
+        matches!(
+            trampoline,
+            Trampoline::ResourceNew(_)
+                | Trampoline::ResourceRep(_)
+                | Trampoline::ResourceDrop(_)
+                | Trampoline::ResourceTransferOwn
+                | Trampoline::ResourceTransferBorrow
+        )
     }
 
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
