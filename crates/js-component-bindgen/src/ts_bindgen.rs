@@ -667,7 +667,7 @@ impl<'a> TsInterface<'a> {
             uwriteln!(self.src, "declare module '{id_name}' {{");
             self.needs_module_end = true;
         } else {
-            uwriteln!(self.src, "// interface {id_name}");
+            uwriteln!(self.src, "/** @module Interface {id_name} **/");
         }
     }
 
