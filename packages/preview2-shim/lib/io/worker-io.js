@@ -200,8 +200,9 @@ class InputStream {
       this
     );
   }
-  static _id(stream) {
-    return stream.#id;
+
+  id() {
+    return this.#id;
   }
   /**
    * @param {FILE | SOCKET_TCP | STDIN | HTTP} streamType
@@ -260,9 +261,6 @@ function httpInputStreamDispose(id) {
 export const inputStreamCreate = InputStream._create;
 delete InputStream._create;
 
-export const inputStreamId = InputStream._id;
-delete InputStream._id;
-
 class OutputStream {
   #id;
   #streamType;
@@ -320,14 +318,14 @@ class OutputStream {
     return streamIoErrorCall(
       OUTPUT_STREAM_SPLICE | this.#streamType,
       this.#id,
-      { src: outputStreamId(src), len }
+      { src: src.id(), len }
     );
   }
   blockingSplice(src, len) {
     return streamIoErrorCall(
       OUTPUT_STREAM_BLOCKING_SPLICE | this.#streamType,
       this.#id,
-      { src: inputStreamId(src), len }
+      { src: src.id(), len }
     );
   }
   subscribe() {
@@ -335,10 +333,10 @@ class OutputStream {
       ioCall(OUTPUT_STREAM_SUBSCRIBE | this.#streamType, this.#id)
     );
   }
-
-  static _id(outputStream) {
-    return outputStream.#id;
+  id() {
+    return this.#id;
   }
+
   /**
    * @param {OutputStreamType} streamType
    * @param {any} createPayload
@@ -399,9 +397,6 @@ function fileOutputStreamDispose(id) {
 
 export const outputStreamCreate = OutputStream._create;
 delete OutputStream._create;
-
-export const outputStreamId = OutputStream._id;
-delete OutputStream._id;
 
 export const error = { Error: IoError };
 
