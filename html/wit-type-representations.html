@@ -1,0 +1,578 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>WIT Type representations - jco</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">jco</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/bytecodealliance/jco" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <style>
+.mdbook-alerts {
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  border-left: 0.25em solid var(--mdbook-alerts-color);
+}
+
+.mdbook-alerts > *:first-child {
+  margin-top: 0;
+}
+
+.mdbook-alerts > *:last-child {
+  margin-bottom: 0;
+}
+
+.mdbook-alerts-title {
+  display: flex;
+  font-weight: 600;
+  align-items: center;
+  line-height: 1;
+  color: var(--mdbook-alerts-color);
+  text-transform: capitalize;
+}
+
+.mdbook-alerts-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.2em;
+  background-color: currentColor;
+  -webkit-mask: no-repeat center / 100%;
+  mask: no-repeat center / 100%;
+  -webkit-mask-image: var(--mdbook-alerts-icon);
+  mask-image: var(--mdbook-alerts-icon);
+}
+
+.mdbook-alerts-note {
+  --mdbook-alerts-color: rgb(9, 105, 218);
+  /* https://icon-sets.iconify.design/material-symbols/info-outline-rounded/ */
+  --mdbook-alerts-icon: url('data:image/svg+xml,%3Csvg xmlns="http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width="24" height="24" viewBox="0 0 24 24"%3E%3Cpath fill="currentColor" d="M12 17q.425 0 .713-.288T13 16v-4q0-.425-.288-.712T12 11q-.425 0-.712.288T11 12v4q0 .425.288.713T12 17m0-8q.425 0 .713-.288T13 8q0-.425-.288-.712T12 7q-.425 0-.712.288T11 8q0 .425.288.713T12 9m0 13q-2.075 0-3.9-.788t-3.175-2.137q-1.35-1.35-2.137-3.175T2 12q0-2.075.788-3.9t2.137-3.175q1.35-1.35 3.175-2.137T12 2q2.075 0 3.9.788t3.175 2.137q1.35 1.35 2.138 3.175T22 12q0 2.075-.788 3.9t-2.137 3.175q-1.35 1.35-3.175 2.138T12 22m0-2q3.35 0 5.675-2.325T20 12q0-3.35-2.325-5.675T12 4Q8.65 4 6.325 6.325T4 12q0 3.35 2.325 5.675T12 20m0-8"%2F%3E%3C%2Fsvg%3E');
+}
+
+.mdbook-alerts-tip {
+  --mdbook-alerts-color: rgb(26, 127, 55);
+  /* https://icon-sets.iconify.design/material-symbols/lightbulb-outline-rounded/ */
+  --mdbook-alerts-icon: url('data:image/svg+xml,%3Csvg xmlns="http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width="24" height="24" viewBox="0 0 24 24"%3E%3Cpath fill="currentColor" d="M12 22q-.825 0-1.412-.587T10 20h4q0 .825-.587 1.413T12 22m-3-3q-.425 0-.712-.288T8 18q0-.425.288-.712T9 17h6q.425 0 .713.288T16 18q0 .425-.288.713T15 19zm-.75-3q-1.725-1.025-2.738-2.75T4.5 9.5q0-3.125 2.188-5.312T12 2q3.125 0 5.313 2.188T19.5 9.5q0 2.025-1.012 3.75T15.75 16zm.6-2h6.3q1.125-.8 1.738-1.975T17.5 9.5q0-2.3-1.6-3.9T12 4Q9.7 4 8.1 5.6T6.5 9.5q0 1.35.613 2.525T8.85 14M12 14"%2F%3E%3C%2Fsvg%3E');
+}
+
+.mdbook-alerts-important {
+  --mdbook-alerts-color: rgb(130, 80, 223);
+  /* https://icon-sets.iconify.design/material-symbols/chat-info-outline-rounded/ */
+  --mdbook-alerts-icon: url('data:image/svg+xml,%3Csvg xmlns="http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width="24" height="24" viewBox="0 0 24 24"%3E%3Cpath fill="currentColor" d="M12 7q.425 0 .713-.288T13 6q0-.425-.288-.712T12 5q-.425 0-.712.288T11 6q0 .425.288.713T12 7m0 8q.425 0 .713-.288T13 14v-4q0-.425-.288-.712T12 9q-.425 0-.712.288T11 10v4q0 .425.288.713T12 15m-6 3l-2.3 2.3q-.475.475-1.088.213T2 19.575V4q0-.825.588-1.412T4 2h16q.825 0 1.413.588T22 4v12q0 .825-.587 1.413T20 18zm-.85-2H20V4H4v13.125zM4 16V4z"%2F%3E%3C%2Fsvg%3E');
+}
+
+.mdbook-alerts-warning {
+  --mdbook-alerts-color: rgb(154, 103, 0);
+  /* https://icon-sets.iconify.design/material-symbols/warning-outline-rounded/ */
+  --mdbook-alerts-icon: url('data:image/svg+xml,%3Csvg xmlns="http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width="24" height="24" viewBox="0 0 24 24"%3E%3Cpath fill="currentColor" d="M2.725 21q-.275 0-.5-.137t-.35-.363q-.125-.225-.137-.488t.137-.512l9.25-16q.15-.25.388-.375T12 3q.25 0 .488.125t.387.375l9.25 16q.15.25.138.513t-.138.487q-.125.225-.35.363t-.5.137zm1.725-2h15.1L12 6zM12 18q.425 0 .713-.288T13 17q0-.425-.288-.712T12 16q-.425 0-.712.288T11 17q0 .425.288.713T12 18m0-3q.425 0 .713-.288T13 14v-3q0-.425-.288-.712T12 10q-.425 0-.712.288T11 11v3q0 .425.288.713T12 15m0-2.5"%2F%3E%3C%2Fsvg%3E');
+}
+
+.mdbook-alerts-caution {
+  --mdbook-alerts-color: rgb(207, 34, 46);
+  /* https://icon-sets.iconify.design/material-symbols/brightness-alert-outline-rounded/ */
+  --mdbook-alerts-icon: url('data:image/svg+xml,%3Csvg xmlns="http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg" width="24" height="24" viewBox="0 0 24 24"%3E%3Cpath fill="currentColor" d="M12 17q.425 0 .713-.288T13 16q0-.425-.288-.712T12 15q-.425 0-.712.288T11 16q0 .425.288.713T12 17m0-4q.425 0 .713-.288T13 12V8q0-.425-.288-.712T12 7q-.425 0-.712.288T11 8v4q0 .425.288.713T12 13m-3.35 7H6q-.825 0-1.412-.587T4 18v-2.65L2.075 13.4q-.275-.3-.425-.662T1.5 12q0-.375.15-.737t.425-.663L4 8.65V6q0-.825.588-1.412T6 4h2.65l1.95-1.925q.3-.275.663-.425T12 1.5q.375 0 .738.15t.662.425L15.35 4H18q.825 0 1.413.588T20 6v2.65l1.925 1.95q.275.3.425.663t.15.737q0 .375-.15.738t-.425.662L20 15.35V18q0 .825-.587 1.413T18 20h-2.65l-1.95 1.925q-.3.275-.662.425T12 22.5q-.375 0-.737-.15t-.663-.425zm.85-2l2.5 2.5l2.5-2.5H18v-3.5l2.5-2.5L18 9.5V6h-3.5L12 3.5L9.5 6H6v3.5L3.5 12L6 14.5V18zm2.5-6"%2F%3E%3C%2Fsvg%3E');
+}
+
+</style>
+<h1 id="wit-type-representations"><a class="header" href="#wit-type-representations">WIT Type Representations</a></h1>
+<p>Similar to any other guest langauge, there are multiple type systems in play when dealing with JS WebAssembly components.</p>
+<p>Types represented in <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md">WebAssembly Interface Types ("WIT")</a> must be converted down to types that are familiar for Javascript,
+and <a href="https://www.typescriptlang.org/">Typescript</a> (if dealing with <code>jco types</code> or <code>jco guest-types</code> subcommands).</p>
+<p>This document details the type representations and usage for types that are defined in WIT and built into components.</p>
+<h2 id="basic-types"><a class="header" href="#basic-types">Basic types</a></h2>
+<p>Here is a basic table of conversions between WIT types and JS types:</p>
+<p>More complicated types that are built into WIT but require more work to translate are explained below.</p>
+<div class="table-wrapper"><table><thead><tr><th>WIT type</th><th>JS Type</th></tr></thead><tbody>
+<tr><td><code>u8</code></td><td><code>number</code></td></tr>
+<tr><td><code>u16</code></td><td><code>number</code></td></tr>
+<tr><td><code>u32</code></td><td><code>number</code></td></tr>
+<tr><td><code>u64</code></td><td><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt"><code>BigInt</code></a></td></tr>
+<tr><td><code>s8</code></td><td><code>number</code></td></tr>
+<tr><td><code>s16</code></td><td><code>number</code></td></tr>
+<tr><td><code>s32</code></td><td><code>number</code></td></tr>
+<tr><td><code>s64</code></td><td><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt"><code>BigInt</code></a></td></tr>
+<tr><td><code>f32</code></td><td><code>number</code></td></tr>
+<tr><td><code>f64</code></td><td><code>number</code></td></tr>
+<tr><td><code>bool</code></td><td><code>boolean</code></td></tr>
+<tr><td><code>char</code></td><td><code>string</code></td></tr>
+<tr><td><code>string</code></td><td><code>string</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="variants-variant"><a class="header" href="#variants-variant">Variants (<code>variant</code>)</a></h2>
+<div class="mdbook-alerts mdbook-alerts-note">
+<p class="mdbook-alerts-title">
+  <span class="mdbook-alerts-icon"></span>
+  note
+</p>
+<p>See the <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#item-variant-one-of-a-set-of-types">Variant section of the WIT IDL</a> for more information on Variants</p>
+</div>
+<p>Variants are like basic enums in most languages with one exception; members of the variant can hold a single data type.
+Alternative variant members may hold <em>different</em> types to represent different cases. For example:</p>
+<pre><code class="language-wit">variant exit-code {
+  success,
+  failure-code(u32),
+  failure-msg(string),
+}
+</code></pre>
+<h3 id="wit-syntax"><a class="header" href="#wit-syntax">WIT syntax</a></h3>
+<pre><code class="language-wit">variant filter {
+    all,
+    none,
+    some(list&lt;string&gt;),
+}
+</code></pre>
+<h3 id="jco-representation"><a class="header" href="#jco-representation">Jco Representation</a></h3>
+<p>Jco represents variants as objects with a <code>tag</code> that represents the variant, and <code>data</code> that represent the content:</p>
+<p>For example, pseudo Typescript for the of the above <code>filter</code> variant would look like the following:</p>
+<pre><code class="language-ts">// Filter with all
+{
+  tag: 'all';
+}
+
+// Filter with None
+{
+  tag: 'none';
+}
+
+// Filter with some and a list of strings
+{
+  tag: 'some';
+  data: string[];
+}
+</code></pre>
+<div class="mdbook-alerts mdbook-alerts-note">
+<p class="mdbook-alerts-title">
+  <span class="mdbook-alerts-icon"></span>
+  note
+</p>
+<p>WIT <code>variant</code>'s options may only contain <em>one</em> piece of data.</p>
+<p>You can work around this limitation of variants by having the contained type be a <em>tuple</em>,
+(e.g. <code>tuple&lt;string, u32, string&gt;</code>), or using a named record as the related data.</p>
+</div>
+<h2 id="records-record"><a class="header" href="#records-record">Records (<code>record</code>)</a></h2>
+<h3 id="wit-syntax-1"><a class="header" href="#wit-syntax-1">WIT Syntax</a></h3>
+<pre><code class="language-wit">record person {
+    name: string,
+    age: u32,
+    favorite-color: option&lt;string&gt;,
+}
+</code></pre>
+<h3 id="jco-representation-1"><a class="header" href="#jco-representation-1">Jco Representation</a></h3>
+<p>Jco represents records as the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object">Javascript Object basic data type</a>:</p>
+<p>Given the WIT record above, you can expect to deal with an object similar to the following Typescript:</p>
+<pre><code class="language-ts">interface Person {
+  person: string;
+  age: number;
+  favoriteColor?: number;
+}
+</code></pre>
+<div class="mdbook-alerts mdbook-alerts-note">
+<p class="mdbook-alerts-title">
+  <span class="mdbook-alerts-icon"></span>
+  note
+</p>
+<p>If using <code>jco guest-types</code> or <code>jco types</code>, you will be able to use Typescript types that
+properly constrain the Typescript code you write.</p>
+</div>
+<h2 id="options-option"><a class="header" href="#options-option">Options (<code>option</code>)</a></h2>
+<h3 id="wit-syntax-2"><a class="header" href="#wit-syntax-2">WIT Syntax</a></h3>
+<pre><code class="language-wit">option&lt;u32, u32&gt;
+option&lt;string, u32&gt;
+</code></pre>
+<h3 id="jco-representation-2"><a class="header" href="#jco-representation-2">Jco Representation</a></h3>
+<p>Jco represents options as an optional value or undefined, so some examples:</p>
+<div class="table-wrapper"><table><thead><tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr></thead><tbody>
+<tr><td><code>option&lt;u32&gt;</code></td><td>`number</td><td>undefined`</td></tr>
+<tr><td><code>option&lt;option&lt;u32&gt;&gt;</code></td><td>`{ tag: "some"</td><td>"none", val: number }`</td></tr>
+</tbody></table>
+</div><div class="mdbook-alerts mdbook-alerts-warning">
+<p class="mdbook-alerts-title">
+  <span class="mdbook-alerts-icon"></span>
+  warning
+</p>
+<p>"single level" <code>option</code>s are easy to reason about, but the doubly nested case (<code>option&lt;option&lt;_&gt;&gt;</code>) is more complex.</p>
+<p>Due to the important distinction between a missing optional versus an <code>option</code> that <em>contains</em> an empty value,
+doubly-nested (or more) <code>option</code>s are encoded with the object encoding described above, rather than as an optional value.</p>
+</div>
+<h3 id="options-in-context-records"><a class="header" href="#options-in-context-records"><code>option</code>s in context: Records</a></h3>
+<p>When used in the context of a <code>record</code> (which becomes a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object">JS Object</a>), optional values are represented as optional properties (i.e in TS a <code>propName?: value</code>).</p>
+<h3 id="options-in-context-function-argumentsreturn-values"><a class="header" href="#options-in-context-function-argumentsreturn-values"><code>option</code>s in context: Function arguments/return values</a></h3>
+<p>When used in the context of arguments or return to a function, single level <code>option</code>s are represented as optional values:</p>
+<p>Consider the following interface:</p>
+<pre><code class="language-wit">interface optional {
+    f: func(n: option&lt;u32&gt;) -&gt; string;
+}
+</code></pre>
+<p>An implementation of the function <code>optional.f</code> would look like the following Typescript:</p>
+<pre><code class="language-ts">function f(n?: number): string {
+  if (n === undefined) { return "no n provided"; }
+  return "n was provided";
+}
+</code></pre>
+<h2 id="result-result"><a class="header" href="#result-result">Result (<code>result</code>)</a></h2>
+<p><code>Result</code> types, as a general concept represent a result that <em>may or may not</em> be present, due to a failure. A result value either contains
+a value that represents a completed computation (<code>SuccessType</code>), or some "error" that indicates a failure (<code>ErrorType</code>).</p>
+<p>You can think of the type of a <code>Result</code> as:</p>
+<pre><code>Result&lt;SuccessType, ErrorType&gt;
+</code></pre>
+<p>The value you ultimately deal with is one <em>or</em> the other -- either the successful result or the error that represents the failure.</p>
+<h3 id="wit-syntax-3"><a class="header" href="#wit-syntax-3">WIT Syntax</a></h3>
+<pre><code class="language-wit">result&lt;_, string&gt;
+result&lt;, string&gt;
+result&lt;t,e&gt;
+</code></pre>
+<h3 id="jco-representation-3"><a class="header" href="#jco-representation-3">Jco representation</a></h3>
+<p>In Javsacript, computation that fails or errors are often represented as exceptions -- and depending on how
+the <code>result</code> is used, Jco adheres to that representations.</p>
+<p>When used as an <em>output</em> to a function, <code>throw</code>ing an error will suffice. Given the following WIT interface:</p>
+<pre><code class="language-wit">add-overflow: func(lhs: u32, rhs: u32) -&gt; result&lt;u32, string&gt;;
+</code></pre>
+<p>The following JS function would satistfy the WIT interface:</p>
+<pre><code class="language-js">function addOverflow(lhs, rhs) {
+    let sum = lhs + rhs;
+    if (Nan.isNan(sum)) {
+      throw "ERROR: addition produced non-number value";
+    } else if (sum &gt; 4294967295) {
+      throw "ERROR: u32 overflow";
+    }
+    return sum;
+}
+</code></pre>
+<p>While JS automatically converts numbers, we must be careful to not attempt passing a number
+that would <em>not</em> fit in a <code>u32</code> (unsigned 32 bit integer) via WebAssembly.</p>
+<blockquote>
+<p>[NOTE]
+How JS treats large numbers is not in focus here, but it is worth noting that
+<code>Number.MAX_VALUE + Number.MAX_VALUE === Infinity</code>.</p>
+</blockquote>
+<h3 id="typescript-schema"><a class="header" href="#typescript-schema">Typescript Schema</a></h3>
+<pre><code>type Result&lt;T,E&gt; = { tag: 'ok', val: T } | { tag: 'err', val: E };
+</code></pre>
+<h3 id="results-in-context-function-return-values"><a class="header" href="#results-in-context-function-return-values"><code>result</code>s in context: Function return values</a></h3>
+<p>When a result is returned directly from a function, any thrown error of the function is treated as the result error type,
+while any direct return value is treated as the result success type.</p>
+<p>Consider the following interface:</p>
+<pre><code class="language-wit">interface fallible {
+    f: func(n: u32) -&gt; result&lt;string, string&gt;;
+}
+</code></pre>
+<p>An implementation of the function <code>fallible.f</code> would look like the following Typescript:</p>
+<pre><code class="language-ts">function f(n: number): string {
+  if (n == 42) { return "correct"; }
+  throw "not correct";
+}
+</code></pre>
+<h3 id="results-in-context-container-types-record-optional-etc"><a class="header" href="#results-in-context-container-types-record-optional-etc"><code>result</code>s in context: Container types (<code>record</code>, <code>optional</code>, etc)</a></h3>
+<p>A <code>result</code> stored inside a container type or in non-function argument/return contexts will look like a variant
+type of the form <code>{ tag: 'ok', val: SuccessType } | { tag: 'err', val: ErrorType }</code>.</p>
+<p>For example, consider the following WIT interface:</p>
+<pre><code class="language-wit">interface fallible-reaction {
+    r: func(r: result&lt;string, string&gt;) -&gt; string;
+}
+</code></pre>
+<p>An implementation of the function <code>fallible-reaction.r</code> would look like the following Typescript:</p>
+<pre><code class="language-ts">type Result&lt;T,E&gt; = { tag: 'ok', val: T } | { tag: 'err', val: E };
+
+function f(input: Result&lt;string, string&gt;): string {
+  switch (input.tag) {
+    case 'ok': return `SUCCESS, returned: [${input.val}]";
+    case 'err': return `ERROR, returned: [${input.val}]";
+    // We we should never reach the case below
+    default: throw Error("something has gone seriously wrong");
+  }
+}
+</code></pre>
+<h3 id="result-considerations-idiomatic-js-errors-for-host-implementations"><a class="header" href="#result-considerations-idiomatic-js-errors-for-host-implementations"><code>result</code> considerations: Idiomatic JS errors for Host implementations</a></h3>
+<p>When running a component in a JS host, it is likely for host functions to throw real JS errors (objects which are descendants of the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error"><code>Error</code> global object</a>),
+rather than the exact type expected by Jco.</p>
+<p>This means that the default conversion mechanism for Jco would be a JS anti-pattern (i.e. <code>throw 12345</code> versus <code>throw new Error("error code 12345")</code>).</p>
+<p>To ensure smooth use of Jco-generated code from hosts, <code>Error</code> objects with a <code>payload</code> property will have the payload extracted as the result error type.</p>
+<p>Consider the following WIT:</p>
+<pre><code class="language-wit">type error-code = u32;
+
+interface only-throws {
+    just-throw: func() -&gt; result&lt;string, error-code&gt;;
+}
+</code></pre>
+<p>Consider the following <strong>host</strong> function adhering to the interface, and making use of idiomatic JS errors:</p>
+<pre><code class="language-js">// The below code assumes interaction with a WIT which looks like a
+function justThrow() {
+  const plainError = new Error("Error for JS users");
+  const errorWithPayload = Object.assign(plainError, { payload: 1111 });
+  throw errorWithPayload;
+}
+</code></pre>
+<h2 id="tuples-tuple"><a class="header" href="#tuples-tuple">Tuples (<code>tuple</code>)</a></h2>
+<p>Tuples are a container type that has a fixed size, types somewhat analogous to a fixed size list.</p>
+<p>Tuples can be combined with type renaming to produce types that carry some semantic meaning. For example:</p>
+<pre><code class="language-wit">type point = tuple&lt;u32,u32&gt;
+</code></pre>
+<p>Note that <code>tuple</code>s can be combined with custom user-defined types like <code>record</code>s and <code>variants</code>, <code>option</code>s and <code>result</code>s. For example:</p>
+<pre><code class="language-wit">variant example-var {
+    nothing,
+    value(u64),
+}
+
+record example-rec {
+    fst: string,
+    snd: u32,
+}
+
+type maybe-num = option&lt;u32&gt;;
+
+type num-or-err-str = result&lt;u32, string&gt;;
+
+type examples = tuple&lt;example-rec, example-var, maybe-num, num-or-err-str&gt;;
+</code></pre>
+<h3 id="wit-syntax-4"><a class="header" href="#wit-syntax-4">WIT Syntax</a></h3>
+<pre><code class="language-wit">tuple&lt;u32, u32&gt;
+tuple&lt;string, u32&gt;
+</code></pre>
+<h3 id="jco-representation-4"><a class="header" href="#jco-representation-4">Jco Representation</a></h3>
+<p>Jco represents tuples as lists (arrays), so some examples:</p>
+<div class="table-wrapper"><table><thead><tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr></thead><tbody>
+<tr><td><code>tuple&lt;u32, u32&gt;</code></td><td><code>[number, number]</code></td><td><code>tuple&lt;u32, u32&gt;</code> -&gt; <code>[number, number]</code></td></tr>
+<tr><td><code>tuple&lt;string, u32&gt;</code></td><td><code>[string, number]</code></td><td><code>tuple&lt;string, u32&gt;</code> -&gt; <code>[string, number]</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="list-list"><a class="header" href="#list-list">List (<code>list</code>)</a></h2>
+<h3 id="wit-syntax-5"><a class="header" href="#wit-syntax-5">WIT Syntax</a></h3>
+<pre><code>list&lt;u8&gt;
+list&lt;string&gt;
+</code></pre>
+<h3 id="jco-representation-5"><a class="header" href="#jco-representation-5">Jco Representation</a></h3>
+<p>Jco represents lists with native Javscript Arrays, with the exception of a <code>list&lt;u8&gt;</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr></thead><tbody>
+<tr><td><code>list&lt;u8&gt;</code></td><td><code>Uint8Array</code></td><td><code>list&lt;u8&gt;</code> -&gt; <code>Uint8Array</code></td></tr>
+<tr><td><code>list&lt;t&gt;</code></td><td><code>T[]</code></td><td><code>list&lt;string&gt;</code> -&gt; <code>string[]</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="resources-resource"><a class="header" href="#resources-resource">Resources (<code>resource</code>)</a></h2>
+<div class="mdbook-alerts mdbook-alerts-note">
+<p class="mdbook-alerts-title">
+  <span class="mdbook-alerts-icon"></span>
+  note
+</p>
+<p>See the <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md#item-resource">WIT IDL description of Resources</a> for more information</p>
+</div>
+<p>Resources represent objects that can not be trivially serialized and send copied to another component or the host. Components or host expose resources almost as a reference to internal state that methods can be called on -- without providing the actual internals of the resource in question.</p>
+<h3 id="wit-syntax-6"><a class="header" href="#wit-syntax-6">WIT Syntax</a></h3>
+<pre><code class="language-wit">resource blob {
+    constructor(init: list&lt;u8&gt;);
+    write: func(bytes: list&lt;u8&gt;);
+    read: func(n: u32) -&gt; list&lt;u8&gt;;
+    merge: static func(lhs: borrow&lt;blob&gt;, rhs: borrow&lt;blob&gt;) -&gt; blob;
+}
+</code></pre>
+<h3 id="jco-representation-6"><a class="header" href="#jco-representation-6">Jco representation</a></h3>
+<p>The example above could be represented with the following class in Typescript pseudo-code:</p>
+<pre><code class="language-ts">class Blob {
+    constructor(init: Uint8Array);
+
+    write(bytes: Uint8Array);
+
+    read(n: number): UInt8Array;
+
+    static merge(lhs: Uint8Array, rhs: Uint8Array): Blob;
+}
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="optimized-host-bindings.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="#.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="optimized-host-bindings.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="#.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
