@@ -9,7 +9,7 @@ jobs:
   deploy:
     permissions:
       contents: write
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
@@ -18,8 +18,13 @@ jobs:
       - name: Setup mdBook
         uses: peaceiris/actions-mdbook@v1
         with:
-          mdbook-version: '0.4.30'
-          # mdbook-version: 'latest'
+          mdbook-version: '0.4.43'
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: >-
+            mdbook-alerts@0.7.0,
+            mdbook-linkcheck@0.7.7
 
       - run: mdbook build docs
 
