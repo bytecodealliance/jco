@@ -102,7 +102,7 @@ The component we will be composing with our as-of-yet incomplete binary *must* s
 npm run compose
 ```
 
-> [!WARN]
+> [!WARNING]
 > This step is the one that uses [`wac`][wac] -- ensure it's installed!
 
 Running the command above will produce a `string-reverse-upper.wasm` file (this time, that is *complete*).

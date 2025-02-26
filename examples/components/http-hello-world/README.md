@@ -48,7 +48,7 @@ $ jco serve http-hello-world.wasm
 Server listening on 8000...
 ```
 
-> [!WARN]
+> [!WARNING]
 > `jco serve` is meant to be used for local/development environments, not production use cases.
 
 Similarly you can also use `wasmtime`:
