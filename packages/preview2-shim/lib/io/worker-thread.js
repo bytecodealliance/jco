@@ -395,7 +395,7 @@ function handle(call, id, payload) {
     case HTTP_OUTGOING_BODY_DISPOSE:
       if (debug && !streams.has(id))
         console.warn(`wasi-io: stream ${id} not found to dispose`);
-      streams.delete(id);  
+      streams.delete(id);
       return;
     case HTTP_SERVER_START:
       return startHttpServer(id, payload);
@@ -646,34 +646,86 @@ function handle(call, id, payload) {
       }
       stream.pollState.ready = false;
       return (stream.flushPromise = new Promise((resolve, reject) => {
-        stream.stream.write(payload, (err) => {
+        if (stream.stream === stdout || stream.stream === stderr) {
+          // Inside workers, NodeJS actually queues writes destined for
+          // stdout/stderr in a port that is only flushed on exit of the worker.
+          //
+          // In this case, we cannot attempt to wait for the promise.
+          //
+          // This code may have to be reworked for browsers.
+          //
+          // see: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker/io.js#L288
+          // see: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker.js#L303
+          // see: https://github.com/nodejs/node/blob/v22.12.0/typings/internalBinding/messaging.d.ts#L27
+          stream.stream.write(payload);
           stream.flushPromise = null;
           pollStateReady(stream.pollState);
-          if (err) return void reject(streamError(err));
           resolve(BigInt(payload.byteLength));
-        });
+        } else {
+          stream.stream.write(payload, (err) => {
+            stream.flushPromise = null;
+            pollStateReady(stream.pollState);
+            if (err) return void reject(streamError(err));
+            resolve(BigInt(payload.byteLength));
+          });
+        }
       }));
     }
     case OUTPUT_STREAM_FLUSH: {
       const stream = getStreamOrThrow(id);
       if (stream.flushPromise) return;
       stream.pollState.ready = false;
-      return (stream.flushPromise = new Promise((resolve, reject) => {
-        stream.stream.write(new Uint8Array([]), (err) => {
+      stream.flushPromise = new Promise((resolve, reject) => {
+        if (stream.stream === stdout || stream.stream === stderr) {
+          // Inside workers, NodeJS actually queues writes destined for
+          // stdout/stderr in a port that is only flushed on exit of the worker.
+          //
+          // In this case, we cannot attempt to wait for the promise.
+          //
+          // This code may have to be reworked for browsers.
+          //
+          // see: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker/io.js#L288
+          // see: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker.js#L303
+          // see: https://github.com/nodejs/node/blob/v22.12.0/typings/internalBinding/messaging.d.ts#L27
           stream.flushPromise = null;
           pollStateReady(stream.pollState);
-          if (err) return void reject(streamError(err));
           resolve();
-        });
-      }));
+        } else {
+          // For all other writes, we can perform the actual write and expect the write to complete
+          // and trigger the relevant callback
+          stream.stream.write(new Uint8Array([]), (err) => {
+            stream.flushPromise = null;
+            pollStateReady(stream.pollState);
+            if (err) return void reject(streamError(err));
+            resolve();
+          });
+        }
+      });
+      return stream.flushPromise;
     }
     case OUTPUT_STREAM_BLOCKING_FLUSH: {
       const stream = getStreamOrThrow(id);
       if (stream.flushPromise) return stream.flushPromise;
       return new Promise((resolve, reject) => {
-        stream.stream.write(new Uint8Array([]), (err) =>
-          err ? reject(streamError(err)) : resolve()
-        );
+        if (stream.stream === stdout || stream.stream === stderr) {
+          // Inside workers, NodeJS actually queues writes destined for
+          // stdout/stderr in a port that is only flushed on exit of the worker.
+          //
+          // In this case, we cannot attempt to wait for the promise.
+          //
+          // This code may have to be reworked for browsers.
+          //
+          // see: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker/io.js#L288
+          // see: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker.js#L303
+          // see: https://github.com/nodejs/node/blob/v22.12.0/typings/internalBinding/messaging.d.ts#L27
+          resolve();
+        } else {
+          // For all other writes, we can perform the actual write and expect the write to complete
+          // and trigger the relevant callback
+          stream.stream.write(new Uint8Array([]), (err) =>
+            err ? reject(streamError(err)) : resolve()
+          );
+        }
       });
     }
     case OUTPUT_STREAM_WRITE_ZEROES:

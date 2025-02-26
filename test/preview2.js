@@ -137,5 +137,19 @@ export async function preview2Test() {
 
       server.stop();
     });
+
+    // https://github.com/bytecodealliance/jco/issues/550
+    test("pollable hang", async () => {
+      const { stdout, stderr } = await exec(
+        jcoPath,
+        "run",
+        fileURLToPath(
+          new URL(
+            "./../test/fixtures/components/stdout-pollable-hang.component.wasm",
+            import.meta.url
+          )
+        )
+      );
+    });
   });
 }
