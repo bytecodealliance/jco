@@ -320,7 +320,7 @@ class OutputStream {
     return streamIoErrorCall(
       OUTPUT_STREAM_SPLICE | this.#streamType,
       this.#id,
-      { src: src.#id, len }
+      { src: outputStreamId(src), len }
     );
   }
   blockingSplice(src, len) {
