@@ -1,4 +1,4 @@
-// interface wasi:http/outgoing-handler@0.2.3
+/** @module Interface wasi:http/outgoing-handler@0.2.3 **/
 /**
  * This function is invoked with an outgoing HTTP Request, and it returns
  * a resource `future-incoming-response` which represents an HTTP Response

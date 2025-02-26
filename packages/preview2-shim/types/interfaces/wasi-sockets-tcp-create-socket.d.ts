@@ -1,4 +1,4 @@
-// interface wasi:sockets/tcp-create-socket@0.2.3
+/** @module Interface wasi:sockets/tcp-create-socket@0.2.3 **/
 /**
  * Create a new TCP socket.
  * 

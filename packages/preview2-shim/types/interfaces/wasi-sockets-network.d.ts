@@ -1,4 +1,4 @@
-// interface wasi:sockets/network@0.2.3
+/** @module Interface wasi:sockets/network@0.2.3 **/
 /**
  * Error codes.
  * 

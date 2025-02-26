@@ -1,4 +1,4 @@
-// interface wasi:sockets/instance-network@0.2.3
+/** @module Interface wasi:sockets/instance-network@0.2.3 **/
 /**
  * Get a handle to the default network.
  */

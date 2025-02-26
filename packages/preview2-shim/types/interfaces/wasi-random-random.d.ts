@@ -1,4 +1,4 @@
-// interface wasi:random/random@0.2.3
+/** @module Interface wasi:random/random@0.2.3 **/
 /**
  * Return `len` cryptographically-secure random or pseudo-random bytes.
  * 

@@ -1,4 +1,4 @@
-// interface wasi:sockets/udp@0.2.3
+/** @module Interface wasi:sockets/udp@0.2.3 **/
 export type Pollable = import('./wasi-io-poll.js').Pollable;
 export type Network = import('./wasi-sockets-network.js').Network;
 export type ErrorCode = import('./wasi-sockets-network.js').ErrorCode;

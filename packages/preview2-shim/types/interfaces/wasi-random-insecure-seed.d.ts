@@ -1,4 +1,4 @@
-// interface wasi:random/insecure-seed@0.2.3
+/** @module Interface wasi:random/insecure-seed@0.2.3 **/
 /**
  * Return a 128-bit value that may contain a pseudo-random value.
  * 

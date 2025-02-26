@@ -1,4 +1,4 @@
-// interface wasi:sockets/ip-name-lookup@0.2.3
+/** @module Interface wasi:sockets/ip-name-lookup@0.2.3 **/
 /**
  * Resolve an internet host name to a list of IP addresses.
  * 

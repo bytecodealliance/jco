@@ -1,4 +1,4 @@
-// interface wasi:cli/exit@0.2.3
+/** @module Interface wasi:cli/exit@0.2.3 **/
 /**
  * Exit the current instance and any linked instances.
  */

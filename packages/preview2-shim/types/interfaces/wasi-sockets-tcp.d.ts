@@ -1,4 +1,4 @@
-// interface wasi:sockets/tcp@0.2.3
+/** @module Interface wasi:sockets/tcp@0.2.3 **/
 export type InputStream = import('./wasi-io-streams.js').InputStream;
 export type OutputStream = import('./wasi-io-streams.js').OutputStream;
 export type Pollable = import('./wasi-io-poll.js').Pollable;

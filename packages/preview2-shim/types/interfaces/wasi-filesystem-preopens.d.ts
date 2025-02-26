@@ -1,4 +1,4 @@
-// interface wasi:filesystem/preopens@0.2.3
+/** @module Interface wasi:filesystem/preopens@0.2.3 **/
 /**
  * Return the set of preopened directories, and their paths.
  */

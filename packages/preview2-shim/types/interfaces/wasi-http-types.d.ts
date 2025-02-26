@@ -1,4 +1,4 @@
-// interface wasi:http/types@0.2.3
+/** @module Interface wasi:http/types@0.2.3 **/
 /**
  * Attempts to extract a http-related `error` from the wasi:io `error`
  * provided.

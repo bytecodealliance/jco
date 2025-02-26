@@ -1,4 +1,4 @@
-// interface wasi:filesystem/types@0.2.3
+/** @module Interface wasi:filesystem/types@0.2.3 **/
 /**
  * Attempts to extract a filesystem-related `error-code` from the stream
  * `error` provided.

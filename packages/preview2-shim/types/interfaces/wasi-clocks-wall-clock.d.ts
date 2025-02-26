@@ -1,4 +1,4 @@
-// interface wasi:clocks/wall-clock@0.2.3
+/** @module Interface wasi:clocks/wall-clock@0.2.3 **/
 /**
  * Read the current value of the clock.
  * 
