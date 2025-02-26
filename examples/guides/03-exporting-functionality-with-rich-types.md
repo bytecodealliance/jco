@@ -61,7 +61,7 @@ export const reverse = {
 };
 ```
 
-> [!WARN]
+> [!WARNING]
 > jco only deals with ES modules, so ensure to set `"type": "module"` in your `package.json` if necessary
 
 > [!NOTE]
