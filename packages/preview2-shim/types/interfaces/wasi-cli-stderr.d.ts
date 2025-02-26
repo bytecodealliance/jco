@@ -1,5 +1,3 @@
-export namespace WasiCliStderr {
-  export function getStderr(): OutputStream;
-}
-import type { OutputStream } from './wasi-io-streams.js';
-export { OutputStream };
+// interface wasi:cli/stderr@0.2.3
+export function getStderr(): OutputStream;
+export type OutputStream = import('./wasi-io-streams.js').OutputStream;

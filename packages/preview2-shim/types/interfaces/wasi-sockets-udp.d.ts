@@ -1,18 +1,9 @@
-export namespace WasiSocketsUdp {
-  export { UdpSocket };
-  export { IncomingDatagramStream };
-  export { OutgoingDatagramStream };
-}
-import type { Pollable } from './wasi-io-poll.js';
-export { Pollable };
-import type { Network } from './wasi-sockets-network.js';
-export { Network };
-import type { ErrorCode } from './wasi-sockets-network.js';
-export { ErrorCode };
-import type { IpSocketAddress } from './wasi-sockets-network.js';
-export { IpSocketAddress };
-import type { IpAddressFamily } from './wasi-sockets-network.js';
-export { IpAddressFamily };
+// interface wasi:sockets/udp@0.2.3
+export type Pollable = import('./wasi-io-poll.js').Pollable;
+export type Network = import('./wasi-sockets-network.js').Network;
+export type ErrorCode = import('./wasi-sockets-network.js').ErrorCode;
+export type IpSocketAddress = import('./wasi-sockets-network.js').IpSocketAddress;
+export type IpAddressFamily = import('./wasi-sockets-network.js').IpAddressFamily;
 /**
  * A received datagram.
  */

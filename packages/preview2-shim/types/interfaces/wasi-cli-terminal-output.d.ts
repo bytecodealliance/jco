@@ -1,6 +1,4 @@
-export namespace WasiCliTerminalOutput {
-  export { TerminalOutput };
-}
+// interface wasi:cli/terminal-output@0.2.3
 
 export class TerminalOutput {
   /**
