@@ -1,0 +1,17 @@
+{
+  "type": "module",
+  "scripts": {
+    "build:component": "jco componentize -w component.wit component.js -o component.wasm",
+    "transpile": "jco transpile -o dist/transpiled component.wasm",
+    "serve": "http-server .",
+    "demo": "npm run build:component && npm run transpile && npm run serve",
+    "all": "npm run build:component && npm run tranpsile"
+  },
+  "dependencies": {
+    "@bytecodealliance/jco": "^1.8.1",
+    "@bytecodealliance/preview2-shim": "^0.17.1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

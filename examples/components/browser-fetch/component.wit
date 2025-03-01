@@ -1,0 +1,26 @@
+package example:browser-fetch;
+
+interface ping {
+  record ping-response {
+    /// User-provided name for a request
+    name: option<string>,
+
+    /// User-provided name for a request
+    url: string,
+
+    /// Response body, converted to JSON
+    repsonse-json: string,
+  }
+
+  /// This function performs a GET request
+  /// to the provided URL without supplying an query parameters or a body
+  ///
+  /// While not strictly necessary, this function also takes a name
+  /// that can be used to correlate the request object and will
+  // be returned along with the response
+  get-json: func(url: string) -> ping-response;
+}
+
+world component {
+ export ping;
+}
