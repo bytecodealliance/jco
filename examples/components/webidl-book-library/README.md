@@ -8,6 +8,8 @@ We can accomplish this by:
 - Writing WebIDL specifications
 - Using [`webidl2wit`][webidl2wit] to turn WebIDL specifications into [WIT interfaces][wit]
 - Using `jco componentize` to build Javascript WebAssembly components that target the relevant WIT interfaces
+- Using `jco transpile` to compile that component to run in a JS context (like NodeJS)
+- Writing host bindings (`demo.js`) that WebAssembly cna use
 
 A common use case for WebIDL is targeting browsers, as the WebIDL is primarily used there
 to document interfaces for the web platform. This example stops short of using the web platform
@@ -31,19 +33,22 @@ To run this example, you'll need the following tools
 
 ## Quickstart
 
-Once dependencies are installed, you can use your favorite NodeJS package mangaer:
+Once dependencies are installed, you can use your favorite NodeJS package manager to run the steps:
 
 ```console
 npm install
 npm run generate:wit
+npm run generate:types
 npm run build
+npm run transpile
 ```
 
 > [!NOTE]
 > To run all these steps at once, you can run `npm run all`
 
-After running the component build, new WebAssembly binary will be available:
+After running the component build, we can run the example code that uses our WebAssembly component,
+and the WebIDL interface & implementation we made:
 
 ```
-(( TODO: add output of npm run build ))
+node demo.js
 ```
