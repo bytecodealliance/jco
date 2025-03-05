@@ -39,12 +39,14 @@ jobs:
     name: Jco Test Suite
     strategy:
       matrix:
-        os: [
-            ubuntu-22.04, # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
-            windows-latest,
-            macos-latest
-        ]
-        node: [18.x, 20.x, latest]
+        os:
+          - ubuntu-22.04 # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
+          - windows-latest
+          - macos-latest
+        node:
+          - 18.x
+          - 20.x
+          - latest
         include:
           - os: windows-latest
             weval-bin-path: .weval-bin/weval.exe
@@ -104,9 +106,17 @@ jobs:
         mkdir .weval-bin
         mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
 
-    # Perform NPM install
+      # Perform NPM install
+      #
+      # Remove node modules explicitly to avoid missing platform-native deps
+      # when on other architectures/OSes
+      #
+      # ex. https://github.com/sveltejs/language-tools/issues/2278
+      # ex. https://github.com/vitejs/vite/discussions/16345
     - name: Install NPM packages
-      run: npm install
+      run: |
+        rm -rf node_modules package-lock.json
+        npm install
 
     - name: Download Build
       uses: actions/download-artifact@v4
@@ -115,14 +125,36 @@ jobs:
         path: obj
 
     - name: Test LTS Node.js
-      run: npm run test:lts
       if: matrix.node == '18.x' || matrix.node == '20.x'
+      run: |
+        npm run test:lts async.browser.js
+        npm run test:lts async.js
+        npm run test:lts browser.js
+        npm run test:lts api.js
+        npm run test:lts cli.js
+        npm run test:lts codegen.js
+        npm run test:lts commands.js
+        npm run test:lts preview2.js
+        npm run test:lts runtime.js
+        npm run test:lts typescript.js
+        npm run test:lts wit.js
 
     - name: Test Latest Node.js
       if: matrix.node == 'latest'
       env:
         WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
-      run: npm run test
+      run: |
+        npm run test async.browser.js
+        npm run test async.js
+        npm run test browser.js
+        npm run test api.js
+        npm run test cli.js
+        npm run test codegen.js
+        npm run test commands.js
+        npm run test preview2.js
+        npm run test runtime.js
+        npm run test typescript.js
+        npm run test wit.js
 
   build-wasi-tests:
     name: WASI Test Generation

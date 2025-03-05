@@ -1,5 +1,8 @@
 // Flags: --map testwasi=../helpers.js --map r=../resource_borrow_simple.js#R test=../resource_borrow_simple.js#test
 
+// @ts-ignore
+import { testImports } from "../output/resource_borrow_simple/resource_borrow_simple.js";
+
 // @ts-nocheck
 import * as assert from "assert";
 
@@ -44,11 +47,7 @@ export function test(r) {
 }
 
 export async function run() {
-  const wasm = await import(
-    "../output/resource_borrow_simple/resource_borrow_simple.js"
-  );
-
-  wasm.testImports();
+  testImports();
   assert.ok(constructed);
   assert.ok(tested);
 }

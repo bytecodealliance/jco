@@ -2,6 +2,7 @@
 
 // @ts-ignore
 import * as helpers from "./helpers.js";
+// @ts-ignore
 import { instantiate } from "../output/lists/lists.js";
 
 // @ts-ignore
@@ -129,7 +130,7 @@ async function run() {
   wasm.test.emptyListParam(new Uint8Array([]));
   wasm.test.emptyStringParam("");
   wasm.test.listParam(new Uint8Array([1, 2, 3, 4]));
-  wasm.test.listParamLarge('blah '.repeat(1000).slice(0, -1).split(' '));
+  wasm.test.listParamLarge("blah ".repeat(1000).slice(0, -1).split(" "));
   wasm.test.listParam2("foo");
   wasm.test.listParam3(["foo", "bar", "baz"]);
   wasm.test.listParam4([["foo", "bar"], ["baz"]]);

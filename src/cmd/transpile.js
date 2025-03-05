@@ -12,7 +12,6 @@ import {
   generate,
   generateTypes,
 } from "../../obj/js-component-bindgen-component.js";
-
 import {
   readFile,
   sizeStr,
@@ -752,4 +751,10 @@ function asmMangle(name) {
     }
   }
   return name;
+}
+
+// see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
+if (typeof __vite_ssr_import_meta__ !== "undefined") {
+  __vite_ssr_import_meta__.resolve = (path) =>
+    "file://" + globalCreateRequire(import.meta.url).resolve(path);
 }

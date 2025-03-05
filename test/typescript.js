@@ -1,77 +1,84 @@
-import { exec } from "./helpers.js";
-import { strictEqual } from "node:assert";
-import {
-  transpile,
-  componentNew,
-  componentEmbed,
-} from "../src/api.js";
 import { readFile } from "node:fs/promises";
-import { ok } from "node:assert";
 
-const tscPath = "node_modules/typescript/bin/tsc";
+import { fileURLToPath } from "url";
 
-// always do TS generation
-let promise;
+import { transpile, componentNew, componentEmbed } from "../src/api.js";
+
+import { suite, test, beforeAll, assert } from "vitest";
+
+import { exec } from "./helpers.js";
+import { NODE_MODULES_TSC_BIN_PATH } from "./common.js";
+
+let TS_GEN_PROMISE;
 export function tsGenerationPromise() {
-  if (promise) return promise;
-  return (promise = (async () => {
-    var { stderr } = await exec(tscPath, "-p", "test/tsconfig.json");
-    strictEqual(stderr, "");
+  if (TS_GEN_PROMISE) return TS_GEN_PROMISE;
+  return (TS_GEN_PROMISE = (async () => {
+    const tsConfigPath = fileURLToPath(
+      new URL("./tsconfig.json", import.meta.url)
+    );
+    var { stdout, stderr } = await exec(
+      NODE_MODULES_TSC_BIN_PATH,
+      "-p",
+      tsConfigPath
+    );
+    assert.strictEqual(stderr, "");
   })());
 }
 
-// TypeScript tests _must_ run after all codegen to complete successfully
-// This is due to type checking against generated bindings
-export function tsTest() {
-  suite(`TypeScript`, () => {
-    test("Verify Typescript output", async () => {
-      await tsGenerationPromise();
-    });
-
-    test(`TS aliasing`, async () => {
-      const component = await componentNew(
-        await componentEmbed({
-          witSource: await readFile(
-            `test/fixtures/wits/issue-365/issue-365.wit`,
-            "utf8"
-          ),
-          dummy: true,
-        })
-      );
-
-      const { files } = await transpile(component, { name: "issue" });
-
-      const dtsSource = new TextDecoder().decode(files["issue.d.ts"]);
-
-      ok(
-        dtsSource.includes(
-          `export type Bar = import('./interfaces/test-issue-types.js').Bar;`
-        )
-      );
-    });
-
-    test(`TS types`, async () => {
-      const component = await componentNew(
-        await componentEmbed({
-          witSource: await readFile(
-            `test/fixtures/wits/issue-480/issue-480.wit`,
-            "utf8"
-          ),
-          dummy: true,
-        }),
-      );
-
-      const { files } = await transpile(component, { name: "issue" });
-
-      const dtsSource = new TextDecoder().decode(
-        files["interfaces/test-issue-types.d.ts"]
-      );
-
-      ok(
-        dtsSource.includes(
-          `export function foobarbaz(): Array<Value | undefined>;`
-        )
-      );
-    });
+suite(`TypeScript`, async () => {
+  beforeAll(async () => {
+    await tsGenerationPromise();
   });
-}
+
+  test(`TS aliasing`, async () => {
+    const witSource = await readFile(
+      fileURLToPath(
+        new URL(`./fixtures/wits/issue-365/issue-365.wit`, import.meta.url)
+      ),
+      "utf8"
+    );
+    const component = await componentNew(
+      await componentEmbed({
+        witSource,
+        dummy: true,
+      })
+    );
+
+    const { files } = await transpile(component, { name: "issue" });
+
+    const dtsSource = new TextDecoder().decode(files["issue.d.ts"]);
+
+    assert.ok(
+      dtsSource.includes(
+        `export type Bar = import('./interfaces/test-issue-types.js').Bar;`
+      )
+    );
+  });
+
+  test(`TS types`, async () => {
+    const witSource = await readFile(
+      fileURLToPath(
+        new URL(`./fixtures/wits/issue-480/issue-480.wit`, import.meta.url)
+      ),
+      "utf8"
+    );
+    const component = await componentNew(
+      await componentEmbed({
+        witSource,
+        dummy: true,
+      })
+    );
+
+    const { files } = await transpile(component, { name: "issue" });
+
+    const dtsSource = new TextDecoder().decode(
+      files["interfaces/test-issue-types.d.ts"]
+    );
+
+    assert.ok(
+      dtsSource.includes(
+        `export function foobarbaz(): Array<Value | undefined>;`
+      )
+    );
+  });
+});

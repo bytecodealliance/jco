@@ -1,17 +1,8 @@
-import { handle } from 'wasi:http/outgoing-handler@0.2.3';
-import {
-  Fields,
-  OutgoingRequest,
-  OutgoingBody,
-} from 'wasi:http/types@0.2.3';
+import { handle } from "wasi:http/outgoing-handler@0.2.3";
+import { Fields, OutgoingRequest, OutgoingBody } from "wasi:http/types@0.2.3";
+import { getArguments } from "wasi:cli/environment@0.2.3";
 
-const sendRequest = (
-  method,
-  scheme,
-  authority,
-  pathWithQuery,
-  body,
-) => {
+const sendRequest = (method, scheme, authority, pathWithQuery, body) => {
   try {
     let incomingResponse;
     {
@@ -19,8 +10,8 @@ const sendRequest = (
 
       const req = new OutgoingRequest(
         new Fields([
-          ['User-agent', encoder.encode('WASI-HTTP/0.0.1')],
-          ['Content-type', encoder.encode('application/json')],
+          ["User-agent", encoder.encode("WASI-HTTP/0.0.1")],
+          ["Content-type", encoder.encode("application/json")],
         ])
       );
       req.setScheme(scheme);
@@ -67,39 +58,51 @@ const sendRequest = (
   } catch (err) {
     throw new Error(err);
   }
-}
+};
 
 export const commands = {
   Error,
   getExample: () => {
+    // Pull in a dynamic host port via the command line arguments
+    const port = parseInt(
+      getArguments()
+        .filter((s) => s.startsWith("--test-port="))
+        .map((s) => s.slice(12))[0]
+    );
     return sendRequest(
       {
-        tag: 'get',
+        tag: "get",
       },
       {
-        tag: 'HTTP',
+        tag: "HTTP",
       },
-      'localhost:8080',
-      '/api/examples',
+      `localhost:${port}`,
+      "/api/examples"
     );
   },
   postExample: () => {
+    // Pull in a dynamic host port via the command line arguments
+    const port = parseInt(
+      getArguments()
+        .filter((s) => s.startsWith("--test-port="))
+        .map((s) => s.slice(12))[0]
+    );
     return sendRequest(
       {
-        tag: 'post',
+        tag: "post",
       },
       {
-        tag: 'HTTP',
+        tag: "HTTP",
       },
-      'localhost:8080',
-      '/api/examples',
-      JSON.stringify({ key: 'value' }),
+      `localhost:${port}`,
+      "/api/examples",
+      JSON.stringify({ key: "value" })
     );
   },
 };
 
 export const incomingHandler = {
   handle(_request, _response) {
-    throw new Error('not implemented');
+    throw new Error("not implemented");
   },
 };
