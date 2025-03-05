@@ -51,7 +51,7 @@ partial interface Library {
   readonly attribute LibraryName libraryName;
 
   // Rename this library
-  void renameLibrary(LibraryName newName);
+  renameLibrary(LibraryName newName);
 };
 
 typedef DOMString LibraryName;
@@ -63,5 +63,5 @@ interface BookManager {
   readonly attribute Library library;
 
   // Initialize a library
-  void initLibrary(LibraryName name);
+  initLibrary(LibraryName name);
 };
