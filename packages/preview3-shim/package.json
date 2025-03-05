@@ -1,0 +1,48 @@
+{
+  "name": "@bytecodealliance/preview3-shim",
+  "version": "0.1.0",
+  "description": "WASI Preview3 shim for JS environments",
+  "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
+  "type": "module",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "node": "./lib/nodejs/index.js",
+      "default": "./lib/browser/index.js"
+    },
+    "./*": {
+      "types": "./types/*.d.ts",
+      "node": "./lib/nodejs/*.js",
+      "default": "./lib/browser/*.js"
+    }
+  },
+  "scripts": {
+    "test": "node --expose-gc ../../node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\""
+  },
+  "files": [
+    "types",
+    "lib"
+  ],
+  "dependencies": {
+    "@bytecodealliance/preview2-shim": "file:../preview2-shim"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "eslint": "^9.21.0",
+    "globals": "^16.0.0",
+    "mocha": "^10.2.0",
+    "prettier": "^3.5.3",
+    "typescript-eslint": "^8.26.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytecodealliance/jco.git"
+  },
+  "license": "(Apache-2.0 WITH LLVM-exception)",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/jco/issues"
+  },
+  "homepage": "https://github.com/bytecodealliance/jco#readme"
+}
