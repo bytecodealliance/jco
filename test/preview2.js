@@ -1,5 +1,4 @@
-import { strictEqual } from "node:assert";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile, appendFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 
@@ -7,149 +6,150 @@ import { fileURLToPath, pathToFileURL } from "url";
 import { HTTPServer } from "@bytecodealliance/preview2-shim/http";
 
 import { componentNew, preview1AdapterCommandPath } from "../src/api.js";
-import { exec, jcoPath, getTmpDir } from "./helpers.js";
 
-export async function preview2Test() {
-  suite("Preview 2", () => {
-    var tmpDir;
-    var outFile;
-    suiteSetup(async function () {
-      tmpDir = await getTmpDir();
-      outFile = resolve(tmpDir, "out-component-file");
-    });
-    suiteTeardown(async function () {
-      try {
-        await rm(tmpDir, { recursive: true });
-      } catch {}
-    });
+import { suite, test, assert } from "vitest";
 
-    teardown(async function () {
-      try {
-        await rm(outFile);
-      } catch {}
-    });
+import { exec, jcoPath, getTmpDir, getRandomPort } from "./helpers.js";
 
-    test("hello_stdout", async () => {
-      const component = await readFile(
-        `test/fixtures/modules/hello_stdout.wasm`
-      );
-      const generatedComponent = await componentNew(component, [
-        [
-          "wasi_snapshot_preview1",
-          await readFile(preview1AdapterCommandPath()),
-        ],
-      ]);
-      await writeFile(
-        "test/output/hello_stdout.component.wasm",
-        generatedComponent
-      );
+suite("Preview 2", () => {
+  test("hello_stdout", async () => {
+    const component = await readFile(
+      fileURLToPath(
+        new URL("./fixtures/modules/hello_stdout.wasm", import.meta.url)
+      )
+    );
+    const generatedComponent = await componentNew(component, [
+      ["wasi_snapshot_preview1", await readFile(preview1AdapterCommandPath())],
+    ]);
 
-      const { stdout, stderr } = await exec(
-        jcoPath,
-        "run",
-        "test/output/hello_stdout.component.wasm"
-      );
-      strictEqual(stdout, "writing to stdout: hello, world\n");
-      strictEqual(stderr, "writing to stderr: hello, world\n");
-    });
+    const outputPath = fileURLToPath(
+      new URL("./fixtures/modules/hello_stdout.component.wasm", import.meta.url)
+    );
 
-    test("wasi-http-proxy", async () => {
-      const server = createServer(async (req, res) => {
-        if (req.url == "/api/examples") {
-          res.writeHead(200, {
-            "Content-Type": "text/plain",
-            "X-Wasi": "mock-server",
-            Date: null,
-          });
-          if (req.method === "GET") {
-            res.write("hello world");
-          } else {
-            req.pipe(res);
-            return;
-          }
+    await writeFile(outputPath, generatedComponent);
+
+    const { stdout, stderr } = await exec(jcoPath, "run", outputPath);
+    assert.strictEqual(stdout, "writing to stdout: hello, world\n");
+    assert.strictEqual(stderr, "writing to stderr: hello, world\n");
+  });
+
+  test("wasi-http-proxy", async () => {
+    const tmpDir = await getTmpDir();
+    const outFile = resolve(tmpDir, "out-component-file");
+    const port = await getRandomPort();
+    const server = createServer(async (req, res) => {
+      if (req.url == "/api/examples") {
+        res.writeHead(200, {
+          "Content-Type": "text/plain",
+          "X-Wasi": "mock-server",
+          Date: null,
+        });
+        if (req.method === "GET") {
+          res.write("hello world");
         } else {
-          res.statusCode(500);
+          req.pipe(res);
+          return;
         }
-        res.end();
-      }).listen(8080);
-
-      const runtimeName = "wasi-http-proxy";
-      try {
-        const { stderr } = await exec(
-          jcoPath,
-          "componentize",
-          "test/fixtures/componentize/wasi-http-proxy/source.js",
-          "-w",
-          "test/fixtures/wit",
-          "--world-name",
-          "test:jco/command-extended",
-          "-o",
-          outFile
-        );
-        strictEqual(stderr, "");
-        const outDir = fileURLToPath(
-          new URL(`./output/${runtimeName}`, import.meta.url)
-        );
-        {
-          const { stderr } = await exec(
-            jcoPath,
-            "transpile",
-            outFile,
-            "--name",
-            runtimeName,
-            "-o",
-            outDir
-          );
-          strictEqual(stderr, "");
-        }
-
-        await exec(`test/output/${runtimeName}.js`);
-      } finally {
-        server.close();
+      } else {
+        res.statusCode(500);
       }
-    });
+      res.end();
+    }).listen(port); // transpile component expects this port
 
-    test("incoming composed", async () => {
+    const runtimeName = "wasi-http-proxy";
+    try {
+      const { stderr } = await exec(
+        jcoPath,
+        "componentize",
+        fileURLToPath(
+          new URL(
+            "./fixtures/componentize/wasi-http-proxy/source.js",
+            import.meta.url
+          )
+        ),
+        "-w",
+        fileURLToPath(new URL("./fixtures/wit", import.meta.url)),
+        "--world-name",
+        "test:jco/command-extended",
+        "-o",
+        outFile
+      );
+      assert.strictEqual(stderr, "");
       const outDir = fileURLToPath(
-        new URL(`./output/composed`, import.meta.url)
+        new URL(`./output/${runtimeName}`, import.meta.url)
       );
       {
         const { stderr } = await exec(
           jcoPath,
           "transpile",
-          fileURLToPath(
-            new URL("./fixtures/components/composed.wasm", import.meta.url)
-          ),
+          outFile,
+          "--name",
+          runtimeName,
           "-o",
           outDir
         );
-        strictEqual(stderr, "");
+        assert.strictEqual(stderr, "");
       }
 
-      const { incomingHandler } = await import(
-        `${pathToFileURL(outDir)}/composed.js`
+      const outputModulePath = fileURLToPath(
+        new URL(`./output/${runtimeName}.js`, import.meta.url)
       );
-      const server = new HTTPServer(incomingHandler);
-      server.listen(8081);
+      await exec(outputModulePath, `--test-port=${port}`);
+    } finally {
+      server.close();
+    }
 
-      const res = await (await fetch("http://localhost:8081")).text();
-      strictEqual(res, "Hello from Typescript!\n");
-
-      server.stop();
-    });
-
-    // https://github.com/bytecodealliance/jco/issues/550
-    test("pollable hang", async () => {
-      const { stdout, stderr } = await exec(
-        jcoPath,
-        "run",
-        fileURLToPath(
-          new URL(
-            "./../test/fixtures/components/stdout-pollable-hang.component.wasm",
-            import.meta.url
-          )
-        )
-      );
-    });
+    try {
+      await rm(outFile);
+    } catch {}
   });
-}
+
+  test.concurrent("incoming composed", async () => {
+    const tmpDir = await getTmpDir();
+    const outFile = resolve(tmpDir, "out-component-file");
+
+    const outDir = fileURLToPath(new URL(`./output/composed`, import.meta.url));
+    {
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        fileURLToPath(
+          new URL("./fixtures/components/composed.wasm", import.meta.url)
+        ),
+        "-o",
+        outDir
+      );
+      assert.strictEqual(stderr, "");
+    }
+
+    const { incomingHandler } = await import(
+      `${pathToFileURL(outDir)}/composed.js`
+    );
+    const server = new HTTPServer(incomingHandler);
+    const port = await getRandomPort();
+    server.listen(port);
+
+    const res = await (await fetch(`http://localhost:${port}`)).text();
+    assert.strictEqual(res, "Hello from Typescript!\n");
+
+    server.stop();
+
+    try {
+      await rm(outFile);
+    } catch {}
+  });
+
+  // https://github.com/bytecodealliance/jco/issues/550
+  test.concurrent("pollable hang", async () => {
+    await exec(
+      jcoPath,
+      "run",
+      fileURLToPath(
+        new URL(
+          "./../test/fixtures/components/stdout-pollable-hang.component.wasm",
+          import.meta.url
+        )
+      )
+    );
+  });
+});

@@ -1,17 +1,21 @@
 // Flags: --tla-compat --map testwasi=../helpers.js --map test:smoke/imports=../smoke.js --base64-cutoff=2500
+
+import { fileURLToPath } from "node:url";
+
 function assert(x: boolean, msg: string) {
-  if (!x)
-    throw new Error(msg);
+  if (!x) throw new Error(msg);
 }
 
 let hit = false;
 
-export function thunk () {
+export function thunk() {
   hit = true;
 }
 
 async function run() {
-  const wasm = await import('../output/smoke/smoke.js');
+  const wasm = await import(
+    fileURLToPath(new URL("../output/smoke/smoke.js", import.meta.url))
+  );
 
   await wasm.$init;
 
