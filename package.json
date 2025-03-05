@@ -39,9 +39,9 @@
     "@typescript-eslint/parser": "^8.2.0",
     "eslint": "^9.9.0",
     "mime": "^4.0.4",
-    "mocha": "^10.7.0",
     "puppeteer": "^24.0.1",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^3.0.7"
   },
   "repository": {
     "type": "git",
@@ -62,8 +62,8 @@
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
     "lint": "eslint -c eslintrc.cjs src/**/*.js packages/*/lib/**/*.js",
-    "test:lts": "mocha -u tdd test/test.js --timeout 240000",
-    "test": "node --experimental-wasm-jspi --stack-trace-limit=100 node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 240000",
+    "test": "vitest run -c test/vitest.ts",
+    "test:lts": "vitest run -c test/vitest.lts.ts",
     "prepublishOnly": "cargo xtask build release && npm run test"
   },
   "files": [

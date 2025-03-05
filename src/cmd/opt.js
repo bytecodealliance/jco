@@ -86,14 +86,15 @@ export async function optimizeComponent(componentBytes, opts) {
   try {
     let componentMetadata = metadataShow(componentBytes);
     componentMetadata.forEach((metadata, index) => {
-        // add index to the metadata object
-        metadata.index = index;
-        const size = metadata.range[1] - metadata.range[0];
-        // compute previous LEB128 encoding length
-        metadata.prevLEBLen = byteLengthLEB128(size);
+      // add index to the metadata object
+      metadata.index = index;
+      const size = metadata.range[1] - metadata.range[0];
+      // compute previous LEB128 encoding length
+      metadata.prevLEBLen = byteLengthLEB128(size);
     });
-    const coreModules = componentMetadata
-      .filter(({ metaType }) => metaType.tag === "module");
+    const coreModules = componentMetadata.filter(
+      ({ metaType }) => metaType.tag === "module"
+    );
 
     // log number of core Wasm modules to be run with wasm-opt
     let completed = 0;
@@ -108,20 +109,20 @@ export async function optimizeComponent(componentBytes, opts) {
     }
 
     // gather the options for wasm-opt. optionally, adding the asyncify flag
-    const args = opts?.optArgs ?
-      [...opts.optArgs] :
-      ['-Oz', '--low-memory-unused', '--enable-bulk-memory', '--strip-debug'];
-    if (opts?.asyncify) args.push('--asyncify');
-
+    const args = opts?.optArgs
+      ? [...opts.optArgs]
+      : ["-Oz", "--low-memory-unused", "--enable-bulk-memory", "--strip-debug"];
+    if (opts?.asyncify) args.push("--asyncify");
 
     // process core Wasm modules with wasm-opt
     await Promise.all(
       coreModules.map(async (metadata) => {
         if (metadata.metaType.tag === "module") {
-          // store the wasm-opt processed module in the metadata 
+          // store the wasm-opt processed module in the metadata
           metadata.optimized = await wasmOpt(
             componentBytes.subarray(metadata.range[0], metadata.range[1]),
-            args);
+            args
+          );
 
           // compute the size change, including the change to
           // the LEB128 encoding of the size change
@@ -135,7 +136,8 @@ export async function optimizeComponent(componentBytes, opts) {
             spinner.text = spinnerText();
           }
         }
-      }));
+      })
+    );
 
     // organize components in modules into tree parent and children
     const nodes = componentMetadata.slice(1);
@@ -147,13 +149,14 @@ export async function optimizeComponent(componentBytes, opts) {
           nodes.splice(i, 1); // remove from nodes
           i--;
           metadata.children = getChildren(metadata.index);
-          metadata.sizeChange = metadata.children
-            .reduce((total, {prevLEBLen, newLEBLen, sizeChange}) => {
-              return sizeChange ?
-                total + sizeChange + newLEBLen - prevLEBLen :
-                total;
+          metadata.sizeChange = metadata.children.reduce(
+            (total, { prevLEBLen, newLEBLen, sizeChange }) => {
+              return sizeChange
+                ? total + sizeChange + newLEBLen - prevLEBLen
+                : total;
             },
-            metadata.sizeChange || 0);
+            metadata.sizeChange || 0
+          );
           const prevSize = metadata.range[1] - metadata.range[0];
           metadata.newLEBLen = byteLengthLEB128(prevSize + metadata.sizeChange);
           children.push(metadata);
@@ -164,16 +167,20 @@ export async function optimizeComponent(componentBytes, opts) {
     const componentTree = getChildren(0);
 
     // compute the total size change in the component binary
-    const sizeChange = componentTree
-      .reduce((total, {prevLEBLen, newLEBLen, sizeChange}) => {
+    const sizeChange = componentTree.reduce(
+      (total, { prevLEBLen, newLEBLen, sizeChange }) => {
         return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
-      }, 0);
+      },
+      0
+    );
 
     let outComponentBytes = new Uint8Array(
-      componentBytes.byteLength + sizeChange);
-    let nextReadPos = 0, nextWritePos = 0;
+      componentBytes.byteLength + sizeChange
+    );
+    let nextReadPos = 0,
+      nextWritePos = 0;
 
-    const write = ({prevLEBLen, range, optimized, children, sizeChange}) => {
+    const write = ({ prevLEBLen, range, optimized, children, sizeChange }) => {
       // write from the last read to the LEB byte start
       outComponentBytes.set(
         componentBytes.subarray(nextReadPos, range[0] - prevLEBLen),
@@ -213,10 +220,7 @@ export async function optimizeComponent(componentBytes, opts) {
     componentTree.forEach(write);
 
     // write remaining
-    outComponentBytes.set(
-      componentBytes.subarray(nextReadPos),
-      nextWritePos
-    );
+    outComponentBytes.set(componentBytes.subarray(nextReadPos), nextWritePos);
 
     // verify it still parses ok
     if (!opts?.noVerify) {
@@ -231,7 +235,7 @@ export async function optimizeComponent(componentBytes, opts) {
 
     return {
       component: outComponentBytes,
-      compressionInfo: coreModules.map(({range, optimized}) => ({
+      compressionInfo: coreModules.map(({ range, optimized }) => ({
         beforeBytes: range[1] - range[0],
         afterBytes: optimized?.byteLength,
       })),
@@ -258,4 +262,10 @@ async function wasmOpt(source, args) {
       return wasmOpt(source, args);
     throw e;
   }
+}
+
+// see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
+if (typeof __vite_ssr_import_meta__ !== "undefined") {
+  __vite_ssr_import_meta__.resolve = (path) =>
+    "file://" + globalCreateRequire(import.meta.url).resolve(path);
 }

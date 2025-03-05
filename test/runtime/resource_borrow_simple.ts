@@ -29,6 +29,8 @@ world root {
 }
 */
 
+import { fileURLToPath } from "node:url";
+
 // Imports
 let constructed = false;
 export class R {
@@ -45,7 +47,12 @@ export function test(r) {
 
 export async function run() {
   const wasm = await import(
-    "../output/resource_borrow_simple/resource_borrow_simple.js"
+    fileURLToPath(
+      new URL(
+        "../output/resource_borrow_simple/resource_borrow_simple.js",
+        import.meta.url
+      )
+    )
   );
 
   wasm.testImports();
