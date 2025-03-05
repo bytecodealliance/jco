@@ -235,7 +235,7 @@ pub fn render_intrinsics(
                                 if (res === undefined && prop[0].toUpperCase() === prop[0]) {
                                     return Object.getPrototypeOf(globalThis[`${prop[0].toLowerCase()}${prop.slice(1)}`]).constructor;
                                 }
-                                return maybeProxy(res);
+                                return maybeProxy(res, prop);
                             },
                             apply: (_, thisArg, args) => {
                                 if (args.length === 1 && Array.isArray(args[0]) && origTarget.length === 0) args = args[0];
@@ -255,11 +255,13 @@ pub fn render_intrinsics(
                             setPrototypeOf: (_, v) => maybeProxy(Reflect.setPrototypeOf(origTarget, v)),
                         });
                     }
-                    function maybeProxy(res) {
-                        if (typeof res === 'function')
-                            return proxy(res, () => {});
-                        if (typeof res === 'object' && res !== null)
-                            return () => proxy(res);
+                    function maybeProxy(res, prop) {
+                        // Catch Class lookups
+                        if (typeof res === "function" && res.prototype?.constructor === res) return res;
+                        // Catch "regular" function calls
+                        if (typeof res === 'function') return proxy(res, () => {});
+                        // Catch all other objects
+                        if (typeof res === 'object' && res !== null) return () => proxy(res);
                         return res;
                     }
                     const proxyInner = proxy => proxy ? proxy[innerSymbol] : proxy;
@@ -297,9 +299,9 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
 
-            // 
+            //
             // # Resource table slab implementation
-            // 
+            //
             // Resource table slab implementation on top of a fixed "SMI" array in JS engines,
             // a fixed contiguous array of u32s, for performance. We don't use a typed array because
             // we need resizability without reserving a large buffer.
