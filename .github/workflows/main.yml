@@ -104,9 +104,17 @@ jobs:
         mkdir .weval-bin
         mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
 
-    # Perform NPM install
+      # Perform NPM install
+      #
+      # Remove node modules explicitly to avoid missing paltform deps
+      # when on other nodes
+      #
+      # ex. https://github.com/sveltejs/language-tools/issues/2278
+      # ex. https://github.com/vitejs/vite/discussions/16345
     - name: Install NPM packages
-      run: npm ci
+      run: |
+        rm -rf node_modules package-lock.json;
+        npm install;
 
     - name: Download Build
       uses: actions/download-artifact@v4
