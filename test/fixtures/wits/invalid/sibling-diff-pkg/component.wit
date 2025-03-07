@@ -1,0 +1,5 @@
+package tests:invalid-wit;
+
+world component {
+    export tests:sibling-wit/test;
+}
