@@ -42,7 +42,7 @@ pub(crate) fn run() -> Result<()> {
             async_mode: None,
         };
 
-        let files = generate_types(name, resolve, world, opts)?;
+        let files = generate_types(&name, resolve, world, opts)?;
 
         if fs::metadata("./packages/preview2-shim/types").is_err() {
             fs::remove_dir_all("./packages/preview2-shim/types")?;

@@ -1,18 +1,33 @@
-import { $init, generate, generateTypes } from '../../obj/js-component-bindgen-component.js';
-import { writeFile } from 'node:fs/promises';
-import { mkdir } from 'node:fs/promises';
-import { dirname, extname, basename, resolve } from 'node:path';
-import c from 'chalk-template';
-import { readFile, sizeStr, table, spawnIOTmp, setShowSpinner, getShowSpinner } from '../common.js';
-import { optimizeComponent } from './opt.js';
-import { minify } from 'terser';
-import { fileURLToPath } from 'url';
+import { platform } from "node:process";
+import { writeFile, lstat } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
+import { dirname, extname, basename, resolve } from "node:path";
+
+import c from "chalk-template";
+import { minify } from "terser";
+import { fileURLToPath } from "url";
+
+import {
+  $init,
+  generate,
+  generateTypes,
+} from "../../obj/js-component-bindgen-component.js";
+
+import {
+  readFile,
+  sizeStr,
+  table,
+  spawnIOTmp,
+  setShowSpinner,
+  getShowSpinner,
+} from "../common.js";
+import { optimizeComponent } from "./opt.js";
 import { $init as wasmToolsInit, tools } from "../../obj/wasm-tools.js";
 const { componentEmbed, componentNew } = tools;
-import ora from '#ora';
-import { platform } from 'node:process';
 
-const isWindows = platform === 'win32';
+import ora from "#ora";
+
+const isWindows = platform === "win32";
 
 const ASYNC_WASI_IMPORTS = [
   "wasi:io/poll#poll",
@@ -30,14 +45,17 @@ const ASYNC_WASI_EXPORTS = [
   "wasi:http/incoming-handler#handle",
 ];
 
-export async function types (witPath, opts) {
+export async function types(witPath, opts) {
   const files = await typesComponent(witPath, opts);
-  await writeFiles(files, opts.quiet ? false : 'Generated Type Files');
+  await writeFiles(files, opts.quiet ? false : "Generated Type Files");
 }
 
-export async function guestTypes (witPath, opts) {
+export async function guestTypes(witPath, opts) {
   const files = await typesComponent(witPath, { ...opts, guest: true });
-  await writeFiles(files, opts.quiet ? false : 'Generated Guest Typescript Definition Files (.d.ts)');
+  await writeFiles(
+    files,
+    opts.quiet ? false : "Generated Guest Typescript Definition Files (.d.ts)"
+  );
 }
 
 /**
@@ -56,24 +74,25 @@ export async function guestTypes (witPath, opts) {
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
-export async function typesComponent (witPath, opts) {
+export async function typesComponent(witPath, opts) {
   await $init;
-  const name = opts.name || (opts.worldName
-    ? opts.worldName.split(':').pop().split('/').pop()
-    : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
+  const name =
+    opts.name ||
+    (opts.worldName
+      ? opts.worldName.split(":").pop().split("/").pop()
+      : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
   let instantiation;
   if (opts.instantiation) {
     instantiation = { tag: opts.instantiation };
   }
-  let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
-  if (!outDir.endsWith('/') && outDir !== '')
-    outDir += '/';
+  let outDir = (opts.outDir ?? "").replace(/\\/g, "/");
+  if (!outDir.endsWith("/") && outDir !== "") outDir += "/";
 
   let features = null;
   if (opts.allFeatures) {
-    features = { tag: 'all' };
+    features = { tag: "all" };
   } else if (Array.isArray(opts.feature)) {
-    features = { tag: 'list', val: opts.feature };
+    features = { tag: "list", val: opts.feature };
   }
 
   if (opts.asyncWasiImports)
@@ -81,45 +100,84 @@ export async function typesComponent (witPath, opts) {
   if (opts.asyncWasiExports)
     opts.asyncExports = ASYNC_WASI_EXPORTS.concat(opts.asyncExports || []);
 
-  const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync' ?
-    null :
-    {
-      tag: opts.asyncMode,
-      val: {
-        imports: opts.asyncImports || [],
-        exports: opts.asyncExports || [],
-      },
-    };
+  const asyncMode =
+    !opts.asyncMode || opts.asyncMode === "sync"
+      ? null
+      : {
+          tag: opts.asyncMode,
+          val: {
+            imports: opts.asyncImports || [],
+            exports: opts.asyncExports || [],
+          },
+        };
 
-  return Object.fromEntries(generateTypes(name, {
-    wit: { tag: 'path', val: (isWindows ? '//?/' : '') + resolve(witPath) },
-    instantiation,
-    tlaCompat: opts.tlaCompat ?? false,
-    world: opts.worldName,
-    features,
-    guest: opts.guest ?? false,
-    asyncMode,
-  }).map(([name, file]) => [`${outDir}${name}`, file]));
+  let types;
+  const absWitPath = resolve(witPath);
+  try {
+    types = generateTypes(name, {
+      wit: { tag: "path", val: (isWindows ? "//?/" : "") + absWitPath },
+      instantiation,
+      tlaCompat: opts.tlaCompat ?? false,
+      world: opts.worldName,
+      features,
+      guest: opts.guest ?? false,
+      asyncMode,
+    }).map(([name, file]) => [`${outDir}${name}`, file]);
+  } catch (err) {
+    if (err.toString().includes("does not match previous package name")) {
+      const hint = await printWITLayoutHint(absWitPath);
+      if (err.message) {
+        err.message += `\n${hint}`;
+      }
+      throw err;
+    }
+    throw err;
+  }
+
+  return Object.fromEntries(types);
+}
+
+/**
+ * Print a hint about WIT folder layout
+ *
+ * @param {(string, any) => void} consoleFn
+ */
+async function printWITLayoutHint(witPath) {
+  const stat = await lstat(witPath);
+  let output = "\n";
+  if (!stat.isFile() && !stat.isDirectory()) {
+    output += c`{yellow.bold warning} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
+    return output;
+  }
+  const ftype = stat.isDirectory() ? "directory" : "file";
+  output += c`{yellow.bold warning} Your WIT ${ftype} [${witPath}] may be laid out incorrectly\n`;
+  output += c`{yellow.bold warning} Keep in mind the following rules:\n`;
+  output += c`{yellow.bold warning}     - Top level WIT files are in the same package (i.e. "ns:pkg" in "wit/*.wit")\n`;
+  output += c`{yellow.bold warning}     - All package dependencies should be in "wit/deps" (i.e. "some:dep" in "wit/deps/some-dep.wit"\n`;
+  return output;
 }
 
 async function writeFiles(files, summaryTitle) {
-  await Promise.all(Object.entries(files).map(async ([name, file]) => {
-    await mkdir(dirname(name), { recursive: true });
-    await writeFile(name, file);
-  }));
-  if (!summaryTitle)
-    return;
+  await Promise.all(
+    Object.entries(files).map(async ([name, file]) => {
+      await mkdir(dirname(name), { recursive: true });
+      await writeFile(name, file);
+    })
+  );
+  if (!summaryTitle) return;
   console.log(c`
   {bold ${summaryTitle}:}
 
-${table(Object.entries(files).map(([name, source]) => [
+${table(
+  Object.entries(files).map(([name, source]) => [
     c` - {italic ${name}}  `,
-    c`{black.italic ${sizeStr(source.length)}}`
-  ]))}`);
+    c`{black.italic ${sizeStr(source.length)}}`,
+  ])
+)}`);
 }
 
-export async function transpile (componentPath, opts, program) {
-  const varIdx = program?.parent.rawArgs.indexOf('--');
+export async function transpile(componentPath, opts, program) {
+  const varIdx = program?.parent.rawArgs.indexOf("--");
   if (varIdx !== undefined && varIdx !== -1)
     opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
 
@@ -128,18 +186,24 @@ export async function transpile (componentPath, opts, program) {
     component = await readFile(componentPath);
   } else {
     await wasmToolsInit;
-    component = componentNew(componentEmbed({
-      dummy: true,
-      witPath: (isWindows ? '//?/' : '') + resolve(componentPath)
-    }), []);
+    component = componentNew(
+      componentEmbed({
+        dummy: true,
+        witPath: (isWindows ? "//?/" : "") + resolve(componentPath),
+      }),
+      []
+    );
   }
 
-  if (!opts.quiet)
-    setShowSpinner(true);
+  if (!opts.quiet) setShowSpinner(true);
   if (!opts.name)
-    opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
+    opts.name = basename(
+      componentPath.slice(0, -extname(componentPath).length || Infinity)
+    );
   if (opts.map)
-    opts.map = Object.fromEntries(opts.map.map(mapping => mapping.split('=')));
+    opts.map = Object.fromEntries(
+      opts.map.map((mapping) => mapping.split("="))
+    );
 
   if (opts.asyncWasiImports)
     opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
@@ -147,21 +211,22 @@ export async function transpile (componentPath, opts, program) {
     opts.asyncExports = ASYNC_WASI_EXPORTS.concat(opts.asyncExports || []);
 
   const { files } = await transpileComponent(component, opts);
-  await writeFiles(files, opts.quiet ? false : 'Transpiled JS Component Files');
+  await writeFiles(files, opts.quiet ? false : "Transpiled JS Component Files");
 }
 
 /**
  * @param {Uint8Array} source
  * @returns {Promise<Uint8Array>}
  */
-async function wasm2Js (source) {
-  const wasm2jsPath = fileURLToPath(import.meta.resolve('binaryen/bin/wasm2js'));
+async function wasm2Js(source) {
+  const wasm2jsPath = fileURLToPath(
+    import.meta.resolve("binaryen/bin/wasm2js")
+  );
 
   try {
-    return await spawnIOTmp(wasm2jsPath, source, ['-Oz', '-o']);
+    return await spawnIOTmp(wasm2jsPath, source, ["-Oz", "-o"]);
   } catch (e) {
-    if (e.toString().includes('BasicBlock requested'))
-      return wasm2Js(source);
+    if (e.toString().includes("BasicBlock requested")) return wasm2Js(source);
     throw e;
   }
 }
@@ -193,7 +258,7 @@ async function wasm2Js (source) {
  * }} opts
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
-export async function transpileComponent (component, opts = {}) {
+export async function transpileComponent(component, opts = {}) {
   await $init;
   if (opts.instantiation) opts.wasiShim = false;
 
@@ -206,15 +271,18 @@ export async function transpileComponent (component, opts = {}) {
   }
 
   if (opts.wasiShim !== false) {
-    opts.map = Object.assign({
-      'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
-      'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
-      'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
-      'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
-      'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
-      'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
-      'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
-    }, opts.map || {});
+    opts.map = Object.assign(
+      {
+        "wasi:cli/*": "@bytecodealliance/preview2-shim/cli#*",
+        "wasi:clocks/*": "@bytecodealliance/preview2-shim/clocks#*",
+        "wasi:filesystem/*": "@bytecodealliance/preview2-shim/filesystem#*",
+        "wasi:http/*": "@bytecodealliance/preview2-shim/http#*",
+        "wasi:io/*": "@bytecodealliance/preview2-shim/io#*",
+        "wasi:random/*": "@bytecodealliance/preview2-shim/random#*",
+        "wasi:sockets/*": "@bytecodealliance/preview2-shim/sockets#*",
+      },
+      opts.map || {}
+    );
   }
 
   let instantiation = null;
@@ -225,21 +293,22 @@ export async function transpileComponent (component, opts = {}) {
   }
   // Otherwise, if `--js` is present, an `instantiate` function is required.
   else if (opts.js) {
-    instantiation = { tag: 'async' };
+    instantiation = { tag: "async" };
   }
 
-  const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync' ?
-    null :
-    {
-      tag: opts.asyncMode,
-      val: {
-        imports: opts.asyncImports || [],
-        exports: opts.asyncExports || [],
-      },
-    };
+  const asyncMode =
+    !opts.asyncMode || opts.asyncMode === "sync"
+      ? null
+      : {
+          tag: opts.asyncMode,
+          val: {
+            imports: opts.asyncImports || [],
+            exports: opts.asyncExports || [],
+          },
+        };
 
   let { files, imports, exports } = generate(component, {
-    name: opts.name ?? 'component',
+    name: opts.name ?? "component",
     map: Object.entries(opts.map ?? {}),
     instantiation,
     asyncMode,
@@ -255,12 +324,11 @@ export async function transpileComponent (component, opts = {}) {
     idlImports: opts.experimentalIdlImports === true,
   });
 
-  let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
-  if (!outDir.endsWith('/') && outDir !== '')
-    outDir += '/';
+  let outDir = (opts.outDir ?? "").replace(/\\/g, "/");
+  if (!outDir.endsWith("/") && outDir !== "") outDir += "/";
   files = files.map(([name, source]) => [`${outDir}${name}`, source]);
 
-  const jsFile = files.find(([name]) => name.endsWith('.js'));
+  const jsFile = files.find(([name]) => name.endsWith(".js"));
 
   // Generate code for the `--js` option.
   //
@@ -309,62 +377,76 @@ export async function transpileComponent (component, opts = {}) {
   // non-async.
   if (opts.js) {
     const withInstantiation = opts.instantiation !== undefined;
-    const async_ = instantiation.tag == 'async' ? 'async ' : '';
-    const await_ = instantiation.tag == 'async' ? 'await ' : '';
+    const async_ = instantiation.tag == "async" ? "async " : "";
+    const await_ = instantiation.tag == "async" ? "await " : "";
 
     // Format the previously generated code.
-    const source = Buffer.from(jsFile[1]).toString('utf8')
+    const source = Buffer.from(jsFile[1])
+      .toString("utf8")
       // update imports manging to match emscripten asm
-      .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`)
-      .replace(/export (async )?function instantiate/, '$1function _instantiate') ;
+      .replace(
+        /exports(\d+)\['([^']+)']/g,
+        (_, i, s) => `exports${i}['${asmMangle(s)}']`
+      )
+      .replace(
+        /export (async )?function instantiate/,
+        "$1function _instantiate"
+      );
 
     // Collect all Wasm files.
-    const wasmFiles = files.filter(([name]) => name.endsWith('.wasm'));
-    files = files.filter(([name]) => !name.endsWith('.wasm'));
+    const wasmFiles = files.filter(([name]) => name.endsWith(".wasm"));
+    files = files.filter(([name]) => !name.endsWith(".wasm"));
 
     // Configure the spinner.
     let completed = 0;
-    const spinnerText = () => c`{cyan ${completed} / ${wasmFiles.length}} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
+    const spinnerText = () =>
+      c`{cyan ${completed} / ${wasmFiles.length}} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
     if (showSpinner) {
       spinner = ora({
-        color: 'cyan',
-        spinner: 'bouncingBar'
+        color: "cyan",
+        spinner: "bouncingBar",
       }).start();
       spinner.text = spinnerText();
     }
 
     // Compile all Wasm modules into ASM.js codes.
     try {
-      const asmFiles = await Promise.all(wasmFiles.map(async ([, source]) => {
-        const output = (await wasm2Js(source)).toString('utf8');
-        if (spinner) {
-          completed++;
-          spinner.text = spinnerText();
-        }
-        return output;
-      }));
+      const asmFiles = await Promise.all(
+        wasmFiles.map(async ([, source]) => {
+          const output = (await wasm2Js(source)).toString("utf8");
+          if (spinner) {
+            completed++;
+            spinner.text = spinnerText();
+          }
+          return output;
+        })
+      );
 
-      const asms = asmFiles.map((asm, nth) => `function asm${nth}(imports) {
+      const asms = asmFiles
+        .map(
+          (asm, nth) => `function asm${nth}(imports) {
   ${
     // strip and replace the asm instantiation wrapper
     asm
-      .replace(/import \* as [^ ]+ from '[^']*';/g, '')
-      .replace('function asmFunc(imports) {', '')
-      .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
-      .replace(/var retasmFunc = [\s\S]*$/, '')
-      .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
-      .replace('memory.grow = __wasm_memory_grow;', '')
+      .replace(/import \* as [^ ]+ from '[^']*';/g, "")
+      .replace("function asmFunc(imports) {", "")
+      .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, "")
+      .replace(/var retasmFunc = [\s\S]*$/, "")
+      .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, "")
+      .replace("memory.grow = __wasm_memory_grow;", "")
       .trim()
-  }`)
-        .join(',\n');
+  }`
+        )
+        .join(",\n");
 
       // The `instantiate` function.
-      const instantiateFunction =
-        `${
-        withInstantiation ? 'export ' : ''
-}${async_}function instantiate(imports) {
+      const instantiateFunction = `${
+        withInstantiation ? "export " : ""
+      }${async_}function instantiate(imports) {
   const wasm_file_to_asm_index = {
-    ${wasmFiles.map(([path], nth) => `'${basename(path)}': ${nth}`).join(',\n    ')}
+    ${wasmFiles
+      .map(([path], nth) => `'${basename(path)}': ${nth}`)
+      .join(",\n    ")}
   };
 
   return ${await_}_instantiate(
@@ -375,85 +457,75 @@ export async function transpileComponent (component, opts = {}) {
 }`;
 
       // If `--js` is used without `--instantiation`.
-      let importDirectives = '';
-      let exportDirectives = '';
-      let exportTrampolines = '';
-      let autoInstantiate = '';
+      let importDirectives = "";
+      let exportDirectives = "";
+      let exportTrampolines = "";
+      let autoInstantiate = "";
 
       if (!withInstantiation) {
         importDirectives = imports
-          .map((import_file, nth) => `import * as import${nth} from '${import_file}';`)
-          .join('\n');
+          .map(
+            (import_file, nth) =>
+              `import * as import${nth} from '${import_file}';`
+          )
+          .join("\n");
 
         if (exports.length > 0 || opts.tlaCompat) {
-          exportDirectives =
-            `export {
+          exportDirectives = `export {
 ${
-            // Exporting `$init` must come first to not break the transpiling tests.
-            (opts.tlaCompat) ? '  $init,\n' : ''
-}${
-            exports
-              .map(([name]) => {
-                if (name === asmMangle(name)){
-                  return `  ${name},`;
-                } else {
-                  return `  ${asmMangle(name)} as '${name}',`;
-                }
-              })
-              .join('\n')
-}
-}`
+  // Exporting `$init` must come first to not break the transpiling tests.
+  opts.tlaCompat ? "  $init,\n" : ""
+}${exports
+            .map(([name]) => {
+              if (name === asmMangle(name)) {
+                return `  ${name},`;
+              } else {
+                return `  ${asmMangle(name)} as '${name}',`;
+              }
+            })
+            .join("\n")}
+}`;
         }
 
-        exportTrampolines =
-          `let ${
-          exports
-            .filter(([, ty]) => ty === 'function')
-            .map(([name]) => `_${asmMangle(name)}`)
-            .join(', ')
-          };
-${
-          exports
-            .map(([name, ty]) => {
-              if (ty === 'function') {
-                return `\nfunction ${asmMangle(name)} () {
+        exportTrampolines = `let ${exports
+          .filter(([, ty]) => ty === "function")
+          .map(([name]) => `_${asmMangle(name)}`)
+          .join(", ")};
+${exports
+  .map(([name, ty]) => {
+    if (ty === "function") {
+      return `\nfunction ${asmMangle(name)} () {
   return _${asmMangle(name)}.apply(this, arguments);
 }`;
-              } else {
-                return `\nlet ${asmMangle(name)};`;
-              }
-            })
-            .join('\n')
-          }`;
+    } else {
+      return `\nlet ${asmMangle(name)};`;
+    }
+  })
+  .join("\n")}`;
 
-        autoInstantiate =
-          `${async_}function $init() {
+        autoInstantiate = `${async_}function $init() {
   ( {
-${
-          exports
-            .map( ([name, ty]) => {
-              if (ty === 'function') {
-                return `    '${ name }': _${ asmMangle(name) },`;
-              } else if (asmMangle(name) === name) {
-                return `    ${ name },`;
-              } else {
-                return `    '${ name }': ${ asmMangle(name) },`;
-              }
-            })
-            .join('\n')
-          }
+${exports
+  .map(([name, ty]) => {
+    if (ty === "function") {
+      return `    '${name}': _${asmMangle(name)},`;
+    } else if (asmMangle(name) === name) {
+      return `    ${name},`;
+    } else {
+      return `    '${name}': ${asmMangle(name)},`;
+    }
+  })
+  .join("\n")}
   } = ${await_}instantiate(
     {
-${
-          imports
-            .map((import_file, nth) => `      '${import_file}': import${ nth },`)
-            .join('\n')
-          }
+${imports
+  .map((import_file, nth) => `      '${import_file}': import${nth},`)
+  .join("\n")}
     }
   ) )
 }
 
-${ opts.tlaCompat ? '' : `${await_}$init();`}`;
+${opts.tlaCompat ? "" : `${await_}$init();`}`;
       }
 
       // Prepare the final generated code.
@@ -473,8 +545,7 @@ ${autoInstantiate}`;
 
       // Save the final generated code.
       jsFile[1] = Buffer.from(outSource);
-    }
-    finally {
+    } finally {
       if (spinner) {
         spinner.stop();
       }
@@ -482,16 +553,19 @@ ${autoInstantiate}`;
   }
 
   if (opts.minify) {
-    ({ code: jsFile[1] } = await minify(Buffer.from(jsFile[1]).toString('utf8'), {
-      module: true,
-      compress: {
-        ecma: 9,
-        unsafe: true
-      },
-      mangle: {
-        keep_classnames: true
+    ({ code: jsFile[1] } = await minify(
+      Buffer.from(jsFile[1]).toString("utf8"),
+      {
+        module: true,
+        compress: {
+          ecma: 9,
+          unsafe: true,
+        },
+        mangle: {
+          keep_classnames: true,
+        },
       }
-    }));
+    ));
   }
 
   return { files: Object.fromEntries(files), imports, exports };
@@ -500,38 +574,37 @@ ${autoInstantiate}`;
 // emscripten asm mangles specifiers to be valid identifiers
 // for imports to match up we must do the same
 // See https://github.com/WebAssembly/binaryen/blob/main/src/asmjs/asmangle.cpp
-function asmMangle (name) {
-  if (name === '')
-    return '$';
+function asmMangle(name) {
+  if (name === "") return "$";
 
   let mightBeKeyword = true;
   let i = 1;
 
   // Names must start with a character, $ or _
   switch (name[0]) {
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9': {
-      name = '$' + name;
+    case "0":
+    case "1":
+    case "2":
+    case "3":
+    case "4":
+    case "5":
+    case "6":
+    case "7":
+    case "8":
+    case "9": {
+      name = "$" + name;
       i = 2;
       // fallthrough
     }
-    case '$':
-    case '_': {
+    case "$":
+    case "_": {
       mightBeKeyword = false;
       break;
     }
     default: {
       let chNum = name.charCodeAt(0);
       if (!(chNum >= 97 && chNum <= 122) && !(chNum >= 65 && chNum <= 90)) {
-        name = '$' + name.substr(1);
+        name = "$" + name.substr(1);
         mightBeKeyword = false;
       }
     }
@@ -541,25 +614,25 @@ function asmMangle (name) {
   let len = name.length;
   for (; i < len; ++i) {
     switch (name[i]) {
-      case '0':
-      case '1':
-      case '2':
-      case '3':
-      case '4':
-      case '5':
-      case '6':
-      case '7':
-      case '8':
-      case '9':
-      case '$':
-      case '_': {
+      case "0":
+      case "1":
+      case "2":
+      case "3":
+      case "4":
+      case "5":
+      case "6":
+      case "7":
+      case "8":
+      case "9":
+      case "$":
+      case "_": {
         mightBeKeyword = false;
         break;
       }
       default: {
         let chNum = name.charCodeAt(i);
         if (!(chNum >= 97 && chNum <= 122) && !(chNum >= 65 && chNum <= 90)) {
-          name = name.substr(0, i) + '_' + name.substr(i + 1);
+          name = name.substr(0, i) + "_" + name.substr(i + 1);
           mightBeKeyword = false;
         }
       }
@@ -569,91 +642,111 @@ function asmMangle (name) {
   // Names must not collide with keywords
   if (mightBeKeyword && len >= 2 && len <= 10) {
     switch (name[0]) {
-      case 'a': {
-        if (name == "arguments")
-          return name + '_';
+      case "a": {
+        if (name == "arguments") return name + "_";
         break;
       }
-      case 'b': {
-        if (name == "break")
-          return name + '_';
+      case "b": {
+        if (name == "break") return name + "_";
         break;
       }
-      case 'c': {
-        if (name == "case" || name == "continue" || name == "catch" ||
-            name == "const" || name == "class")
-          return name + '_';
+      case "c": {
+        if (
+          name == "case" ||
+          name == "continue" ||
+          name == "catch" ||
+          name == "const" ||
+          name == "class"
+        )
+          return name + "_";
         break;
       }
-      case 'd': {
+      case "d": {
         if (name == "do" || name == "default" || name == "debugger")
-          return name + '_';
+          return name + "_";
         break;
       }
-      case 'e': {
-        if (name == "else" || name == "enum" || name == "eval" || // to be sure
-            name == "export" || name == "extends")
-          return name + '_';
+      case "e": {
+        if (
+          name == "else" ||
+          name == "enum" ||
+          name == "eval" || // to be sure
+          name == "export" ||
+          name == "extends"
+        )
+          return name + "_";
         break;
       }
-      case 'f': {
-        if (name == "for" || name == "false" || name == "finally" ||
-            name == "function")
-          return name + '_';
+      case "f": {
+        if (
+          name == "for" ||
+          name == "false" ||
+          name == "finally" ||
+          name == "function"
+        )
+          return name + "_";
         break;
       }
-      case 'i': {
-        if (name == "if" || name == "in" || name == "import" ||
-            name == "interface" || name == "implements" ||
-            name == "instanceof")
-          return name + '_';
+      case "i": {
+        if (
+          name == "if" ||
+          name == "in" ||
+          name == "import" ||
+          name == "interface" ||
+          name == "implements" ||
+          name == "instanceof"
+        )
+          return name + "_";
         break;
       }
-      case 'l': {
-        if (name == "let")
-          return name + '_';
+      case "l": {
+        if (name == "let") return name + "_";
         break;
       }
-      case 'n': {
-        if (name == "new" || name == "null")
-          return name + '_';
+      case "n": {
+        if (name == "new" || name == "null") return name + "_";
         break;
       }
-      case 'p': {
-        if (name == "public" || name == "package" || name == "private" ||
-            name == "protected")
-          return name + '_';
+      case "p": {
+        if (
+          name == "public" ||
+          name == "package" ||
+          name == "private" ||
+          name == "protected"
+        )
+          return name + "_";
         break;
       }
-      case 'r': {
-        if (name == "return")
-          return name + '_';
+      case "r": {
+        if (name == "return") return name + "_";
         break;
       }
-      case 's': {
+      case "s": {
         if (name == "super" || name == "static" || name == "switch")
-          return name + '_';
+          return name + "_";
         break;
       }
-      case 't': {
-        if (name == "try" || name == "this" || name == "true" ||
-            name == "throw" || name == "typeof")
-          return name + '_';
+      case "t": {
+        if (
+          name == "try" ||
+          name == "this" ||
+          name == "true" ||
+          name == "throw" ||
+          name == "typeof"
+        )
+          return name + "_";
         break;
       }
-      case 'v': {
-        if (name == "var" || name == "void")
-          return name + '_';
+      case "v": {
+        if (name == "var" || name == "void") return name + "_";
         break;
       }
-      case 'w': {
-        if (name == "with" || name == "while")
-          return name + '_';
+      case "w": {
+        if (name == "with" || name == "while") return name + "_";
         break;
       }
-      case 'y': {
-        if (name == "yield")
-          return name + '_';
+      case "y": {
+        if (name == "yield") return name + "_";
         break;
       }
     }
