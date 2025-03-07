@@ -186,8 +186,8 @@ impl Guest for JsComponentBindgenComponent {
             async_mode: opts.async_mode.map(Into::into),
         };
 
-        let files = js_component_bindgen::generate_types(name, resolve, world, opts)
-            .with_context(|| format!("generating types for [${name}]"))
+        let files = js_component_bindgen::generate_types(&name, resolve, world, opts)
+            .with_context(|| format!("generating types for [${}]", &name))
             .map_err(|e| e.to_string())?;
 
         Ok(files)
