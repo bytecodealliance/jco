@@ -1,0 +1,23 @@
+/// This package combines with of the auto-generated `book-library.wit` which
+/// produces the package 'webidl:pkg' which contains the `global-book-library`
+/// interface, which will be picked up and put on globalThis by jco.
+package example:component;
+
+interface librarian {
+    use webidl:pkg/global-book-library.{book, book-genre, library};
+
+    /// Create a local library
+    create-local-library: func() -> library;
+
+    /// Add this librarian's favorite book to the library
+    add-favorite-book: func(l: library) -> library;
+
+    /// Get a list of the favorite books
+    get-favorite-books: func(l: library) -> tuple<library, list<book>>;
+}
+
+world component {
+    import webidl:pkg/global-book-library;
+
+    export librarian;
+}
