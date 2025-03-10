@@ -26,7 +26,7 @@ jobs:
     - name: Install wasm32-wasip1 target
       run: rustup target add wasm32-wasip1
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Build
       run: npm run build
     - name: Upload Jco Build
@@ -106,7 +106,7 @@ jobs:
 
     # Perform NPM install
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
 
     - name: Download Build
       uses: actions/download-artifact@v4
@@ -173,7 +173,7 @@ jobs:
       with:
         deno-version: v1.x
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Download Build
       uses: actions/download-artifact@v4
       with:
@@ -215,7 +215,7 @@ jobs:
       with:
         node-version: ${{ matrix.node }}
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Download Build
       uses: actions/download-artifact@v4
       with:
@@ -229,15 +229,15 @@ jobs:
     - name: WASI Preview 2 Conformance
       run: cargo test node_
 
-  test-workspaces:
-    name: Test Workspaces
+  test-preview2-shims:
+    name: Test Preview2 Shims
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Test Workspaces
-      run: npm run test --workspaces
+      run: npm run test --workspace packages/preview2-shim
 
   eslint:
     name: ESLint
@@ -245,7 +245,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Lint
       run: npm run lint
 
@@ -260,3 +260,49 @@ jobs:
       run: rm -r tests/mod.rs
     - name: Format source code
       run: cargo fmt -- --check
+
+  examples:
+    name: Example ${{ matrix.project.name }}
+    needs: [build]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        wac:
+          - version: 0.6.0
+        node:
+          - version: 22.5.1
+        project:
+          - name: add
+            workspace: examples/components/add
+          - name: string-reverse
+            workspace: examples/components/string-reverse
+          - name: string-reverse-upper
+            workspace: examples/components/string-reverse-upper
+            is-composed: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node.version }}
+      - name: Download Build
+        uses: actions/download-artifact@v4
+        with:
+          name: jco-build
+          path: obj
+
+      - name: install wac
+        if: ${{ matrix.project.is-composed }}
+        uses: jaxxstorm/action-install-gh-release@v1
+        with:
+          repo: bytecodealliance/wac
+          tag: v${{ matrix.wac.version }}
+          extension-matching: disable
+          rename-to: wac
+          chmod: 0755
+
+      - name: npm install
+        run: npm install
+
+      - name: run all script for (${{ matrix.project.name }})
+        working-directory: ${{ matrix.project.dir }}
+        run: npm run all --workspace ${{ matrix.project.workspace }}
