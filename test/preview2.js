@@ -107,7 +107,9 @@ suite("Preview 2", () => {
       }
 
       const outputModulePath = pathToFileURL(
-        new URL(`./output/${runtimeName}.js`, import.meta.url)
+        resolve(
+          fileURLToPath(new URL(`./output/${runtimeName}.js`, import.meta.url))
+        )
       );
       await exec(outputModulePath, `--test-port=${port}`);
     } finally {
