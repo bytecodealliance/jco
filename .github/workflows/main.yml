@@ -301,7 +301,7 @@ jobs:
           chmod: 0755
 
       - name: npm install
-        run: npm install
+        run: npm install --include optional
 
       - name: run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
