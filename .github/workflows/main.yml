@@ -279,6 +279,8 @@ jobs:
           - name: string-reverse-upper
             workspace: examples/components/string-reverse-upper
             is-composed: true
+          - name: webidl-book-library
+            workspace: examples/components/webidl-book-library
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
