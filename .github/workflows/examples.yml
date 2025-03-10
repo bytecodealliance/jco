@@ -20,11 +20,11 @@ jobs:
           - version: 22.5.1
         project:
           - name: add
-            dir: ./examples/components/add
+            workspace: examples/components/add
           - name: string-reverse
-            dir: ./examples/components/string-reverse
+            workspace: examples/components/string-reverse
           - name: string-reverse-upper
-            dir: ./examples/components/string-reverse-upper
+            workspace: examples/components/string-reverse-upper
             is-composed: true
     steps:
       - uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # 4.2.0
@@ -48,11 +48,8 @@ jobs:
           chmod: 0755
 
       - name: install (${{ matrix.project.name }})
-        working-directory: ${{ matrix.project.dir }}
-        run: |
-          npm install
+        run: npm install
 
       - name: run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
-        run: |
-          npm run all
+        run: npm run all --workspace ${{ matrix.project.workspace }}

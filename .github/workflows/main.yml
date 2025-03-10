@@ -229,15 +229,15 @@ jobs:
     - name: WASI Preview 2 Conformance
       run: cargo test node_
 
-  test-workspaces:
-    name: Test Workspaces
+  test-preview2-shims:
+    name: Test Preview2 Shims
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: Install NPM packages
       run: npm ci
     - name: Test Workspaces
-      run: npm run test --workspaces
+      run: npm run test --workspace packages/preview2-shim
 
   eslint:
     name: ESLint
