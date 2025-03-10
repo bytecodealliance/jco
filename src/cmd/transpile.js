@@ -156,6 +156,26 @@ async function printWITLayoutHint(witPath) {
   return output;
 }
 
+/**
+ * Print a hint about WIT folder layout
+ *
+ * @param {(string, any) => void} consoleFn
+ */
+async function printWITLayoutHint(witPath) {
+  const stat = await lstat(witPath);
+  let output = "\n";
+  if (!stat.isFile() && !stat.isDirectory()) {
+    output += c`{yellow.bold warning} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
+    return output;
+  }
+  const ftype = stat.isDirectory() ? "directory" : "file";
+  output += c`{yellow.bold warning} Your WIT ${ftype} [${witPath}] may be laid out incorrectly\n`;
+  output += c`{yellow.bold warning} Keep in mind the following rules:\n`;
+  output += c`{yellow.bold warning}     - Top level WIT files are in the same package (i.e. "ns:pkg" in "wit/*.wit")\n`;
+  output += c`{yellow.bold warning}     - All package dependencies should be in "wit/deps" (i.e. "some:dep" in "wit/deps/some-dep.wit"\n`;
+  return output;
+}
+
 async function writeFiles(files, summaryTitle) {
   await Promise.all(
     Object.entries(files).map(async ([name, file]) => {

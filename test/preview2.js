@@ -114,7 +114,7 @@ suite("Preview 2", () => {
       );
       if (isWindows) {
         outputModulePath = relative(
-          fileURLToPath(new URL(import.meta.url)),
+          fileURLToPath(new URL("test", import.meta.url)),
           outputModulePath
         );
       }
