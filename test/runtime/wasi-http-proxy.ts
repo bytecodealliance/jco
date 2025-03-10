@@ -17,7 +17,7 @@ async function run() {
   );
 
   // @ts-ignore
-  const { commands } = import(outputPath);
+  const { commands } = await import(outputPath);
 
   assert.equal(
     commands.getExample(),

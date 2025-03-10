@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile, appendFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 
@@ -10,6 +10,7 @@ import { componentNew, preview1AdapterCommandPath } from "../src/api.js";
 import { suite, test, assert } from "vitest";
 
 import { exec, jcoPath, getTmpDir, getRandomPort } from "./helpers.js";
+import { tsGenerationPromise } from "./typescript.js";
 
 suite("Preview 2", () => {
   test("hello_stdout", async () => {
@@ -55,6 +56,11 @@ suite("Preview 2", () => {
       }
       res.end();
     }).listen(port); // transpile component expects this port
+
+    try {
+      // Ignore errors from compilation (usually TS warnings)
+      await tsGenerationPromise();
+    } catch {}
 
     const runtimeName = "wasi-http-proxy";
     try {
