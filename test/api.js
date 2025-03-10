@@ -36,7 +36,7 @@ suite("API", () => {
     exitCodeWasmBytes = bytes[1];
   });
 
-  test.concurrent("Transpile", async () => {
+  test("Transpile", async () => {
     const name = "flavorful";
     const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
       name,
@@ -70,7 +70,7 @@ suite("API", () => {
     for (let i = 0; i < 2; i++) assert.ok(source.includes(exports[i][0]));
   });
 
-  test.concurrent("Transpile map into package imports", async () => {
+  test("Transpile map into package imports", async () => {
     const name = "flavorful";
     const { files, imports } = await transpile(flavorfulWasmBytes, {
       name,
@@ -84,7 +84,7 @@ suite("API", () => {
     assert.ok(source.includes("'#testimport'"));
   });
 
-  test.concurrent("Type generation", async () => {
+  test("Type generation", async () => {
     const files = await types("test/fixtures/wit", {
       worldName: "test:flavorful/flavorful",
     });
@@ -106,7 +106,7 @@ suite("API", () => {
     );
   });
 
-  test.concurrent("Type generation (guest)", async () => {
+  test("Type generation (guest)", async () => {
     const files = await types("test/fixtures/wit", {
       worldName: "test:flavorful/flavorful",
       guest: true,
@@ -128,7 +128,7 @@ suite("API", () => {
     );
   });
 
-  test.concurrent("Print & Parse", async () => {
+  test("Print & Parse", async () => {
     const output = await print(flavorfulWasmBytes);
     assert.strictEqual(output.slice(0, 10), "(component");
 
@@ -136,7 +136,7 @@ suite("API", () => {
     assert.ok(componentParsed);
   });
 
-  test.concurrent("Wit & New", async () => {
+  test("Wit & New", async () => {
     const wit = await readFile(
       `test/fixtures/wit/deps/flavorful/flavorful.wit`,
       "utf8"
@@ -178,7 +178,7 @@ suite("API", () => {
     ]);
   });
 
-  test.concurrent("Multi-file WIT", async () => {
+  test("Multi-file WIT", async () => {
     const generatedComponent = await componentEmbed({
       dummy: true,
       witPath:
@@ -219,7 +219,7 @@ suite("API", () => {
     ]);
   });
 
-  test.concurrent("Component new adapt", async () => {
+  test("Component new adapt", async () => {
     const generatedComponent = await componentNew(exitCodeWasmBytes, [
       [
         "wasi_snapshot_preview1",
@@ -230,7 +230,7 @@ suite("API", () => {
     await print(generatedComponent);
   });
 
-  test.concurrent("Extract metadata", async () => {
+  test("Extract metadata", async () => {
     const meta = await metadataShow(exitCodeWasmBytes);
     assert.deepStrictEqual(meta, [
       {
