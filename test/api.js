@@ -47,24 +47,6 @@ suite("API", () => {
     assert.ok(files[name + ".js"]);
   });
 
-  test.concurrent("Transpile & Optimize & Minify", async () => {
-    const name = "flavorful";
-    const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
-      name,
-      minify: true,
-      validLiftingOptimization: true,
-      tlaCompat: true,
-      optimize: true,
-      base64Cutoff: 0,
-    });
-    assert.strictEqual(imports.length, 4);
-    assert.strictEqual(exports.length, 3);
-    assert.deepStrictEqual(exports[0], ["test", "instance"]);
-    assert.ok(
-      files[name + ".js"].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT
-    );
-  });
-
   test("Transpile to JS", async () => {
     const name = "flavorful";
     const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
@@ -144,11 +126,6 @@ suite("API", () => {
         "declare module 'test:flavorful/test' {"
       )
     );
-  });
-
-  test.concurrent("Optimize", async () => {
-    const { component: optimizedComponent } = await opt(flavorfulWasmBytes);
-    assert.ok(optimizedComponent.byteLength < flavorfulWasmBytes.byteLength);
   });
 
   test.concurrent("Print & Parse", async () => {
@@ -264,5 +241,28 @@ suite("API", () => {
         range: [0, 262],
       },
     ]);
+  });
+
+  test("Optimize", async () => {
+    const { component: optimizedComponent } = await opt(flavorfulWasmBytes);
+    assert.ok(optimizedComponent.byteLength < flavorfulWasmBytes.byteLength);
+  });
+
+  test("Transpile & Optimize & Minify", async () => {
+    const name = "flavorful";
+    const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
+      name,
+      minify: true,
+      validLiftingOptimization: true,
+      tlaCompat: true,
+      optimize: true,
+      base64Cutoff: 0,
+    });
+    assert.strictEqual(imports.length, 4);
+    assert.strictEqual(exports.length, 3);
+    assert.deepStrictEqual(exports[0], ["test", "instance"]);
+    assert.ok(
+      files[name + ".js"].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT
+    );
   });
 });
