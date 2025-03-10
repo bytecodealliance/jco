@@ -79,7 +79,11 @@ export async function exec(cmd, ...args) {
       if (code !== 0) {
         const output = (stderr || stdout).toString();
         reject(
-          new Error(`error while executing [${cmd} ${cmdArgs}]:\n${output}`)
+          new Error(
+            `error while executing [${processCmd} ${cmdArgs.join(
+              " "
+            )}]:\n${output}`
+          )
         );
         return;
       }
