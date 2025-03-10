@@ -1,3 +1,5 @@
+import { availableParallelism } from "node:os";
+
 import { defineConfig } from "vitest/config";
 
 const DEFAULT_TIMEOUT_MS = 1000 * 60 * 4; // 4m
@@ -9,6 +11,7 @@ const REPORTERS = process.env.GITHUB_ACTIONS
 export default defineConfig({
   test: {
     reporters: REPORTERS,
+    maxConcurrency: availableParallelism(),
     disableConsoleIntercept: true,
     printConsoleTrace: true,
     passWithNoTests: false,
