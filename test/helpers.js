@@ -33,6 +33,8 @@ import { componentize } from "../src/cmd/componentize.js";
 // Path to the jco binary
 export const jcoPath = "src/jco.js";
 
+const COMPONENT_BYTES_CACHE = {};
+
 // Simple debug logging for tests
 export function log(args, ..._rest) {
   if (!env.TEST_DEBUG) {
@@ -219,7 +221,11 @@ export async function setupAsyncTest(args) {
     ...(jco?.transpile?.extraArgs || {}),
   };
 
-  const componentBytes = await readFile(componentPath);
+  let componentBytes;
+  if (!COMPONENT_BYTES_CACHE[componentPath]) {
+    COMPONENT_BYTES_CACHE[componentPath] = await readFile(componentPath);
+  }
+  componentBytes = COMPONENT_BYTES_CACHE[componentPath];
 
   // Perform transpilation, write out files
   const { files } = await transpile(componentBytes, transpileOpts);

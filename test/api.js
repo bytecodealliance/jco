@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { platform } from "node:process";
 import { readFile } from "node:fs/promises";
 
-import { suite, test, assert } from "vitest";
+import { suite, test, assert, beforeAll } from "vitest";
 
 import {
   transpile,
@@ -22,12 +22,21 @@ const isWindows = platform === "win32";
 const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 28_500;
 
 suite("API", () => {
+  let flavorfulWasmBytes;
+  let exitCodeWasmBytes;
+
+  beforeAll(async () => {
+    flavorfulWasmBytes = await readFile(
+      `test/fixtures/components/flavorful.component.wasm`
+    );
+    exitCodeWasmBytes = await readFile(`test/fixtures/modules/exitcode.wasm`);
+  });
+
   test.concurrent("Transpile", async () => {
     const name = "flavorful";
-    const component = await readFile(
-      `test/fixtures/components/${name}.component.wasm`
-    );
-    const { files, imports, exports } = await transpile(component, { name });
+    const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
+      name,
+    });
     assert.strictEqual(imports.length, 4);
     assert.strictEqual(exports.length, 3);
     assert.deepStrictEqual(exports[0], ["test", "instance"]);
@@ -36,10 +45,7 @@ suite("API", () => {
 
   test.concurrent("Transpile & Optimize & Minify", async () => {
     const name = "flavorful";
-    const component = await readFile(
-      `test/fixtures/components/${name}.component.wasm`
-    );
-    const { files, imports, exports } = await transpile(component, {
+    const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
       name,
       minify: true,
       validLiftingOptimization: true,
@@ -57,10 +63,7 @@ suite("API", () => {
 
   test("Transpile to JS", async () => {
     const name = "flavorful";
-    const component = await readFile(
-      `test/fixtures/components/${name}.component.wasm`
-    );
-    const { files, imports, exports } = await transpile(component, {
+    const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
       map: {
         "test:flavorful/*": "./*.js",
       },
@@ -83,10 +86,7 @@ suite("API", () => {
 
   test.concurrent("Transpile map into package imports", async () => {
     const name = "flavorful";
-    const component = await readFile(
-      `test/fixtures/components/${name}.component.wasm`
-    );
-    const { files, imports } = await transpile(component, {
+    const { files, imports } = await transpile(flavorfulWasmBytes, {
       name,
       map: {
         "test:flavorful/*": "#*import",
@@ -143,18 +143,12 @@ suite("API", () => {
   });
 
   test.concurrent("Optimize", async () => {
-    const component = await readFile(
-      `test/fixtures/components/flavorful.component.wasm`
-    );
-    const { component: optimizedComponent } = await opt(component);
-    assert.ok(optimizedComponent.byteLength < component.byteLength);
+    const { component: optimizedComponent } = await opt(flavorfulWasmBytes);
+    assert.ok(optimizedComponent.byteLength < flavorfulWasmBytes.byteLength);
   });
 
   test.concurrent("Print & Parse", async () => {
-    const component = await readFile(
-      `test/fixtures/components/flavorful.component.wasm`
-    );
-    const output = await print(component);
+    const output = await print(flavorfulWasmBytes);
     assert.strictEqual(output.slice(0, 10), "(component");
 
     const componentParsed = await parse(output);
@@ -245,9 +239,7 @@ suite("API", () => {
   });
 
   test.concurrent("Component new adapt", async () => {
-    const component = await readFile(`test/fixtures/modules/exitcode.wasm`);
-
-    const generatedComponent = await componentNew(component, [
+    const generatedComponent = await componentNew(exitCodeWasmBytes, [
       ["wasi_snapshot_preview1", await readFile(preview1AdapterReactorPath())],
     ]);
 
@@ -255,10 +247,7 @@ suite("API", () => {
   });
 
   test.concurrent("Extract metadata", async () => {
-    const component = await readFile(`test/fixtures/modules/exitcode.wasm`);
-
-    const meta = await metadataShow(component);
-
+    const meta = await metadataShow(exitCodeWasmBytes);
     assert.deepStrictEqual(meta, [
       {
         metaType: { tag: "module" },
