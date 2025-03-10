@@ -20,7 +20,6 @@ import {
   mkdir,
   readFile,
 } from "node:fs/promises";
-import { ok, strictEqual } from "node:assert";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 
@@ -61,7 +60,7 @@ export async function exec(cmd, ...args) {
   let stdout = "",
     stderr = "";
   await new Promise((resolve, reject) => {
-    const processCmd = argv[0];
+    let processCmd = argv[0];
     const cmdArgs = ["--no-warnings", ...execArgv, cmd, ...args];
     const cp = spawn(processCmd, cmdArgs, {
       stdio: "pipe",
@@ -77,7 +76,11 @@ export async function exec(cmd, ...args) {
       if (code !== 0) {
         const output = (stderr || stdout).toString();
         reject(
-          new Error(`error while executing [${cmd} ${cmdArgs}]:\n${output}`),
+          new Error(
+            `error while executing [${processCmd} ${cmdArgs.join(
+              " "
+            )}]:\n${output}`
+          )
         );
         return;
       }
@@ -124,7 +127,7 @@ export async function setupAsyncTest(args) {
 
   if (component.path && component.build) {
     throw new Error(
-      "Both component.path and component.build should not be specified at the same time",
+      "Both component.path and component.build should not be specified at the same time"
     );
   }
 
@@ -182,13 +185,15 @@ export async function setupAsyncTest(args) {
 
   // Return early if the test was intended to run on JSPI but JSPI is not enabled
   if (asyncMode == "jspi" && typeof WebAssembly?.Suspending !== "function") {
-    let nodeMajorVersion = parseInt(version.replace("v","").split(".")[0]);
+    let nodeMajorVersion = parseInt(version.replace("v", "").split(".")[0]);
     if (nodeMajorVersion < 23) {
-      throw new Error("NodeJS versions <23 does not support JSPI integration, please use a NodeJS version >=23");
+      throw new Error(
+        "NodeJS versions <23 does not support JSPI integration, please use a NodeJS version >=23"
+      );
     }
     await cleanup();
     throw new Error(
-      "JSPI async type skipped, but JSPI was not enabled -- please ensure test is run from an environment with JSPI integration (ex. node with the --experimental-wasm-jspi flag)",
+      "JSPI async type skipped, but JSPI was not enabled -- please ensure test is run from an environment with JSPI integration (ex. node with the --experimental-wasm-jspi flag)"
     );
   }
 
@@ -217,7 +222,7 @@ export async function setupAsyncTest(args) {
     ...(jco?.transpile?.extraArgs || {}),
   };
 
-  const componentBytes = await readFile(componentPath);
+  const componentBytes = await readComponentBytes(componentPath);
 
   // Perform transpilation, write out files
   const { files } = await transpile(componentBytes, transpileOpts);
@@ -225,13 +230,13 @@ export async function setupAsyncTest(args) {
     Object.entries(files).map(async ([name, file]) => {
       await mkdir(dirname(name), { recursive: true });
       await writeFile(name, file);
-    }),
+    })
   );
 
   // Write a minimal package.json
   await writeFile(
     `${moduleOutputDir}/package.json`,
-    JSON.stringify({ type: "module" }),
+    JSON.stringify({ type: "module" })
   );
 
   // TODO: DEBUG module import not working, file is missing!
@@ -286,7 +291,7 @@ export async function buildComponent(args) {
   const witWorld = args.wit?.world;
   if (!name) {
     throw new Error(
-      "invalid/missing component name for in-test component build",
+      "invalid/missing component name for in-test component build"
     );
   }
   if (!jsSource) {
@@ -325,7 +330,7 @@ export async function buildComponent(args) {
       }
       if (dep.destPath && isAbsolute(dep.destPath)) {
         throw new Error(
-          "Only relative dest paths are allowed (into the wit/deps directory)",
+          "Only relative dest paths are allowed (into the wit/deps directory)"
         );
       }
 
@@ -340,7 +345,7 @@ export async function buildComponent(args) {
         await cp(dep.srcPath, outputPath, { recursive: true });
       } else {
         throw new Error(
-          "unrecognized file type for WIT dep, neither file nor directory",
+          "unrecognized file type for WIT dep, neither file nor directory"
         );
       }
     }
@@ -411,15 +416,18 @@ export async function loadTestPage(args) {
     page
       .on("console", (message) =>
         log(
-          `[browser] ${message.type().substr(0, 3).toUpperCase()} ${message.text()}`,
-        ),
+          `[browser] ${message
+            .type()
+            .substr(0, 3)
+            .toUpperCase()} ${message.text()}`
+        )
       )
       .on("pageerror", ({ message }) => log(`[browser] ${message}`))
       .on("response", (response) =>
-        log(`[browser] ${response.status()} ${response.url()}`),
+        log(`[browser] ${response.status()} ${response.url()}`)
       )
       .on("requestfailed", (request) =>
-        log(`[browser] ${request.failure().errorText} ${request.url()}`),
+        log(`[browser] ${request.failure().errorText} ${request.url()}`)
       );
   }
 
@@ -429,7 +437,9 @@ export async function loadTestPage(args) {
   const hashURL = `http://localhost:${serverPort}/${path}#${hash}`;
   log(`[browser] attempting to navigate to [${hashURL}]`);
   const hashTest = await page.goto(hashURL);
-  ok(hashTest.ok(), `navigated to URL [${hashURL}]`);
+  if (!hashTest.ok()) {
+    throw new Error(`failed to navigate to URL [${hashURL}]`);
+  }
 
   const body = await page.locator("body").waitHandle();
 
@@ -480,7 +490,9 @@ export async function getRandomPort() {
  * @returns {Promise<{ serverPort: number, server: object }>}
  */
 export async function startTestWebServer(args) {
-  if (!args.routes) { throw new Error("missing serve paths"); }
+  if (!args.routes) {
+    throw new Error("missing serve paths");
+  }
   const serverPort = await getRandomPort();
 
   const server = createHttpServer(async (req, res) => {
@@ -492,19 +504,25 @@ export async function startTestWebServer(args) {
     };
 
     // Find route to serve incoming request
-    const route = args.routes.find(dir => {
-      return !dir.urlPrefix || (dir.urlPrefix && req.url.startsWith(dir.urlPrefix));
+    const route = args.routes.find((dir) => {
+      return (
+        !dir.urlPrefix || (dir.urlPrefix && req.url.startsWith(dir.urlPrefix))
+      );
     });
     if (!route) {
       log(`[webserver] failed to find route to serve [${req.url.path}]`);
-      returnError(new Error(`failed to resolve url [${req.url}] with any provided routes`));
+      returnError(
+        new Error(`failed to resolve url [${req.url}] with any provided routes`)
+      );
       return;
     }
-    if (!route.basePathURL) { throw new Error("invalid/missing path in specified route"); }
+    if (!route.basePathURL) {
+      throw new Error("invalid/missing path in specified route");
+    }
 
     const fileURL = new URL(
       `./${req.url.slice(route.urlPrefix ? route.urlPrefix.length : "")}`,
-      route.basePathURL,
+      route.basePathURL
     );
 
     log(`[webserver] attempting to read file on disk @ [${fileURL}]`);
@@ -528,8 +546,8 @@ export async function startTestWebServer(args) {
     }
   });
 
-  const served = new Promise(resolve => {
-    server.on('listening', () => {
+  const served = new Promise((resolve) => {
+    server.on("listening", () => {
       resolve({
         serverPort,
         server,
@@ -538,7 +556,7 @@ export async function startTestWebServer(args) {
           server.close(() => {
             log("server successfully closed");
           });
-        }
+        },
       });
     });
   });
@@ -546,4 +564,31 @@ export async function startTestWebServer(args) {
   server.listen(serverPort);
 
   return await served;
+}
+
+/** Read the flags that should be set before running a given codegen fixture */
+export async function readFixtureFlags(fixturePath) {
+  try {
+    var source = await readFile(fixturePath, "utf8");
+  } catch (e) {
+    if (e && e.code === "ENOENT") return [];
+    throw e;
+  }
+
+  const firstLine = source.split("\n")[0];
+  if (firstLine.startsWith("// Flags:")) {
+    return firstLine.slice(9).trim().split(" ");
+  }
+
+  return [];
+}
+
+export const COMPONENT_BYTES_CACHE = {};
+export async function readComponentBytes(componentPath) {
+  let componentBytes;
+  if (!COMPONENT_BYTES_CACHE[componentPath]) {
+    COMPONENT_BYTES_CACHE[componentPath] = await readFile(componentPath);
+  }
+  componentBytes = COMPONENT_BYTES_CACHE[componentPath];
+  return componentBytes;
 }

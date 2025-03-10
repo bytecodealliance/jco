@@ -12,7 +12,6 @@ import {
   generate,
   generateTypes,
 } from "../../obj/js-component-bindgen-component.js";
-
 import {
   readFile,
   sizeStr,
@@ -135,6 +134,26 @@ export async function typesComponent(witPath, opts) {
   }
 
   return Object.fromEntries(types);
+}
+
+/**
+ * Print a hint about WIT folder layout
+ *
+ * @param {(string, any) => void} consoleFn
+ */
+async function printWITLayoutHint(witPath) {
+  const stat = await lstat(witPath);
+  let output = "\n";
+  if (!stat.isFile() && !stat.isDirectory()) {
+    output += c`{yellow.bold warning} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
+    return output;
+  }
+  const ftype = stat.isDirectory() ? "directory" : "file";
+  output += c`{yellow.bold warning} Your WIT ${ftype} [${witPath}] may be laid out incorrectly\n`;
+  output += c`{yellow.bold warning} Keep in mind the following rules:\n`;
+  output += c`{yellow.bold warning}     - Top level WIT files are in the same package (i.e. "ns:pkg" in "wit/*.wit")\n`;
+  output += c`{yellow.bold warning}     - All package dependencies should be in "wit/deps" (i.e. "some:dep" in "wit/deps/some-dep.wit"\n`;
+  return output;
 }
 
 /**
@@ -752,4 +771,10 @@ function asmMangle(name) {
     }
   }
   return name;
+}
+
+// see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
+if (typeof __vite_ssr_import_meta__ !== "undefined") {
+  __vite_ssr_import_meta__.resolve = (path) =>
+    "file://" + globalCreateRequire(import.meta.url).resolve(path);
 }
