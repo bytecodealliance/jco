@@ -75,6 +75,8 @@
     "obj/interfaces"
   ],
   "workspaces": [
-    "packages/preview2-shim"
+    ".",
+    "packages/preview2-shim",
+    "examples/components/webidl-book-library"
   ]
 }
