@@ -26,7 +26,7 @@ jobs:
     - name: Install wasm32-wasip1 target
       run: rustup target add wasm32-wasip1
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Build
       run: npm run build
     - name: Upload Jco Build
@@ -106,7 +106,7 @@ jobs:
 
     # Perform NPM install
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
 
     - name: Download Build
       uses: actions/download-artifact@v4
@@ -173,7 +173,7 @@ jobs:
       with:
         deno-version: v1.x
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Download Build
       uses: actions/download-artifact@v4
       with:
@@ -215,7 +215,7 @@ jobs:
       with:
         node-version: ${{ matrix.node }}
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Download Build
       uses: actions/download-artifact@v4
       with:
@@ -235,7 +235,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Test Workspaces
       run: npm run test --workspace packages/preview2-shim
 
@@ -245,7 +245,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install NPM packages
-      run: npm ci
+      run: npm install
     - name: Lint
       run: npm run lint
 
@@ -292,7 +292,7 @@ jobs:
 
       - name: install wac
         if: ${{ matrix.project.is-composed }}
-        uses: jaxxstorm/action-install-gh-release@25d5e2dd555cd74f1fab9ac1e6ea117acde2c0c4 # 1.2.0
+        uses: jaxxstorm/action-install-gh-release@v1
         with:
           repo: bytecodealliance/wac
           tag: v${{ matrix.wac.version }}
@@ -301,7 +301,7 @@ jobs:
           chmod: 0755
 
       - name: npm install
-        run: npm install -f # -f needed to update optional dependencies
+        run: npm install
 
       - name: run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
