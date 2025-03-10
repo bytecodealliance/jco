@@ -712,6 +712,7 @@ impl Intrinsic {
             "validateGuestChar",
             "validateHostChar",
             // JS Globals / non intrinsic names
+            "ArrayBuffer",
             "BigInt",
             "BigInt64Array",
             "DataView",
@@ -725,6 +726,8 @@ impl Intrinsic {
             "Object",
             "process",
             "String",
+            "TextDecoder",
+            "TextEncoder",
             "toUint64",
             "TypeError",
             "Uint16Array",
