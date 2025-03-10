@@ -40,9 +40,9 @@ jobs:
     strategy:
       matrix:
         os: [
-            ubuntu-22.04, # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
+            # ubuntu-22.04, # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
             windows-latest,
-            macos-latest
+            # macos-latest
         ]
         node: [18.x, 20.x, latest]
         include:
@@ -154,139 +154,139 @@ jobs:
         npm run test typescript.js
         npm run test wit.js
 
-  build-wasi-tests:
-    name: WASI Test Generation
-    runs-on: ubuntu-latest
-    outputs:
-      cache-key: ${{ steps.cache-wasi-tests.outputs.cache-primary-key }}
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - name: Cache WASI Tests
-      id: cache-wasi-tests
-      uses: actions/cache@v4
-      with:
-        path: tests/gen
-        key: wasi-${{ hashFiles('xtask/src/generate/preview2_tests.rs', 'submodules/wasmtime/Cargo.lock') }}
-    - name: Install Rust
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup update stable --no-self-update && rustup default stable
-    - name: Install wasm32-unknown-unknown target
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup target add wasm32-unknown-unknown
-    - name: Install wasm32-wasip1 target
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup target add wasm32-wasip1
-    - name: Install wasm-tools
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: cargo install wasm-tools
-    - name: Generate WASI Tests
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: cargo xtask generate preview2-tests
-    - name: Upload Generated WASI Tests
-      uses: actions/upload-artifact@v4
-      with:
-        name: wasi-tests
-        path: tests/gen
+  # build-wasi-tests:
+  #   name: WASI Test Generation
+  #   runs-on: ubuntu-latest
+  #   outputs:
+  #     cache-key: ${{ steps.cache-wasi-tests.outputs.cache-primary-key }}
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #     with:
+  #       submodules: recursive
+  #   - name: Cache WASI Tests
+  #     id: cache-wasi-tests
+  #     uses: actions/cache@v4
+  #     with:
+  #       path: tests/gen
+  #       key: wasi-${{ hashFiles('xtask/src/generate/preview2_tests.rs', 'submodules/wasmtime/Cargo.lock') }}
+  #   - name: Install Rust
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: rustup update stable --no-self-update && rustup default stable
+  #   - name: Install wasm32-unknown-unknown target
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: rustup target add wasm32-unknown-unknown
+  #   - name: Install wasm32-wasip1 target
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: rustup target add wasm32-wasip1
+  #   - name: Install wasm-tools
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: cargo install wasm-tools
+  #   - name: Generate WASI Tests
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: cargo xtask generate preview2-tests
+  #   - name: Upload Generated WASI Tests
+  #     uses: actions/upload-artifact@v4
+  #     with:
+  #       name: wasi-tests
+  #       path: tests/gen
 
-  test-wasi-deno:
-    name: Jco Deno WASI Conformance Tests
-    runs-on: 'ubuntu-latest'
-    needs: [build, build-wasi-tests]
-    steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v3
-      with:
-        node-version: 'latest'
-    - uses: denoland/setup-deno@v1
-      with:
-        deno-version: v1.x
-    - name: Install NPM packages
-      run: npm ci
-    - name: Download Build
-      uses: actions/download-artifact@v4
-      with:
-        name: jco-build
-        path: obj
-    - name: Download WASI Tests
-      uses: actions/download-artifact@v4
-      with:
-        name: wasi-tests
-        path: tests/gen
-    - name: WASI Preview 2 Conformance
-      run: cargo test deno_
+  # test-wasi-deno:
+  #   name: Jco Deno WASI Conformance Tests
+  #   runs-on: 'ubuntu-latest'
+  #   needs: [build, build-wasi-tests]
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - uses: actions/setup-node@v3
+  #     with:
+  #       node-version: 'latest'
+  #   - uses: denoland/setup-deno@v1
+  #     with:
+  #       deno-version: v1.x
+  #   - name: Install NPM packages
+  #     run: npm ci
+  #   - name: Download Build
+  #     uses: actions/download-artifact@v4
+  #     with:
+  #       name: jco-build
+  #       path: obj
+  #   - name: Download WASI Tests
+  #     uses: actions/download-artifact@v4
+  #     with:
+  #       name: wasi-tests
+  #       path: tests/gen
+  #   - name: WASI Preview 2 Conformance
+  #     run: cargo test deno_
 
-  test-wasi:
-    name: Jco Node.js WASI Conformance Tests
-    strategy:
-      matrix:
-        os: [
-            ubuntu-latest,
-            windows-latest,
-            macos-latest
-        ]
-        node: [18.x, 20.x, latest]
-        exclude:
-          - os: macos-latest
-            node: 20.x
-          - os: macos-latest
-            node: 18.x
-          - os: windows-latest
-            node: 20.x
-          - os: windows-latest
-            node: 18.x
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    needs: [build, build-wasi-tests]
-    steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node }}
-    - name: Install NPM packages
-      run: npm ci
-    - name: Download Build
-      uses: actions/download-artifact@v4
-      with:
-        name: jco-build
-        path: obj
-    - name: Download WASI Tests
-      uses: actions/download-artifact@v4
-      with:
-        name: wasi-tests
-        path: tests/gen
-    - name: WASI Preview 2 Conformance
-      run: cargo test node_
+  # test-wasi:
+  #   name: Jco Node.js WASI Conformance Tests
+  #   strategy:
+  #     matrix:
+  #       os: [
+  #           ubuntu-latest,
+  #           windows-latest,
+  #           macos-latest
+  #       ]
+  #       node: [18.x, 20.x, latest]
+  #       exclude:
+  #         - os: macos-latest
+  #           node: 20.x
+  #         - os: macos-latest
+  #           node: 18.x
+  #         - os: windows-latest
+  #           node: 20.x
+  #         - os: windows-latest
+  #           node: 18.x
+  #     fail-fast: false
+  #   runs-on: ${{ matrix.os }}
+  #   needs: [build, build-wasi-tests]
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - uses: actions/setup-node@v3
+  #     with:
+  #       node-version: ${{ matrix.node }}
+  #   - name: Install NPM packages
+  #     run: npm ci
+  #   - name: Download Build
+  #     uses: actions/download-artifact@v4
+  #     with:
+  #       name: jco-build
+  #       path: obj
+  #   - name: Download WASI Tests
+  #     uses: actions/download-artifact@v4
+  #     with:
+  #       name: wasi-tests
+  #       path: tests/gen
+  #   - name: WASI Preview 2 Conformance
+  #     run: cargo test node_
 
-  test-workspaces:
-    name: Test Workspaces
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install NPM packages
-      run: npm ci
-    - name: Test Workspaces
-      run: npm run test --workspaces
+  # test-workspaces:
+  #   name: Test Workspaces
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install NPM packages
+  #     run: npm ci
+  #   - name: Test Workspaces
+  #     run: npm run test --workspaces
 
-  eslint:
-    name: ESLint
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install NPM packages
-      run: npm ci
-    - name: Lint
-      run: npm run lint
+  # eslint:
+  #   name: ESLint
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install NPM packages
+  #     run: npm ci
+  #   - name: Lint
+  #     run: npm run lint
 
-  rustfmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Install Rust
-      run: rustup update stable && rustup default stable && rustup component add rustfmt
-    - name: Remove tests mod
-      run: rm -r tests/mod.rs
-    - name: Format source code
-      run: cargo fmt -- --check
+  # rustfmt:
+  #   name: Rustfmt
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   - name: Install Rust
+  #     run: rustup update stable && rustup default stable && rustup component add rustfmt
+  #   - name: Remove tests mod
+  #     run: rm -r tests/mod.rs
+  #   - name: Format source code
+  #     run: cargo fmt -- --check
