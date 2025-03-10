@@ -59,7 +59,7 @@ pub struct ComponentInfo {
 }
 
 pub fn generate_types(
-    name: String,
+    name: &str,
     resolve: Resolve,
     world_id: WorldId,
     opts: TranspileOpts,

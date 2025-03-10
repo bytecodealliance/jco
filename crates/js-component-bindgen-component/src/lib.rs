@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
-use js_component_bindgen::{generate_types, source::wit_parser::Resolve, transpile};
+use anyhow::{Context as _, Result};
+
+use js_component_bindgen::source::wit_parser::Resolve;
+use js_component_bindgen::transpile;
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -147,9 +149,16 @@ impl Guest for JsComponentBindgenComponent {
             Wit::Path(path) => {
                 let path = PathBuf::from(path);
                 if path.is_dir() {
-                    resolve.push_dir(&path).map_err(|e| e.to_string())?.0
+                    resolve
+                        .push_dir(&path)
+                        .with_context(|| format!("reading WIT dir at [{}]", path.display()))
+                        .map_err(|e| format!("{:?}", e))?
+                        .0
                 } else {
-                    resolve.push_file(&path).map_err(|e| e.to_string())?
+                    resolve
+                        .push_file(&path)
+                        .with_context(|| format!("reading WIT file at [{}]", path.display()))
+                        .map_err(|e| format!("{:?}", e))?
                 }
             }
             Wit::Binary(_) => todo!(),
@@ -177,7 +186,9 @@ impl Guest for JsComponentBindgenComponent {
             async_mode: opts.async_mode.map(Into::into),
         };
 
-        let files = generate_types(name, resolve, world, opts).map_err(|e| e.to_string())?;
+        let files = js_component_bindgen::generate_types(&name, resolve, world, opts)
+            .with_context(|| format!("generating types for [{}]", &name))
+            .map_err(|e| e.to_string())?;
 
         Ok(files)
     }

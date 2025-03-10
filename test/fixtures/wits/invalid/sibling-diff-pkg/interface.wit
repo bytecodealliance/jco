@@ -1,0 +1,5 @@
+package tests:sibling-wit;
+
+interface test {
+    f: func() -> string;
+}
