@@ -63,7 +63,9 @@ export async function exec(cmd, ...args) {
     stderr = "";
   await new Promise((resolve, reject) => {
     let processCmd = argv[0];
-    processCmd = (isWindows ? "//?/" : "") + processCmd;
+    // if (isWindows) {
+    //   cmd = `//?/${cmd}`;
+    // }
     const cmdArgs = ["--no-warnings", ...execArgv, cmd, ...args];
     const cp = spawn(processCmd, cmdArgs, {
       stdio: "pipe",
