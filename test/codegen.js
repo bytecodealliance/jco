@@ -4,14 +4,29 @@ import { componentNew, componentEmbed, transpile } from "@bytecodealliance/jco";
 import { suite, test, assert } from "vitest";
 import { fileURLToPath } from "node:url";
 
-import { exec, jcoPath } from "./helpers.js";
+import { exec, jcoPath, readFixtureFlags } from "./helpers.js";
 import { getDefaultComponentFixtures, ESLINT_PATH } from "./common.js";
+
+let TS_CODEGEN_PROMISE;
+function tsCodegenPromise(t) {
+  if (TS_CODEGEN_PROMISE) {
+    t.ok(true, "already generated");
+    return TS_CODEGEN_PROMISE;
+  }
+  return (TS_CODEGEN_PROMISE = (async () => {
+    var { stderr } = await exec(
+      NODE_MODULES_TSC_BIN_PATH,
+      "-p",
+      "test/tsconfig.json"
+    );
+    assert.strictEqual(stderr, "");
+  })());
+}
 
 suite(`Transpiler codegen`, async () => {
   const fixtures = await getDefaultComponentFixtures();
   for (const fixture of fixtures) {
     const testName = fixture.replace(/(\.component)?\.(wasm|wat)$/, "");
-
     test.concurrent(`${testName} transpile & lint`, async () => {
       const flags = await readFixtureFlags(
         fileURLToPath(new URL(`./runtime/${testName}.ts`, import.meta.url))
@@ -76,20 +91,3 @@ suite(`Naming`, () => {
     assert.isOk(bindingsSource.includes("Thing: Thing$1"));
   });
 });
-
-/** Read the flags that should be set before running a given codegen fixture */
-async function readFixtureFlags(fixturePath) {
-  try {
-    var source = await readFile(fixturePath, "utf8");
-  } catch (e) {
-    if (e && e.code === "ENOENT") return [];
-    throw e;
-  }
-
-  const firstLine = source.split("\n")[0];
-  if (firstLine.startsWith("// Flags:")) {
-    return firstLine.slice(9).trim().split(" ");
-  }
-
-  return [];
-}

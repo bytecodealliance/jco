@@ -106,8 +106,8 @@ jobs:
 
       # Perform NPM install
       #
-      # Remove node modules explicitly to avoid missing paltform deps
-      # when on other nodes
+      # Remove node modules explicitly to avoid missing platform-native deps
+      # when on other architectures/OSes
       #
       # ex. https://github.com/sveltejs/language-tools/issues/2278
       # ex. https://github.com/vitejs/vite/discussions/16345

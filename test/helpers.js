@@ -560,3 +560,20 @@ export async function startTestWebServer(args) {
 
   return await served;
 }
+
+/** Read the flags that should be set before running a given codegen fixture */
+export async function readFixtureFlags(fixturePath) {
+  try {
+    var source = await readFile(fixturePath, "utf8");
+  } catch (e) {
+    if (e && e.code === "ENOENT") return [];
+    throw e;
+  }
+
+  const firstLine = source.split("\n")[0];
+  if (firstLine.startsWith("// Flags:")) {
+    return firstLine.slice(9).trim().split(" ");
+  }
+
+  return [];
+}
