@@ -106,7 +106,7 @@ suite("Preview 2", () => {
         assert.strictEqual(stderr, "");
       }
 
-      const outputModulePath = fileURLToPath(
+      const outputModulePath = pathToFileURL(
         new URL(`./output/${runtimeName}.js`, import.meta.url)
       );
       await exec(outputModulePath, `--test-port=${port}`);
