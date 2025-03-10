@@ -13,3 +13,4 @@ node_modules
 /tests/rundir
 /tests/output
 /tests/gen
+.pkg
