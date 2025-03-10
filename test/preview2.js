@@ -46,6 +46,7 @@ suite("Preview 2", () => {
   test("wasi-http-proxy", async () => {
     const tmpDir = await getTmpDir();
     const outFile = resolve(tmpDir, "out-component-file");
+
     const port = await getRandomPort();
     const server = createServer(async (req, res) => {
       if (req.url == "/api/examples") {
@@ -105,11 +106,8 @@ suite("Preview 2", () => {
         );
         assert.strictEqual(stderr, "");
       }
-
-      const outputModulePath = pathToFileURL(
-        resolve(
-          fileURLToPath(new URL(`./output/${runtimeName}.js`, import.meta.url))
-        )
+      const outputModulePath = fileURLToPath(
+        new URL(`./output/${runtimeName}.js`, import.meta.url)
       );
       await exec(outputModulePath, `--test-port=${port}`);
     } finally {

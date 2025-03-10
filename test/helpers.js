@@ -1,4 +1,4 @@
-import { version, env, argv, execArgv } from "node:process";
+import { version, env, argv, execArgv, platform } from "node:process";
 import { createServer as createNetServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import {
@@ -28,6 +28,8 @@ import { pathToFileURL } from "url";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
+
+const isWindows = platform === "win32";
 
 // Path to the jco binary
 export const jcoPath = "src/jco.js";
@@ -60,7 +62,8 @@ export async function exec(cmd, ...args) {
   let stdout = "",
     stderr = "";
   await new Promise((resolve, reject) => {
-    const processCmd = argv[0];
+    let processCmd = argv[0];
+    processCmd = (isWindows ? "//?/" : "") + processCmd;
     const cmdArgs = ["--no-warnings", ...execArgv, cmd, ...args];
     const cp = spawn(processCmd, cmdArgs, {
       stdio: "pipe",
