@@ -260,3 +260,49 @@ jobs:
       run: rm -r tests/mod.rs
     - name: Format source code
       run: cargo fmt -- --check
+
+  examples:
+    name: Example ${{ matrix.project.name }}
+    needs: [build]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        wac:
+          - version: 0.6.0
+        node:
+          - version: 22.5.1
+        project:
+          - name: add
+            workspace: examples/components/add
+          - name: string-reverse
+            workspace: examples/components/string-reverse
+          - name: string-reverse-upper
+            workspace: examples/components/string-reverse-upper
+            is-composed: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Download Build
+        uses: actions/download-artifact@v4
+        with:
+          name: jco-build
+          path: obj
+
+      - name: install wac
+        if: ${{ matrix.project.is-composed }}
+        uses: jaxxstorm/action-install-gh-release@25d5e2dd555cd74f1fab9ac1e6ea117acde2c0c4 # 1.2.0
+        with:
+          repo: bytecodealliance/wac
+          tag: v${{ matrix.wac.version }}
+          extension-matching: disable
+          rename-to: wac
+          chmod: 0755
+
+      - name: npm install
+        run: npm install
+
+      - name: run all script for (${{ matrix.project.name }})
+        working-directory: ${{ matrix.project.dir }}
+        run: npm run all --workspace ${{ matrix.project.workspace }}
