@@ -4,7 +4,7 @@ import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 
 import { fileURLToPath, pathToFileURL } from "url";
 
-import { exec, jcoPath, getTmpDir } from "./helpers.js";
+import { exec, jcoPath, getTmpDir, readComponentBytes } from "./helpers.js";
 import { AsyncFunction } from "./common.js";
 
 import { suite, test, beforeAll, afterAll, afterEach, assert } from "vitest";
@@ -415,13 +415,14 @@ suite("CLI", () => {
   });
 
   test("Optimize", async () => {
-    const component = await readFile(
-      `test/fixtures/components/flavorful.component.wasm`
+    const wasmPath = fileURLToPath(
+      new URL(`./fixtures/components/flavorful.component.wasm`, import.meta.url)
     );
+    const component = await readComponentBytes(wasmPath);
     const { stderr, stdout } = await exec(
       jcoPath,
       "opt",
-      `test/fixtures/components/flavorful.component.wasm`,
+      wasmPath,
       "-o",
       outFile
     );

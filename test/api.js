@@ -16,6 +16,8 @@ import {
   preview1AdapterReactorPath,
 } from "../src/api.js";
 
+import { readComponentBytes } from "./helpers.js";
+
 const isWindows = platform === "win32";
 
 // - (2025/02/04) incrased due to incoming implementations of async and new flush impl
@@ -26,10 +28,12 @@ suite("API", () => {
   let exitCodeWasmBytes;
 
   beforeAll(async () => {
-    flavorfulWasmBytes = await readFile(
-      `test/fixtures/components/flavorful.component.wasm`
-    );
-    exitCodeWasmBytes = await readFile(`test/fixtures/modules/exitcode.wasm`);
+    const bytes = await Promise.all([
+      readComponentBytes(`test/fixtures/components/flavorful.component.wasm`),
+      readComponentBytes(`test/fixtures/modules/exitcode.wasm`),
+    ]);
+    flavorfulWasmBytes = bytes[0];
+    exitCodeWasmBytes = bytes[1];
   });
 
   test.concurrent("Transpile", async () => {
@@ -240,7 +244,10 @@ suite("API", () => {
 
   test.concurrent("Component new adapt", async () => {
     const generatedComponent = await componentNew(exitCodeWasmBytes, [
-      ["wasi_snapshot_preview1", await readFile(preview1AdapterReactorPath())],
+      [
+        "wasi_snapshot_preview1",
+        await readComponentBytes(preview1AdapterReactorPath()),
+      ],
     ]);
 
     await print(generatedComponent);

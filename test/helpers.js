@@ -20,7 +20,6 @@ import {
   mkdir,
   readFile,
 } from "node:fs/promises";
-import { ok, strictEqual } from "node:assert";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 
@@ -32,8 +31,6 @@ import { componentize } from "../src/cmd/componentize.js";
 
 // Path to the jco binary
 export const jcoPath = "src/jco.js";
-
-const COMPONENT_BYTES_CACHE = {};
 
 // Simple debug logging for tests
 export function log(args, ..._rest) {
@@ -221,11 +218,7 @@ export async function setupAsyncTest(args) {
     ...(jco?.transpile?.extraArgs || {}),
   };
 
-  let componentBytes;
-  if (!COMPONENT_BYTES_CACHE[componentPath]) {
-    COMPONENT_BYTES_CACHE[componentPath] = await readFile(componentPath);
-  }
-  componentBytes = COMPONENT_BYTES_CACHE[componentPath];
+  const componentBytes = await readComponentBytes(componentPath);
 
   // Perform transpilation, write out files
   const { files } = await transpile(componentBytes, transpileOpts);
@@ -440,7 +433,9 @@ export async function loadTestPage(args) {
   const hashURL = `http://localhost:${serverPort}/${path}#${hash}`;
   log(`[browser] attempting to navigate to [${hashURL}]`);
   const hashTest = await page.goto(hashURL);
-  ok(hashTest.ok(), `navigated to URL [${hashURL}]`);
+  if (!hashTest.ok()) {
+    throw new Error(`failed to navigate to URL [${hashURL}]`);
+  }
 
   const body = await page.locator("body").waitHandle();
 
@@ -582,4 +577,14 @@ export async function readFixtureFlags(fixturePath) {
   }
 
   return [];
+}
+
+export const COMPONENT_BYTES_CACHE = {};
+export async function readComponentBytes(componentPath) {
+  let componentBytes;
+  if (!COMPONENT_BYTES_CACHE[componentPath]) {
+    COMPONENT_BYTES_CACHE[componentPath] = await readFile(componentPath);
+  }
+  componentBytes = COMPONENT_BYTES_CACHE[componentPath];
+  return componentBytes;
 }

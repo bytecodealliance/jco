@@ -47,7 +47,6 @@ suite("Async", () => {
 
   test.concurrent("Transpile async (NodeJS, JSPI)", async () => {
     if (typeof WebAssembly?.Suspending !== "function") {
-      console.warn("JSPI not enabled");
       return;
     }
     const tmpDir = await getTmpDir();
@@ -110,7 +109,6 @@ suite("Async", () => {
     "Transpile async import and export (NodeJS, JSPI)",
     async () => {
       if (typeof WebAssembly?.Suspending !== "function") {
-        console.warn("JSPI not enabled");
         return;
       }
 

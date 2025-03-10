@@ -9,18 +9,27 @@ import { componentNew, preview1AdapterCommandPath } from "../src/api.js";
 
 import { suite, test, assert } from "vitest";
 
-import { exec, jcoPath, getTmpDir, getRandomPort } from "./helpers.js";
+import {
+  exec,
+  jcoPath,
+  getTmpDir,
+  getRandomPort,
+  readComponentBytes,
+} from "./helpers.js";
 import { tsGenerationPromise } from "./typescript.js";
 
 suite("Preview 2", () => {
   test("hello_stdout", async () => {
-    const component = await readFile(
+    const component = await readComponentBytes(
       fileURLToPath(
         new URL("./fixtures/modules/hello_stdout.wasm", import.meta.url)
       )
     );
     const generatedComponent = await componentNew(component, [
-      ["wasi_snapshot_preview1", await readFile(preview1AdapterCommandPath())],
+      [
+        "wasi_snapshot_preview1",
+        await readComponentBytes(preview1AdapterCommandPath()),
+      ],
     ]);
 
     const outputPath = fileURLToPath(
