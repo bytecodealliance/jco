@@ -48,7 +48,6 @@ suite(`Async`, async () => {
 
   test("Transpile async (browser, JSPI)", async () => {
     if (typeof WebAssembly?.Suspending !== "function") {
-      console.warn("JSPI not enabled");
       return;
     }
     const componentName = "async-call";
