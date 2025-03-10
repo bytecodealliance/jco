@@ -10,7 +10,7 @@
     "transpiled-js": "node run-transpiled.js",
     "all": "npm run build:dep ; npm run build ; npm run compose ; npm run transpile ; npm run transpiled-js"
   },
-  "devDependencies": {
-    "@bytecodealliance/jco": "1.10.2"
+  "dependencies": {
+    "@bytecodealliance/jco": "^1.10.2"
   }
 }

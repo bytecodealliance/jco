@@ -75,6 +75,11 @@
     "obj/interfaces"
   ],
   "workspaces": [
+    ".",
+    "examples/components/add",
+    "examples/components/http-hello-world",
+    "examples/components/string-reverse",
+    "examples/components/string-reverse-upper",
     "packages/preview2-shim"
   ]
 }
