@@ -1,6 +1,7 @@
+import { platform } from "node:process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { resolve } from "node:path";
+import { resolve, relative } from "node:path";
 
 import { fileURLToPath, pathToFileURL } from "url";
 import { HTTPServer } from "@bytecodealliance/preview2-shim/http";
@@ -8,6 +9,8 @@ import { HTTPServer } from "@bytecodealliance/preview2-shim/http";
 import { componentNew, preview1AdapterCommandPath } from "../src/api.js";
 
 import { suite, test, assert } from "vitest";
+
+const isWindows = platform === "win32";
 
 import {
   exec,
@@ -106,9 +109,16 @@ suite("Preview 2", () => {
         );
         assert.strictEqual(stderr, "");
       }
-      const outputModulePath = fileURLToPath(
+      let outputModulePath = fileURLToPath(
         new URL(`./output/${runtimeName}.js`, import.meta.url)
       );
+      if (isWindows) {
+        outputModulePath = relative(
+          fileURLToPath(new URL(import.meta.url)),
+          outputModulePath
+        );
+      }
+
       await exec(outputModulePath, `--test-port=${port}`);
     } finally {
       server.close();
