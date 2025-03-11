@@ -79,6 +79,7 @@
     ".",
     "examples/components/add",
     "examples/components/http-hello-world",
+    "examples/components/node-fetch",
     "examples/components/string-reverse",
     "examples/components/string-reverse-upper",
     "examples/components/webidl-book-library",

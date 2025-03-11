@@ -1,0 +1,19 @@
+package example:node-fetch;
+
+interface simple-request {
+  record response {
+    /// User-provided name for a request
+    url: string,
+
+    /// Response body, converted to JSON
+    response-json: string,
+  }
+
+  /// This function performs a GET request
+  /// to the provided URL without supplying an query parameters or a body
+  get-json: func(url: option<string>) -> response;
+}
+
+world component {
+ export simple-request;
+}
