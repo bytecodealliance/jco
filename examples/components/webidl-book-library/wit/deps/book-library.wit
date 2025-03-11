@@ -1,0 +1,40 @@
+package webidl:pkg;
+
+interface global-book-library {
+  enum book-genre {
+    fiction,
+    non-fiction,
+    mystery,
+    fantasy,
+    science-fiction,
+    biography,
+  }
+  type book-title = string;
+  record book {
+    title: book-title,
+    author: string,
+    genre: option<book-genre>,
+    pages: option<u16>,
+  }
+  resource library {
+    constructor();
+    total-books: func() -> u32;
+    add-book: func(book: book) -> bool;
+    remove-book: func(title: string) -> bool;
+    get-book-by-title: func(title: string) -> option<book>;
+    list-books: func() -> option<list<book>>;
+    as-advanced-library: func() -> option<advanced-library>;
+    library-name: func() -> library-name;
+    rename-library: func(new-name: library-name);
+  }
+  resource advanced-library {
+    as-library: func() -> library;
+    filter-books: func(name: string) -> list<book>;
+  }
+  type library-name = string;
+  resource book-manager {
+    constructor();
+    library: func() -> library;
+    init-library: func(name: library-name);
+  }
+}

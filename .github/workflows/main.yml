@@ -279,6 +279,10 @@ jobs:
           - name: string-reverse-upper
             workspace: examples/components/string-reverse-upper
             is-composed: true
+          - name: webidl-book-library
+            workspace: examples/components/webidl-book-library
+            requires-crates:
+              - webidl2wit-cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
@@ -290,7 +294,18 @@ jobs:
           name: jco-build
           path: obj
 
-      - name: install wac
+
+      - name: Install Rust
+        if: ${{ matrix.project.requires-crates != '[]' }}
+        run: rustup update stable --no-self-update && rustup default stable
+
+      - name: Install required rust crates
+        if: ${{ matrix.project.requires-crates != '[]' }}
+        uses: taiki-e/install-action@v2
+        with:
+          tool: ${{ join(matrix.project.requires-crates, ',') }}
+
+      - name: Install wac
         if: ${{ matrix.project.is-composed }}
         uses: jaxxstorm/action-install-gh-release@v1
         with:
@@ -300,9 +315,8 @@ jobs:
           rename-to: wac
           chmod: 0755
 
-      - name: npm install
-        run: npm install
+      - run: npm install
 
-      - name: run all script for (${{ matrix.project.name }})
+      - name: Run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
         run: npm run all --workspace ${{ matrix.project.workspace }}
