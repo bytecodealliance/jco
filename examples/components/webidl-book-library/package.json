@@ -7,7 +7,7 @@
     "generate:types": "jco types wit -o dist/generated/types",
     "build": "jco componentize librarian.js --wit wit/ --world-name component --out librarian.wasm --disable all",
     "transpile": "jco transpile librarian.wasm -o dist/transpiled",
-    "all": "npm run generate:wit && npm run generate:types && npm run build && npm run transpile"
+    "all": "npm run generate:wit && npm run generate:types && npm run build && npm run transpile && node demo.js"
   },
   "devDependencies": {
     "@bytecodealliance/jco": "1.10.2"
