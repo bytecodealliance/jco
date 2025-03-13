@@ -12,6 +12,7 @@
     "moduleResolution": "nodenext",
     "target": "es2020",
     "strict": true,
+    "noImplicitAny": false,
     "strictNullChecks": true,
     "baseUrl": "../",
     "paths": {

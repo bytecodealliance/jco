@@ -1,8 +1,12 @@
 // Flags: --instantiation
 
+// @ts-ignore
 import * as helpers from "./helpers.js";
+// @ts-ignore
 import { instantiate } from "../output/numbers/numbers.js";
+// @ts-ignore
 import { strictEqual } from 'node:assert';
+
 function assert(x: boolean) {
   if (!x)
     throw new Error("assert failed");

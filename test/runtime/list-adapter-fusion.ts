@@ -55,6 +55,7 @@ export function listFloat64(f: Float64Array) {
 }
 
 async function run() {
+  // @ts-ignore
   const wasm = await import('../output/list-adapter-fusion/list-adapter-fusion.js');
   await wasm.$init;
 

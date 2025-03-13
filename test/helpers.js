@@ -1,4 +1,4 @@
-import { version, env, argv, execArgv } from "node:process";
+import { version, env, argv, execArgv, platform } from "node:process";
 import { createServer as createNetServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import {
@@ -20,7 +20,6 @@ import {
   mkdir,
   readFile,
 } from "node:fs/promises";
-import { ok, strictEqual } from "node:assert";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -30,6 +29,9 @@ import { parse, stringify } from "smol-toml";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
+import { NODE_MODULES_TSC_BIN_PATH } from "./common.js";
+
+export const isWindows = platform === "win32";
 
 // Path to the jco binary
 export const jcoPath = "src/jco.js";
@@ -62,7 +64,7 @@ export async function exec(cmd, ...args) {
   let stdout = "",
     stderr = "";
   await new Promise((resolve, reject) => {
-    const processCmd = argv[0];
+    let processCmd = argv[0];
     const cmdArgs = ["--no-warnings", ...execArgv, cmd, ...args];
     const cp = spawn(processCmd, cmdArgs, {
       stdio: "pipe",
@@ -78,7 +80,11 @@ export async function exec(cmd, ...args) {
       if (code !== 0) {
         const output = (stderr || stdout).toString();
         reject(
-          new Error(`error while executing [${cmd} ${cmdArgs}]:\n${output}`)
+          new Error(
+            `error while executing [${processCmd} ${cmdArgs.join(
+              " "
+            )}]:\n${output}`
+          )
         );
         return;
       }
@@ -220,7 +226,7 @@ export async function setupAsyncTest(args) {
     ...(jco?.transpile?.extraArgs || {}),
   };
 
-  const componentBytes = await readFile(componentPath);
+  const componentBytes = await readComponentBytes(componentPath);
 
   // Perform transpilation, write out files
   const { files } = await transpile(componentBytes, transpileOpts);
@@ -435,7 +441,9 @@ export async function loadTestPage(args) {
   const hashURL = `http://localhost:${serverPort}/${path}#${hash}`;
   log(`[browser] attempting to navigate to [${hashURL}]`);
   const hashTest = await page.goto(hashURL);
-  ok(hashTest.ok(), `navigated to URL [${hashURL}]`);
+  if (!hashTest.ok()) {
+    throw new Error(`failed to navigate to URL [${hashURL}]`);
+  }
 
   const body = await page.locator("body").waitHandle();
 
@@ -560,6 +568,52 @@ export async function startTestWebServer(args) {
   server.listen(serverPort);
 
   return await served;
+}
+
+/** Read the flags that should be set before running a given codegen fixture */
+export async function readFixtureFlags(fixturePath) {
+  try {
+    var source = await readFile(fixturePath, "utf8");
+  } catch (e) {
+    if (e && e.code === "ENOENT") return [];
+    throw e;
+  }
+
+  const firstLine = source.split("\n")[0];
+  if (firstLine.startsWith("// Flags:")) {
+    return firstLine.slice(9).trim().split(" ");
+  }
+
+  return [];
+}
+
+export const COMPONENT_BYTES_CACHE = {};
+export async function readComponentBytes(componentPath) {
+  let componentBytes;
+  if (!COMPONENT_BYTES_CACHE[componentPath]) {
+    COMPONENT_BYTES_CACHE[componentPath] = await readFile(componentPath);
+  }
+  componentBytes = COMPONENT_BYTES_CACHE[componentPath];
+  return componentBytes;
+}
+
+let TS_CODEGEN_PROMISE;
+export function tsCodegenPromise() {
+  if (TS_CODEGEN_PROMISE) {
+    return TS_CODEGEN_PROMISE;
+  }
+  return (TS_CODEGEN_PROMISE = (async () => {
+    var { stderr } = await exec(
+      NODE_MODULES_TSC_BIN_PATH,
+      "-p",
+      "test/tsconfig.json"
+    );
+    if (stderr !== "") {
+      throw new Error(
+        `ERROR: stderr for tsc generation was non-empty\n${stderr}`
+      );
+    }
+  })());
 }
 
 /** Get the current version of `wit-component` which is reflected in WAT output and used for tests */

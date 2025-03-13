@@ -21,6 +21,7 @@ export function fetch (scalar: Scalars) {
 }
 
 async function run() {
+  // @ts-ignore
   const wasm = await import('../output/example_guest_import/example_guest_import.js');
 
   const x = new Scalars();

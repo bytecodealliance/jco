@@ -1,6 +1,8 @@
 // Flags: --instantiation
 
+// @ts-ignore
 import { instantiate } from "../output/many-arguments/many-arguments.js";
+// @ts-ignore
 import * as helpers from "./helpers.js";
 
 function assertEq(x: any, y: any) {
