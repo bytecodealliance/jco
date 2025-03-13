@@ -6,6 +6,7 @@ const TRACE: bool = false;
 const DENO: bool = true;
 const TEST_FILTER: &[&str] = &[];
 
+/// Tests that should be ignored
 const TEST_IGNORE: &[&str] = &[
     // Wasmtime run supports a `wasmtime run --argv0=...` argument to customize the argv0
     // which this test assumes is being used. We don't support this feature.
@@ -19,8 +20,8 @@ const TEST_IGNORE: &[&str] = &[
     "cli_multiple_preopens",
 ];
 
-// we don't currently support these subsystems, but if someone wants to work on them we
-// can add these anytime!
+/// We don't currently support these subsystems, but if someone wants to work on them we
+/// can add these anytime!
 const KEYWORD_IGNORE: &[&str] = &["nn_", "keyvalue", "runtime_config"];
 
 const DENO_IGNORE: &[&str] = &[
@@ -77,7 +78,7 @@ const DENO_IGNORE: &[&str] = &[
     "proxy_hash",
 ];
 
-// Tests that cannot be implemented on Windows
+/// Tests that cannot be implemented on Windows
 const TEST_IGNORE_WINDOWS: &[&str] = &[
     // openAt implementation should carry directory permissions through to nested
     // open calls. But our openAt implementation is currently path-based and not
@@ -86,7 +87,14 @@ const TEST_IGNORE_WINDOWS: &[&str] = &[
     "api_read_only",
 ];
 
-const FLAKY_NETWORK_TESTS: &[&str] = &["preview2_tcp_streams"];
+/// Tests that are known to be flaky in the imported & generated suite
+const FLAKY_TESTS: &[&str] = &[
+    // Flaky on multiple platforms, network access
+    "preview2_tcp_streams",
+    // Flaky on windows in particular
+    // error message encountered was "mtim should change"
+    "preview1_path_filestat",
+];
 
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
@@ -269,7 +277,7 @@ fn generate_test(test_name: &str, windows_skip: bool, deno: bool) -> String {
     let mut retry_start = String::new();
     let mut retry_end = String::new();
     let mut retry_return = String::new();
-    if FLAKY_NETWORK_TESTS.contains(&test_name) {
+    if FLAKY_TESTS.contains(&test_name) {
         retry_return.push_str("Ok(()) as anyhow::Result<()>");
         retry_start.push_str("let test_run = || \n");
         retry_end.push_str("; for _n in 0..2 {\n");
