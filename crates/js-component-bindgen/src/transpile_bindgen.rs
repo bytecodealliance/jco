@@ -880,12 +880,37 @@ impl<'a> Instantiator<'a, '_> {
                         unimplemented!("utf16 to compact utf16 transcoder")
                     }
                     Transcode::Utf16ToLatin1 => unimplemented!("utf16 to latin1 transcoder"),
-                    Transcode::Utf16ToUtf8 => unimplemented!("utf16 to utf8 transcoder"),
+                    Transcode::Utf16ToUtf8 => {
+                        uwriteln!(
+                                    self.src.js,
+                                    "function trampoline{i} (src, src_len, dst, dst_len) {{
+                                const encoder = new TextEncoder();
+                                const {{ read, written }} = encoder.encodeInto(String.fromCharCode.apply(null, new Uint16Array(memory{from}.buffer, src, src_len)), new Uint8Array(memory{to}.buffer, dst, dst_len)); 
+                                return [read, written];
+                            }}
+                            "
+                                );
+                    }
                     Transcode::Utf8ToCompactUtf16 => {
                         unimplemented!("utf8 to compact utf16 transcoder")
                     }
                     Transcode::Utf8ToLatin1 => unimplemented!("utf8 to latin1 transcoder"),
-                    Transcode::Utf8ToUtf16 => unimplemented!("utf8 to utf16 transcoder"),
+                    Transcode::Utf8ToUtf16 => {
+                        uwriteln!(
+                                    self.src.js,
+                                    "function trampoline{i} (from_ptr, len, to_ptr) {{
+                                const decoder = new TextDecoder();
+                                const content = decoder.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                                const strlen = content.length
+                                const view = new Uint16Array(memory{to}.buffer, to_ptr, strlen * 2)
+                                for (var i = 0; i < strlen; i++) {{
+                                    view[i] = content.charCodeAt(i);
+                                }}
+                                return strlen;
+                            }}
+                            "
+                                );
+                    }
                 };
             }
             Trampoline::ResourceNew(resource) => {

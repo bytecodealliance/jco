@@ -61,6 +61,19 @@ export async function cliTest(_fixtures) {
       deepStrictEqual(m.testGetEnv(), [["CUSTOM", "VAL"]]);
     });
 
+    test("Transcoding UTF8 <-> UTF16", async () => {
+      const { stdout, stderr } = await exec(
+        jcoPath,
+        "run",
+        `test/fixtures/utf8-utf16.composed.wasm`,
+        ...multiMemory,
+        "--",
+        "asdf中文🀄️⏰",
+      );
+      strictEqual(stdout, "ret: asdf中文🀄️⏰asdf中文🀄️⏰\n");
+      strictEqual(stderr, "");
+    });
+
     test("Resource transfer", async () => {
       const { stderr } = await exec(
         jcoPath,
