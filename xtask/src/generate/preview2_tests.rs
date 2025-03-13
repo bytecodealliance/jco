@@ -86,6 +86,8 @@ const TEST_IGNORE_WINDOWS: &[&str] = &[
     "api_read_only",
 ];
 
+const FLAKY_NETWORK_TESTS: &[&str] = &["preview2_tcp_streams"];
+
 pub fn run() -> anyhow::Result<()> {
     let sh = Shell::new()?;
 
@@ -262,6 +264,20 @@ fn generate_test(test_name: &str, windows_skip: bool, deno: bool) -> String {
         "".into()
     };
 
+    // For tests that deal with external network access that are sometimes
+    // flaky, we allow for a retry mechanism
+    let mut retry_start = String::new();
+    let mut retry_end = String::new();
+    let mut retry_return = String::new();
+    if FLAKY_NETWORK_TESTS.contains(&test_name) {
+        retry_return.push_str("Ok(()) as anyhow::Result<()>");
+        retry_start.push_str("let test_run = || \n");
+        retry_end.push_str("; for _n in 0..2 {\n");
+        retry_end.push_str("  if test_run().is_ok() { return Ok(()); }");
+        retry_end.push_str("}");
+        retry_end.push_str(r#"panic!("no test run passed");"#);
+    }
+
     format!(
         r##"//! This file has been auto-generated, please do not modify manually
 //! To regenerate this file re-run `cargo xtask generate tests` from the project root
@@ -271,13 +287,17 @@ use std::fs;
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
-    {}{{
+    {}
+    {retry_start}
+    {{
         let wasi_file = "./tests/gen/{test_name}.component.wasm";
         let _ = fs::remove_dir_all("./tests/rundir/{}{test_name}");
         {cmd1}
         {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
         assert!({}status.success(), "test execution failed");
+        {retry_return}
     }}
+    {retry_end}
     Ok(())
 }}
 "##,
