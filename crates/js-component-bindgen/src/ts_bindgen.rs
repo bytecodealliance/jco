@@ -15,7 +15,7 @@ use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
-use crate::{dealias, feature_gate_allowed, uwrite, uwriteln};
+use crate::{dealias, feature_gate_allowed, get_thrown_type, uwrite, uwriteln};
 
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the
@@ -197,9 +197,6 @@ pub fn ts_bindgen(
                         TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
-                        TypeDefKind::ErrorContext => {
-                            todo!("(async impl) generate for error-context")
-                        }
                         TypeDefKind::Unknown => unreachable!(),
                         TypeDefKind::Resource => gen.type_resource(*tid, ty),
                         TypeDefKind::Handle(_) => todo!(),
@@ -728,9 +725,6 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
                 TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                 TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
-                TypeDefKind::ErrorContext { .. } => {
-                    todo!("(async impl) generate for error-context")
-                }
                 TypeDefKind::Unknown => unreachable!(),
                 TypeDefKind::Resource => self.type_resource(*id, ty),
                 TypeDefKind::Handle(_) => todo!(),
@@ -752,6 +746,8 @@ impl<'a> TsInterface<'a> {
             Type::U64 | Type::S64 => self.src.push_str("bigint"),
             Type::Char => self.src.push_str("string"),
             Type::String => self.src.push_str("string"),
+            // TODO: `error-context`s should probably be represented by a native always-provided type
+            Type::ErrorContext => self.src.push_str("number"),
             Type::Id(id) => {
                 let ty = &self.resolve.types[*id];
                 if let Some(name) = &ty.name {
@@ -799,7 +795,6 @@ impl<'a> TsInterface<'a> {
                         }
                         panic!("anonymous resource handle");
                     }
-                    TypeDefKind::ErrorContext => todo!("(async impl) anonymous error-context)"),
                 }
             }
         }
@@ -898,6 +893,17 @@ impl<'a> TsInterface<'a> {
                     iface.has_constructor = true;
                     iface.src.push_str("constructor");
                 }
+                FunctionKind::AsyncFreestanding => {
+                    todo!("[ts_func()] FunctionKind::AsyncFreeStanding (declaration gen)")
+                }
+                FunctionKind::AsyncMethod(id) => {
+                    let _ = id;
+                    todo!("[ts_func()] FunctionKind::AsyncMethod (declaration gen)")
+                }
+                FunctionKind::AsyncStatic(id) => {
+                    let _ = id;
+                    todo!("[ts_func()] FunctionKind::AsyncStatic (declaration gen)")
+                }
             }
         } else if is_js_identifier(&out_name) {
             iface.src.push_str(&format!("{maybe_async}{out_name}"));
@@ -914,6 +920,9 @@ impl<'a> TsInterface<'a> {
             FunctionKind::Method(_) => 1,
             FunctionKind::Static(_) => 0,
             FunctionKind::Constructor(_) => 0,
+            FunctionKind::AsyncFreestanding => 0,
+            FunctionKind::AsyncMethod(_) => 1,
+            FunctionKind::AsyncStatic(_) => 0,
         };
 
         for (i, (name, ty)) in func.params[param_start..].iter().enumerate() {
@@ -943,22 +952,12 @@ impl<'a> TsInterface<'a> {
             iface.src.push_str("Promise<");
         }
 
-        if let Some((ok_ty, _)) = func.results.throws(iface.resolve) {
+        if let Some((ok_ty, _)) = get_thrown_type(&iface.resolve, func.result) {
             iface.print_optional_ty(ok_ty);
         } else {
-            match func.results.len() {
-                0 => iface.src.push_str("void"),
-                1 => iface.print_ty(func.results.iter_types().next().unwrap()),
-                _ => {
-                    iface.src.push_str("[");
-                    for (i, ty) in func.results.iter_types().enumerate() {
-                        if i != 0 {
-                            iface.src.push_str(", ");
-                        }
-                        iface.print_ty(ty);
-                    }
-                    iface.src.push_str("]");
-                }
+            match func.result {
+                None => iface.src.push_str("void"),
+                Some(ty) => iface.print_ty(&ty),
             }
         }
 
