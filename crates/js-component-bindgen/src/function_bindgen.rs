@@ -7,10 +7,12 @@ use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
-use wit_parser::{ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId};
+use wit_parser::{
+    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
+};
 
 use crate::intrinsics::Intrinsic;
-use crate::source;
+use crate::{get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
 #[derive(PartialEq)]
@@ -111,23 +113,31 @@ impl FunctionBindgen<'_> {
         results.push(format!("{}({}, {}, {})", clamp, operands[0], min, max));
     }
 
-    fn load(&mut self, method: &str, offset: i32, operands: &[String], results: &mut Vec<String>) {
+    fn load(
+        &mut self,
+        method: &str,
+        offset: ArchitectureSize,
+        operands: &[String],
+        results: &mut Vec<String>,
+    ) {
         let view = self.intrinsic(Intrinsic::DataView);
         let memory = self.memory.as_ref().unwrap();
         results.push(format!(
             "{view}({memory}).{method}({} + {offset}, true)",
             operands[0],
+            offset = offset.size_wasm32()
         ));
     }
 
-    fn store(&mut self, method: &str, offset: i32, operands: &[String]) {
+    fn store(&mut self, method: &str, offset: ArchitectureSize, operands: &[String]) {
         let view = self.intrinsic(Intrinsic::DataView);
         let memory = self.memory.as_ref().unwrap();
         uwriteln!(
             self.src,
             "{view}({memory}).{method}({} + {offset}, {}, true);",
             operands[1],
-            operands[0]
+            operands[0],
+            offset = offset.size_wasm32()
         );
     }
 
@@ -219,7 +229,7 @@ impl Bindgen for FunctionBindgen<'_> {
         self.blocks.push((src.into(), mem::take(operands)));
     }
 
-    fn return_pointer(&mut self, _size: usize, _align: usize) -> String {
+    fn return_pointer(&mut self, _size: ArchitectureSize, _align: Alignment) -> String {
         unimplemented!();
     }
 
@@ -1074,7 +1084,7 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::CallInterface { func, .. } => {
-                let results_length = func.results.len();
+                let results_length = if func.result.is_none() { 0 } else { 1 };
                 let maybe_async_await = if self.is_async { "await " } else { "" };
                 let call = if self.callee_resource_dynamic {
                     format!(
@@ -1094,7 +1104,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     // result<_, string> allows JS error coercion only, while
                     // any other result type will trap for arbitrary JS errors.
                     let err_payload = if let (_, Some(Type::Id(err_ty))) =
-                        func.results.throws(self.resolve).unwrap()
+                        get_thrown_type(&self.resolve, func.result).unwrap()
                     {
                         match &self.resolve.types[*err_ty].kind {
                             TypeDefKind::Type(Type::String) => {
@@ -1233,7 +1243,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 let realloc = self.realloc.as_ref().unwrap();
                 let ptr = format!("ptr{tmp}");
-                uwriteln!(self.src, "var {ptr} = {realloc}(0, 0, {align}, {size});",);
+                uwriteln!(
+                    self.src,
+                    "var {ptr} = {realloc}(0, 0, {align}, {size});",
+                    align = align.align_wasm32(),
+                    size = size.size_wasm32()
+                );
                 results.push(ptr);
             }
 
@@ -1531,7 +1546,6 @@ impl Bindgen for FunctionBindgen<'_> {
             | Instruction::FutureLift { .. }
             | Instruction::StreamLower { .. }
             | Instruction::StreamLift { .. }
-            | Instruction::AsyncMalloc { .. }
             | Instruction::AsyncCallWasm { .. }
             | Instruction::AsyncPostCallInterface { .. }
             | Instruction::AsyncCallReturn { .. }
@@ -1604,6 +1618,7 @@ pub fn array_ty(resolve: &Resolve, ty: &Type) -> Option<&'static str> {
         Type::F64 => Some("Float64Array"),
         Type::Char => None,
         Type::String => None,
+        Type::ErrorContext => None,
         Type::Id(id) => match &resolve.types[*id].kind {
             TypeDefKind::Type(t) => array_ty(resolve, t),
             _ => None,

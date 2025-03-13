@@ -25,7 +25,6 @@ use wit_parser::{
     WorldItem, WorldKey,
 };
 
-use crate::core;
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{
@@ -34,6 +33,7 @@ use crate::function_bindgen::{
 use crate::intrinsics::{render_intrinsics, Intrinsic};
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source;
+use crate::{core, get_thrown_type};
 use crate::{uwrite, uwriteln};
 
 #[derive(Default, Clone)]
@@ -1166,10 +1166,8 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
         let results_ty = &self.types[self.types[ty_func_idx].results];
-        for (ty, iface_ty) in func.results.iter_types().zip(results_ty.types.iter()) {
-            if let Type::Id(id) = ty {
-                self.connect_resource_types(*id, iface_ty, resource_map);
-            }
+        if let (Some(Type::Id(id)), Some(iface_ty)) = (func.result, results_ty.types.first()) {
+            self.connect_resource_types(id, iface_ty, resource_map);
         }
     }
 
@@ -1248,6 +1246,17 @@ impl<'a> Instantiator<'a, '_> {
                         import_name.strip_prefix("[constructor]").unwrap()
                     }
                     FunctionKind::Freestanding => import_name,
+                    FunctionKind::AsyncFreestanding => {
+                        todo!("[lower_import()] FunctionKind::AsyncFreeStanding (import specifier)")
+                    }
+                    FunctionKind::AsyncMethod(id) => {
+                        let _ = id;
+                        todo!("[lower_import()] FunctionKind::AsyncMethod (import specifier)")
+                    }
+                    FunctionKind::AsyncStatic(id) => {
+                        let _ = id;
+                        todo!("[lower_import()] FunctionKind::AsyncStatic (import specifier)")
+                    }
                 }
             },
         );
@@ -1301,6 +1310,17 @@ impl<'a> Instantiator<'a, '_> {
                 ),
                 CallType::Standard,
             ),
+            FunctionKind::AsyncFreestanding => {
+                todo!("[lower_import()] FunctionKind::AsyncFreeStanding")
+            }
+            FunctionKind::AsyncMethod(id) => {
+                let _ = id;
+                todo!("[lower_import()] FunctionKind::AsyncMethod");
+            }
+            FunctionKind::AsyncStatic(id) => {
+                let _ = id;
+                todo!("[lower_import()] FunctionKind::AsyncStatic");
+            }
         };
 
         let nparams = self
@@ -1375,6 +1395,17 @@ impl<'a> Instantiator<'a, '_> {
                     )
                 ),
                 FunctionKind::Constructor(_) => callee_name[4..].to_string(),
+                FunctionKind::AsyncFreestanding => {
+                    todo!("[lower_import()] FunctionKind::AsyncFreeStanding (callee name gen)")
+                }
+                FunctionKind::AsyncMethod(id) => {
+                    let _ = id;
+                    todo!("[lower_import()] FunctionKind::AsyncMethod (callee name gen)")
+                }
+                FunctionKind::AsyncStatic(id) => {
+                    let _ = id;
+                    todo!("[lower_import()] FunctionKind::AsyncFreeStanding (callee name gen)")
+                }
             };
             let resource_tables = {
                 let mut resource_tables: Vec<TypeResourceTableIndex> = Vec::new();
@@ -1403,6 +1434,8 @@ impl<'a> Instantiator<'a, '_> {
                     )
                 }
             };
+
+            // Build trampolines for the import
             match self.gen.opts.import_bindings {
                 Some(BindingsMode::Hybrid) => {
                     let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
@@ -1429,6 +1462,8 @@ impl<'a> Instantiator<'a, '_> {
                 None | Some(BindingsMode::Js) => unreachable!(),
             };
         }
+
+        // Generate import name
         let (import_name, binding_name) = match func.kind {
             FunctionKind::Freestanding => (func_name.to_lower_camel_case(), callee_name),
             FunctionKind::Method(tid)
@@ -1445,6 +1480,17 @@ impl<'a> Instantiator<'a, '_> {
                     )
                     .to_string(),
                 )
+            }
+            FunctionKind::AsyncFreestanding => {
+                todo!("[lower_import()] FunctionKind::AsyncFreeStanding (import name gen)")
+            }
+            FunctionKind::AsyncMethod(id) => {
+                let _ = id;
+                todo!("[lower_import()] FunctionKind::AsyncMethod (import name gen)")
+            }
+            FunctionKind::AsyncStatic(id) => {
+                let _ = id;
+                todo!("[lower_import()] FunctionKind::AsyncStatic (import name gen)")
             }
         };
 
@@ -1768,7 +1814,7 @@ impl<'a> Instantiator<'a, '_> {
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
             sizes: &self.sizes,
-            err: if func.results.throws(self.resolve).is_some() {
+            err: if get_thrown_type(self.resolve, func.result).is_some() {
                 match abi {
                     AbiVariant::GuestExport => ErrHandling::ThrowResultErr,
                     AbiVariant::GuestImport => ErrHandling::ResultCatchHandler,
@@ -2120,6 +2166,7 @@ impl<'a> Instantiator<'a, '_> {
             }
         };
 
+        // Write the function
         match func.kind {
             FunctionKind::Freestanding => {
                 uwrite!(self.src.js, "\n{maybe_async}function {local_name}")
@@ -2162,7 +2209,20 @@ impl<'a> Instantiator<'a, '_> {
                 );
                 self.defined_resource_classes.insert(local_name.to_string());
             }
+            FunctionKind::AsyncFreestanding => {
+                todo!("[export_bindgen()] FunctionKind::AsyncFreeStanding (declaration)")
+            }
+            FunctionKind::AsyncMethod(id) => {
+                let _ = id;
+                todo!("[export_bindgen()] FunctionKind::AsyncMethod (declaration)")
+            }
+            FunctionKind::AsyncStatic(id) => {
+                let _ = id;
+                todo!("[export_bindgen()] FunctionKind::AsyncMethod (declaration)")
+            }
         }
+
+        // Perform bindgen
         self.bindgen(
             func.params.len(),
             match func.kind {
@@ -2181,10 +2241,23 @@ impl<'a> Instantiator<'a, '_> {
             AbiVariant::GuestExport,
             is_async,
         );
+
+        // End the function
         match func.kind {
             FunctionKind::Freestanding => self.src.js("\n"),
             FunctionKind::Method(_) | FunctionKind::Static(_) => self.src.js(";\n"),
             FunctionKind::Constructor(_) => self.src.js("\n}\n"),
+            FunctionKind::AsyncFreestanding => {
+                todo!("[export_bindgen()] FunctionKind::AsyncFreeStanding (end)")
+            }
+            FunctionKind::AsyncMethod(id) => {
+                let _ = id;
+                todo!("[export_bindgen()] FunctionKind::AsyncMethod (end)")
+            }
+            FunctionKind::AsyncStatic(id) => {
+                let _ = id;
+                todo!("[export_bindgen()] FunctionKind::AsyncStatic (end)")
+            }
         }
     }
 }

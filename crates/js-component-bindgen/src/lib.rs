@@ -209,3 +209,20 @@ fn feature_gate_allowed(
         }
     })
 }
+
+/// Utility function for deducing whether a type can throw
+pub fn get_thrown_type<'a>(
+    resolve: &'a Resolve,
+    return_type: Option<Type>,
+) -> Option<(Option<&'a Type>, Option<&'a Type>)> {
+    match return_type {
+        None => None,
+        Some(ty) => match ty {
+            Type::Id(id) => match &resolve.types[id].kind {
+                TypeDefKind::Result(r) => Some((r.ok.as_ref(), r.err.as_ref())),
+                _ => None,
+            },
+            _ => None,
+        },
+    }
+}
