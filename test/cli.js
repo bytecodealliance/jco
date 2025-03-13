@@ -78,8 +78,8 @@ suite("CLI", () => {
       "--",
       "asdf中文🀄️⏰"
     );
-    strictEqual(stdout, "ret: asdf中文🀄️⏰asdf中文🀄️⏰\n");
-    strictEqual(stderr, "");
+    assert.strictEqual(stdout, "ret: asdf中文🀄️⏰asdf中文🀄️⏰\n");
+    assert.strictEqual(stderr, "");
   });
 
   test("Resource transfer", async () => {
