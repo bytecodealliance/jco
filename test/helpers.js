@@ -23,9 +23,10 @@ import {
 import { ok, strictEqual } from "node:assert";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import mime from "mime";
-import { pathToFileURL } from "url";
+import { parse, stringify } from "smol-toml";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
@@ -77,7 +78,7 @@ export async function exec(cmd, ...args) {
       if (code !== 0) {
         const output = (stderr || stdout).toString();
         reject(
-          new Error(`error while executing [${cmd} ${cmdArgs}]:\n${output}`),
+          new Error(`error while executing [${cmd} ${cmdArgs}]:\n${output}`)
         );
         return;
       }
@@ -124,7 +125,7 @@ export async function setupAsyncTest(args) {
 
   if (component.path && component.build) {
     throw new Error(
-      "Both component.path and component.build should not be specified at the same time",
+      "Both component.path and component.build should not be specified at the same time"
     );
   }
 
@@ -182,13 +183,15 @@ export async function setupAsyncTest(args) {
 
   // Return early if the test was intended to run on JSPI but JSPI is not enabled
   if (asyncMode == "jspi" && typeof WebAssembly?.Suspending !== "function") {
-    let nodeMajorVersion = parseInt(version.replace("v","").split(".")[0]);
+    let nodeMajorVersion = parseInt(version.replace("v", "").split(".")[0]);
     if (nodeMajorVersion < 23) {
-      throw new Error("NodeJS versions <23 does not support JSPI integration, please use a NodeJS version >=23");
+      throw new Error(
+        "NodeJS versions <23 does not support JSPI integration, please use a NodeJS version >=23"
+      );
     }
     await cleanup();
     throw new Error(
-      "JSPI async type skipped, but JSPI was not enabled -- please ensure test is run from an environment with JSPI integration (ex. node with the --experimental-wasm-jspi flag)",
+      "JSPI async type skipped, but JSPI was not enabled -- please ensure test is run from an environment with JSPI integration (ex. node with the --experimental-wasm-jspi flag)"
     );
   }
 
@@ -225,13 +228,13 @@ export async function setupAsyncTest(args) {
     Object.entries(files).map(async ([name, file]) => {
       await mkdir(dirname(name), { recursive: true });
       await writeFile(name, file);
-    }),
+    })
   );
 
   // Write a minimal package.json
   await writeFile(
     `${moduleOutputDir}/package.json`,
-    JSON.stringify({ type: "module" }),
+    JSON.stringify({ type: "module" })
   );
 
   // TODO: DEBUG module import not working, file is missing!
@@ -286,7 +289,7 @@ export async function buildComponent(args) {
   const witWorld = args.wit?.world;
   if (!name) {
     throw new Error(
-      "invalid/missing component name for in-test component build",
+      "invalid/missing component name for in-test component build"
     );
   }
   if (!jsSource) {
@@ -325,7 +328,7 @@ export async function buildComponent(args) {
       }
       if (dep.destPath && isAbsolute(dep.destPath)) {
         throw new Error(
-          "Only relative dest paths are allowed (into the wit/deps directory)",
+          "Only relative dest paths are allowed (into the wit/deps directory)"
         );
       }
 
@@ -340,7 +343,7 @@ export async function buildComponent(args) {
         await cp(dep.srcPath, outputPath, { recursive: true });
       } else {
         throw new Error(
-          "unrecognized file type for WIT dep, neither file nor directory",
+          "unrecognized file type for WIT dep, neither file nor directory"
         );
       }
     }
@@ -411,15 +414,18 @@ export async function loadTestPage(args) {
     page
       .on("console", (message) =>
         log(
-          `[browser] ${message.type().substr(0, 3).toUpperCase()} ${message.text()}`,
-        ),
+          `[browser] ${message
+            .type()
+            .substr(0, 3)
+            .toUpperCase()} ${message.text()}`
+        )
       )
       .on("pageerror", ({ message }) => log(`[browser] ${message}`))
       .on("response", (response) =>
-        log(`[browser] ${response.status()} ${response.url()}`),
+        log(`[browser] ${response.status()} ${response.url()}`)
       )
       .on("requestfailed", (request) =>
-        log(`[browser] ${request.failure().errorText} ${request.url()}`),
+        log(`[browser] ${request.failure().errorText} ${request.url()}`)
       );
   }
 
@@ -480,7 +486,9 @@ export async function getRandomPort() {
  * @returns {Promise<{ serverPort: number, server: object }>}
  */
 export async function startTestWebServer(args) {
-  if (!args.routes) { throw new Error("missing serve paths"); }
+  if (!args.routes) {
+    throw new Error("missing serve paths");
+  }
   const serverPort = await getRandomPort();
 
   const server = createHttpServer(async (req, res) => {
@@ -492,19 +500,25 @@ export async function startTestWebServer(args) {
     };
 
     // Find route to serve incoming request
-    const route = args.routes.find(dir => {
-      return !dir.urlPrefix || (dir.urlPrefix && req.url.startsWith(dir.urlPrefix));
+    const route = args.routes.find((dir) => {
+      return (
+        !dir.urlPrefix || (dir.urlPrefix && req.url.startsWith(dir.urlPrefix))
+      );
     });
     if (!route) {
       log(`[webserver] failed to find route to serve [${req.url.path}]`);
-      returnError(new Error(`failed to resolve url [${req.url}] with any provided routes`));
+      returnError(
+        new Error(`failed to resolve url [${req.url}] with any provided routes`)
+      );
       return;
     }
-    if (!route.basePathURL) { throw new Error("invalid/missing path in specified route"); }
+    if (!route.basePathURL) {
+      throw new Error("invalid/missing path in specified route");
+    }
 
     const fileURL = new URL(
       `./${req.url.slice(route.urlPrefix ? route.urlPrefix.length : "")}`,
-      route.basePathURL,
+      route.basePathURL
     );
 
     log(`[webserver] attempting to read file on disk @ [${fileURL}]`);
@@ -528,8 +542,8 @@ export async function startTestWebServer(args) {
     }
   });
 
-  const served = new Promise(resolve => {
-    server.on('listening', () => {
+  const served = new Promise((resolve) => {
+    server.on("listening", () => {
       resolve({
         serverPort,
         server,
@@ -538,7 +552,7 @@ export async function startTestWebServer(args) {
           server.close(() => {
             log("server successfully closed");
           });
-        }
+        },
       });
     });
   });
@@ -546,4 +560,22 @@ export async function startTestWebServer(args) {
   server.listen(serverPort);
 
   return await served;
+}
+
+/** Get the current version of `wit-component` which is reflected in WAT output and used for tests */
+let CURRENT_WIT_COMPONENT_VERSION;
+export async function getCurrentWitComponentVersion() {
+  if (CURRENT_WIT_COMPONENT_VERSION) {
+    return CURRENT_WIT_COMPONENT_VERSION;
+  }
+  const cargoTomlPath = fileURLToPath(
+    new URL("../Cargo.toml", import.meta.url)
+  );
+  const cargoToml = parse(await readFile(cargoTomlPath, "utf8"));
+  const version = cargoToml.workspace.dependencies["wit-component"].version;
+  if (!version) {
+    throw new Error(`Failed to find/parse wit-version in [${cargoTomlPath}]`);
+  }
+  CURRENT_WIT_COMPONENT_VERSION = version;
+  return CURRENT_WIT_COMPONENT_VERSION;
 }

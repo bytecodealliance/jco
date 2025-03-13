@@ -1,5 +1,8 @@
 import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { platform } from "node:process";
+
 import {
   transpile,
   types,
@@ -11,8 +14,8 @@ import {
   metadataShow,
   preview1AdapterReactorPath,
 } from "../src/api.js";
-import { fileURLToPath } from "node:url";
-import { platform } from "node:process";
+
+import { getCurrentWitComponentVersion } from "./helpers.js";
 
 const isWindows = platform === "win32";
 
@@ -49,7 +52,9 @@ export async function apiTest(_fixtures) {
       strictEqual(imports.length, 4);
       strictEqual(exports.length, 3);
       deepStrictEqual(exports[0], ["test", "instance"]);
-      ok(files[name + ".js"].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
+      ok(
+        files[name + ".js"].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT
+      );
     });
 
     test("Transpile to JS", async () => {
@@ -95,27 +100,43 @@ export async function apiTest(_fixtures) {
       ok(source.includes("'#testimport'"));
     });
 
-    test('Type generation', async () => {
-      const files = await types('test/fixtures/wit', {
-        worldName: 'test:flavorful/flavorful',
+    test("Type generation", async () => {
+      const files = await types("test/fixtures/wit", {
+        worldName: "test:flavorful/flavorful",
       });
-     strictEqual(Object.keys(files).length, 2);
-     strictEqual(Object.keys(files)[0], 'flavorful.d.ts');
-     strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
-     ok(Buffer.from(files[Object.keys(files)[0]]).includes('export * as test from \'./interfaces/test-flavorful-test.js\''));
-     ok(Buffer.from(files[Object.keys(files)[1]]).includes('export type ListInAlias = '));
+      strictEqual(Object.keys(files).length, 2);
+      strictEqual(Object.keys(files)[0], "flavorful.d.ts");
+      strictEqual(Object.keys(files)[1], "interfaces/test-flavorful-test.d.ts");
+      ok(
+        Buffer.from(files[Object.keys(files)[0]]).includes(
+          "export * as test from './interfaces/test-flavorful-test.js'"
+        )
+      );
+      ok(
+        Buffer.from(files[Object.keys(files)[1]]).includes(
+          "export type ListInAlias = "
+        )
+      );
     });
 
-    test('Type generation (guest)', async () => {
-      const files = await types('test/fixtures/wit', {
-        worldName: 'test:flavorful/flavorful',
+    test("Type generation (guest)", async () => {
+      const files = await types("test/fixtures/wit", {
+        worldName: "test:flavorful/flavorful",
         guest: true,
       });
-     strictEqual(Object.keys(files).length, 2);
-     strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
-     ok(Buffer.from(files[Object.keys(files)[0]]).includes('declare module \'test:flavorful/flavorful\' {'));
-     ok(Buffer.from(files[Object.keys(files)[1]]).includes('declare module \'test:flavorful/test\' {'));
-    })
+      strictEqual(Object.keys(files).length, 2);
+      strictEqual(Object.keys(files)[1], "interfaces/test-flavorful-test.d.ts");
+      ok(
+        Buffer.from(files[Object.keys(files)[0]]).includes(
+          "declare module 'test:flavorful/flavorful' {"
+        )
+      );
+      ok(
+        Buffer.from(files[Object.keys(files)[1]]).includes(
+          "declare module 'test:flavorful/test' {"
+        )
+      );
+    });
 
     test("Optimize", async () => {
       const component = await readFile(
@@ -124,7 +145,7 @@ export async function apiTest(_fixtures) {
       const { component: optimizedComponent } = await opt(component);
       ok(optimizedComponent.byteLength < component.byteLength);
     });
-    
+
     test("Print & Parse", async () => {
       const component = await readFile(
         `test/fixtures/components/flavorful.component.wasm`
@@ -170,7 +191,7 @@ export async function apiTest(_fixtures) {
         [
           "processed-by",
           [
-            ["wit-component", "0.225.0"],
+            ["wit-component", await getCurrentWitComponentVersion()],
             ["dummy-gen", "test"],
           ],
         ],
@@ -211,7 +232,7 @@ export async function apiTest(_fixtures) {
         [
           "processed-by",
           [
-            ["wit-component", "0.225.0"],
+            ["wit-component", await getCurrentWitComponentVersion()],
             ["dummy-gen", "test"],
           ],
         ],

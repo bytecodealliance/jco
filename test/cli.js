@@ -4,7 +4,12 @@ import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 
 import { fileURLToPath, pathToFileURL } from "url";
-import { exec, jcoPath, getTmpDir } from "./helpers.js";
+import {
+  exec,
+  jcoPath,
+  getTmpDir,
+  getCurrentWitComponentVersion,
+} from "./helpers.js";
 
 const multiMemory = execArgv.includes("--experimental-wasm-multi-memory")
   ? ["--multi-memory"]
@@ -27,7 +32,7 @@ export async function cliTest(_fixtures) {
       await symlink(
         fileURLToPath(new URL("../packages/preview2-shim", import.meta.url)),
         resolve(modulesDir, "preview2-shim"),
-        "dir",
+        "dir"
       );
     });
     suiteTeardown(async function () {
@@ -50,12 +55,12 @@ export async function cliTest(_fixtures) {
         `test/fixtures/env-allow.composed.wasm`,
         ...multiMemory,
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       await writeFile(
         `${outDir}/package.json`,
-        JSON.stringify({ type: "module" }),
+        JSON.stringify({ type: "module" })
       );
       const m = await import(`${pathToFileURL(outDir)}/env-allow.composed.js`);
       deepStrictEqual(m.testGetEnv(), [["CUSTOM", "VAL"]]);
@@ -68,12 +73,12 @@ export async function cliTest(_fixtures) {
         `test/fixtures/stdio.composed.wasm`,
         ...multiMemory,
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       await writeFile(
         `${outDir}/package.json`,
-        JSON.stringify({ type: "module" }),
+        JSON.stringify({ type: "module" })
       );
       const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
       m.testStdio();
@@ -87,12 +92,12 @@ export async function cliTest(_fixtures) {
         ...multiMemory,
         "--valid-lifting-optimization",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       await writeFile(
         `${outDir}/package.json`,
-        JSON.stringify({ type: "module" }),
+        JSON.stringify({ type: "module" })
       );
       const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
       m.testStdio();
@@ -108,7 +113,7 @@ export async function cliTest(_fixtures) {
         "--name",
         name,
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/${name}.js`);
@@ -131,12 +136,12 @@ export async function cliTest(_fixtures) {
           "--async-imports=something:test/test-interface#call-async",
           "--async-exports=run-async",
           "-o",
-          outDir,
+          outDir
         );
         strictEqual(stderr, "");
         await writeFile(
           `${outDir}/package.json`,
-          JSON.stringify({ type: "module" }),
+          JSON.stringify({ type: "module" })
         );
         const m = await import(`${pathToFileURL(outDir)}/${name}.js`);
         const inst = await m.instantiate(undefined, {
@@ -167,7 +172,7 @@ export async function cliTest(_fixtures) {
         "--minify",
         "--base64-cutoff=0",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/${name}.js`);
@@ -187,20 +192,20 @@ export async function cliTest(_fixtures) {
         "--tracing",
         "--base64-cutoff=0",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/${name}.js`, "utf8");
       ok(source.includes("function toResultString("));
       ok(
         source.includes(
-          'console.error(`[module="test:flavorful/test", function="f-list-in-record1"] call a',
-        ),
+          'console.error(`[module="test:flavorful/test", function="f-list-in-record1"] call a'
+        )
       );
       ok(
         source.includes(
-          'console.error(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);',
-        ),
+          'console.error(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);'
+        )
       );
     });
 
@@ -212,12 +217,19 @@ export async function cliTest(_fixtures) {
         "--world-name",
         "test:flavorful/flavorful",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/flavorful.d.ts`, "utf8");
-      ok(source.includes("export * as test from './interfaces/test-flavorful-test.js';")); // exported interface
-      const iface = await readFile(`${outDir}/interfaces/test-flavorful-test.d.ts`, "utf8");
+      ok(
+        source.includes(
+          "export * as test from './interfaces/test-flavorful-test.js';"
+        )
+      ); // exported interface
+      const iface = await readFile(
+        `${outDir}/interfaces/test-flavorful-test.d.ts`,
+        "utf8"
+      );
       ok(!iface.includes("declare module 'test:flavorful/test' {")); // should *not* be an ambient module (guest types)
       ok(iface.includes("export function listOfVariants(")); // function
       ok(iface.includes("export type MyErrno =")); // enum
@@ -234,12 +246,12 @@ export async function cliTest(_fixtures) {
         "--feature",
         "enable-c",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(
         `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
-        "utf8",
+        "utf8"
       );
       ok(source.includes("export function a(): void;"));
       ok(!source.includes("export function b(): void;"));
@@ -255,12 +267,12 @@ export async function cliTest(_fixtures) {
         "test:feature-gates-unstable/gated",
         "--all-features",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(
         `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
-        "utf8",
+        "utf8"
       );
       ok(source.includes("export function a(): void;"));
       ok(source.includes("export function b(): void;"));
@@ -279,12 +291,12 @@ export async function cliTest(_fixtures) {
         "--feature",
         "enable-c",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(
         `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
-        "utf8",
+        "utf8"
       );
       ok(source.includes("export function a(): void;"));
       ok(source.includes("export function b(): void;"));
@@ -302,7 +314,10 @@ export async function cliTest(_fixtures) {
         outDir
       );
       strictEqual(stderr, "");
-      const source = await readFile(`${outDir}/interfaces/test-flavorful-test.d.ts`, "utf8");
+      const source = await readFile(
+        `${outDir}/interfaces/test-flavorful-test.d.ts`,
+        "utf8"
+      );
       // NOTE: generation of guest types *no longer* produces an explicitly exported module
       // but rather contains an typescript ambient module (w/ opt-in for producing explicit
       // module declarations if necessary)
@@ -318,7 +333,7 @@ export async function cliTest(_fixtures) {
         `test/fixtures/wit/deps/ts-check/ts-check.wit`,
         "--stub",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       {
@@ -328,7 +343,7 @@ export async function cliTest(_fixtures) {
       }
       {
         const source = await readFile(
-          `${outDir}/interfaces/ts-naming-blah.d.ts`,
+          `${outDir}/interfaces/ts-naming-blah.d.ts`
         );
         ok(source.toString().includes("declare function _class(): void"));
         ok(source.toString().includes("export { _class as class }"));
@@ -350,7 +365,7 @@ export async function cliTest(_fixtures) {
         "--js",
         "--base64-cutoff=0",
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/${name}.js`, "utf8");
@@ -370,7 +385,7 @@ export async function cliTest(_fixtures) {
         "--name",
         name,
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/${name}.js`);
@@ -391,7 +406,7 @@ export async function cliTest(_fixtures) {
         "--name",
         name,
         "-o",
-        outDir,
+        outDir
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/${name}.js`);
@@ -404,14 +419,14 @@ export async function cliTest(_fixtures) {
 
     test("Optimize", async () => {
       const component = await readFile(
-        `test/fixtures/components/flavorful.component.wasm`,
+        `test/fixtures/components/flavorful.component.wasm`
       );
       const { stderr, stdout } = await exec(
         jcoPath,
         "opt",
         `test/fixtures/components/flavorful.component.wasm`,
         "-o",
-        outFile,
+        outFile
       );
       strictEqual(stderr, "");
       ok(stdout.includes("Core Module 1:"));
@@ -446,7 +461,7 @@ export async function cliTest(_fixtures) {
         `test/fixtures/components/simple-nested-optimized.component.wasm`,
         "--asyncify",
         "-o",
-        outFile,
+        outFile
       );
       strictEqual(stderr, "");
       ok(stdout.includes("Core Module 1:"));
@@ -458,7 +473,7 @@ export async function cliTest(_fixtures) {
       const { stderr, stdout } = await exec(
         jcoPath,
         "print",
-        `test/fixtures/components/flavorful.component.wasm`,
+        `test/fixtures/components/flavorful.component.wasm`
       );
       strictEqual(stderr, "");
       strictEqual(stdout.slice(0, 10), "(component");
@@ -468,7 +483,7 @@ export async function cliTest(_fixtures) {
           "print",
           `test/fixtures/components/flavorful.component.wasm`,
           "-o",
-          outFile,
+          outFile
         );
         strictEqual(stderr, "");
         strictEqual(stdout, "");
@@ -479,7 +494,7 @@ export async function cliTest(_fixtures) {
           "parse",
           outFile,
           "-o",
-          outFile,
+          outFile
         );
         strictEqual(stderr, "");
         strictEqual(stdout, "");
@@ -494,7 +509,7 @@ export async function cliTest(_fixtures) {
         `test/fixtures/wit/deps/app/app.wit`,
         "-o",
         outDir,
-        "--stub",
+        "--stub"
       );
       strictEqual(stderr, "");
       const source = await readFile(`${outDir}/app.js`);
@@ -505,7 +520,7 @@ export async function cliTest(_fixtures) {
       const { stderr, stdout } = await exec(
         jcoPath,
         "wit",
-        `test/fixtures/components/flavorful.component.wasm`,
+        `test/fixtures/components/flavorful.component.wasm`
       );
       strictEqual(stderr, "");
       ok(stdout.includes("world root {"));
@@ -522,7 +537,7 @@ export async function cliTest(_fixtures) {
           "-m",
           "processed-by=dummy-gen@test",
           "-o",
-          outFile,
+          outFile
         );
         strictEqual(stderr, "");
         strictEqual(stdout, "");
@@ -539,7 +554,7 @@ export async function cliTest(_fixtures) {
           "new",
           outFile,
           "-o",
-          outFile,
+          outFile
         );
         strictEqual(stderr, "");
         strictEqual(stdout, "");
@@ -554,7 +569,7 @@ export async function cliTest(_fixtures) {
           jcoPath,
           "metadata-show",
           outFile,
-          "--json",
+          "--json"
         );
         strictEqual(stderr, "");
         const meta = JSON.parse(stdout);
@@ -570,7 +585,7 @@ export async function cliTest(_fixtures) {
           [
             "processed-by",
             [
-              ["wit-component", "0.225.0"],
+              ["wit-component", await getCurrentWitComponentVersion()],
               ["dummy-gen", "test"],
             ],
           ],
@@ -586,7 +601,7 @@ export async function cliTest(_fixtures) {
         "test/fixtures/modules/exitcode.wasm",
         "--wasi-reactor",
         "-o",
-        outFile,
+        outFile
       );
       strictEqual(stderr, "");
       {
@@ -601,7 +616,7 @@ export async function cliTest(_fixtures) {
         jcoPath,
         "metadata-show",
         "test/fixtures/modules/exitcode.wasm",
-        "--json",
+        "--json"
       );
       strictEqual(stderr, "");
       deepStrictEqual(JSON.parse(stdout), [
@@ -624,7 +639,7 @@ export async function cliTest(_fixtures) {
         "-w",
         "test/fixtures/componentize/source.wit",
         "-o",
-        outFile,
+        outFile
       );
       strictEqual(stderr, "");
       {
@@ -637,13 +652,13 @@ export async function cliTest(_fixtures) {
           "--map",
           "local:test/foo=./foo.js",
           "-o",
-          outDir,
+          outDir
         );
         strictEqual(stderr, "");
       }
       await writeFile(
         `${outDir}/package.json`,
-        JSON.stringify({ type: "module" }),
+        JSON.stringify({ type: "module" })
       );
       await writeFile(`${outDir}/foo.js`, `export class Bar {}`);
       const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
@@ -675,7 +690,7 @@ async function cachedComponentize(outputPath, args) {
     "componentize",
     ...args,
     "-o",
-    outputPath,
+    outputPath
   );
   strictEqual(stderr, "");
 
