@@ -2,8 +2,7 @@ import { availableParallelism, platform } from "node:os";
 
 import { defineConfig } from "vitest/config";
 
-const TIMEOUT_MULTIPLE = platform() === "win32" ? 2 : 1;
-const DEFAULT_TIMEOUT_MS = 1000 * 60 * 8 * TIMEOUT_MULTIPLE; // 8m non-windows, 16m windows
+const DEFAULT_TIMEOUT_MS = 1000 * 60 * 10; // 10m
 
 const REPORTERS = process.env.GITHUB_ACTIONS
   ? ["verbose", "github-actions"]
