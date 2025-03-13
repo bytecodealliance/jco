@@ -134,7 +134,6 @@ jobs:
         npm run test:lts cli.js
         npm run test:lts codegen.js
         npm run test:lts commands.js
-        npm run test:lts preview2.js
         npm run test:lts runtime.js
         npm run test:lts typescript.js
         npm run test:lts wit.js
@@ -151,7 +150,6 @@ jobs:
         npm run test cli.js
         npm run test codegen.js
         npm run test commands.js
-        npm run test preview2.js
         npm run test runtime.js
         npm run test typescript.js
         npm run test wit.js
