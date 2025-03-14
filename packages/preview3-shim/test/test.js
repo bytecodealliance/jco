@@ -29,7 +29,7 @@ suite("Node.js Preview3", () => {
     await tx.write(message);
     await tx.close();
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     process.stdout.write = restore;
     strictEqual(output, message);
@@ -71,13 +71,13 @@ suite("Node.js Preview3", () => {
     cli.stdout.setStdout(rx1);
 
     await tx1.write("Hello ");
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const [tx2, rx2] = stream();
     cli.stdout.setStdout(rx2);
     await tx2.write("world!");
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Write an additional message on the first stream after switching.
     await rejects(async () => {

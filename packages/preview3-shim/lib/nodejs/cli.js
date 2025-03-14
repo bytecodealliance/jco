@@ -21,11 +21,16 @@ export {
   terminalStderr,
 } from "@bytecodealliance/preview2-shim/cli";
 
-// Create a single shared worker that handles stdout and stderr.
-const worker = new Worker(new URL("./stdio-worker.js", import.meta.url));
+let worker;
 
-// Unref the worker so it doesn't block process exit.
-worker.unref();
+function getWorker() {
+  if (!worker) {
+    worker = new Worker(new URL("./stdio-worker.js", import.meta.url));
+    worker.unref();
+  }
+
+  return worker;
+}
 
 export const stdin = {
   getStdin() {
@@ -37,13 +42,13 @@ export const stdin = {
 export const stdout = {
   setStdout(streamReader) {
     const stream = streamReader.intoStream();
-    worker.postMessage({ stream, target: "stdout" }, [stream]);
+    getWorker().postMessage({ stream, target: "stdout" }, [stream]);
   },
 };
 
 export const stderr = {
   setStdout(streamReader) {
     const stream = streamReader.intoStream();
-    worker.postMessage({ stream, target: "stderr" }, [stream]);
+    getWorker().postMessage({ stream, target: "stderr" }, [stream]);
   },
 };
