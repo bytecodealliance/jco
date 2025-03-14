@@ -143,7 +143,7 @@ suite("Node.js Preview3", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     for (const item of toDispose) {
-      // item[symbolDispose]();
+      item[symbolDispose]();
     }
   });
 });
