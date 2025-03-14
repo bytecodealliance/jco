@@ -130,6 +130,12 @@ class Descriptor {
     return descriptorCreate(inner);
   }
 
+  [Symbol.dispose]() {
+    if (this.#inner && typeof this.#inner[Symbol.dispose] === "function") {
+      this.#inner[Symbol.dispose]();
+    }
+  }
+
   // Delegate methods from preview2
   static _makeDelegate(methodName) {
     return function (...args) {
