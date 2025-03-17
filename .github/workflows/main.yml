@@ -119,7 +119,7 @@ jobs:
       if: matrix.node == '18.x' || matrix.node == '20.x'
       env:
         NODE_OPTIONS: >-
-          --max-old-space-size=2048
+          --max-old-space-size=3072
       run: |
         npm run test:lts
 
@@ -128,7 +128,7 @@ jobs:
       env:
         WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
         NODE_OPTIONS: >-
-          --max-old-space-size=2048
+          --max-old-space-size=3072
       run: |
         npm run test
 
