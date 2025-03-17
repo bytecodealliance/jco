@@ -272,11 +272,38 @@ fn generate_test(test_name: &str, windows_skip: bool, deno: bool) -> String {
         "".into()
     };
 
+    // Calculate phrases we'll use in the generated function
+    let windows_skip_prefix = if windows_skip {
+        "#[cfg(not(windows))]\n    "
+    } else {
+        ""
+    };
+    let deno_prefix = if deno { "deno_" } else { "" };
+    let stdin_read = match stdin {
+        Some(stdin) => format!(
+            "cmd1_child
+            .stdin
+            .as_ref()
+            .unwrap()
+            .write(b\"{stdin}\")
+            .unwrap();
+        "
+        ),
+        None => "".into(),
+    };
+    let piped_cmd_num = if piped { "2" } else { "1" };
+    let should_error = if !should_error { "" } else { "!" };
+
     // For tests that deal with external network access that are sometimes
     // flaky, we allow for a retry mechanism
     let mut retry_start = String::new();
     let mut retry_end = String::new();
     let mut retry_return = String::new();
+    let mut exec_maybe_retriable = format!(
+        r#"let status = cmd{piped_cmd_num}_child.wait().expect("failed to wait on child");"#
+    );
+    let mut check_test_output =
+        format!(r#"assert!({should_error}status.success(), "test execution failed");"#);
     if FLAKY_TESTS.contains(&test_name) {
         retry_return.push_str("Ok(()) as anyhow::Result<()>");
         retry_start.push_str("let test_run = || \n");
@@ -284,6 +311,18 @@ fn generate_test(test_name: &str, windows_skip: bool, deno: bool) -> String {
         retry_end.push_str("  if test_run().is_ok() { return Ok(()); }");
         retry_end.push_str("}");
         retry_end.push_str(r#"panic!("no test run passed");"#);
+        exec_maybe_retriable = format!(
+            r#"
+let status = match cmd{piped_cmd_num}_child.wait() {{
+    Ok(s) => s,
+    Err(e) => {{
+        anyhow::bail!("CHILD PROCESS ERROR: {{e:?}}\n");
+    }}
+}};"#
+        );
+        check_test_output = format!(
+            r#"if !{should_error}status.success() {{ anyhow::bail!("executable returned non-zero exit code, retrying..."); }}"#
+        );
     }
 
     format!(
@@ -295,41 +334,22 @@ use std::fs;
 
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
-    {}
+    {windows_skip_prefix}
     {retry_start}
     {{
         let wasi_file = "./tests/gen/{test_name}.component.wasm";
-        let _ = fs::remove_dir_all("./tests/rundir/{}{test_name}");
+        let _ = fs::remove_dir_all("./tests/rundir/{deno_prefix}{test_name}");
         {cmd1}
-        {cmd2}{}let status = cmd{}_child.wait().expect("failed to wait on child");
-        assert!({}status.success(), "test execution failed");
+        {cmd2}
+        {stdin_read}
+        {exec_maybe_retriable}
+        {check_test_output}
         {retry_return}
     }}
     {retry_end}
     Ok(())
 }}
 "##,
-        if windows_skip {
-            "#[cfg(not(windows))]\n    "
-        } else {
-            ""
-        },
-        if deno { "deno_" } else { "" },
-        match stdin {
-            Some(stdin) => format!(
-                "cmd1_child
-            .stdin
-            .as_ref()
-            .unwrap()
-            .write(b\"{}\")
-            .unwrap();
-        ",
-                stdin
-            ),
-            None => "".into(),
-        },
-        if piped { "2" } else { "1" },
-        if !should_error { "" } else { "!" },
     )
 }
 

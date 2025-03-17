@@ -20,11 +20,10 @@ jobs:
       with:
         node-version: 'latest'
     - name: Install Rust
-      run: rustup update stable --no-self-update && rustup default stable
-    - name: Install wasm32-unknown-unknown target
-      run: rustup target add wasm32-unknown-unknown
-    - name: Install wasm32-wasip1 target
-      run: rustup target add wasm32-wasip1
+      run: rustup update stable --no-self-update
+    - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: jco-${{ hashFiles('Cargo.lock') }}
     - name: Install NPM packages
       run: npm install
     - name: Build
@@ -39,12 +38,14 @@ jobs:
     name: Jco Test Suite
     strategy:
       matrix:
-        os: [
-            ubuntu-22.04, # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
-            windows-latest,
-            macos-latest
-        ]
-        node: [18.x, 20.x, latest]
+        os:
+          - ubuntu-22.04 # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
+          - windows-latest
+          - macos-latest
+        node:
+          - 18.x
+          - 20.x
+          - latest
         include:
           - os: windows-latest
             weval-bin-path: .weval-bin/weval.exe
@@ -104,9 +105,9 @@ jobs:
         mkdir .weval-bin
         mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
 
-    # Perform NPM install
     - name: Install NPM packages
-      run: npm install
+      run: |
+        npm install
 
     - name: Download Build
       uses: actions/download-artifact@v4
@@ -115,14 +116,16 @@ jobs:
         path: obj
 
     - name: Test LTS Node.js
-      run: npm run test:lts
       if: matrix.node == '18.x' || matrix.node == '20.x'
+      run: |
+        npm run test:lts -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
     - name: Test Latest Node.js
       if: matrix.node == 'latest'
       env:
         WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
-      run: npm run test
+      run: |
+        npm run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
   build-wasi-tests:
     name: WASI Test Generation

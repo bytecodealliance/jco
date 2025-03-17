@@ -1,6 +1,8 @@
 // Flags: --instantiation
 
+// @ts-ignore
 import * as helpers from "./helpers.js";
+// @ts-ignore
 import { instantiate, ImportObject } from "../output/records/records.js";
 // @ts-ignore
 import * as assert from 'node:assert';

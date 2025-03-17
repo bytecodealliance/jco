@@ -13,3 +13,6 @@ node_modules
 /tests/rundir
 /tests/output
 /tests/gen
+
+# Test output
+test/fixtures/modules/hello_stdout.component.wasm
