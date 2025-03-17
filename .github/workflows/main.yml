@@ -118,14 +118,14 @@ jobs:
     - name: Test LTS Node.js
       if: matrix.node == '18.x' || matrix.node == '20.x'
       run: |
-        npm run test:lts
+        npm run test:lts -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
     - name: Test Latest Node.js
       if: matrix.node == 'latest'
       env:
         WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
       run: |
-        npm run test
+        npm run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
   build-wasi-tests:
     name: WASI Test Generation

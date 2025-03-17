@@ -63,8 +63,8 @@
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
     "lint": "eslint -c eslintrc.cjs src/**/*.js packages/*/lib/**/*.js",
-    "test": "vitest --maxConcurrency 2 --maxWorkers 4 run -c test/vitest.ts",
-    "test:lts": "vitest --maxConcurrency 2 --maxWorkers 4 run -c test/vitest.lts.ts",
+    "test": "vitest run -c test/vitest.ts",
+    "test:lts": "vitest run -c test/vitest.lts.ts",
     "prepublishOnly": "cargo xtask build release && npm run test"
   },
   "files": [
