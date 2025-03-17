@@ -48,6 +48,7 @@ suite(`Async`, async () => {
 
   test(
     "Transpile async (browser, JSPI)",
+    { retry: 3 },
     async () => {
       if (typeof WebAssembly?.Suspending !== "function") {
         return;
@@ -129,15 +130,12 @@ suite(`Async`, async () => {
       const {
         page,
         output: { json },
-      } = await loadTestPage(
-        {
-          browser,
-          serverPort,
-          path: "fixtures/browser/test-pages/something__test.async.html",
-          hash: `transpiled:${moduleRelPath}`,
-        },
-        { retry: 3 }
-      );
+      } = await loadTestPage({
+        browser,
+        serverPort,
+        path: "fixtures/browser/test-pages/something__test.async.html",
+        hash: `transpiled:${moduleRelPath}`,
+      });
 
       // Check the output expected to be returned from handle of the
       // guest export (this depends on the component)
@@ -147,7 +145,5 @@ suite(`Async`, async () => {
       await webServerCleanup();
       await componentCleanup();
     },
-    // Test options -- allow for retries in case of intermittent browser navigation issues
-    { retry: 3 }
   );
 });
