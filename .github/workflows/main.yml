@@ -20,11 +20,10 @@ jobs:
       with:
         node-version: 'latest'
     - name: Install Rust
-      run: rustup update stable --no-self-update && rustup default stable
-    - name: Install wasm32-unknown-unknown target
-      run: rustup target add wasm32-unknown-unknown
-    - name: Install wasm32-wasip1 target
-      run: rustup target add wasm32-wasip1
+      run: rustup update stable --no-self-update
+    - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: jco-${{ hashFiles('Cargo.lock') }}
     - name: Install NPM packages
       run: npm install
     - name: Build
@@ -118,33 +117,29 @@ jobs:
 
     - name: Test LTS Node.js
       if: matrix.node == '18.x' || matrix.node == '20.x'
+      env:
+        NODE_OPTIONS: >-
+          --max-old-space-size=2048
       run: |
-        npm run test:lts async.browser.js
-        npm run test:lts async.js
-        npm run test:lts browser.js
-        npm run test:lts api.js
-        npm run test:lts cli.js
-        npm run test:lts codegen.js
-        npm run test:lts commands.js
-        npm run test:lts runtime.js
-        npm run test:lts typescript.js
-        npm run test:lts wit.js
+        npm run test:lts
 
     - name: Test Latest Node.js
-      if: matrix.node == 'latest'
+      if: matrix.node == 'latest' && matrix.os != 'macos-latest'
+      env:
+        WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
+        NODE_OPTIONS: >-
+          --max-old-space-size=2048
+      run: |
+        npm run test
+
+    # NOTE(2025/03/18) - MacOS is running incredibly slowly (a single test taking 40 minutes)
+    # with max-old-space-size set.
+    - name: Test Latest Node.js (MacOS)
+      if: matrix.node == 'latest' && matrix.os == 'macos-latest'
       env:
         WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
       run: |
-        npm run test async.browser.js
-        npm run test async.js
-        npm run test browser.js
-        npm run test api.js
-        npm run test cli.js
-        npm run test codegen.js
-        npm run test commands.js
-        npm run test runtime.js
-        npm run test typescript.js
-        npm run test wit.js
+        npm run test
 
   build-wasi-tests:
     name: WASI Test Generation
