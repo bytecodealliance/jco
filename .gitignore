@@ -16,3 +16,4 @@ node_modules
 
 # Test output
 test/fixtures/modules/hello_stdout.component.wasm
+package-lock.json
