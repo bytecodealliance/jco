@@ -53,6 +53,7 @@ suite("Browser", () => {
       }
     }).listen(port);
 
+    await new Promise(resolve => setTimeout(resolve, 500));
     browser = await puppeteer.launch();
   });
 
