@@ -533,4 +533,30 @@ suite("Instantiation", () => {
       Object.keys(random.insecure).sort(),
     );
   });
+
+  test("Shim export override", async () => {
+    const { random } = await import("@bytecodealliance/preview2-shim");
+    const { Shim } = await import(
+      "@bytecodealliance/preview2-shim/instantiation"
+    );
+    const invalidShim = {
+      random: {
+        random: {
+          invalid: function setup() {},
+        },
+      },
+    };
+    const shim = new Shim(invalidShim);
+    ok(shim);
+    notDeepStrictEqual(
+      Object.keys(shim.importObject()["wasi:random/random"]).sort(),
+      Object.keys(random.random).sort(),
+    );
+    strictEqual(shim.importObject()["wasi:random/insecure-seed"], undefined);
+    strictEqual(shim.importObject()["wasi:random/insecure"], undefined);
+    deepStrictEqual(
+      Object.keys(shim.importObject()["wasi:random/random"]).sort(),
+      Object.keys(invalidShim.random.random).sort(),
+    );
+  });
 });
