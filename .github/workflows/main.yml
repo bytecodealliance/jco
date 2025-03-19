@@ -282,6 +282,8 @@ jobs:
             workspace: examples/components/webidl-book-library
             requires-crates:
               - webidl2wit-cli
+          - name: node-fetch
+            workspace: examples/components/node-fetch
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3

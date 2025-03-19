@@ -1,0 +1,14 @@
+{
+  "name": "node-fetch",
+  "description": "Example of using fetch API from a WebAssembly component with jco",
+  "type": "module",
+  "scripts": {
+    "build:component": "jco componentize -w wit/component.wit component.js -o component.wasm",
+    "transpile": "jco transpile -o dist/transpiled component.wasm",
+    "demo": "node demo.js",
+    "all": "npm run build:component && npm run transpile && npm run demo"
+  },
+  "dependencies": {
+    "@bytecodealliance/jco": "^1.10.2"
+  }
+}
