@@ -257,8 +257,8 @@ interface dom {
     set-type: func(%type: string);
     no-module: func() -> bool;
     set-no-module: func(no-module: bool);
-    async: func() -> bool;
-    set-async: func(async: bool);
+    %async: func() -> bool;
+    set-async: func(%async: bool);
     defer: func() -> bool;
     set-defer: func(defer: bool);
     cross-origin: func() -> option<string>;
