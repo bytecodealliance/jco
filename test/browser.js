@@ -6,7 +6,7 @@ import puppeteer from "puppeteer";
 import { fileURLToPath, pathToFileURL } from "url";
 import mime from "mime";
 
-import { suite, test, beforeAll, afterAll, afterEach, assert } from "vitest";
+import { suite, test, beforeAll, afterAll, afterEach, assert, vi } from "vitest";
 
 import { transpile } from "../src/api.js";
 import { getRandomPort, exec, jcoPath, getTmpDir } from "./helpers.js";
@@ -53,7 +53,23 @@ suite("Browser", () => {
       }
     }).listen(port);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Wait until the server is ready
+    await vi.waitUntil(async () => {
+      let res;
+      try {
+        // NOTE: we only need the request to succeed to know the server is running
+        // requesting the root will actually return a 500 due to attempt to open a dir
+        res = await fetch(`http://localhost:${port}`);
+        return true;
+      } catch(err) {
+        console.log("ERROR:", err);
+        return false;
+      }
+    }, {
+      timeout: 30_000,
+      interval: 500,
+    });
+
     browser = await puppeteer.launch();
   });
 
