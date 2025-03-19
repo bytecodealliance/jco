@@ -1,4 +1,4 @@
-import * as wasi from "../index.js";
+import * as wasi from "@bytecodealliance/preview2-shim";
 
 /**
  * A class that holds WASI shims and can be used to configure
@@ -41,29 +41,32 @@ export class WasiP2Shim {
       "wasi:cli/environment": this.#cli.environment,
       "wasi:cli/exit": this.#cli.exit,
       "wasi:cli/stderr": this.#cli.stderr,
-      "wasi:cli/stdout": this.#cli.stdout,
       "wasi:cli/stdin": this.#cli.stdin,
+      "wasi:cli/stdout": this.#cli.stdout,
       "wasi:cli/terminal-input": this.#cli.terminalInput,
       "wasi:cli/terminal-output": this.#cli.terminalOutput,
+      "wasi:cli/terminal-stderr": this.#cli.terminalStderr,
       "wasi:cli/terminal-stdin": this.#cli.terminalStdin,
       "wasi:cli/terminal-stdout": this.#cli.terminalStdout,
-      "wasi:cli/terminal-stderr": this.#cli.terminalStderr,
 
       "wasi:sockets/instance-network": this.#sockets.instanceNetwork,
+      "wasi:sockets/ip-name-lookup": this.#sockets.ipNameLookup,
       "wasi:sockets/network": this.#sockets.network,
-      "wasi:sockets/udp": this.#sockets.udp,
-      "wasi:sockets/udp-create-socket": this.#sockets.udpCreateSocket,
       "wasi:sockets/tcp": this.#sockets.tcp,
       "wasi:sockets/tcp-create-socket": this.#sockets.tcpCreateSocket,
-      "wasi:sockets/ip-name-lookup": this.#sockets.ipNameLookup,
+      "wasi:sockets/udp": this.#sockets.udp,
+      "wasi:sockets/udp-create-socket": this.#sockets.udpCreateSocket,
 
       "wasi:filesystem/preopens": this.#filesystem.preopens,
       "wasi:filesystem/types": this.#filesystem.types,
 
       "wasi:io/error": this.#io.error,
+      "wasi:io/poll": this.#io.poll,
       "wasi:io/streams": this.#io.streams,
 
       "wasi:random/random": this.#random.random,
+      "wasi:random/insecure": this.#random.insecure,
+      "wasi:random/insecure-seed": this.#random.insecureSeed,
 
       "wasi:clocks/monotonic-clock": this.#clocks.monotonicClock,
       "wasi:clocks/timezone": this.#clocks.timezone,

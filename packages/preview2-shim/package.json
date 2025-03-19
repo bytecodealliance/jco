@@ -15,6 +15,11 @@
       "types": "./types/*.d.ts",
       "node": "./lib/nodejs/*.js",
       "default": "./lib/browser/*.js"
+    },
+    "./instantiation": {
+      "types": "./types/instantiation.d.ts",
+      "node": "./lib/common/instantiation.js",
+      "default": "./lib/common/instantiation.js"
     }
   },
   "scripts": {
