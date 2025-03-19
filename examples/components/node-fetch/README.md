@@ -1,8 +1,15 @@
 # WebAssembly Component with NodeJS `fetch()` shim
 
-This repository showcases how to use the Javascript WebAssembly Component toolchain (`jco`) to
-transpile a WebAssembly component and run it in a NodeJS, using [`fetch()`][mdn-fetch] via
-[StarlingMonkey][sm] and [WASI][wasi] HTTP interface ([`wasi:http`][wasi-http]) `outgoing-handler`.
+This repository showcases a WebAssembly component built with the Javascript WebAssembly Component
+toolchain (`jco`) that performs web requests using the [`fetch()`][mdn-fetch] built-in.
+
+WebAssembly components built with `jco` support making outgoing HTTP requests via WASI ([`wasi:http`][wasi-http]),
+thanks to [StarlingMonkey][sm], the JS engine underneath which makes `fetch` natively available to components 
+built with `jco componentize`.
+
+In addition to building components, we can use `jco transpile` to run the component from NodeJS, serving 
+as a "virtual" WebAssembly + WASI host (see [`@bytecodealliance/preview2-shim`][p2-shims]) that makes 
+available HTTP request (`wasi:http/outgoing-handler`).
 
 > [!NOTE]
 > WebAssembly components are *not* the same as WebAssembly Modules (asm.js, emscripten, etc),
