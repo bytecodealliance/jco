@@ -8,7 +8,7 @@
     "serve": "jco serve http-hello-world.wasm",
     "all": "npm run build"
   },
-  "dependencoes": {
+  "dependencies": {
     "@bytecodealliance/jco": "^1.10.2"
   }
 }
