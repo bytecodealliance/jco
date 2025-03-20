@@ -1,0 +1,17 @@
+{
+  "name": "http-server-fetch-handler",
+  "description": "Example of using a WebAssembly Component to answer requests via the ServiceWorker Fetch API with jco",
+  "type": "module",
+  "scripts": {
+    "build:component": "jco componentize -w wit component.js -o component.wasm",
+    "build": "npm run build:component",
+    "transpile": "jco transpile -o dist/transpiled component.wasm",
+    "serve": "http-server .",
+    "demo": "node demo.js",
+    "all": "npm run build && npm run demo"
+  },
+  "dependencies": {
+    "@bytecodealliance/jco": "^1.11.1",
+    "@bytecodealliance/componentize-js": "^0.17.0"
+  }
+}

@@ -1,0 +1,11 @@
+package example:http-server-fetch-handler;
+
+world component {
+    /// This import is required when using the fetch event handler implementation
+    import wasi:cli/environment@0.2.3;
+
+    /// NOTE: StarlingMonkey picks up on this export along with the 
+    /// *lack* of an explicit `incomingHandler` ES module export to add the fetch
+    /// event handler that is usable from a service worker.
+    export wasi:http/incoming-handler@0.2.3;
+}
