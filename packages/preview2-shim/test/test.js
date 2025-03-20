@@ -10,12 +10,12 @@ import { fileURLToPath } from "node:url";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
-function testWithGCWrap (asyncTestFn) {
+function testWithGCWrap(asyncTestFn) {
   return async () => {
     await asyncTestFn();
     // Force the JS GC to run finalizers
     gc();
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
   };
 }
 
@@ -117,7 +117,7 @@ suite("Node.js Preview2", () => {
         {},
         fileURLToPath(import.meta.url).slice(1),
         {},
-        {}
+        {},
       );
       const stream = childDescriptor.readViaStream(0);
       const poll = stream.subscribe();
@@ -129,72 +129,74 @@ suite("Node.js Preview2", () => {
       toDispose.push(stream);
       toDispose.push(childDescriptor);
     })();
-    
 
     // Force the Poll to GC so the next dispose doesn't trap
     gc();
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     for (const item of toDispose) {
       item[symbolDispose]();
     }
   });
 
-  test("WASI HTTP", testWithGCWrap(async () => {
-    const { http } = await import("@bytecodealliance/preview2-shim");
-    const { handle } = http.outgoingHandler;
-    const { OutgoingRequest, OutgoingBody, Fields } = http.types;
-    const encoder = new TextEncoder();
-    const request = new OutgoingRequest(
-      new Fields([
-        ["User-agent", encoder.encode("WASI-HTTP/0.0.1")],
-        ["Content-type", encoder.encode("application/json")],
-      ])
-    );
-    request.setPathWithQuery("/");
-    request.setAuthority("webassembly.org");
-    request.setScheme({ tag: "HTTPS" });
+  test(
+    "WASI HTTP",
+    testWithGCWrap(async () => {
+      const { http } = await import("@bytecodealliance/preview2-shim");
+      const { handle } = http.outgoingHandler;
+      const { OutgoingRequest, OutgoingBody, Fields } = http.types;
+      const encoder = new TextEncoder();
+      const request = new OutgoingRequest(
+        new Fields([
+          ["User-agent", encoder.encode("WASI-HTTP/0.0.1")],
+          ["Content-type", encoder.encode("application/json")],
+        ]),
+      );
+      request.setPathWithQuery("/");
+      request.setAuthority("webassembly.org");
+      request.setScheme({ tag: "HTTPS" });
 
-    const outgoingBody = request.body();
-    OutgoingBody.finish(outgoingBody);
+      const outgoingBody = request.body();
+      OutgoingBody.finish(outgoingBody);
 
-    const futureIncomingResponse = handle(request);
-    futureIncomingResponse.subscribe().block();
-    const incomingResponseResult = futureIncomingResponse.get().val;
+      const futureIncomingResponse = handle(request);
+      futureIncomingResponse.subscribe().block();
+      const incomingResponseResult = futureIncomingResponse.get().val;
 
-    if (incomingResponseResult.tag !== 'ok') {
-      throw incomingResponseResult.val;
-    }
-
-    const status = incomingResponseResult.val.status();
-    const responseHeaders = incomingResponseResult.val.headers().entries();
-
-    const decoder = new TextDecoder();
-    const headers = Object.fromEntries(
-      responseHeaders.map(([k, v]) => [k, decoder.decode(v)])
-    );
-
-    let responseBody;
-    const incomingBody = incomingResponseResult.val.consume();
-    {
-      const bodyStream = incomingBody.stream();
-      bodyStream.subscribe().block();
-      let buf = bodyStream.read(5000n);
-      while (buf.byteLength === 0) {
-        try {
-          buf = bodyStream.read(5000n);
-        } catch (e) {
-          if (e.tag === "closed") break;
-          throw e.val || e;
-        }
+      if (incomingResponseResult.tag !== "ok") {
+        throw incomingResponseResult.val;
       }
-      responseBody = new TextDecoder().decode(buf);
-    }
 
-    strictEqual(status, 200);
-    ok(headers["content-type"].startsWith("text/html"));
-    ok(responseBody.includes("WebAssembly"));
-  }));
+      const status = incomingResponseResult.val.status();
+      const responseHeaders = incomingResponseResult.val.headers().entries();
+
+      const decoder = new TextDecoder();
+      const headers = Object.fromEntries(
+        responseHeaders.map(([k, v]) => [k, decoder.decode(v)]),
+      );
+
+      let responseBody;
+      const incomingBody = incomingResponseResult.val.consume();
+      {
+        const bodyStream = incomingBody.stream();
+        bodyStream.subscribe().block();
+        let buf = bodyStream.read(5000n);
+        while (buf.byteLength === 0) {
+          try {
+            buf = bodyStream.read(5000n);
+          } catch (e) {
+            if (e.tag === "closed") break;
+            throw e.val || e;
+          }
+        }
+        responseBody = new TextDecoder().decode(buf);
+      }
+
+      strictEqual(status, 200);
+      ok(headers["content-type"].startsWith("text/html"));
+      ok(responseBody.includes("WebAssembly"));
+    }),
+  );
 
   suite("WASI Sockets (TCP)", async () => {
     test("sockets.instanceNetwork() should be a singleton", async () => {
@@ -213,7 +215,7 @@ suite("Node.js Preview2", () => {
         () => {
           sockets.tcpCreateSocket.createTcpSocket("abc");
         },
-        (err) => err === "not-supported"
+        (err) => err === "not-supported",
       );
     });
     test("tcp.bind(): should bind to a valid ipv4 address", async () => {
@@ -288,7 +290,7 @@ suite("Node.js Preview2", () => {
         () => {
           tcpSocket.startBind(network, localAddress);
         },
-        (err) => err === "invalid-argument"
+        (err) => err === "invalid-argument",
       );
     });
 
@@ -311,7 +313,7 @@ suite("Node.js Preview2", () => {
           // already bound
           tcpSocket.startBind(network, localAddress);
         },
-        (err) => err === "invalid-state"
+        (err) => err === "invalid-state",
       );
     });
 
@@ -335,59 +337,64 @@ suite("Node.js Preview2", () => {
       // const [socket, input, output] = tcpSocket.accept();
     });
 
-    test("tcp.connect(): should connect to a valid ipv4 address and port=0", testWithGCWrap(async () => {
-      const { lookup } = await import("node:dns");
-      const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const network = sockets.instanceNetwork.instanceNetwork();
-      const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
+    test(
+      "tcp.connect(): should connect to a valid ipv4 address and port=0",
+      testWithGCWrap(async () => {
+        const { lookup } = await import("node:dns");
+        const { sockets } = await import("@bytecodealliance/preview2-shim");
+        const network = sockets.instanceNetwork.instanceNetwork();
+        const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
 
-      const pollable = tcpSocket.subscribe();
+        const pollable = tcpSocket.subscribe();
 
-      const googleIp = await new Promise((resolve, reject) =>
-        lookup("google.com", (err, result) => err ? reject(err) : resolve(result))
-      );
+        const googleIp = await new Promise((resolve, reject) =>
+          lookup("google.com", (err, result) =>
+            err ? reject(err) : resolve(result),
+          ),
+        );
 
-      tcpSocket.startConnect(network, {
-        tag: "ipv4",
-        val: {
-          address: googleIp.split("."),
-          port: 80,
-        },
-      });
+        tcpSocket.startConnect(network, {
+          tag: "ipv4",
+          val: {
+            address: googleIp.split("."),
+            port: 80,
+          },
+        });
 
-      ok(!pollable.ready());
-      pollable.block();
-      ok(pollable.ready());
+        ok(!pollable.ready());
+        pollable.block();
+        ok(pollable.ready());
 
-      const [input, output] = tcpSocket.finishConnect();
+        const [input, output] = tcpSocket.finishConnect();
 
-      strictEqual(tcpSocket.addressFamily(), "ipv4");
+        strictEqual(tcpSocket.addressFamily(), "ipv4");
 
-      ok(pollable.ready());
+        ok(pollable.ready());
 
-      output.blockingWriteAndFlush(
-        new TextEncoder().encode("GET http://www.google.com/ HTTP/1.1\n\n")
-      );
+        output.blockingWriteAndFlush(
+          new TextEncoder().encode("GET http://www.google.com/ HTTP/1.1\n\n"),
+        );
 
-      {
-        input.subscribe().block();
-        let buf = input.read(5000n);
-        while (buf.byteLength === 0) {
-          try {
-            buf = input.read(5000n);
-          } catch (e) {
-            if (e.tag === "closed") break;
-            throw e.val || e;
+        {
+          input.subscribe().block();
+          let buf = input.read(5000n);
+          while (buf.byteLength === 0) {
+            try {
+              buf = input.read(5000n);
+            } catch (e) {
+              if (e.tag === "closed") break;
+              throw e.val || e;
+            }
           }
+          const responseBody = new TextDecoder().decode(buf);
+          ok(responseBody.includes("<title>Google"));
+          ok(responseBody.includes("<!doctype"));
+          ok(responseBody.includes("<script"));
         }
-        const responseBody = new TextDecoder().decode(buf);
-        ok(responseBody.includes("<title>Google"));
-        ok(responseBody.includes("<!doctype"));
-        ok(responseBody.includes("<script"));
-      }
 
-      tcpSocket.shutdown("both");
-    }));
+        tcpSocket.shutdown("both");
+      }),
+    );
   });
 
   suite("WASI Sockets (UDP)", async () => {
@@ -417,7 +424,7 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
 
       const boundAddress = socket.localAddress();
-      strictEqual(boundAddress.tag, 'ipv4');
+      strictEqual(boundAddress.tag, "ipv4");
       deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0]);
       strictEqual(boundAddress.val.port > 0, true);
       strictEqual(socket.addressFamily(), "ipv4");
@@ -426,9 +433,9 @@ suite("Node.js Preview2", () => {
     test("udp.bind(): should bind to a valid ipv6 address and port=0", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network = sockets.instanceNetwork.instanceNetwork();
-      const socket = sockets.udpCreateSocket.createUdpSocket('ipv6');
+      const socket = sockets.udpCreateSocket.createUdpSocket("ipv6");
       const localAddress = {
-        tag: 'ipv6',
+        tag: "ipv6",
         val: {
           address: [0, 0, 0, 0, 0, 0, 0, 0],
           port: 0,
@@ -439,7 +446,7 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
 
       const boundAddress = socket.localAddress();
-      strictEqual(boundAddress.tag, 'ipv6');
+      strictEqual(boundAddress.tag, "ipv6");
       deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
       strictEqual(boundAddress.val.port > 0, true);
       strictEqual(socket.addressFamily(), "ipv6");
@@ -472,32 +479,84 @@ suite("Node.js Preview2", () => {
 
       const boundAddress = socket.localAddress();
 
-      strictEqual(boundAddress.tag, 'ipv4');
+      strictEqual(boundAddress.tag, "ipv4");
       notDeepStrictEqual(boundAddress.val.address, [0, 0, 0, 0]);
       strictEqual(boundAddress.val.port > 0, true);
     });
 
-    test("udp.stream(): should connect to a valid ipv6 address", testWithGCWrap(async () => {
-      const { sockets } = await import("@bytecodealliance/preview2-shim");
-      const network = sockets.instanceNetwork.instanceNetwork();
-      const socket = sockets.udpCreateSocket.createUdpSocket('ipv6');
-      const localAddress = {
-        tag: 'ipv6',
-        val: {
-          address: [0, 0, 0, 0, 0, 0, 0, 0],
-          port: 1337,
+    test(
+      "udp.stream(): should connect to a valid ipv6 address",
+      testWithGCWrap(async () => {
+        const { sockets } = await import("@bytecodealliance/preview2-shim");
+        const network = sockets.instanceNetwork.instanceNetwork();
+        const socket = sockets.udpCreateSocket.createUdpSocket("ipv6");
+        const localAddress = {
+          tag: "ipv6",
+          val: {
+            address: [0, 0, 0, 0, 0, 0, 0, 0],
+            port: 1337,
+          },
+        };
+
+        socket.startBind(network, localAddress);
+        socket.finishBind();
+        socket.stream();
+
+        strictEqual(socket.addressFamily(), "ipv6");
+
+        const boundAddress = socket.localAddress();
+        deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
+        strictEqual(boundAddress.val.port, 1337);
+      }),
+    );
+  });
+});
+
+suite("Instantiation", () => {
+  test("WASIShim export (random)", async () => {
+    const { random } = await import("@bytecodealliance/preview2-shim");
+    const { WASIShim } = await import(
+      "@bytecodealliance/preview2-shim/instantiation"
+    );
+    const shim = new WASIShim();
+    ok(shim);
+    deepStrictEqual(
+      Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
+      Object.keys(random.random).sort(),
+    );
+    deepStrictEqual(
+      Object.keys(shim.getImportObject()["wasi:random/insecure-seed"]).sort(),
+      Object.keys(random.insecureSeed).sort(),
+    );
+    deepStrictEqual(
+      Object.keys(shim.getImportObject()["wasi:random/insecure"]).sort(),
+      Object.keys(random.insecure).sort(),
+    );
+  });
+
+  test("WASIShim export override", async () => {
+    const { random } = await import("@bytecodealliance/preview2-shim");
+    const { WASIShim } = await import(
+      "@bytecodealliance/preview2-shim/instantiation"
+    );
+    const invalidWASIShim = {
+      random: {
+        random: {
+          invalid: function setup() {},
         },
-      };
-
-      socket.startBind(network, localAddress);
-      socket.finishBind();
-      socket.stream();
-
-      strictEqual(socket.addressFamily(), "ipv6");
-
-      const boundAddress = socket.localAddress();
-      deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
-      strictEqual(boundAddress.val.port, 1337);
-    }));
+      },
+    };
+    const shim = new WASIShim(invalidWASIShim);
+    ok(shim);
+    notDeepStrictEqual(
+      Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
+      Object.keys(random.random).sort(),
+    );
+    strictEqual(shim.getImportObject()["wasi:random/insecure-seed"], undefined);
+    strictEqual(shim.getImportObject()["wasi:random/insecure"], undefined);
+    deepStrictEqual(
+      Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
+      Object.keys(invalidWASIShim.random.random).sort(),
+    );
   });
 });
