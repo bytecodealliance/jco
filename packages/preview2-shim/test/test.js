@@ -513,50 +513,50 @@ suite("Node.js Preview2", () => {
 });
 
 suite("Instantiation", () => {
-  test("Shim export (random)", async () => {
+  test("WASIShim export (random)", async () => {
     const { random } = await import("@bytecodealliance/preview2-shim");
-    const { Shim } = await import(
+    const { WASIShim } = await import(
       "@bytecodealliance/preview2-shim/instantiation"
     );
-    const shim = new Shim();
+    const shim = new WASIShim();
     ok(shim);
     deepStrictEqual(
-      Object.keys(shim.importObject()["wasi:random/random"]).sort(),
+      Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
       Object.keys(random.random).sort(),
     );
     deepStrictEqual(
-      Object.keys(shim.importObject()["wasi:random/insecure-seed"]).sort(),
+      Object.keys(shim.getImportObject()["wasi:random/insecure-seed"]).sort(),
       Object.keys(random.insecureSeed).sort(),
     );
     deepStrictEqual(
-      Object.keys(shim.importObject()["wasi:random/insecure"]).sort(),
+      Object.keys(shim.getImportObject()["wasi:random/insecure"]).sort(),
       Object.keys(random.insecure).sort(),
     );
   });
 
-  test("Shim export override", async () => {
+  test("WASIShim export override", async () => {
     const { random } = await import("@bytecodealliance/preview2-shim");
-    const { Shim } = await import(
+    const { WASIShim } = await import(
       "@bytecodealliance/preview2-shim/instantiation"
     );
-    const invalidShim = {
+    const invalidWASIShim = {
       random: {
         random: {
           invalid: function setup() {},
         },
       },
     };
-    const shim = new Shim(invalidShim);
+    const shim = new WASIShim(invalidWASIShim);
     ok(shim);
     notDeepStrictEqual(
-      Object.keys(shim.importObject()["wasi:random/random"]).sort(),
+      Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
       Object.keys(random.random).sort(),
     );
-    strictEqual(shim.importObject()["wasi:random/insecure-seed"], undefined);
-    strictEqual(shim.importObject()["wasi:random/insecure"], undefined);
+    strictEqual(shim.getImportObject()["wasi:random/insecure-seed"], undefined);
+    strictEqual(shim.getImportObject()["wasi:random/insecure"], undefined);
     deepStrictEqual(
-      Object.keys(shim.importObject()["wasi:random/random"]).sort(),
-      Object.keys(invalidShim.random.random).sort(),
+      Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
+      Object.keys(invalidWASIShim.random.random).sort(),
     );
   });
 });

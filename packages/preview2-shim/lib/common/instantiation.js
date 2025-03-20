@@ -9,27 +9,27 @@ import * as wasi from "@bytecodealliance/preview2-shim";
  * and/or imports that import the relevant packages (ex. `@bytecodealliance/preview2-shim/clocks`)
  * from the right sources.
  *
- * This function makes use of the `Shim` object to provide an object that can be easily
+ * This function makes use of the `WASIShim` object to provide an object that can be easily
  * fed to the `instantiate` function produced by a transpiled component:
  *
  * ```js
- * import { Shim } from "@bytecodealliance/preview2-shim/instantiation"
+ * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
  * // ...
  * import { instantiate } from "path/to/transpiled/component.js"
  * // ...
- * const component = await instantiate(null, new Shim().importObject())
+ * const component = await instantiate(null, new WASIShim().getImportObject())
  * ```
  *
  * You can also replace imports that you'd like to override with custom implementations,
- * by using the `Shim` object directly:
+ * by using the `WASIShim` object directly:
  *
  * ```js
  * import { random } from "@bytecodealliance/preview2-shim"
- * import { Shim } from "@bytecodealliance/preview2-shim/instantiation"
+ * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
  * // ...
  * import { instantiate } from "path/to/transpiled/component.js"
  * // ...
- * const customShim = new Shim({
+ * const customWASIShim = new WASIShim({
  *     random: {
  *         // For these two interfaces we re-use the default provided shim
  *         random: random.random,
@@ -41,12 +41,17 @@ import * as wasi from "@bytecodealliance/preview2-shim";
  *     }
  * });
  *
- * const component = await instantiate(null, customShim.importObject())
+ * const component = await instantiate(null, customWASIShim.getImportObject())
  * ```
  *
- * @class Shim
+ * Note that this object is similar but not identical to the Node `WASI` object --
+ * it is solely concerned with shimming of preview2 when dealing with a WebAssembly
+ * component transpiled by Jco. While this object *does* work with Node (and the browser)
+ * semantics are not the same as Node's `WASI` object.
+ *
+ * @class WASIShim
  */
-export class Shim {
+export class WASIShim {
   /** Object that confirms to the shim interface for `wasi:cli` */
   #cli;
   /** Object that confirms to the shim interface for `wasi:filesystem` */
@@ -76,7 +81,7 @@ export class Shim {
    *
    * @returns {object}
    */
-  importObject() {
+  getImportObject() {
     return {
       "wasi:cli/environment": this.#cli.environment,
       "wasi:cli/exit": this.#cli.exit,
