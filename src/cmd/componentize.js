@@ -1,4 +1,3 @@
-import { freemem } from "node:os";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, basename } from "node:path";
 
@@ -14,7 +13,7 @@ export async function componentize(jsSource, opts) {
   const source = await readFile(jsSource, "utf8");
   const { component } = await componentizeFn(source, {
     enableAot: opts.aot,
-    aotMinStackSizeBytes: opts.aotMinStackSizeBytes ?? defaultMinStackSize(),
+    aotMinStackSizeBytes: opts.aotMinStackSizeBytes,
     wevalBin: opts.wevalBin,
     sourceName: basename(jsSource),
     witPath: resolve(opts.wit),
@@ -25,15 +24,4 @@ export async function componentize(jsSource, opts) {
   });
   await writeFile(opts.out, component);
   console.log(c`{green OK} Successfully written {bold ${opts.out}}.`);
-}
-
-/**
- * Calculate the min stack size depending on free memory
- *
- * @param {number} freeMemoryBytes - Amount of free memory in the system, in bytes  (if not provided, os.freemem() is used)
- * @returns {number} The minimum stack size that should be used as a default.
- */
-function defaultMinStackSize(freeMemoryBytes) {
-  freeMemoryBytes = freeMemoryBytes ?? freemem();
-  return Math.max(8 * 1024 * 1024, Math.floor(freeMemoryBytes * 0.1));
 }
