@@ -2,6 +2,9 @@
 
 import * as assert from "assert";
 
+// @ts-ignore
+import * as wasm from "../output/list-adapter-fusion/list-adapter-fusion.js";
+
 let expected: any = null;
 
 export function listU8(f: Uint8Array) {
@@ -55,10 +58,6 @@ export function listFloat64(f: Float64Array) {
 }
 
 async function run() {
-  // @ts-ignore
-  const wasm = await import(
-    "../output/list-adapter-fusion/list-adapter-fusion.js"
-  );
   await wasm.$init;
 
   function test<T>(f: (arg0: T) => void, arg: T) {

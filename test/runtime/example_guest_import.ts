@@ -2,6 +2,9 @@
 
 import { ok, strictEqual } from "node:assert";
 
+// @ts-ignore
+import * as wasm from "../output/example_guest_import/example_guest_import.js";
+
 let instance = 0;
 
 export class Scalars {
@@ -21,11 +24,6 @@ export function fetch(scalar: Scalars) {
 }
 
 async function run() {
-  // @ts-ignore
-  const wasm = await import(
-    "../output/example_guest_import/example_guest_import.js"
-  );
-
   const x = new Scalars();
   const y = new Scalars();
   strictEqual(wasm.front.handle(x), 2);
