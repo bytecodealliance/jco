@@ -1,11 +1,13 @@
 #!/usr/bin/env node
+
+import c from 'chalk-template';
 import { program, Option } from 'commander';
+
 import { opt } from './cmd/opt.js';
 import { transpile, types, guestTypes } from './cmd/transpile.js';
 import { run as runCmd, serve as serveCmd } from './cmd/run.js';
 import { parse, print, componentNew, componentEmbed, metadataAdd, metadataShow, componentWit } from './cmd/wasm-tools.js';
 import { componentize } from './cmd/componentize.js';
-import c from 'chalk-template';
 
 program
   .name('jco')
@@ -34,6 +36,7 @@ program.command('componentize')
   .requiredOption('-w, --wit <path>', 'WIT path to build with')
   .option('-n, --world-name <name>', 'WIT world to build')
   .option('--aot', 'Enable Weval AOT compilation of JS')
+  .option('--aot-min-stack-size-bytes <number>', 'Set the min stack size to be used during AOT')
   .option('--weval-bin <path>', 'Specify a custom weval binary to use')
   .addOption(new Option('-d, --disable <feature...>', 'disable WASI features').choices(['clocks', 'http', 'random', 'stdio', 'all']))
   // .addOption(new Option('-e, --enable <feature...>', 'enable WASI features').choices(['http']))
