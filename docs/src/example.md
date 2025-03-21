@@ -187,4 +187,4 @@ It can also be executed in a browser via a module script:
 <script type="module" src="test.js"></script>
 ```
 
-There are a number of custom transpilation options available, detailed in the [API section](README.md#API).
+There are a number of custom transpilation options available, detailed in the [API section](https://github.com/bytecodealliance/jco?tab=readme-ov-file#api).
