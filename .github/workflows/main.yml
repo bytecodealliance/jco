@@ -284,6 +284,8 @@ jobs:
               - webidl2wit-cli
           - name: node-fetch
             workspace: examples/components/node-fetch
+          - name: http-hello-world
+            workspace: examples/components/http-hello-world
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
