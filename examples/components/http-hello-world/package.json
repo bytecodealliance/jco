@@ -6,9 +6,13 @@
     "build:component": "jco componentize http-hello-world.js --wit wit/ --world-name component --out http-hello-world.wasm",
     "build": "jco componentize http-hello-world.js --wit wit/ --world-name component --out http-hello-world.wasm",
     "serve": "jco serve http-hello-world.wasm",
-    "all": "npm run build"
+    "demo": "node demo.js",
+    "all": "npm run build && npm run demo"
   },
   "dependencies": {
     "@bytecodealliance/jco": "^1.10.2"
+  },
+  "devDependencies": {
+    "terminate": "^2.8.0"
   }
 }
