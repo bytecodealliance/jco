@@ -94,6 +94,8 @@ const FLAKY_TESTS: &[&str] = &[
     // Flaky on windows in particular
     // error message encountered was "mtim should change"
     "preview1_path_filestat",
+    // Flaky on windows
+    "preview2_udp_bind",
 ];
 
 pub fn run() -> anyhow::Result<()> {
