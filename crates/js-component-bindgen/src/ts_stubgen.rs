@@ -646,18 +646,22 @@ impl<'a> Printer<'a> {
 
         self.src.push_str(": ");
 
-        match func.results.len() {
-            0 => self.src.push_str("void"),
-            1 => self.print_ty(func.results.iter_types().next().unwrap()),
-            _ => {
-                self.src.push_str("[");
-                for (i, ty) in func.results.iter_types().enumerate() {
-                    if i != 0 {
-                        self.src.push_str(", ");
+        if let Some((ok_ty, _)) = func.results.throws(self.resolve) {
+            self.print_optional_ty(ok_ty);
+        } else {
+            match func.results.len() {
+                0 => self.src.push_str("void"),
+                1 => self.print_ty(func.results.iter_types().next().unwrap()),
+                _ => {
+                    self.src.push_str("[");
+                    for (i, ty) in func.results.iter_types().enumerate() {
+                        if i != 0 {
+                            self.src.push_str(", ");
+                        }
+                        self.print_ty(ty);
                     }
-                    self.print_ty(ty);
+                    self.src.push_str("]");
                 }
-                self.src.push_str("]");
             }
         }
     }
