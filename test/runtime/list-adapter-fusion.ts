@@ -1,6 +1,6 @@
 // Flags: --tla-compat --map test=../list-adapter-fusion.js
 
-import * as assert from 'assert';
+import * as assert from "assert";
 
 let expected: any = null;
 
@@ -56,7 +56,9 @@ export function listFloat64(f: Float64Array) {
 
 async function run() {
   // @ts-ignore
-  const wasm = await import('../output/list-adapter-fusion/list-adapter-fusion.js');
+  const wasm = await import(
+    "../output/list-adapter-fusion/list-adapter-fusion.js"
+  );
   await wasm.$init;
 
   function test<T>(f: (arg0: T) => void, arg: T) {

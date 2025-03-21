@@ -1,28 +1,30 @@
 // Flags: --map example2:component/backend=../example_guest_import.js
 
-import { ok, strictEqual } from 'node:assert';
+import { ok, strictEqual } from "node:assert";
 
 let instance = 0;
 
 export class Scalars {
   instance: number;
-  constructor () {
+  constructor() {
     this.instance = instance++;
   }
-  getB () {
+  getB() {
     return this.instance;
   }
 }
 
 let received: Scalars[] = [];
-export function fetch (scalar: Scalars) {
+export function fetch(scalar: Scalars) {
   received.push(scalar);
   return new Scalars();
 }
 
 async function run() {
   // @ts-ignore
-  const wasm = await import('../output/example_guest_import/example_guest_import.js');
+  const wasm = await import(
+    "../output/example_guest_import/example_guest_import.js"
+  );
 
   const x = new Scalars();
   const y = new Scalars();

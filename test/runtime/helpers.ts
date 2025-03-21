@@ -1,11 +1,11 @@
 // @ts-ignore
-import { readFile } from 'node:fs/promises';
+import { readFile } from "node:fs/promises";
 // @ts-ignore
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
 // @ts-ignore
-import { stdout, stderr } from 'node:process';
+import { stdout, stderr } from "node:process";
 // @ts-ignore
-import { basename } from 'node:path';
+import { basename } from "node:path";
 
 // This is a helper function used from `host.ts` test in the `tests/runtime/*`
 // directory to pass as the `instantiateCore` argument to the `instantiate`
@@ -15,56 +15,52 @@ import { basename } from 'node:path';
 // `imports` object provided. The `path` is a relative path to a wasm file
 // within the generated directory.
 export async function loadWasm(path: string) {
-  const name = basename(path).replace(/\.core\d*\.wasm$/, '');
-  return await WebAssembly.compile(await readFile(new URL(`./${name}/${path}`, import.meta.url)));
+  const name = basename(path).replace(/\.core\d*\.wasm$/, "");
+  return await WebAssembly.compile(
+    await readFile(new URL(`./${name}/${path}`, import.meta.url))
+  );
 }
 
 // Just like `loadWasm`, but not async :-).
 export function loadWasmSync(path: string) {
-  const name = basename(path).replace(/\.core\d*\.wasm$/, '');
-  return new WebAssembly.Module(readFileSync(new URL(`./${name}/${path}`, import.meta.url)));
+  const name = basename(path).replace(/\.core\d*\.wasm$/, "");
+  return new WebAssembly.Module(
+    readFileSync(new URL(`./${name}/${path}`, import.meta.url))
+  );
 }
 
 // Export a WASI interface directly for instance imports
-export function log (bytes: Uint8Array) {
+export function log(bytes: Uint8Array) {
   stdout.write(bytes);
 }
-export function logErr (bytes: Uint8Array) {
+export function logErr(bytes: Uint8Array) {
   stderr.write(bytes);
 }
 
 export const wasi = {
-  'wasi:cli/stderr': {
-    getStderr () {
-
-    }
+  "wasi:cli/stderr": {
+    getStderr() {},
   },
-  'wasi:cli/stdin': {
-    getStdin () {
-
-    }
+  "wasi:cli/stdin": {
+    getStdin() {},
   },
-  'wasi:cli/stdout': {
-    getStdout () {
-
-    }
+  "wasi:cli/stdout": {
+    getStdout() {},
   },
-  'wasi:filesystem/preopens': {
-    getDirectores () {
-
-    }
+  "wasi:filesystem/preopens": {
+    getDirectores() {},
   },
-  'wasi:filesystem/types': {
+  "wasi:filesystem/types": {
     Descriptor: class Descriptor {},
-    filsystemErrorCode () {
+    filsystemErrorCode() {
       return 0;
-    }
+    },
   },
-  'wasi:io/error': {
-    Error: class WasiError {}
+  "wasi:io/error": {
+    Error: class WasiError {},
   },
-  'wasi:io/streams': {
+  "wasi:io/streams": {
     InputStream: class InputStream {},
-    OutputStream: class OutputStream {}
-  }
+    OutputStream: class OutputStream {},
+  },
 };

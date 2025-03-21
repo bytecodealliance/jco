@@ -17,4 +17,4 @@ async function run() {
   // assert.throws(run, Error(""));
 }
 
-await run()
+await run();

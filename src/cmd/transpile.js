@@ -317,7 +317,7 @@ export async function transpileComponent(component, opts = {}) {
     noNodejsCompat: opts.nodejsCompat === false,
     noTypescript: opts.typescript === false,
     tlaCompat: opts.tlaCompat ?? false,
-    base64Cutoff: opts.js ? 0 : opts.base64Cutoff ?? 5000,
+    base64Cutoff: opts.js ? 0 : (opts.base64Cutoff ?? 5000),
     noNamespacedExports: opts.namespacedExports === false,
     multiMemory: opts.multiMemory === true,
     idlImports: opts.experimentalIdlImports === true,
