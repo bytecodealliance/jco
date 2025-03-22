@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Contributor Guide - jco</title>
+        <title>Example Workflow - jco</title>
 
 
         <!-- Custom HTML head -->
@@ -222,17 +222,151 @@
 }
 
 </style>
-<h1 id="contributor-guide"><a class="header" href="#contributor-guide">Contributor Guide</a></h1>
+<h2 id="jco-example-workflow"><a class="header" href="#jco-example-workflow">Jco Example Workflow</a></h2>
+<p>Given an existing Wasm Component, <code>jco</code> provides the tooling necessary to work with this Component fully natively in JS.</p>
+<p>Jco also provides an experimental feature for generating components from JavaScript by wrapping <a href="https://github.com/bytecodealliance/ComponentizeJS">ComponentizeJS</a> in the <code>jco componentize</code> command.</p>
+<p>To demonstrate a full end-to-end component, we can create a JavaScript component embedding Spidermnokey then run it in JavaScript.</p>
+<h3 id="installing-jco"><a class="header" href="#installing-jco">Installing Jco</a></h3>
+<p>Either install Jco globally:</p>
+<pre><code class="language-shell">$ npm install -g @bytecodealliance/jco
+$ jco --version
+1.0.3
+</code></pre>
+<p>Or install it locally and use <code>npx</code> to run it:</p>
+<pre><code class="language-shell">$ npm install @bytecodealliance/jco
+$ npx jco --version
+1.0.3
+</code></pre>
+<p>Local usage can be preferable to ensure the project is reproducible and self-contained, but requires
+replacing all <code>jco</code> shell calls in the following example with either <code>./node_modules/.bin/jco</code> or <code>npx jco</code>.</p>
+<h3 id="installing-componentizejs"><a class="header" href="#installing-componentizejs">Installing ComponentizeJS</a></h3>
+<p>To use ComponentizeJS, it must be separately installed, globally or locally depending on whether Jco was installed globally or locally. Globally:</p>
+<pre><code class="language-shell">$ npm install -g @bytecodealliance/componentize-js
+</code></pre>
+<p>Or locally:</p>
+<pre><code class="language-shell">$ npm install @bytecodealliance/componentize-js
+</code></pre>
+<p>Now the <code>jco componentize</code> command will be ready to use.</p>
+<h3 id="creating-a-component-with-componentizejs"><a class="header" href="#creating-a-component-with-componentizejs">Creating a Component with ComponentizeJS</a></h3>
+<p>This Cowsay component uses the following WIT file (<a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md">WIT</a> is the typing language used for defining Components):</p>
+<p>cowsay.wit</p>
+<pre><code class="language-wit">package local:cowsay;
+world cowsay {
+  export cow: interface {
+    enum cows {
+      default,
+      owl
+    }
+    say: func(text: string, cow: option&lt;cows&gt;) -&gt; string;
+  }
+}
+</code></pre>
+<p>We can implement this with the following JS:</p>
+<p>cowsay.js</p>
+<pre><code class="language-js">export const cow = {
+  say (text, cow = 'default') {
+    switch (cow) {
+      case 'default':
+return `${text}
+  \\   ^__^
+    \\  (oo)\\______
+      (__)\\      )\/\\
+          ||----w |
+          ||     ||
+`;
+      case 'owl':
+return `${text}
+   ___
+  (o o)
+ (  V  )
+/--m-m-
+`;
+    }
+  }
+};
+</code></pre>
+<p>To turn this into a component run:</p>
+<pre><code class="language-shell">$ jco componentize cowsay.js --wit cowsay.wit -o cowsay.wasm
+
+OK Successfully written cowsay.wasm with imports ().
+</code></pre>
+<h3 id="inspecting-component-wit"><a class="header" href="#inspecting-component-wit">Inspecting Component WIT</a></h3>
+<p>As a first step, we might like to look instead this binary black box of a Component and see what it actually does.</p>
+<pre><code class="language-shell">$ jco wit cowsay.wasm
+package root:component;
+
+world root {
+  export cow: interface {
+    enum cows {
+      default,
+      owl,
+    }
+
+    say: func(text: string, cow: option&lt;cows&gt;) -&gt; string;
+  }
+}
+</code></pre>
+<h3 id="transpiling-to-js"><a class="header" href="#transpiling-to-js">Transpiling to JS</a></h3>
+<p>To execute the Component in a JS environment, use the <code>jco transpile</code> command to generate the JS for the Component:</p>
+<pre><code class="language-shell">$ jco transpile cowsay.wasm -o cowsay
+
+Transpiled JS Component Files:
+
+ - cowsay/cowsay.core.wasm     7.61 MiB
+ - cowsay/cowsay.d.ts          0.07 KiB
+ - cowsay/cowsay.js            2.62 KiB
+ - cowsay/interfaces/cow.d.ts  0.21 KiB
+</code></pre>
+<p>Now the Component can be directly imported and used as an ES module:</p>
+<p>test.js</p>
+<pre><code class="language-js">import { cow } from './cowsay/cowsay.js';
+
+console.log(cow.say('Hello Wasm Components!'));
+</code></pre>
+<p>For Node.js to allow us to run native ES modules, we must first create or edit the local <code>package.json</code> file to include a <code>"type": "module"</code> field:</p>
+<p>package.json</p>
+<pre><code class="language-json">{
+  "type": "module"
+}
+</code></pre>
+<p>The above JavaScript can now be executed in Node.js:</p>
+<pre><code class="language-shell">$ node test.js
+
+ Hello Wasm Components!
+  \   ^__^
+    \  (oo)\______
+      (__)\      )/\
+          ||----w |
+          ||     ||
+</code></pre>
+<p>Passing in the optional second parameter, we can change the cow:</p>
+<p>test.js</p>
+<pre><code class="language-js">import { cow } from './cowsay/cowsay.js';
+
+console.log(cow.say('Hello Wasm Components!', 'owl'));
+</code></pre>
+<pre><code class="language-shell">$ node test.js
+
+ Hello Wasm Components!
+   ___
+  (o o)
+ (  V  )
+/--m-m-
+</code></pre>
+<p>It can also be executed in a browser via a module script:</p>
+<pre><code class="language-html">&lt;script type="module" src="test.js"&gt;&lt;/script&gt;
+</code></pre>
+<p>There are a number of custom transpilation options available, detailed in the <a href="https://github.com/bytecodealliance/jco?tab=readme-ov-file#api">API section</a>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="example.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="transpiling.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="optimized-host-bindings.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="#.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -242,11 +376,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="example.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="transpiling.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="optimized-host-bindings.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="#.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
