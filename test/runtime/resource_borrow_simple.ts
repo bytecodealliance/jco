@@ -1,10 +1,10 @@
 // Flags: --map testwasi=../helpers.js --map r=../resource_borrow_simple.js#R test=../resource_borrow_simple.js#test
 
 // @ts-ignore
-import { testImports } from "../output/resource_borrow_simple/resource_borrow_simple.js";
+import { testImports } from '../output/resource_borrow_simple/resource_borrow_simple.js';
 
 // @ts-nocheck
-import * as assert from "assert";
+import * as assert from 'assert';
 
 /*
 WIT definition (for reference):
@@ -35,21 +35,21 @@ world root {
 // Imports
 let constructed = false;
 export class R {
-  constructor() {
-    constructed = true;
-  }
+    constructor() {
+        constructed = true;
+    }
 }
 
 let tested = false;
 export function test(r) {
-  assert.ok(r instanceof R);
-  tested = true;
+    assert.ok(r instanceof R);
+    tested = true;
 }
 
 export async function run() {
-  testImports();
-  assert.ok(constructed);
-  assert.ok(tested);
+    testImports();
+    assert.ok(constructed);
+    assert.ok(tested);
 }
 
 // TLA cycle avoidance
