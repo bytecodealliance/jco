@@ -66,6 +66,7 @@
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
     "lint": "eslint -c eslintrc.mjs src/**/*.js packages/*/lib/**/*.js",
+    "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
     "test:lts": "vitest run -c test/vitest.lts.ts",
     "prepublishOnly": "cargo xtask build release && npm run test"
