@@ -1,5 +1,5 @@
 import { platform } from 'node:process';
-import { writeFile, lstat } from 'node:fs/promises';
+import { writeFile, stat } from 'node:fs/promises';
 import { mkdir } from 'node:fs/promises';
 import { dirname, extname, basename, resolve } from 'node:path';
 
@@ -144,13 +144,13 @@ export async function typesComponent(witPath, opts) {
  * @param {(string, any) => void} consoleFn
  */
 async function printWITLayoutHint(witPath) {
-    const stat = await lstat(witPath);
+    const pathMeta = await stat(witPath);
     let output = '\n';
-    if (!stat.isFile() && !stat.isDirectory()) {
+    if (!pathMeta.isFile() && !pathMeta.isDirectory()) {
         output += c`{yellow.bold warning} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
         return output;
     }
-    const ftype = stat.isDirectory() ? 'directory' : 'file';
+    const ftype = pathMeta.isDirectory() ? 'directory' : 'file';
     output += c`{yellow.bold warning} Your WIT ${ftype} [${witPath}] may be laid out incorrectly\n`;
     output += c`{yellow.bold warning} Keep in mind the following rules:\n`;
     output += c`{yellow.bold warning}     - Top level WIT files are in the same package (i.e. "ns:pkg" in "wit/*.wit")\n`;
