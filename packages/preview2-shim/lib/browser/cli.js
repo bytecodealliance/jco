@@ -4,125 +4,122 @@ const { InputStream, OutputStream } = streams;
 
 const symbolDispose = Symbol.dispose ?? Symbol.for('dispose');
 
-let _env = [], _args = [], _cwd = "/";
-export function _setEnv (envObj) {
-  _env = Object.entries(envObj);
+let _env = [],
+    _args = [],
+    _cwd = '/';
+export function _setEnv(envObj) {
+    _env = Object.entries(envObj);
 }
-export function _setArgs (args) {
-  _args = args;
+export function _setArgs(args) {
+    _args = args;
 }
 
-export function _setCwd (cwd) {
-  fsSetCwd(_cwd = cwd);
+export function _setCwd(cwd) {
+    fsSetCwd((_cwd = cwd));
 }
 
 export const environment = {
-  getEnvironment () {
-    return _env;
-  },
-  getArguments () {
-    return _args;
-  },
-  initialCwd () {
-    return _cwd;
-  }
+    getEnvironment() {
+        return _env;
+    },
+    getArguments() {
+        return _args;
+    },
+    initialCwd() {
+        return _cwd;
+    },
 };
 
 class ComponentExit extends Error {
-  constructor(code) {
-    super(`Component exited ${code === 0 ? 'successfully' : 'with error'}`);
-    this.exitError = true;
-    this.code = code;
-  }
+    constructor(code) {
+        super(`Component exited ${code === 0 ? 'successfully' : 'with error'}`);
+        this.exitError = true;
+        this.code = code;
+    }
 }
 
 export const exit = {
-  exit (status) {
-    throw new ComponentExit(status.tag === 'err' ? 1 : 0);
-  },
-  exitWithCode (code) {
-    throw new ComponentExit(code);
-  }
+    exit(status) {
+        throw new ComponentExit(status.tag === 'err' ? 1 : 0);
+    },
+    exitWithCode(code) {
+        throw new ComponentExit(code);
+    },
 };
 
 /**
- * @param {import('../common/io.js').InputStreamHandler} handler 
+ * @param {import('../common/io.js').InputStreamHandler} handler
  */
-export function _setStdin (handler) {
-  stdinStream.handler = handler;
+export function _setStdin(handler) {
+    stdinStream.handler = handler;
 }
 /**
- * @param {import('../common/io.js').OutputStreamHandler} handler 
+ * @param {import('../common/io.js').OutputStreamHandler} handler
  */
-export function _setStderr (handler) {
-  stderrStream.handler = handler;
+export function _setStderr(handler) {
+    stderrStream.handler = handler;
 }
 /**
- * @param {import('../common/io.js').OutputStreamHandler} handler 
+ * @param {import('../common/io.js').OutputStreamHandler} handler
  */
-export function _setStdout (handler) {
-  stdoutStream.handler = handler;
+export function _setStdout(handler) {
+    stdoutStream.handler = handler;
 }
 
 const stdinStream = new InputStream({
-  blockingRead (_len) {
-    // TODO
-  },
-  subscribe () {
-    // TODO
-  },
-  [symbolDispose] () {
-    // TODO
-  }
+    blockingRead(_len) {
+        // TODO
+    },
+    subscribe() {
+        // TODO
+    },
+    [symbolDispose]() {
+        // TODO
+    },
 });
 let textDecoder = new TextDecoder();
 const stdoutStream = new OutputStream({
-  write (contents) {
-    if (contents[contents.length - 1] == 10) {
-      // console.log already appends a new line
-      contents = contents.subarray(0, contents.length - 1);
-    }
-    console.log(textDecoder.decode(contents));
-  },
-  blockingFlush () {
-  },
-  [symbolDispose] () {
-  }
+    write(contents) {
+        if (contents[contents.length - 1] == 10) {
+            // console.log already appends a new line
+            contents = contents.subarray(0, contents.length - 1);
+        }
+        console.log(textDecoder.decode(contents));
+    },
+    blockingFlush() {},
+    [symbolDispose]() {},
 });
 const stderrStream = new OutputStream({
-  write (contents) {
-    if (contents[contents.length - 1] == 10) {
-      // console.error already appends a new line
-      contents = contents.subarray(0, contents.length - 1);
-    }
-    console.error(textDecoder.decode(contents));
-  },
-  blockingFlush () {
-  },
-  [symbolDispose] () {
-
-  }
+    write(contents) {
+        if (contents[contents.length - 1] == 10) {
+            // console.error already appends a new line
+            contents = contents.subarray(0, contents.length - 1);
+        }
+        console.error(textDecoder.decode(contents));
+    },
+    blockingFlush() {},
+    [symbolDispose]() {},
 });
 
 export const stdin = {
-  InputStream,
-  getStdin () {
-    return stdinStream;
-  }
+    InputStream,
+    getStdin() {
+        return stdinStream;
+    },
 };
 
 export const stdout = {
-  OutputStream,
-  getStdout () {
-    return stdoutStream;
-  }
+    OutputStream,
+    getStdout() {
+        return stdoutStream;
+    },
 };
 
 export const stderr = {
-  OutputStream,
-  getStderr () {
-    return stderrStream;
-  }
+    OutputStream,
+    getStderr() {
+        return stderrStream;
+    },
 };
 
 class TerminalInput {}
@@ -133,30 +130,30 @@ const terminalStderrInstance = new TerminalOutput();
 const terminalStdinInstance = new TerminalInput();
 
 export const terminalInput = {
-  TerminalInput
+    TerminalInput,
 };
 
 export const terminalOutput = {
-  TerminalOutput
+    TerminalOutput,
 };
 
 export const terminalStderr = {
-  TerminalOutput,
-  getTerminalStderr () {
-    return terminalStderrInstance;
-  }
+    TerminalOutput,
+    getTerminalStderr() {
+        return terminalStderrInstance;
+    },
 };
 
 export const terminalStdin = {
-  TerminalInput,
-  getTerminalStdin () {
-    return terminalStdinInstance;
-  }
+    TerminalInput,
+    getTerminalStdin() {
+        return terminalStdinInstance;
+    },
 };
 
 export const terminalStdout = {
-  TerminalOutput,
-  getTerminalStdout () {
-    return terminalStdoutInstance;
-  }
+    TerminalOutput,
+    getTerminalStdout() {
+        return terminalStdoutInstance;
+    },
 };

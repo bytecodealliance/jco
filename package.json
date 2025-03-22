@@ -38,6 +38,8 @@
     "@typescript-eslint/eslint-plugin": "^8.2.0",
     "@typescript-eslint/parser": "^8.2.0",
     "eslint": "^9.9.0",
+    "eslint-config-prettier": "^10.1.1",
+    "eslint-plugin-prettier": "^5.2.3",
     "mime": "^4.0.4",
     "prettier": "^3.5.3",
     "puppeteer": "^24.0.1",
@@ -60,11 +62,11 @@
   },
   "homepage": "https://github.com/bytecodealliance/jco#readme",
   "scripts": {
-    "fmt": "prettier --config prettier.mjs --write src/**/*.{js,ts} test/**/*.{js,ts}",
     "build": "cargo xtask build debug",
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
-    "lint": "eslint -c eslintrc.cjs src/**/*.js packages/*/lib/**/*.js",
+    "lint": "eslint -c eslintrc.mjs src/**/*.js packages/*/lib/**/*.js",
+    "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
     "test:lts": "vitest run -c test/vitest.lts.ts",
     "prepublishOnly": "cargo xtask build release && npm run test"
