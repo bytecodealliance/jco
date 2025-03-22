@@ -1,4 +1,4 @@
-import * as wasi from "@bytecodealliance/preview2-shim";
+import * as wasi from '@bytecodealliance/preview2-shim';
 
 /**
  * A class that holds WASI shims and can be used to configure
@@ -52,70 +52,70 @@ import * as wasi from "@bytecodealliance/preview2-shim";
  * @class WASIShim
  */
 export class WASIShim {
-  /** Object that confirms to the shim interface for `wasi:cli` */
-  #cli;
-  /** Object that confirms to the shim interface for `wasi:filesystem` */
-  #filesystem;
-  /** Object that confirms to the shim interface for `wasi:io` */
-  #io;
-  /** Object that confirms to the shim interface for `wasi:random` */
-  #random;
-  /** Object that confirms to the shim interface for `wasi:clocks` */
-  #clocks;
-  /** Object that confirms to the shim interface for `wasi:sockets` */
-  #sockets;
+    /** Object that confirms to the shim interface for `wasi:cli` */
+    #cli;
+    /** Object that confirms to the shim interface for `wasi:filesystem` */
+    #filesystem;
+    /** Object that confirms to the shim interface for `wasi:io` */
+    #io;
+    /** Object that confirms to the shim interface for `wasi:random` */
+    #random;
+    /** Object that confirms to the shim interface for `wasi:clocks` */
+    #clocks;
+    /** Object that confirms to the shim interface for `wasi:sockets` */
+    #sockets;
 
-  constructor(shims) {
-    this.#cli = shims?.cli ?? wasi.cli;
-    this.#filesystem = shims?.filesystem ?? wasi.filesystem;
-    this.#io = shims?.io ?? wasi.io;
-    this.#random = shims?.random ?? wasi.random;
-    this.#clocks = shims?.clocks ?? wasi.clocks;
-    this.#sockets = shims?.sockets ?? wasi.sockets;
-  }
+    constructor(shims) {
+        this.#cli = shims?.cli ?? wasi.cli;
+        this.#filesystem = shims?.filesystem ?? wasi.filesystem;
+        this.#io = shims?.io ?? wasi.io;
+        this.#random = shims?.random ?? wasi.random;
+        this.#clocks = shims?.clocks ?? wasi.clocks;
+        this.#sockets = shims?.sockets ?? wasi.sockets;
+    }
 
-  /**
-   * Generate an import object for the shim that can be used with
-   * functions like `instantiate` that are exposed from a transpiled
-   * WebAssembly component.
-   *
-   * @returns {object}
-   */
-  getImportObject() {
-    return {
-      "wasi:cli/environment": this.#cli.environment,
-      "wasi:cli/exit": this.#cli.exit,
-      "wasi:cli/stderr": this.#cli.stderr,
-      "wasi:cli/stdin": this.#cli.stdin,
-      "wasi:cli/stdout": this.#cli.stdout,
-      "wasi:cli/terminal-input": this.#cli.terminalInput,
-      "wasi:cli/terminal-output": this.#cli.terminalOutput,
-      "wasi:cli/terminal-stderr": this.#cli.terminalStderr,
-      "wasi:cli/terminal-stdin": this.#cli.terminalStdin,
-      "wasi:cli/terminal-stdout": this.#cli.terminalStdout,
+    /**
+     * Generate an import object for the shim that can be used with
+     * functions like `instantiate` that are exposed from a transpiled
+     * WebAssembly component.
+     *
+     * @returns {object}
+     */
+    getImportObject() {
+        return {
+            'wasi:cli/environment': this.#cli.environment,
+            'wasi:cli/exit': this.#cli.exit,
+            'wasi:cli/stderr': this.#cli.stderr,
+            'wasi:cli/stdin': this.#cli.stdin,
+            'wasi:cli/stdout': this.#cli.stdout,
+            'wasi:cli/terminal-input': this.#cli.terminalInput,
+            'wasi:cli/terminal-output': this.#cli.terminalOutput,
+            'wasi:cli/terminal-stderr': this.#cli.terminalStderr,
+            'wasi:cli/terminal-stdin': this.#cli.terminalStdin,
+            'wasi:cli/terminal-stdout': this.#cli.terminalStdout,
 
-      "wasi:sockets/instance-network": this.#sockets.instanceNetwork,
-      "wasi:sockets/ip-name-lookup": this.#sockets.ipNameLookup,
-      "wasi:sockets/network": this.#sockets.network,
-      "wasi:sockets/tcp": this.#sockets.tcp,
-      "wasi:sockets/tcp-create-socket": this.#sockets.tcpCreateSocket,
-      "wasi:sockets/udp": this.#sockets.udp,
-      "wasi:sockets/udp-create-socket": this.#sockets.udpCreateSocket,
+            'wasi:sockets/instance-network': this.#sockets.instanceNetwork,
+            'wasi:sockets/ip-name-lookup': this.#sockets.ipNameLookup,
+            'wasi:sockets/network': this.#sockets.network,
+            'wasi:sockets/tcp': this.#sockets.tcp,
+            'wasi:sockets/tcp-create-socket': this.#sockets.tcpCreateSocket,
+            'wasi:sockets/udp': this.#sockets.udp,
+            'wasi:sockets/udp-create-socket': this.#sockets.udpCreateSocket,
 
-      "wasi:filesystem/preopens": this.#filesystem.preopens,
-      "wasi:filesystem/types": this.#filesystem.types,
+            'wasi:filesystem/preopens': this.#filesystem.preopens,
+            'wasi:filesystem/types': this.#filesystem.types,
 
-      "wasi:io/error": this.#io.error,
-      "wasi:io/poll": this.#io.poll,
-      "wasi:io/streams": this.#io.streams,
+            'wasi:io/error': this.#io.error,
+            'wasi:io/poll': this.#io.poll,
+            'wasi:io/streams': this.#io.streams,
 
-      "wasi:random/random": this.#random.random,
-      "wasi:random/insecure": this.#random.insecure,
-      "wasi:random/insecure-seed": this.#random.insecureSeed,
+            'wasi:random/random': this.#random.random,
+            'wasi:random/insecure': this.#random.insecure,
+            'wasi:random/insecure-seed': this.#random.insecureSeed,
 
-      "wasi:clocks/monotonic-clock": this.#clocks.monotonicClock,
-      "wasi:clocks/timezone": this.#clocks.timezone,
-      "wasi:clocks/wall-clock": this.#clocks.wallClock,
-    };
-  }
+            'wasi:clocks/monotonic-clock': this.#clocks.monotonicClock,
+            'wasi:clocks/timezone': this.#clocks.timezone,
+            'wasi:clocks/wall-clock': this.#clocks.wallClock,
+        };
+    }
 }
