@@ -7,6 +7,8 @@ import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import c from 'chalk-template';
 
+const DEFAULT_SERVE_HOST = 'localhost';
+
 export async function run(componentPath, args, opts) {
     // Ensure that `args` is an array
     args = [...args];
@@ -42,6 +44,7 @@ export async function serve(componentPath, args, opts) {
     }
     // Ensure that `args` is an array
     args = [...args];
+    host = host ?? DEFAULT_SERVE_HOST;
     return runComponent(
         componentPath,
         args,
@@ -66,7 +69,7 @@ export async function serve(componentPath, args, opts) {
     `
             : `server.listen(port, ${JSON.stringify(host)})`
     }
-    console.error(\`Server listening on port...\`);
+    console.error(\`Server listening @ ${host}:${port}...\`);
   `
     );
 }
