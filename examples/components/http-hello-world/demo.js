@@ -38,7 +38,7 @@ async function main() {
   // Wait for the server to start
   await new Promise((resolve) => {
     proc.stderr.on("data", (data) => {
-      if (data.includes("Server listening on port")) {
+      if (data.includes("Server listening")) {
         resolve();
       }
     });
