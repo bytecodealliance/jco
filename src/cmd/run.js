@@ -113,8 +113,11 @@ async function runComponent(componentPath, args, opts, executor) {
                 ),
                 '../../../'
             );
-        } catch {
-            throw c`Unable to locate the {bold @bytecodealliance/preview2-shim} package, make sure it is installed.`;
+        } catch (err) {
+          const msg =
+                c`{red.bold error} Failed to resolve {bold @bytecodealliance/preview2-shim}, ensure it is installed.`;
+          msg += `\nERROR:\n${err.toString()}`;
+          throw new Error(msg);
         }
 
         const modulesDir = resolve(outDir, 'node_modules', '@bytecodealliance');
