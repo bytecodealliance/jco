@@ -137,8 +137,8 @@ Jco represents options as an optional value or undefined, so some examples:
 
 | Type                  | Representation (TS)                     | Example                               |
 |-----------------------|-----------------------------------------|---------------------------------------|
-| `option<u32>`         | `number | undefined`                    | `option<u32>` -> `number | undefined` |
-| `option<option<u32>>` | `{ tag: "some" | "none", val: number }` | `option<u32>` -> `number | undefined` |
+| `option<u32>`         | <code>number \| undefined</code>                    | `option<u32>` -> <code>number \| undefined</code> |
+| `option<option<u32>>` | <code>{ tag: "some" \| "none", val: number }</code> | `option<u32>` -> <code>number \| undefined</code> |
 
 > [!WARNING]
 > "single level" `option`s are easy to reason about, but the doubly nested case (`option<option<_>>`) is more complex.
