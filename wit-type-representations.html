@@ -330,8 +330,8 @@ option&lt;string, u32&gt;
 <h3 id="jco-representation-2"><a class="header" href="#jco-representation-2">Jco Representation</a></h3>
 <p>Jco represents options as an optional value or undefined, so some examples:</p>
 <div class="table-wrapper"><table><thead><tr><th>Type</th><th>Representation (TS)</th><th>Example</th></tr></thead><tbody>
-<tr><td><code>option&lt;u32&gt;</code></td><td>`number</td><td>undefined`</td></tr>
-<tr><td><code>option&lt;option&lt;u32&gt;&gt;</code></td><td>`{ tag: "some"</td><td>"none", val: number }`</td></tr>
+<tr><td><code>option&lt;u32&gt;</code></td><td><code>number | undefined</code></td><td><code>option&lt;u32&gt;</code> -&gt; <code>number | undefined</code></td></tr>
+<tr><td><code>option&lt;option&lt;u32&gt;&gt;</code></td><td><code>{ tag: "some" | "none", val: number }</code></td><td><code>option&lt;u32&gt;</code> -&gt; <code>number | undefined</code></td></tr>
 </tbody></table>
 </div><div class="mdbook-alerts mdbook-alerts-warning">
 <p class="mdbook-alerts-title">
