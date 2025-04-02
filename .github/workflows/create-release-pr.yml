@@ -1,0 +1,151 @@
+name: create-release-pr
+run-name: create-release-pr
+description: |
+  Create a release PR for a project in the repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        type: choice
+        required: true
+        default: "jco"
+        options:
+          - jco
+          - js-component-bindgen
+          - preview2-shim
+        description: |
+          Project to prep for release (ex. `0.1.0`)
+
+      version:
+        type: string
+        required: true
+        description: |
+          Version to prep for release (ex. `0.1.0`, `0.1.0-rc.0`)
+
+permissions:
+  contents: none
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      pull-requests: write
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      # Install Rust deps
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
+      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
+        with:
+          tool: just
+      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
+        with:
+          tool: git-cliff
+      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
+        with:
+          tool: cargo-get
+      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
+        with:
+          tool: cargo-edit
+
+      - name: Gather project metadata
+        id: project-meta
+        env:
+          NEXT_VERSION: ${{ inputs.version }}
+          PROJECT: ${{ inputs.project }}
+        shell: bash
+        run: |
+          if [[ $NEXT_VERSION == v* ]]; then
+            echo "::error::next version [$NEXT_VERSION] starts with 'v' -- enter only the semver version (ex. '0.1.0', not 'v0.1.0')";
+            exit 1;
+          fi
+
+          case $PROJECT in
+            jco)
+              export PROJECT_DIR=$PWD;
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              ;;
+            preview2-shim)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              ;;
+            js-component-bindgen)
+              export PROJECT_DIR="$PWD/crates/$PROJECT";
+              export CURRENT_VERSION=$(cargo get  package.version --terminator Nul --entry=crates/js-component-bindgen);
+              export IS_RUST_PROJECT=true;
+              ;;
+            *)
+              echo "unexpected project type (neither Rust nor JS)";
+              exit 1;
+          esac
+
+          echo -e "project=$PROJECT"
+          echo -e "project-dir=$PROJECT_DIR"
+          echo -e "current-version=$CURRENT_VERSION"
+          echo -e "next-version=$NEXT_VERSION"
+          echo -e "is-rust-project=$IS_RUST_PROJECT"
+          echo -e "is-js-project=$IS_JS_PROJECT"
+
+          echo -e "project=$PROJECT" >> $GITHUB_OUTPUT
+          echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
+          echo -e "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo -e "next-version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT
+          echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
+
+      # Set project version
+      - name: Set project version
+        working-directory: ${{ steps.project-meta.outputs.project-dir }}
+        shell: bash
+        run: |
+          if [ "true" == "${{ steps.project-meta.outputs.is-rust-project }}" ]; then
+            cargo set-version -p ${{ steps.project-meta.outputs.project }} ${{ steps.project-meta.outputs.next-version }};
+          elif [ "true" == "${{ steps.project-meta.outputs.is-js-project }}" ]; then
+            npm pkg set version=${{ steps.project-meta.outputs.next-version }};
+          fi
+
+      # Generate changelog
+      - name: Generate changelog
+        working-directory: ${{ steps.project-meta.outputs.project-dir }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git cliff \
+            --repository=${{ github.workspace }}/.git \
+            --config=./cliff.toml \
+            --unreleased \
+            --tag=${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }} \
+            --prepend=CHANGELOG.md
+
+      # Create release PR
+      - name: Create release prep PR
+        uses: peter-evans/create-pull-request@67ccf781d68cd99b580ae25a5c18a1cc84ffff1f # v7.0.6
+        with:
+          branch: prep-release-${{ steps.project-meta.outputs.project}}-v${{ steps.project-meta.outputs.next-version }}
+          commit-message: |
+            release: ${{ steps.project-meta.outputs.project }} v${{ steps.project-meta.outputs.next-version }}
+          title: |
+            release: ${{ steps.project-meta.outputs.project }} v${{ steps.project-meta.outputs.next-version }}
+          labels: |
+            release-pr
+          assignees: |
+            vados-cosmonic
+          signoff: true
+          body: |
+            This is a release prep branch for `${{ steps.project-meta.outputs.project }}` release `v${{ steps.project-meta.outputs.next-version }}`.
+
+            To ensure this release is ready to be merged:
+              - [ ] Review updated CHANGELOG(s)
+
+            After merging this PR, please do the following:
+              - [ ] Run the `tag-release` CI workflow (specifying the commit hash of this PR once fast-forwarded onto `main`)
+              - [ ] Run the `release` CI workflow (specifying the released tag)
+              - [ ] Make releases to downstream repositories (e.g. NPM) for the released artifacts as necessary

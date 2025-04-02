@@ -1,0 +1,233 @@
+name: release
+run-name: release
+
+on:
+  push:
+    # NOTE: pushes from CI without a PAT will not trigger the tags below
+    tags:
+      - "jco-v[0-9]+.[0-9]+.[0-9]+*"
+      - "jco-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "preview2-shim-v[0-9]+.[0-9]+.[0-9]+*"
+      - "preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+*"
+      - "js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+-*"
+    branches:
+      - "prep-release-jco-v[0-9]+.[0-9]+.[0-9]+*"
+      - "prep-release-jco-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+*"
+      - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "prep-release-js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+*"
+      - "prep-release-js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+-*"
+
+  workflow_dispatch:
+    inputs:
+      project:
+        type: choice
+        required: true
+        default: "jco"
+        options:
+          - jco
+          - js-component-bindgen
+          - preview2-shim
+        description: |
+          Project to tag for release (ex. `0.1.0`)
+
+      version:
+        type: string
+        required: true
+        description: |
+          Version tag to release (e.x. `0.1.0`, `0.2.0`)
+
+permissions:
+  contents: none
+
+jobs:
+  meta:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      project: ${{ steps.meta.outputs.project }}
+      project-dir: ${{ steps.project-meta.outputs.project-dir }}
+      is-js-project: ${{ steps.project-meta.outputs.is-js-project }}
+      is-rust-project: ${{ steps.project-meta.outputs.is-rust-project }}
+      artifacts-glob: ${{ steps.project-meta.outputs.artifacts-glob }}
+      artifact-name: ${{ steps.project-meta.outputs.artifact-name }}
+      release-ref: ${{ steps.project-meta.outputs.release-ref }}
+    steps:
+      - name: Collect metadata
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        id: meta
+        with:
+          script: |
+            if (context.payload.inputs.project && context.payload.inputs.version) {
+              core.setOutput('project', context.payload.inputs.project);
+              core.setOutput('version', context.payload.inputs.version);
+              return;
+            }
+
+            if (context.ref.startsWith('refs/tags')) {
+              match = tag.replace(/^refs\/tags\//, '').match(/^(.*)-v(\d+\.\d+\.\d+)$/);
+            } else if (context.ref.startsWith('refs/heads')) {
+              match = tag.replace(/^refs\/heads\//, '').match(/^prep-release-(.+)-v(\d+\.\d+\.\d+)$/);
+             } else {
+               throw new Error(`Unexpected context ref [${context.ref}]`);
+             }
+             if (!match) { throw new Error(`Failed to parse tag/branch: [${context.ref}]`); }
+             const [_, project, version] = match;
+             core.setOutput('project', project);
+             core.setOutput('version', version);
+
+      - name: Gather project metadata
+        id: project-meta
+        env:
+          NEXT_VERSION: ${{ steps.meta.outputs.version }}
+          PROJECT: ${{ steps.meta.outputs.project }}
+        shell: bash
+        run: |
+          if [[ $NEXT_VERSION == v* ]]; then
+            echo "::error::next version [$NEXT_VERSION] starts with 'v' -- enter only the semver version (ex. '0.1.0', not 'v0.1.0')";
+            exit 1;
+          fi
+
+          case $PROJECT in
+            jco)
+              export PROJECT_DIR=$PWD;
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
+              export ARTIFACT_NAME="bytecodealliance-jco-v$NEXT_VERSION.tgz";
+              ;;
+            preview2-shim)
+              export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              export ARTIFACTS_GLOB="packages/preview2-shim/bytecodealliance-preview2-shim-*.tgz";
+              export ARTIFACT_NAME="bytecodealliance-preview2-shim-$NEXT_VERSION.tgz";
+              ;;
+            js-component-bindgen)
+              export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
+              export CURRENT_VERSION=$(cargo get  package.version --terminator Nul --entry=crates/js-component-bindgen);
+              export IS_RUST_PROJECT=true;
+              export ARTIFACTS_GLOB="target/package/js-component-bindgen-*.crate";
+              export ARTIFACT_NAME="js-component-bindgen-$NEXT_VERSION.crate";
+              ;;
+            *)
+              echo "unexpected project type (neither Rust nor JS)";
+              exit 1;
+          esac
+
+          echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
+          echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT
+          echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
+          echo -e "artifacts-glob=$ARTIFACTS_GLOB" >> $GITHUB_OUTPUT
+          echo -e "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo -e "release-ref=${PROJECT}-v${NEXT_VERSION}" >> $GITHUB_OUTPUT
+
+  pack-crate-release:
+    if: ${{ needs.meta.outputs.is-rust-project == 'true' }}
+    runs-on: ubuntu-24.04
+    needs:
+      - meta
+    permissions:
+      actions: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.release-ref }}
+
+      - name: Release crate (dry run)
+        working-directory: ${{ needs.meta.outputs.project-dir }}
+        run: |
+          cargo publish --locked --dry-run
+
+      - name: Create release package
+        working-directory: ${{ needs.meta.outputs.project-dir }}
+        run: |
+          cargo package
+
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ needs.meta.outputs.artifacts-glob }}
+
+      - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          if-no-files-found: error
+          name: ${{ needs.meta.outputs.artifact-name }}
+          path: |
+            ${{ needs.meta.outputs.artifacts-glob }}
+
+  pack-npm-release:
+    if: ${{ needs.meta.outputs.is-js-project == 'true' }}
+    runs-on: ubuntu-24.04
+    needs:
+      - meta
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.release-ref }}
+
+      - name: Create release package
+        working-directory: ${{ needs.meta.outputs.project-dir }}
+        run: |
+          npm pack
+
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ needs.meta.outputs.artifacts-glob }}
+
+      - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          if-no-files-found: error
+          name: ${{ needs.meta.outputs.artifact-name }}
+          path: |
+            ${{ needs.meta.outputs.artifacts-glob }}
+
+  gh-release:
+    runs-on: ubuntu-24.04
+    if: always()
+    needs:
+      - meta
+      - pack-crate-release
+      - pack-npm-release
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.meta.outputs.release-ref }}
+
+      - uses: taiki-e/install-action@d125c0a83576d3c0c86ac610c708b38d3565af4e # v2.47.15
+        with:
+          fallback: none
+          tool: git-cliff
+
+      # Re-generate the current changelog so we can use it in the GH release announcement
+      - name: Re-generate current changelog
+        working-directory: ${{ needs.meta.outputs.project-dir }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          git cliff --repository=${{ github.workspace }}/.git --tag=${{ needs.meta.outputs.release-ref }} > CHANGELOG.current
+
+      # Download all the artifacts generated during this run
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          path: artifacts
+
+      - name: Create GH release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          prerelease: ${{ startsWith(github.ref, 'refs/heads/prep-release') }}
+          draft: ${{ startsWith(github.ref, 'refs/heads/prep-release') }}
+          tag_name: ${{ needs.meta.outputs.release-ref }}
+          generate_release_notes: false
+          body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current
+          files: |
+            ./artifacts/*/*

@@ -1,10 +1,13 @@
-name: CI
+name: test
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 defaults:
   run:
