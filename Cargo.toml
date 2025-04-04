@@ -46,7 +46,7 @@ wasm-encoder = { version = "0.227.1", default-features = false }
 wasm-metadata = { version = "0.227.1", default-features = false }
 wasmparser = { version = "0.227.1", default-features = false }
 wasmprinter = { version = "0.227.1", default-features = false }
-wasmtime-environ = { version = "30.0.1", features = [
+wasmtime-environ = { version = "31.0.0", features = [
   "component-model",
   "compile",
 ] }
