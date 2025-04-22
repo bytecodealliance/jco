@@ -27,6 +27,7 @@ export async function componentize(jsSource, opts) {
             disableFeatures: opts.disable,
             enableFeatures: opts.enable,
             preview2Adapter: opts.preview2Adapter,
+            debugBuild: opts.useDebugBuild,
         });
         component = result.component;
     } catch (err) {
