@@ -41,6 +41,7 @@ program.command('componentize')
   .addOption(new Option('-d, --disable <feature...>', 'disable WASI features').choices(['clocks', 'http', 'random', 'stdio', 'all']))
   // .addOption(new Option('-e, --enable <feature...>', 'enable WASI features').choices(['http']))
   .option('--preview2-adapter <adapter>', 'provide a custom preview2 adapter path')
+  .option('--debug-starlingmonkey-build', 'use a debug build of StarlingMonkey')
   .requiredOption('-o, --out <out>', 'output component file')
   .action(asyncAction(componentize));
 
