@@ -43,24 +43,24 @@ pub enum Intrinsic {
     SymbolDispose,
     ThrowInvalidBool,
     ThrowUninitialized,
-    /// Implementation of https://tc39.es/ecma262/#sec-tobigint64.
+    /// Implementation of <https://tc39.es/ecma262/#sec-tobigint64>
     ToBigInt64,
-    /// Implementation of https://tc39.es/ecma262/#sec-tobiguint64.
+    /// Implementation of <https://tc39.es/ecma262/#sec-tobiguint64>
     ToBigUint64,
-    /// Implementation of https://tc39.es/ecma262/#sec-toint16.
+    /// Implementation of <https://tc39.es/ecma262/#sec-toint16>
     ToInt16,
-    /// Implementation of https://tc39.es/ecma262/#sec-toint32.
+    /// Implementation of <https://tc39.es/ecma262/#sec-toint32>
     ToInt32,
-    /// Implementation of https://tc39.es/ecma262/#sec-toint8.
+    /// Implementation of <https://tc39.es/ecma262/#sec-toint8>
     ToInt8,
     ToResultString,
-    /// Implementation of https://tc39.es/ecma262/#sec-tostring.
+    /// Implementation of <https://tc39.es/ecma262/#sec-tostring>
     ToString,
-    /// Implementation of https://tc39.es/ecma262/#sec-touint16.
+    /// Implementation of <https://tc39.es/ecma262/#sec-touint16>
     ToUint16,
-    /// Implementation of https://tc39.es/ecma262/#sec-touint32.
+    /// Implementation of <https://tc39.es/ecma262/#sec-touint32>
     ToUint32,
-    /// Implementation of https://tc39.es/ecma262/#sec-touint8.
+    /// Implementation of <https://tc39.es/ecma262/#sec-touint8>
     ToUint8,
     Utf16Decoder,
     Utf16Encode,
