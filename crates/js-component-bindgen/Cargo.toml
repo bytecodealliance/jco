@@ -1,6 +1,6 @@
 [package]
 name = "js-component-bindgen"
-version = "1.10.0"
+version = "1.11.0"
 license = "Apache-2.0 WITH LLVM-exception"
 categories = ["wasm"]
 keywords = ["webassembly", "wasm"]
