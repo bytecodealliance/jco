@@ -21,6 +21,9 @@ crate-type = ["lib"]
 default = ["transpile-bindgen"]
 transpile-bindgen = []
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 anyhow = { workspace = true }
 base64 = { workspace = true, features = [ "alloc" ] }

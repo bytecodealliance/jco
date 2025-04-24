@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 mod core;
 mod files;
 mod transpile_bindgen;
