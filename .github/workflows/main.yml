@@ -22,13 +22,23 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: "latest"
+
       - name: Install Rust
         run: rustup update stable --no-self-update
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
+
+      - name: Cache npm install
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
       - name: Install NPM packages
         run: npm install
+
       - name: Build
         run: npm run build
       - name: Upload Jco Build
@@ -66,7 +76,8 @@ jobs:
           - os: windows-latest
             node: 18.x
     runs-on: ${{ matrix.os }}
-    needs: [build]
+    needs:
+      - build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
@@ -108,9 +119,28 @@ jobs:
           mkdir .weval-bin
           mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
 
+      - name: Cache npm install
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
       - name: Install NPM packages
         run: |
           npm install
+
+      - name: Cache puppeteer install
+        id: cache-puppeteer
+        uses: actions/cache@v4
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            /home/runner/.cache/puppeteer
+      - name: Install puppeteer
+        if: steps.cache-puppeteer.outputs.cache-hit != 'true'
+        run: |
+          npx puppeteer browsers install chrome
 
       - name: Download Build
         uses: actions/download-artifact@v4
@@ -169,27 +199,41 @@ jobs:
   test-wasi-deno:
     name: Jco Deno WASI Conformance Tests
     runs-on: "ubuntu-latest"
-    needs: [build, build-wasi-tests]
+    needs:
+      - build
+      - build-wasi-tests
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: "latest"
+
       - uses: denoland/setup-deno@v1
         with:
           deno-version: v1.x
+
+      - name: Cache npm install
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
       - name: Install NPM packages
         run: npm install
+
       - name: Download Build
         uses: actions/download-artifact@v4
         with:
           name: jco-build
           path: obj
+
       - name: Download WASI Tests
         uses: actions/download-artifact@v4
         with:
           name: wasi-tests
           path: tests/gen
+
       - name: WASI Preview 2 Conformance
         run: cargo test deno_
 
@@ -197,8 +241,14 @@ jobs:
     name: Jco Node.js WASI Conformance Tests
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [18.x, 20.x, latest]
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        node:
+          - 18.x
+          - 20.x
+          - latest
         exclude:
           - os: macos-latest
             node: 20.x
@@ -210,14 +260,25 @@ jobs:
             node: 18.x
       fail-fast: false
     runs-on: ${{ matrix.os }}
-    needs: [build, build-wasi-tests]
+    needs:
+      - build
+      - build-wasi-tests
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
+
+      - name: Cache npm install
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
       - name: Install NPM packages
         run: npm install
+
       - name: Download Build
         uses: actions/download-artifact@v4
         with:
@@ -236,8 +297,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache npm install
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
       - name: Install NPM packages
         run: npm install
+
       - name: Test Workspaces
         run: npm run test --workspace packages/preview2-shim
 
@@ -246,8 +316,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache npm install
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
       - name: Install NPM packages
         run: npm install
+
       - name: Lint
         run: npm run lint
 
@@ -265,7 +344,8 @@ jobs:
 
   examples:
     name: Example ${{ matrix.project.name }}
-    needs: [build]
+    needs:
+      - build
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -320,6 +400,13 @@ jobs:
           rename-to: wac
           chmod: 0755
 
+      - name: Cache npm install
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
       - run: npm install
 
       - name: Run all script for (${{ matrix.project.name }})
