@@ -88,8 +88,7 @@ jobs:
       - name: Push tag
         if: ${{ steps.meta.outputs.proceed }}
         env:
-          # TODO: we must use a PAT here to trigger the release action automatically
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]";
           git config user.email "github-actions[bot]@users.noreply.github.com";

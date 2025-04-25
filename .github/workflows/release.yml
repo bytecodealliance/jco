@@ -211,7 +211,7 @@ jobs:
       - name: Re-generate current changelog
         working-directory: ${{ needs.meta.outputs.project-dir }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
           git cliff --repository=${{ github.workspace }}/.git --tag=${{ needs.meta.outputs.release-ref }} > CHANGELOG.current
