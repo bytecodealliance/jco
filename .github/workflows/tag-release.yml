@@ -4,6 +4,7 @@ description: |
   Tag a given commit as a release
 
 on:
+  merge_group:
   pull_request:
     types:
       - closed
