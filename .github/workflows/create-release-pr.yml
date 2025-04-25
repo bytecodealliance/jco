@@ -130,6 +130,7 @@ jobs:
         uses: peter-evans/create-pull-request@67ccf781d68cd99b580ae25a5c18a1cc84ffff1f # v7.0.6
         with:
           branch: prep-release-${{ steps.project-meta.outputs.project}}-v${{ steps.project-meta.outputs.next-version }}
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           commit-message: |
             release: ${{ steps.project-meta.outputs.project }} v${{ steps.project-meta.outputs.next-version }}
           title: |
