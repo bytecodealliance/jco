@@ -10,7 +10,7 @@
     "all": "npm run generate:wit && npm run generate:types && npm run build && npm run transpile && node demo.js"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "1.10.2",
+    "@bytecodealliance/jco": "1.11.0",
     "@bytecodealliance/componentize-js": "0.17.0"
   }
 }
