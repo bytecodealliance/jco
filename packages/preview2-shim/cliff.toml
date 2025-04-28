@@ -49,15 +49,15 @@ trim = true
 
 # regex for parsing and grouping commits
 commit_parsers = [
-  { message = "^feat(p2-shim)", group = "<!-- 0 -->🚀 Features" },
-  { message = "^fix(p2-shim)", group = "<!-- 1 -->🐛 Bug Fixes" },
-  { message = "^doc(p2-shim)", group = "<!-- 3 -->📚 Documentation" },
-  { message = "^perf(p2-shim)", group = "<!-- 4 -->⚡ Performance" },
-  { message = "^refactor(p2-shim)", group = "<!-- 2 -->🚜 Refactor" },
-  { message = "^style(p2-shim)", group = "<!-- 5 -->🎨 Styling" },
-  { message = "^test(p2-shim)", group = "<!-- 6 -->🧪 Testing" },
-  { message = "^release", skip = true },
-  { message = "^chore(p2-shim)", group = "<!-- 7 -->⚙️ Miscellaneous Tasks" },
+  { message = '^feat\(p2-shim\)', group = '<!-- 0 -->🚀 Features' },
+  { message = '^fix\(p2-shim\)', group = '<!-- 1 -->🐛 Bug Fixes' },
+  { message = '^doc\(p2-shim\)', group = '<!-- 3 -->📚 Documentation' },
+  { message = '^perf\(p2-shim\)', group = '<!-- 4 -->⚡ Performance' },
+  { message = '^refactor\(p2-shim\)', group = '<!-- 2 -->🚜 Refactor' },
+  { message = '^style\(p2-shim\)', group = '<!-- 5 -->🎨 Styling' },
+  { message = '^test\(p2-shim\)', group = '<!-- 6 -->🧪 Testing' },
+  { message = '^release', skip = true },
+  { message = '^chore\(p2-shim\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
 ]
 
 # filter out the commits that are not matched by commit parsers
