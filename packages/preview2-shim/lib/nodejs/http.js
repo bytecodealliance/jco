@@ -737,4 +737,7 @@ export class HTTPServer {
         ioCall(HTTP_SERVER_STOP, this.#id, null);
         httpServers.delete(this.#id);
     }
+    close() {
+      this.stop();
+    }
 }
