@@ -662,6 +662,7 @@ const httpServers = new Map();
 let httpServerCnt = 0;
 export class HTTPServer {
     #id = ++httpServerCnt;
+    #stopped = false;
     #liveEventLoopInterval;
     constructor(incomingHandler) {
         httpServers.set(this.#id, this);
@@ -733,8 +734,15 @@ export class HTTPServer {
         ioCall(HTTP_SERVER_START, this.#id, { port, host });
     }
     stop() {
+        if (this.#stopped) {
+            return;
+        }
         clearInterval(this.#liveEventLoopInterval);
         ioCall(HTTP_SERVER_STOP, this.#id, null);
         httpServers.delete(this.#id);
+        this.#stopped = true;
+    }
+    close() {
+        this.stop();
     }
 }
