@@ -18,6 +18,7 @@ export const monotonicClock = {
     const diffMillis = Number(diffNanos) / 1e6;
     return new Promise((resolve) => setTimeout(resolve, diffMillis));
   },
+
   waitFor(howLong) {
     return this.waitUntil(this.now() + howLong);
   },

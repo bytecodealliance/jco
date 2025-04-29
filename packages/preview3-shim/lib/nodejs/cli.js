@@ -21,15 +21,15 @@ export {
   terminalStderr,
 } from "@bytecodealliance/preview2-shim/cli";
 
-let worker;
+let _worker = null;
 
 function getWorker() {
-  if (!worker) {
-    worker = new Worker(new URL("./stdio-worker.js", import.meta.url));
-    worker.unref();
+  if (!_worker) {
+    _worker = new Worker(new URL("./stdio-worker.js", import.meta.url));
+    _worker.unref();
   }
 
-  return worker;
+  return _worker;
 }
 
 export const stdin = {
