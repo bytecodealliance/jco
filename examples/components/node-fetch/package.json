@@ -9,7 +9,7 @@
     "all": "npm run build:component && npm run transpile && npm run demo"
   },
   "dependencies": {
-    "@bytecodealliance/jco": "^1.11.0",
+    "@bytecodealliance/jco": "^1.11.1",
     "@bytecodealliance/componentize-js": "0.17.0"
   }
 }
