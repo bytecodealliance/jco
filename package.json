@@ -69,7 +69,7 @@
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
     "test:lts": "vitest run -c test/vitest.lts.ts",
-    "prepublishOnly": "cargo xtask build release && npm run test"
+    "prepack": "cargo xtask build release && npm run test"
   },
   "files": [
     "lib",
