@@ -27,6 +27,16 @@ export class StreamReader {
     return value;
   }
 
+  async readAll() {
+    const chunks = []
+    let c
+    while ((c = await this.read()) !== null) {
+      chunks.push(c)
+    }
+
+    return Buffer.concat(chunks)
+  }
+
   async cancel(reason) {
     this.throwIfClosed();
     return this.#reader.cancel(reason);

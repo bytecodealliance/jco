@@ -5,34 +5,58 @@ import { randomUUID } from "crypto";
 
 import { preopens as preview2Preopens } from "@bytecodealliance/preview2-shim/filesystem";
 
-function doFilesystemOp(msg, transferable = []) {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL("./fs-worker.js", import.meta.url));
-    worker.unref();
+let _worker = null;
+let _pending = new Map();
 
-    const id = randomUUID();
+function terminateWorker() {
+  _pending.clear();
+  _worker.removeAllListeners();
+  _worker.terminate();
+  _worker = null;
+}
 
-    const onMessage = (res) => {
-      if (res.id === id) {
-        worker.removeListener("message", onMessage);
-        worker.terminate();
+function getFsWorker() {
+  if (!_worker) {
+    _worker = new Worker(new URL("./fs-worker.js", import.meta.url));
+    _worker.unref();
 
-        if (res.error) {
-          reject(res.error);
-        } else {
-          resolve(res.result);
-        }
+    _worker.on("message", (res) => {
+      const { id, result, error } = res;
+      const entry = _pending.get(id);
+      if (!entry) return;
+
+      const { resolve, reject } = entry;
+      _pending.delete(id);
+
+      if (error) {
+        reject(error);
+      } else {
+        resolve(result);
       }
-    };
 
-    worker.on("message", onMessage);
-    worker.on("error", (err) => {
-      worker.terminate();
-      reject(err);
+      // TODO: Should we avoid creating and destroying workers too frequently?
+      if (_pending.size === 0) {
+        terminateWorker();
+      }
     });
 
-    msg.id = id;
-    worker.postMessage(msg, transferable);
+    _worker.on("error", (err) => {
+      for (const { reject } of _pending.values()) {
+        reject(err);
+      }
+      terminateWorker();
+    });
+  }
+
+  return _worker;
+}
+
+export function doFilesystemOp(msg, transferable = []) {
+  const worker = getFsWorker();
+  return new Promise((resolve, reject) => {
+    const id = randomUUID();
+    _pending.set(id, { resolve, reject });
+    worker.postMessage({ ...msg, id }, transferable);
   });
 }
 
