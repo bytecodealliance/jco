@@ -117,7 +117,7 @@ async function runComponent(componentPath, args, opts, executor) {
                 '../../../'
             );
         } catch (err) {
-            const msg = c`{red.bold error} Failed to resolve {bold @bytecodealliance/preview2-shim}, ensure it is installed.`;
+            let msg = c`{red.bold error} Failed to resolve {bold @bytecodealliance/preview2-shim}, ensure it is installed.`;
             msg += `\nERROR:\n${err.toString()}`;
             throw new Error(msg);
         }
