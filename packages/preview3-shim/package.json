@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "test": "node --expose-gc ../../node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000",
+    "test": "vitest --run",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\""
   },
   "files": [
@@ -32,7 +32,7 @@
     "@eslint/js": "^9.21.0",
     "eslint": "^9.21.0",
     "globals": "^16.0.0",
-    "mocha": "^10.2.0",
+    "vitest": "^3.1.1",
     "prettier": "^3.5.3",
     "typescript-eslint": "^8.26.0"
   },
