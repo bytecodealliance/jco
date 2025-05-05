@@ -1,39 +1,27 @@
 import process from "node:process";
+import { Readable } from "node:stream";
 import { parentPort } from "worker_threads";
+import { pipeline } from "stream/promises";
 
-// See: https://streams.spec.whatwg.org/#example-pipe-switch-dest
-const controllers = {
-  stdout: null,
-  stderr: null,
-};
+async function handleOp(msg) {
+  const { id, op, stream } = msg;
 
-let pipePromise = Promise.resolve();
+  const readable = Readable.fromWeb(stream);
+  const writable = op === "stdout" ? process.stdout : process.stderr;
 
-parentPort.on("message", async (event) => {
-  const { stream, target } = event;
-  if (!stream || !target) return;
+  await pipeline(readable, writable, { end: false });
+  parentPort.postMessage({ id, result: { ok: true } });
+}
 
-  // If a previous stream is active for this target, abort it.
-  if (controllers[target]) {
-    controllers[target].abort();
-    await pipePromise.catch(() => {});
+parentPort.on("message", async (msg) => {
+  try {
+    const { op } = msg;
+    if (op === "stdout" || op === "stderr") {
+      await handleOp(msg);
+    } else {
+      throw new Error("Unknown operation: " + op);
+    }
+  } catch (e) {
+    parentPort.postMessage({ id: msg.id, error: e });
   }
-
-  controllers[target] = new AbortController();
-
-  const writable = new WritableStream({
-    write(chunk) {
-      if (target === "stdout") {
-        process.stdout.write(chunk);
-      } else if (target === "stderr") {
-        process.stderr.write(chunk);
-      }
-    },
-  });
-
-  pipePromise = stream.pipeTo(writable, {
-    signal: controllers[target].signal,
-    preventAbort: true,
-    preventClose: true,
-  });
 });

@@ -1,6 +1,6 @@
 import process from "node:process";
 import { Readable } from "stream";
-import { Worker } from "worker_threads";
+import { ResourceWorker } from "./resource-worker.js";
 
 import { StreamReader } from "./stream.js";
 
@@ -21,16 +21,9 @@ export {
   terminalStderr,
 } from "@bytecodealliance/preview2-shim/cli";
 
-let _worker = null;
-
-function getWorker() {
-  if (!_worker) {
-    _worker = new Worker(new URL("./stdio-worker.js", import.meta.url));
-    _worker.unref();
-  }
-
-  return _worker;
-}
+const _worker = new ResourceWorker(
+  new URL("./stdio-worker.js", import.meta.url),
+);
 
 export const stdin = {
   getStdin() {
@@ -42,13 +35,13 @@ export const stdin = {
 export const stdout = {
   setStdout(streamReader) {
     const stream = streamReader.intoStream();
-    getWorker().postMessage({ stream, target: "stdout" }, [stream]);
+    _worker.runOp({ op: "stdout", stream }, [stream]);
   },
 };
 
 export const stderr = {
   setStdout(streamReader) {
     const stream = streamReader.intoStream();
-    getWorker().postMessage({ stream, target: "stderr" }, [stream]);
+    _worker.runOp({ op: "stderr", stream }, [stream]);
   },
 };

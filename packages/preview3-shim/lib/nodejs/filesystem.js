@@ -1,63 +1,13 @@
-import { Worker } from "worker_threads";
 import { StreamReader } from "./stream.js";
 import { FutureReader } from "./future.js";
-import { randomUUID } from "crypto";
+import { ResourceWorker } from "./resource-worker.js";
 
 import { preopens as preview2Preopens } from "@bytecodealliance/preview2-shim/filesystem";
 
-let _worker = null;
-let _pending = new Map();
+const _worker = new ResourceWorker(new URL("./fs-worker.js", import.meta.url));
 
-function terminateWorker() {
-  _pending.clear();
-  _worker.removeAllListeners();
-  _worker.terminate();
-  _worker = null;
-}
-
-function getFsWorker() {
-  if (!_worker) {
-    _worker = new Worker(new URL("./fs-worker.js", import.meta.url));
-    _worker.unref();
-
-    _worker.on("message", (res) => {
-      const { id, result, error } = res;
-      const entry = _pending.get(id);
-      if (!entry) return;
-
-      const { resolve, reject } = entry;
-      _pending.delete(id);
-
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-
-      // TODO: Should we avoid creating and destroying workers too frequently?
-      if (_pending.size === 0) {
-        terminateWorker();
-      }
-    });
-
-    _worker.on("error", (err) => {
-      for (const { reject } of _pending.values()) {
-        reject(err);
-      }
-      terminateWorker();
-    });
-  }
-
-  return _worker;
-}
-
-export function doFilesystemOp(msg, transferable = []) {
-  const worker = getFsWorker();
-  return new Promise((resolve, reject) => {
-    const id = randomUUID();
-    _pending.set(id, { resolve, reject });
-    worker.postMessage({ ...msg, id }, transferable);
-  });
+function doFilesystemOp(msg, transferable = []) {
+  return _worker.runOp(msg, transferable);
 }
 
 class Descriptor {
