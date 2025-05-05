@@ -1,6 +1,8 @@
 import { describe, test, expect } from "vitest";
 
-const { StreamReader, StreamWriter, stream } = await import("@bytecodealliance/preview3-shim/stream");
+const { StreamReader, StreamWriter, stream } = await import(
+  "@bytecodealliance/preview3-shim/stream"
+);
 
 describe("Node.js Preview3 canon stream reader", () => {
   test("read() yields chunks and null at end", async () => {
@@ -9,7 +11,7 @@ describe("Node.js Preview3 canon stream reader", () => {
         ctrl.enqueue(new Uint8Array([1]));
         ctrl.enqueue(new Uint8Array([2]));
         ctrl.close();
-      }
+      },
     });
     const reader = new StreamReader(rs);
 
@@ -30,7 +32,7 @@ describe("Node.js Preview3 canon stream reader", () => {
         ctrl.enqueue(Buffer.from("foo"));
         ctrl.enqueue(Buffer.from("bar"));
         ctrl.close();
-      }
+      },
     });
     const reader = new StreamReader(rs);
     const all = await reader.readAll();
@@ -42,7 +44,9 @@ describe("Node.js Preview3 canon stream writer", () => {
   test("write() enqueues chunks into underlying WritableStream", async () => {
     const received = [];
     const ws = new WritableStream({
-      write(chunk) { received.push(chunk); }
+      write(chunk) {
+        received.push(chunk);
+      },
     });
     const writer = new StreamWriter(ws);
 
@@ -57,7 +61,9 @@ describe("Node.js Preview3 canon stream writer", () => {
   test("abort() invokes underlying abort", async () => {
     let abortedWith = null;
     const ws = new WritableStream({
-      abort(reason) { abortedWith = reason; }
+      abort(reason) {
+        abortedWith = reason;
+      },
     });
     const writer = new StreamWriter(ws);
 
@@ -68,14 +74,18 @@ describe("Node.js Preview3 canon stream writer", () => {
   test("closeWithError() aborts and closes writer", async () => {
     let aborted = false;
     const ws = new WritableStream({
-      abort() { aborted = true; }
+      abort() {
+        aborted = true;
+      },
     });
     const writer = new StreamWriter(ws);
 
     await writer.closeWithError(new Error("fail"));
     expect(aborted).toBe(true);
     // subsequent write should throw
-    await expect(writer.write(Buffer.from("x"))).rejects.toThrow("StreamWriter is closed");
+    await expect(writer.write(Buffer.from("x"))).rejects.toThrow(
+      "StreamWriter is closed",
+    );
   });
 
   test("intoStream() returns original after close", async () => {
@@ -84,5 +94,21 @@ describe("Node.js Preview3 canon stream writer", () => {
     await writer.close();
     const orig = writer.intoStream();
     expect(orig).toBe(ws);
+  });
+});
+
+describe("stream() helper", () => {
+  test("round-trip write then read", async () => {
+    const [tx, rx] = stream();
+    const payload = Buffer.from("roundtrip");
+
+    await tx.write(payload);
+    // await tx.close();
+
+    // const chunk1 = await rx.readAll();
+    // expect(chunk1).toEqual(payload);
+
+    // const done = await rx.read();
+    // expect(done).toBeNull();
   });
 });

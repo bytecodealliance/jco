@@ -11,7 +11,7 @@ describe("Node.js Preview3 wasi-filesystem", () => {
       {},
       fileURLToPath(import.meta.url).slice(1),
       {},
-      {}
+      {},
     );
 
     const [streamReader, futureReader] = child.readViaStream(0);
