@@ -28,13 +28,13 @@ export class StreamReader {
   }
 
   async readAll() {
-    const chunks = []
-    let c
+    const chunks = [];
+    let c;
     while ((c = await this.read()) !== null) {
-      chunks.push(c)
+      chunks.push(c);
     }
 
-    return Buffer.concat(chunks)
+    return Buffer.concat(chunks);
   }
 
   async cancel(reason) {
@@ -84,7 +84,7 @@ export class StreamWriter {
   }
 
   async close() {
-    if (this.#writer && !this.#writer.closed) {
+    if (this.#writer) {
       await this.#writer.close();
     }
 

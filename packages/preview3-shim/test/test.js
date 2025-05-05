@@ -8,6 +8,8 @@ import { Readable } from "stream";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
+import { finished } from "node:stream/promises";
+
 suite("Node.js Preview3", () => {
   test("setStdout to Readable stream", async () => {
     const { cli } = await import("@bytecodealliance/preview3-shim");
@@ -71,6 +73,7 @@ suite("Node.js Preview3", () => {
     cli.stdout.setStdout(rx1);
 
     await tx1.write("Hello ");
+    await tx1.close();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const [tx2, rx2] = stream();
@@ -84,7 +87,6 @@ suite("Node.js Preview3", () => {
       await tx1.write("The owls are not what they seem.");
     }, "Writing to the old stream should fail");
 
-    await tx1.close();
     await tx2.close();
 
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -130,11 +132,13 @@ suite("Node.js Preview3", () => {
 
       const [streamReader, futureReader] = childDescriptor.readViaStream(0);
 
-      const buf = await streamReader.read();
+      console.log("foo");
+      const buf = await streamReader.readAll();
       const source = new TextDecoder().decode(buf);
       ok(source.includes("UNIQUE STRING"));
 
       await futureReader.read();
+      console.log("baz");
       toDispose.push(childDescriptor);
     })();
 

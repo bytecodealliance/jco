@@ -1,6 +1,7 @@
 import { parentPort } from "worker_threads";
-import { Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { createReadStream, createWriteStream } from "node:fs";
+import { pipeline } from "stream/promises";
 
 import fs from "fs";
 
@@ -13,8 +14,8 @@ async function handleRead(msg) {
     highWaterMark: 64 * 1024,
   });
 
-  const web = Readable.toWeb(readable);
-  await web.pipeTo(stream);
+  const writable = Writable.fromWeb(stream);
+  await pipeline(readable, writable);
 
   parentPort.postMessage({ id, result: { ok: true } });
 }
@@ -29,9 +30,7 @@ async function handleWrite(msg) {
     highWaterMark: 64 * 1024,
   });
 
-  await new Promise((resolve, reject) => {
-    readable.pipe(writable).on("finish", resolve).on("error", reject);
-  });
+  await pipeline(readable, writable);
 
   parentPort.postMessage({
     id,
@@ -50,9 +49,7 @@ async function handleAppend(msg) {
     highWaterMark: 64 * 1024,
   });
 
-  await new Promise((resolve, reject) => {
-    readable.pipe(writable).on("finish", resolve).on("error", reject);
-  });
+  await pipeline(readable, writable);
 
   parentPort.postMessage({
     id,
