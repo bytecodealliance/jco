@@ -105,7 +105,11 @@ export class StreamWriter {
 }
 
 export function stream() {
-  const transform = new TransformStream();
+  const transform = new TransformStream(
+    {},
+    { highwatermark: 64 * 1024 },
+    { highWaterMark: 64 * 1024 },
+  );
   const tx = new StreamWriter(transform.writable);
   const rx = new StreamReader(transform.readable);
 

@@ -12,7 +12,7 @@ describe("Node.js Preview3 wasi-cli", () => {
     const restore = process.stdout.write.bind(process.stdout);
     let output = "";
 
-    const finished = new Promise(resolve => {
+    const finished = new Promise((resolve) => {
       process.stdout.write = (chunk, _enc, cb) => {
         output += chunk;
         cb?.();
@@ -60,7 +60,7 @@ describe("Node.js Preview3 wasi-cli", () => {
     const restore = process.stdout.write.bind(process.stdout);
     let output = "";
 
-    const finished = new Promise(resolve => {
+    const finished = new Promise((resolve) => {
       process.stdout.write = (chunk, _enc, cb) => {
         output += chunk;
         cb?.();
