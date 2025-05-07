@@ -620,10 +620,20 @@ pub fn render_intrinsics(
                         utf8EncodedLen = 0;
                         return 1;
                     }
-                    let buf = utf8Encoder.encode(s);
-                    let ptr = realloc(0, 0, 1, buf.length);
-                    new Uint8Array(memory.buffer).set(buf, ptr);
-                    utf8EncodedLen = buf.length;
+                    let allocLen = 0;
+                    let ptr = 0;
+                    let writtenTotal = 0;
+                    while (s.length > 0) {
+                        ptr = realloc(ptr, allocLen, 1, allocLen += s.length * 2);
+                        const { read, written } = utf8Encoder.encodeInto(
+                            s,
+                            new Uint8Array(memory.buffer, ptr + writtenTotal, allocLen - writtenTotal),
+                        );
+                        writtenTotal += written;
+                        s = s.slice(read);
+                    }
+                    realloc(ptr, allocLen, 8, writtenTotal);
+                    utf8EncodedLen = writtenTotal;
                     return ptr;
                 }
             "),
