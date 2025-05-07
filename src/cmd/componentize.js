@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { stat, readFile, writeFile } from 'node:fs/promises';
 import { resolve, basename } from 'node:path';
 
 import c from 'chalk-template';
