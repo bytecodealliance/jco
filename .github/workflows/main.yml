@@ -370,6 +370,8 @@ jobs:
             workspace: examples/components/node-fetch
           - name: http-hello-world
             workspace: examples/components/http-hello-world
+          - name: http-server-fetch-handler
+            workspace: examples/components/http-server-fetch-handler
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
