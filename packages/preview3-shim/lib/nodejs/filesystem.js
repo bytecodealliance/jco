@@ -6,10 +6,6 @@ import { preopens as preview2Preopens } from "@bytecodealliance/preview2-shim/fi
 
 const _worker = new ResourceWorker(new URL("./fs-worker.js", import.meta.url));
 
-function doFilesystemOp(msg, transferable = []) {
-  return _worker.runOp(msg, transferable);
-}
-
 class Descriptor {
   #inner;
   #fd;
@@ -25,73 +21,62 @@ class Descriptor {
 
   readViaStream(offset) {
     const transform = new TransformStream();
-    const promise = Promise.resolve()
-      .then(() =>
-        doFilesystemOp(
-          {
-            op: "read",
-            fd: this.#fd,
-            offset: Number(offset),
-            stream: transform.writable,
-          },
-          [transform.writable],
-        ),
+    const promise = _worker
+      .runOp(
+        {
+          op: "read",
+          fd: this.#fd,
+          offset: Number(offset),
+          stream: transform.writable,
+        },
+        [transform.writable],
       )
       .catch((err) => {
-        throw convertFsError(err);
+        throw mapError(err);
       });
 
     return [new StreamReader(transform.readable), new FutureReader(promise)];
   }
 
-  writeViaStream(offset, data) {
-    const res = Promise.resolve()
-      .then(() => data.intoStream())
-      .then((stream) =>
-        doFilesystemOp(
-          { op: "write", fd: this.#fd, offset: Number(offset), stream },
-          [stream],
-        ),
-      )
-      .catch((err) => {
-        throw convertFsError(err);
-      });
-
-    return new FutureReader(res);
-  }
-
-  appendViaStream(data) {
-    const res = Promise.resolve()
-      .then(() => data.intoStream())
-      .then((stream) =>
-        doFilesystemOp({ op: "append", fd: this.#fd, stream }, [stream]),
-      )
-      .catch((err) => {
-        throw convertFsError(err);
-      });
-
-    return new FutureReader(res);
-  }
-
   readDirectory() {
     const transform = new TransformStream();
-    const res = Promise.resolve()
-      .then(() =>
-        doFilesystemOp(
-          {
-            op: "readDir",
-            fd: this.#fd,
-            fullPath: this.#fullPath,
-            stream: transform.writable,
-          },
-          [transform.writable],
-        ),
+    const promise = _worker
+      .runOp(
+        {
+          op: "readDir",
+          fd: this.#fd,
+          fullPath: this.#fullPath,
+          stream: transform.writable,
+        },
+        [transform.writable],
       )
       .catch((err) => {
-        throw convertFsError(err);
+        throw mapError(err);
       });
 
-    return [new StreamReader(transform.readable), new FutureReader(res)];
+    return [new StreamReader(transform.readable), new FutureReader(promise)];
+  }
+
+  async writeViaStream(offset, data) {
+    const stream = await data.intoStream();
+
+    try {
+      await _worker.runOp({ op: "write", fd: this.#fd, offset, stream }, [
+        stream,
+      ]);
+    } catch (err) {
+      throw mapError(err);
+    }
+  }
+
+  async appendViaStream(data) {
+    const stream = await data.intoStream();
+
+    try {
+      await _worker.runOp({ op: "append", fd: this.#fd, stream }, [stream]);
+    } catch (err) {
+      throw mapError(err);
+    }
   }
 
   openAt(pathFlags, path, openFlags, descriptorFlags) {
@@ -157,7 +142,7 @@ delete Descriptor._create;
 export const types = {
   Descriptor,
   filesystemErrorCode(err) {
-    return convertFsError(err.payload);
+    return mapError(err.payload);
   },
 };
 
@@ -177,93 +162,54 @@ function intoPreview3([inner, virtualPath]) {
   return [descriptorCreate(inner), virtualPath];
 }
 
-function convertFsError(e) {
-  switch (e.code) {
-    case "EACCES":
-      return "access";
-    case "EALREADY":
-      return "already";
-    case "EBADF":
-      return "bad-descriptor";
-    case "EBUSY":
-      return "busy";
-    case "EDEADLK":
-      return "deadlock";
-    case "EDQUOT":
-      return "quota";
-    case "EEXIST":
-      return "exist";
-    case "EFBIG":
-      return "file-too-large";
-    case "EILSEQ":
-      return "illegal-byte-sequence";
-    case "EINPROGRESS":
-      return "in-progress";
-    case "EINTR":
-      return "interrupted";
-    case "EINVAL":
-      return "invalid";
-    case "EIO":
-      return "io";
-    case "EISDIR":
-      return "is-directory";
-    case "ELOOP":
-      return "loop";
-    case "EMLINK":
-      return "too-many-links";
-    case "EMSGSIZE":
-      return "message-size";
-    case "ENAMETOOLONG":
-      return "name-too-long";
-    case "ENODEV":
-      return "no-device";
-    case "ENOENT":
-      return "no-entry";
-    case "ENOLCK":
-      return "no-lock";
-    case "ENOMEM":
-      return "insufficient-memory";
-    case "ENOSPC":
-      return "insufficient-space";
-    case "ENOTDIR":
-    case "ERR_FS_EISDIR":
-      return "not-directory";
-    case "ENOTEMPTY":
-      return "not-empty";
-    case "ENOTRECOVERABLE":
-      return "not-recoverable";
-    case "ENOTSUP":
-      return "unsupported";
-    case "ENOTTY":
-      return "no-tty";
-    // windows gives this error for badly structured `//` reads
-    // this seems like a slightly better error than unknown given
-    // that it's a common footgun
-    case -4094:
-    case "ENXIO":
-      return "no-such-device";
-    case "EOVERFLOW":
-      return "overflow";
-    case "EPERM":
-      return "not-permitted";
-    case "EPIPE":
-      return "pipe";
-    case "EROFS":
-      return "read-only";
-    case "ESPIPE":
-      return "invalid-seek";
-    case "ETXTBSY":
-      return "text-file-busy";
-    case "EXDEV":
-      return "cross-device";
-    case "UNKNOWN":
-      switch (e.errno) {
-        case -4094:
-          return "no-such-device";
-        default:
-          throw e;
-      }
-    default:
-      throw e;
+const ERROR_MAP = {
+  EACCES: "access",
+  EALREADY: "already",
+  EBADF: "bad-descriptor",
+  EBUSY: "busy",
+  EDEADLK: "deadlock",
+  EDQUOT: "quota",
+  EEXIST: "exist",
+  EFBIG: "file-too-large",
+  EILSEQ: "illegal-byte-sequence",
+  EINPROGRESS: "in-progress",
+  EINTR: "interrupted",
+  EINVAL: "invalid",
+  EIO: "io",
+  EISDIR: "is-directory",
+  ELOOP: "loop",
+  EMLINK: "too-many-links",
+  EMSGSIZE: "message-size",
+  ENAMETOOLONG: "name-too-long",
+  ENODEV: "no-device",
+  ENOENT: "no-entry",
+  ENOLCK: "no-lock",
+  ENOMEM: "insufficient-memory",
+  ENOSPC: "insufficient-space",
+  ENOTDIR: "not-directory",
+  ERR_FS_EISDIR: "not-directory",
+  ENOTEMPTY: "not-empty",
+  ENOTRECOVERABLE: "not-recoverable",
+  ENOTSUP: "unsupported",
+  ENOTTY: "no-tty",
+  ENXIO: "no-such-device",
+  EOVERFLOW: "overflow",
+  EPERM: "not-permitted",
+  EPIPE: "pipe",
+  EROFS: "read-only",
+  ESPIPE: "invalid-seek",
+  ETXTBSY: "text-file-busy",
+  EXDEV: "cross-device",
+};
+
+function mapError(e) {
+  if (e.code in fsErrorMap) {
+    return fsErrorMap[codeKey];
   }
+
+  if (e.code === -4094 || (e.code === "UNKNOWN" && e.errno === -4094)) {
+    return "no-such-device";
+  }
+
+  throw e;
 }
