@@ -1,7 +1,10 @@
 name: lint
 
 on:
+  merge_group:
   pull_request:
+    branches:
+      - main
 
 permissions:
   contents: none
@@ -9,7 +12,7 @@ permissions:
 jobs:
   conventional-commits:
     runs-on: ubuntu-22.04
-    permissons:
+    permissions:
       contents: read
       pull-requests: write
     steps:
