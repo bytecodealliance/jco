@@ -146,7 +146,4 @@ jobs:
             To ensure this release is ready to be merged:
               - [ ] Review updated CHANGELOG(s)
 
-            After merging this PR, please do the following:
-              - [ ] Run the `tag-release` CI workflow (specifying the commit hash of this PR once fast-forwarded onto `main`)
-              - [ ] Run the `release` CI workflow (specifying the released tag)
-              - [ ] Make releases to downstream repositories (e.g. NPM) for the released artifacts as necessary
+            After this PR is merged tagging, artifacts and releasing should run automatically.
