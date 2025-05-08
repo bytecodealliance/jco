@@ -1,7 +1,5 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
 ## [jco-v1.11.0] - 2025-04-28
 
 ### 🚀 Features
