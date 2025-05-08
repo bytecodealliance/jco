@@ -58,20 +58,27 @@ jobs:
           script: |
             switch (context.eventName) {
               case 'pull_request':
-                if (!context?.payload?.head?.ref.includes("prep-release")) {
-                  console.log(`invalid ref [${context?.payload?.head?.ref}]: does not include 'prep-release'`);
+                const pr = context?.payload?.pull_request;
+                const headRef = pr?.head?.ref;
+                const headMerged = pr?.head?.merged;
+                const numCommits = pr?.commits.len;
+                const title = pr?.title;
+
+                if (!headRef?.includes("prep-release")) {
+                  console.log(`invalid ref [${headRef}]: does not include 'prep-release'`);
                   return;
                 }
-                if (!context?.payload?.head?.ref || !context.payload.head.merged) {
+                if (!headRef || !headMerged) {
                   console.log("invalid/unexpected pull request event type (must be merged, must have ref)");
                   return;
                 }
-                if (!context?.payload?.commits?.len || context?.payload?.commits?.len == 0) {
+                if (context?.payload?.commits === 0) {
                   console.log("missing commits on automatically triggered merge");
                   return;
                 }
-                const commitMsg = context.payload.commits[0].message;
-                const [_, project, version] = /^release:\s([^\s]+)\sv([^\s]+)$/.match(commitMsg);
+
+                const [_, project, version] = /^release:\s([^\s]+)\sv([^\s]+)$/.match(title);
+
                 core.setOutput('proceed', "true");
                 core.setOutput('project', project);
                 core.setOutput('version', version);
