@@ -8,13 +8,11 @@
   "exports": {
     ".": {
       "types": "./types/index.d.ts",
-      "node": "./lib/nodejs/index.js",
-      "default": "./lib/browser/index.js"
+      "node": "./lib/nodejs/index.js"
     },
     "./*": {
       "types": "./types/*.d.ts",
-      "node": "./lib/nodejs/*.js",
-      "default": "./lib/browser/*.js"
+      "node": "./lib/nodejs/*.js"
     }
   },
   "scripts": {
