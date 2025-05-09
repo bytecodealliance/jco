@@ -1,5 +1,5 @@
 export {
-  insecure,
-  insecureSeed,
-  random,
-} from "@bytecodealliance/preview2-shim/random";
+    insecure,
+    insecureSeed,
+    random,
+} from '@bytecodealliance/preview2-shim/random';

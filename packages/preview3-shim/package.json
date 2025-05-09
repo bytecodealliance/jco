@@ -16,8 +16,7 @@
     }
   },
   "scripts": {
-    "test": "vitest --run",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\""
+    "test": "vitest --run"
   },
   "files": [
     "types",

@@ -1,74 +1,74 @@
-import { Worker } from "worker_threads";
-import { randomUUID } from "crypto";
+import { Worker } from 'worker_threads';
+import { randomUUID } from 'crypto';
 
 export class ResourceWorker {
-  #worker = null;
-  #workerUrl = null;
-  #pending = new Map();
+    #worker = null;
+    #workerUrl = null;
+    #pending = new Map();
 
-  constructor(workerUrl) {
-    this.#workerUrl = workerUrl;
-  }
-
-  #getWorker() {
-    // TODO(tandr): Use a pool of workers instead of a single one.
-    if (this.#worker) {
-      return this.#worker;
+    constructor(workerUrl) {
+        this.#workerUrl = workerUrl;
     }
 
-    this.#worker = new Worker(this.#workerUrl);
-    this.#worker.unref();
+    #getWorker() {
+        // TODO(tandr): Use a pool of workers instead of a single one.
+        if (this.#worker) {
+            return this.#worker;
+        }
 
-    this.#worker.on("message", (res) => {
-      const { id, result, error } = res;
-      const entry = this.#pending.get(id);
-      if (!entry) return;
+        this.#worker = new Worker(this.#workerUrl);
+        this.#worker.unref();
 
-      const { resolve, reject } = entry;
-      this.#pending.delete(id);
+        this.#worker.on('message', (res) => {
+            const { id, result, error } = res;
+            const entry = this.#pending.get(id);
+            if (!entry) return;
 
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
+            const { resolve, reject } = entry;
+            this.#pending.delete(id);
 
-      // TOOD:(tandr): This is too aggresive but shuold be fixed with a pool of workers.
-      if (this.#pending.size === 0) {
+            if (error) {
+                reject(error);
+            } else {
+                resolve(result);
+            }
+
+            // TOOD:(tandr): This is too aggresive but shuold be fixed with a pool of workers.
+            if (this.#pending.size === 0) {
+                this.#terminate();
+            }
+        });
+
+        this.#worker.on('error', (err) => {
+            for (const { reject } of this.#pending.values()) {
+                reject(err);
+            }
+            this.#terminate();
+        });
+
+        return this.#worker;
+    }
+
+    #terminate() {
+        if (!this.#worker) return;
+
+        this.#pending.clear();
+        this.#worker.removeAllListeners();
+        this.#worker.terminate();
+        this.#worker = null;
+    }
+
+    runOp(msg, transferable = []) {
+        const worker = this.#getWorker();
+
+        return new Promise((resolve, reject) => {
+            const id = randomUUID();
+            this.#pending.set(id, { resolve, reject });
+            worker.postMessage({ ...msg, id }, transferable);
+        });
+    }
+
+    terminate() {
         this.#terminate();
-      }
-    });
-
-    this.#worker.on("error", (err) => {
-      for (const { reject } of this.#pending.values()) {
-        reject(err);
-      }
-      this.#terminate();
-    });
-
-    return this.#worker;
-  }
-
-  #terminate() {
-    if (!this.#worker) return;
-
-    this.#pending.clear();
-    this.#worker.removeAllListeners();
-    this.#worker.terminate();
-    this.#worker = null;
-  }
-
-  runOp(msg, transferable = []) {
-    const worker = this.#getWorker();
-
-    return new Promise((resolve, reject) => {
-      const id = randomUUID();
-      this.#pending.set(id, { resolve, reject });
-      worker.postMessage({ ...msg, id }, transferable);
-    });
-  }
-
-  terminate() {
-    this.#terminate();
-  }
+    }
 }
