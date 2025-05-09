@@ -4,7 +4,9 @@ import { ResourceWorker } from "./workers/resource-worker.js";
 
 import { preopens as preview2Preopens } from "@bytecodealliance/preview2-shim/filesystem";
 
-const _worker = new ResourceWorker(new URL("./workers/filesystem-worker.js", import.meta.url));
+const _worker = new ResourceWorker(
+  new URL("./workers/filesystem-worker.js", import.meta.url),
+);
 
 class Descriptor {
   #inner;

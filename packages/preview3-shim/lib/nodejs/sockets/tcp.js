@@ -1,6 +1,7 @@
 import { StreamReader, StreamWriter, stream } from "../stream.js";
 import { FutureReader, future } from "../future.js";
 import { ResourceWorker } from "../workers/resource-worker.js";
+import { mapError } from "./error.js";
 
 import {
   isWildcardIpAddress,
@@ -664,44 +665,3 @@ export const tcpCreateSocket = {
     }
   },
 };
-
-export const ERROR_MAP = {
-  EACCES: "access-denied",
-  EPERM: "access-denied",
-  EOPNOTSUPP: "not-supported",
-  EINVAL: "invalid-argument",
-  ENOMEM: "out-of-memory",
-  ENOBUFS: "out-of-memory",
-  EAI_MEMORY: "out-of-memory",
-  ETIMEDOUT: "timeout",
-  EADDRINUSE: "address-in-use",
-  EADDRNOTAVAIL: "address-not-bindable",
-  EHOSTUNREACH: "remote-unreachable",
-  ENETUNREACH: "remote-unreachable",
-  ENETDOWN: "remote-unreachable",
-  ECONNREFUSED: "connection-refused",
-  ECONNRESET: "connection-reset",
-  ECONNABORTED: "connection-aborted",
-  EMSGSIZE: "datagram-too-large",
-  ENOTCONN: "invalid-state",
-  EISCONN: "invalid-state",
-  EALREADY: "invalid-state",
-  EDESTADDRREQ: "invalid-argument",
-};
-
-/**
- * Maps system error codes to standardized error strings
- * @param {string|Error} err - The error to map
- * @returns {string} The mapped error code
- */
-function mapError(err) {
-  if (typeof err === "string") {
-    return ERROR_MAP[err] || err;
-  }
-
-  if (err && typeof err.code === "string") {
-    return ERROR_MAP[err.code] || err.code;
-  }
-
-  return "unknown";
-}
