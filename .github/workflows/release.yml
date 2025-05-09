@@ -177,6 +177,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Cache npm install
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
+      - name: Install NPM packages
+        run: |
+          npm install
+
       - name: Create release package
         working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
