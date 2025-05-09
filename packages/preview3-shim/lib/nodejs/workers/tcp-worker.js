@@ -3,7 +3,8 @@ import { parentPort } from "worker_threads";
 import { randomUUID } from "node:crypto";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
-import { serializeIpAddress } from "./socket-address.js";
+
+import { serializeIpAddress } from "../sockets/address.js";
 
 import process from "node:process";
 const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
