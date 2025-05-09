@@ -81,7 +81,7 @@ parentPort.on("message", async (msg) => {
         result = await handleSendBufferSize(msg);
         break;
       case "tcp-dispose":
-        result = handleTcpDispose(socketId);
+        result = handleTcpDispose(msg);
         break;
       default:
         throw new Error(`Unknown operation: ${op}`);
@@ -204,7 +204,7 @@ async function handleTcpListen({ socketId, stream }) {
     stream.write({ family, socketId: id });
   });
 
-  server.on("error", (err) => stream.error(err));
+  server.on("error", (err) => stream.abort(err));
   stream.closed.then(() => server.close());
 
   return { success: true };
@@ -326,7 +326,7 @@ async function handleSendBufferSize({ socketId, value }) {
   }
 }
 
-function handleTcpDispose(socketId) {
+function handleTcpDispose({ socketId }) {
   const socket = sockets.get(socketId);
   if (!socket) {
     throw new Error("Invalid socket ID");

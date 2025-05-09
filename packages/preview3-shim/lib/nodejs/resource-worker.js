@@ -33,6 +33,7 @@ export class ResourceWorker {
         resolve(result);
       }
 
+      // TOOD:(tandr): This is too aggresive but shuold be fixed with a pool of workers.
       if (this.#pending.size === 0) {
         this.#terminate();
       }
