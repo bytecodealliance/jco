@@ -10,7 +10,9 @@ import {
   IP_ADDRESS_FAMILY,
 } from "./socket-address.js";
 
-const _worker = new ResourceWorker(new URL("./sockets-worker.js", import.meta.url));
+const _worker = new ResourceWorker(
+  new URL("./sockets-worker.js", import.meta.url),
+);
 
 const STATE = {
   UNBOUND: "unbound",
@@ -49,8 +51,16 @@ export class TcpSocket {
     sendBufferSize: undefined,
   };
 
-  // Create a new TCP socket
-  // WIT: constructor(address-family: ip-address-family)
+  /**
+   * Creates a new TCP socket
+   * WIT: constructor(address-family: ip-address-family)
+   *
+   * @static
+   * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
+   * @param {number} socketId - The internal socket identifier
+   * @returns {TcpSocket} A new TcpSocket instance
+   * @private
+   */
   static _create(addressFamily, socketId) {
     const socket = new TcpSocket();
     socket.#family = addressFamily;
@@ -58,8 +68,17 @@ export class TcpSocket {
     return socket;
   }
 
-  // Bind the socket to a local address
-  // WIT: bind: func(local-address: ip-socket-address) -> result<_, error-code>
+  /**
+   * Binds the socket to a local address
+   * WIT: bind: func(local-address: ip-socket-address) -> result<_, error-code>
+   *
+   * @async
+   * @param {Object} localAddress - The local address to bind to
+   * @returns {Promise<void>}
+   * @throws {"invalid-state"} If the socket is not in unbound state
+   * @throws {"invalid-argument"} If the local address is not valid
+   * @throws {string} Other error codes mapped from system errors
+   */
   async bind(localAddress) {
     if (this.#state !== STATE.UNBOUND) {
       throw "invalid-state";
@@ -81,8 +100,17 @@ export class TcpSocket {
     }
   }
 
-  // Connect to a remote endpoint
-  // WIT: connect: func(remote-address: ip-socket-address) -> result<_, error-code>
+  /**
+   * Connects to a remote endpoint
+   * WIT: connect: func(remote-address: ip-socket-address) -> result<_, error-code>
+   *
+   * @async
+   * @param {Object} remoteAddress - The remote address to connect to
+   * @returns {Promise<void>}
+   * @throws {"invalid-state"} If the socket is connecting, connected or listening
+   * @throws {"invalid-argument"} If the remote address is not valid
+   * @throws {string} Other error codes mapped from system errors
+   */
   async connect(remoteAddress) {
     if (
       this.#state === STATE.CONNECTING ||
@@ -112,8 +140,15 @@ export class TcpSocket {
     }
   }
 
-  // Start listening for connections
-  // WIT: listen: func() -> result<stream<tcp-socket>, error-code>
+  /**
+   * Starts listening for connections
+   * WIT: listen: func() -> result<stream<tcp-socket>, error-code>
+   *
+   * @async
+   * @returns {Promise<StreamReader>} A stream of incoming TCP socket connections
+   * @throws {"invalid-state"} If the socket is listening or connected
+   * @throws {string} Other error codes mapped from system errors
+   */
   async listen() {
     if (this.#state === STATE.LISTENING || this.#state === STATE.CONNECTED) {
       throw "invalid-state";
@@ -144,16 +179,25 @@ export class TcpSocket {
     }
   }
 
-  // Send data to the connected peer
-  // WIT: send: func(data: stream<u8>) -> result<_, error-code>
+  /**
+   * Sends data to the connected peer
+   * WIT: send: func(data: stream<u8>) -> result<_, error-code>
+   *
+   * @async
+   * @param {StreamReader} data - The data stream to send
+   * @returns {Promise<void>}
+   * @throws {"invalid-state"} If the socket is not connected
+   * @throws {"invalid-argument"} If data is not a valid StreamReader
+   * @throws {string} Other error codes mapped from system errors
+   */
   async send(data) {
     if (this.#state !== STATE.CONNECTED) {
       throw "invalid-state";
     }
-
-    if (data === null || typeof data !== "StreamReader") {
+    if (!(data instanceof StreamReader)) {
       throw "invalid-argument";
     }
+
     const stream = data.intoStream();
 
     try {
@@ -171,11 +215,16 @@ export class TcpSocket {
     }
   }
 
-  // Receive data from the connected peer
-  // WIT: receive: func() -> tuple<stream<u8>, future<result<_, error-code>>>
+  /**
+   * Receives data from the connected peer
+   * WIT: receive: func() -> tuple<stream<u8>, future<result<_, error-code>>>
+   *
+   * @throws {"invalid-state"} If the socket is not connected
+   * @returns {[StreamReader, FutureReader]} A tuple containing the data stream and a future
+   */
   receive() {
     if (this.#state !== STATE.CONNECTED) {
-      throw new Error("Socket not connected");
+      throw "invalid-state";
     }
 
     const transform = new TransformStream();
@@ -195,8 +244,15 @@ export class TcpSocket {
     return [new StreamReader(transform.readable), new FutureReader(promise)];
   }
 
-  // Get the bound local address
-  // WIT: local-address: func() -> result<ip-socket-address, error-code>
+  /**
+   * Gets the bound local address
+   * WIT: local-address: func() -> result<ip-socket-address, error-code>
+   *
+   * @async
+   * @returns {Promise<Object>} The local socket address
+   * @throws {"invalid-state"} If the socket is not bound
+   * @throws {string} Other error codes mapped from system errors
+   */
   async localAddress() {
     if (this.#state === STATE.UNBOUND) {
       throw "invalid-state";
@@ -212,8 +268,15 @@ export class TcpSocket {
     }
   }
 
-  // Get the remote address
-  // WIT: remote-address: func() -> result<ip-socket-address, error-code>
+  /**
+   * Gets the remote address
+   * WIT: remote-address: func() -> result<ip-socket-address, error-code>
+   *
+   * @async
+   * @returns {Promise<Object>} The remote socket address
+   * @throws {"invalid-state"} If the socket is not connected
+   * @throws {string} Other error codes mapped from system errors
+   */
   async remoteAddress() {
     if (this.#state !== STATE.CONNECTED) {
       throw "invalid-state";
@@ -229,20 +292,38 @@ export class TcpSocket {
     }
   }
 
-  // Check if socket is in listening state
-  // WIT: is-listening: func() -> bool
+  /**
+   * Checks if the socket is in listening state
+   * WIT: is-listening: func() -> bool
+   *
+   * @returns {boolean} True if socket is listening, false otherwise
+   */
   isListening() {
     return this.#state === STATE.LISTENING;
   }
 
-  // Get address family
-  // WIT: address-family: func() -> ip-address-family
+  /**
+   * Gets the address family
+   * WIT: address-family: func() -> ip-address-family
+   *
+   * @returns {IP_ADDRESS_FAMILY} The IP address family (IPv4 or IPv6)
+   */
   addressFamily() {
     return this.#family;
   }
 
-  // Set listen backlog size
-  // WIT: set-listen-backlog-size: func(value: u64) -> result<_, error-code>
+  /**
+   * Sets the listen backlog size
+   * WIT: set-listen-backlog-size: func(value: u64) -> result<_, error-code>
+   *
+   * @async
+   * @param {bigint} value - The backlog size
+   * @returns {Promise<void>}
+   * @throws {"invalid-argument"} If value is 0
+   * @throws {"not-supported"} If socket is connecting or connected
+   * @throws {"invalid-state"} If socket is not in unbound or bound state
+   * @throws {string} Other error codes mapped from system errors
+   */
   async setListenBacklogSize(value) {
     if (value === 0n) {
       throw "invalid-argument";
@@ -268,14 +349,27 @@ export class TcpSocket {
     }
   }
 
-  // Get whether keep alive is enabled
-  // WIT: keep-alive-enabled: func() -> result<bool, error-code>
+  /**
+   * Gets whether keep-alive is enabled
+   * WIT: keep-alive-enabled: func() -> result<bool, error-code>
+   *
+   * @async
+   * @returns {Promise<boolean>} True if keep-alive is enabled, false otherwise
+   * @throws {string} Error codes mapped from system errors
+   */
   async keepAliveEnabled() {
     return this.#options.keepAliveEnabled;
   }
 
-  // Set keep alive enabled
-  // WIT: set-keep-alive-enabled: func(value: bool) -> result<_, error-code>
+  /**
+   * Sets keep-alive enabled state
+   * WIT: set-keep-alive-enabled: func(value: bool) -> result<_, error-code>
+   *
+   * @async
+   * @param {boolean} value - Whether to enable keep-alive
+   * @returns {Promise<void>}
+   * @throws {string} Error codes mapped from system errors
+   */
   async setKeepAliveEnabled(value) {
     try {
       this.#options.keepAliveEnabled = value;
@@ -291,14 +385,26 @@ export class TcpSocket {
     }
   }
 
-  // Get keep alive idle time
-  // WIT: keep-alive-idle-time: func() -> result<duration, error-code>
-  async keepAliveIdleTime() {
+  /**
+   * Gets the keep-alive idle time
+   * WIT: keep-alive-idle-time: func() -> result<duration, error-code>
+   *
+   * @returns {bigint} The keep-alive idle time in nanoseconds
+   */
+  keepAliveIdleTime() {
     return this.#options.keepAliveIdleTime;
   }
 
-  // Set keep alive idle time
-  // WIT: set-keep-alive-idle-time: func(value: duration) -> result<_, error-code>
+  /**
+   * Sets the keep-alive idle time
+   * WIT: set-keep-alive-idle-time: func(value: duration) -> result<_, error-code>
+   *
+   * @async
+   * @param {bigint} value - The idle time in nanoseconds
+   * @returns {Promise<void>}
+   * @throws {"invalid-argument"} If value is less than 1
+   * @throws {string} Other error codes mapped from system errors
+   */
   async setKeepAliveIdleTime(value) {
     if (value < 1n) {
       throw "invalid-argument";
@@ -329,47 +435,83 @@ export class TcpSocket {
     }
   }
 
-  // Get keep alive interval
-  // WIT: keep-alive-interval: func() -> result<duration, error-code>
-  async keepAliveInterval() {
+  /**
+   * Gets the keep-alive interval
+   * WIT: keep-alive-interval: func() -> result<duration, error-code>
+   *
+   * @returns {bigint} The keep-alive interval in nanoseconds
+   */
+  keepAliveInterval() {
     return this.#options.keepAliveInterval;
   }
 
-  // Set keep alive interval
-  // WIT: set-keep-alive-interval: func(value: duration) -> result<_, error-code>
-  async setKeepAliveInterval(value) {
+  /**
+   * Sets the keep-alive interval
+   * WIT: set-keep-alive-interval: func(value: duration) -> result<_, error-code>
+   *
+   * @param {bigint} value - The interval in nanoseconds
+   * @returns {void}
+   * @throws {"invalid-argument"} If value is less than 1
+   */
+  setKeepAliveInterval(value) {
     if (value < 1n) throw "invalid-argument";
     this.#options.keepAliveInterval = value;
   }
 
-  // Get keep alive count
-  // WIT: keep-alive-count: func() -> result<u32, error-code>
-  async keepAliveCount() {
+  /**
+   * Gets the keep-alive count
+   * WIT: keep-alive-count: func() -> result<u32, error-code>
+   *
+   * @returns {number} The keep-alive count
+   */
+  keepAliveCount() {
     return this.#options.keepAliveCount;
   }
 
-  // Set keep alive count
-  // WIT: set-keep-alive-count: func(value: u32) -> result<_, error-code>
-  async setKeepAliveCount(value) {
-    if (value < 1n) throw "invalid-argument";
+  /**
+   * Sets the keep-alive count
+   * WIT: set-keep-alive-count: func(value: u32) -> result<_, error-code>
+   *
+   * @param {number} value - The keep-alive count
+   * @returns {void}
+   * @throws {"invalid-argument"} If value is less than 1
+   */
+  setKeepAliveCount(value) {
+    if (value < 1) throw "invalid-argument";
     this.#options.keepAliveCount = value;
   }
 
-  // Get hop limit
-  // WIT: hop-limit: func() -> result<u8, error-code>
-  async hopLimit() {
+  /**
+   * Gets the hop limit
+   * WIT: hop-limit: func() -> result<u8, error-code>
+   *
+   * @returns {number} The hop limit
+   */
+  hopLimit() {
     return this.#options.hopLimit;
   }
 
-  // Set hop limit
-  // WIT: set-hop-limit: func(value: u8) -> result<_, error-code>
-  async setHopLimit(value) {
-    if (value < 1n) throw "invalid-argument";
+  /**
+   * Sets the hop limit
+   * WIT: set-hop-limit: func(value: u8) -> result<_, error-code>
+   *
+   * @param {number} value - The hop limit
+   * @returns {void}
+   * @throws {"invalid-argument"} If value is less than 1
+   */
+  setHopLimit(value) {
+    if (value < 1) throw "invalid-argument";
     this.#options.hopLimit = value;
   }
 
-  // Get receive buffer size
-  // WIT: receive-buffer-size: func() -> result<u64, error-code>
+  /**
+   * Gets the receive buffer size
+   * WIT: receive-buffer-size: func() -> result<u64, error-code>
+   *
+   * @async
+   * @returns {Promise<bigint>} The receive buffer size in bytes
+   * @throws {string} Error codes mapped from system errors
+   */
   async receiveBufferSize() {
     if (this.#options.receiveBufferSize) {
       return this.#options.receiveBufferSize;
@@ -388,15 +530,27 @@ export class TcpSocket {
     }
   }
 
-  // Set receive buffer size
-  // WIT: set-receive-buffer-size: func(value: u64) -> result<_, error-code>
-  async setReceiveBufferSize(value) {
+  /**
+   * Sets the receive buffer size
+   * WIT: set-receive-buffer-size: func(value: u64) -> result<_, error-code>
+   *
+   * @param {bigint} value - The receive buffer size in bytes
+   * @returns {void}
+   * @throws {"invalid-argument"} If value is 0
+   */
+  setReceiveBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
     this.#options.receiveBufferSize = value;
   }
 
-  // Get send buffer size
-  // WIT: send-buffer-size: func() -> result<u64, error-code>
+  /**
+   * Gets the send buffer size
+   * WIT: send-buffer-size: func() -> result<u64, error-code>
+   *
+   * @async
+   * @returns {Promise<bigint>} The send buffer size in bytes
+   * @throws {string} Error codes mapped from system errors
+   */
   async sendBufferSize() {
     if (this.#options.sendBufferSize) {
       return this.#options.sendBufferSize;
@@ -415,13 +569,22 @@ export class TcpSocket {
     }
   }
 
-  // Set send buffer size
-  // WIT: set-send-buffer-size: func(value: u64) -> result<_, error-code>
-  async setSendBufferSize(value) {
+  /**
+   * Sets the send buffer size
+   * WIT: set-send-buffer-size: func(value: u64) -> result<_, error-code>
+   *
+   * @param {bigint} value - The send buffer size in bytes
+   * @returns {void}
+   * @throws {"invalid-argument"} If value is 0
+   */
+  setSendBufferSize(value) {
     if (value === 0n) throw "invalid-argument";
     this.#options.sendBufferSize = value;
   }
 
+  /**
+   * Disposes the socket
+   */
   [Symbol.dispose]() {
     if (this.#socketId) {
       void _worker.runOp({
@@ -434,6 +597,12 @@ export class TcpSocket {
     this.#state = STATE.CLOSED;
   }
 
+  /**
+   * Validates if a local address is valid for this socket
+   * @param {Object} localAddress - The local address to validate
+   * @returns {boolean} True if the address is valid, false otherwise
+   * @private
+   */
   #isValidLocalAddress(localAddress) {
     return (
       this.#family === localAddress.tag &&
@@ -442,6 +611,12 @@ export class TcpSocket {
     );
   }
 
+  /**
+   * Validates if a remote address is valid for this socket
+   * @param {Object} remoteAddress - The remote address to validate
+   * @returns {boolean} True if the address is valid, false otherwise
+   * @private
+   */
   #isValidRemoteAddress(remoteAddress) {
     return (
       this.#family === remoteAddress.tag &&
@@ -458,6 +633,16 @@ const tcpSocketCreate = TcpSocket._create;
 delete TcpSocket._create;
 
 export const tcpCreateSocket = {
+  /**
+   * Creates a new TCP socket
+   * WIT: createTcpSocket: func(address-family: ip-address-family) -> result<tcp-socket, error-code>
+   *
+   * @async
+   * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
+   * @returns {TcpSocket>} A new TCP socket instance
+   * @throws {"invalid-argument"} If the address family is not valid
+   * @throws {string} Other error codes mapped from system errors
+   */
   async createTcpSocket(addressFamily) {
     if (
       addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
@@ -506,13 +691,18 @@ export const ERROR_MAP = {
   EDESTADDRREQ: "invalid-argument",
 };
 
+/**
+ * Maps system error codes to standardized error strings
+ * @param {string|Error} err - The error to map
+ * @returns {string} The mapped error code
+ */
 function mapError(err) {
   if (typeof err === "string") {
-    return ERROR_MAP[err] || "unknown";
+    return ERROR_MAP[err] || err;
   }
 
-  if (err instanceof Error && err.code) {
-    return ERROR_MAP[err.code] || "unknown";
+  if (err && typeof err.code === "string") {
+    return ERROR_MAP[err.code] || err.code;
   }
 
   return "unknown";
