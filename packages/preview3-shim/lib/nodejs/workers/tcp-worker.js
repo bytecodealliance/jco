@@ -5,6 +5,7 @@ import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 
 import { serializeIpAddress } from "../sockets/address.js";
+import { mapErrorCode } from "../sockets/error.js";
 
 import process from "node:process";
 const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
@@ -12,37 +13,17 @@ const { TCP, constants: TCPConstants } = process.binding("tcp_wrap");
 // Socket instances stored by ID
 const sockets = new Map();
 
-export function mapErrorCode(code) {
-  const map = {
-    4053: "invalid-state",
-    4083: "invalid-state",
-    ENOTCONN: "invalid-state",
-    EBADF: "invalid-state",
-    EACCES: "access-denied",
-    EPERM: "access-denied",
-    ENOTSUP: "not-supported",
-    EINVAL: "invalid-argument",
-    ENOMEM: "out-of-memory",
-    ENOBUFS: "out-of-memory",
-    EALREADY: "concurrency-conflict",
-    EWOULDBLOCK: "would-block",
-    4090: "address-not-bindable",
-    EADDRNOTAVAIL: "address-not-bindable",
-    4091: "address-in-use",
-    EADDRINUSE: "address-in-use",
-    ECONNREFUSED: "connection-refused",
-    ECONNRESET: "connection-reset",
-    ECONNABORTED: "connection-aborted",
-  };
-
-  return map[code] ?? "unknown";
-}
-
 // Handle worker messages
 parentPort.on("message", async (msg) => {
+  const { id, op } = msg;
+
   try {
-    const { id, op } = msg;
     let result;
+
+    // All operations except "tcp-create" require a valid socket ID
+    if (op !== "tcp-create" && !sockets.has(msg.socketId)) {
+      throw new Error("Invalid socket ID");
+    }
 
     switch (op) {
       case "tcp-create":
@@ -119,10 +100,6 @@ function handleTcpCreate({ family }) {
 // Bind a socket to local address
 async function handleTcpBind({ socketId, localAddress }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
   const address = serializeIpAddress(localAddress);
   const port = localAddress.val.port;
 
@@ -149,10 +126,6 @@ async function handleTcpBind({ socketId, localAddress }) {
 // Connect a socket to remote address
 async function handleTcpConnect({ socketId, remoteAddress }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
   const { handle } = socket;
 
   const host = serializeIpAddress(remoteAddress);
@@ -179,10 +152,6 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
 
 async function handleTcpListen({ socketId, stream }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
   const { handle, backlog, family } = socket;
 
   const server = new Server({
@@ -213,10 +182,6 @@ async function handleTcpListen({ socketId, stream }) {
 
 async function handleTcpSend({ socketId, stream }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
   const { tcp } = socket;
   const readable = Readable.fromWeb(stream);
 
@@ -227,10 +192,6 @@ async function handleTcpSend({ socketId, stream }) {
 
 async function handleTcpReceive({ socketId, stream }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
   const { tcp } = socket;
 
   const writable = Writable.fromWeb(stream);
@@ -240,14 +201,9 @@ async function handleTcpReceive({ socketId, stream }) {
 
 async function handleGetLocalAddress(socketId) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
-  const { handle } = socket;
   const out = {};
 
-  const code = handle.getsockname(out);
+  const code = socket.handle.getsockname(out);
   if (code !== 0) {
     throw new Error(mapErrorCode(-code));
   }
@@ -257,14 +213,9 @@ async function handleGetLocalAddress(socketId) {
 
 async function handleGetRemoteAddress(socketId) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
-  const { handle } = socket;
   const out = {};
 
-  const code = handle.getpeername(out);
+  const code = socket.handle.getpeername(out);
   if (code !== 0) {
     throw new Error(mapErrorCode(-code));
   }
@@ -274,10 +225,6 @@ async function handleGetRemoteAddress(socketId) {
 
 function handleTcpSetBacklogSize({ socketId, value }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
   socket.backlog = Number(value);
 }
 
@@ -287,27 +234,17 @@ async function handleTcpSetKeepAlive({
   keepAliveIdleTime,
 }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
-  const { handle } = socket;
   const time = Number(keepAliveIdleTime / 1_000_000_000n);
 
-  const code = handle.setKeepAlive(keepAliveEnabled, time);
+  const code = socket.handle.setKeepAlive(keepAliveEnabled, time);
   if (code !== 0) throw mapErrorCode(-code);
 }
 
 async function handleRecvBufferSize({ socketId, value }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
 
-  const { tcp } = socket;
-
-  if (tcp) {
-    return BigInt(tcp.getRecvBufferSize());
+  if (socket.tcp) {
+    return BigInt(socket.tcp.getRecvBufferSize());
   } else {
     return await getDefaultRecvBufferSize();
   }
@@ -315,13 +252,8 @@ async function handleRecvBufferSize({ socketId, value }) {
 
 async function handleSendBufferSize({ socketId, value }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
-  const { tcp } = socket;
-  if (tcp) {
-    return BigInt(tcp.getSendBufferSize());
+  if (socket.tcp) {
+    return BigInt(socket.tcp.getSendBufferSize());
   } else {
     return await getDefaultSendBufferSize();
   }
@@ -329,10 +261,6 @@ async function handleSendBufferSize({ socketId, value }) {
 
 function handleTcpDispose({ socketId }) {
   const socket = sockets.get(socketId);
-  if (!socket) {
-    throw new Error("Invalid socket ID");
-  }
-
   socket.tcp.destroy();
   socket.handle.close();
   sockets.delete(socketId);
