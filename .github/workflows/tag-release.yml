@@ -59,25 +59,25 @@ jobs:
             switch (context.eventName) {
               case 'pull_request':
                 const pr = context?.payload?.pull_request;
-                const headRef = pr?.head?.ref;
-                const headMerged = pr?.head?.merged;
-                const numCommits = pr?.commits.len;
-                const title = pr?.title;
+                if (!pr) {
+                  throw new Error(Invalid/missing pull request payload");
+                  return;
+                }
+                const headMerged = pr.merged;
+                const numCommits = pr.commits.len;
+                const title = pr.title;
 
-                if (!headRef?.includes("prep-release")) {
+                if (!headMerged) {
+                  console.log("invalid/unexpected pull request event type (must be merged)");
+                  return;
+                }
+
+                if (!title?.startsWith("release:")) {
                   console.log(`invalid ref [${headRef}]: does not include 'prep-release'`);
                   return;
                 }
-                if (!headRef || !headMerged) {
-                  console.log("invalid/unexpected pull request event type (must be merged, must have ref)");
-                  return;
-                }
-                if (context?.payload?.commits === 0) {
-                  console.log("missing commits on automatically triggered merge");
-                  return;
-                }
 
-                const [_, project, version] = /^release:\s([^\s]+)\sv([^\s]+)$/.match(title);
+                const [_, project, version] = /^release:\s+([^\s]+)\s+v([^\s]+)$/.match(title);
 
                 core.setOutput('proceed', "true");
                 core.setOutput('project', project);
