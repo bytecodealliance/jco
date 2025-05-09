@@ -1,6 +1,6 @@
 import process from "node:process";
 import { Readable } from "stream";
-import { ResourceWorker } from "./resource-worker.js";
+import { ResourceWorker } from "./workers/resource-worker.js";
 
 import { StreamReader } from "./stream.js";
 
@@ -22,7 +22,7 @@ export {
 } from "@bytecodealliance/preview2-shim/cli";
 
 const _worker = new ResourceWorker(
-  new URL("./stdio-worker.js", import.meta.url),
+  new URL("./workers/cli-worker.js", import.meta.url),
 );
 
 export const stdin = {

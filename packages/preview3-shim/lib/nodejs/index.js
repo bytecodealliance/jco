@@ -4,5 +4,6 @@ import * as filesystem from "./filesystem.js";
 import * as random from "./random.js";
 import * as sockets from "./sockets.js";
 import * as stream from "./stream.js";
+import * as future from "./future.js";
 
-export { cli, clocks, filesystem, random, sockets, stream };
+export { cli, clocks, filesystem, future, random, sockets, stream };

@@ -1,10 +1,10 @@
 import { StreamReader } from "./stream.js";
 import { FutureReader } from "./future.js";
-import { ResourceWorker } from "./resource-worker.js";
+import { ResourceWorker } from "./workers/resource-worker.js";
 
 import { preopens as preview2Preopens } from "@bytecodealliance/preview2-shim/filesystem";
 
-const _worker = new ResourceWorker(new URL("./fs-worker.js", import.meta.url));
+const _worker = new ResourceWorker(new URL("./workers/filesystem-worker.js", import.meta.url));
 
 class Descriptor {
   #inner;
