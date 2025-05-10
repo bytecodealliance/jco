@@ -101,7 +101,7 @@ jobs:
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
-              export ARTIFACT_NAME="bytecodealliance-jco-v$NEXT_VERSION.tgz";
+              export ARTIFACT_NAME="bytecodealliance-jco-$NEXT_VERSION.tgz";
               ;;
             preview2-shim)
               export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
@@ -231,12 +231,13 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/crate
-          cp artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/crate/
+          cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/crate/
           cd /tmp/crate
-          tar -xvf --strip-components=1 ${{needs.meta.outputs.artifact-name }}
+          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
           mv Cargo.toml.orig Cargo.toml
           cargo publish --dry-run
 
+  # Test *all* packages that would be released by NPM
   test-npm-release:
     runs-on: ubuntu-24.04
     needs:
@@ -249,15 +250,18 @@ jobs:
         with:
           path: artifacts
 
-      - name: Test built NPM package
+      - name: Test built jco NPM package
+        if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
         run: |
-          mkdir -p /tmp/npm
-          cp artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/npm/
-          cd /tmp/npm
-          tar -xvf --strip-components=1 ${{needs.meta.outputs.artifact-name }}
-          cd ${{ github.workspace }}/examples/http-hello-world
-          npm install --save /tmp/npm
+          export PROJECT_DIR=/tmp/${{ needs.meta.outputs.artifact-name }}
+          mkdir -p $PROJECT_DIR
+          cp -r artifacts/${{ needs.meta.outputs.artifact-name }}/* $PROJECT_DIR
+          cd $PROJECT_DIR
+          ls *
+          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
+          cd ${{ github.workspace }}/examples/components/http-hello-world
+          npm install --save $PROJECT_DIR
           npm run all
 
   gh-release:
