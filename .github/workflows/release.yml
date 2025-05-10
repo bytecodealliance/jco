@@ -143,6 +143,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          shared-key: jco-${{ hashFiles('Cargo.lock') }}
+
       - name: Release crate (dry run)
         working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
@@ -176,6 +180,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
       - name: Cache npm install
         id: cache-node-modules
