@@ -185,6 +185,11 @@ jobs:
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
+      # NOTE: we must use a node version new-enough to have --experimental-wasm-jspi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ">=22"
+
       - name: Cache npm install
         id: cache-node-modules
         uses: actions/cache@v4
