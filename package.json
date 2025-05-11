@@ -24,18 +24,18 @@
   },
   "type": "module",
   "dependencies": {
-    "@bytecodealliance/componentize-js": "^0.17.0",
+    "@bytecodealliance/componentize-js": "^0.18.2",
     "@bytecodealliance/preview2-shim": "^0.17.2",
-    "binaryen": "^122.0.0",
+    "binaryen": "^123.0.0",
     "chalk-template": "^1",
-    "commander": "^12",
+    "commander": "^13",
     "mkdirp": "^3",
     "ora": "^8",
     "terser": "^5"
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^19.8.1",
-    "@types/node": "^20.14.12",
+    "@types/node": "^22.15.17",
     "@typescript-eslint/eslint-plugin": "^8.2.0",
     "@typescript-eslint/parser": "^8.2.0",
     "commitlint": "^19.8.1",
