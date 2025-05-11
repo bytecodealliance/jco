@@ -1,10 +1,12 @@
 # Contributing to the Codebase
 
-Development is based on a standard `npm install && npm run build && npm run test` workflow.
+Development is based on a standard NodeJS workflow, i.e.:
 
-Tests can be run without bundling via `npm run build:dev && npm run test:dev`.
-
-Specific tests can be run adding the mocha `--grep` / `-g` flag, for example: `npm run test:dev -- --grep exports_only`.
+```console
+npm install
+npm run build
+npm run test
+```
 
 ## Prerequisites
 
@@ -49,7 +51,21 @@ npm run build
 ## Testing
 
 There are three test suites in jco:
+
 * `npm run test`: Project-level transpilation, CLI & API tests.
 * `npm run test --workspace packages/preview2-shim`: `preview2-shim` unit tests.
 * `test/browser.html`: Bare-minimum browser validation test.
 * `cargo test`: Wasmtime preview2 conformance tests (not currently passing).
+
+### Running tests without bundling
+
+Tests can be run without bundling via `npm run build:dev && npm run test:dev`.
+
+### Running specific tests
+
+JS tests are powered by [`vitest`][vitest], and a specific test suite can be run by passing
+the filename to `npm run test`:
+
+```console
+npm run test runtime.js
+```
