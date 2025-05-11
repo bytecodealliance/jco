@@ -1,20 +1,29 @@
+# Editors
 .vscode
 *.swp
 *.swo
-node_modules
+
+# Generated ouput
 /target
 /obj
 /dist
-/test/output
 /jco.sh
-/docs/book
+
+# Typescript
 /src/**/*.d.ts
 /src/**/*.d.ts.map
+
+# Docs
+/docs/book
+
+# Package management
+node_modules
+package-lock.json
+pnpm-lock.yaml
+
+# Test output
 /tests/rundir
 /tests/output
 /tests/gen
-
-# Test output
+/test/output
 test/fixtures/modules/hello_stdout.component.wasm
-package-lock.json
-pnpm-lock.yaml

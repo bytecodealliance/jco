@@ -2,3 +2,4 @@ node_modules
 dist
 *.wasm
 pnpm-lock.yaml
+package-lock.json
