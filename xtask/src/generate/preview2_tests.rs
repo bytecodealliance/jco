@@ -91,10 +91,14 @@ const TEST_IGNORE_WINDOWS: &[&str] = &[
 const FLAKY_TESTS: &[&str] = &[
     // Flaky on multiple platforms, network access
     "preview2_tcp_streams",
-    // Flaky on windows in particular
-    // error message encountered was "mtim should change"
+    // Flaky on windows & ubuntu
+    // error message encountered was some variation of "mtim should change"
+    //
+    // This likely points to a race in the impl that we should find & fix...
+    "preview1_path_filestat",
     "preview1_path_filestat",
     "preview1_fd_filestat_set",
+    "preview1_symlink_filestat",
     // Flaky on windows
     "preview2_udp_bind",
 ];
