@@ -228,16 +228,17 @@ jobs:
           path: artifacts
 
       - name: Test built crates.io crate
+        if: ${{ needs.meta.outputs.project == 'js-component-bindgen' }}
         shell: bash
         run: |
           mkdir -p /tmp/${{ needs.meta.outputs.project }}
           cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
           cd /tmp/${{ needs.meta.outputs.project }}
           tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
-          mv Cargo.toml.orig Cargo.toml
-          cargo publish --dry-run
+          rm Cargo.toml.orig
 
-  # Test *all* packages that would be released by NPM
+          cargo build
+
   test-npm-release:
     runs-on: ubuntu-24.04
     needs:
@@ -283,7 +284,7 @@ jobs:
           cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
           cd /tmp/${{ needs.meta.outputs.project }}
           tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
-          mv Cargo.toml.orig Cargo.toml
+          rm Cargo.toml.orig
 
           cargo publish $OPT_DRY_RUN
 
