@@ -19,20 +19,20 @@ jobs:
     name: Jco Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "latest"
 
       - name: Install Rust
         run: rustup update stable --no-self-update
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
       - name: Cache npm install
         id: cache-node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
           path: |
@@ -43,7 +43,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Upload Jco Build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: jco-build
           path: obj
@@ -80,8 +80,8 @@ jobs:
     needs:
       - build
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
 
@@ -97,7 +97,7 @@ jobs:
       # Use cached weval bin if present
       - name: Cache weval bin
         id: cache-weval-bin
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: .weval-bin
           key: weval-bin-${{ steps.weval-meta.outputs.version }}-${{ matrix.os }}
@@ -122,7 +122,7 @@ jobs:
 
       - name: Cache npm install
         id: cache-npm
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
           path: |
@@ -133,7 +133,7 @@ jobs:
 
       - name: Cache puppeteer install
         id: cache-puppeteer
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
           path: |
@@ -144,7 +144,7 @@ jobs:
           npx puppeteer browsers install chrome
 
       - name: Download Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: jco-build
           path: obj
@@ -167,12 +167,12 @@ jobs:
     outputs:
       cache-key: ${{ steps.cache-wasi-tests.outputs.cache-primary-key }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
       - name: Cache WASI Tests
         id: cache-wasi-tests
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: tests/gen
           key: wasi-${{ hashFiles('xtask/src/generate/preview2_tests.rs', 'submodules/wasmtime/Cargo.lock') }}
@@ -192,7 +192,7 @@ jobs:
         if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
         run: cargo xtask generate preview2-tests
       - name: Upload Generated WASI Tests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wasi-tests
           path: tests/gen
@@ -204,18 +204,18 @@ jobs:
       - build
       - build-wasi-tests
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "latest"
 
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@909cc5acb0fdd60627fb858598759246509fa755 # v2.0.2
         with:
           deno-version: v1.x
 
       - name: Cache npm install
         id: cache-npm
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
           path: |
@@ -224,13 +224,13 @@ jobs:
         run: npm install
 
       - name: Download Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: jco-build
           path: obj
 
       - name: Download WASI Tests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: wasi-tests
           path: tests/gen
@@ -265,14 +265,14 @@ jobs:
       - build
       - build-wasi-tests
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
 
       - name: Cache npm install
         id: cache-npm
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
           path: |
@@ -281,12 +281,12 @@ jobs:
         run: npm install
 
       - name: Download Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: jco-build
           path: obj
       - name: Download WASI Tests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: wasi-tests
           path: tests/gen
@@ -297,11 +297,11 @@ jobs:
     name: Test Preview2 Shims
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Cache npm install
         id: cache-npm
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
           path: |
@@ -316,11 +316,11 @@ jobs:
     name: ESLint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Cache npm install
         id: cache-npm
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
           path: |
@@ -335,7 +335,7 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Install Rust
         run: rustup update stable && rustup default stable && rustup component add rustfmt
       - name: Remove tests mod
@@ -373,12 +373,12 @@ jobs:
           - name: http-server-fetch-handler
             workspace: examples/components/http-server-fetch-handler
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node.version }}
       - name: Download Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: jco-build
           path: obj
@@ -389,13 +389,13 @@ jobs:
 
       - name: Install required rust crates
         if: ${{ matrix.project.requires-crates != '[]' }}
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@83254c543806f3224380bf1001d6fac8feaf2d0b # v2
         with:
           tool: ${{ join(matrix.project.requires-crates, ',') }}
 
       - name: Install wac
         if: ${{ matrix.project.is-composed }}
-        uses: jaxxstorm/action-install-gh-release@v1
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
         with:
           repo: bytecodealliance/wac
           tag: v${{ matrix.wac.version }}
@@ -405,7 +405,7 @@ jobs:
 
       - name: Cache npm install
         id: cache-npm
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
           path: |
