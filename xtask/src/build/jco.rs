@@ -1,26 +1,88 @@
-use anyhow::{Context, Result};
+use std::collections::HashMap;
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use anyhow::{bail, Context, Result};
 use js_component_bindgen::BindingsMode;
-use std::{collections::HashMap, fs, io::Write, path::PathBuf};
 use wit_component::ComponentEncoder;
 use xshell::{cmd, Shell};
 
-pub(crate) fn run(release: bool) -> Result<()> {
-    let build = if release { "release" } else { "debug" };
-    transpile(
-        &format!("target/wasm32-wasip1/{build}/js_component_bindgen_component.wasm"),
-        "js-component-bindgen-component".to_string(),
-        release,
-    )?;
-    transpile(
-        &format!("target/wasm32-wasip1/{build}/wasm_tools_js.wasm"),
-        "wasm-tools".to_string(),
-        release,
-    )?;
+/// Type of build being performed
+#[derive(Debug, Eq, PartialEq, Clone)]
+enum BuildType {
+    Release,
+    Debug,
+}
 
+impl FromStr for BuildType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "release" => Ok(Self::Release),
+            "debug" => Ok(Self::Debug),
+            _ => bail!("invalid BuildType [{s}]"),
+        }
+    }
+}
+
+impl std::fmt::Display for BuildType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BuildType::Release => write!(f, "release"),
+            BuildType::Debug => write!(f, "debug"),
+        }
+    }
+}
+
+/// Helper function that compiles both js-component-bindgen and wasm-tools components
+///
+/// This is factored out to ensure it is easy to call in the case of a release build
+/// that needs to be bootstrapped (bindgen and then wasm-tools must be built in that order)
+fn transpile_components(build_type: BuildType) -> Result<()> {
+    let optimize = build_type == BuildType::Release;
+
+    transpile(TranspileArgs {
+        component_path: format!(
+            "target/wasm32-wasip1/{build_type}/js_component_bindgen_component.wasm"
+        ),
+        name: "js-component-bindgen-component".into(),
+        optimize,
+        build_type: build_type.clone(),
+    })
+    .context("transpiling wasm-tools")?;
+
+    transpile(TranspileArgs {
+        component_path: format!("target/wasm32-wasip1/{build_type}/wasm_tools_js.wasm"),
+        name: "wasm-tools".into(),
+        optimize,
+        build_type,
+    })
+    .context("transpiling wasm-tools")?;
     Ok(())
 }
 
-fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
+/// Arguments for transpilation
+struct TranspileArgs {
+    /// Path to the component
+    component_path: String,
+    /// The name of the component
+    name: String,
+    /// Whether to optimize the build
+    optimize: bool,
+    /// Type of build
+    build_type: BuildType,
+}
+
+fn transpile<'a>(args: TranspileArgs) -> Result<()> {
+    let TranspileArgs {
+        component_path,
+        name,
+        optimize,
+        build_type,
+    } = args;
     std::env::set_var("RUST_BACKTRACE", "1");
     let component = fs::read(component_path).context("wasm bindgen component missing")?;
 
@@ -33,14 +95,28 @@ fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
 
     encoder = encoder.adapter("wasi_snapshot_preview1", &adapter)?;
 
+    let obj_dir = PathBuf::from("./obj");
     let mut adapted_component = encoder.encode()?;
-    fs::create_dir_all(PathBuf::from("./obj"))?;
-    let mut component_path = PathBuf::from("./obj").join(&name);
+    fs::create_dir_all(&obj_dir)?;
+    let mut component_path = obj_dir.join(&name);
     component_path.set_extension("component.wasm");
     fs::write(&component_path, &adapted_component)?;
 
     let sh = Shell::new()?;
     if optimize {
+        // If building a release build, to optimize we must have wasm-tools,
+        // and the only way to build it before use is an *unoptimized* build,
+        // which means a debug build.
+        if build_type == BuildType::Release
+            && !fs::exists(PathBuf::from("./obj/wasm-tools.js"))
+                .context("checking for obj/wasm-tools.js")?
+        {
+            // Build the workspace and the components
+            cmd!(sh, "cargo build --workspace --target wasm32-wasip1").read()?;
+            // Transpile the built components so they can be used for optimization
+            transpile_components(BuildType::Debug).context("transpiling all components (debug)")?;
+        }
+
         cmd!(
             sh,
             "node ./src/jco.js opt {component_path} -o {component_path}"
@@ -97,5 +173,11 @@ fn transpile(component_path: &str, name: String, optimize: bool) -> Result<()> {
         file.write_all(contents).unwrap();
     }
 
+    Ok(())
+}
+
+pub(crate) fn run(release: bool) -> Result<()> {
+    let build_type = BuildType::from_str(if release { "release" } else { "debug" })?;
+    transpile_components(build_type)?;
     Ok(())
 }

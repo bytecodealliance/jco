@@ -54,6 +54,17 @@ jobs:
         with:
           tool: cargo-edit
 
+      - name: Cache npm install
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
+      - name: Install debug NPM packages
+        run: |
+          npm install -D
+
       - name: Gather project metadata
         id: project-meta
         env:
@@ -101,6 +112,14 @@ jobs:
           echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT
           echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
 
+      - name: Ensure next version is after current
+        run: |
+          IS_AFTER=$(node scripts/semver-lt.mjs ${{ steps.project-meta.outputs.current-version }} ${{ steps.project-meta.outputs.next-version }});
+          if [ "$IS_AFTER" == "false" ]; then \
+            echo "::error::project [${{ steps.project-meta.outputs.project }}] next version [${{ steps.project-meta.outputs.next-version }}] is not after current version [${{ steps.project-meta.outputs.current-version }}]";
+            exit 1;
+          fi
+
       # Set project version
       - name: Set project version
         working-directory: ${{ steps.project-meta.outputs.project-dir }}
@@ -110,6 +129,10 @@ jobs:
             cargo set-version -p ${{ steps.project-meta.outputs.project }} ${{ steps.project-meta.outputs.next-version }};
           elif [ "true" == "${{ steps.project-meta.outputs.is-js-project }}" ]; then
             npm pkg set version=${{ steps.project-meta.outputs.next-version }};
+          fi
+
+          if [ "jco" == "${{ steps.project-meta.outputs.project }}" ]; then
+            sed -i "s/version('${{ steps.project-meta.current-version }}')/version('${{ steps.project-meta.next-version }}')/" src/jco.js
           fi
 
       # Generate changelog

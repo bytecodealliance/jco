@@ -48,6 +48,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.ref || 'main' }}
+          token: ${{ secrets.RELEASE_PAT || github.token }}
 
       # Pull project and version
       # (automatically triggered run)
@@ -58,20 +59,28 @@ jobs:
           script: |
             switch (context.eventName) {
               case 'pull_request':
-                if (!context?.payload?.head?.ref.includes("prep-release")) {
-                  console.log(`invalid ref [${context?.payload?.head?.ref}]: does not include 'prep-release'`);
+                const pr = context?.payload?.pull_request;
+                if (!pr) {
+                  throw new Error("Invalid/missing pull request payload");
                   return;
                 }
-                if (!context?.payload?.head?.ref || !context.payload.head.merged) {
-                  console.log("invalid/unexpected pull request event type (must be merged, must have ref)");
+                console.log(`sha: [${pr.merge_commit_sha}]`);
+                const headMerged = pr.merged;
+                const numCommits = pr.commits.len;
+                const title = pr.title;
+
+                if (!headMerged) {
+                  console.log("Invalid/unexpected pull request event type (must be merged)");
                   return;
                 }
-                if (!context?.payload?.commits?.len || context?.payload?.commits?.len == 0) {
-                  console.log("missing commits on automatically triggered merge");
+
+                if (!title?.startsWith("release:")) {
+                  console.log(`Invalid ref [${headRef}]: does not include 'prep-release'`);
                   return;
                 }
-                const commitMsg = context.payload.commits[0].message;
-                const [_, project, version] = /^release:\s([^\s]+)\sv([^\s]+)$/.match(commitMsg);
+
+                const [_, project, version] = /^release:\s+([^\s]+)\s+v([^\s]+)$/.exec(title);
+
                 core.setOutput('proceed', "true");
                 core.setOutput('project', project);
                 core.setOutput('version', version);

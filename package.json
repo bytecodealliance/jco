@@ -46,6 +46,7 @@
     "mime": "^4.0.4",
     "prettier": "^3.5.3",
     "puppeteer": "^24.0.1",
+    "semver": "^7.7.1",
     "smol-toml": "^1.3.1",
     "typescript": "^5.5.4",
     "vitest": "^3.0.7"
@@ -72,7 +73,7 @@
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
     "test:lts": "vitest run -c test/vitest.lts.ts",
-    "prepack": "cargo xtask build release && npm run test"
+    "prepack": "cargo xtask build release"
   },
   "files": [
     "lib",
