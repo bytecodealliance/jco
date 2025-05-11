@@ -250,18 +250,12 @@ jobs:
         with:
           path: artifacts
 
-      - name: Test built jco NPM package
+      - name: Test built NPM package
         if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
+        working-directory: examples/components/http-hello-world
         run: |
-          export PROJECT_DIR=/tmp/${{ needs.meta.outputs.artifact-name }}
-          mkdir -p $PROJECT_DIR
-          cp -r artifacts/${{ needs.meta.outputs.artifact-name }}/* $PROJECT_DIR
-          cd $PROJECT_DIR
-          ls *
-          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
-          cd ${{ github.workspace }}/examples/components/http-hello-world
-          npm install --save $PROJECT_DIR
+          npm install --save ${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
           npm run all
 
   gh-release:
