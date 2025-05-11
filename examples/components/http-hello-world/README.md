@@ -100,28 +100,15 @@ the `wasi:http/incoming-handler` interface.
 
 One way fo doing this is *downloading* the WIT from Bytecode Alliance repositories, using [`wkg`, from the `bytecodealliance/wasm-pkg-tools`][wkg].
 
-Since WASI is a growing standard, and well integrated we can generally follow the error messages:
+With a top level world in `wit/component.wit`, we can easily fetch all automatically-resolvable interfaces:
 
 ```console
-wkg get wasi:http@0.2.2
-wkg get wasi:random@0.2.2
-wkg get wasi:cli@0.2.2
-wkg get wasi:filesystem@0.2.2
-wkg get wasi:sockets@0.2.2
-wkg get wasi:io@0.2.2
-wkg get wasi:clocks@0.2.2
+wkg wit fetch
 ```
 
 > [!NOTE]
-> How do we know all these are required? After getting `wasi:http` you can generally follow the error messages.
-
-This will add many WIT files to your local repository, but you can move/rename all the downloaded `*.wit` files
-by making a folder named `deps` under `wit` and dropping them there.
-
-```console
-mkdir wit/deps
-mv *.wit wit/deps
-```
+> Standard interfaces are automatically resolvable, but if custom interfaces are used, you'll need to configure `wkg`
+> so it knows where to find the relevant WIT information.
 
 ## Building our component
 

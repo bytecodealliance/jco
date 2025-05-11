@@ -3,12 +3,11 @@
  */
 
 import {
-  IncomingRequest,
   ResponseOutparam,
   OutgoingBody,
   OutgoingResponse,
   Fields,
-} from 'wasi:http/types@0.2.2';
+} from 'wasi:http/types@0.2.3';
 
 /**
  * This export represents the `wasi:http/incoming-handler` interface,
@@ -23,7 +22,7 @@ export const incomingHandler = {
    * which defines how to hadle incoming web requests, turning this component into one that can
    * serve web requests.
    */
-  handle(incomingRequest, responseOutparam) {
+  handle(_incomingRequest, _responseOutparam) {
     // Start building an outgoing response
     const outgoingResponse = new OutgoingResponse(new Fields());
 
