@@ -164,7 +164,7 @@ jobs:
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           if-no-files-found: error
-          name: ${{ needs.meta.outputs.artifact-name }}
+          name: ${{ needs.meta.outputs.project }}
           path: |
             ${{ needs.meta.outputs.artifacts-glob }}
 
@@ -213,7 +213,7 @@ jobs:
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           if-no-files-found: error
-          name: ${{ needs.meta.outputs.artifact-name }}
+          name: ${{ needs.meta.outputs.project }}
           path: |
             ${{ needs.meta.outputs.artifacts-glob }}
 
@@ -230,9 +230,9 @@ jobs:
       - name: Test built crates.io crate
         shell: bash
         run: |
-          mkdir -p /tmp/crate
-          cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/crate/
-          cd /tmp/crate
+          mkdir -p /tmp/${{ needs.meta.outputs.project }}
+          cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
+          cd /tmp/${{ needs.meta.outputs.project }}
           tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
           mv Cargo.toml.orig Cargo.toml
           cargo publish --dry-run
@@ -250,12 +250,14 @@ jobs:
         with:
           path: artifacts
 
-      - name: Test built NPM package
+      - name: Test built jco NPM package
         if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
-        working-directory: examples/components/http-hello-world
         run: |
-          npm install --save ${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
+          cp -r examples/components/http-hello-world /tmp/test
+          cd /tmp/test
+          npm install --save $PACKAGE_DIR
           npm run all
 
   gh-release:
