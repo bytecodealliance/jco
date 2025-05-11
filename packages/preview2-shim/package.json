@@ -23,15 +23,12 @@
     }
   },
   "scripts": {
-    "test": "node --expose-gc ../../node_modules/mocha/bin/mocha.js -u tdd test/test.js --timeout 30000"
+    "test": "vitest run -c test/vitest.ts"
   },
   "files": [
     "types",
     "lib"
   ],
-  "devDependencies": {
-    "mocha": "^10.2.0"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bytecodealliance/jco.git"

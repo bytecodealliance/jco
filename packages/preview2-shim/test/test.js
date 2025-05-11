@@ -1,23 +1,11 @@
 import {
-  deepStrictEqual,
-  notDeepStrictEqual,
-  notEqual,
-  ok,
-  strictEqual,
-  throws,
+  throws
 } from "node:assert";
 import { fileURLToPath } from "node:url";
 
-const symbolDispose = Symbol.dispose || Symbol.for("dispose");
+import { suite, test, assert } from "vitest";
 
-function testWithGCWrap(asyncTestFn) {
-  return async () => {
-    await asyncTestFn();
-    // Force the JS GC to run finalizers
-    gc();
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  };
-}
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 suite("Node.js Preview2", () => {
   test("Stdio", async () => {
@@ -38,14 +26,14 @@ suite("Node.js Preview2", () => {
 
       {
         const { seconds, nanoseconds } = wallClock.now();
-        strictEqual(typeof seconds, "bigint");
-        strictEqual(typeof nanoseconds, "number");
+        assert.strictEqual(typeof seconds, "bigint");
+        assert.strictEqual(typeof nanoseconds, "number");
       }
 
       {
         const { seconds, nanoseconds } = wallClock.resolution();
-        strictEqual(typeof seconds, "bigint");
-        strictEqual(typeof nanoseconds, "number");
+        assert.strictEqual(typeof seconds, "bigint");
+        assert.strictEqual(typeof nanoseconds, "number");
       }
     });
 
@@ -54,10 +42,10 @@ suite("Node.js Preview2", () => {
         clocks: { monotonicClock },
       } = await import("@bytecodealliance/preview2-shim");
 
-      strictEqual(typeof monotonicClock.resolution(), "bigint");
+      assert.strictEqual(typeof monotonicClock.resolution(), "bigint");
       const curNow = monotonicClock.now();
-      strictEqual(typeof curNow, "bigint");
-      ok(monotonicClock.now() > curNow);
+      assert.strictEqual(typeof curNow, "bigint");
+      assert.ok(monotonicClock.now() > curNow);
     });
 
     test("Monotonic clock immediately resolved polls", async () => {
@@ -67,11 +55,11 @@ suite("Node.js Preview2", () => {
       const curNow = monotonicClock.now();
       {
         const poll = monotonicClock.subscribeInstant(curNow - 10n);
-        ok(poll.ready());
+        assert.ok(poll.ready());
       }
       {
         const poll = monotonicClock.subscribeDuration(0n);
-        ok(poll.ready());
+        assert.ok(poll.ready());
       }
     });
 
@@ -87,8 +75,8 @@ suite("Node.js Preview2", () => {
 
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
-      ok(nextNow - curNow >= 10e6);
-      ok(nextNow - curNow < 15e6);
+      assert.ok(nextNow - curNow >= 10e6);
+      assert.ok(nextNow - curNow < 15e6);
     });
 
     test("Monotonic clock subscribe instant", async () => {
@@ -103,8 +91,8 @@ suite("Node.js Preview2", () => {
 
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
-      ok(nextNow - curNow >= 10e6);
-      ok(nextNow - curNow < 15e6);
+      assert.ok(nextNow - curNow >= 10e6);
+      assert.ok(nextNow - curNow < 15e6);
     });
   });
 
@@ -125,7 +113,7 @@ suite("Node.js Preview2", () => {
       let buf = stream.read(10000n);
       while (buf.byteLength === 0) buf = stream.read(10000n);
       const source = new TextDecoder().decode(buf);
-      ok(source.includes("UNIQUE STRING"));
+      assert.ok(source.includes("UNIQUE STRING"));
       toDispose.push(stream);
       toDispose.push(childDescriptor);
     })();
@@ -192,9 +180,9 @@ suite("Node.js Preview2", () => {
         responseBody = new TextDecoder().decode(buf);
       }
 
-      strictEqual(status, 200);
-      ok(headers["content-type"].startsWith("text/html"));
-      ok(responseBody.includes("WebAssembly"));
+      assert.strictEqual(status, 200);
+      assert.ok(headers["content-type"].startsWith("text/html"));
+      assert.ok(responseBody.includes("WebAssembly"));
     }),
   );
 
@@ -203,13 +191,13 @@ suite("Node.js Preview2", () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const network1 = sockets.instanceNetwork.instanceNetwork();
       const network2 = sockets.instanceNetwork.instanceNetwork();
-      strictEqual(network1, network2);
+      assert.strictEqual(network1, network2);
     });
 
     test("sockets.tcpCreateSocket() should throw not-supported", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const socket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
-      notEqual(socket, null);
+      assert.notEqual(socket, null);
 
       throws(
         () => {
@@ -232,14 +220,14 @@ suite("Node.js Preview2", () => {
       tcpSocket.startBind(network, localAddress);
       tcpSocket.finishBind();
 
-      deepStrictEqual(tcpSocket.localAddress(), {
+      assert.deepStrictEqual(tcpSocket.localAddress(), {
         tag: "ipv4",
         val: {
           address: [0, 0, 0, 0],
           port: 1337,
         },
       });
-      strictEqual(tcpSocket.addressFamily(), "ipv4");
+      assert.strictEqual(tcpSocket.addressFamily(), "ipv4");
     });
 
     test("tcp.bind(): should bind to a valid ipv6 address and port=0", async () => {
@@ -256,7 +244,7 @@ suite("Node.js Preview2", () => {
       tcpSocket.startBind(network, localAddress);
       tcpSocket.finishBind();
 
-      strictEqual(tcpSocket.addressFamily(), "ipv6");
+      assert.strictEqual(tcpSocket.addressFamily(), "ipv6");
 
       const boundAddress = tcpSocket.localAddress();
       const expectedAddress = {
@@ -268,9 +256,9 @@ suite("Node.js Preview2", () => {
         },
       };
 
-      strictEqual(boundAddress.tag, expectedAddress.tag);
-      deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
-      strictEqual(boundAddress.val.port > 0, true);
+      assert.strictEqual(boundAddress.tag, expectedAddress.tag);
+      assert.deepStrictEqual(boundAddress.val.address, expectedAddress.val.address);
+      assert.strictEqual(boundAddress.val.port > 0, true);
     });
 
     test("tcp.bind(): should throw invalid-argument when invalid address family", async () => {
@@ -361,15 +349,15 @@ suite("Node.js Preview2", () => {
           },
         });
 
-        ok(!pollable.ready());
+        assert.ok(!pollable.ready());
         pollable.block();
-        ok(pollable.ready());
+        assert.ok(pollable.ready());
 
         const [input, output] = tcpSocket.finishConnect();
 
-        strictEqual(tcpSocket.addressFamily(), "ipv4");
+        assert.strictEqual(tcpSocket.addressFamily(), "ipv4");
 
-        ok(pollable.ready());
+        assert.ok(pollable.ready());
 
         output.blockingWriteAndFlush(
           new TextEncoder().encode("GET http://www.google.com/ HTTP/1.1\n\n"),
@@ -387,9 +375,9 @@ suite("Node.js Preview2", () => {
             }
           }
           const responseBody = new TextDecoder().decode(buf);
-          ok(responseBody.includes("<title>Google"));
-          ok(responseBody.includes("<!doctype"));
-          ok(responseBody.includes("<script"));
+          assert.ok(responseBody.includes("<title>Google"));
+          assert.ok(responseBody.includes("<!doctype"));
+          assert.ok(responseBody.includes("<script"));
         }
 
         tcpSocket.shutdown("both");
@@ -401,9 +389,9 @@ suite("Node.js Preview2", () => {
     test("sockets.udpCreateSocket() should be a singleton", async () => {
       const { sockets } = await import("@bytecodealliance/preview2-shim");
       const socket1 = sockets.udpCreateSocket.createUdpSocket("ipv4");
-      notEqual(socket1.id, 1);
+      assert.notEqual(socket1.id, 1);
       const socket2 = sockets.udpCreateSocket.createUdpSocket("ipv4");
-      notEqual(socket2.id, 1);
+      assert.notEqual(socket2.id, 1);
     });
 
     // TODO: figure out how to mock handle.on("message", ...)
@@ -424,10 +412,10 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
 
       const boundAddress = socket.localAddress();
-      strictEqual(boundAddress.tag, "ipv4");
-      deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0]);
-      strictEqual(boundAddress.val.port > 0, true);
-      strictEqual(socket.addressFamily(), "ipv4");
+      assert.strictEqual(boundAddress.tag, "ipv4");
+      assert.deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0]);
+      assert.strictEqual(boundAddress.val.port > 0, true);
+      assert.strictEqual(socket.addressFamily(), "ipv4");
     });
 
     test("udp.bind(): should bind to a valid ipv6 address and port=0", async () => {
@@ -446,10 +434,10 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
 
       const boundAddress = socket.localAddress();
-      strictEqual(boundAddress.tag, "ipv6");
-      deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
-      strictEqual(boundAddress.val.port > 0, true);
-      strictEqual(socket.addressFamily(), "ipv6");
+      assert.strictEqual(boundAddress.tag, "ipv6");
+      assert.deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
+      assert.strictEqual(boundAddress.val.port > 0, true);
+      assert.strictEqual(socket.addressFamily(), "ipv6");
     });
 
     test("udp.stream(): should connect to a valid ipv4 address", async () => {
@@ -475,13 +463,13 @@ suite("Node.js Preview2", () => {
       socket.finishBind();
       socket.stream(remoteAddress);
 
-      strictEqual(socket.addressFamily(), "ipv4");
+      assert.strictEqual(socket.addressFamily(), "ipv4");
 
       const boundAddress = socket.localAddress();
 
-      strictEqual(boundAddress.tag, "ipv4");
-      notDeepStrictEqual(boundAddress.val.address, [0, 0, 0, 0]);
-      strictEqual(boundAddress.val.port > 0, true);
+      assert.strictEqual(boundAddress.tag, "ipv4");
+      assert.notDeepEqual(boundAddress.val.address, [0, 0, 0, 0]);
+      assert.strictEqual(boundAddress.val.port > 0, true);
     });
 
     test(
@@ -502,11 +490,11 @@ suite("Node.js Preview2", () => {
         socket.finishBind();
         socket.stream();
 
-        strictEqual(socket.addressFamily(), "ipv6");
+        assert.strictEqual(socket.addressFamily(), "ipv6");
 
         const boundAddress = socket.localAddress();
-        deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
-        strictEqual(boundAddress.val.port, 1337);
+        assert.deepStrictEqual(boundAddress.val.address, [0, 0, 0, 0, 0, 0, 0, 0]);
+        assert.strictEqual(boundAddress.val.port, 1337);
       }),
     );
   });
@@ -519,16 +507,16 @@ suite("Instantiation", () => {
       "@bytecodealliance/preview2-shim/instantiation"
     );
     const shim = new WASIShim();
-    ok(shim);
-    deepStrictEqual(
+    assert.ok(shim);
+    assert.deepStrictEqual(
       Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
       Object.keys(random.random).sort(),
     );
-    deepStrictEqual(
+    assert.deepStrictEqual(
       Object.keys(shim.getImportObject()["wasi:random/insecure-seed"]).sort(),
       Object.keys(random.insecureSeed).sort(),
     );
-    deepStrictEqual(
+    assert.deepStrictEqual(
       Object.keys(shim.getImportObject()["wasi:random/insecure"]).sort(),
       Object.keys(random.insecure).sort(),
     );
@@ -547,16 +535,25 @@ suite("Instantiation", () => {
       },
     };
     const shim = new WASIShim(invalidWASIShim);
-    ok(shim);
-    notDeepStrictEqual(
+    assert.ok(shim);
+    assert.notDeepEqual(
       Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
       Object.keys(random.random).sort(),
     );
-    strictEqual(shim.getImportObject()["wasi:random/insecure-seed"], undefined);
-    strictEqual(shim.getImportObject()["wasi:random/insecure"], undefined);
-    deepStrictEqual(
+    assert.strictEqual(shim.getImportObject()["wasi:random/insecure-seed"], undefined);
+    assert.strictEqual(shim.getImportObject()["wasi:random/insecure"], undefined);
+    assert.deepStrictEqual(
       Object.keys(shim.getImportObject()["wasi:random/random"]).sort(),
       Object.keys(invalidWASIShim.random.random).sort(),
     );
   });
 });
+
+function testWithGCWrap(asyncTestFn) {
+  return async () => {
+    await asyncTestFn();
+    // Force the JS GC to run finalizers
+    gc();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  };
+}
