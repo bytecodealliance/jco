@@ -153,7 +153,7 @@ jobs:
         run: |
           cargo package
 
-      - uses: actions/attest-build-provenance@v1
+      - uses: actions/attest-build-provenance@v2
         with:
           subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
@@ -182,7 +182,7 @@ jobs:
         run: |
           npm pack
 
-      - uses: actions/attest-build-provenance@v1
+      - uses: actions/attest-build-provenance@v2
         with:
           subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
