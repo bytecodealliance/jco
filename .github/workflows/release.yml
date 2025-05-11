@@ -270,7 +270,7 @@ jobs:
         with:
           path: artifacts
 
-      - name: Publish ${{ needs.meta.outputs.project }} to NPM
+      - name: Publish ${{ needs.meta.outputs.project }} to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_KEY }}
         run: |
@@ -317,6 +317,8 @@ jobs:
       - meta
       - test-crate-release
       - test-npm-release
+      - npm-publish
+      - crate-publish
     permissions:
       contents: write
     steps:
