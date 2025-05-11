@@ -22,7 +22,7 @@ const config = {
       ],
     ],
     "scope-enum": [1, "always", ["jco", "bindgen", "p2-shim"]],
-    "scope-case": [2, "always", "kebab-case"],
+    "scope-case": [2, "always", "lower-case"],
   },
 };
 
