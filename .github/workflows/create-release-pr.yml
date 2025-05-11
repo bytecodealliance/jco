@@ -131,6 +131,10 @@ jobs:
             npm pkg set version=${{ steps.project-meta.outputs.next-version }};
           fi
 
+          if [ "jco" == "${{ steps.project-meta.outputs.project }}" ]; then
+            sed -i "s/version('${{ steps.project-meta.current-version }}')/version('${{ steps.project-meta.next-version }}')/" src/jco.js
+          fi
+
       # Generate changelog
       - name: Generate changelog
         working-directory: ${{ steps.project-meta.outputs.project-dir }}
