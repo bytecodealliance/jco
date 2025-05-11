@@ -223,9 +223,11 @@
 
 </style>
 <h1 id="contributing-to-the-codebase"><a class="header" href="#contributing-to-the-codebase">Contributing to the Codebase</a></h1>
-<p>Development is based on a standard <code>npm install &amp;&amp; npm run build &amp;&amp; npm run test</code> workflow.</p>
-<p>Tests can be run without bundling via <code>npm run build:dev &amp;&amp; npm run test:dev</code>.</p>
-<p>Specific tests can be run adding the mocha <code>--grep</code> / <code>-g</code> flag, for example: <code>npm run test:dev -- --grep exports_only</code>.</p>
+<p>Development is based on a standard NodeJS workflow, i.e.:</p>
+<pre><code class="language-console">npm install
+npm run build
+npm run test
+</code></pre>
 <h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
 <p>Required prerequisites for building jco include:</p>
 <ul>
@@ -262,6 +264,13 @@ npm run build
 <li><code>test/browser.html</code>: Bare-minimum browser validation test.</li>
 <li><code>cargo test</code>: Wasmtime preview2 conformance tests (not currently passing).</li>
 </ul>
+<h3 id="running-tests-without-bundling"><a class="header" href="#running-tests-without-bundling">Running tests without bundling</a></h3>
+<p>Tests can be run without bundling via <code>npm run build:dev &amp;&amp; npm run test:dev</code>.</p>
+<h3 id="running-specific-tests"><a class="header" href="#running-specific-tests">Running specific tests</a></h3>
+<p>JS tests are powered by [<code>vitest</code>][vitest], and a specific test suite can be run by passing
+the filename to <code>npm run test</code>:</p>
+<pre><code class="language-console">npm run test runtime.js
+</code></pre>
 
                     </main>
 
