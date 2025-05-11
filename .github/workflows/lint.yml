@@ -44,6 +44,7 @@ jobs:
         if: ${{ steps.cc.outputs.fail == 'true' }}
         uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
         with:
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           number: ${{ github.event.pull_request.number }}
           header: tip-cc
           recreate: true
@@ -81,6 +82,7 @@ jobs:
         if: ${{ steps.cc.outputs.success == 'true' }}
         uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
         with:
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           number: ${{ github.event.pull_request.number }}
           header: tip-cc
           hide: true
