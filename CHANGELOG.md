@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.11.2-rc.0] - 2025-05-11
+
+### 🐛 Bug Fixes
+
+* *(jco)* missing stat dependency (#650) by @vados-cosmonic in #650
+
+* *(jco)* appending to const value raises error (#648) by @thomas9911 in #648
+
+
+
+## New Contributors
+* @dependabot[bot] made their first contribution in [#662](https://github.com/bytecodealliance/jco/pull/662)
+* @thomas9911 made their first contribution in [#648](https://github.com/bytecodealliance/jco/pull/648)
+
+
 ## [jco-v1.11.0] - 2025-04-28
 
 ### 🚀 Features
