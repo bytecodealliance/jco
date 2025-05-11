@@ -75,7 +75,7 @@ jobs:
                 }
 
                 if (!title?.startsWith("release:")) {
-                  console.log(`Invalid ref [${headRef}]: does not include 'prep-release'`);
+                  console.log(`Invalid ref [${title}]: does not include 'prep-release'`);
                   return;
                 }
 
