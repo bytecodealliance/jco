@@ -132,7 +132,7 @@ jobs:
           fi
 
           if [ "jco" == "${{ steps.project-meta.outputs.project }}" ]; then
-            sed -i "s/version('${{ steps.project-meta.current-version }}')/version('${{ steps.project-meta.next-version }}')/" src/jco.js
+            sed -i "s/version('${{ steps.project-meta.outputs.current-version }}')/version('${{ steps.project-meta.outputs.next-version }}')/" src/jco.js
           fi
 
       # Generate changelog
