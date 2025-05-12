@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.2-rc.2] - 2025-05-12
+
+### 🚜 Refactor
+
+* *(jco)* re-arrange package.json, add contributors (#679) by @vados-cosmonic in #679
+
+
+
+
 ## [1.11.2-rc.1] - 2025-05-12
 
 ### ⚙️ Miscellaneous Tasks
