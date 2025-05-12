@@ -70,11 +70,11 @@
     "prepack": "cargo xtask build release"
   },
   "dependencies": {
-    "@bytecodealliance/componentize-js": "^0.17.0",
+    "@bytecodealliance/componentize-js": "^0.18.2",
     "@bytecodealliance/preview2-shim": "^0.17.2",
     "binaryen": "^123.0.0",
     "chalk-template": "^1",
-    "commander": "^12",
+    "commander": "^13",
     "mkdirp": "^3",
     "ora": "^8",
     "terser": "^5"
