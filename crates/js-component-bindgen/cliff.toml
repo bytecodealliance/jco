@@ -77,4 +77,11 @@ sort_commits = "newest"
 tag_pattern = "js-component-bindgen-v[0-9]*"
             
 # regex for skipping tags
-skip_tags = ".*beta.*"
+#
+# NOTE: we don't skip taks for beta/rc/alpha since we want their features
+# to be included in the next stable release
+#
+#skip_tags = "beta|rc|alpha"
+
+# tags to ignore
+ignore_tags = "beta|rc|alpha"
