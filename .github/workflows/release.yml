@@ -60,6 +60,21 @@ jobs:
         with:
           tool: cargo-get
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ">=22"
+
+      - name: Cache npm install
+        id: cache-node-modules
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          path: |
+            node_modules
+      - name: Install debug NPM packages
+        run: |
+          npm install -D
+
       - name: Collect metadata
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         id: meta
