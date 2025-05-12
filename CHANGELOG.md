@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.11.2-rc.2] - 2025-05-12
+
+### 🐛 Bug Fixes
+
+* *(jco)* missing stat dependency (#650) by @vados-cosmonic in #650
+
+* *(jco)* appending to const value raises error (#648) by @thomas9911 in #648
+
+
+### 🚜 Refactor
+
+* *(jco)* re-arrange package.json, add contributors (#679) by @vados-cosmonic in #679
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update printed versions (#677) by @vados-cosmonic in #677
+
+* *(jco)* update printed CLI version by @vados-cosmonic
+
+
+
+## New Contributors
+* @jco-release-bot made their first contribution in [#678](https://github.com/bytecodealliance/jco/pull/678)
+* @dependabot[bot] made their first contribution in [#662](https://github.com/bytecodealliance/jco/pull/662)
+* @thomas9911 made their first contribution in [#648](https://github.com/bytecodealliance/jco/pull/648)
+
+
 ## [1.11.2-rc.1] - 2025-05-12
 
 ### ⚙️ Miscellaneous Tasks
