@@ -53,6 +53,8 @@ jobs:
       artifacts-glob: ${{ steps.project-meta.outputs.artifacts-glob }}
       artifact-name: ${{ steps.project-meta.outputs.artifact-name }}
       next-release-tag: ${{ steps.project-meta.outputs.next-release-tag }}
+      is-prerelease: ${{ steps.project-meta.outputs.is-prerelease }}
+      prerelease-tag: ${{ steps.project-meta.outputs.prerelease-tag }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -137,17 +139,17 @@ jobs:
               exit 1;
           esac
 
-          export IS_PRERELEASE=$(node scripts/semver-is-prerelease.mjs $NEXT_VERSION);
-          echo -e "is-prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT;
-          export PRERELEASE_TAG=$(node scripts/semver-get-prerelease.mjs $NEXT_VERSION);
-          echo -e "prerelease-tag=$PRERELEASE_TAG" >> $GITHUB_OUTPUT;
-
           echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT;
           echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT;
           echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT;
           echo -e "artifacts-glob=$ARTIFACTS_GLOB" >> $GITHUB_OUTPUT;
           echo -e "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT;
           echo -e "next-release-tag=${PROJECT}-v${NEXT_VERSION}" >> $GITHUB_OUTPUT;
+
+          export IS_PRERELEASE=$(node scripts/semver-is-prerelease.mjs $NEXT_VERSION);
+          echo -e "is-prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT;
+          export PRERELEASE_TAG=$(node scripts/semver-get-prerelease.mjs $NEXT_VERSION);
+          echo -e "prerelease-tag=$PRERELEASE_TAG" >> $GITHUB_OUTPUT;
 
   pack-crate-release:
     if: ${{ needs.meta.outputs.is-rust-project == 'true' }}
@@ -336,8 +338,8 @@ jobs:
           fi
 
           export OPT_RELEASE_TAG=""
-          if [ "true" == "${{ needs.project-meta.outputs.is-prerelease }}" ]; then
-            export OPT_RELEASE_TAG="--tag ${{ needs.project-meta.outputs.prerelease-tag }}";
+          if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
+            export OPT_RELEASE_TAG="--tag ${{ needs.meta.outputs.prerelease-tag }}";
           fi
 
           npm publish $OPT_DRY_RUN $OPT_RELEASE_TAG $PACKAGE_DIR
