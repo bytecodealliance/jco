@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.11.2-rc.1] - 2025-05-12
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update printed versions (#677) by @vados-cosmonic in #677
+
+* *(jco)* update printed CLI version by @vados-cosmonic
+
+
+
+
 ## [1.11.2-rc.0] - 2025-05-11
 
 ### 🐛 Bug Fixes
