@@ -366,17 +366,25 @@ jobs:
           tool: git-cliff
 
       # Re-generate the current changelog so we can use it in the GH release announcement
+      #
+      # NOTE: if this workflow is being run due to a tag push, that's an *already committed* release
+      # tag and likely the one corresponding to this release, so we use the latest
+      #
       - name: Re-generate current changelog
         working-directory: ${{ needs.meta.outputs.project-dir }}
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
-          git cliff \
-            --repository=${{ github.workspace }}/.git \
-            --unreleased \
-            --tag=${{ needs.meta.outputs.next-release-tag }} \
-            > CHANGELOG.current
+          if [ "tag" == "${{ github.ref_type }}" ]; then
+            git cliff --repository=${{ github.workspace }}/.git --latest > CHANGELOG.current;
+          else
+            git cliff \
+              --repository=${{ github.workspace }}/.git \
+              --unreleased \
+              --tag=${{ needs.meta.outputs.next-release-tag }} \
+              > CHANGELOG.current;
+          fi
 
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
