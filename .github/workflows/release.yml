@@ -341,7 +341,8 @@ jobs:
         run: |
           git cliff \
           --repository=${{ github.workspace }}/.git \
-          --tag=${{ needs.meta.outputs.next-release-tag }} > CHANGELOG.current
+          --latest \
+          --tag ${{ needs.meta.outputs.next-release-tag }} > CHANGELOG.current
 
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
