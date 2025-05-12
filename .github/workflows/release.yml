@@ -18,6 +18,7 @@ on:
       - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "fix=release-process"
 
   workflow_dispatch:
     inputs:
@@ -42,284 +43,327 @@ permissions:
   contents: none
 
 jobs:
-  meta:
-    runs-on: ubuntu-24.04
-    outputs:
-      version: ${{ steps.meta.outputs.version }}
-      project: ${{ steps.meta.outputs.project }}
-      project-dir: ${{ steps.project-meta.outputs.project-dir }}
-      is-js-project: ${{ steps.project-meta.outputs.is-js-project }}
-      is-rust-project: ${{ steps.project-meta.outputs.is-rust-project }}
-      artifacts-glob: ${{ steps.project-meta.outputs.artifacts-glob }}
-      artifact-name: ${{ steps.project-meta.outputs.artifact-name }}
-      next-release-tag: ${{ steps.project-meta.outputs.next-release-tag }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  # meta:
+  #   runs-on: ubuntu-24.04
+  #   outputs:
+  #     version: ${{ steps.meta.outputs.version }}
+  #     project: ${{ steps.meta.outputs.project }}
+  #     project-dir: ${{ steps.project-meta.outputs.project-dir }}
+  #     is-js-project: ${{ steps.project-meta.outputs.is-js-project }}
+  #     is-rust-project: ${{ steps.project-meta.outputs.is-rust-project }}
+  #     artifacts-glob: ${{ steps.project-meta.outputs.artifacts-glob }}
+  #     artifact-name: ${{ steps.project-meta.outputs.artifact-name }}
+  #     next-release-tag: ${{ steps.project-meta.outputs.next-release-tag }}
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
-        with:
-          tool: cargo-get
+  #     - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
+  #       with:
+  #         tool: cargo-get
 
-      - name: Collect metadata
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        id: meta
-        with:
-          script: |
-            if (context.payload.inputs?.project && context.payload.inputs?.version) {
-              core.setOutput('project', context.payload.inputs.project);
-              core.setOutput('version', context.payload.inputs.version);
-              return;
-            }
+  #     - name: Collect metadata
+  #       uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+  #       id: meta
+  #       with:
+  #         script: |
+  #           if (context.payload.inputs?.project && context.payload.inputs?.version) {
+  #             core.setOutput('project', context.payload.inputs.project);
+  #             core.setOutput('version', context.payload.inputs.version);
+  #             return;
+  #           }
 
-            if (context.ref.startsWith('refs/tags/')) {
-              match = context.ref.replace('refs/tags/', '').match(/^(.*)-v([^\s]+)$/);
-            } else if (context.ref.startsWith('refs/heads/')) {
-              match = context.ref.replace('refs/heads/', '').match(/^prep-release-(.+)-v([^\s]+)$/);
-             } else {
-               throw new Error(`Unexpected context ref [${context.ref}]`);
-             }
-             if (!match) { throw new Error(`Failed to parse tag/branch: [${context.ref}]`); }
-             const [_, project, version] = match;
-             core.setOutput('project', project);
-             core.setOutput('version', version);
+  #           if (context.ref.startsWith('refs/tags/')) {
+  #             match = context.ref.replace('refs/tags/', '').match(/^(.*)-v([^\s]+)$/);
+  #           } else if (context.ref.startsWith('refs/heads/')) {
+  #             match = context.ref.replace('refs/heads/', '').match(/^prep-release-(.+)-v([^\s]+)$/);
+  #            } else {
+  #              throw new Error(`Unexpected context ref [${context.ref}]`);
+  #            }
+  #            if (!match) { throw new Error(`Failed to parse tag/branch: [${context.ref}]`); }
+  #            const [_, project, version] = match;
+  #            core.setOutput('project', project);
+  #            core.setOutput('version', version);
 
-      - name: Gather project metadata
-        id: project-meta
-        env:
-          NEXT_VERSION: ${{ steps.meta.outputs.version }}
-          PROJECT: ${{ steps.meta.outputs.project }}
-        shell: bash
-        run: |
-          if [[ $NEXT_VERSION == v* ]]; then
-            echo "::error::next version [$NEXT_VERSION] starts with 'v' -- enter only the semver version (ex. '0.1.0', not 'v0.1.0')";
-            exit 1;
-          fi
+  #     - name: Gather project metadata
+  #       id: project-meta
+  #       env:
+  #         NEXT_VERSION: ${{ steps.meta.outputs.version }}
+  #         PROJECT: ${{ steps.meta.outputs.project }}
+  #       shell: bash
+  #       run: |
+  #         if [[ $NEXT_VERSION == v* ]]; then
+  #           echo "::error::next version [$NEXT_VERSION] starts with 'v' -- enter only the semver version (ex. '0.1.0', not 'v0.1.0')";
+  #           exit 1;
+  #         fi
 
-          case $PROJECT in
-            jco)
-              export PROJECT_DIR=$PWD;
-              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
-              export IS_JS_PROJECT=true;
-              export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
-              export ARTIFACT_NAME="bytecodealliance-jco-$NEXT_VERSION.tgz";
-              ;;
-            preview2-shim)
-              export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
-              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
-              export IS_JS_PROJECT=true;
-              export ARTIFACTS_GLOB="packages/preview2-shim/bytecodealliance-preview2-shim-*.tgz";
-              export ARTIFACT_NAME="bytecodealliance-preview2-shim-$NEXT_VERSION.tgz";
-              ;;
-            js-component-bindgen)
-              export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
-              export CURRENT_VERSION=$(cargo get package.version --terminator Nul --entry=$PROJECT_DIR);
-              export IS_RUST_PROJECT=true;
-              export ARTIFACTS_GLOB="target/package/js-component-bindgen-*.crate";
-              export ARTIFACT_NAME="js-component-bindgen-$NEXT_VERSION.crate";
-              ;;
-            *)
-              echo "unexpected project type (neither Rust nor JS)";
-              exit 1;
-          esac
+  #         case $PROJECT in
+  #           jco)
+  #             export PROJECT_DIR=$PWD;
+  #             export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+  #             export IS_JS_PROJECT=true;
+  #             export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
+  #             export ARTIFACT_NAME="bytecodealliance-jco-$NEXT_VERSION.tgz";
+  #             ;;
+  #           preview2-shim)
+  #             export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
+  #             export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+  #             export IS_JS_PROJECT=true;
+  #             export ARTIFACTS_GLOB="packages/preview2-shim/bytecodealliance-preview2-shim-*.tgz";
+  #             export ARTIFACT_NAME="bytecodealliance-preview2-shim-$NEXT_VERSION.tgz";
+  #             ;;
+  #           js-component-bindgen)
+  #             export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
+  #             export CURRENT_VERSION=$(cargo get package.version --terminator Nul --entry=$PROJECT_DIR);
+  #             export IS_RUST_PROJECT=true;
+  #             export ARTIFACTS_GLOB="target/package/js-component-bindgen-*.crate";
+  #             export ARTIFACT_NAME="js-component-bindgen-$NEXT_VERSION.crate";
+  #             ;;
+  #           *)
+  #             echo "unexpected project type (neither Rust nor JS)";
+  #             exit 1;
+  #         esac
 
-          echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
-          echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT
-          echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
-          echo -e "artifacts-glob=$ARTIFACTS_GLOB" >> $GITHUB_OUTPUT
-          echo -e "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-          echo -e "next-release-tag=${PROJECT}-v${NEXT_VERSION}" >> $GITHUB_OUTPUT
+  #         echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
+  #         echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT
+  #         echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
+  #         echo -e "artifacts-glob=$ARTIFACTS_GLOB" >> $GITHUB_OUTPUT
+  #         echo -e "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+  #         echo -e "next-release-tag=${PROJECT}-v${NEXT_VERSION}" >> $GITHUB_OUTPUT
 
-  pack-crate-release:
-    if: ${{ needs.meta.outputs.is-rust-project == 'true' }}
-    runs-on: ubuntu-24.04
-    needs:
-      - meta
-    permissions:
-      actions: write
-      id-token: write
-      attestations: write
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
+  # pack-crate-release:
+  #   if: ${{ needs.meta.outputs.is-rust-project == 'true' }}
+  #   runs-on: ubuntu-24.04
+  #   needs:
+  #     - meta
+  #   permissions:
+  #     actions: write
+  #     id-token: write
+  #     attestations: write
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  #       with:
+  #         fetch-depth: 0
 
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-        with:
-          shared-key: jco-${{ hashFiles('Cargo.lock') }}
+  #     - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+  #       with:
+  #         shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
-      - name: Release crate (dry run)
-        working-directory: ${{ needs.meta.outputs.project-dir }}
-        run: |
-          cargo publish --locked --dry-run
+  #     - name: Release crate (dry run)
+  #       working-directory: ${{ needs.meta.outputs.project-dir }}
+  #       run: |
+  #         cargo publish --locked --dry-run
 
-      - name: Create release package
-        working-directory: ${{ needs.meta.outputs.project-dir }}
-        run: |
-          cargo package
+  #     - name: Create release package
+  #       working-directory: ${{ needs.meta.outputs.project-dir }}
+  #       run: |
+  #         cargo package
 
-      - uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
-        with:
-          subject-path: ${{ needs.meta.outputs.artifacts-glob }}
+  #     - uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+  #       with:
+  #         subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
-      - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          if-no-files-found: error
-          name: ${{ needs.meta.outputs.project }}
-          path: |
-            ${{ needs.meta.outputs.artifacts-glob }}
+  #     - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+  #       with:
+  #         if-no-files-found: error
+  #         name: ${{ needs.meta.outputs.project }}
+  #         path: |
+  #           ${{ needs.meta.outputs.artifacts-glob }}
 
-  pack-npm-release:
-    if: ${{ needs.meta.outputs.is-js-project == 'true' }}
-    runs-on: ubuntu-24.04
-    needs:
-      - meta
-    permissions:
-      id-token: write
-      attestations: write
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
+  # pack-npm-release:
+  #   if: ${{ needs.meta.outputs.is-js-project == 'true' }}
+  #   runs-on: ubuntu-24.04
+  #   needs:
+  #     - meta
+  #   permissions:
+  #     id-token: write
+  #     attestations: write
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  #       with:
+  #         fetch-depth: 0
 
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-        with:
-          shared-key: jco-${{ hashFiles('Cargo.lock') }}
+  #     - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+  #       with:
+  #         shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
-      # NOTE: we must use a node version new-enough to have --experimental-wasm-jspi
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: ">=22"
+  #     # NOTE: we must use a node version new-enough to have --experimental-wasm-jspi
+  #     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+  #       with:
+  #         node-version: ">=22"
 
-      - name: Cache npm install
-        id: cache-node-modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
-          path: |
-            node_modules
-      - name: Install NPM packages
-        run: |
-          npm install
+  #     - name: Cache npm install
+  #       id: cache-node-modules
+  #       uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+  #       with:
+  #         key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+  #         path: |
+  #           node_modules
+  #     - name: Install NPM packages
+  #       run: |
+  #         npm install
 
-      - name: Create release package
-        working-directory: ${{ needs.meta.outputs.project-dir }}
-        run: |
-          npm pack
+  #     - name: Create release package
+  #       working-directory: ${{ needs.meta.outputs.project-dir }}
+  #       run: |
+  #         npm pack
 
-      - uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
-        with:
-          subject-path: ${{ needs.meta.outputs.artifacts-glob }}
+  #     - uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+  #       with:
+  #         subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
-      - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          if-no-files-found: error
-          name: ${{ needs.meta.outputs.project }}
-          path: |
-            ${{ needs.meta.outputs.artifacts-glob }}
+  #     - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+  #       with:
+  #         if-no-files-found: error
+  #         name: ${{ needs.meta.outputs.project }}
+  #         path: |
+  #           ${{ needs.meta.outputs.artifacts-glob }}
 
-  test-crate-release:
-    runs-on: ubuntu-24.04
-    needs:
-      - meta
-      - pack-crate-release
-    steps:
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          path: artifacts
+  # test-crate-release:
+  #   runs-on: ubuntu-24.04
+  #   needs:
+  #     - meta
+  #     - pack-crate-release
+  #   steps:
+  #     - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+  #       with:
+  #         path: artifacts
 
-      - name: Test built crates.io crate
-        if: ${{ needs.meta.outputs.project == 'js-component-bindgen' }}
-        shell: bash
-        run: |
-          mkdir -p /tmp/${{ needs.meta.outputs.project }}
-          cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
-          cd /tmp/${{ needs.meta.outputs.project }}
-          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
-          rm Cargo.toml.orig
+  #     - name: Test built crates.io crate
+  #       if: ${{ needs.meta.outputs.project == 'js-component-bindgen' }}
+  #       shell: bash
+  #       run: |
+  #         mkdir -p /tmp/${{ needs.meta.outputs.project }}
+  #         cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
+  #         cd /tmp/${{ needs.meta.outputs.project }}
+  #         tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
+  #         rm Cargo.toml.orig
 
-          cargo build
+  #         cargo build
 
-  test-npm-release:
-    runs-on: ubuntu-24.04
-    needs:
-      - meta
-      - pack-npm-release
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  # test-npm-release:
+  #   runs-on: ubuntu-24.04
+  #   needs:
+  #     - meta
+  #     - pack-npm-release
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          path: artifacts
+  #     - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+  #       with:
+  #         path: artifacts
 
-      - name: Test built jco NPM package
-        if: ${{ needs.meta.outputs.project == 'jco' }}
-        shell: bash
-        run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
-          cp -r examples/components/http-hello-world /tmp/test
-          cd /tmp/test
-          npm install --save $PACKAGE_DIR
-          npm run all
+  #     - name: Test built jco NPM package
+  #       if: ${{ needs.meta.outputs.project == 'jco' }}
+  #       shell: bash
+  #       run: |
+  #         export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
+  #         cp -r examples/components/http-hello-world /tmp/test
+  #         cd /tmp/test
+  #         npm install --save $PACKAGE_DIR
+  #         npm run all
 
-  crate-publish:
-    runs-on: ubuntu-24.04
-    needs:
-      - meta
-      - test-crate-release
-    steps:
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          path: artifacts
+  # crate-publish:
+  #   runs-on: ubuntu-24.04
+  #   needs:
+  #     - meta
+  #     - test-crate-release
+  #   steps:
+  #     - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+  #       with:
+  #         path: artifacts
 
-      - name: Publish ${{ needs.meta.outputs.project }} to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_KEY }}
-        run: |
-          export OPT_DRY_RUN="--dry-run"
-          if [ "tag" == "${{ github.ref_type }}" ]; then
-            export OPT_DRY_RUN="";
-          fi
+  #     - name: Publish ${{ needs.meta.outputs.project }} to crates.io
+  #       env:
+  #         CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_KEY }}
+  #       run: |
+  #         export OPT_DRY_RUN="--dry-run"
+  #         if [ "tag" == "${{ github.ref_type }}" ]; then
+  #           export OPT_DRY_RUN="";
+  #         fi
 
-          mkdir -p /tmp/${{ needs.meta.outputs.project }}
-          cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
-          cd /tmp/${{ needs.meta.outputs.project }}
-          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
-          rm Cargo.toml.orig
+  #         mkdir -p /tmp/${{ needs.meta.outputs.project }}
+  #         cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
+  #         cd /tmp/${{ needs.meta.outputs.project }}
+  #         tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
+  #         rm Cargo.toml.orig
 
-          cargo publish $OPT_DRY_RUN
+  #         cargo publish $OPT_DRY_RUN
 
-  npm-publish:
-    runs-on: ubuntu-24.04
-    needs:
-      - meta
-      - test-npm-release
-    steps:
-      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          path: artifacts
+  # npm-publish:
+  #   runs-on: ubuntu-24.04
+  #   needs:
+  #     - meta
+  #     - test-npm-release
+  #   steps:
+  #     - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+  #       with:
+  #         path: artifacts
 
-      - name: Publish ${{ needs.meta.outputs.project }} to NPM
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
-        shell: bash
-        run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
-          export OPT_DRY_RUN="--dry-run"
-          if [ "tag" == "${{ github.ref_type }}" ]; then
-            export OPT_DRY_RUN="";
-          fi
+  #     - name: Publish ${{ needs.meta.outputs.project }} to NPM
+  #       env:
+  #         NPM_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+  #       shell: bash
+  #       run: |
+  #         export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
+  #         export OPT_DRY_RUN="--dry-run"
+  #         if [ "tag" == "${{ github.ref_type }}" ]; then
+  #           export OPT_DRY_RUN="";
+  #         fi
 
-          npm publish $OPT_DRY_RUN $PACKAGE_DIR
+  #         npm publish $OPT_DRY_RUN $PACKAGE_DIR
 
-  create-gh-release:
+  # create-gh-release:
+  #   runs-on: ubuntu-24.04
+  #   if: always()
+  #   needs:
+  #     - meta
+  #     - test-crate-release
+  #     - test-npm-release
+  #     - npm-publish
+  #     - crate-publish
+  #   permissions:
+  #     contents: write
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  #       with:
+  #         fetch-depth: 0
+
+  #     - uses: taiki-e/install-action@d125c0a83576d3c0c86ac610c708b38d3565af4e # v2.47.15
+  #       with:
+  #         fallback: none
+  #         tool: git-cliff
+
+  #     # Re-generate the current changelog so we can use it in the GH release announcement
+  #     - name: Re-generate current changelog
+  #       working-directory: ${{ needs.meta.outputs.project-dir }}
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+  #         GITHUB_REPO: ${{ github.repository }}
+  #       run: |
+  #         git cliff \
+  #         --repository=${{ github.workspace }}/.git \
+  #         --latest
+  #         --tag=${{ needs.meta.outputs.next-release-tag }} > CHANGELOG.current
+
+  #     - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+  #       with:
+  #         path: artifacts
+
+  #     - name: Create GH release
+  #       uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+  #       with:
+  #         token: ${{ secrets.RELEASE_PAT || github.token }}
+  #         prerelease: ${{ github.ref_type != 'tag' }}
+  #         draft: ${{ github.ref_type != 'tag' }}
+  #         tag_name: ${{ needs.meta.outputs.next-release-tag }}
+  #         generate_release_notes: false
+  #         body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current
+  #         files: |
+  #           ./artifacts/*/*
+
+  test:
     runs-on: ubuntu-24.04
     if: always()
-    needs:
-      - meta
-      - test-crate-release
-      - test-npm-release
-      - npm-publish
-      - crate-publish
     permissions:
       contents: write
     steps:
@@ -352,8 +396,8 @@ jobs:
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           token: ${{ secrets.RELEASE_PAT || github.token }}
-          prerelease: ${{ github.ref_type != 'tag' }}
-          draft: ${{ github.ref_type != 'tag' }}
+          prerelease: true
+          draft: true
           tag_name: ${{ needs.meta.outputs.next-release-tag }}
           generate_release_notes: false
           body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current
