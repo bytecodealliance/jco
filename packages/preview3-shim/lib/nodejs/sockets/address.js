@@ -53,12 +53,12 @@ export const isBroadcastIpAddress = ({ tag, val: { address } }) =>
 export const isUnicastIpAddress = (a) =>
     !isMulticastIpAddress(a) &&
     !isBroadcastIpAddress(a) &&
-    !isWildcardAddress(a);
+    !isWildcardIpAddress(a);
 
 export const serializeIpAddress = ({ tag, val: { address } }) =>
     tag === 'ipv4' ? tupleToIpv4(address) : tupleToIpv6(address);
 
-export const makeIpSocketAddress = (family, host, port) => {
+export const makeIpAddress = (family, host, port) => {
     const address = family === 'ipv4' ? ipv4ToTuple(host) : ipv6ToTuple(host);
 
     const base = { address, port };

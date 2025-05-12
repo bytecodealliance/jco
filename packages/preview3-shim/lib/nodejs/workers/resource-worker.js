@@ -32,24 +32,19 @@ export class ResourceWorker {
             } else {
                 resolve(result);
             }
-
-            // TOOD:(tandr): This is too aggresive but shuold be fixed with a pool of workers.
-            if (this.#pending.size === 0) {
-                this.#terminate();
-            }
         });
 
         this.#worker.on('error', (err) => {
             for (const { reject } of this.#pending.values()) {
                 reject(err);
             }
-            this.#terminate();
+            this.terminate();
         });
 
         return this.#worker;
     }
 
-    #terminate() {
+    terminate() {
         if (!this.#worker) return;
 
         this.#pending.clear();
@@ -66,9 +61,5 @@ export class ResourceWorker {
             this.#pending.set(id, { resolve, reject });
             worker.postMessage({ ...msg, id }, transferable);
         });
-    }
-
-    terminate() {
-        this.#terminate();
     }
 }

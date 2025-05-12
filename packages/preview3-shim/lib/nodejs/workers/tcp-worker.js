@@ -1,10 +1,11 @@
 import { Socket, Server } from 'node:net';
 import { parentPort } from 'worker_threads';
 import { randomUUID } from 'node:crypto';
-import { Readable } from 'stream';
+import { Readable, Writable } from 'stream';
 import { pipeline } from 'stream/promises';
+import { once } from 'node:events';
 
-import { serializeIpAddress } from '../sockets/address.js';
+import { serializeIpAddress, makeIpAddress } from '../sockets/address.js';
 import { mapErrorCode } from '../sockets/error.js';
 
 import process from 'node:process';
@@ -75,7 +76,7 @@ parentPort.on('message', async (msg) => {
             id,
             error: {
                 message: error.message,
-                code: error.code || 'UNKNOWN',
+                code: error.code || 'unknown',
                 stack: error.stack,
             },
         });
@@ -173,7 +174,7 @@ async function handleTcpListen({ socketId, stream }) {
     });
 
     server.on('error', (err) => stream.abort(err));
-    stream.closed.then(() => server.close());
+    // TODO(tandr): Handle server close
 
     return { success: true };
 }
@@ -197,7 +198,7 @@ async function handleTcpReceive({ socketId, stream }) {
     return { success: true };
 }
 
-async function handleGetLocalAddress(socketId) {
+async function handleGetLocalAddress({ socketId }) {
     const socket = sockets.get(socketId);
     const out = {};
 
@@ -209,7 +210,7 @@ async function handleGetLocalAddress(socketId) {
     return makeIpAddress(out.family.toLowerCase(), out.address, out.port);
 }
 
-async function handleGetRemoteAddress(socketId) {
+async function handleGetRemoteAddress({ socketId }) {
     const socket = sockets.get(socketId);
     const out = {};
 
@@ -244,7 +245,7 @@ async function handleRecvBufferSize({ socketId }) {
     if (socket.tcp) {
         return BigInt(socket.tcp.getRecvBufferSize());
     } else {
-        return await getDefaultRecvBufferSize();
+        return await getDefaultReceiveBufferSize();
     }
 }
 

@@ -176,7 +176,7 @@ export class TcpSocket {
             );
 
             this.#state = STATE.LISTENING;
-            return StreamReader(transform.readable);
+            return new StreamReader(transform.readable);
         } catch (error) {
             this.#state = STATE.CLOSED;
             throw mapError(error);

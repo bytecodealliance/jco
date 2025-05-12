@@ -5,21 +5,20 @@ import { monotonicClock as monotonicClockV2 } from '@bytecodealliance/preview2-s
 const { subscribeInstant, subscribeDuration, ...baseMonotonicClock } =
     monotonicClockV2;
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export const monotonicClock = {
     ...baseMonotonicClock,
 
-    waitUntil(when) {
+    async waitUntil(when) {
         const now = this.now();
-        if (when <= now) {
-            return Promise.resolve();
-        }
+        if (when <= now) return;
 
-        const diffNanos = when - now;
-        const diffMillis = Number(diffNanos) / 1e6;
-        return new Promise((resolve) => setTimeout(resolve, diffMillis));
+        const ms = Math.max(0, Number(when - this.now()) / 1e6);
+        await sleep(ms);
     },
 
-    waitFor(howLong) {
-        return this.waitUntil(this.now() + howLong);
+    async waitFor(howLong) {
+        await sleep(Number(howLong) / 1e6);
     },
 };
