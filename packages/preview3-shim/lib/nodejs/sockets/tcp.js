@@ -136,6 +136,7 @@ export class TcpSocket {
 
             this.#state = STATE.CONNECTED;
         } catch (error) {
+            console.error('Failed to connect:', error);
             this.#state = STATE.CLOSED;
             throw mapError(error);
         }
@@ -162,6 +163,7 @@ export class TcpSocket {
             const transform = new TransformStream({
                 transform({ family, socketId }, controller) {
                     const socket = tcpSocketCreate(family, socketId);
+                    socket.#state = STATE.CONNECTED;
                     controller.enqueue(socket);
                 },
             });

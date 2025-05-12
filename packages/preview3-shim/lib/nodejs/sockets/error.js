@@ -36,7 +36,7 @@ export function mapError(err) {
         return ERROR_MAP[err.code] || err.code;
     }
 
-    return 'unknown';
+    return err;
 }
 
 export const CODE_MAP = {

@@ -150,6 +150,7 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
 }
 
 async function handleTcpListen({ socketId, stream }) {
+    const writer = stream.getWriter();
     const socket = sockets.get(socketId);
     const { handle, backlog, family } = socket;
 
@@ -170,7 +171,7 @@ async function handleTcpListen({ socketId, stream }) {
     server.on('connection', (conn) => {
         const id = randomUUID();
         sockets.set(id, { handle: conn._handle, family, backlog, tcp: conn });
-        stream.write({ family, socketId: id });
+        writer.write({ family, socketId: id });
     });
 
     server.on('error', (err) => stream.abort(err));
@@ -260,8 +261,10 @@ async function handleSendBufferSize({ socketId }) {
 
 function handleTcpDispose({ socketId }) {
     const socket = sockets.get(socketId);
-    socket.tcp.destroy();
-    socket.handle.close();
+
+    if (socket.tcp) socket.tcp.destroy();
+    if (socket.handle) socket.handle.close();
+
     sockets.delete(socketId);
 }
 
