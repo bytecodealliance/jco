@@ -1,9 +1,15 @@
 import { parentPort } from 'worker_threads';
 import { randomUUID } from 'node:crypto';
-import dgram from 'node:dgram';
+import { once } from 'node:events';
 import { serializeIpAddress, makeIpAddress } from '../sockets/address.js';
 
+import dgram from 'node:dgram';
+
 const sockets = new Map();
+
+export function noLookup(ip, _opts, cb) {
+    cb(null, ip);
+}
 
 parentPort.on('message', async (msg) => {
     const { id, op } = msg;
@@ -69,9 +75,15 @@ parentPort.on('message', async (msg) => {
 function handleCreate({ family }) {
     const socketId = randomUUID();
     const type = family === 'ipv6' ? 'udp6' : 'udp4';
-    const udp = dgram.createSocket({ type });
+    const ipv6Only = family === 'ipv6';
+    const udp = dgram.createSocket({
+        type,
+        ipv6Only,
+        reuseAddr: false,
+        lookup: noLookup,
+    });
 
-    sock.on('error', () => {});
+    udp.on('error', () => {});
     sockets.set(socketId, { udp, family, connected: null });
 
     return { socketId };
@@ -80,13 +92,16 @@ function handleCreate({ family }) {
 async function handleBind({ socketId, localAddress }) {
     const socket = sockets.get(socketId);
     const addr = serializeIpAddress(localAddress);
-    await new Promise((res, rej) => {
-        socket.udp.bind(localAddress.val.port, addr, (err) => {
-            if (err) rej(err);
-            else res();
-        });
+    const port = localAddress.val.port;
+
+    const onListening = once(socket.udp, 'listening');
+    const onError = once(socket.udp, 'error').then(([err]) => {
+        throw err;
     });
 
+    socket.udp.bind(port, addr);
+
+    await Promise.race([onListening, onError]);
     return { success: true };
 }
 
@@ -94,6 +109,7 @@ function handleConnect({ socketId, remoteAddress }) {
     const socket = sockets.get(socketId);
     const addr = serializeIpAddress(remoteAddress);
     const port = remoteAddress.val.port;
+
     socket.udp.connect(port, addr);
     socket.connected = remoteAddress;
 
@@ -110,31 +126,48 @@ function handleDisconnect({ socketId }) {
 
 async function handleSend({ socketId, data, remoteAddress }) {
     const socket = sockets.get(socketId);
-    const addr = serializeIpAddress(remoteAddress);
-    await new Promise((res, rej) => {
-        socket.udp.send(data, remoteAddress.val.port, addr, (err) => {
-            if (err) rej(err);
-            else res();
-        });
+    const isConnected = socket.connected != null;
+
+    await new Promise((resolve, reject) => {
+        if (isConnected) {
+            socket.udp.send(data, (err) => (err ? reject(err) : resolve()));
+        } else {
+            const addr = serializeIpAddress(remoteAddress);
+            const port = remoteAddress.val.port;
+
+            socket.udp.send(data, port, addr, (err) =>
+                err ? reject(err) : resolve()
+            );
+        }
     });
-    return {};
+
+    return { success: true };
 }
 
 async function handleReceive({ socketId }) {
     const socket = sockets.get(socketId);
-    if (!socket) throw new Error('Invalid socket ID');
-    return await new Promise((res) => {
-        socket.udp.once('message', (msg, rinfo) => {
-            res({
-                data: msg,
-                remoteAddress: makeIpAddress(
-                    socket.family,
-                    rinfo.address,
-                    rinfo.port
-                ),
-            });
-        });
-    });
+
+    const [event, payload] = await Promise.race([
+        once(socket.udp, 'message').then(([msg, rinfo]) => [
+            'message',
+            { msg, rinfo },
+        ]),
+        once(socket.udp, 'error').then(([err]) => {
+            throw err;
+        }),
+    ]);
+
+    if (event === 'message') {
+        const { msg, rinfo } = payload;
+        return {
+            data: msg,
+            remoteAddress: makeIpAddress(
+                socket.family,
+                rinfo.address,
+                rinfo.port
+            ),
+        };
+    }
 }
 
 function handleGetLocal({ socketId }) {

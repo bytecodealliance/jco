@@ -136,15 +136,15 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
         allowHalfOpen: true,
     }));
 
+    const onConnect = once(tcp, 'connect');
+    const onError = once(tcp, 'error').then(([err]) => {
+        throw err;
+    });
+
     // TODO(tandr): Add lookup
     tcp.connect({ port, host });
 
-    await Promise.race([
-        once(tcp, 'connect'),
-        once(tcp, 'error').then(([err]) => {
-            throw err;
-        }),
-    ]);
+    await Promise.race([onConnect, onError]);
 
     return { success: true };
 }
@@ -159,14 +159,14 @@ async function handleTcpListen({ socketId, stream }) {
         allowHalfOpen: true,
     });
 
+    const onListening = once(server, 'listening');
+    const onError = once(server, 'error').then(([err]) => {
+        throw err;
+    });
+
     server.listen(handle, backlog);
 
-    await Promise.race([
-        once(server, 'listening'),
-        once(server, 'error').then(([err]) => {
-            throw err;
-        }),
-    ]);
+    await Promise.race([onListening, onError]);
 
     server.on('connection', (conn) => {
         const id = randomUUID();

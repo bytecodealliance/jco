@@ -92,6 +92,7 @@ export class UdpSocket {
         ) {
             throw 'invalid-argument';
         }
+
         try {
             await _worker.runOp({
                 op: 'udp-connect',
@@ -134,18 +135,26 @@ export class UdpSocket {
      *
      * @async
      * @param {Uint8Array} data - The datagram payload
-     * @param {Object} [remoteAddress] - Optional peer address if not connected
+     * @param {?Object} remoteAddress Optional peer address if not connected.
      * @returns {Promise<void>}
      * @throws {"invalid-state"} If socket is not bound
      * @throws {"invalid-argument"} If `data` is not Uint8Array or address invalid
      * @throws {string} Other error codes mapped from system errors
      */
     async send(data, remoteAddress = null) {
-        if (this.#state === STATE.UNBOUND) throw 'invalid-state';
+        if (this.#state === STATE.UNBOUND || this.#state === STATE.CLOSED)
+            throw 'invalid-state';
+
         if (!(data instanceof Uint8Array)) throw 'invalid-argument';
+
         const addr = remoteAddress ?? this.#remote;
-        if (!addr) throw 'invalid-argument';
-        if (addr.tag !== this.#family) throw 'invalid-argument';
+        if (!addr || addr.val.port === 0n || addr.tag !== this.#family)
+            throw 'invalid-argument';
+
+        if (this.#state === STATE.CONNECTED && addr !== this.#remote) {
+            throw 'invalid-argument';
+        }
+
         try {
             await _worker.runOp(
                 {
