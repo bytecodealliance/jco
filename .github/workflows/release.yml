@@ -360,7 +360,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: taiki-e/install-action@d125c0a83576d3c0c86ac610c708b38d3565af4e # v2.47.15
+      - uses: taiki-e/install-action@83254c543806f3224380bf1001d6fac8feaf2d0b # v2.50.10
         with:
           fallback: none
           tool: git-cliff
