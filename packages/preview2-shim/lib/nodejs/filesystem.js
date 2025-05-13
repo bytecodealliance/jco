@@ -580,14 +580,6 @@ class Descriptor {
             );
         return descriptor.#fullPath + (subpath.length > 0 ? '/' : '') + subpath;
     }
-
-    _getFd() {
-        return this.#fd;
-    }
-
-    _getFullPath() {
-        return this.#fullPath;
-    }
 }
 const descriptorCreatePreopen = Descriptor._createPreopen;
 delete Descriptor._createPreopen;

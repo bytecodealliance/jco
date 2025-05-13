@@ -7,7 +7,7 @@ describe('Node.js Preview3 wasi-filesystem', () => {
         const [[rootDescriptor]] = filesystem.preopens.getDirectories();
 
         // open child descriptor at this file
-        const child = rootDescriptor.openAt(
+        const child = await rootDescriptor.openAt(
             {},
             fileURLToPath(import.meta.url).slice(1),
             {},
