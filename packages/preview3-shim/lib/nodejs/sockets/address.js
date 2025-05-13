@@ -55,9 +55,21 @@ export const isUnicastIpAddress = (a) =>
     !isBroadcastIpAddress(a) &&
     !isWildcardIpAddress(a);
 
+/**
+ * Serialize a socket‐address to text.
+ * @param {{tag:string,val:{address:number[]}}} ipAddr
+ * @returns {string|null}
+ */
 export const serializeIpAddress = ({ tag, val: { address } }) =>
     tag === 'ipv4' ? tupleToIpv4(address) : tupleToIpv6(address);
 
+/**
+ * Create a socket‐address object.
+ * @param {'ipv4'|'ipv6'} family
+ * @param {string} host IP text
+ * @param {number|bigint} port
+ * @returns {{tag:string,val:Object}}
+ */
 export const makeIpAddress = (family, host, port) => {
     const address = family === 'ipv4' ? ipv4ToTuple(host) : ipv6ToTuple(host);
 
