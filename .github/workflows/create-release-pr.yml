@@ -40,7 +40,7 @@ jobs:
           fetch-depth: 0
 
       # Install Rust deps
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
       - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
         with:
           tool: just
