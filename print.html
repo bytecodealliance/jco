@@ -1095,7 +1095,7 @@ Alternative variant members may hold <em>different</em> types to represent diffe
 }
 </code></pre>
 <h3 id="jco-representation"><a class="header" href="#jco-representation">Jco Representation</a></h3>
-<p>Jco represents variants as objects with a <code>tag</code> that represents the variant, and <code>data</code> that represent the content:</p>
+<p>Jco represents variants as objects with a <code>tag</code> that represents the variant, and <code>val</code> that represents the content:</p>
 <p>For example, pseudo Typescript for the of the above <code>filter</code> variant would look like the following:</p>
 <pre><code class="language-ts">// Filter with all
 {
@@ -1110,7 +1110,7 @@ Alternative variant members may hold <em>different</em> types to represent diffe
 // Filter with some and a list of strings
 {
   tag: 'some';
-  data: string[];
+  val: string[];
 }
 </code></pre>
 <div class="mdbook-alerts mdbook-alerts-note">
