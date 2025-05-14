@@ -92,7 +92,7 @@ describe('Node.js Preview3 canon stream writer', () => {
         const ws = new WritableStream({ write() {} });
         const writer = new StreamWriter(ws);
         await writer.close();
-        const orig = writer.intoStream();
+        const orig = await writer.intoStream();
         expect(orig).toBe(ws);
     });
 });

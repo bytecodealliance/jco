@@ -10,14 +10,8 @@ export class StreamReader {
         this.#reader = readable.getReader();
     }
 
-    throwIfClosed() {
-        if (this.#reader === null) {
-            throw new Error('StreamReader is closed');
-        }
-    }
-
     async read() {
-        this.throwIfClosed();
+        this.#ensureReader();
 
         const { done, value } = await this.#reader.read();
         if (done) {
@@ -30,15 +24,19 @@ export class StreamReader {
     async readAll() {
         const chunks = [];
         let c;
-        while ((c = await this.read()) !== null) {
-            chunks.push(c);
-        }
+        try {
+            while ((c = await this.read()) !== null) {
+                chunks.push(c);
+            }
 
-        return Buffer.concat(chunks);
+            return Buffer.concat(chunks);
+        } finally {
+            this.close();
+        }
     }
 
     async cancel(reason) {
-        this.throwIfClosed();
+        this.#ensureReader();
         return this.#reader.cancel(reason);
     }
 
@@ -52,6 +50,12 @@ export class StreamReader {
     intoStream() {
         this.close();
         return this.#stream;
+    }
+
+    #ensureReader() {
+        if (this.#reader === null) {
+            throw new Error('StreamReader is closed');
+        }
     }
 }
 
@@ -67,19 +71,13 @@ export class StreamWriter {
         this.#writer = writable.getWriter();
     }
 
-    throwIfClosed() {
-        if (this.#writer === null) {
-            throw new Error('StreamWriter is closed');
-        }
-    }
-
     async write(chunk) {
-        this.throwIfClosed();
+        this.#ensureWriter();
         return this.#writer.write(chunk);
     }
 
     async abort(reason) {
-        this.throwIfClosed();
+        this.#ensureWriter();
         return this.#writer.abort(reason);
     }
 
@@ -98,9 +96,15 @@ export class StreamWriter {
         }
     }
 
-    intoStream() {
-        this.close();
+    async intoStream() {
+        await this.close();
         return this.#stream;
+    }
+
+    #ensureWriter() {
+        if (this.#writer === null) {
+            throw new Error('StreamWriter is closed');
+        }
     }
 }
 
