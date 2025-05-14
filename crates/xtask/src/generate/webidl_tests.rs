@@ -12,7 +12,7 @@ const IDL_VERSION_MINOR: u64 = 0;
 const IDL_VERSION_PATCH: u64 = 1;
 
 pub(crate) fn run() -> Result<()> {
-    for file in read_dir("test/fixtures/idl")? {
+    for file in read_dir("packages/jco/test/fixtures/idl")? {
         let file = file?;
         let file_name = file.file_name();
         let file_name_str = file_name.to_string_lossy().to_string();
@@ -72,7 +72,7 @@ pub(crate) fn run() -> Result<()> {
             .to_string()
         };
 
-        let output_file = format!("test/fixtures/idl/{name}.wit");
+        let output_file = format!("packages/jco/test/fixtures/idl/{name}.wit");
         write(
             &output_file,
             format!(
