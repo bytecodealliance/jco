@@ -8,7 +8,7 @@ import {
   OutgoingBody,
   OutgoingResponse,
   Fields,
-} from 'wasi:http/types@0.2.2';
+} from 'wasi:http/types@0.2.4';
 
 /**
  * This export represents the `wasi:http/incoming-handler` interface,
