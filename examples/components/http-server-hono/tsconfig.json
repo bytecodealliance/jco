@@ -1,0 +1,23 @@
+{
+  /* Visit https://aka.ms/tsconfig to read more about this file */
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "esnext",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "esModuleInterop": true,
+
+    /* Source code */
+    "types": [
+      "./generated/types/wit.d.ts",
+    ],
+    "allowJs": false,
+
+    /* Generation */
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Type Checking */
+    "strict": true
+  }
+}
