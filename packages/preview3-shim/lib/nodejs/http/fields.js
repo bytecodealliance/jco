@@ -3,12 +3,10 @@ import { HttpError } from './error.js';
 import * as http from 'node:http';
 const { validateHeaderName = () => {}, validateHeaderValue = () => {} } = http;
 
-export const _forbiddenHeaders = new Set(['connection', 'keep-alive', 'host']);
-
 /**
  * Implements the WASI Preview3 fields resource for HTTP headers and trailers
  */
-class Fields {
+export class Fields {
     #immutable = false;
     /** @type {[string, Uint8Array][]} */
     #entries = [];
@@ -183,7 +181,7 @@ class Fields {
      */
     clone() {
         const entries = this.#entries.slice();
-        return fieldsFromEntriesChecked(entries);
+        return _fieldsFromEntriesChecked(entries);
     }
 
     /**
@@ -253,8 +251,10 @@ class Fields {
     }
 }
 
-const fieldsLock = Fields._lock;
+export const _fieldsLock = Fields._lock;
 delete Fields._lock;
 
-const fieldsFromEntriesChecked = Fields._fromEntriesChecked;
+export const _fieldsFromEntriesChecked = Fields._fromEntriesChecked;
 delete Fields._fromEntriesChecked;
+
+export const _forbiddenHeaders = new Set(['connection', 'keep-alive', 'host']);

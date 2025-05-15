@@ -23,7 +23,7 @@ describe('UDP Socket Creation', () => {
         expect(sock).toBeInstanceOf(UdpSocket);
         expect(sock.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
 
-        sock[Symbol.dispose]()
+        sock[Symbol.dispose]();
     });
 
     test('creates an IPv6 UDP socket', async () => {
@@ -31,7 +31,7 @@ describe('UDP Socket Creation', () => {
         expect(sock).toBeInstanceOf(UdpSocket);
         expect(sock.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV6);
 
-        sock[Symbol.dispose]()
+        sock[Symbol.dispose]();
     });
 
     test('throws on invalid address family', async () => {
@@ -52,7 +52,7 @@ describe('UDP Socket Bind', () => {
         expect(local.val.address).toStrictEqual([127, 0, 0, 1]);
         expect(local.val.port).toBeGreaterThan(0);
 
-        sock[Symbol.dispose]()
+        sock[Symbol.dispose]();
     });
 
     test('throws when binding with mismatched family', async () => {
@@ -107,7 +107,7 @@ describe('UDP Send/Receive without connect', () => {
         expect(raddr.tag).toBe(IP_ADDRESS_FAMILY.IPV4);
         expect(raddr.val.port).toBe(port);
 
-        sock[Symbol.dispose]()
+        sock[Symbol.dispose]();
     });
 
     test('sends and receives via connected socket', async () => {
@@ -124,7 +124,7 @@ describe('UDP Send/Receive without connect', () => {
         expect(raddr.tag).toBe(IP_ADDRESS_FAMILY.IPV4);
         expect(raddr.val.port).toBe(port);
 
-        sock[Symbol.dispose]()
+        sock[Symbol.dispose]();
     });
 
     test('disconnect allows send with explicit address', async () => {
@@ -137,7 +137,7 @@ describe('UDP Send/Receive without connect', () => {
             sock.send(payload, makeIpAddress('ipv4', '127.0.0.1', port))
         ).resolves.toBeUndefined();
 
-        sock[Symbol.dispose]()
+        sock[Symbol.dispose]();
     });
 
     test('send throws invalid-argument when remote-address mismatches connected peer', async () => {
@@ -151,6 +151,6 @@ describe('UDP Send/Receive without connect', () => {
             'invalid-argument'
         );
 
-        sock[Symbol.dispose]()
+        sock[Symbol.dispose]();
     });
 });
