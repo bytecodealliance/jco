@@ -23,6 +23,7 @@
     }
   },
   "scripts": {
+    "lint": "eslint -c ../../eslintrc.mjs ./lib/**/*.js",
     "test": "vitest run -c test/vitest.ts"
   },
   "files": [

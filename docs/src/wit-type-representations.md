@@ -62,7 +62,7 @@ variant filter {
 
 ### Jco Representation
 
-Jco represents variants as objects with a `tag` that represents the variant, and `data` that represent the content:
+Jco represents variants as objects with a `tag` that represents the variant, and `val` that represents the content:
 
 For example, pseudo Typescript for the of the above `filter` variant would look like the following:
 
@@ -80,7 +80,7 @@ For example, pseudo Typescript for the of the above `filter` variant would look 
 // Filter with some and a list of strings
 {
   tag: 'some';
-  data: string[];
+  val: string[];
 }
 ```
 

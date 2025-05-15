@@ -1,0 +1,13 @@
+[package]
+name = "jco"
+publish = false
+
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "dummy"
+path = "src/bin/dummy.rs"
+
+[dev-dependencies]
+anyhow = { workspace = true }

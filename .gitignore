@@ -5,7 +5,6 @@
 
 # Generated ouput
 /target
-/obj
 /dist
 /jco.sh
 
@@ -22,8 +21,11 @@ package-lock.json
 pnpm-lock.yaml
 
 # Test output
-/tests/rundir
-/tests/output
-/tests/gen
-/test/output
+crates/jco/tests/rundir
+crates/jco/tests/output
+crates/jco/tests/gen
 test/fixtures/modules/hello_stdout.component.wasm
+
+# Jco
+packages/jco/obj
+packages/jco/test/output
