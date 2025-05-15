@@ -35,7 +35,7 @@ export class Response {
      * @param {?StreamReader} contents  optional body stream
      * @param {FutureReader} trailers  future for trailers
      * @returns {[Response, FutureReader]}
-     * @throws {HttpError} with payload.tag 'invalid-argument' if headers is not Fields
+     * @throws {HttpError} with payload.tag 'invalid-argument' for invalid arguments
      */
     static new(headers, contents, trailers) {
         if (!(headers instanceof Fields)) {

@@ -150,6 +150,14 @@ export class Request {
      *   trailers: future<result<option<trailers>, error-code>>,
      *   options: option<request-options>
      * ) -> tuple<request, future<result<_, error-code>>>;
+     *
+     * @param {Fields} headers  immutable headers resource
+     * @param {?StreamReader} contents  optional body stream
+     * @param {FutureReader} trailers  future for trailers
+     * @param {?RequestOptions} options  optional RequestOptions
+     * @returns {[Response, FutureReader]}
+     * @throws {HttpError} with payload.tag 'invalid-argument' for invalid arguments
+     *
      */
     static new(headers, contents, trailers, options) {
         if (options != null && !(options instanceof RequestOptions)) {
