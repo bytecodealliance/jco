@@ -363,6 +363,8 @@ jobs:
         project:
           - name: add
             workspace: examples/components/add
+          - name: adder
+            workspace: examples/components/adder
           - name: string-reverse
             workspace: examples/components/string-reverse
           - name: string-reverse-upper

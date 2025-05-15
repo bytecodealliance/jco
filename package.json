@@ -4,6 +4,7 @@
     "packages/jco",
     "packages/preview2-shim",
     "examples/components/add",
+    "examples/components/adder",
     "examples/components/http-hello-world",
     "examples/components/node-fetch",
     "examples/components/http-server-fetch-handler",
