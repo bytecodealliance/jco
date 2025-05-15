@@ -1,9 +1,8 @@
 import { StreamReader } from '../stream.js';
 import { FutureReader } from '../future.js';
 import { ResourceWorker } from '../workers/resource-worker.js';
-import { registerDispose, earlyDispose } from '../finalization.js';
-
-import { FsError, mapError } from './error.js';
+import { earlyDispose } from '../finalization.js';
+import { FsError } from './error.js';
 
 import { constants } from 'fs';
 import { close } from 'fs';
@@ -793,12 +792,7 @@ delete Descriptor._createPreopen;
 const descriptorCreate = Descriptor._create;
 delete Descriptor._create;
 
-export const types = {
-    Descriptor,
-    filesystemErrorCode(err) {
-        return mapError(err.payload);
-    },
-};
+export const types = { Descriptor };
 
 const preopenEntries = [];
 export const preopens = {

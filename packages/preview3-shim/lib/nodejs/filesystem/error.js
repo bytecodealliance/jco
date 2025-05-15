@@ -38,7 +38,7 @@ export const ERROR_MAP = {
     EXDEV: 'cross-device',
 };
 
-export function mapError(e) {
+function mapError(e) {
     if (e.code in ERROR_MAP) {
         return ERROR_MAP[e.code];
     }
@@ -77,3 +77,9 @@ export class FsError extends Error {
         return new FsError(tag, message);
     }
 }
+
+export const types = {
+    filesystemErrorCode(err) {
+        return mapError(err.payload);
+    },
+};
