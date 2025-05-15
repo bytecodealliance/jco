@@ -1,5 +1,7 @@
 import { HttpError } from './error.js';
-import { _fieldsLock } from '../fields.js';
+import { _fieldsLock, Fields } from './fields.js';
+
+import { future } from '../future.js';
 
 const defaultHttpTimeout = 600_000_000_000n;
 
@@ -149,6 +151,14 @@ export class Request {
      * ) -> tuple<request, future<result<_, error-code>>>;
      */
     static new(headers, contents, trailers, options) {
+        if (options != null && !(options instanceof RequestOptions)) {
+            throw new HttpError('invalid-argument');
+        }
+
+        if (headers != null && !(headers instanceof Fields)) {
+            throw new HttpError('invalid-argument');
+        }
+
         let request = new Request(REQUEST_PRIV_SYM);
         request.#headers = headers;
         request.#contents = contents;
