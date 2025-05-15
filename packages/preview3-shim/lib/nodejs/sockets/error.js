@@ -22,23 +22,6 @@ export const ERROR_MAP = {
     EDESTADDRREQ: 'invalid-argument',
 };
 
-/**
- * Maps system error codes to standardized error strings
- * @param {string|Error} err - The error to map
- * @returns {string} The mapped error code
- */
-export function mapError(err) {
-    if (typeof err === 'string') {
-        return ERROR_MAP[err] || err;
-    }
-
-    if (err && typeof err.code === 'string') {
-        return ERROR_MAP[err.code] || err.code;
-    }
-
-    return err;
-}
-
 export const CODE_MAP = {
     4053: 'invalid-state',
     4083: 'invalid-state',
@@ -61,6 +44,47 @@ export const CODE_MAP = {
     ECONNABORTED: 'connection-aborted',
 };
 
-export function mapErrorCode(code) {
-    return CODE_MAP[code] ?? 'unknown';
+/**
+ * Custom error for Socket operations with JCO compatible payload.
+ *
+ * https://bytecodealliance.github.io/jco/wit-type-representations.html#result-considerations-idiomatic-js-errors-for-host-implementations
+ */
+export class SocketError extends Error {
+  /**
+   * @param {string} tag        – machine‐readable error tag
+   * @param {string} [message]  – human‐readable message
+   * @param {any}    [val]      – optional extra data
+   */
+  constructor(tag, message, val) {
+    super(message ?? `Error: ${tag}`)
+    this.name    = 'SocketError'
+    this.payload = val !== undefined
+      ? { tag, val }
+      : { tag }
+  }
+
+  /**
+   * Create or rewrap an error into SocketError
+   * @param {any} err – number, string, Error, or SocketError
+   */
+    static from(err) {
+      if (err instanceof SocketError) return err
+
+      let tag, message = undefined
+
+      if (typeof err === 'number') {
+        tag = CODE_MAP[err] ?? 'unknown'
+        message = `Error code ${err}`
+      } else if (typeof err === 'string') {
+        tag = ERROR_MAP[err] ?? err
+      } else if (err && typeof err.code === 'string') {
+        tag = ERROR_MAP[err.code] ?? err.code
+        message = err.message
+      } else {
+        tag = 'unknown'
+        message = err?.message
+      }
+
+      return new SocketError(tag, message, err)
+    }
 }

@@ -60,15 +60,8 @@ parentPort.on('message', async (msg) => {
                 throw new Error(`Unknown op ${op}`);
         }
         parentPort.postMessage({ id, result });
-    } catch (e) {
-        parentPort.postMessage({
-            id,
-            error: {
-                message: e.message,
-                code: e.code || 'UNKNOWN',
-                stack: e.stack,
-            },
-        });
+    } catch (error) {
+        parentPort.postMessage({id, error });
     }
 });
 
@@ -178,8 +171,6 @@ function handleGetLocal({ socketId }) {
 
 function handleSetHop({ socketId, value }) {
     const socket = sockets.get(socketId);
-    if (!socket) throw new Error('Invalid socket ID');
-
     socket.udp.setTTL(value);
     return { success: true };
 }

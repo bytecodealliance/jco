@@ -6,7 +6,7 @@ import { pipeline } from 'stream/promises';
 import { once } from 'node:events';
 
 import { serializeIpAddress, makeIpAddress } from '../sockets/address.js';
-import { mapErrorCode } from '../sockets/error.js';
+import { SocketError } from '../sockets/error.js';
 
 import process from 'node:process';
 const { TCP, constants: TCPConstants } = process.binding('tcp_wrap');
@@ -72,14 +72,7 @@ parentPort.on('message', async (msg) => {
 
         parentPort.postMessage({ id, result });
     } catch (error) {
-        parentPort.postMessage({
-            id,
-            error: {
-                message: error.message,
-                code: error.code || 'unknown',
-                stack: error.stack,
-            },
-        });
+        parentPort.postMessage({id, error });
     }
 });
 
@@ -115,7 +108,7 @@ async function handleTcpBind({ socketId, localAddress }) {
         }
 
         if (code !== 0) {
-            reject(new Error(mapErrorCode(-code)));
+            reject(SocketError.from(-code));
         } else {
             resolve();
         }
@@ -205,7 +198,7 @@ async function handleGetLocalAddress({ socketId }) {
 
     const code = socket.handle.getsockname(out);
     if (code !== 0) {
-        throw new Error(mapErrorCode(-code));
+        throw new SocketError.from(-code);
     }
 
     return makeIpAddress(out.family.toLowerCase(), out.address, out.port);
@@ -217,7 +210,7 @@ async function handleGetRemoteAddress({ socketId }) {
 
     const code = socket.handle.getpeername(out);
     if (code !== 0) {
-        throw new Error(mapErrorCode(-code));
+        throw new SocketError.from(-code);
     }
 
     return makeIpAddress(out.family.toLowerCase(), out.address, out.port);

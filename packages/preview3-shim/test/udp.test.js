@@ -35,9 +35,9 @@ describe('UDP Socket Creation', () => {
     });
 
     test('throws on invalid address family', async () => {
-        await expect(udpCreateSocket.createUdpSocket('invalid')).rejects.toBe(
-            'invalid-argument'
-        );
+        await expect(
+            udpCreateSocket.createUdpSocket('invalid')
+        ).rejects.toSatisfy((err) => err.payload.tag === 'invalid-argument');
     });
 });
 
@@ -57,21 +57,23 @@ describe('UDP Socket Bind', () => {
 
     test('throws when binding with mismatched family', async () => {
         const sock = await createIpv4Socket();
-        await expect(sock.bind(ipv6LocalAddress)).rejects.toBe(
-            'invalid-argument'
+        await expect(sock.bind(ipv6LocalAddress)).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-argument'
         );
     });
 
     test('throws when binding twice', async () => {
         const sock = await createIpv4Socket();
         await sock.bind(ipv4LocalAddress);
-        await expect(sock.bind(ipv4LocalAddress)).rejects.toBe('invalid-state');
+        await expect(sock.bind(ipv4LocalAddress)).rejects.rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-state'
+        );
     });
 
     test('throws on send before bind', async () => {
         const sock = await createIpv4Socket();
-        await expect(sock.send(new Uint8Array([1, 2, 3]))).rejects.toBe(
-            'invalid-state'
+        await expect(sock.send(new Uint8Array([1, 2, 3]))).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-state'
         );
     });
 });
@@ -147,8 +149,8 @@ describe('UDP Send/Receive without connect', () => {
         const peerB = makeIpAddress('ipv4', '127.0.0.1', 40001);
         await sock.connect(peerA);
         const payload = new Uint8Array([0x01, 0x02, 0x03]);
-        await expect(sock.send(payload, peerB)).rejects.toBe(
-            'invalid-argument'
+        await expect(sock.send(payload, peerB)).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-argument'
         );
 
         sock[Symbol.dispose]();

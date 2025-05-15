@@ -1,7 +1,7 @@
 import { StreamReader } from '../stream.js';
 import { FutureReader } from '../future.js';
 import { ResourceWorker } from '../workers/resource-worker.js';
-import { mapError } from './error.js';
+import { SocketError } from './error.js';
 
 import {
     isWildcardIpAddress,
@@ -76,17 +76,17 @@ export class TcpSocket {
      * @async
      * @param {Object} localAddress - The local address to bind to
      * @returns {Promise<void>}
-     * @throws {"invalid-state"} If the socket is not in unbound state
-     * @throws {"invalid-argument"} If the local address is not valid
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if the socket is not in ~STATE.UNBOUND~
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~localAddress~ is invalid
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async bind(localAddress) {
         if (this.#state !== STATE.UNBOUND) {
-            throw 'invalid-state';
+            throw new SocketError('invalid-state');
         }
 
         if (!this.#isValidLocalAddress(localAddress)) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
         try {
             await _worker.runOp({
@@ -97,7 +97,7 @@ export class TcpSocket {
 
             this.#state = STATE.BOUND;
         } catch (error) {
-            throw mapError(error);
+            throw SocketError.from(error);
         }
     }
 
@@ -108,9 +108,9 @@ export class TcpSocket {
      * @async
      * @param {Object} remoteAddress - The remote address to connect to
      * @returns {Promise<void>}
-     * @throws {"invalid-state"} If the socket is connecting, connected or listening
-     * @throws {"invalid-argument"} If the remote address is not valid
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if socket is CONNECTING, CONNECTED, or LISTENING
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~remoteAddress~ is invalid or port == 0
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async connect(remoteAddress) {
         if (
@@ -118,11 +118,11 @@ export class TcpSocket {
             this.#state === STATE.CONNECTED ||
             this.#state === STATE.LISTENING
         ) {
-            throw 'invalid-state';
+            throw new SocketError('invalid-state');
         }
 
         if (!this.#isValidRemoteAddress(remoteAddress)) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
 
         this.#state = STATE.CONNECTING;
@@ -136,9 +136,8 @@ export class TcpSocket {
 
             this.#state = STATE.CONNECTED;
         } catch (error) {
-            console.error('Failed to connect:', error);
             this.#state = STATE.CLOSED;
-            throw mapError(error);
+            throw SocketError.from(error);
         }
     }
 
@@ -148,15 +147,15 @@ export class TcpSocket {
      *
      * @async
      * @returns {Promise<StreamReader>} A stream of incoming TCP socket connections
-     * @throws {"invalid-state"} If the socket is listening or connected
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if socket is LISTENING or CONNECTED
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async listen() {
         if (
             this.#state === STATE.LISTENING ||
             this.#state === STATE.CONNECTED
         ) {
-            throw 'invalid-state';
+            throw new SocketError('invalid-state');
         }
         try {
             // Convert incoming connections from worker to TcpSocket instances
@@ -181,7 +180,7 @@ export class TcpSocket {
             return new StreamReader(transform.readable);
         } catch (error) {
             this.#state = STATE.CLOSED;
-            throw mapError(error);
+            throw SocketError.from(error);
         }
     }
 
@@ -192,16 +191,16 @@ export class TcpSocket {
      * @async
      * @param {StreamReader} data - The data stream to send
      * @returns {Promise<void>}
-     * @throws {"invalid-state"} If the socket is not connected
-     * @throws {"invalid-argument"} If data is not a valid StreamReader
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} With payload.tag 'invalid-state' if socket is not CONNECTED
+     * @throws {SocketError} With payload.tag 'invalid-argument' if ~data~ is not a {StreamReader}
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async send(data) {
         if (this.#state !== STATE.CONNECTED) {
-            throw 'invalid-state';
+            throw new SocketError('invalid-state');
         }
         if (!(data instanceof StreamReader)) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
 
         const stream = data.intoStream();
@@ -217,7 +216,7 @@ export class TcpSocket {
                 [stream]
             );
         } catch (error) {
-            throw mapError(error);
+            throw SocketError.from(error);
         }
     }
 
@@ -225,12 +224,12 @@ export class TcpSocket {
      * Receives data from the connected peer
      * WIT: receive: func() -> tuple<stream<u8>, future<result<_, error-code>>>
      *
-     * @throws {"invalid-state"} If the socket is not connected
-     * @returns {[StreamReader, FutureReader]} A tuple containing the data stream and a future
+     * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not CONNECTED
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     receive() {
         if (this.#state !== STATE.CONNECTED) {
-            throw 'invalid-state';
+            throw new SocketError('invalid-state');
         }
 
         const transform = new TransformStream();
@@ -244,7 +243,7 @@ export class TcpSocket {
                 [transform.writable]
             )
             .catch((err) => {
-                throw mapError(err);
+                throw SocketError.from(err);
             });
 
         return [
@@ -259,12 +258,12 @@ export class TcpSocket {
      *
      * @async
      * @returns {Promise<Object>} The local socket address
-     * @throws {"invalid-state"} If the socket is not bound
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not BOUND
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async localAddress() {
         if (this.#state === STATE.UNBOUND) {
-            throw 'invalid-state';
+            throw new SocketError('invalid-state');
         }
 
         try {
@@ -273,7 +272,7 @@ export class TcpSocket {
                 socketId: this.#socketId,
             });
         } catch (err) {
-            throw mapError(err);
+            throw SocketError.from(err);
         }
     }
 
@@ -283,12 +282,12 @@ export class TcpSocket {
      *
      * @async
      * @returns {Promise<Object>} The remote socket address
-     * @throws {"invalid-state"} If the socket is not connected
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not CONNECTED
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async remoteAddress() {
         if (this.#state !== STATE.CONNECTED) {
-            throw 'invalid-state';
+            throw new SocketError('invalid-state');
         }
 
         try {
@@ -297,7 +296,7 @@ export class TcpSocket {
                 socketId: this.#socketId,
             });
         } catch (err) {
-            throw mapError(err);
+            throw SocketError.from(err);
         }
     }
 
@@ -328,25 +327,25 @@ export class TcpSocket {
      * @async
      * @param {bigint} value - The backlog size
      * @returns {Promise<void>}
-     * @throws {"invalid-argument"} If value is 0
-     * @throws {"not-supported"} If socket is connecting or connected
-     * @throws {"invalid-state"} If socket is not in unbound or bound state
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
+     * @throws {SocketError} with payload.tag 'not-supported' if socket is CONNECTING or CONNECTED
+     * @throws {SocketError} with payload.tag 'invalid-state' if socket is not UNBOUND or BOUND
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async setListenBacklogSize(value) {
         if (value === 0n) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
 
         if (
             this.#state === STATE.CONNECTING ||
             this.#state === STATE.CONNECTED
         ) {
-            throw 'not-supported';
+            throw new SocketError('not-supported');
         }
 
         if (this.#state !== STATE.UNBOUND && this.#state !== STATE.BOUND) {
-            throw 'invalid-state';
+            throw new SocketError('invalid-state');
         }
 
         this.#options.listenBacklogSize = Number(value);
@@ -357,7 +356,7 @@ export class TcpSocket {
                 value,
             });
         } catch (err) {
-            throw mapError(err);
+            throw SocketError.from(err);
         }
     }
 
@@ -367,7 +366,6 @@ export class TcpSocket {
      *
      * @async
      * @returns {Promise<boolean>} True if keep-alive is enabled, false otherwise
-     * @throws {string} Error codes mapped from system errors
      */
     async keepAliveEnabled() {
         return this.#options.keepAliveEnabled;
@@ -380,7 +378,7 @@ export class TcpSocket {
      * @async
      * @param {boolean} value - Whether to enable keep-alive
      * @returns {Promise<void>}
-     * @throws {string} Error codes mapped from system errors
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async setKeepAliveEnabled(value) {
         try {
@@ -393,7 +391,7 @@ export class TcpSocket {
                 keepAliveIdleTime: this.#options.keepAliveIdleTime,
             });
         } catch (err) {
-            throw mapError(err);
+            throw SocketError.from(err);
         }
     }
 
@@ -414,12 +412,12 @@ export class TcpSocket {
      * @async
      * @param {bigint} value - The idle time in nanoseconds
      * @returns {Promise<void>}
-     * @throws {"invalid-argument"} If value is less than 1
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async setKeepAliveIdleTime(value) {
         if (value < 1n) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
 
         if (value < 1_000_000_000n) {
@@ -443,7 +441,7 @@ export class TcpSocket {
                 keepAliveIdleTime: this.#options.keepAliveIdleTime,
             });
         } catch (err) {
-            throw mapError(err);
+            throw SocketError.from(err);
         }
     }
 
@@ -463,10 +461,10 @@ export class TcpSocket {
      *
      * @param {bigint} value - The interval in nanoseconds
      * @returns {void}
-     * @throws {"invalid-argument"} If value is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
      */
     setKeepAliveInterval(value) {
-        if (value < 1n) throw 'invalid-argument';
+        if (value < 1n) throw new SocketError('invalid-argument');
         this.#options.keepAliveInterval = value;
     }
 
@@ -486,10 +484,10 @@ export class TcpSocket {
      *
      * @param {number} value - The keep-alive count
      * @returns {void}
-     * @throws {"invalid-argument"} If value is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
      */
     setKeepAliveCount(value) {
-        if (value < 1) throw 'invalid-argument';
+        if (value < 1) throw new SocketError('invalid-argument');
         this.#options.keepAliveCount = value;
     }
 
@@ -509,10 +507,10 @@ export class TcpSocket {
      *
      * @param {number} value - The hop limit
      * @returns {void}
-     * @throws {"invalid-argument"} If value is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
      */
     setHopLimit(value) {
-        if (value < 1) throw 'invalid-argument';
+        if (value < 1) throw new SocketError('invalid-argument');
         this.#options.hopLimit = value;
     }
 
@@ -522,7 +520,7 @@ export class TcpSocket {
      *
      * @async
      * @returns {Promise<bigint>} The receive buffer size in bytes
-     * @throws {string} Error codes mapped from system errors
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async receiveBufferSize() {
         if (this.#options.receiveBufferSize) {
@@ -538,7 +536,7 @@ export class TcpSocket {
             this.#options.receiveBufferSize = result;
             return result;
         } catch (err) {
-            throw mapError(err);
+            throw SocketError.from(err);
         }
     }
 
@@ -548,10 +546,10 @@ export class TcpSocket {
      *
      * @param {bigint} value - The receive buffer size in bytes
      * @returns {void}
-     * @throws {"invalid-argument"} If value is 0
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
      */
     setReceiveBufferSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) throw new SocketError('invalid-argument');
         this.#options.receiveBufferSize = value;
     }
 
@@ -561,7 +559,7 @@ export class TcpSocket {
      *
      * @async
      * @returns {Promise<bigint>} The send buffer size in bytes
-     * @throws {string} Error codes mapped from system errors
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async sendBufferSize() {
         if (this.#options.sendBufferSize) {
@@ -577,7 +575,7 @@ export class TcpSocket {
             this.#options.sendBufferSize = result;
             return result;
         } catch (err) {
-            throw mapError(err);
+            throw SocketError.from(err);
         }
     }
 
@@ -587,10 +585,10 @@ export class TcpSocket {
      *
      * @param {bigint} value - The send buffer size in bytes
      * @returns {void}
-     * @throws {"invalid-argument"} If value is 0
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
      */
     setSendBufferSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) throw new SocketError('invalid-argument');
         this.#options.sendBufferSize = value;
     }
 
@@ -652,15 +650,15 @@ export const tcpCreateSocket = {
      * @async
      * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
      * @returns {TcpSocket>} A new TCP socket instance
-     * @throws {"invalid-argument"} If the address family is not valid
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~addressFamily~ is not IPV4 or IPV6
+     * @throws {SocketError} for other errors, payload.tag maps the low-level system error_
      */
     async createTcpSocket(addressFamily) {
         if (
             addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
             addressFamily !== IP_ADDRESS_FAMILY.IPV6
         ) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
 
         try {
@@ -671,8 +669,7 @@ export const tcpCreateSocket = {
 
             return tcpSocketCreate(addressFamily, result.socketId);
         } catch (error) {
-            console.error('Failed to create socket:', error);
-            throw mapError(error);
+            throw SocketError.from(error);
         }
     },
 };

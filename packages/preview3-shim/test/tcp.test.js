@@ -38,9 +38,9 @@ describe('TCP Socket Creation', () => {
     });
 
     test('should throw on invalid address family', async () => {
-        await expect(tcpCreateSocket.createTcpSocket('invalid')).rejects.toBe(
-            'invalid-argument'
-        );
+        await expect(
+            tcpCreateSocket.createTcpSocket('invalid')
+        ).rejects.toSatisfy((err) => err.payload.tag === 'invalid-argument');
     });
 });
 
@@ -57,16 +57,16 @@ describe('TCP Socket Bind', () => {
 
     test('should throw when binding with mismatched address family', async () => {
         const client = await createIpv4Socket();
-        await expect(client.bind(ipv6LocalAddress)).rejects.toBe(
-            'invalid-argument'
+        await expect(client.bind(ipv6LocalAddress)).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-argument'
         );
     });
 
     test('should throw when binding already bound socket', async () => {
         const client = await createIpv4Socket();
         await client.bind(ipv4LocalAddress);
-        await expect(client.bind(ipv4LocalAddress)).rejects.toBe(
-            'invalid-state'
+        await expect(client.bind(ipv4LocalAddress)).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-state'
         );
     });
 
@@ -109,7 +109,9 @@ describe('TCP Socket Listen', () => {
         await client.bind(ipv4LocalAddress);
         await client.listen();
 
-        await expect(client.listen()).rejects.toBe('invalid-state');
+        await expect(client.listen()).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-state'
+        );
     });
 
     test('should allow backlog size configuration before listening', async () => {
@@ -126,8 +128,8 @@ describe('TCP Socket Listen', () => {
     test('should throw when setting backlog size to 0', async () => {
         const client = await createIpv4Socket();
 
-        await expect(client.setListenBacklogSize(0n)).rejects.toBe(
-            'invalid-argument'
+        await expect(client.setListenBacklogSize(0n)).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-argument'
         );
     });
 
@@ -136,8 +138,8 @@ describe('TCP Socket Listen', () => {
         await client.bind(ipv4LocalAddress);
         await client.listen();
 
-        await expect(client.setListenBacklogSize(1000n)).rejects.toBe(
-            'invalid-state'
+        await expect(client.setListenBacklogSize(1000n)).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-state'
         );
     });
 

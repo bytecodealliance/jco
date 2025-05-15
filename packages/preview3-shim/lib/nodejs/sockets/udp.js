@@ -1,5 +1,5 @@
 import { ResourceWorker } from '../workers/resource-worker.js';
-import { mapError } from './error.js';
+import { SocketError } from './error.js';
 import {
     isWildcardIpAddress,
     isUnicastIpAddress,
@@ -52,13 +52,15 @@ export class UdpSocket {
      * @async
      * @param {Object} localAddress - The local address to bind to
      * @returns {Promise<void>}
-     * @throws {"invalid-state"} If the socket is already bound or closed
-     * @throws {"invalid-argument"} The `localAddress` has the wrong family
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if the socket is not in ~STATE.UNBOUND~
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~localAddress~ is invalid
+     * @throws {SocketError} for other errors, payload.tag maps the system error
+     *
      */
     async bind(localAddress) {
-        if (this.#state !== STATE.UNBOUND) throw 'invalid-state';
-        if (localAddress.tag !== this.#family) throw 'invalid-argument';
+        if (this.#state !== STATE.UNBOUND) throw new SocketError('invalid-state');
+        if (localAddress.tag !== this.#family) throw new SocketError('invalid-argument');
+
         try {
             await _worker.runOp({
                 op: 'udp-bind',
@@ -67,7 +69,7 @@ export class UdpSocket {
             });
             this.#state = STATE.BOUND;
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -78,19 +80,19 @@ export class UdpSocket {
      * @async
      * @param {Object} remoteAddress - The remote address to connect to
      * @returns {Promise<void>}
-     * @throws {"invalid-state"} If the socket is already connected
-     * @throws {"invalid-argument"} If `remoteAddress` is invalid or wildcard
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if the socket is already connected
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~remoteAddress~ is invalid or wildcard
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async connect(remoteAddress) {
-        if (this.#state === STATE.CONNECTED) throw 'invalid-state';
+        if (this.#state === STATE.CONNECTED) throw new SocketError('invalid-state');
         if (
             remoteAddress.tag !== this.#family ||
             remoteAddress.val.port === 0 ||
             isWildcardIpAddress(remoteAddress) ||
             !isUnicastIpAddress(remoteAddress)
         ) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
 
         try {
@@ -102,7 +104,7 @@ export class UdpSocket {
             this.#remote = remoteAddress;
             this.#state = STATE.CONNECTED;
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -112,11 +114,11 @@ export class UdpSocket {
      *
      * @async
      * @returns {Promise<void>}
-     * @throws {"invalid-state"} If the socket is not connected
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if the socket is not connected
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async disconnect() {
-        if (this.#state !== STATE.CONNECTED) throw 'invalid-state';
+        if (this.#state !== STATE.CONNECTED) throw new SocketError('invalid-state');
         try {
             await _worker.runOp({
                 op: 'udp-disconnect',
@@ -125,7 +127,7 @@ export class UdpSocket {
             this.#remote = null;
             this.#state = STATE.BOUND;
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -137,22 +139,27 @@ export class UdpSocket {
      * @param {Uint8Array} data - The datagram payload
      * @param {?Object} remoteAddress Optional peer address if not connected.
      * @returns {Promise<void>}
-     * @throws {"invalid-state"} If socket is not bound
-     * @throws {"invalid-argument"} If `data` is not Uint8Array or address invalid
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if socket is not bound
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~data~ is not a Uint8Array or address invalid
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async send(data, remoteAddress = null) {
-        if (this.#state === STATE.UNBOUND || this.#state === STATE.CLOSED)
-            throw 'invalid-state';
+        if (this.#state === STATE.UNBOUND || this.#state === STATE.CLOSED) {
+            throw new SocketError('invalid-state');
+        }
 
-        if (!(data instanceof Uint8Array)) throw 'invalid-argument';
+        if (!(data instanceof Uint8Array)) {
+            throw new SocketError('invalid-argument');
+        }
 
         const addr = remoteAddress ?? this.#remote;
-        if (!addr || addr.val.port === 0n || addr.tag !== this.#family)
-            throw 'invalid-argument';
+        if (!addr || addr.val.port === 0n || addr.tag !== this.#family) {
+            throw new SocketError('invalid-argument');
+        }
+
 
         if (this.#state === STATE.CONNECTED && addr !== this.#remote) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
 
         try {
@@ -166,7 +173,7 @@ export class UdpSocket {
                 [data.buffer]
             );
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -176,11 +183,11 @@ export class UdpSocket {
      *
      * @async
      * @returns {Promise<[Uint8Array, Object]>} Received data and sender address
-     * @throws {"invalid-state"} If socket has not been bound
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if socket has not been bound
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async receive() {
-        if (this.#state === STATE.UNBOUND) throw 'invalid-state';
+        if (this.#state === STATE.UNBOUND) throw new SocketError('invalid-state');
         try {
             const { data, remoteAddress } = await _worker.runOp({
                 op: 'udp-receive',
@@ -188,7 +195,7 @@ export class UdpSocket {
             });
             return [new Uint8Array(data), remoteAddress];
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -198,18 +205,18 @@ export class UdpSocket {
      *
      * @async
      * @returns {Promise<Object>} The local socket address
-     * @throws {"invalid-state"} If the socket hasn't been bound yet
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-state' if the socket hasn't been bound yet
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async localAddress() {
-        if (this.#state === STATE.UNBOUND) throw 'invalid-state';
+        if (this.#state === STATE.UNBOUND) throw new SocketError('invalid-state');
         try {
             return await _worker.runOp({
                 op: 'udp-get-local-address',
                 socketId: this.#socketId,
             });
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -219,10 +226,10 @@ export class UdpSocket {
      *
      * @async
      * @returns {Promise<Object>} The connected peer address
-     * @throws {"invalid-state"} If the socket is not connected
+     * @throws {SocketError} with payload.tag 'invalid-state' if the socket is not connected
      */
     async remoteAddress() {
-        if (this.#state !== STATE.CONNECTED) throw 'invalid-state';
+        if (this.#state !== STATE.CONNECTED) throw new SocketError('invalid-state');
         return this.#remote;
     }
 
@@ -253,11 +260,11 @@ export class UdpSocket {
      * @async
      * @param {number} value - The hop limit (must be ≥1)
      * @returns {Promise<void>}
-     * @throws {"invalid-argument"} If value < 1
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-argument' if value < 1
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async setUnicastHopLimit(value) {
-        if (value < 1) throw 'invalid-argument';
+        if (value < 1) throw new SocketError('invalid-argument');
         this.#options.hopLimit = value;
         try {
             await _worker.runOp({
@@ -266,7 +273,7 @@ export class UdpSocket {
                 value,
             });
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -276,7 +283,7 @@ export class UdpSocket {
      *
      * @async
      * @returns {Promise<bigint>}
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} payload.tag maps the system error
      */
     async receiveBufferSize() {
         if (this.#options.receiveBufferSize) {
@@ -290,7 +297,7 @@ export class UdpSocket {
             this.#options.receiveBufferSize = size;
             return size;
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -299,10 +306,10 @@ export class UdpSocket {
      * WIT: set-receive-buffer-size: func(value: u64) -> result<_, error-code>
      *
      * @param {bigint} value - The buffer size in bytes (must be >0)
-     * @throws {"invalid-argument"} If value == 0
+     * @throws {SocketError} payload.tag maps the system error
      */
     setReceiveBufferSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) throw new SocketError('invalid-argument');
         this.#options.receiveBufferSize = value;
     }
 
@@ -312,7 +319,7 @@ export class UdpSocket {
      *
      * @async
      * @returns {Promise<bigint>}
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} payload.tag maps the system error
      */
     async sendBufferSize() {
         if (this.#options.sendBufferSize) {
@@ -326,7 +333,7 @@ export class UdpSocket {
             this.#options.sendBufferSize = size;
             return size;
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     }
 
@@ -335,10 +342,10 @@ export class UdpSocket {
      * WIT: set-send-buffer-size: func(value: u64) -> result<_, error-code>
      *
      * @param {bigint} value - The buffer size in bytes (must be >0)
-     * @throws {"invalid-argument"} If value == 0
+     * @throws {SocketError} with payload.tag 'invalid-argument' if value == 0
      */
     setSendBufferSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) throw new SocketError('invalid-argument');
         this.#options.sendBufferSize = value;
     }
 
@@ -370,15 +377,15 @@ export const udpCreateSocket = {
      * @async
      * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family
      * @returns {Promise<UdpSocket>}
-     * @throws {"invalid-argument"} If addressFamily is not IPv4 or IPv6
-     * @throws {string} Other error codes mapped from system errors
+     * @throws {SocketError} with payload.tag 'invalid-argument' if ~addressFamily~ is not IPv4 or IPv6
+     * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async createUdpSocket(addressFamily) {
         if (
             addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
             addressFamily !== IP_ADDRESS_FAMILY.IPV6
         ) {
-            throw 'invalid-argument';
+            throw new SocketError('invalid-argument');
         }
         try {
             const { socketId } = await _worker.runOp({
@@ -387,7 +394,7 @@ export const udpCreateSocket = {
             });
             return udpSocketCreate(addressFamily, socketId);
         } catch (e) {
-            throw mapError(e);
+            throw SocketError.from(e);
         }
     },
 };
