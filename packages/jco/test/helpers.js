@@ -623,7 +623,7 @@ export async function getCurrentWitComponentVersion() {
     return CURRENT_WIT_COMPONENT_VERSION;
   }
   const cargoTomlPath = fileURLToPath(
-    new URL("../Cargo.toml", import.meta.url)
+    new URL("../../../Cargo.toml", import.meta.url)
   );
   const cargoToml = parse(await readFile(cargoTomlPath, "utf8"));
   const version = cargoToml.workspace.dependencies["wit-component"].version;

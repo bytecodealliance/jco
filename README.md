@@ -2,7 +2,7 @@
   <h1><code>jco</code></h1>
 
   <p>
-    <strong>JavaScript toolchain for working with <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
+    <strong>JavaScript tooling for <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
   </p>
 
   <strong>A <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project</strong>
@@ -20,150 +20,78 @@
 
 ## Overview
 
-Jco provides a fully native JS toolchain for working with [WebAssembly Components](https://github.com/WebAssembly/component-model) in JavaScript.
+Jco (`jco`) provides a [Javascript][js]-native toolchain for working with [WebAssembly Components][cm-book].
 
-Features include:
+**Jco aims to be a convenient multi-tool for the JS WebAssembly ecosystem.**
 
-* "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-* WASI Preview2 support in Node.js & browsers (experimental).
-* Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments, as well as optimization helper for Components via Binaryen.
-* Run and serve commands like Wasmtime, as JS implementations of the Command and HTTP Proxy worlds.
-* "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
+With Jco (and related projects in this repository), you can:
 
-For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
+- **Build WebAssembly components** from Javascript/Typescript with the help of [`componentize-js`][cjs]
+- **"Transpile" WebAssembly components** into ES modules that can run in environments like NodeJS and the browser, combining platform-native WebAssembly core support with the advanced features of WebAssembly Components
+- **Run WebAssembly components** whether single-shot applications or web servers (similar to [`wasmtime run`][wasmtime-run]/[`wasmtime serve`][wasmtime-serve])
+- **Reuse WebAssembly component workflows** (e.g. building components, tranpsiling, etc) from your own JS projects
+- **Utilize [`wasm-tools`][wt]** as a library from JS
 
-## Installation
+[cm-book]: https://component-model.bytecodealliance.org/
+[js]: https://developer.mozilla.org/en-US/docs/Web/JavaScript
+[cjs]: https://github.com/bytecodealliance/componentize-js
+[wt]: https://github.com/bytecodealliance/wasm-tools
+[wasmtime-serve]: https://docs.wasmtime.dev/cli-options.html#serve
+[wasmtime-run]: https://docs.wasmtime.dev/cli-options.html#run
 
-```shell
-npm install @bytecodealliance/jco
-```
+## Organization
+
+As Jco aims to do many things, it contains many subprojects that are organized in this repository:
+
+| Subproject                          | Language   | Directory                               | Description                                                                                     |
+|----------------------------------|------------|-----------------------------------------|-------------------------------------------------------------------------------------------------|
+| `jco`                            | Javascript | `packages/jco`                          | The `jco` CLI                                                                                   |
+| `preview2-shim`                  | Javascript | `packages/preview2-shim`                | Library that provides a mapping of [WASI Preview2][wasi-p2] for NodeJS and Browsers             |
+| `js-component-bindgen`           | Rust       | `crates/js-component-bindgen`           | Enables `jco transpile` and other features, reusing the Rust WebAssembly ecosystem              |
+| `js-component-bindgen-component` | Rust       | `crates/js-component-bindgen-component` | WebAssembly component that (when transipled) makes `js-component-bindgen` available in JS `jco` |
+| `wasm-tools-component`           | Rust       | `crates/wasm-tools-component`           | WebAssembly component containing pieces of [`wasm-tools`][wt] used by `jco`                     |
+
+[wasi-p2]: https://github.com/WebAssembly/WASI/tree/main/wasip2
+
+## Quickstart
 
 Jco can be used as either a library import or as a CLI via the `jco` command.
 
-## Example
+To install it, use `npm` (or your favorite `npm` equivalent):
 
-See the [Example Workflow](https://bytecodealliance.github.io/jco/example.html) page for a full usage example.
-
-## CLI
-
-```shell
-Usage: jco <command> [options]
-
-jco - WebAssembly JS Component Tools
-      JS Component Transpilation Bindgen & Wasm Tools for JS
-
-Options:
-  -V, --version                         output the version number
-  -h, --help                            display help for command
-
-Commands:
-  componentize [options] <js-source>    Create a component from a JavaScript module
-  transpile [options] <component-path>  Transpile a WebAssembly Component to JS + core Wasm for JavaScript execution
-  types [options] <wit-path>            Generate types for the given WIT
-  guest-types [options] <wit-path>      (experimental) Generate guest types for the given WIT
-  run [options] <command> [args...]     Run a WASI Command component
-  serve [options] <server> [args...]    Serve a WASI HTTP component
-  opt [options] <component-file>        optimizes a Wasm component, including running wasm-opt Binaryen optimizations
-  wit [options] <component-path>        extract the WIT from a WebAssembly Component [wasm-tools component wit]
-  print [options] <input>               print the WebAssembly WAT text for a binary file [wasm-tools print]
-  metadata-show [options] [module]      extract the producer metadata for a Wasm binary [wasm-tools metadata show]
-  metadata-add [options] [module]       add producer metadata for a Wasm binary [wasm-tools metadata add]
-  parse [options] <input>               parses the Wasm text format into a binary file [wasm-tools parse]
-  new [options] <core-module>           create a WebAssembly component adapted from a component core Wasm [wasm-tools component new]
-  embed [options] [core-module]         embed the component typing section into a core Wasm module [wasm-tools component embed]
-  help [command]                        display help for command
+```console
+npm install @bytecodealliance/jco
 ```
 
-For help with individual command options, use `jco <cmd> --help`.
+> [!NOTE]
+> If you're using jco to build components, you should also install `componentize-js`, which is dynamically imported:
+>
+> ```console
+> npm install @bytecodealliance/componentize-js
+> ```
 
-### Transpile
+### Building an example component
 
-See the [Transpiling Docs](https://bytecodealliance.github.io/jco/transpiling.html) for more background and info.
+For instructions on how to build an example component, see the [Component model section on Javascript][cm-book-js].
 
-#### Bindgen Crate
+To see examples of common patterns, check out the [example components folder (`examples/components`)](./examples/components).
 
-To directly call into the transpilation in Rust, the bindgen used in Jco is also available on crates.io as [js-component-bindgen](https://crates.io/crates/js-component-bindgen).
+[cm-book-js]: https://component-model.bytecodealliance.org/language-support/javascript.html
 
-### Run & Serve
+## Learn more
 
-For Wasm components that implement the WASI Command world, a `jco run` utility is provided to run these applications in Node.js.
+For a deeper guide on the intricacies of Jco, read the [Jco Book][jco-book].
 
-```
-jco run cowasy.component.wasm hello
-```
+[jco-book]: https://bytecodealliance.github.io/jco/
 
-Using the preview2-shim WASI implementation, full access to the underlying system primitives is provided, including filesystem and environment variable permissions.
-
-For HTTP Proxy components, `jco serve` provides a JS server implementation:
-
-```
-jco serve --port 8080 server.wasm
-```
-
-> [Wasmtime](https://github.com/bytecodealliance/wasmtime) generally provides the most performant implementation for executing command and proxy worlds to use. These implementations are rather for when JS virtualization is required or the most convenient approach.
-
-### Componentize
-
-> **Note**: `jco componentize` is considered experimental, and breaking changes may be made without notice.
-
-To componentize a JS file run:
-
-```
-jco componentize app.js --wit wit -n world-name -o component.wasm
-```
-
-Creates a component from a JS module implementing a WIT world definition, via a Spidermonkey engine embedding.
-
-See [ComponentizeJS](https://github.com/bytecodealliance/componentize-js) for more details on this process.
-
-## API
-
-#### `transpile(component: Uint8Array, opts?): Promise<{ files: Record<string, Uint8Array> }>`
-
-Transpile a Component to JS.
-
-#### `opt(component: Uint8Array, opts?): Promise<{ component: Uint8Array }>`
-
-Optimize a Component with the [Binaryen Wasm-opt](https://www.npmjs.com/package/binaryen) project.
-
-#### `componentWit(component: Uint8Array, document?: string): string`
-
-Extract the WIT world from a component binary.
-
-#### `print(component: Uint8Array): string`
-
-Print the WAT for a Component binary.
-
-#### `metadataShow(wasm: Uint8Array): Metadata`
-
-Extract the producer toolchain metadata for a component and its nested modules.
-
-#### `parse(wat: string): Uint8Array`
-
-Parse a compoment WAT to output a Component binary.
-
-#### `componentNew(coreWasm: Uint8Array | null, adapters?: [String, Uint8Array][]): Uint8Array`
-
-"WIT Component" Component creation tool, optionally providing a set of named adapter binaries.
-
-#### `componentEmbed(coreWasm: Uint8Array | null, wit: String, opts?: { stringEncoding?, dummy?, world?, metadata? }): Uint8Array`
-
-"WIT Component" Component embedding tool, for embedding component types into core binaries, as an advanced use case of component generation.
-
-#### `metadataAdd(wasm: Uint8Array, metadata): Uint8Array`
-
-Add new producer metadata to a component or core Wasm binary.
-
-## Contributing
-
-See the [Contributing](https://bytecodealliance.github.io/jco/contributing.html) chapter of the Jco book.
-
-# License
+## License
 
 This project is licensed under the Apache 2.0 license with the LLVM exception.
 See [LICENSE](LICENSE) for more details.
 
-### Contribution
+## Contributing
+
+See the [Contributing](https://bytecodealliance.github.io/jco/contributing.html) chapter of the Jco book.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this project by you, as defined in the Apache-2.0 license,

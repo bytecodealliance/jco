@@ -8,7 +8,7 @@ use js_component_bindgen::{generate_types, source::wit_parser::Resolve, Bindings
 pub(crate) fn run() -> Result<()> {
     for world in ["wasi:http/proxy", "wasi:cli/command"] {
         let name = world.replace([':', '/'], "-");
-        let preview2_wit_path = "./test/fixtures/wit";
+        let preview2_wit_path = "./packages/jco/test/fixtures/wit";
 
         let mut resolve = Resolve::default();
         let (_, _) = resolve.push_dir(&PathBuf::from(preview2_wit_path))?;

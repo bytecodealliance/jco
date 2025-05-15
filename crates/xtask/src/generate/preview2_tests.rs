@@ -112,11 +112,11 @@ pub fn run() -> anyhow::Result<()> {
     drop(guard);
 
     // Tidy up the dir and recreate it.
-    let _ = fs::remove_dir_all("./tests/gen");
-    let _ = fs::remove_dir_all("./tests/output");
-    fs::create_dir_all("./tests/gen")?;
-    fs::create_dir_all("./tests/output")?;
-    fs::write("./tests/mod.rs", "mod gen;\n")?;
+    let _ = fs::remove_dir_all("./crates/jco/tests/gen");
+    let _ = fs::remove_dir_all("./crates/jco/tests/output");
+    fs::create_dir_all("./crates/jco/tests/gen")?;
+    fs::create_dir_all("./crates/jco/tests/output")?;
+    fs::write("./crates/jco/tests/mod.rs", "mod gen;\n")?;
 
     let mut test_names = vec![];
 
@@ -154,11 +154,11 @@ pub fn run() -> anyhow::Result<()> {
     for test_name in test_names {
         let path = format!("submodules/wasmtime/target/wasm32-wasip1/debug/{test_name}.wasm");
         // compile into generated dir
-        let dest_file = format!("./tests/gen/{test_name}.component.wasm");
+        let dest_file = format!("./crates/jco/tests/gen/{test_name}.component.wasm");
 
         if let Err(err) = cmd!(
             sh,
-            "wasm-tools component new {path} --adapt ./lib/wasi_snapshot_preview1.command.wasm -o {dest_file}"
+            "wasm-tools component new {path} --adapt ./packages/jco/lib/wasi_snapshot_preview1.command.wasm -o {dest_file}"
         )
         .run()
         {
@@ -173,12 +173,12 @@ pub fn run() -> anyhow::Result<()> {
         let windows_skip = TEST_IGNORE_WINDOWS.contains(&test_name.as_ref());
 
         let content = generate_test(&test_name, windows_skip, false);
-        fs::write(format!("tests/gen/node_{test_name}.rs"), content)?;
+        fs::write(format!("crates/jco/tests/gen/node_{test_name}.rs"), content)?;
 
         if DENO && !DENO_IGNORE.contains(&test_name.as_ref()) {
             let content = generate_test(&test_name, true, true);
             let test_name = format!("deno_{test_name}");
-            fs::write(format!("tests/gen/{test_name}.rs"), content)?;
+            fs::write(format!("crates/jco/tests/gen/{test_name}.rs"), content)?;
             all_names.push(test_name);
         }
 
@@ -188,7 +188,7 @@ pub fn run() -> anyhow::Result<()> {
     all_names.sort();
 
     let content = generate_mod(all_names.as_slice());
-    let file_name = "tests/gen/mod.rs";
+    let file_name = "crates/jco/tests/gen/mod.rs";
     fs::write(file_name, content)?;
     println!("generated {} tests", all_names.len());
     Ok(())
@@ -344,8 +344,8 @@ fn {test_name}() -> anyhow::Result<()> {{
     {windows_skip_prefix}
     {retry_start}
     {{
-        let wasi_file = "./tests/gen/{test_name}.component.wasm";
-        let _ = fs::remove_dir_all("./tests/rundir/{deno_prefix}{test_name}");
+        let wasi_file = "./crates/jco/tests/gen/{test_name}.component.wasm";
+        let _ = fs::remove_dir_all("./crates/jco/tests/rundir/{deno_prefix}{test_name}");
         {cmd1}
         {cmd2}
         {stdin_read}
@@ -372,9 +372,9 @@ fn generate_command_invocation(
         {cmd_name}.arg("./src/jco.js");
         {cmd_name}.arg("run");{}{}
         {cmd_name}.arg("--jco-dir");
-        {cmd_name}.arg("./tests/rundir/{run_dir}");
+        {cmd_name}.arg("./crates/jco/tests/rundir/{run_dir}");
         {cmd_name}.arg("--jco-import");
-        {cmd_name}.arg("./tests/virtualenvs/{virtual_env}.js");
+        {cmd_name}.arg("./crates/jco/tests/virtualenvs/{virtual_env}.js");
         {cmd_name}.arg("--jco-import-bindings");
         {cmd_name}.arg("hybrid");
         {cmd_name}.arg(wasi_file);
@@ -392,7 +392,7 @@ fn generate_command_invocation(
             format!(
                 "
         {cmd_name}.env(\"JCO_RUN_PATH\", \"deno\")
-            .env(\"JCO_RUN_ARGS\", \"run --importmap ./tests/importmap.json -A\");"
+            .env(\"JCO_RUN_ARGS\", \"run --importmap ./crates/jco/tests/importmap.json -A\");"
             )
         } else {
             "".into()

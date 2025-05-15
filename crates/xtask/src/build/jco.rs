@@ -1,13 +1,19 @@
-use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{collections::HashMap, sync::LazyLock};
 
 use anyhow::{bail, Context, Result};
 use js_component_bindgen::BindingsMode;
 use wit_component::ComponentEncoder;
 use xshell::{cmd, Shell};
+
+static WORKSPACE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    // NOTE this goes to the xtask dir
+    let xtask_manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    xtask_manifest_dir.join("../../")
+});
 
 /// Type of build being performed
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -44,18 +50,23 @@ impl std::fmt::Display for BuildType {
 fn transpile_components(build_type: BuildType) -> Result<()> {
     let optimize = build_type == BuildType::Release;
 
+    // NOTE this goes to the xtask dir
+    let workspace_dir = &*WORKSPACE_DIR.to_path_buf();
+
     transpile(TranspileArgs {
-        component_path: format!(
+        component_path: workspace_dir.join(format!(
             "target/wasm32-wasip1/{build_type}/js_component_bindgen_component.wasm"
-        ),
+        )),
         name: "js-component-bindgen-component".into(),
         optimize,
         build_type: build_type.clone(),
     })
-    .context("transpiling wasm-tools")?;
+    .context("transpiling js-component-bindgen-component")?;
 
     transpile(TranspileArgs {
-        component_path: format!("target/wasm32-wasip1/{build_type}/wasm_tools_js.wasm"),
+        component_path: workspace_dir.join(format!(
+            "target/wasm32-wasip1/{build_type}/wasm_tools_js.wasm"
+        )),
         name: "wasm-tools".into(),
         optimize,
         build_type,
@@ -67,7 +78,7 @@ fn transpile_components(build_type: BuildType) -> Result<()> {
 /// Arguments for transpilation
 struct TranspileArgs {
     /// Path to the component
-    component_path: String,
+    component_path: PathBuf,
     /// The name of the component
     name: String,
     /// Whether to optimize the build
@@ -84,10 +95,28 @@ fn transpile<'a>(args: TranspileArgs) -> Result<()> {
         build_type,
     } = args;
     std::env::set_var("RUST_BACKTRACE", "1");
-    let component = fs::read(component_path).context("wasm bindgen component missing")?;
+    let component_path = PathBuf::from(&component_path)
+        .canonicalize()
+        .with_context(|| {
+            format!(
+                "failed to resolve component path [{}]",
+                component_path.display()
+            )
+        })?;
+    let component = fs::read(&component_path).with_context(|| {
+        format!(
+            "wasm bindgen component missing @ [{}]",
+            component_path.display()
+        )
+    })?;
 
-    let adapter_path = "lib/wasi_snapshot_preview1.reactor.wasm";
-    let adapter = fs::read(adapter_path).context("preview1 adapter file missing")?;
+    let adapter_path = &*WORKSPACE_DIR.join("packages/jco/lib/wasi_snapshot_preview1.reactor.wasm");
+    let adapter = fs::read(&adapter_path).with_context(|| {
+        format!(
+            "preview1 adapter file missing @ [{}]",
+            adapter_path.display()
+        )
+    })?;
 
     let mut encoder = ComponentEncoder::default()
         .validate(true)
@@ -95,7 +124,7 @@ fn transpile<'a>(args: TranspileArgs) -> Result<()> {
 
     encoder = encoder.adapter("wasi_snapshot_preview1", &adapter)?;
 
-    let obj_dir = PathBuf::from("./obj");
+    let obj_dir = WORKSPACE_DIR.join("packages/jco/obj");
     let mut adapted_component = encoder.encode()?;
     fs::create_dir_all(&obj_dir)?;
     let mut component_path = obj_dir.join(&name);
@@ -108,7 +137,7 @@ fn transpile<'a>(args: TranspileArgs) -> Result<()> {
         // and the only way to build it before use is an *unoptimized* build,
         // which means a debug build.
         if build_type == BuildType::Release
-            && !fs::exists(PathBuf::from("./obj/wasm-tools.js"))
+            && !fs::exists(obj_dir.join("wasm-tools.js"))
                 .context("checking for obj/wasm-tools.js")?
         {
             // Build the workspace and the components
@@ -167,7 +196,7 @@ fn transpile<'a>(args: TranspileArgs) -> Result<()> {
     let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;
 
     for (filename, contents) in transpiled.files.iter() {
-        let outfile = PathBuf::from("./obj").join(filename);
+        let outfile = obj_dir.join(filename);
         fs::create_dir_all(outfile.parent().unwrap()).unwrap();
         let mut file = fs::File::create(outfile).unwrap();
         file.write_all(contents).unwrap();

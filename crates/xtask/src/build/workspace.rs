@@ -2,6 +2,8 @@ use xshell::{cmd, Shell};
 
 pub(crate) fn run(release: bool) -> anyhow::Result<()> {
     let sh = Shell::new()?;
+
+    // Build rust code
     if release {
         cmd!(
             sh,
@@ -11,6 +13,8 @@ pub(crate) fn run(release: bool) -> anyhow::Result<()> {
     } else {
         cmd!(sh, "cargo build --workspace --target wasm32-wasip1").read()?;
     }
-    cmd!(sh, "node node_modules/typescript/bin/tsc -p tsconfig.json").read()?;
+
+    // Build Jco TS code
+    cmd!(sh, "npx -w @bytecodealliance/jco tsc -p tsconfig.json").read()?;
     Ok(())
 }
