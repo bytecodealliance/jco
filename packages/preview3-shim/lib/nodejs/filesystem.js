@@ -27,6 +27,11 @@ class Descriptor {
         desc.#fd = fd;
         desc.#mode = mode;
         desc.#fullPath = fullPath;
+
+        // TODO: fix: (node:54252) [DEP0137] DeprecationWarning: Closing a FileHandle object on
+        // garbage collection is deprecated. Please close FileHandle objects explicitly using
+        // FileHandle.prototype.close(). In the future, an error will be thrown if a file
+        // descriptor is closed during garbage collection.
         desc.#finalizer = registerDispose(desc, null, fd, (fd) => close(fd));
 
         return desc;
