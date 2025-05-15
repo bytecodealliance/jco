@@ -1,7 +1,8 @@
 import { HttpError } from './error.js';
 import { _fieldsLock, Fields } from './fields.js';
 
-import { future } from '../future.js';
+import { FutureReader, future } from '../future.js';
+import { StreamReader } from '../stream.js';
 
 const defaultHttpTimeout = 600_000_000_000n;
 
@@ -152,11 +153,19 @@ export class Request {
      */
     static new(headers, contents, trailers, options) {
         if (options != null && !(options instanceof RequestOptions)) {
-            throw new HttpError('invalid-argument');
+            throw new HttpError('invalid-argument', 'options must be RequestOptions');
         }
 
-        if (headers != null && !(headers instanceof Fields)) {
-            throw new HttpError('invalid-argument');
+        if (!(headers instanceof Fields)) {
+            throw new HttpError('invalid-argument', 'headers must be Fields');
+        }
+
+        if (contents != null && !(contents instanceof StreamReader)) {
+            throw new HttpError('invalid-argument', 'contents must be StreamReader');
+        }
+
+        if (!(trailers instanceof FutureReader)) {
+            throw new HttpError('invalid-argument', 'trailers must be FutureReader');
         }
 
         let request = new Request(REQUEST_PRIV_SYM);
@@ -342,6 +351,7 @@ export class Request {
      * @throws {HttpError} with payload.tag 'invalid-state' if body already open
      */
     body() {
+        // TODO: enforce single-stream semantics
         return [this.#contents, this.#trailersFuture];
     }
 
