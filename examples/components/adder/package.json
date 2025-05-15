@@ -1,0 +1,15 @@
+{
+  "name": "adder-wasm",
+  "description": "Simple codebase for compiling an add interface to WebAssembly with jco",
+  "type": "module",
+  "scripts": {
+    "build": "jco componentize adder.js --wit wit/component.wit --world-name adder --out adder.wasm --disable all",
+    "transpile": "jco transpile adder.wasm -o dist/transpiled",
+    "transpiled-js": "node run-transpiled.js",
+    "all": "npm run build && npm run transpile && npm run transpiled-js"
+  },
+  "dependencies": {
+    "@bytecodealliance/jco": "^1.11.1",
+    "@bytecodealliance/componentize-js": "0.17.0"
+  }
+}
