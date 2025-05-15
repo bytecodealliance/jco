@@ -50,41 +50,40 @@ export const CODE_MAP = {
  * https://bytecodealliance.github.io/jco/wit-type-representations.html#result-considerations-idiomatic-js-errors-for-host-implementations
  */
 export class SocketError extends Error {
-  /**
-   * @param {string} tag        – machine‐readable error tag
-   * @param {string} [message]  – human‐readable message
-   * @param {any}    [val]      – optional extra data
-   */
-  constructor(tag, message, val) {
-    super(message ?? `Error: ${tag}`)
-    this.name    = 'SocketError'
-    this.payload = val !== undefined
-      ? { tag, val }
-      : { tag }
-  }
+    /**
+     * @param {string} tag        – machine‐readable error tag
+     * @param {string} [message]  – human‐readable message
+     * @param {any}    [val]      – optional extra data
+     */
+    constructor(tag, message, val) {
+        super(message ?? `Error: ${tag}`);
+        this.name = 'SocketError';
+        this.payload = val !== undefined ? { tag, val } : { tag };
+    }
 
-  /**
-   * Create or rewrap an error into SocketError
-   * @param {any} err – number, string, Error, or SocketError
-   */
+    /**
+     * Create or rewrap an error into SocketError
+     * @param {any} err – number, string, Error, or SocketError
+     */
     static from(err) {
-      if (err instanceof SocketError) return err
+        if (err instanceof SocketError) return err;
 
-      let tag, message = undefined
+        let tag,
+            message = undefined;
 
-      if (typeof err === 'number') {
-        tag = CODE_MAP[err] ?? 'unknown'
-        message = `Error code ${err}`
-      } else if (typeof err === 'string') {
-        tag = ERROR_MAP[err] ?? err
-      } else if (err && typeof err.code === 'string') {
-        tag = ERROR_MAP[err.code] ?? err.code
-        message = err.message
-      } else {
-        tag = 'unknown'
-        message = err?.message
-      }
+        if (typeof err === 'number') {
+            tag = CODE_MAP[err] ?? 'unknown';
+            message = `Error code ${err}`;
+        } else if (typeof err === 'string') {
+            tag = ERROR_MAP[err] ?? err;
+        } else if (err && typeof err.code === 'string') {
+            tag = ERROR_MAP[err.code] ?? err.code;
+            message = err.message;
+        } else {
+            tag = 'unknown';
+            message = err?.message;
+        }
 
-      return new SocketError(tag, message, err)
+        return new SocketError(tag, message);
     }
 }

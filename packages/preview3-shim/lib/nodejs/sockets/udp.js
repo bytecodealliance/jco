@@ -58,8 +58,10 @@ export class UdpSocket {
      *
      */
     async bind(localAddress) {
-        if (this.#state !== STATE.UNBOUND) throw new SocketError('invalid-state');
-        if (localAddress.tag !== this.#family) throw new SocketError('invalid-argument');
+        if (this.#state !== STATE.UNBOUND)
+            throw new SocketError('invalid-state');
+        if (localAddress.tag !== this.#family)
+            throw new SocketError('invalid-argument');
 
         try {
             await _worker.runOp({
@@ -85,7 +87,8 @@ export class UdpSocket {
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async connect(remoteAddress) {
-        if (this.#state === STATE.CONNECTED) throw new SocketError('invalid-state');
+        if (this.#state === STATE.CONNECTED)
+            throw new SocketError('invalid-state');
         if (
             remoteAddress.tag !== this.#family ||
             remoteAddress.val.port === 0 ||
@@ -118,7 +121,8 @@ export class UdpSocket {
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async disconnect() {
-        if (this.#state !== STATE.CONNECTED) throw new SocketError('invalid-state');
+        if (this.#state !== STATE.CONNECTED)
+            throw new SocketError('invalid-state');
         try {
             await _worker.runOp({
                 op: 'udp-disconnect',
@@ -157,7 +161,6 @@ export class UdpSocket {
             throw new SocketError('invalid-argument');
         }
 
-
         if (this.#state === STATE.CONNECTED && addr !== this.#remote) {
             throw new SocketError('invalid-argument');
         }
@@ -187,7 +190,8 @@ export class UdpSocket {
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async receive() {
-        if (this.#state === STATE.UNBOUND) throw new SocketError('invalid-state');
+        if (this.#state === STATE.UNBOUND)
+            throw new SocketError('invalid-state');
         try {
             const { data, remoteAddress } = await _worker.runOp({
                 op: 'udp-receive',
@@ -209,7 +213,8 @@ export class UdpSocket {
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async localAddress() {
-        if (this.#state === STATE.UNBOUND) throw new SocketError('invalid-state');
+        if (this.#state === STATE.UNBOUND)
+            throw new SocketError('invalid-state');
         try {
             return await _worker.runOp({
                 op: 'udp-get-local-address',
@@ -229,7 +234,8 @@ export class UdpSocket {
      * @throws {SocketError} with payload.tag 'invalid-state' if the socket is not connected
      */
     async remoteAddress() {
-        if (this.#state !== STATE.CONNECTED) throw new SocketError('invalid-state');
+        if (this.#state !== STATE.CONNECTED)
+            throw new SocketError('invalid-state');
         return this.#remote;
     }
 

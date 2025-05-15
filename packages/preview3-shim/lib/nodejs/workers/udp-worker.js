@@ -61,7 +61,7 @@ parentPort.on('message', async (msg) => {
         }
         parentPort.postMessage({ id, result });
     } catch (error) {
-        parentPort.postMessage({id, error });
+        parentPort.postMessage({ id, error });
     }
 });
 
