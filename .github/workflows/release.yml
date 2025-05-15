@@ -70,7 +70,7 @@ jobs:
         id: cache-node-modules
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
           path: |
             node_modules
       - name: Install debug NPM packages
@@ -114,14 +114,14 @@ jobs:
 
           case $PROJECT in
             jco)
-              export PROJECT_DIR=$PWD;
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
               export ARTIFACT_NAME="bytecodealliance-jco-$NEXT_VERSION.tgz";
               ;;
             preview2-shim)
-              export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="packages/preview2-shim/bytecodealliance-preview2-shim-*.tgz";
@@ -216,7 +216,7 @@ jobs:
         id: cache-node-modules
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
           path: |
             node_modules
       - name: Install NPM packages
@@ -342,7 +342,7 @@ jobs:
             export OPT_RELEASE_TAG="--tag ${{ needs.meta.outputs.prerelease-tag }}";
           fi
 
-          npm publish $OPT_DRY_RUN $OPT_RELEASE_TAG $PACKAGE_DIR
+          npm publish -w @bytecodealliance/${{ needs.meta.outputs.project }} $OPT_DRY_RUN $OPT_RELEASE_TAG $PACKAGE_DIR
 
   create-gh-release:
     runs-on: ubuntu-24.04

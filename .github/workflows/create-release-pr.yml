@@ -58,7 +58,7 @@ jobs:
         id: cache-node-modules
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
           path: |
             node_modules
       - name: Install debug NPM packages
@@ -79,7 +79,7 @@ jobs:
 
           case $PROJECT in
             jco)
-              export PROJECT_DIR=$PWD;
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               ;;
@@ -132,7 +132,10 @@ jobs:
           fi
 
           if [ "jco" == "${{ steps.project-meta.outputs.project }}" ]; then
-            sed -i "s/version('${{ steps.project-meta.outputs.current-version }}')/version('${{ steps.project-meta.outputs.next-version }}')/" src/jco.js
+            sed \
+              -i \
+              "s/version('${{ steps.project-meta.outputs.current-version }}')/version('${{ steps.project-meta.outputs.next-version }}')/" \
+              src/jco.js;
           fi
 
       # Generate changelog
@@ -169,4 +172,4 @@ jobs:
             To ensure this release is ready to be merged:
               - [ ] Review updated CHANGELOG(s)
 
-            After this PR is merged tagging, artifacts and releasing should run automatically.
+            After this PR is merged tagging, artifact builds and releasing will run automatically.
