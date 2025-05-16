@@ -6,8 +6,9 @@
     "examples/components/add",
     "examples/components/adder",
     "examples/components/http-hello-world",
-    "examples/components/node-fetch",
     "examples/components/http-server-fetch-handler",
+    "examples/components/http-server-hono",
+    "examples/components/node-fetch",
     "examples/components/string-reverse",
     "examples/components/string-reverse-upper",
     "examples/components/webidl-book-library"

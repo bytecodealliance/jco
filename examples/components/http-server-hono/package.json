@@ -1,0 +1,30 @@
+{
+  "name": "http-server-hono",
+  "description": "Example of a WASI-enabled WebAsssembly HTTP server powered by Hono",
+  "private": true,
+  "main": "src/component.ts",
+  "type": "module",
+  "scripts": {
+    "gen:types": "jco guest-types wit -o generated/types",
+    "build:js": "rollup -c",
+    "build:component": "jco componentize -w wit -o dist/component.wasm dist/component.js",
+    "build": "npm run gen:types && npm run build:js && npm run build:component",
+    "transpile": "jco transpile -o dist/transpiled dist/component.wasm",
+    "serve": "jco serve dist/compnent.wasm",
+    "demo": "node scripts/demo.js",
+    "all": "npm run build && npm run demo"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "^0.18.2",
+    "@bytecodealliance/jco": "^1.11.2",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "rollup": "^4.40.2",
+    "terminate": "^2.8.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "hono": "^4.7.9"
+  }
+}
