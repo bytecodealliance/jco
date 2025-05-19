@@ -1,0 +1,10 @@
+package example:hono;
+
+world component {
+    import wasi:cli/environment@0.2.3;
+    export wasi:http/incoming-handler@0.2.3;
+
+    // TODO(FIX): v0.2.4 wasi interfaces can be leveraged after componentize-js v0.18.3 is used by jco
+    // import wasi:cli/environment@0.2.4;
+    // export wasi:http/incoming-handler@0.2.4;
+}
