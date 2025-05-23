@@ -160,6 +160,56 @@ suite("Async", () => {
         await rm(outDir, { recursive: true });
         await rm(outFile);
       } catch {}
-    }
-  );
+    });
+
+  test("Transpile simple error-context", async () => {
+      const { esModule, cleanup, esModuleOutputDir } = await setupAsyncTest({
+        asyncMode: "jspi",
+        component: {
+          name: "async-error-context",
+          path: resolve(
+            "test/fixtures/components/async-error-context.component.wasm"
+          ),
+          skipInstantiation: true,
+        },
+        jco: {
+          transpile: {
+            extraArgs: {
+              asyncExports: ["local:local/run#run"],
+              minify: false,
+            },
+          },
+        },
+      });
+
+      // TODO: FIX, this should be possible to just automatically map/ at least
+      // get a pre-filled importMap to use here.
+      //
+      // Or, we need to just add this to preview2-shim so it's just easy to pass to 
+      // custom module instantiation
+      const wasi = await import("@bytecodealliance/preview2-shim");
+      const instance = await esModule.instantiate(undefined, {
+        "wasi:cli/environment": wasi.cli.environment,
+        "wasi:cli/exit": wasi.cli.exit,
+        "wasi:cli/stderr": wasi.cli.stderr,
+        "wasi:cli/stdout": wasi.cli.stdout,
+        "wasi:cli/stdin": wasi.cli.stdin,
+        "wasi:filesystem/preopens": wasi.filesystem.preopens,
+        "wasi:filesystem/types": wasi.filesystem.types,
+        "wasi:io/error": wasi.io.error,
+        "wasi:io/streams": wasi.io.streams,
+        "wasi:random/random": wasi.random.random,
+      });
+
+      const runFn = instance["local:local/run"].run;
+      assert.strictEqual(
+        runFn instanceof AsyncFunction,
+        true,
+        "local:local/run should be async"
+      );
+
+      await runFn();
+
+      await cleanup();
+    });
 });

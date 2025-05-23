@@ -69,6 +69,218 @@ pub enum Intrinsic {
     Utf8EncodedLen,
     ValidateGuestChar,
     ValidateHostChar,
+
+    /// Storage of component-wide "global" `error-context` metadata
+    ///
+    /// Contexts are reference counted at both the global level, and locally for a single
+    /// component.
+    ///
+    /// Component-global counts are used along with component-local counts in order
+    /// to determine when an error context can *actually* be reclaimed/removed (i.e. no longer
+    /// in use in either a local component or by the host in some fashion).
+    ///
+    /// You can consider the type of the value referenced by this intrinsic to be:
+    ///
+    /// ```ts
+    /// // (in-binary component-global) ~i32, stable index for a component-model-wide error-context
+    /// type ErrorContextRep = number;
+    /// // (in-binary component-global) u32, number of references to the given handle
+    /// type GlobalRefCount = number;
+    /// // ('single', component-local) debug message represented by the given error-context
+    /// type DebugMessage = string;
+    /// // (in-binary component-global) metadata representative of an error-context
+    /// type GlobalErrorContextMeta = { refCount: number, debugMessage: string };
+    ///
+    /// Map<ErrorContextRep, GlobalErrorContextMeta>
+    /// ```
+    ErrorContextComponentGlobalTable,
+
+    /// Storage of per-component "local" `error-context` metadata
+    ///
+    /// Contexts are reference counted at the component-local level, with counts here used
+    /// in addition to global counts to determine when an error context can be removed.
+    ///
+    /// This structure is a multi-level lookup based on sparse arrays, indexed by:
+    ///   - component
+    ///   - local context-error table index (i.e. the component-local id for a context-error)
+    ///   - error-context handle
+    ///
+    /// You can consider the type of the value referenced by this intrinsic to be:
+    ///
+    /// ```ts
+    /// // (in-binary component-global) i32, stable index for a given subcomponent inside the current component
+    /// type ComponentIndex = number;
+    /// // ('single' component-local) i32, stable index for a given error-context table (effectively identifies a component)
+    /// type TableIndex = number;
+    /// // ('single', component-local) i32, stable index for a given component's error-context
+    /// type ErrorContextHandle = number;
+    /// // (in-binary component-global) i32, stable index for a component-model-wide error-context
+    /// type ErrorContextRep = number;
+    /// // ('single', component-local) u32, number of references to the given handle
+    /// type LocalRefCount = number;
+    /// // ('single', component-local) information related to the local representation of this error-context
+    /// type LocalErrorContextMeta = { rep: number, refCount: number };
+    ///
+    /// type ErrorContextComponentLocalTable = Map<
+    ///   ComponentIndex,
+    ///   Map<
+    ///     ComponentErrorContextTableIndex,
+    ///     Map<
+    ///       ErrorContextHandle,
+    ///       LocalErrorContextMeta
+    ///     >
+    ///   >
+    /// >
+    /// ```
+    ///
+    /// Note that garbage collection of an error context cannot be done unless *all* references are dropped
+    /// (locally and globally)
+    ErrorContextComponentLocalTable,
+
+    /// Create a new error context
+    ErrorContextNew,
+
+    /// Drop an existing error context
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type u64 = bigint;
+    /// function errCtxDrop(tbl: ErrorContextComponentLocalTable, errContextHandle: u32): bool;
+    /// ```
+    ///
+    /// see also: [`Intrinsic::ErrorContextComponentLocalTable`]
+    ErrorContextDrop,
+
+    /// Transfer a remote error context to a local one, from one component to another
+    ///
+    /// Error contexts are stored and managed via the ErrorContexts intrinsic,
+    /// and this intrinsic builds on that by implementing a function that will
+    /// move an error context with a handle from one component that owns it to another.
+    ///
+    /// This intrinsic is normally invoked when an error-context is passed across a component
+    /// boundary (ex. function output, closing a stream/futrue with an error, etc.)
+    ///
+    /// NOTE that error contexts unlike streams/futures/resources are reference counted --
+    /// transferring one does not not drop an error context.
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type u64 = bigint;
+    /// function errCtxTransfer(tbl: ErrorContextComponentLocalTable, errContextHandle: u32): bool;
+    /// ```
+    ///
+    ErrorContextTransfer,
+
+    /// Retrieve the debug message for an existing error context
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type OuputStringWriteFn = (s: string, outputPtr: u32) => void;
+    /// type Options = {
+    ///   callbackFnIdx?: u32,
+    ///   postReturnFnIdx?: u32,
+    ///   async?: bool,
+    /// }
+    ///
+    /// function errCtxDebugMessage(
+    ///   opts: Options,
+    ///   writeOutput: OuputStringWriteFn,
+    ///   tbl: ErrorContextComponentLocalTable,
+    ///   errContextHandle: u32, // provided by CABI
+    ///   outputStrPtr: u32, // provided by CABI
+    /// );
+    /// ```
+    ///
+    ErrorContextDebugMessage,
+
+    /// Retrieve the per component sparse array lookup of error contexts
+    ///
+    /// See [`Intrinsics::ErrorcontextComponentLocalTable`] for the shape of the lookup.
+    ///
+    /// This is a utility function that is used internally but does not translate to an actual component model intrinsic.
+    ErrorContextGetLocalTable,
+
+    /// Retrieve the component-global rep for a given component-local error-context handle
+    ///
+    /// See [`Intrinsics::ErrorcontextComponentLocalTable`] for the shape of the per-component error-context table.
+    ///
+    /// This is a utility function that is used internally but does not translate to an actual component model intrinsic.
+    ErrorContextGetHandleRep,
+
+    /// Increment the ref count for a component-global error-context
+    ///
+    /// See [`Intrinsics::ErrorcontextComponentLocalTable`] for the shape of the global error-context table.
+    ///
+    /// This is a utility function that is used internally but does not translate to an actual component model intrinsic.
+    ErrorContextGlobalRefCountAdd,
+
+    /// Create a local handle in a given component table
+    ///
+    /// See [`Intrinsics::ErrorcontextComponentLocalTable`] for the shape of the global error-context table.
+    ///
+    /// Note that this function is expected to receive a table *already* indexed by component.
+    ///
+    /// This is a utility function that is used internally but does not translate to an actual component model intrinsic.
+    ErrorContextCreateLocalHandle,
+
+    /// Reserve a new error context at the global scope, given a debug message to use
+    ErrorContextReserveGlobalRep,
+
+    /// Return a value to a caller of an lifted export.
+    ///
+    /// Consider the following scenario:
+    ///   - Some component A is created with a async lifted export
+    ///   - A caller of component A (Host/other component) calls the lifted export
+    ///   - During component A's execution, component A triggers `task.return` with a (possibly partial) result of computation
+    ///   - While processing the `task.return` intrinsic:
+    ///     - The host lifts the return values from the partial computation
+    ///     - The host pauses execution (if necessary) of component A
+    ///     - The host delivers return values to possibly waiting tasks
+    ///     - The host continues executing the appropriate next task
+    ///
+    /// Note that it *is* possible for the lifted export to be sync.
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// type usize = bigint;
+    /// type ComponentIdx = number;
+    /// type TypeIdx = number;
+    /// type ValueWithTypeIdx = (ComponentIdx, TypeIdx, any);
+    /// type LiftFn = function(ptr: u32, totalLen: usize): ValueWithTypeIndex[];
+    ///
+    /// function taskReturn(taskId: number, resultLiftFns: LiftFn[], storagePtr: u32, storageLen: usize);
+    /// ```
+    ///
+    TaskReturn,
+
+    /// Remove the subtask (waitable) at the given index, for a given component
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// function subtaskDrop(componentIdx: number, taskId: i32);
+    /// ```
+    ///
+    SubtaskDrop,
 }
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
@@ -106,10 +318,36 @@ pub fn render_intrinsics(
         ",
         );
     }
+
     if intrinsics.contains(&Intrinsic::ResourceTransferBorrow)
         || intrinsics.contains(&Intrinsic::ResourceTransferBorrowValidLifting)
     {
         intrinsics.insert(Intrinsic::ResourceTableCreateBorrow);
+    }
+
+    // Attempting to perform a debug message hoist will require string encoding to memory
+    if intrinsics.contains(&Intrinsic::ErrorContextDebugMessage) {
+        intrinsics.extend([
+            &Intrinsic::Utf8Encode,
+            &Intrinsic::Utf16Encode,
+            &Intrinsic::ErrorContextGetLocalTable,
+        ]);
+    }
+    if intrinsics.contains(&Intrinsic::ErrorContextNew) {
+        intrinsics.extend([
+            &Intrinsic::ErrorContextComponentGlobalTable,
+            &Intrinsic::ErrorContextReserveGlobalRep,
+            &Intrinsic::ErrorContextCreateLocalHandle,
+            &Intrinsic::ErrorContextGetLocalTable,
+        ]);
+    }
+
+    if intrinsics.contains(&Intrinsic::ErrorContextDebugMessage) {
+        intrinsics.extend([
+            &Intrinsic::ErrorContextGlobalRefCountAdd,
+            &Intrinsic::ErrorContextDrop,
+            &Intrinsic::ErrorContextGetLocalTable,
+        ]);
     }
 
     for i in intrinsics.iter() {
@@ -299,7 +537,6 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
 
-            //
             // # Resource table slab implementation
             //
             // Resource table slab implementation on top of a fixed "SMI" array in JS engines,
@@ -611,7 +848,6 @@ pub fn render_intrinsics(
 
             Intrinsic::Utf8Encode => output.push_str("
                 const utf8Encoder = new TextEncoder();
-
                 let utf8EncodedLen = 0;
                 function utf8Encode(s, realloc, memory) {
                     if (typeof s !== 'string') \
@@ -646,7 +882,185 @@ pub fn render_intrinsics(
                     return s.codePointAt(0);
                 }
             "),
-      }
+
+            Intrinsic::ErrorContextComponentGlobalTable => {
+                let name = Intrinsic::ErrorContextComponentGlobalTable.name();
+                output.push_str(&format!("const {name} = new Map();"));
+            },
+
+            Intrinsic::ErrorContextComponentLocalTable => {
+                let name = Intrinsic::ErrorContextComponentLocalTable.name();
+                output.push_str(&format!("const {name} = new Map();"));
+            },
+
+            Intrinsic::ErrorContextNew => {
+                let create_local_handle_fn = Intrinsic::ErrorContextCreateLocalHandle.name();
+                let reserve_global_err_ctx_fn = Intrinsic::ErrorContextReserveGlobalRep.name();
+                let new_fn= Intrinsic::ErrorContextNew.name();
+                let get_local_tbl_fn = Intrinsic::ErrorContextGetLocalTable.name();
+                output.push_str(&format!("
+                    function {new_fn}(componentIdx, errCtxTblIdx, readInputStrFn, msgPtr, msgLen) {{
+                        const componentTable = {get_local_tbl_fn}(componentIdx, errCtxTblIdx);
+                        const debugMessage = readInputStrFn(msgPtr, msgLen);
+                        const rep = {reserve_global_err_ctx_fn}(debugMessage, 0);
+                        return {create_local_handle_fn}(componentTable, rep);
+                    }}
+                "));
+            },
+
+            Intrinsic::ErrorContextDebugMessage => {
+                let global_tbl = Intrinsic::ErrorContextComponentGlobalTable.name();
+                let err_ctx_debug_msg_fn= Intrinsic::ErrorContextDebugMessage.name();
+                let get_local_tbl_fn = Intrinsic::ErrorContextGetLocalTable.name();
+                output.push_str(&format!("
+                    function {err_ctx_debug_msg_fn}(componentIdx, errCtxTblIdx, opts, writeOutputStrFn, handle, outputStrPtr) {{
+                        const componentTable = {get_local_tbl_fn}(componentIdx, errCtxTblIdx);
+                        if (!componentTable.get(handle)) {{ throw new Error('missing error-context in component while retrieving debug msg'); }}
+                        const rep = componentTable.get(handle).rep;
+                        const msg = {global_tbl}.get(rep).debugMessage;
+                        writeOutputStrFn(msg, outputStrPtr)
+                    }}
+                "));
+            },
+
+            Intrinsic::ErrorContextDrop => {
+                let global_ref_count_add_fn = Intrinsic::ErrorContextGlobalRefCountAdd.name();
+                let global_tbl = Intrinsic::ErrorContextComponentGlobalTable.name();
+                let err_ctx_drop_fn= Intrinsic::ErrorContextDrop.name();
+                let get_local_tbl_fn = Intrinsic::ErrorContextGetLocalTable.name();
+                output.push_str(&format!("
+                    function {err_ctx_drop_fn}(componentIdx, errCtxTblIdx, handle) {{
+                        const localErrCtxTable = {get_local_tbl_fn}(componentIdx, errCtxTblIdx);
+                        if (!localErrCtxTable.get(handle)) {{ throw new Error('missing error-context in component during drop'); }}
+                        const existing = localErrCtxTable.get(handle);
+                        existing.refCount -= 1;
+                        if (existing.refCount === 0) {{ localErrCtxTable.delete(handle); }}
+                        const globalRefCount = {global_ref_count_add_fn}(existing.rep, -1);
+                        if (globalRefCount === 0) {{
+                            if (existing.refCount !== 0) {{ throw new Error('local refCount exceeds global during removal'); }}
+                            {global_tbl}.delete(existing.rep);
+                        }}
+                        return true;
+                    }}
+                "));
+            },
+
+            Intrinsic::ErrorContextTransfer => {
+                let get_local_tbl_fn = Intrinsic::ErrorContextGetLocalTable.name();
+                let drop_fn = Intrinsic::ErrorContextDrop.name();
+                let get_handle_rep_fn = Intrinsic::ErrorContextGetHandleRep.name();
+                let global_ref_count_add_fn = Intrinsic::ErrorContextGlobalRefCountAdd.name();
+                let err_ctx_transfer_fn = Intrinsic::ErrorContextTransfer.name();
+                let create_local_handle_fn = Intrinsic::ErrorContextCreateLocalHandle.name();
+                // NOTE: the handle described below is *not* the error-context rep, but rather the
+                // component-local handle for the canonical rep of a certain global error-context.
+                output.push_str(&format!("
+                    function {err_ctx_transfer_fn}(fromComponentIdx, toComponentIdx, handle, fromTableIdx, toTableIdx) {{
+                        const fromTbl = {get_local_tbl_fn}(fromComponentIdx, fromTableIdx);
+                        const toTbl = {get_local_tbl_fn}(toComponentIdx, toTableIdx);
+                        const rep = {get_handle_rep_fn}(fromTbl, handle);
+                        {global_ref_count_add_fn}(rep, 1); // Add an extra global ref count to avoid premature removal during drop
+                        {drop_fn}(fromTbl, handle);
+                        const newHandle = {create_local_handle_fn}(toTbl, rep);
+                        {global_ref_count_add_fn}(rep, -1); // Re-normalize the global count
+                        return newHandle;
+                    }}
+                "));
+            }
+
+            Intrinsic::ErrorContextGetHandleRep => {
+                let err_ctx_get_handle_rep_fn = Intrinsic::ErrorContextGetHandleRep.name();
+                output.push_str(&format!("
+                    function {err_ctx_get_handle_rep_fn}(componentTable, handle) {{
+                        if (!Array.isArray(componentTable[handle])) {{ throw new Error('missing error-context in component while retrieving rep'); }}
+                        return componentTable[handle][1];
+                    }}
+                "));
+            }
+
+            Intrinsic::ErrorContextGlobalRefCountAdd => {
+                let global_tbl = Intrinsic::ErrorContextComponentGlobalTable.name();
+                let err_ctx_global_ref_count_add_fn = Intrinsic::ErrorContextGlobalRefCountAdd.name();
+                output.push_str(&format!("
+                    function {err_ctx_global_ref_count_add_fn}(rep, amount) {{
+                        if (!{global_tbl}.get(rep)) {{ throw new Error('missing global error-context for rep [' + rep + '] while incrementing refcount'); }}
+                        return {global_tbl}.get(rep).refCount += amount;
+                    }}
+                "));
+            }
+            Intrinsic::ErrorContextGetLocalTable => {
+                let get_local_tbl_fn = Intrinsic::ErrorContextGetLocalTable.name();
+                let local_tbl_var = Intrinsic::ErrorContextComponentLocalTable.name();
+                output.push_str(&format!("
+                    function {get_local_tbl_fn}(componentIdx, tableIdx) {{
+                        if (!{local_tbl_var}.get(componentIdx)) {{ throw new Error('missing/invalid error-context sub-component idx [' + componentIdx + '] while getting local table'); }}
+                        if (!{local_tbl_var}.get(componentIdx).get(tableIdx)) {{
+                            throw new Error('missing/invalid error-context sub-component idx [' + componentIdx + '] table idx [' + tableIdx + '] while getting local table');
+                        }}
+                        return {local_tbl_var}.get(componentIdx).get(tableIdx);
+                    }}
+                "));
+            }
+
+            Intrinsic::ErrorContextCreateLocalHandle => {
+                // TODO: Refactor to efficient tuple array sparse array setup + non-racy nextId mechanism
+                let create_local_handle_fn = Intrinsic::ErrorContextCreateLocalHandle.name();
+                let global_tbl = Intrinsic::ErrorContextComponentGlobalTable.name();
+                output.push_str(&format!("
+                    function {create_local_handle_fn}(table, rep) {{
+                        if (!{global_tbl}.get(rep)) {{ throw new Error('missing/invalid global error-context w/ rep [' + rep + ']'); }}
+                        const nextHandle = table.size + 1;
+                        if (table.has(nextHandle)) {{ throw new Error('unexpected rep collision in global error-context map'); }}
+                        table.set(nextHandle, {{ rep, refCount: 1 }});
+                        {global_tbl}.get(rep).refCount += 1;
+                        return nextHandle;
+                    }}
+                "));
+            }
+
+            Intrinsic::ErrorContextReserveGlobalRep => {
+                // TODO: Refactor to efficient tuple array sparse array setup + non-racy nextId mechanism
+                let global_tbl = Intrinsic::ErrorContextComponentGlobalTable.name();
+                let reserve_global_err_ctx_fn = Intrinsic::ErrorContextReserveGlobalRep.name();
+                output.push_str(&format!("
+                    function {reserve_global_err_ctx_fn}(debugMessage, refCount) {{
+                        const nextRep = {global_tbl}.size + 1;
+                        if ({global_tbl}.has(nextRep)) {{ throw new Error('unexpected rep collision in global error-context map'); }}
+                        {global_tbl}.set(nextRep, {{ refCount, debugMessage }});
+                        return nextRep;
+                    }}
+                "));
+            }
+
+            Intrinsic::TaskReturn => {
+                // TODO: write results into provided memory, perform checks for task & result types
+                // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-taskreturn
+                let task_return_fn = Intrinsic::TaskReturn.name();
+                output.push_str(&format!("
+                    function {task_return_fn}(taskId, liftFns, storagePtr, storageLen) {{
+                        const originalPtr = storagePtr;
+                        const results = [];
+                        for (const liftFn of liftFns) {{
+                            const [ componentIdx, typeIdx, val, bytesRead ] =  liftFn(storagePtr, storageLen);
+                            storagePtr += bytesRead;
+                            storageLen -= bytesRead;
+                            results.push([componentIdx, typeIdx, val]);
+                        }}
+                    }}
+                "));
+            }
+
+            Intrinsic::SubtaskDrop => {
+                // TODO: ensure task is marked "may_leave", drop task for relevant component
+                // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-subtaskdrop
+                let subtask_drop_fn = Intrinsic::SubtaskDrop.name();
+                output.push_str(&format!("
+                    function {subtask_drop_fn}(componentId, taskId) {{
+                    }}
+                "));
+            }
+
+        }
     }
 
     output
@@ -711,6 +1125,21 @@ impl Intrinsic {
             "utf8EncodedLen",
             "validateGuestChar",
             "validateHostChar",
+            // Intrinsics: Error Contexts
+            "errCtxGlobal",
+            "errCtxLocal",
+            "errCtxNew",
+            "errCtxDrop",
+            "errCtxTransfer",
+            "errCtxDebugMessage",
+            "errCtxGetHandleRep",
+            "errCtxGlobalRefCountAdd",
+            "errCtxGetLocalTable",
+            "errCtxCreateLocalHandle",
+            "errCtxReserveGlobalRep",
+            // Intrinsics: Tasks
+            "taskReturn",
+            "subtaskDrop",
             // JS Globals / non intrinsic names
             "ArrayBuffer",
             "BigInt",
@@ -794,6 +1223,23 @@ impl Intrinsic {
             Intrinsic::Utf8EncodedLen => "utf8EncodedLen",
             Intrinsic::ValidateGuestChar => "validateGuestChar",
             Intrinsic::ValidateHostChar => "validateHostChar",
+
+            // Dealing with error-contexts
+            Intrinsic::ErrorContextComponentGlobalTable => "errCtxGlobal",
+            Intrinsic::ErrorContextComponentLocalTable => "errCtxLocal",
+            Intrinsic::ErrorContextNew => "errCtxNew",
+            Intrinsic::ErrorContextDrop => "errCtxDrop",
+            Intrinsic::ErrorContextTransfer => "errCtxTransfer",
+            Intrinsic::ErrorContextDebugMessage => "errCtxDebugMessage",
+            Intrinsic::ErrorContextGetHandleRep => "errCtxGetHandleRep",
+            Intrinsic::ErrorContextGlobalRefCountAdd => "errCtxGlobalRefCountAdd",
+            Intrinsic::ErrorContextGetLocalTable => "errCtxGetLocalTable",
+            Intrinsic::ErrorContextCreateLocalHandle => "errCtxCreateLocalHandle",
+            Intrinsic::ErrorContextReserveGlobalRep => "errCtxReserveGlobalRep",
+
+            // Tasks
+            Intrinsic::TaskReturn => "taskReturn",
+            Intrinsic::SubtaskDrop => "subtaskDrop",
         }
     }
 }
