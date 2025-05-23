@@ -52,7 +52,7 @@ wit-parser = { version = "0.227.1", default-features = false }
 #] }
 
 # TODO: remove modified wasmtime-environ for async
-wasmtime-environ = { git = "https://github.com/bytecodealliance/wasip3-prototyping.git", rev = "6b2a3794a8cfc0cd0a45de3b4065443c3ffb9b63", features = [
+wasmtime-environ = { git = "https://github.com/bytecodealliance/wasip3-prototyping.git", rev = "a7ac064a84ed03e575caaea82e779b353e4476bb", features = [
   "component-model",
   "compile",
 ] }
