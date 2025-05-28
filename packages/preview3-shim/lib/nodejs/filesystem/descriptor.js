@@ -1,13 +1,11 @@
+import fs from 'node:fs/promises';
+import process from 'node:process';
+
 import { StreamReader } from '../stream.js';
+import { FsError } from './error.js';
 import { FutureReader } from '../future.js';
 import { ResourceWorker } from '../workers/resource-worker.js';
 import { earlyDispose, registerDispose } from '../finalization.js';
-import { FsError } from './error.js';
-
-import { constants } from 'fs';
-
-import fs from 'fs/promises';
-import process from 'node:process';
 
 const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 
@@ -16,10 +14,15 @@ const _worker = new ResourceWorker(
 );
 
 class Descriptor {
+    // Node.js file handle for file operations (FileHandle from fs.promises.open)
     #handle;
+    // Descriptor flags
     #mode;
+    // Absolute filesystem path to the file or directory
     #fullPath;
+    // Cleanup finalizer
     #finalizer;
+    // Host filesystem path for preopened directories
     #hostPreopen;
 
     static _create(handle, mode, fullPath) {
@@ -63,20 +66,20 @@ class Descriptor {
      * Return a stream for reading from a file.
      * WIT: read-via-stream: func(offset: filesize) -> tuple<stream<u8>, future<result<_, error-code>>>
      *
-     * @async
      * @param {bigint} offset The offset within the file.
      * @returns {Promise<[StreamReader, FutureReader]>}
      *   A tuple: a readable byte stream and a future that resolves to an error code.
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     readViaStream(offset) {
+        this.#ensureHandle();
         const transform = new TransformStream();
         const promise = _worker
             .run(
                 {
                     op: 'read',
                     fd: this.#handle.fd,
-                    offset: Number(offset),
+                    offset,
                     stream: transform.writable,
                 },
                 [transform.writable]
@@ -102,6 +105,7 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async writeViaStream(data, offset) {
+        this.#ensureHandle();
         const stream = await data.intoStream();
 
         try {
@@ -124,6 +128,7 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async appendViaStream(data) {
+        this.#ensureHandle();
         const offset = await this.#handle.stat().then((s) => s.size);
         return this.writeViaStream(data, offset);
     }
@@ -139,7 +144,7 @@ class Descriptor {
      * @returns {Promise<void>}
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
-    advise(_offset, _length, _advice) {
+    async advise(_offset, _length, _advice) {
         if (this.getType() === 'directory') throw new FsError('bad-descriptor');
     }
 
@@ -152,11 +157,13 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async syncData() {
-        if (this.#hostPreopen) throw new FsError('invalid');
+        this.#ensureHandle();
         try {
             await this.#handle.datasync();
         } catch (e) {
-            if (e.code === 'EPERM') return;
+            // On windows, `sync_data` uses `FileFlushBuffers` which fails with `EPERM` if
+            // the file is not upen for writing. Ignore this error, for POSIX compatibility.
+            if (process.platform === 'win32' && e.code === 'EPERM') return;
             throw FsError.from(e);
         }
     }
@@ -201,12 +208,12 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async setSize(size) {
-        if (this.#hostPreopen) throw new FsError('is-directory');
+        this.#ensureHandle();
         try {
             await this.#handle.truncate(Number(size));
         } catch (e) {
             if (process.platform === 'win32' && e.code === 'EPERM')
-                throw 'access';
+                throw new FsError('access');
             throw FsError.from(e);
         }
     }
@@ -222,19 +229,11 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async setTimes(atimeDesc, mtimeDesc) {
-        if (this.#hostPreopen) throw new FsError('invalid');
-        let stats;
-        if ('no-change' === atimeDesc.tag || 'no-change' === mtimeDesc.tag) {
-            stats = await this.stat();
-        }
+        this.#ensureHandle();
 
-        const atime = this.#getNewTimestamp(
+        const { atime, mtime } = await this.#computeTimestamps(
             atimeDesc,
-            stats?.dataAccessTimestamp
-        );
-        const mtime = this.#getNewTimestamp(
-            mtimeDesc,
-            stats?.dataModificationTimestamp
+            mtimeDesc
         );
 
         try {
@@ -253,12 +252,12 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     readDirectory() {
+        if (!this.#fullPath) throw new FsError('invalid');
         const transform = new TransformStream();
         const promise = _worker
             .run(
                 {
                     op: 'readDir',
-                    fd: this.#handle.fd,
                     fullPath: this.#fullPath,
                     stream: transform.writable,
                 },
@@ -283,11 +282,13 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async sync() {
-        if (this.#hostPreopen) throw 'invalid';
+        this.#ensureHandle();
         try {
             await this.#handle.sync();
         } catch (e) {
-            if (e.code === 'EPERM') return;
+            // On windows, `sync_data` uses `FileFlushBuffers` which fails with `EPERM` if
+            // the file is not upen for writing. Ignore this error, for POSIX compatibility.
+            if (process.platform === 'win32' && e.code === 'EPERM') return;
             throw FsError.from(e);
         }
     }
@@ -319,7 +320,7 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async stat() {
-        if (this.#hostPreopen) throw 'invalid';
+        this.#ensureHandle();
         try {
             const s = await this.#handle.stat();
             return {
@@ -389,22 +390,14 @@ class Descriptor {
      */
     async setTimesAt(flags, path, atimeDesc, mtimeDesc) {
         const full = this.#getFullPath(path, flags.symlinkFollow);
-        let stats;
-        if ('no-change' === atimeDesc.tag || 'no-change' === mtimeDesc.tag) {
-            stats = await this.stat();
-        }
 
-        const atime = this.#getNewTimestamp(
+        const { atime, mtime } = await this.#computeTimestamps(
             atimeDesc,
-            stats?.dataAccessTimestamp
-        );
-        const mtime = this.#getNewTimestamp(
-            mtimeDesc,
-            stats?.dataModificationTimestamp
+            mtimeDesc
         );
 
         if (!flags.symlinkFollow && !fs.lutimes) {
-            throw 'unsupported';
+            throw new FsError('unsupported');
         }
 
         try {
@@ -436,7 +429,10 @@ class Descriptor {
         const src = this.#getFullPath(oldPath, oldFlags.symlinkFollow);
         const dst = newDesc.#getFullPath(newPath, false);
 
-        if (process.platform === 'win32' && dst.endsWith('/')) throw 'no-entry';
+        // On Windows, a trailing '/' means the path is treated as a
+        // directory and hard links to directory are not supported
+        if (process.platform === 'win32' && dst.endsWith('/'))
+            throw new FsError('no-entry');
 
         try {
             await fs.link(src, dst);
@@ -470,44 +466,44 @@ class Descriptor {
         // prettier-ignore
         const makeFsFlags = () => {
             let fsFlags = 0;
-            if (of.create)           fsFlags |= constants.O_CREAT;
-            if (of.directory)        fsFlags |= constants.O_DIRECTORY;
-            if (of.exclusive)        fsFlags |= constants.O_EXCL;
-            if (of.truncate)         fsFlags |= constants.O_TRUNC;
-            if (df.read && df.write) fsFlags |= constants.O_RDWR;
-            else if (df.write)       fsFlags |= constants.O_WRONLY;
-            else if (df.read)        fsFlags |= constants.O_RDONLY;
-            if (!pf.symlinkFollow)   fsFlags |= constants.O_NOFOLLOW;
+            if (of.create)                 fsFlags |= fs.constants.O_CREAT;
+            if (of.directory)              fsFlags |= fs.constants.O_DIRECTORY;
+            if (of.exclusive)              fsFlags |= fs.constants.O_EXCL;
+            if (of.truncate)               fsFlags |= fs.constants.O_TRUNC;
+            if (df.read && df.write)       fsFlags |= fs.constants.O_RDWR;
+            else if (df.write)             fsFlags |= fs.constants.O_WRONLY;
+            else if (df.read)              fsFlags |= fs.constants.O_RDONLY;
+            if (df.fileIntegritySync)      fsFlags |= fs.constants.O_SYNC;
+            if (df.requestedIntegritySync) fsFlags |= fs.constants.O_SYNC;
+            if (df.dataIntegritySync)      fsFlags |= fs.constants.O_DSYNC;
+            if (!pf.symlinkFollow)         fsFlags |= fs.constants.O_NOFOLLOW;
             return fsFlags;
         }
 
         const fsFlags = makeFsFlags();
 
-        // Unsupported descriptor flags
-        if (df.requestedWriteSync || df.mutateDirectory)
-            throw new FsError('unsupported');
-        if (df.fileIntegritySync || df.dataIntegritySync)
-            throw new FsError('unsupported');
-
         if (process.platform === 'win32') {
             if (!pf.symlinkFollow && !of.create) {
-                let isSymlink = false;
-                try {
-                    isSymlink = (await fs.lstat(fullPath)).isSymbolicLink();
-                } catch {
-                    /* */
+                const isSymlink = await fs
+                    .lstat(fullPath)
+                    .then((p) => p.isSymbolicLink())
+                    .catch(() => false);
+
+                if (isSymlink) {
+                    const tag = of.directory ? 'not-directory' : 'loop';
+                    throw new FsError(tag);
                 }
-                if (isSymlink) throw of.directory ? 'not-directory' : 'loop';
             }
 
             if (pf.symlinkFollow && of.directory) {
-                let isFile = false;
-                try {
-                    isFile = !(await fs.stat(fullPath)).isDirectory();
-                } catch {
-                    /* */
+                const isFile = await fs
+                    .stat(fullPath)
+                    .then((p) => !p.isDirectory())
+                    .catch(() => false);
+
+                if (isFile) {
+                    throw new FsError('not-directory');
                 }
-                if (isFile) throw 'not-directory';
             }
         }
 
@@ -589,7 +585,7 @@ class Descriptor {
             await fs.rename(src, dst);
         } catch (e) {
             if (process.platform === 'win32' && e.code === 'EPERM')
-                throw 'access';
+                throw new FsError('access');
             throw FsError.from(e);
         }
     }
@@ -723,6 +719,23 @@ class Descriptor {
         }
     }
 
+    async #computeTimestamps(atimeDesc, mtimeDesc) {
+        let stats;
+        if (atimeDesc.tag === 'no-change' || mtimeDesc.tag === 'no-change') {
+            stats = await this.stat();
+        }
+
+        const atime = this.#getNewTimestamp(
+            atimeDesc,
+            stats?.dataAccessTimestamp
+        );
+        const mtime = this.#getNewTimestamp(
+            mtimeDesc,
+            stats?.dataModificationTimestamp
+        );
+        return { atime, mtime };
+    }
+
     /**
      * Resolve a relative subpath against this descriptor.
      */
@@ -756,6 +769,12 @@ class Descriptor {
         const baseNormalized = base.replace(/\/$/, '');
         return `${baseNormalized}/${segments.join('/')}`;
     }
+
+    #ensureHandle() {
+        if (!this.#handle) {
+            throw new FsError('bad-descriptor');
+        }
+    }
 }
 
 function lookupType(obj) {
@@ -769,9 +788,9 @@ function lookupType(obj) {
     return 'unknown';
 }
 
-const nsMagnitude = 1_000_000_000_000n;
+const NS_PER_SEC = 1_000_000_000n;
 function nsToDateTime(ns) {
-    const seconds = ns / nsMagnitude;
+    const seconds = ns / NS_PER_SEC;
     const nanoseconds = Number(ns % seconds);
     return { seconds, nanoseconds };
 }

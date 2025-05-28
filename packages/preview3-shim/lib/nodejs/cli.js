@@ -1,7 +1,7 @@
 import process from 'node:process';
-import { Readable } from 'stream';
-import { ResourceWorker } from './workers/resource-worker.js';
+import { Readable } from 'node:stream';
 
+import { ResourceWorker } from './workers/resource-worker.js';
 import { StreamReader } from './stream.js';
 
 export {

@@ -10,15 +10,48 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export const monotonicClock = {
     ...baseMonotonicClock,
 
-    async waitUntil(when) {
-        const now = this.now();
-        if (when <= now) return;
+    /**
+     * Waits until a specific target time (in nanoseconds) is reached
+     *
+     * WIT:
+     * ```
+     * wait-until: async func(when: instant);
+     * ```
+     * @async
+     * @param {bigint} targetNs - The target time in nanoseconds to wait until
+     * @returns {Promise<void>} A promise that resolves when the target time is reached
+     * @throws {TypeError} If targetNs is not a bigint
+     */
+    async waitUntil(targetNs) {
+        const nowNs = this.now();
+        const diffNs = targetNs - nowNs;
 
-        const ms = Math.max(0, Number(when - this.now()) / 1e6);
-        await sleep(ms);
+        if (diffNs <= 0n) return;
+
+        const ms = diffNs / 1_000_000n;
+        const max = BigInt(Number.MAX_SAFE_INTEGER);
+        const clamped = ms > max ? max : ms;
+
+        await sleep(Number(clamped));
     },
 
-    async waitFor(howLong) {
-        await sleep(Number(howLong) / 1e6);
+    /**
+     * Waits for a specified duration in nanoseconds
+     *
+     * WIT:
+     * ```
+     * wait-for: async func(how-long: duration);
+     * ```
+     * @async
+     * @param {bigint} durationNs - The duration to wait in nanoseconds
+     * @returns {Promise<void>} A promise that resolves after the specified duration
+     * @throws {TypeError} If durationNs is not a bigint
+     */
+    async waitFor(durationNs) {
+        const ms = durationNs / 1_000_000n;
+        const max = BigInt(Number.MAX_SAFE_INTEGER);
+        const clamped = ms > max ? max : ms;
+
+        await sleep(Number(clamped));
     },
 };
