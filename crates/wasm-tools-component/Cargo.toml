@@ -12,7 +12,7 @@ doctest = false
 [dependencies]
 anyhow = { workspace = true }
 wasm-encoder = { workspace = true }
-wasm-metadata = { workspace = true }
+wasm-metadata = { workspace = true, features = [ "oci" ] }
 wasmparser = { workspace = true }
 wasmprinter = { workspace = true, features = ["component-model"] }
 wat = { workspace = true }
