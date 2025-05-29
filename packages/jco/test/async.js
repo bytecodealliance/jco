@@ -1,3 +1,4 @@
+import { version } from "node:process";
 import { resolve } from "node:path";
 import { mkdir, readFile, rm, symlink } from "node:fs/promises";
 
@@ -162,7 +163,13 @@ suite("Async", () => {
       } catch {}
     });
 
-  test("Transpile simple error-context", async () => {
+  test("Transpile simple error-context", async (t) => {
+      // Skip if we're running in an environment without JSPI
+      let nodeMajorVersion = parseInt(version.replace("v", "").split(".")[0]);
+      if (nodeMajorVersion < 23) {
+          t.skip();
+      }
+
       const { esModule, cleanup, esModuleOutputDir } = await setupAsyncTest({
         asyncMode: "jspi",
         component: {
