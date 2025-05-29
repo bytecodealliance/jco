@@ -1,5 +1,4 @@
-
-                package webidl:dom@0.0.1;
+package webidl:dom@0.0.1;
 
 world window {
   import dom;
@@ -396,7 +395,7 @@ interface dom {
   resource window {
     console: func() -> console;
     set-console: func(console: console);
-    window: func() -> window-proxy;
+    get-window: func() -> window-proxy; // TODO: fix, window.window conflict
     self: func() -> window-proxy;
     document: func() -> document;
     name: func() -> string;
@@ -431,8 +430,7 @@ interface dom {
   get-window: func() -> window;
 }
 
-                world window-test {
-                include window;
-                export test: func();
-            }
-            
+world window-test {
+    include window;
+    export test: func();
+}

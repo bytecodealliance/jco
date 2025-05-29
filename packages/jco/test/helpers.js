@@ -243,30 +243,23 @@ export async function setupAsyncTest(args) {
     JSON.stringify({ type: "module" })
   );
 
-  // TODO: DEBUG module import not working, file is missing!
-  // log("WROTE EVERYTHING:", moduleOutputDir);
-  // await new Promise(resolve => setTimeout(resolve, 60_000));
-
   // Import the transpiled JS
   const esModuleOutputPath = join(moduleOutputDir, `${componentName}.js`);
   const esModuleSourcePathURL = pathToFileURL(esModuleOutputPath);
-  const module = await import(esModuleSourcePathURL);
+  const esModule = await import(esModuleSourcePathURL);
 
-  // TODO: DEBUG module import not working, file is missing!
-  // log("PRE INSTANTIATION", { moduleOutputDir });
-  // await new Promise(resolve => setTimeout(resolve, 60_000_000));
-
-  // Optionally instantiate the module
+  // Optionally instantiate the ES module
   //
   // It's useful to be able to skip instantiation of the instantiation should happen
   // elsewhere (ex. in a browser window)
   let instance = null;
   if (!component.skipInstantiation) {
-    instance = await module.instantiate(undefined, componentImports || {});
+    instance = await esModule.instantiate(undefined, componentImports || {});
   }
 
   return {
-    module,
+    esModule,
+    esModuleOutputDir: moduleOutputDir,
     esModuleOutputPath,
     esModuleSourcePathURL,
     esModuleRelativeSourcePath: relative(outputDir, esModuleOutputPath),
