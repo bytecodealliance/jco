@@ -175,6 +175,8 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async advise(_offset, _length, _advice) {
+        // TODO: This not directly suported on Node.js:
+        // https://github.com/bytecodealliance/jco/issues/718
         if (this.getType() === 'directory') throw new FsError('bad-descriptor');
     }
 
