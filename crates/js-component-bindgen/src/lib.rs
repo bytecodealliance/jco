@@ -16,6 +16,7 @@ use transpile_bindgen::transpile_bindgen;
 
 use anyhow::{bail, ensure, Context};
 use wasmtime_environ::component::{ComponentTypesBuilder, Export, StaticModuleIndex};
+use wasmtime_environ::wasmparser::WasmFeatures;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_component::DecodedWasm;
 
@@ -116,7 +117,20 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
     // that need to be executed to instantiate a component.
     let scope = ScopeVec::new();
     let tunables = Tunables::default_u32();
-    let mut validator = wasmtime_environ::wasmparser::Validator::default();
+
+    // The validator that will be used on the component must enable support for all
+    // CM features we expect components to use.
+    //
+    // This does not require the correct execution of the related features post-transpilation,
+    // but without the right features specified, components won't load at all.
+    let mut validator = wasmtime_environ::wasmparser::Validator::new_with_features(
+        WasmFeatures::WASM2
+            | WasmFeatures::COMPONENT_MODEL
+            | WasmFeatures::CM_ASYNC
+            | WasmFeatures::CM_ASYNC_BUILTINS
+            | WasmFeatures::CM_ERROR_CONTEXT
+            | WasmFeatures::MULTI_MEMORY,
+    );
     let mut types = ComponentTypesBuilder::new(&validator);
 
     let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)

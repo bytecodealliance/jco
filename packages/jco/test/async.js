@@ -1,3 +1,4 @@
+import { version } from "node:process";
 import { resolve } from "node:path";
 import { mkdir, readFile, rm, symlink } from "node:fs/promises";
 
@@ -160,6 +161,51 @@ suite("Async", () => {
         await rm(outDir, { recursive: true });
         await rm(outFile);
       } catch {}
-    }
-  );
+    });
+
+  test("Transpile simple error-context", async (t) => {
+      // Skip if we're running in an environment without JSPI
+      let nodeMajorVersion = parseInt(version.replace("v", "").split(".")[0]);
+      if (nodeMajorVersion < 23) {
+          t.skip();
+      }
+
+      const { esModule, cleanup, esModuleOutputDir } = await setupAsyncTest({
+        asyncMode: "jspi",
+        component: {
+          name: "async-error-context",
+          path: resolve(
+            "test/fixtures/components/async-error-context.component.wasm"
+          ),
+          skipInstantiation: true,
+        },
+        jco: {
+          transpile: {
+            extraArgs: {
+              asyncExports: ["local:local/run#run"],
+              minify: false,
+            },
+          },
+        },
+      });
+
+      const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+      const instance = await esModule.instantiate(undefined, new WASIShim().getImportObject());
+
+      const runFn = instance["local:local/run"].asyncRun;
+      assert.strictEqual(
+        runFn instanceof AsyncFunction,
+        true,
+        "local:local/run should be async"
+      );
+
+      // TODO: more of error-context must be implemented for this to run -- particularly:
+      // - context get/set
+      // - waitable-join
+      // - waitable-set-new
+      // - waitable-set-drop (?)
+      // await runFn();
+
+      await cleanup();
+    });
 });
