@@ -35,13 +35,18 @@ impl EsmBindgen {
     /// only two-level nesting supports serialization into imports currently
     pub fn add_import_binding(&mut self, path: &[String], binding_name: String) {
         let mut iface = &mut self.imports;
+
+        // Process elements of the path in order
+        // ex. ["@bytecodealliance/preview2-shim/filesystem", "types", "Descriptor"]
         for i in 0..path.len() - 1 {
+            // Create the interface if it is not already present
             if !iface.contains_key(&path[i]) {
                 iface.insert(
                     path[i].to_string(),
                     ImportBinding::Interface(BTreeMap::new()),
                 );
             }
+
             iface = match iface.get_mut(&path[i]).unwrap() {
                 ImportBinding::Interface(iface) => iface,
                 ImportBinding::Local(local) => {
@@ -54,14 +59,15 @@ impl EsmBindgen {
                 }
             };
         }
+
         if let Some(ref mut existing) = iface.get_mut(&path[path.len() - 1]) {
             match existing {
                 ImportBinding::Interface(_) => {
                     unreachable!("Multi-version interfaces must have the same shape")
                 }
-                ImportBinding::Local(ref mut local_names) => {
-                    if !local_names.contains(&binding_name) {
-                        local_names.push(binding_name);
+                ImportBinding::Local(ref mut binding_local_names) => {
+                    if !binding_local_names.contains(&binding_name) {
+                        binding_local_names.push(binding_name);
                     }
                 }
             }
@@ -341,8 +347,8 @@ impl EsmBindgen {
                         uwriteln!(output, "}} from '{specifier}';");
                     }
                 }
-                ImportBinding::Local(local_names) => {
-                    let local_name = &local_names[0];
+                ImportBinding::Local(binding_local_names) => {
+                    let local_name = &binding_local_names[0];
                     if let Some(imports_object) = imports_object {
                         uwriteln!(
                             output,
@@ -352,21 +358,22 @@ impl EsmBindgen {
                     } else {
                         uwriteln!(output, "{local_name} from '{specifier}';");
                     }
-                    for other_local_name in &local_names[1..] {
+                    for other_local_name in &binding_local_names[1..] {
                         uwriteln!(output, "const {other_local_name} = {local_name};");
                     }
                 }
             }
         }
+
         // render interface import member getters
         for (iface_local_name, iface_imports) in iface_imports {
             uwrite!(output, "const {{");
             let mut first = true;
             for (member_name, binding) in iface_imports {
-                let ImportBinding::Local(local_names) = binding else {
+                let ImportBinding::Local(binding_local_names) = binding else {
                     continue;
                 };
-                for local_name in local_names {
+                for local_name in binding_local_names {
                     if first {
                         output.push_str(" ");
                         first = false;

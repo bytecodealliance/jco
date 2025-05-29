@@ -58,7 +58,10 @@ impl<'a> LocalNames {
         Some(&self.local_name_ids[&hash])
     }
 
-    /// get or create a unique identifier for a string while storing the lookup by unique id
+    /// Get or create a unique identifier for a string while storing the lookup by unique id
+    ///
+    /// NOTE: we must be careful here to ensure that the object being hashed w/ a similar goal name
+    /// are *the same* hashable object -- (ex. `Id<T>` vs `ResourceIndex`)
     pub fn get_or_create<H: Hash>(&'a mut self, unique_id: H, goal_name: &str) -> (&'a str, bool) {
         let hash = self.random_state.hash_one(&unique_id);
         let mut seen = true;

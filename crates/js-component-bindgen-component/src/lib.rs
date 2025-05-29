@@ -31,46 +31,25 @@ macro_rules! uwriteln {
     };
 }
 
-wit_bindgen::generate!({
-    world: "js-component-bindgen"
-});
+mod bindings {
+    //! Generated WIT bindings that govern the accessible functionality
+    //! of the js-component-bindgen Wasm component used by Jco
 
-impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
-    fn from(value: InstantiationMode) -> Self {
-        match value {
-            InstantiationMode::Async => js_component_bindgen::InstantiationMode::Async,
-            InstantiationMode::Sync => js_component_bindgen::InstantiationMode::Sync,
-        }
-    }
+    use super::JsComponentBindgenComponent;
+    wit_bindgen::generate!({
+        world: "js-component-bindgen"
+    });
+    export!(JsComponentBindgenComponent);
 }
+use bindings::{
+    AsyncImportsExports, AsyncMode, BindingsMode, EnabledFeatureSet, ExportType, GenerateOptions,
+    InstantiationMode, Transpiled, TypeGenerationOptions, Wit,
+};
 
-impl From<BindingsMode> for js_component_bindgen::BindingsMode {
-    fn from(value: BindingsMode) -> Self {
-        match value {
-            BindingsMode::Js => js_component_bindgen::BindingsMode::Js,
-            BindingsMode::DirectOptimized => js_component_bindgen::BindingsMode::DirectOptimized,
-            BindingsMode::Optimized => js_component_bindgen::BindingsMode::Optimized,
-            BindingsMode::Hybrid => js_component_bindgen::BindingsMode::Hybrid,
-        }
-    }
-}
-
-impl From<AsyncMode> for js_component_bindgen::AsyncMode {
-    fn from(value: AsyncMode) -> Self {
-        match value {
-            AsyncMode::Sync => js_component_bindgen::AsyncMode::Sync,
-            AsyncMode::Jspi(AsyncImportsExports { imports, exports }) => {
-                js_component_bindgen::AsyncMode::JavaScriptPromiseIntegration { imports, exports }
-            }
-        }
-    }
-}
-
+/// Implementation of the `js-component-bindgen` world
 struct JsComponentBindgenComponent;
 
-export!(JsComponentBindgenComponent);
-
-impl Guest for JsComponentBindgenComponent {
+impl bindings::Guest for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         let component = wat::parse_bytes(&component).map_err(|e| format!("{e}"))?;
         let opts = js_component_bindgen::TranspileOpts {
@@ -191,5 +170,36 @@ impl Guest for JsComponentBindgenComponent {
             .map_err(|e| e.to_string())?;
 
         Ok(files)
+    }
+}
+
+impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {
+    fn from(value: InstantiationMode) -> Self {
+        match value {
+            InstantiationMode::Async => js_component_bindgen::InstantiationMode::Async,
+            InstantiationMode::Sync => js_component_bindgen::InstantiationMode::Sync,
+        }
+    }
+}
+
+impl From<BindingsMode> for js_component_bindgen::BindingsMode {
+    fn from(value: BindingsMode) -> Self {
+        match value {
+            BindingsMode::Js => js_component_bindgen::BindingsMode::Js,
+            BindingsMode::DirectOptimized => js_component_bindgen::BindingsMode::DirectOptimized,
+            BindingsMode::Optimized => js_component_bindgen::BindingsMode::Optimized,
+            BindingsMode::Hybrid => js_component_bindgen::BindingsMode::Hybrid,
+        }
+    }
+}
+
+impl From<AsyncMode> for js_component_bindgen::AsyncMode {
+    fn from(value: AsyncMode) -> Self {
+        match value {
+            AsyncMode::Sync => js_component_bindgen::AsyncMode::Sync,
+            AsyncMode::Jspi(AsyncImportsExports { imports, exports }) => {
+                js_component_bindgen::AsyncMode::JavaScriptPromiseIntegration { imports, exports }
+            }
+        }
     }
 }
