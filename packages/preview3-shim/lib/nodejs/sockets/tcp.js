@@ -54,7 +54,10 @@ export class TcpSocket {
 
     /**
      * Creates a new TCP socket
-     * WIT: constructor(address-family: ip-address-family)
+     * WIT:
+     * ```
+     * constructor(address-family: ip-address-family)
+     * ```
      *
      * @static
      * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
@@ -71,7 +74,10 @@ export class TcpSocket {
 
     /**
      * Binds the socket to a local address
-     * WIT: bind: func(local-address: ip-socket-address) -> result<_, error-code>
+     * WIT:
+     * ```
+     * bind: func(local-address: ip-socket-address) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {Object} localAddress - The local address to bind to
@@ -103,7 +109,10 @@ export class TcpSocket {
 
     /**
      * Connects to a remote endpoint
-     * WIT: connect: func(remote-address: ip-socket-address) -> result<_, error-code>
+     * WIT:
+     * ```
+     * connect: func(remote-address: ip-socket-address) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {Object} remoteAddress - The remote address to connect to
@@ -143,7 +152,10 @@ export class TcpSocket {
 
     /**
      * Starts listening for connections
-     * WIT: listen: func() -> result<stream<tcp-socket>, error-code>
+     * WIT:
+     * ```
+     * listen: func() -> result<stream<tcp-socket>, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<StreamReader>} A stream of incoming TCP socket connections
@@ -186,7 +198,10 @@ export class TcpSocket {
 
     /**
      * Sends data to the connected peer
-     * WIT: send: func(data: stream<u8>) -> result<_, error-code>
+     * WIT:
+     * ```
+     * send: func(data: stream<u8>) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {StreamReader} data - The data stream to send
@@ -222,7 +237,10 @@ export class TcpSocket {
 
     /**
      * Receives data from the connected peer
-     * WIT: receive: func() -> tuple<stream<u8>, future<result<_, error-code>>>
+     * WIT:
+     * ```
+     * receive: func() -> tuple<stream<u8>, future<result<_, error-code>>>
+     * ```
      *
      * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not CONNECTED
      * @throws {SocketError} for other errors, payload.tag maps the system error
@@ -255,7 +273,10 @@ export class TcpSocket {
 
     /**
      * Gets the bound local address
-     * WIT: local-address: func() -> result<ip-socket-address, error-code>
+     * WIT:
+     * ```
+     * local-address: func() -> result<ip-socket-address, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<Object>} The local socket address
@@ -279,7 +300,10 @@ export class TcpSocket {
 
     /**
      * Gets the remote address
-     * WIT: remote-address: func() -> result<ip-socket-address, error-code>
+     * WIT:
+     * ```
+     * remote-address: func() -> result<ip-socket-address, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<Object>} The remote socket address
@@ -303,7 +327,10 @@ export class TcpSocket {
 
     /**
      * Checks if the socket is in listening state
-     * WIT: is-listening: func() -> bool
+     * WIT:
+     * ```
+     * is-listening: func() -> bool
+     * ```
      *
      * @returns {boolean} True if socket is listening, false otherwise
      */
@@ -313,7 +340,10 @@ export class TcpSocket {
 
     /**
      * Gets the address family
-     * WIT: address-family: func() -> ip-address-family
+     * WIT:
+     * ```
+     * address-family: func() -> ip-address-family
+     * ```
      *
      * @returns {IP_ADDRESS_FAMILY} The IP address family (IPv4 or IPv6)
      */
@@ -323,7 +353,10 @@ export class TcpSocket {
 
     /**
      * Sets the listen backlog size
-     * WIT: set-listen-backlog-size: func(value: u64) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-listen-backlog-size: func(value: u64) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {bigint} value - The backlog size
@@ -363,7 +396,10 @@ export class TcpSocket {
 
     /**
      * Gets whether keep-alive is enabled
-     * WIT: keep-alive-enabled: func() -> result<bool, error-code>
+     * WIT:
+     * ```
+     * keep-alive-enabled: func() -> result<bool, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<boolean>} True if keep-alive is enabled, false otherwise
@@ -374,7 +410,10 @@ export class TcpSocket {
 
     /**
      * Sets keep-alive enabled state
-     * WIT: set-keep-alive-enabled: func(value: bool) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-keep-alive-enabled: func(value: bool) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {boolean} value - Whether to enable keep-alive
@@ -398,7 +437,10 @@ export class TcpSocket {
 
     /**
      * Gets the keep-alive idle time
-     * WIT: keep-alive-idle-time: func() -> result<duration, error-code>
+     * WIT:
+     * ```
+     * keep-alive-idle-time: func() -> result<duration, error-code>
+     * ```
      *
      * @returns {bigint} The keep-alive idle time in nanoseconds
      */
@@ -408,7 +450,10 @@ export class TcpSocket {
 
     /**
      * Sets the keep-alive idle time
-     * WIT: set-keep-alive-idle-time: func(value: duration) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-keep-alive-idle-time: func(value: duration) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {bigint} value - The idle time in nanoseconds
@@ -448,7 +493,10 @@ export class TcpSocket {
 
     /**
      * Gets the keep-alive interval
-     * WIT: keep-alive-interval: func() -> result<duration, error-code>
+     * WIT:
+     * ```
+     * keep-alive-interval: func() -> result<duration, error-code>
+     * ```
      *
      * @returns {bigint} The keep-alive interval in nanoseconds
      */
@@ -458,7 +506,10 @@ export class TcpSocket {
 
     /**
      * Sets the keep-alive interval
-     * WIT: set-keep-alive-interval: func(value: duration) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-keep-alive-interval: func(value: duration) -> result<_, error-code>
+     * ```
      *
      * @param {bigint} value - The interval in nanoseconds
      * @returns {void}
@@ -471,7 +522,10 @@ export class TcpSocket {
 
     /**
      * Gets the keep-alive count
-     * WIT: keep-alive-count: func() -> result<u32, error-code>
+     * WIT:
+     * ```
+     * keep-alive-count: func() -> result<u32, error-code>
+     * ```
      *
      * @returns {number} The keep-alive count
      */
@@ -481,7 +535,10 @@ export class TcpSocket {
 
     /**
      * Sets the keep-alive count
-     * WIT: set-keep-alive-count: func(value: u32) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-keep-alive-count: func(value: u32) -> result<_, error-code>
+     * ```
      *
      * @param {number} value - The keep-alive count
      * @returns {void}
@@ -494,7 +551,10 @@ export class TcpSocket {
 
     /**
      * Gets the hop limit
-     * WIT: hop-limit: func() -> result<u8, error-code>
+     * WIT:
+     * ```
+     * hop-limit: func() -> result<u8, error-code>
+     * ```
      *
      * @returns {number} The hop limit
      */
@@ -504,7 +564,10 @@ export class TcpSocket {
 
     /**
      * Sets the hop limit
-     * WIT: set-hop-limit: func(value: u8) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-hop-limit: func(value: u8) -> result<_, error-code>
+     * ```
      *
      * @param {number} value - The hop limit
      * @returns {void}
@@ -517,7 +580,10 @@ export class TcpSocket {
 
     /**
      * Gets the receive buffer size
-     * WIT: receive-buffer-size: func() -> result<u64, error-code>
+     * WIT:
+     * ```
+     * receive-buffer-size: func() -> result<u64, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<bigint>} The receive buffer size in bytes
@@ -543,7 +609,10 @@ export class TcpSocket {
 
     /**
      * Sets the receive buffer size
-     * WIT: set-receive-buffer-size: func(value: u64) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-receive-buffer-size: func(value: u64) -> result<_, error-code>
+     * ```
      *
      * @param {bigint} value - The receive buffer size in bytes
      * @returns {void}
@@ -556,7 +625,10 @@ export class TcpSocket {
 
     /**
      * Gets the send buffer size
-     * WIT: send-buffer-size: func() -> result<u64, error-code>
+     * WIT:
+     * ```
+     * send-buffer-size: func() -> result<u64, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<bigint>} The send buffer size in bytes
@@ -582,7 +654,10 @@ export class TcpSocket {
 
     /**
      * Sets the send buffer size
-     * WIT: set-send-buffer-size: func(value: u64) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-send-buffer-size: func(value: u64) -> result<_, error-code>
+     * ```
      *
      * @param {bigint} value - The send buffer size in bytes
      * @returns {void}

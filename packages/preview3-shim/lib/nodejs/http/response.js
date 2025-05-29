@@ -25,11 +25,14 @@ export class Response {
     /**
      * Construct a new Response with default status-code 200.
      *
-     * WIT: new: static func(
+     * WIT:
+     * ```
+     * new: static func(
      *   headers: headers,
      *   contents: option<stream<u8>>,
      *   trailers: future<result<option<trailers>, error-code>>
      * ) -> tuple<response, future<result<_, error-code>>>;
+     * ```
      *
      * @param {Fields} headers  immutable headers resource
      * @param {?StreamReader} contents  optional body stream
@@ -70,7 +73,10 @@ export class Response {
     /**
      * Get the HTTP Status Code for the Response.
      *
-     * WIT: status-code: func() -> status-code;
+     * WIT:
+     * ```
+     * status-code: func() -> status-code;
+     * ```
      *
      * @returns {number}
      */
@@ -81,7 +87,10 @@ export class Response {
     /**
      * Set the HTTP Status Code for the Response.
      *
-     * WIT: set-status-code: func(status-code: status-code) -> result;
+     * WIT:
+     * ```
+     * set-status-code: func(status-code: status-code) -> result;
+     * ```
      *
      * @param {number} code
      * @throws {HttpError} with payload.tag 'invalid-argument'
@@ -105,7 +114,10 @@ export class Response {
     /**
      * Get the headers associated with the Response.
      *
-     * WIT: headers: func() -> headers;
+     * WIT:
+     * ```
+     * headers: func() -> headers;
+     * ```
      *
      * @returns {Fields}
      */
@@ -116,7 +128,10 @@ export class Response {
     /**
      * Get the body stream and trailers future.
      *
-     * WIT: body: func() -> result<tuple<stream<u8>, future<result<option<trailers>, error-code>>>>;
+     * WIT:
+     * ```
+     * body: func() -> result<tuple<stream<u8>, future<result<option<trailers>, error-code>>>>;
+     * ```
      *
      * @returns {{ body: StreamReader, trailers: FutureReader }}
      * @throws {HttpError} with payload.tag 'invalid-state' if body has already been opened

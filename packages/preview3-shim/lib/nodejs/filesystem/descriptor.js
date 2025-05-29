@@ -82,7 +82,10 @@ class Descriptor {
 
     /**
      * Return a stream for reading from a file.
-     * WIT: read-via-stream: func(offset: filesize) -> tuple<stream<u8>, future<result<_, error-code>>>
+     * WIT:
+     * ```
+     * read-via-stream: func(offset: filesize) -> tuple<stream<u8>, future<result<_, error-code>>>
+     * ```
      *
      * @param {bigint} offset The offset within the file.
      * @returns {Promise<[StreamReader, FutureReader]>}
@@ -114,7 +117,10 @@ class Descriptor {
 
     /**
      * Write to a file via a byte stream.
-     * WIT: write-via-stream: async func(data: stream<u8>, offset: filesize) -> result<_, error-code>
+     * WIT:
+     * ```
+     * write-via-stream: async func(data: stream<u8>, offset: filesize) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {object} data A data source implementing `intoStream()`.
@@ -138,7 +144,10 @@ class Descriptor {
 
     /**
      * Append to a file via a byte stream.
-     * WIT: append-via-stream: async func(data: stream<u8>) -> result<_, error-code>
+     * WIT:
+     * ```
+     * append-via-stream: async func(data: stream<u8>) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {object} data A data source implementing `intoStream()`.
@@ -153,7 +162,10 @@ class Descriptor {
 
     /**
      * Advisory on file access patterns.
-     * WIT: advise: async func(offset: filesize, length: filesize, advice: advice) -> result<_, error-code>
+     * WIT:
+     * ```
+     * advise: async func(offset: filesize, length: filesize, advice: advice) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {bigint} offset Start of the region.
@@ -168,7 +180,10 @@ class Descriptor {
 
     /**
      * Synchronize file data to disk.
-     * WIT: sync-data: async func() -> result<_, error-code>
+     * WIT:
+     * ```
+     * sync-data: async func() -> result<_, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<void>}
@@ -188,7 +203,10 @@ class Descriptor {
 
     /**
      * Get flags associated with a descriptor.
-     * WIT: get-flags: async func() -> result<descriptor-flags, error-code>
+     * WIT:
+     * ```
+     * get-flags: async func() -> result<descriptor-flags, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<object>} The descriptor flags object.
@@ -200,7 +218,10 @@ class Descriptor {
 
     /**
      * Get the dynamic type of a descriptor.
-     * WIT: get-type: async func() -> result<descriptor-type, error-code>
+     * WIT:
+     * ```
+     * get-type: async func() -> result<descriptor-type, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<string>} The descriptor type.
@@ -218,7 +239,10 @@ class Descriptor {
 
     /**
      * Adjust the size of an open file.
-     * WIT: set-size: async func(size: filesize) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-size: async func(size: filesize) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {bigint} size The new size.
@@ -243,7 +267,10 @@ class Descriptor {
 
     /**
      * Adjust the timestamps of an open file or directory.
-     * WIT: set-times: async func(data-access-timestamp: new-timestamp, data-modification-timestamp: new-timestamp) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-times: async func(data-access-timestamp: new-timestamp, data-modification-timestamp: new-timestamp) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {object} atimeDesc new-timestamp descriptor
@@ -268,7 +295,10 @@ class Descriptor {
 
     /**
      * Read directory entries via a stream.
-     * WIT: read-directory: async func() -> tuple<stream<directory-entry>, future<result<_, error-code>>>
+     * WIT:
+     * ```
+     * read-directory: async func() -> tuple<stream<directory-entry>, future<result<_, error-code>>>
+     * ```
      *
      * @async
      * @returns {Promise<[StreamReader, FutureReader]>}
@@ -298,7 +328,10 @@ class Descriptor {
 
     /**
      * Synchronize data & metadata to disk.
-     * WIT: sync: async func() -> result<_, error-code>
+     * WIT:
+     * ```
+     * sync: async func() -> result<_, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<void>}
@@ -318,7 +351,10 @@ class Descriptor {
 
     /**
      * Create a directory.
-     * WIT: create-directory-at: async func(path: string) -> result<_, error-code>
+     * WIT:
+     * ```
+     * create-directory-at: async func(path: string) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {string} path Relative path.
@@ -336,7 +372,10 @@ class Descriptor {
 
     /**
      * Return attributes of an open file or directory.
-     * WIT: stat: async func() -> result<descriptor-stat, error-code>
+     * WIT:
+     * ```
+     * stat: async func() -> result<descriptor-stat, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<object>} File statistics.
@@ -361,12 +400,15 @@ class Descriptor {
 
     /**
      * Adjust timestamps on a file or symlink.
-     * WIT: set-times-at: async func(
+     * WIT:
+     * ```
+     * set-times-at: async func(
      *   path-flags: path-flags,
      *   path: string,
      *   data-access-timestamp: new-timestamp,
      *   data-modification-timestamp: new-timestamp
      * ) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {object} flags Path flags.
@@ -396,12 +438,15 @@ class Descriptor {
 
     /**
      * Adjust timestamps on a file or symlink.
-     * WIT: set-times-at: async func(
+     * WIT:
+     * ```
+     * set-times-at: async func(
      *   path-flags: path-flags,
      *   path: string,
      *   data-access-timestamp: new-timestamp,
      *   data-modification-timestamp: new-timestamp
      * ) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {object} flags Path flags.
@@ -433,12 +478,15 @@ class Descriptor {
 
     /**
      * Create a hard link.
-     * WIT: link-at: async func(
+     * WIT:
+     * ```
+     * link-at: async func(
      *   old-path-flags: path-flags,
      *   old-path: string,
      *   new-descriptor: borrow<descriptor>,
      *   new-path: string
      * ) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {object} oldFlags Old path flags.
@@ -466,12 +514,15 @@ class Descriptor {
 
     /**
      * Open a file or directory.
-     * WIT: open-at: async func(
+     * WIT:
+     * ```
+     * open-at: async func(
      *   path-flags: path-flags,
      *   path: string,
      *   open-flags: open-flags,
      *   %flags: descriptor-flags
      * ) -> result<descriptor, error-code>
+     * ```
      *
      * @async
      * @param {object} pf Path flags.
@@ -554,7 +605,10 @@ class Descriptor {
 
     /**
      * Read the contents of a symbolic link.
-     * WIT: readlink-at: async func(path: string) -> result<string, error-code>
+     * WIT:
+     * ```
+     * readlink-at: async func(path: string) -> result<string, error-code>
+     * ```
      *
      * @async
      * @param {string} path Relative path.
@@ -572,7 +626,10 @@ class Descriptor {
 
     /**
      * Remove a directory.
-     * WIT: remove-directory-at: async func(path: string) -> result<_, error-code>
+     * WIT:
+     * ```
+     * remove-directory-at: async func(path: string) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {string} path Relative path.
@@ -592,7 +649,10 @@ class Descriptor {
 
     /**
      * Rename a filesystem object.
-     * WIT: rename-at: async func(old-path: string, new-descriptor: borrow<descriptor>, new-path: string) -> result<_, error-code>
+     * WIT:
+     * ```
+     * rename-at: async func(old-path: string, new-descriptor: borrow<descriptor>, new-path: string) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {string} oldPath Source path.
@@ -615,7 +675,10 @@ class Descriptor {
 
     /**
      * Create a symbolic link.
-     * WIT: symlink-at: async func(old-path: string, new-path: string) -> result<_, error-code>
+     * WIT:
+     * ```
+     * symlink-at: async func(old-path: string, new-path: string) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {string} target Link target.
@@ -648,7 +711,10 @@ class Descriptor {
 
     /**
      * Unlink a filesystem object that is not a directory.
-     * WIT: unlink-file-at: async func(path: string) -> result<_, error-code>
+     * WIT:
+     * ```
+     * unlink-file-at: async func(path: string) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {string} path Relative path.
@@ -682,7 +748,10 @@ class Descriptor {
 
     /**
      * Test whether two descriptors refer to the same object.
-     * WIT: is-same-object: async func(other: borrow<descriptor>) -> bool
+     * WIT:
+     * ```
+     * is-same-object: async func(other: borrow<descriptor>) -> bool
+     * ```
      *
      * @async
      * @param {Descriptor} other Another descriptor.
@@ -694,7 +763,10 @@ class Descriptor {
 
     /**
      * Return a hash of the metadata associated with this descriptor.
-     * WIT: metadata-hash: async func() -> result<metadata-hash-value, error-code>
+     * WIT:
+     * ```
+     * metadata-hash: async func() -> result<metadata-hash-value, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<{upper: bigint, lower: bigint}>}
@@ -712,7 +784,10 @@ class Descriptor {
 
     /**
      * Return a hash of the metadata via path.
-     * WIT: metadata-hash-at: async func(path-flags: path-flags, path: string) -> result<metadata-hash-value, error-code>
+     * WIT:
+     * ```
+     * metadata-hash-at: async func(path-flags: path-flags, path: string) -> result<metadata-hash-value, error-code>
+     * ```
      *
      * @async
      * @param {object} flags Path flags.

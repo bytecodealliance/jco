@@ -30,7 +30,10 @@ export class UdpSocket {
 
     /**
      * Creates a new UDP socket
-     * WIT: constructor(address-family: ip-address-family)
+     * WIT:
+     * ```
+     * constructor(address-family: ip-address-family)
+     * ```
      *
      * @static
      * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
@@ -47,7 +50,10 @@ export class UdpSocket {
 
     /**
      * Bind the socket to the provided IP address and port.
-     * WIT: bind: func(local-address: ip-socket-address) -> result<_, error-code>
+     * WIT:
+     * ```
+     * bind: func(local-address: ip-socket-address) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {Object} localAddress - The local address to bind to
@@ -77,7 +83,10 @@ export class UdpSocket {
 
     /**
      * Associate this socket with a specific peer address.
-     * WIT: connect: func(remote-address: ip-socket-address) -> result<_, error-code>
+     * WIT:
+     * ```
+     * connect: func(remote-address: ip-socket-address) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {Object} remoteAddress - The remote address to connect to
@@ -113,7 +122,10 @@ export class UdpSocket {
 
     /**
      * Dissociate this socket from its peer address.
-     * WIT: disconnect: func() -> result<_, error-code>
+     * WIT:
+     * ```
+     * disconnect: func() -> result<_, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<void>}
@@ -137,7 +149,10 @@ export class UdpSocket {
 
     /**
      * Send a message on the socket to a particular peer.
-     * WIT: send: func(data: list<u8>, remote-address: option<ip-socket-address>) -> result<_, error-code>
+     * WIT:
+     * ```
+     * send: func(data: list<u8>, remote-address: option<ip-socket-address>) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {Uint8Array} data - The datagram payload
@@ -182,7 +197,10 @@ export class UdpSocket {
 
     /**
      * Receive a message on the socket.
-     * WIT: receive: func() -> result<tuple<list<u8>, ip-socket-address>, error-code>
+     * WIT:
+     * ```
+     * receive: func() -> result<tuple<list<u8>, ip-socket-address>, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<[Uint8Array, Object]>} Received data and sender address
@@ -205,7 +223,10 @@ export class UdpSocket {
 
     /**
      * Get the current bound address.
-     * WIT: local-address: func() -> result<ip-socket-address, error-code>
+     * WIT:
+     * ```
+     * local-address: func() -> result<ip-socket-address, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<Object>} The local socket address
@@ -227,7 +248,10 @@ export class UdpSocket {
 
     /**
      * Get the address the socket is currently connected to.
-     * WIT: remote-address: func() -> result<ip-socket-address, error-code>
+     * WIT:
+     * ```
+     * remote-address: func() -> result<ip-socket-address, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<Object>} The connected peer address
@@ -241,7 +265,10 @@ export class UdpSocket {
 
     /**
      * Whether this is an IPv4 or IPv6 socket.
-     * WIT: address-family: func() -> ip-address-family
+     * WIT:
+     * ```
+     * address-family: func() -> ip-address-family
+     * ```
      *
      * @returns {IP_ADDRESS_FAMILY}
      */
@@ -251,7 +278,10 @@ export class UdpSocket {
 
     /**
      * Get the unicast hop limit (TTL).
-     * WIT: unicast-hop-limit: func() -> result<u8, error-code>
+     * WIT:
+     * ```
+     * unicast-hop-limit: func() -> result<u8, error-code>
+     * ```
      *
      * @returns {number}
      */
@@ -261,7 +291,10 @@ export class UdpSocket {
 
     /**
      * Set the unicast hop limit (TTL).
-     * WIT: set-unicast-hop-limit: func(value: u8) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-unicast-hop-limit: func(value: u8) -> result<_, error-code>
+     * ```
      *
      * @async
      * @param {number} value - The hop limit (must be ≥1)
@@ -285,7 +318,10 @@ export class UdpSocket {
 
     /**
      * Get the receive buffer size.
-     * WIT: receive-buffer-size: func() -> result<u64, error-code>
+     * WIT:
+     * ```
+     * receive-buffer-size: func() -> result<u64, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<bigint>}
@@ -309,7 +345,10 @@ export class UdpSocket {
 
     /**
      * Set the receive buffer size.
-     * WIT: set-receive-buffer-size: func(value: u64) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-receive-buffer-size: func(value: u64) -> result<_, error-code>
+     * ```
      *
      * @param {bigint} value - The buffer size in bytes (must be >0)
      * @throws {SocketError} payload.tag maps the system error
@@ -321,7 +360,10 @@ export class UdpSocket {
 
     /**
      * Get the send buffer size.
-     * WIT: send-buffer-size: func() -> result<u64, error-code>
+     * WIT:
+     * ```
+     * send-buffer-size: func() -> result<u64, error-code>
+     * ```
      *
      * @async
      * @returns {Promise<bigint>}
@@ -345,7 +387,10 @@ export class UdpSocket {
 
     /**
      * Set the send buffer size.
-     * WIT: set-send-buffer-size: func(value: u64) -> result<_, error-code>
+     * WIT:
+     * ```
+     * set-send-buffer-size: func(value: u64) -> result<_, error-code>
+     * ```
      *
      * @param {bigint} value - The buffer size in bytes (must be >0)
      * @throws {SocketError} with payload.tag 'invalid-argument' if value == 0
@@ -378,7 +423,10 @@ delete UdpSocket._create;
 export const udpCreateSocket = {
     /**
      * Create a new UDP socket.
-     * WIT: createUdpSocket: func(address-family: ip-address-family) -> result<udp-socket, error-code>
+     * WIT:
+     * ```
+     * createUdpSocket: func(address-family: ip-address-family) -> result<udp-socket, error-code>
+     * ```
      *
      * @async
      * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family

@@ -15,13 +15,19 @@ export class Fields {
 
     /**
      * Constructs an empty HTTP Fields
-     * WIT: constructor();
+     * WIT:
+     * ```
+     * constructor();
+     * ```
      */
     constructor() {}
 
     /**
      * Constructs a Fields instance from a list of name-value pairs
-     * WIT: from-list: static func(entries: list<tuple<field-name,field-value>>) -> result<fields, header-error>;
+     * WIT:
+     * ```
+     * from-list: static func(entries: list<tuple<field-name,field-value>>) -> result<fields, header-error>;
+     * ```
      *
      * @param {[string, Uint8Array[]][]} entries - List of field name and value pairs
      * @returns {Fields} A new Fields instance
@@ -41,7 +47,10 @@ export class Fields {
 
     /**
      * Get all values for a given field name
-     * WIT: get: func(name: field-name) -> list<field-value>;
+     * WIT:
+     * ```
+     * get: func(name: field-name) -> list<field-value>;
+     * ```
      *
      * @param {string} name - The field name to get values for
      * @returns {Uint8Array[]} List of values for the field
@@ -54,7 +63,10 @@ export class Fields {
 
     /**
      * Check if a field name exists in the collection
-     * WIT: has: func(name: field-name) -> bool;
+     * WIT:
+     * ```
+     * has: func(name: field-name) -> bool;
+     * ```
      *
      * @param {string} name - The field name to check
      * @returns {boolean} True if the field exists
@@ -65,7 +77,10 @@ export class Fields {
 
     /**
      * Set values for a field name, replacing any existing values
-     * WIT: set: func(name: field-name, value: list<field-value>) -> result<_, header-error>;
+     * WIT:
+     * ```
+     * set: func(name: field-name, value: list<field-value>) -> result<_, header-error>;
+     * ```
      *
      * @param {string} name - The field name
      * @param {Uint8Array[]} values - The values to set
@@ -101,7 +116,10 @@ export class Fields {
 
     /**
      * Delete all values for a field name
-     * WIT: delete: func(name: field-name) -> result<_, header-error>;
+     * WIT:
+     * ```
+     * delete: func(name: field-name) -> result<_, header-error>;
+     * ```
      *
      * @param {string} name - The field name to delete
      * @throws {HttpError} With payload.tag 'immutable' if the fields are immutable
@@ -121,7 +139,10 @@ export class Fields {
 
     /**
      * Get all values for a field name and then delete them
-     * WIT: get-and-delete: func(name: field-name) -> result<list<field-value>, header-error>;
+     * WIT:
+     * ```
+     * get-and-delete: func(name: field-name) -> result<list<field-value>, header-error>;
+     * ```
      *
      * @param {string} name - The field name to get and delete
      * @returns {Uint8Array[]} List of values that were deleted
@@ -137,7 +158,10 @@ export class Fields {
 
     /**
      * Append a value to a field name
-     * WIT: append: func(name: field-name, value: field-value) -> result<_, header-error>;
+     * WIT:
+     * ```
+     * append: func(name: field-name, value: field-value) -> result<_, header-error>;
+     * ```
      *
      * @param {string} name - The field name
      * @param {Uint8Array} value - The value to append
@@ -165,7 +189,10 @@ export class Fields {
 
     /**
      * Get all entries as a list of name-value pairs
-     * WIT: entries: func() -> list<tuple<field-name,field-value>>;
+     * WIT:
+     * ```
+     * entries: func() -> list<tuple<field-name,field-value>>;
+     * ```
      *
      * @returns {[string, Uint8Array][]} List of all entries
      */
@@ -175,7 +202,10 @@ export class Fields {
 
     /**
      * Create a deep copy of this Fields instance
-     * WIT: clone: func() -> fields;
+     * WIT:
+     * ```
+     * clone: func() -> fields;
+     * ```
      *
      * @returns {Fields} A new mutable Fields instance with the same entries
      */

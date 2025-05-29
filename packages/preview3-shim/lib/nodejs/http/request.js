@@ -16,13 +16,19 @@ export class RequestOptions {
 
     /**
      * Construct a default ~RequestOptions~ value.
-     * WIT: constructor()
+     * WIT:
+     * ```
+     * constructor()
+     * ```
      */
     constructor() {}
 
     /**
      * The timeout for the initial connect to the HTTP Server.
-     * WIT: connect-timeout: func() -> option<duration>
+     * WIT:
+     * ```
+     * connect-timeout: func() -> option<duration>
+     * ```
      *
      * @returns {?number} Duration in milliseconds, or `null` if not set
      */
@@ -32,7 +38,10 @@ export class RequestOptions {
 
     /**
      * Set the timeout for the initial connect to the HTTP Server.
-     * WIT: set-connect-timeout: func(duration: option<duration>) -> result<_, request-options-error>
+     * WIT:
+     * ```
+     * set-connect-timeout: func(duration: option<duration>) -> result<_, request-options-error>
+     * ```
      *
      * @param {?number} duration Duration in milliseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
@@ -44,7 +53,10 @@ export class RequestOptions {
 
     /**
      * The timeout for receiving the first byte of the Response body.
-     * WIT: first-byte-timeout: func() -> option<duration>
+     * WIT:
+     * ```
+     * first-byte-timeout: func() -> option<duration>
+     * ```
      *
      * @returns {?number} Duration in milliseconds, or `null` if not set
      */
@@ -54,7 +66,10 @@ export class RequestOptions {
 
     /**
      * Set the timeout for receiving the first byte of the Response body.
-     * WIT: set-first-byte-timeout: func(duration: option<duration>) -> result<_, request-options-error>
+     * WIT:
+     * ```
+     * set-first-byte-timeout: func(duration: option<duration>) -> result<_, request-options-error>
+     * ```
      *
      * @param {?number} duration Duration in milliseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
@@ -66,7 +81,10 @@ export class RequestOptions {
 
     /**
      * The timeout for receiving subsequent chunks of bytes in the Response body.
-     * WIT: between-bytes-timeout: func() -> option<duration>
+     * WIT:
+     * ```
+     * between-bytes-timeout: func() -> option<duration>
+     * ```
      *
      * @returns {?number} Duration in milliseconds, or `null` if not set
      */
@@ -76,7 +94,10 @@ export class RequestOptions {
 
     /**
      * Set the timeout for receiving subsequent chunks of bytes in the Response body.
-     * WIT: set-between-bytes-timeout: func(duration: option<duration>) -> result<_, request-options-error>
+     * WIT:
+     * ```
+     * set-between-bytes-timeout: func(duration: option<duration>) -> result<_, request-options-error>
+     * ```
      *
      * @param {?number} duration Duration in milliseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
@@ -88,7 +109,10 @@ export class RequestOptions {
 
     /**
      * Make a deep copy of the ~RequestOptions~.
-     * WIT: clone: func() -> request-options
+     * WIT:
+     * ```
+     * clone: func() -> request-options
+     * ```
      *
      * @returns {RequestOptions} A new mutable copy
      */
@@ -144,12 +168,15 @@ export class Request {
     /**
      * Construct a new Request with default values.
      *
-     * WIT: new: static func(
+     * WIT:
+     * ```
+     * new: static func(
      *   headers: headers,
      *   contents: option<stream<u8>>,
      *   trailers: future<result<option<trailers>, error-code>>,
      *   options: option<request-options>
      * ) -> tuple<request, future<result<_, error-code>>>;
+     * ```
      *
      * @param {Fields} headers  immutable headers resource
      * @param {?StreamReader} contents  optional body stream
@@ -206,7 +233,10 @@ export class Request {
     /**
      * Get the Method for the Request.
      *
-     * WIT: method: func() -> method;
+     * WIT:
+     * ```
+     * method: func() -> method;
+     * ```
      *
      * @returns {method}
      */
@@ -217,7 +247,10 @@ export class Request {
     /**
      * Set the Method for the Request.
      *
-     * WIT: set-method: func(method: method) -> result;
+     * WIT:
+     * ```
+     * set-method: func(method: method) -> result;
+     * ```
      *
      * @param {method} method
      * @throws {HttpError} with payload.tag 'invalid-syntax' if method is invalid
@@ -240,7 +273,10 @@ export class Request {
     /**
      * Get the HTTP Path and Query.
      *
-     * WIT: path-with-query: func() -> option<string>;
+     * WIT:
+     * ```
+     * path-with-query: func() -> option<string>;
+     * ```
      *
      * @returns {?string}
      */
@@ -251,7 +287,10 @@ export class Request {
     /**
      * Set the HTTP Path and Query.
      *
-     * WIT: set-path-with-query: func(path-with-query: option<string>) -> result;
+     * WIT:
+     * ```
+     * set-path-with-query: func(path-with-query: option<string>) -> result;
+     * ```
      *
      * @param {?string} pathWithQuery
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid URI component
@@ -274,7 +313,10 @@ export class Request {
     /**
      * Get the HTTP Scheme.
      *
-     * WIT: scheme: func() -> option<scheme>;
+     * WIT:
+     * ```
+     * scheme: func() -> option<scheme>;
+     * ```
      *
      * @returns {?scheme}
      */
@@ -285,7 +327,10 @@ export class Request {
     /**
      * Set the HTTP Scheme.
      *
-     * WIT: set-scheme: func(scheme: option<scheme>) -> result;
+     * WIT:
+     * ```
+     * set-scheme: func(scheme: option<scheme>) -> result;
+     * ```
      *
      * @param {?scheme} scheme
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid scheme
@@ -307,7 +352,10 @@ export class Request {
     /**
      * Get the authority for the target URI.
      *
-     * WIT: authority: func() -> option<string>;
+     * WIT:
+     * ```
+     * authority: func() -> option<string>;
+     * ```
      *
      * @returns {?string}
      */
@@ -318,7 +366,10 @@ export class Request {
     /**
      * Set the authority for the target URI.
      *
-     * WIT: set-authority: func(authority: option<string>) -> result;
+     * WIT:
+     * ```
+     * set-authority: func(authority: option<string>) -> result;
+     * ```
      *
      * @param {?string} authority
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid authority
@@ -340,7 +391,10 @@ export class Request {
     /**
      * Get the associated request-options resource.
      *
-     * WIT: options: func() -> option<request-options>;
+     * WIT:
+     * ```
+     * options: func() -> option<request-options>;
+     * ```
      *
      * @returns {?RequestOptions}
      */
@@ -351,7 +405,10 @@ export class Request {
     /**
      * Get the headers resource (immutable).
      *
-     * WIT: headers: func() -> headers;
+     * WIT:
+     * ```
+     * headers: func() -> headers;
+     * ```
      *
      * @returns {Fields}
      */
@@ -362,7 +419,10 @@ export class Request {
     /**
      * Get the body stream and trailers future.
      *
-     * WIT: body: func() -> result<tuple<stream<u8>, future<result<option<trailers>, error-code>>>>;
+     * WIT:
+     * ```
+     * body: func() -> result<tuple<stream<u8>, future<result<option<trailers>, error-code>>>>;
+     * ```
      *
      * @returns {{ req: StreamReader, trailers: FutureReader }}
      * @throws {HttpError} with payload.tag 'invalid-state' if body already open
