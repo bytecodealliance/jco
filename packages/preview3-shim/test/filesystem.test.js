@@ -1,4 +1,13 @@
-import { describe, test, expect, beforeAll, afterAll } from 'vitest';
+import {
+    describe,
+    test,
+    expect,
+    beforeAll,
+    afterAll,
+    beforeEach,
+    afterEach,
+    vi,
+} from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fsPromises } from 'fs';
@@ -56,7 +65,6 @@ describe('Descriptor with os.tmpdir()', () => {
         await tx.close();
         await child.writeViaStream(rx, 0);
 
-        // now read back via readViaStream_
         const [sr, fr] = child.readViaStream(0n);
         const buf = await sr.readAll();
         await fr.read();
@@ -161,7 +169,6 @@ describe('Descriptor with os.tmpdir()', () => {
             { read: true, write: true }
         );
 
-        // write a byte to update timestamps
         const { tx, rx } = stream();
         await tx.write('x');
         await tx.close();
@@ -200,9 +207,7 @@ describe('Descriptor with os.tmpdir()', () => {
         expect(stats1.type).toBe('regular-file');
         expect(typeof stats1.size).toBe('bigint');
         expect(typeof stats1.dataAccessTimestamp.seconds).toBe('bigint');
-        expect(typeof stats1.dataAccessTimestamp.nanoseconds).toBe(
-            'number'
-        );
+        expect(typeof stats1.dataAccessTimestamp.nanoseconds).toBe('number');
         child[Symbol.dispose]?.();
 
         const realPath = path.join(tmpDir, 'statat-file.txt');
@@ -221,5 +226,300 @@ describe('Descriptor with os.tmpdir()', () => {
             linkSub
         );
         expect(stats3.type).toBe('regular-file');
+    });
+});
+
+describe('Descriptor#setTimes and #setTimesAt', () => {
+    let filesystem;
+    let rootDescriptor;
+    let tmpDir;
+    let relBase;
+
+    beforeAll(async () => {
+        ({ filesystem } = await import('@bytecodealliance/preview3-shim'));
+        [[rootDescriptor]] = filesystem.preopens.getDirectories();
+
+        const base = os.tmpdir();
+        tmpDir = await fsPromises.mkdtemp(path.join(base, 'preview3-test-'));
+
+        const rootPath = path.parse(tmpDir).root;
+        relBase = path.relative(rootPath, tmpDir).replaceAll(path.sep, '/');
+
+        const subDir = `${relBase}/time-test-dir`;
+        await rootDescriptor.createDirectoryAt(subDir);
+    });
+
+    afterAll(async () => {
+        await fsPromises.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    beforeEach(() => {
+        vi.useFakeTimers({ now: Date.now(), toFake: ['setTimeout', 'Date'] });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
+
+    function datetimeToNumber({ seconds, nanoseconds }) {
+        return Number(seconds) + nanoseconds / 1e9;
+    }
+
+    test('setTimes: timestamp and no-change variants', async () => {
+        const sub = `${relBase}/times-fake-tsnc.txt`;
+        const child = await rootDescriptor.openAt(
+            {},
+            sub,
+            { create: true },
+            { read: true, write: true }
+        );
+        const { tx, rx } = stream();
+        await tx.write('A');
+        await tx.close();
+        await child.writeViaStream(rx, 0);
+
+        const before = await child.stat();
+
+        // timestamp variant
+        await child.setTimes(
+            { tag: 'timestamp', val: before.dataAccessTimestamp },
+            { tag: 'timestamp', val: before.dataModificationTimestamp }
+        );
+        const afterTs = await child.stat();
+
+        expect(afterTs.dataAccessTimestamp.seconds).toBe(
+            before.dataAccessTimestamp.seconds
+        );
+        expect(datetimeToNumber(afterTs.dataAccessTimestamp)).toBeCloseTo(
+            datetimeToNumber(before.dataAccessTimestamp),
+            3
+        );
+        expect(afterTs.dataModificationTimestamp.seconds).toBe(
+            before.dataModificationTimestamp.seconds
+        );
+        expect(datetimeToNumber(afterTs.dataModificationTimestamp)).toBeCloseTo(
+            datetimeToNumber(before.dataModificationTimestamp),
+            3
+        );
+
+        // no-change variant
+        await child.setTimes({ tag: 'no-change' }, { tag: 'no-change' });
+        const afterNc = await child.stat();
+
+        expect(afterNc.dataAccessTimestamp.seconds).toBe(
+            before.dataAccessTimestamp.seconds
+        );
+        expect(datetimeToNumber(afterNc.dataAccessTimestamp)).toBeCloseTo(
+            datetimeToNumber(before.dataAccessTimestamp),
+            3
+        );
+        expect(afterNc.dataModificationTimestamp.seconds).toBe(
+            before.dataModificationTimestamp.seconds
+        );
+        expect(datetimeToNumber(afterNc.dataModificationTimestamp)).toBeCloseTo(
+            datetimeToNumber(before.dataModificationTimestamp),
+            3
+        );
+
+        child[Symbol.dispose]?.();
+    });
+
+    test('setTimes: now variant advances time', async () => {
+        const sub = `${relBase}/times-fake-now.txt`;
+        const child = await rootDescriptor.openAt(
+            {},
+            sub,
+            { create: true },
+            { read: true, write: true }
+        );
+        const { tx, rx } = stream();
+        await tx.write('B');
+        await tx.close();
+        await child.writeViaStream(rx, 0);
+
+        const before = await child.stat();
+        vi.advanceTimersByTime(5000);
+
+        await child.setTimes({ tag: 'now' }, { tag: 'now' });
+        const after = await child.stat();
+        expect(after.dataAccessTimestamp.seconds).toBe(
+            before.dataAccessTimestamp.seconds + 5n
+        );
+        expect(after.dataModificationTimestamp.seconds).toBe(
+            before.dataModificationTimestamp.seconds + 5n
+        );
+
+        child[Symbol.dispose]?.();
+    });
+
+    test('setTimesAt: timestamp and no-change variants', async () => {
+        const sub = `${relBase}/timesat-fake-tsnc.txt`;
+        const child = await rootDescriptor.openAt(
+            {},
+            sub,
+            { create: true },
+            { read: true, write: true }
+        );
+        const { tx, rx } = stream();
+        await tx.write('C');
+        await tx.close();
+        await child.writeViaStream(rx, 0);
+
+        const before = await rootDescriptor.statAt(
+            { symlinkFollow: true },
+            sub
+        );
+
+        await rootDescriptor.setTimesAt(
+            { symlinkFollow: true },
+            sub,
+            { tag: 'timestamp', val: before.dataAccessTimestamp },
+            { tag: 'timestamp', val: before.dataModificationTimestamp }
+        );
+        const afterTs = await rootDescriptor.statAt(
+            { symlinkFollow: true },
+            sub
+        );
+        expect(afterTs.dataAccessTimestamp.seconds).toBe(
+            before.dataAccessTimestamp.seconds
+        );
+        expect(datetimeToNumber(afterTs.dataAccessTimestamp)).toBeCloseTo(
+            datetimeToNumber(before.dataAccessTimestamp),
+            3
+        );
+        expect(afterTs.dataModificationTimestamp.seconds).toBe(
+            before.dataModificationTimestamp.seconds
+        );
+        expect(datetimeToNumber(afterTs.dataModificationTimestamp)).toBeCloseTo(
+            datetimeToNumber(before.dataModificationTimestamp),
+            3
+        );
+
+        await rootDescriptor.setTimesAt(
+            { symlinkFollow: true },
+            sub,
+            { tag: 'no-change' },
+            { tag: 'no-change' }
+        );
+        const afterNc = await rootDescriptor.statAt(
+            { symlinkFollow: true },
+            sub
+        );
+        expect(afterNc.dataAccessTimestamp.seconds).toBe(
+            before.dataAccessTimestamp.seconds
+        );
+        expect(datetimeToNumber(afterNc.dataAccessTimestamp)).toBeCloseTo(
+            datetimeToNumber(before.dataAccessTimestamp),
+            3
+        );
+        expect(afterNc.dataModificationTimestamp.seconds).toBe(
+            before.dataModificationTimestamp.seconds
+        );
+        expect(datetimeToNumber(afterNc.dataModificationTimestamp)).toBeCloseTo(
+            datetimeToNumber(before.dataModificationTimestamp),
+            3
+        );
+
+        child[Symbol.dispose]?.();
+    });
+
+    test('setTimesAt: now variant advances time', async () => {
+        const sub = `${relBase}/timesat-fake-now.txt`;
+        const child = await rootDescriptor.openAt(
+            {},
+            sub,
+            { create: true },
+            { read: true, write: true }
+        );
+        const { tx, rx } = stream();
+        await tx.write('D');
+        await tx.close();
+        await child.writeViaStream(rx, 0);
+
+        const before = await rootDescriptor.statAt(
+            { symlinkFollow: true },
+            sub
+        );
+        vi.advanceTimersByTime(3000);
+
+        await rootDescriptor.setTimesAt(
+            { symlinkFollow: true },
+            sub,
+            { tag: 'now' },
+            { tag: 'now' }
+        );
+        const after = await rootDescriptor.statAt({ symlinkFollow: true }, sub);
+        expect(after.dataAccessTimestamp.seconds).toBe(
+            before.dataAccessTimestamp.seconds + 3n
+        );
+        expect(after.dataModificationTimestamp.seconds).toBe(
+            before.dataModificationTimestamp.seconds + 3n
+        );
+
+        child[Symbol.dispose]?.();
+    });
+
+    test('setTimes on directory preserves & advances correct timestamps', async () => {
+        const dirSub = `${relBase}/time-test-dir`;
+        const dirDesc = await rootDescriptor.openAt(
+            {},
+            dirSub,
+            { directory: true },
+            { read: true }
+        );
+
+        const before = await dirDesc.stat();
+
+        vi.advanceTimersByTime(2000);
+        await dirDesc.setTimes({ tag: 'now' }, { tag: 'now' });
+
+        const afterNow = await dirDesc.stat();
+        expect(afterNow.dataAccessTimestamp.seconds).toBe(
+            before.dataAccessTimestamp.seconds + 2n
+        );
+        expect(afterNow.dataModificationTimestamp.seconds).toBe(
+            before.dataModificationTimestamp.seconds + 2n
+        );
+
+        await dirDesc.setTimes(
+            { tag: 'timestamp', val: afterNow.dataAccessTimestamp },
+            { tag: 'timestamp', val: afterNow.dataModificationTimestamp }
+        );
+        const afterTs = await dirDesc.stat();
+        expect(datetimeToNumber(afterTs.dataAccessTimestamp)).toBeCloseTo(
+            datetimeToNumber(afterNow.dataAccessTimestamp),
+            3
+        );
+
+        dirDesc[Symbol.dispose]?.();
+    });
+
+    test('setTimesAt on directory advances timestamps', async () => {
+        const dirSub = `${relBase}/time-test-dir`;
+        const beforeAt = await rootDescriptor.statAt(
+            { symlinkFollow: true },
+            dirSub
+        );
+
+        vi.advanceTimersByTime(3000);
+        await rootDescriptor.setTimesAt(
+            { symlinkFollow: true },
+            dirSub,
+            { tag: 'now' },
+            { tag: 'now' }
+        );
+
+        const afterAt = await rootDescriptor.statAt(
+            { symlinkFollow: true },
+            dirSub
+        );
+
+        expect(afterAt.dataAccessTimestamp.seconds).toBeGreaterThan(
+            beforeAt.dataAccessTimestamp.seconds
+        );
+        expect(afterAt.dataModificationTimestamp.seconds).toBeGreaterThan(
+            beforeAt.dataModificationTimestamp.seconds
+        );
     });
 });

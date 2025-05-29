@@ -384,9 +384,15 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async stat() {
-        this.#ensureHandle();
         try {
-            const s = await this.#handle.stat({ bigint: true });
+            let s;
+            if (this.#hostPreopen) {
+                s = await fs.stat(this.#hostPreopen, { bigint: true });
+            } else {
+                this.#ensureHandle();
+                s = await this.#handle.stat({ bigint: true });
+            }
+
             return {
                 type: lookupType(s),
                 linkCount: s.nlink,
@@ -459,16 +465,17 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async setTimesAt(flags, path, atimeDesc, mtimeDesc) {
-        const full = this.#getFullPath(path, flags.symlinkFollow);
-
         const { atime, mtime } = await this.#computeTimestamps(
             atimeDesc,
-            mtimeDesc
+            mtimeDesc,
+            path
         );
 
         if (!flags.symlinkFollow && !fs.lutimes) {
             throw new FsError('unsupported');
         }
+
+        const full = this.#getFullPath(path, flags.symlinkFollow);
 
         try {
             const fn = flags.symlinkFollow ? fs.utimes : fs.lutimes;
@@ -808,21 +815,28 @@ class Descriptor {
         }
     }
 
-    #getNewTimestamp(newTimestamp, maybeNow) {
+    #getNewTimestamp(newTimestamp, oldTimestamp) {
         switch (newTimestamp.tag) {
             case 'now':
                 return Math.floor(Date.now() / 1e3);
             case 'no-change':
-                return timestampToMs(newTimestamp.val);
+                return timestampToSec(oldTimestamp);
             case 'timestamp':
-                return timestampToMs(maybeNow.val);
+                return timestampToSec(newTimestamp.val);
+            default:
+                throw new FsError(
+                    'invalid',
+                    `Unknown new-timestamp tag: ${newTimestamp.tag}`
+                );
         }
     }
 
-    async #computeTimestamps(atimeDesc, mtimeDesc) {
+    async #computeTimestamps(atimeDesc, mtimeDesc, path = null) {
         let stats;
         if (atimeDesc.tag === 'no-change' || mtimeDesc.tag === 'no-change') {
-            stats = await this.stat();
+            const flags = { symlinkFollow: true };
+            const p = path === null ? this.stat() : this.statAt(flags, path);
+            stats = await p;
         }
 
         const atime = this.#getNewTimestamp(
@@ -895,8 +909,8 @@ function nsToDateTime(ns) {
     return { seconds, nanoseconds };
 }
 
-function timestampToMs(timestamp) {
-    return Number(timestamp.seconds) * 1000 + timestamp.nanoseconds / 1e9;
+function timestampToSec({ seconds, nanoseconds }) {
+    return Number(seconds) + nanoseconds / 1e9;
 }
 
 const descriptorCreatePreopen = Descriptor._createPreopen;
