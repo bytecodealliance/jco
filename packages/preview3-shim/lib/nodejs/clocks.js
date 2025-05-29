@@ -29,10 +29,13 @@ export const monotonicClock = {
         if (diffNs <= 0n) return;
 
         const ms = diffNs / 1_000_000n;
-        const max = BigInt(Number.MAX_SAFE_INTEGER);
-        const clamped = ms > max ? max : ms;
+        if (ms > BigInt(Number.MAX_SAFE_INTEGER)) {
+            throw new TypeError(
+                `Cannot wait for ${targetNs} ns, exceeds maximum safe integer`
+            );
+        }
 
-        await sleep(Number(clamped));
+        await sleep(Number(ms));
     },
 
     /**
@@ -49,9 +52,12 @@ export const monotonicClock = {
      */
     async waitFor(durationNs) {
         const ms = durationNs / 1_000_000n;
-        const max = BigInt(Number.MAX_SAFE_INTEGER);
-        const clamped = ms > max ? max : ms;
+        if (ms > BigInt(Number.MAX_SAFE_INTEGER)) {
+            throw new TypeError(
+                `Cannot wait for ${durationNs} ns, exceeds maximum safe integer`
+            );
+        }
 
-        await sleep(Number(clamped));
+        await sleep(Number(ms));
     },
 };
