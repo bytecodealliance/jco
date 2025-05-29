@@ -26,10 +26,28 @@ class Descriptor {
     #hostPreopen;
 
     static _create(handle, mode, fullPath) {
+        const {
+            read = false,
+            write = false,
+            fileIntegritySync = false,
+            dataIntegritySync = false,
+            requestedIntegritySync = false,
+            mutateDirectory = false,
+        } = mode;
+
+        const merged = {
+            read,
+            write,
+            fileIntegritySync,
+            dataIntegritySync,
+            requestedIntegritySync,
+            mutateDirectory,
+        };
+
         const desc = new Descriptor();
         desc.#handle = handle;
-        desc.#mode = mode;
         desc.#fullPath = fullPath;
+        desc.#mode = merged;
         desc.#finalizer = registerDispose(desc, null, handle, (handle) =>
             handle.close()
         );
@@ -173,7 +191,7 @@ class Descriptor {
      * WIT: get-flags: async func() -> result<descriptor-flags, error-code>
      *
      * @async
-     * @returns {Promise<number>} The descriptor flags.
+     * @returns {Promise<object>} The descriptor flags object.
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async getFlags() {
