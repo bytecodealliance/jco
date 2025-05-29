@@ -227,6 +227,11 @@ class Descriptor {
      */
     async setSize(size) {
         this.#ensureHandle();
+
+        if (size > Number.MAX_SAFE_INTEGER) {
+            throw new FsError('invalid');
+        }
+
         try {
             await this.#handle.truncate(Number(size));
         } catch (e) {
