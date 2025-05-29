@@ -1,72 +1,105 @@
-import { parentPort } from 'worker_threads';
-import { Readable, Writable } from 'node:stream';
-import { createReadStream, createWriteStream } from 'node:fs';
-import { pipeline } from 'stream/promises';
-
 import fs from 'fs';
+import { promisify } from 'util';
+import { parentPort } from 'worker_threads';
+
+const readAsync = promisify(fs.read);
+const writeAsync = promisify(fs.write);
+
+const { opendir } = fs.promises;
+
+const CHUNK = 64 * 1024;
+const buffer = Buffer.alloc(CHUNK);
 
 async function handleRead(msg) {
     const { id, fd, offset, stream } = msg;
-    const readable = createReadStream(null, {
-        fd,
-        start: Number(offset),
-        autoClose: false,
-        highWaterMark: 64 * 1024,
-    });
+    const writer = stream.getWriter();
+    try {
+        let pos = BigInt(offset);
 
-    const writable = Writable.fromWeb(stream);
-    await pipeline(readable, writable);
+        while (true) {
+            const { bytesRead } = await readAsync(fd, buffer, 0, CHUNK, pos);
+            if (bytesRead === 0) break;
 
-    parentPort.postMessage({ id, result: { ok: true } });
+            await writer.write(buffer.subarray(0, bytesRead));
+            pos += BigInt(bytesRead);
+        }
+
+        await writer.close();
+        parentPort.postMessage({ id, result: { ok: true } });
+    } catch (err) {
+        await writer.abort(err);
+        parentPort.postMessage({ id, error: err });
+    }
 }
 
 async function handleWrite(msg) {
     const { id, fd, offset, stream } = msg;
-    const readable = Readable.fromWeb(stream);
-    const writable = createWriteStream(null, {
-        fd,
-        start: Number(offset),
-        autoClose: false,
-        highWaterMark: 64 * 1024,
-    });
+    const reader = stream.getReader();
 
-    await pipeline(readable, writable);
+    try {
+        let pos = BigInt(offset);
+        let total = BigInt(0);
 
-    parentPort.postMessage({
-        id,
-        result: { ok: true, bytesWritten: writable.bytesWritten },
-    });
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const buf = Buffer.from(value);
+            const { bytesWritten } = await writeAsync(
+                fd,
+                buf,
+                0,
+                buf.length,
+                pos
+            );
+            pos += BigInt(bytesWritten);
+            total += BigInt(bytesWritten);
+        }
+
+        parentPort.postMessage({
+            id,
+            result: { ok: true, bytesWritten: total },
+        });
+    } catch (err) {
+        await reader.cancel(err);
+        parentPort.postMessage({ id, error: err });
+    }
 }
 
 async function handleReadDir(msg) {
     const { id, fullPath, stream } = msg;
     const writer = stream.getWriter();
-    const walker = await fs.promises.opendir(fullPath);
 
-    for await (const dirent of walker) {
-        const entry = {
-            name: dirent.name,
-            type: lookupType(dirent),
-        };
-
-        await writer.write(entry);
+    try {
+        const walker = await opendir(fullPath);
+        for await (const dirent of walker) {
+            const entry = {
+                name: dirent.name,
+                type: lookupType(dirent),
+            };
+            await writer.write(entry);
+        }
+        await writer.close();
+        parentPort.postMessage({ id, result: { ok: true } });
+    } catch (err) {
+        await writer.abort(err);
+        parentPort.postMessage({ id, error: err });
     }
-
-    await writer.close();
-    parentPort.postMessage({ id, result: { ok: true } });
 }
 
 parentPort.on('message', async (msg) => {
     try {
-        const { op } = msg;
-        if (op === 'read') {
-            await handleRead(msg);
-        } else if (op === 'write') {
-            await handleWrite(msg);
-        } else if (op === 'readDir') {
-            await handleReadDir(msg);
-        } else {
-            throw new Error('Unknown operation: ' + op);
+        switch (msg.op) {
+            case 'read':
+                await handleRead(msg);
+                break;
+            case 'write':
+                await handleWrite(msg);
+                break;
+            case 'readDir':
+                await handleReadDir(msg);
+                break;
+            default:
+                throw new Error('Unknown operation: ' + msg.op);
         }
     } catch (e) {
         parentPort.postMessage({ id: msg.id, error: e });
