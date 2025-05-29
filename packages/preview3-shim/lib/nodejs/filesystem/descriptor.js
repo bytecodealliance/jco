@@ -386,7 +386,7 @@ class Descriptor {
     async stat() {
         this.#ensureHandle();
         try {
-            const s = await this.#handle.stat();
+            const s = await this.#handle.stat({ bigint: true });
             return {
                 type: lookupType(s),
                 linkCount: s.nlink,
@@ -424,7 +424,7 @@ class Descriptor {
         const full = this.#getFullPath(path, flags.symlinkFollow);
         try {
             const fn = flags.symlinkFollow ? fs.stat : fs.lstat;
-            const s = await fn(full);
+            const s = await fn(full, { bigint: true });
             return {
                 type: lookupType(s),
                 linkCount: s.nlink,
@@ -891,7 +891,7 @@ function lookupType(obj) {
 const NS_PER_SEC = 1_000_000_000n;
 function nsToDateTime(ns) {
     const seconds = ns / NS_PER_SEC;
-    const nanoseconds = Number(ns % seconds);
+    const nanoseconds = Number(ns % NS_PER_SEC);
     return { seconds, nanoseconds };
 }
 

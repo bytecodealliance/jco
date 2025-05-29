@@ -151,4 +151,75 @@ describe('Descriptor with os.tmpdir()', () => {
         expect(h2.lower).toBe(h1.lower);
         child[Symbol.dispose]?.();
     });
+
+    test('stat returns correct timestamp fields seconds and nanoseconds', async () => {
+        const statSub = `${relBase}/stat-test.txt`;
+        const statDesc = await rootDescriptor.openAt(
+            {},
+            statSub,
+            { create: true },
+            { read: true, write: true }
+        );
+
+        // write a byte to update timestamps
+        const { tx, rx } = stream();
+        await tx.write('x');
+        await tx.close();
+        await statDesc.writeViaStream(rx, 0);
+
+        const statInfo = await statDesc.stat();
+        expect(typeof statInfo.size).toBe('bigint');
+        expect(typeof statInfo.dataAccessTimestamp.seconds).toBe('bigint');
+        expect(typeof statInfo.dataAccessTimestamp.nanoseconds).toBe('number');
+        expect(statInfo.dataAccessTimestamp.nanoseconds).toBeLessThan(
+            1_000_000_000
+        );
+
+        statDesc[Symbol.dispose]?.();
+    });
+
+    test('statAt returns correct stats and respects symlinkFollow', async () => {
+        const fileSub = `${relBase}/statat-file.txt`;
+        const child = await rootDescriptor.openAt(
+            {},
+            fileSub,
+            { create: true },
+            { read: true, write: true }
+        );
+
+        const { tx, rx } = stream();
+        await tx.write('x');
+        await tx.close();
+        await child.writeViaStream(rx, 0);
+
+        const stats1 = await rootDescriptor.statAt(
+            { symlinkFollow: false },
+            fileSub
+        );
+
+        expect(stats1.type).toBe('regular-file');
+        expect(typeof stats1.size).toBe('bigint');
+        expect(typeof stats1.dataAccessTimestamp.seconds).toBe('bigint');
+        expect(typeof stats1.dataAccessTimestamp.nanoseconds).toBe(
+            'number'
+        );
+        child[Symbol.dispose]?.();
+
+        const realPath = path.join(tmpDir, 'statat-file.txt');
+        const linkSub = `${relBase}/statat-link.txt`;
+        const linkPath = path.join(tmpDir, 'statat-link.txt');
+        await fsPromises.symlink(realPath, linkPath);
+
+        const stats2 = await rootDescriptor.statAt(
+            { symlinkFollow: false },
+            linkSub
+        );
+        expect(stats2.type).toBe('symbolic-link');
+
+        const stats3 = await rootDescriptor.statAt(
+            { symlinkFollow: true },
+            linkSub
+        );
+        expect(stats3.type).toBe('regular-file');
+    });
 });
