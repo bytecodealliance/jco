@@ -88,7 +88,7 @@ class Descriptor {
      * ```
      *
      * @param {bigint} offset The offset within the file.
-     * @returns {Promise<[StreamReader, FutureReader]>}
+     * @returns {{stream: StreamReader, future: FutureReader}}
      *   A tuple: a readable byte stream and a future that resolves to an error code.
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
@@ -109,10 +109,10 @@ class Descriptor {
                 throw FsError.from(err);
             });
 
-        return [
-            new StreamReader(transform.readable),
-            new FutureReader(promise),
-        ];
+        return {
+            stream: new StreamReader(transform.readable),
+            future: new FutureReader(promise),
+        };
     }
 
     /**
@@ -303,7 +303,7 @@ class Descriptor {
      * ```
      *
      * @async
-     * @returns {Promise<[StreamReader, FutureReader]>}
+     * @returns {{stream: StreamReader, future: FutureReader}}
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     readDirectory() {
@@ -322,10 +322,10 @@ class Descriptor {
                 throw FsError.from(err);
             });
 
-        return [
-            new StreamReader(transform.readable),
-            new FutureReader(promise),
-        ];
+        return {
+            stream: new StreamReader(transform.readable),
+            future: new FutureReader(promise),
+        };
     }
 
     /**
