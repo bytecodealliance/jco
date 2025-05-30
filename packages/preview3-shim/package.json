@@ -16,7 +16,8 @@
     }
   },
   "scripts": {
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "bench": "vitest bench --run"
   },
   "files": [
     "types",

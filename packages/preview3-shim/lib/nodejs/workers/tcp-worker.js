@@ -1,10 +1,10 @@
 import { Socket, Server } from 'node:net';
-import { parentPort } from 'worker_threads';
 import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { once } from 'node:events';
 
+import { Router } from '../workers/resource-worker.js';
 import { serializeIpAddress, makeIpAddress } from '../sockets/address.js';
 import { SocketError } from '../sockets/error.js';
 
@@ -15,66 +15,25 @@ const { TCP, constants: TCPConstants } = process.binding('tcp_wrap');
 const sockets = new Map();
 
 // Handle worker messages
-parentPort.on('message', async (msg) => {
-    const { id, op } = msg;
-
-    try {
-        let result;
-
-        // All operations except "tcp-create" require a valid socket ID
-        if (op !== 'tcp-create' && !sockets.has(msg.socketId)) {
+Router()
+    .beforeAll((msg) => {
+        if (msg.op !== 'tcp-create' && !sockets.has(msg.socketId)) {
             throw new Error('Invalid socket ID');
         }
-
-        switch (op) {
-            case 'tcp-create':
-                result = handleTcpCreate(msg);
-                break;
-            case 'tcp-bind':
-                result = await handleTcpBind(msg);
-                break;
-            case 'tcp-connect':
-                result = await handleTcpConnect(msg);
-                break;
-            case 'tcp-listen':
-                result = await handleTcpListen(msg);
-                break;
-            case 'tcp-send':
-                result = await handleTcpSend(msg);
-                break;
-            case 'tcp-receive':
-                result = await handleTcpReceive(msg);
-                break;
-            case 'tcp-get-local-address':
-                result = await handleGetLocalAddress(msg);
-                break;
-            case 'tcp-get-remote-address':
-                result = await handleGetRemoteAddress(msg);
-                break;
-            case 'tcp-set-listen-backlog-size':
-                result = await handleTcpSetBacklogSize(msg);
-                break;
-            case 'tcp-set-keep-alive':
-                result = await handleTcpSetKeepAlive(msg);
-                break;
-            case 'tcp-recv-buffer-size':
-                result = await handleRecvBufferSize(msg);
-                break;
-            case 'tcp-send-buffer-size':
-                result = await handleSendBufferSize(msg);
-                break;
-            case 'tcp-dispose':
-                result = handleTcpDispose(msg);
-                break;
-            default:
-                throw new Error(`Unknown operation: ${op}`);
-        }
-
-        parentPort.postMessage({ id, result });
-    } catch (error) {
-        parentPort.postMessage({ id, error });
-    }
-});
+    })
+    .op('tcp-create', handleTcpCreate)
+    .op('tcp-bind', handleTcpBind)
+    .op('tcp-connect', handleTcpConnect)
+    .op('tcp-listen', handleTcpListen)
+    .op('tcp-send', handleTcpSend)
+    .op('tcp-receive', handleTcpReceive)
+    .op('tcp-get-local-address', handleGetLocalAddress)
+    .op('tcp-get-remote-address', handleGetRemoteAddress)
+    .op('tcp-set-listen-backlog-size', handleTcpSetBacklogSize)
+    .op('tcp-set-keep-alive', handleTcpSetKeepAlive)
+    .op('tcp-recv-buffer-size', handleRecvBufferSize)
+    .op('tcp-send-buffer-size', handleSendBufferSize)
+    .op('tcp-dispose', handleTcpDispose);
 
 // Create a new TCP socket
 function handleTcpCreate({ family }) {

@@ -1,6 +1,7 @@
-import { parentPort } from 'worker_threads';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+
+import { Router } from '../workers/resource-worker.js';
 import { serializeIpAddress, makeIpAddress } from '../sockets/address.js';
 
 import dgram from 'node:dgram';
@@ -11,59 +12,23 @@ export function noLookup(ip, _opts, cb) {
     cb(null, ip);
 }
 
-parentPort.on('message', async (msg) => {
-    const { id, op } = msg;
-
-    try {
-        let result;
-
-        // All operations except "udp-create" require a valid socket ID
-        if (op !== 'udp-create' && !sockets.has(msg.socketId)) {
+Router()
+    .beforeAll((msg) => {
+        if (msg.op !== 'udp-create' && !sockets.has(msg.socketId)) {
             throw new Error('Invalid socket ID');
         }
-
-        switch (op) {
-            case 'udp-create':
-                result = handleCreate(msg);
-                break;
-            case 'udp-bind':
-                result = await handleBind(msg);
-                break;
-            case 'udp-connect':
-                result = handleConnect(msg);
-                break;
-            case 'udp-disconnect':
-                result = handleDisconnect(msg);
-                break;
-            case 'udp-send':
-                result = await handleSend(msg);
-                break;
-            case 'udp-receive':
-                result = await handleReceive(msg);
-                break;
-            case 'udp-get-local-address':
-                result = handleGetLocal(msg);
-                break;
-            case 'udp-set-unicast-hop-limit':
-                result = handleSetHop(msg);
-                break;
-            case 'udp-recv-buffer-size':
-                result = handleRecvBuffer(msg);
-                break;
-            case 'udp-send-buffer-size':
-                result = handleSendBuffer(msg);
-                break;
-            case 'udp-dispose':
-                result = handleDispose(msg);
-                break;
-            default:
-                throw new Error(`Unknown op ${op}`);
-        }
-        parentPort.postMessage({ id, result });
-    } catch (error) {
-        parentPort.postMessage({ id, error });
-    }
-});
+    })
+    .op('udp-create', handleCreate)
+    .op('udp-bind', handleBind)
+    .op('udp-connect', handleConnect)
+    .op('udp-disconnect', handleDisconnect)
+    .op('udp-send', handleSend)
+    .op('udp-receive', handleReceive)
+    .op('udp-get-local-address', handleGetLocal)
+    .op('udp-set-unicast-hop-limit', handleSetHop)
+    .op('udp-recv-buffer-size', handleRecvBuffer)
+    .op('udp-send-buffer-size', handleSendBuffer)
+    .op('udp-dispose', handleDispose);
 
 function handleCreate({ family }) {
     const socketId = randomUUID();

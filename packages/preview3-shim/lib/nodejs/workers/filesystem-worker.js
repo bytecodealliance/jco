@@ -1,17 +1,34 @@
 import fs from 'fs';
 import { promisify } from 'util';
-import { parentPort } from 'worker_threads';
+import { Router } from '../workers/resource-worker.js';
 
 const readAsync = promisify(fs.read);
 const writeAsync = promisify(fs.write);
-
 const { opendir } = fs.promises;
 
 const CHUNK = 64 * 1024;
 const buffer = Buffer.alloc(CHUNK);
 
-async function handleRead(msg) {
-    const { id, fd, offset, stream } = msg;
+/** Auto‐dispatch all ops */
+Router()
+    .op('read', handleRead)
+    .op('write', handleWrite)
+    .op('readDir', handleReadDir);
+
+/** Map fs.Dirent → WASI type */
+function lookupType(obj) {
+    if (obj.isFile()) return 'regular-file';
+    if (obj.isSocket()) return 'socket';
+    if (obj.isSymbolicLink()) return 'symbolic-link';
+    if (obj.isFIFO()) return 'fifo';
+    if (obj.isDirectory()) return 'directory';
+    if (obj.isCharacterDevice()) return 'character-device';
+    if (obj.isBlockDevice()) return 'block-device';
+    return 'unknown';
+}
+
+/** Read loop → writes into a TransformStream */
+async function handleRead({ fd, offset, stream }) {
     const writer = stream.getWriter();
     try {
         let pos = BigInt(offset);
@@ -25,20 +42,18 @@ async function handleRead(msg) {
         }
 
         await writer.close();
-        parentPort.postMessage({ id, result: { ok: true } });
+        return { ok: true };
     } catch (err) {
         await writer.abort(err);
-        parentPort.postMessage({ id, error: err });
+        throw err;
     }
 }
 
-async function handleWrite(msg) {
-    const { id, fd, offset, stream } = msg;
+async function handleWrite({ fd, offset, stream }) {
     const reader = stream.getReader();
-
     try {
         let pos = BigInt(offset);
-        let total = BigInt(0);
+        let total = 0n;
 
         while (true) {
             const { done, value } = await reader.read();
@@ -54,65 +69,28 @@ async function handleWrite(msg) {
             pos += BigInt(bytesWritten);
             total += BigInt(bytesWritten);
         }
-
-        parentPort.postMessage({
-            id,
-            result: { ok: true, bytesWritten: total },
-        });
+        return { ok: true, bytesWritten: total };
     } catch (err) {
         await reader.cancel(err);
-        parentPort.postMessage({ id, error: err });
+        throw err;
     }
 }
 
-async function handleReadDir(msg) {
-    const { id, fullPath, stream } = msg;
+async function handleReadDir({ fullPath, stream }) {
     const writer = stream.getWriter();
 
     try {
         const walker = await opendir(fullPath);
         for await (const dirent of walker) {
-            const entry = {
+            await writer.write({
                 name: dirent.name,
                 type: lookupType(dirent),
-            };
-            await writer.write(entry);
+            });
         }
         await writer.close();
-        parentPort.postMessage({ id, result: { ok: true } });
+        return { ok: true };
     } catch (err) {
         await writer.abort(err);
-        parentPort.postMessage({ id, error: err });
+        throw err;
     }
-}
-
-parentPort.on('message', async (msg) => {
-    try {
-        switch (msg.op) {
-            case 'read':
-                await handleRead(msg);
-                break;
-            case 'write':
-                await handleWrite(msg);
-                break;
-            case 'readDir':
-                await handleReadDir(msg);
-                break;
-            default:
-                throw new Error('Unknown operation: ' + msg.op);
-        }
-    } catch (e) {
-        parentPort.postMessage({ id: msg.id, error: e });
-    }
-});
-
-function lookupType(obj) {
-    if (obj.isFile()) return 'regular-file';
-    else if (obj.isSocket()) return 'socket';
-    else if (obj.isSymbolicLink()) return 'symbolic-link';
-    else if (obj.isFIFO()) return 'fifo';
-    else if (obj.isDirectory()) return 'directory';
-    else if (obj.isCharacterDevice()) return 'character-device';
-    else if (obj.isBlockDevice()) return 'block-device';
-    return 'unknown';
 }

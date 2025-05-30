@@ -1,4 +1,3 @@
-import { parentPort } from 'worker_threads';
 import { randomUUID } from 'node:crypto';
 import { Readable, Writable, PassThrough } from 'node:stream';
 import { pipeline } from 'stream/promises';
@@ -8,6 +7,15 @@ import { request as httpRequest, Agent as HttpAgent } from 'node:http';
 import { request as httpsRequest, Agent as HttpsAgent } from 'node:https';
 
 import { HttpError } from '../http/error.js';
+import { Router } from '../workers/resource-worker.js';
+
+Router()
+    .op('http-server-start', handleHttpServerStart)
+    .op('http-server-stop', handleHttpServerStop)
+    .op('http-server-next', handleNext)
+    .op('http-server-response', handleResponse)
+    .op('http-server-close', handleHttpServerClose)
+    .op('http-client-request', handleRequest);
 
 class Queue {
     constructor() {
@@ -38,46 +46,6 @@ class Queue {
 // Map<serverId, { server, pending: Queue, inflight: Map }>
 const servers = new Map();
 
-parentPort.on('message', async (msg) => {
-    const { id, op } = msg;
-
-    try {
-        let result;
-        let transferable = [];
-
-        switch (op) {
-            case 'http-server-start':
-                result = await handleHttpServerStart(msg);
-                break;
-            case 'http-server-stop':
-                result = handleHttpServerStop(msg);
-                break;
-            case 'http-server-next':
-                result = await handleNext(msg, transferable);
-                break;
-            case 'http-server-response':
-                result = await handleResponse(msg);
-                break;
-            case 'http-server-close':
-                result = await handleHttpServerClose(msg);
-                break;
-            case 'http-client-request':
-                result = await handleRequest(msg, transferable);
-                break;
-            default:
-                throw new Error(`Unknown operation: ${op}`);
-        }
-
-        if (transferable.length) {
-            parentPort.postMessage({ id, result }, transferable);
-        } else {
-            parentPort.postMessage({ id, result });
-        }
-    } catch (error) {
-        parentPort.postMessage({ id, error });
-    }
-});
-
 async function handleHttpServerStart({ port, host }) {
     const serverId = randomUUID();
     const pending = new Queue();
@@ -98,7 +66,7 @@ async function handleHttpServerStart({ port, host }) {
     return serverId;
 }
 
-async function handleNext({ serverId }, transferable) {
+async function handleNext({ serverId }) {
     const srv = servers.get(serverId);
     if (!srv) throw new Error(`No such server: ${serverId}`);
 
@@ -116,12 +84,10 @@ async function handleNext({ serverId }, transferable) {
         .catch((err) => tx.postMessage({ error: err }))
         .finally(() => tx.close());
 
-    transferable.push(body, trailers);
-
     const headers = toEntries(req.headersDistinct);
     const { method, url } = req;
 
-    return {
+    const result = {
         requestId,
         headers,
         body,
@@ -129,6 +95,8 @@ async function handleNext({ serverId }, transferable) {
         method,
         url,
     };
+
+    return { result, transferable: [body, trailers] };
 }
 
 async function handleResponse({
@@ -165,10 +133,14 @@ async function handleResponse({
     return null;
 }
 
-async function handleRequest(
-    { url, method, headers, trailers, body, timeouts },
-    transferable
-) {
+async function handleRequest({
+    url,
+    method,
+    headers,
+    trailers,
+    body,
+    timeouts,
+}) {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new HttpError('HTTP-protocol-error');
@@ -270,8 +242,7 @@ async function handleRequest(
         trailers: rx,
     };
 
-    transferable.push(web, rx);
-    return result;
+    return { result, transferable: [web, rx] };
 }
 
 function handleHttpServerStop({ serverId }) {
