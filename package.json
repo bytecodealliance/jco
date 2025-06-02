@@ -3,6 +3,7 @@
   "workspaces": [
     "packages/jco",
     "packages/preview2-shim",
+    "packages/preview3-shim",
     "examples/components/add",
     "examples/components/adder",
     "examples/components/http-hello-world",
