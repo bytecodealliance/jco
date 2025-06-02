@@ -32,7 +32,7 @@ export class HttpServer {
 
     async listen(port, host) {
         this.#serverId = await _worker.run({
-            op: 'http-server-start',
+            op: 'server-start',
             port,
             host,
         });
@@ -44,7 +44,7 @@ export class HttpServer {
         if (!this.#serverId) return;
 
         await _worker.run({
-            op: 'http-server-stop',
+            op: 'server-stop',
             serverId: this.#serverId,
         });
 
@@ -56,7 +56,7 @@ export class HttpServer {
 
         await this.stop();
         await _worker.run({
-            op: 'http-server-close',
+            op: 'server-close',
             serverId: this.#serverId,
         });
 
@@ -68,7 +68,7 @@ export class HttpServer {
 
         const nextRequest = async () =>
             await _worker.run({
-                op: 'http-server-next',
+                op: 'server-next',
                 serverId: this.#serverId,
             });
 
@@ -95,7 +95,7 @@ export class HttpServer {
 
                     await _worker.run(
                         {
-                            op: 'http-server-response',
+                            op: 'server-response',
                             serverId: this.#serverId,
                             requestId,
                             statusCode: res.statusCode(),
@@ -107,7 +107,7 @@ export class HttpServer {
                     );
                 } else {
                     await _worker.run({
-                        op: 'http-server-response',
+                        op: 'server-response',
                         serverId: this.#serverId,
                         requestId,
                         statusCode: 500,

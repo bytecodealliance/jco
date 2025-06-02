@@ -10,12 +10,12 @@ import { HttpError } from '../http/error.js';
 import { Router } from '../workers/resource-worker.js';
 
 Router()
-    .op('http-server-start', handleHttpServerStart)
-    .op('http-server-stop', handleHttpServerStop)
-    .op('http-server-next', handleNext)
-    .op('http-server-response', handleResponse)
-    .op('http-server-close', handleHttpServerClose)
-    .op('http-client-request', handleRequest);
+    .op('server-start', handleHttpServerStart)
+    .op('server-stop', handleHttpServerStop)
+    .op('server-next', handleNext)
+    .op('server-response', handleResponse)
+    .op('server-close', handleHttpServerClose)
+    .op('client-request', handleRequest);
 
 class Queue {
     constructor() {

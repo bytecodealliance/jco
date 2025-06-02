@@ -52,7 +52,7 @@ export const HttpClient = {
 
             const parts = await _worker.run(
                 {
-                    op: 'http-client-request',
+                    op: 'client-request',
                     url,
                     method: req.method().tag,
                     headers: req.headers().entries(),
