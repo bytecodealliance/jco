@@ -144,7 +144,6 @@ jobs:
           path: |
             /home/runner/.cache/puppeteer
       - name: Install puppeteer
-        if: steps.cache-puppeteer.outputs.cache-hit != 'true'
         run: |
           npx puppeteer browsers install chrome
 
