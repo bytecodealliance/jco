@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: none
 
@@ -40,54 +44,4 @@ jobs:
         run: |
           node scripts/lint-cc.mjs
 
-      - name: Create CC fix comment
-        if: ${{ steps.cc.outputs.fail == 'true' }}
-        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
-        with:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
-          number: ${{ github.event.pull_request.number }}
-          header: tip-cc
-          recreate: true
-          hide_and_recreate: true
-          skip_unchanged: true
-          message: | # markdown
-            ### :warning: It looks like your commit is not formatted in line with Conventional Commits
-
-            This repository uses [Conventional Commits][cc] to enable automation and ensure consistent commit messages across the project.
-
-            ### ❌ Errors
-
-            | Error Name | Error Message | Commit Message |
-            |------------|---------------|----------------|
-            ${{ steps.cc.outputs.error-rows-md-table }}
-
-            ### ⚠ Warnings
-
-            | Warning Name | Warning Message | Commit Message |
-            |------------|---------------|----------------|
-            ${{ steps.cc.outputs.warning-rows-md-table }}
-
-            ### How to fix this issue
-
-            Please `git amend` (including a `git rebase` if necessary) your commits to follow the [Conventional Commits][cc] format.
-
-            > [!NOTE]
-            > If you don't feel comfortable doing this, don't worry—a project maintainer can help correct this for you, before merging.
-            >
-            > Ensure that maintainers are allowed to modify your pull requests.
-
-            [cc]: https://www.conventionalcommits.org/en/v1.0.0
-
-      - name: Hide PR Comment
-        if: ${{ steps.cc.outputs.success == 'true' }}
-        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
-        with:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
-          number: ${{ github.event.pull_request.number }}
-          header: tip-cc
-          hide: true
-          hide_classify: "RESOLVED"
-          append: true
-          skip_unchanged: true
-          only_update: true
-          message: "This PR is now formatted in line with Conventional Commits"
+      - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1

@@ -194,6 +194,9 @@ pub fn ts_bindgen(
                         TypeDefKind::Option(t) => gen.type_option(*tid, name, t, &ty.docs),
                         TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
                         TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
+                        TypeDefKind::FixedSizeList(t, len) => {
+                            gen.type_fixed_size_list(*tid, name, t, len, &ty.docs)
+                        }
                         TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
@@ -722,6 +725,9 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Option(t) => self.type_option(*id, name, t, &ty.docs),
                 TypeDefKind::Result(r) => self.type_result(*id, name, r, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(*id, name, t, &ty.docs),
+                TypeDefKind::FixedSizeList(t, len) => {
+                    self.type_fixed_size_list(*id, name, t, len, &ty.docs)
+                }
                 TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
                 TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                 TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
@@ -778,10 +784,20 @@ impl<'a> TsInterface<'a> {
                         self.print_optional_ty(r.err.as_ref());
                         self.src.push_str(">");
                     }
-                    TypeDefKind::Variant(_) => panic!("anonymous variant"),
+                    TypeDefKind::Variant(_) => panic!("[print_ty()] anonymous variant"),
                     TypeDefKind::List(v) => self.print_list(v),
-                    TypeDefKind::Future(_) => todo!("anonymous future"),
-                    TypeDefKind::Stream(_) => todo!("anonymous stream"),
+                    // TODO: improve fixed size list
+                    TypeDefKind::FixedSizeList(v, len) => self.print_fixed_size_list(v, len),
+                    TypeDefKind::Future(maybe_ty) => {
+                        self.src.push_str("Promise<");
+                        self.print_optional_ty(maybe_ty.as_ref());
+                        self.src.push_str(">");
+                    }
+                    TypeDefKind::Stream(maybe_ty) => {
+                        self.src.push_str("ReadableStream<");
+                        self.print_optional_ty(maybe_ty.as_ref());
+                        self.src.push_str(">");
+                    }
                     TypeDefKind::Unknown => unreachable!(),
                     TypeDefKind::Resource => todo!(),
                     TypeDefKind::Handle(h) => {
@@ -817,6 +833,16 @@ impl<'a> TsInterface<'a> {
                 self.src.push_str(">");
             }
         }
+    }
+
+    fn print_fixed_size_list(&mut self, ty: &Type, len: &u32) {
+        self.src.push_str("[");
+        for _ in 0..len - 1 {
+            self.print_ty(ty);
+            self.src.push_str(",");
+        }
+        self.print_ty(ty);
+        self.src.push_str("]");
     }
 
     fn print_tuple(&mut self, tuple: &Tuple) {
@@ -894,15 +920,33 @@ impl<'a> TsInterface<'a> {
                     iface.src.push_str("constructor");
                 }
                 FunctionKind::AsyncFreestanding => {
-                    todo!("[ts_func()] FunctionKind::AsyncFreeStanding (declaration gen)")
+                    if is_js_identifier(&out_name) {
+                        iface
+                            .src
+                            .push_str(&format!("export async function {out_name}"));
+                    } else {
+                        let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
+                        iface
+                            .src
+                            .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
+                        iface
+                            .src
+                            .push_str(&format!("declare async function {local_name}"));
+                    };
                 }
-                FunctionKind::AsyncMethod(id) => {
-                    let _ = id;
-                    todo!("[ts_func()] FunctionKind::AsyncMethod (declaration gen)")
+                FunctionKind::AsyncMethod(_) => {
+                    if is_js_identifier(&out_name) {
+                        iface.src.push_str(&format!("async {out_name}"));
+                    } else {
+                        iface.src.push_str(&format!("async '{out_name}'"));
+                    }
                 }
-                FunctionKind::AsyncStatic(id) => {
-                    let _ = id;
-                    todo!("[ts_func()] FunctionKind::AsyncStatic (declaration gen)")
+                FunctionKind::AsyncStatic(_) => {
+                    if is_js_identifier(&out_name) {
+                        iface.src.push_str(&format!("static async {out_name}"))
+                    } else {
+                        iface.src.push_str(&format!("static async '{out_name}'"))
+                    }
                 }
             }
         } else if is_js_identifier(&out_name) {
@@ -1185,6 +1229,14 @@ impl<'a> TsInterface<'a> {
         self.src
             .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
         self.print_list(ty);
+        self.src.push_str(";\n");
+    }
+
+    fn type_fixed_size_list(&mut self, _id: TypeId, name: &str, ty: &Type, len: &u32, docs: &Docs) {
+        self.docs(docs);
+        self.src
+            .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
+        self.print_fixed_size_list(ty, len);
         self.src.push_str(";\n");
     }
 

@@ -88,12 +88,16 @@ pub enum AugmentedOp {
 }
 
 impl<'a> Translation<'a> {
+    /// Create a new translation
     pub fn new(translation: ModuleTranslation<'a>, multi_memory: bool) -> Result<Translation<'a>> {
         if multi_memory {
             return Ok(Translation::Normal(translation));
         }
+
+        // Set up wasm features to use
         let mut features = WasmFeatures::default();
         features.set(WasmFeatures::MULTI_MEMORY, false);
+
         match Validator::new_with_features(features).validate_all(translation.wasm) {
             // This module validates without multi-memory, no need to augment
             // it
@@ -624,7 +628,10 @@ macro_rules! define_translate {
             #[allow(dropping_copy_types)]
             fn $visit(&mut self $(, $($arg: $argty),*)?)  {
                 #[allow(unused_imports)]
-                use wasm_encoder::Instruction::*;
+                use wasm_encoder::{
+                    Instruction::*,
+                    Ieee32, Ieee64,
+                };
 
                 define_translate!(translate self $op $($($arg)*)?)
             }
@@ -715,8 +722,8 @@ macro_rules! define_translate {
     );
     (mk I32Const $v:ident) => (I32Const($v));
     (mk I64Const $v:ident) => (I64Const($v));
-    (mk F32Const $v:ident) => (F32Const(f32::from_bits($v.bits())));
-    (mk F64Const $v:ident) => (F64Const(f64::from_bits($v.bits())));
+    (mk F32Const $v:ident) => (F32Const(Ieee32::from(f32::from_bits($v.bits()))));
+    (mk F64Const $v:ident) => (F64Const(Ieee64::from(f64::from_bits($v.bits()))));
     (mk V128Const $v:ident) => (V128Const($v.i128()));
     (mk TryTable $v:ident) => (unimplemented_try_table());
     (mk MemoryGrow $($x:tt)*) => ({
@@ -737,6 +744,8 @@ macro_rules! define_translate {
     (map $self:ident $arg:ident ordering) => {$self.ordering($arg)};
     (map $self:ident $arg:ident blockty) => {$self.blockty($arg)};
     (map $self:ident $arg:ident hty) => {$self.heapty($arg)};
+    // (map $self:ident $arg:ident tys) => {$self.tys($arg)};
+    (map $self:ident $arg:ident tys) => {$self.tys($arg)};
     (map $self:ident $arg:ident tag_index) => {$arg};
     (map $self:ident $arg:ident relative_depth) => {$arg};
     (map $self:ident $arg:ident function_index) => {$self.augmenter.remap_func($arg)};
@@ -819,6 +828,14 @@ impl Translator<'_, '_> {
         }
     }
     fn heapty(&self, _ty: wasmparser::HeapType) -> wasm_encoder::HeapType {
+        unimplemented!()
+    }
+
+    fn tys<'a>(
+        &self,
+        _ty: Vec<wasmparser::ValType>,
+    ) -> std::borrow::Cow<'a, [wasm_encoder::ValType]> {
+        // TODO: IMPLEMENT
         unimplemented!()
     }
 

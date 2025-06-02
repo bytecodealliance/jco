@@ -15,13 +15,19 @@ use crate::intrinsics::Intrinsic;
 use crate::{get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
+/// Method of error handling
 #[derive(PartialEq)]
 pub enum ErrHandling {
+    /// Do no special handling of errors, requiring users to return objects that represent
+    /// errors as represented in WIT
     None,
+    /// Require throwing of result error objects
     ThrowResultErr,
+    /// Catch thrown errors and convert them into result<t,e> error variants
     ResultCatchHandler,
 }
 
+/// Data related to a given resource
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResourceData {
     Host {
@@ -36,7 +42,6 @@ pub enum ResourceData {
     },
 }
 
-///
 /// Map used for resource function bindgen within a given component
 ///
 /// Mapping from the instance + resource index in that component (internal or external)
@@ -62,34 +67,86 @@ pub enum ResourceData {
 /// In the case of an imported resource tables, in place of "rep" we just store
 /// the direct JS object being referenced, since in JS the object is its own handle.
 ///
-///
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResourceTable {
+    /// Whether a resource was imported
+    ///
+    /// This should be tracked because imported types cannot be re-exported uniquely (?)
     pub imported: bool,
+
+    /// Data related to the actual resource
     pub data: ResourceData,
 }
+
+/// A mapping of type IDs to the resources that they represent
 pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
+/// A mapping of remote reps that represent imported resources
+pub type RemoteResourceMap = BTreeMap<u32, ResourceTable>;
+
 pub struct FunctionBindgen<'a> {
+    /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
-    pub cur_resource_borrows: bool,
+
+    /// Mapping of resources for types that are defined only in the remote component
+    /// and must be auto-vivicated locally.
+    pub remote_resource_map: &'a RemoteResourceMap,
+
+    /// Whether current resource borrows need to be deactivated
+    pub clear_resource_borrows: bool,
+
+    /// Set of intrinsics
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
+
+    /// Whether to perform valid lifting optimization
     pub valid_lifting_optimization: bool,
+
+    /// Sizes and alignments for sub elements
     pub sizes: &'a SizeAlign,
+
+    /// Method of error handling
     pub err: ErrHandling,
+
+    /// Temporary values
     pub tmp: usize,
+
+    /// Source code of the function
     pub src: source::Source,
+
+    /// Block storage
     pub block_storage: Vec<source::Source>,
+
+    /// Blocks of the fucntion
     pub blocks: Vec<(String, Vec<String>)>,
+
+    /// Parameters of the function
     pub params: Vec<String>,
+
+    /// Memory variable
     pub memory: Option<&'a String>,
+
+    /// Realloc function name
     pub realloc: Option<&'a String>,
+
+    /// Post return function name
     pub post_return: Option<&'a String>,
+
+    /// Prefix to use when printing tracing information
     pub tracing_prefix: Option<&'a String>,
+
+    /// Method if string encoding
     pub encoding: StringEncoding,
+
+    /// Callee of the function
     pub callee: &'a str,
+
+    /// Whether the callee is dynamic (i.e. has multiple operands)
     pub callee_resource_dynamic: bool,
+
+    /// The [`wit_bindgen::Resolve`] containing extracted WIT information
     pub resolve: &'a Resolve,
+
+    /// Whether the function is async
     pub is_async: bool,
 }
 
@@ -259,29 +316,15 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 }
             }
-
-            // The representation of i32 in JS is a number, so 8/16-bit values
-            // get further clamped to ensure that the upper bits aren't set when
-            // we pass the value, ensuring that only the right number of bits
-            // are transferred.
             Instruction::U8FromI32 => self.clamp_guest(results, operands, u8::MIN, u8::MAX),
             Instruction::S8FromI32 => self.clamp_guest(results, operands, i8::MIN, i8::MAX),
             Instruction::U16FromI32 => self.clamp_guest(results, operands, u16::MIN, u16::MAX),
             Instruction::S16FromI32 => self.clamp_guest(results, operands, i16::MIN, i16::MAX),
-            // Use `>>>0` to ensure the bits of the number are treated as
-            // unsigned.
             Instruction::U32FromI32 => results.push(format!("{} >>> 0", operands[0])),
-            // All bigints coming from wasm are treated as signed, so convert
-            // it to ensure it's treated as unsigned.
             Instruction::U64FromI64 => results.push(format!("BigInt.asUintN(64, {})", operands[0])),
-            // Nothing to do signed->signed where the representations are the
-            // same.
             Instruction::S32FromI32 | Instruction::S64FromI64 => {
                 results.push(operands.pop().unwrap())
             }
-
-            // All values coming from the host and going to wasm need to have
-            // their ranges validated, since the host could give us any value.
             Instruction::I32FromU8 => {
                 let conv = self.intrinsic(Intrinsic::ToUint8);
                 results.push(format!("{conv}({op})", op = operands[0]))
@@ -314,39 +357,25 @@ impl Bindgen for FunctionBindgen<'_> {
                 let conv = self.intrinsic(Intrinsic::ToBigInt64);
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
-
-            // The native representation in JS of f32 and f64 is just a number,
-            // so there's nothing to do here. Everything wasm gives us is
-            // representable in JS.
             Instruction::F32FromCoreF32 | Instruction::F64FromCoreF64 => {
                 results.push(operands.pop().unwrap())
             }
-
-            // Use a unary `+` to cast to a float.
             Instruction::CoreF32FromF32 | Instruction::CoreF64FromF64 => {
                 results.push(format!("+{}", operands[0]))
             }
-
-            // Validate that i32 values coming from wasm are indeed valid code
-            // points.
             Instruction::CharFromI32 => {
                 let validate = self.intrinsic(Intrinsic::ValidateGuestChar);
                 results.push(format!("{}({})", validate, operands[0]));
             }
-
-            // Validate that strings are indeed 1 character long and valid
-            // unicode.
             Instruction::I32FromChar => {
                 let validate = self.intrinsic(Intrinsic::ValidateHostChar);
                 results.push(format!("{}({})", validate, operands[0]));
             }
-
             Instruction::Bitcasts { casts } => {
                 for (cast, op) in casts.iter().zip(operands) {
                     results.push(self.bitcast(cast, op));
                 }
             }
-
             Instruction::BoolFromI32 => {
                 let tmp = self.tmp();
                 uwrite!(self.src, "var bool{} = {};\n", tmp, operands[0]);
@@ -362,7 +391,6 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::I32FromBool => {
                 results.push(format!("{} ? 1 : 0", operands[0]));
             }
-
             Instruction::RecordLower { record, .. } => {
                 // use destructuring field access to get each
                 // field individually.
@@ -380,7 +408,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 uwrite!(self.src, "{} }} = {};\n", expr, operands[0]);
             }
-
             Instruction::RecordLift { record, .. } => {
                 // records are represented as plain objects, so we
                 // make a new object and set all the fields with an object
@@ -392,7 +419,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 result.push('}');
                 results.push(result);
             }
-
             Instruction::TupleLower { tuple, .. } => {
                 // Tuples are represented as an array, sowe can use
                 // destructuring assignment to lower the tuple into its
@@ -409,14 +435,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 uwrite!(self.src, "{}] = {};\n", expr, operands[0]);
             }
-
             Instruction::TupleLift { .. } => {
                 // Tuples are represented as an array, so we just shove all
                 // the operands into an array.
                 results.push(format!("[{}]", operands.join(", ")));
             }
-
-            // This lowers flags from a dictionary of booleans in accordance with https://webidl.spec.whatwg.org/#es-dictionary.
             Instruction::FlagsLower { flags, .. } => {
                 let op0 = &operands[0];
 
@@ -451,8 +474,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 uwrite!(
-                    self.src,
-                    "\
+                            self.src,
+                            "\
                     }} else if ({op0} !== null && {op0} !== undefined) {{
                         throw new TypeError('only an object, undefined or null can be converted to flags');
                     }}
@@ -462,7 +485,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 // case, since that's interpreted as everything false, and we
                 // already defaulted everyting to 0.
             }
-
             Instruction::FlagsLift { flags, .. } => {
                 let tmp = self.tmp();
                 results.push(format!("flags{tmp}"));
@@ -493,9 +515,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 uwriteln!(self.src, "}};");
             }
-
             Instruction::VariantPayloadName => results.push("e".to_string()),
-
             Instruction::VariantLower {
                 variant,
                 results: result_types,
@@ -543,7 +563,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
                 uwriteln!(self.src, "}}");
             }
-
             Instruction::VariantLift { variant, name, .. } => {
                 let blocks = self
                     .blocks
@@ -595,7 +614,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "}}");
                 results.push(format!("variant{}", tmp));
             }
-
             Instruction::OptionLower {
                 payload,
                 results: result_types,
@@ -648,7 +666,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
             }
-
             Instruction::OptionLift { payload, .. } => {
                 let (some, some_results) = self.blocks.pop().unwrap();
                 let (none, none_results) = self.blocks.pop().unwrap();
@@ -709,7 +726,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 results.push(format!("variant{tmp}"));
             }
-
             Instruction::ResultLower {
                 results: result_types,
                 ..
@@ -750,7 +766,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     }}",
                 );
             }
-
             Instruction::ResultLift { result, .. } => {
                 let (err, err_results) = self.blocks.pop().unwrap();
                 let (ok, ok_results) = self.blocks.pop().unwrap();
@@ -818,8 +833,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 results.push(format!("variant{tmp}"));
             }
-
-            // Lowers an enum in accordance with https://webidl.spec.whatwg.org/#es-enumeration.
             Instruction::EnumLower { name, enum_, .. } => {
                 let tmp = self.tmp();
 
@@ -852,16 +865,15 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
                 uwriteln!(
-                    self.src,
-                    "
+                            self.src,
+                            "
                             throw new TypeError(`\"${{val{tmp}}}\" is not one of the cases of {name}`);
                         }}
                     }}",
-                );
+                        );
 
                 results.push(format!("enum{tmp}"));
             }
-
             Instruction::EnumLift { name, enum_, .. } => {
                 let tmp = self.tmp();
 
@@ -894,7 +906,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 results.push(format!("enum{tmp}"));
             }
-
             Instruction::ListCanonLower { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
@@ -916,14 +927,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 // TODO: this is the wrong endianness
                 if matches!(element, Type::U8) {
                     uwriteln!(
-                        self.src,
-                        "var src{tmp} = new Uint8Array(val{tmp}.buffer || val{tmp}, val{tmp}.byteOffset, len{tmp} * {size});",
-                    );
+                                self.src,
+                                "var src{tmp} = new Uint8Array(val{tmp}.buffer || val{tmp}, val{tmp}.byteOffset, len{tmp} * {size});",
+                            );
                 } else {
                     uwriteln!(
-                        self.src,
-                        "var src{tmp} = new Uint8Array(val{tmp}.buffer, val{tmp}.byteOffset, len{tmp} * {size});",
-                    );
+                                self.src,
+                                "var src{tmp} = new Uint8Array(val{tmp}.buffer, val{tmp}.byteOffset, len{tmp} * {size});",
+                            );
                 }
                 uwriteln!(
                     self.src,
@@ -940,10 +951,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 // TODO: this is the wrong endianness
                 let array_ty = array_ty(resolve, element).unwrap();
                 uwriteln!(
-                    self.src,
-                    "var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {}));",
-                    self.sizes.size(element).size_wasm32(),
-                );
+                            self.src,
+                            "var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {}));",
+                            self.sizes.size(element).size_wasm32(),
+                        );
                 results.push(format!("result{tmp}"));
             }
             Instruction::StringLower { .. } => {
@@ -993,13 +1004,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
                 uwriteln!(
-                    self.src,
-                    "var result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
-                    if self.encoding == StringEncoding::UTF16 { "16" } else { "8" }
-                );
+                            self.src,
+                            "var result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
+                            if self.encoding == StringEncoding::UTF16 { "16" } else { "8" }
+                        );
                 results.push(format!("result{tmp}"));
             }
-
             Instruction::ListLower { element, .. } => {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 assert!(body_results.is_empty());
@@ -1033,7 +1043,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(result);
                 results.push(len);
             }
-
             Instruction::ListLift { element, .. } => {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 let tmp = self.tmp();
@@ -1053,11 +1062,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "{result}.push({});", body_results[0]);
                 uwrite!(self.src, "}}\n");
             }
-
             Instruction::IterElem { .. } => results.push("e".to_string()),
-
             Instruction::IterBasePointer => results.push("base".to_string()),
-
             Instruction::CallWasm { sig, .. } => {
                 let sig_results_length = sig.results.len();
                 self.bind_results(sig_results_length, results);
@@ -1082,7 +1088,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
             }
-
             Instruction::CallInterface { func, .. } => {
                 let results_length = if func.result.is_none() { 0 } else { 1 };
                 let maybe_async_await = if self.is_async { "await " } else { "" };
@@ -1144,14 +1149,15 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 // After a high level call, we need to deactivate the component resource borrows.
-                if self.cur_resource_borrows {
+                if self.clear_resource_borrows {
                     let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
                     let cur_resource_borrows = self.intrinsic(Intrinsic::CurResourceBorrows);
-                    let host = matches!(
+                    let is_host = matches!(
                         self.resource_map.iter().nth(0).unwrap().1.data,
                         ResourceData::Host { .. }
                     );
-                    if host {
+
+                    if is_host {
                         uwriteln!(
                             self.src,
                             "for (const rsc of {cur_resource_borrows}) {{
@@ -1171,10 +1177,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             {cur_resource_borrows} = [];"
                         );
                     }
-                    self.cur_resource_borrows = false;
+                    self.clear_resource_borrows = false;
                 }
             }
-
             Instruction::Return { amt, .. } => {
                 if *amt == 0 {
                     if let Some(f) = &self.post_return {
@@ -1214,7 +1219,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 }
             }
-
             Instruction::I32Load { offset } => self.load("getInt32", *offset, operands, results),
             Instruction::I64Load { offset } => self.load("getBigInt64", *offset, operands, results),
             Instruction::F32Load { offset } => self.load("getFloat32", *offset, operands, results),
@@ -1231,7 +1235,6 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::F64Store { offset } => self.store("setFloat64", *offset, operands),
             Instruction::I32Store8 { offset } => self.store("setInt8", *offset, operands),
             Instruction::I32Store16 { offset } => self.store("setInt16", *offset, operands),
-
             Instruction::LengthStore { offset } => self.store("setInt32", *offset, operands),
             Instruction::LengthLoad { offset } => self.load("getInt32", *offset, operands, results),
             Instruction::PointerStore { offset } => self.store("setInt32", *offset, operands),
@@ -1282,26 +1285,26 @@ impl Bindgen for FunctionBindgen<'_> {
                                 // Sending an own handle out to JS as a return value - set up finalizer and disposal.
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(self.src,
-                                    "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
+                                            "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                     finalizationRegistry{tid}.register({rsc}, {handle}, {rsc});");
                                 if let Some(dtor) = dtor_name {
                                     // The Symbol.dispose function gets disabled on drop, so we can rely on the own handle remaining valid.
                                     uwriteln!(
-                                        self.src,
-                                        "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{
+                                                self.src,
+                                                "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{
                                             finalizationRegistry{tid}.unregister({rsc});
                                             {rsc_table_remove}(handleTable{tid}, {handle});
                                             {rsc}[{symbol_dispose}] = {empty_func};
                                             {rsc}[{symbol_resource_handle}] = undefined;
                                             {dtor}(handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag});
                                         }}}});"
-                                    );
+                                            );
                                 } else {
                                     // Set up Symbol.dispose for borrows to allow its call, even though it does nothing.
                                     uwriteln!(
-                                        self.src,
-                                        "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: {empty_func} }});",
-                                    );
+                                                self.src,
+                                                "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: {empty_func} }});",
+                                            );
                                 }
                             } else {
                                 // Borrow handles of local resources have rep handles, which we carry through here.
@@ -1315,14 +1318,14 @@ impl Bindgen for FunctionBindgen<'_> {
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
                             uwriteln!(self.src,
-                                "var {rep} = handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag};
+                                        "var {rep} = handleTable{tid}[({handle} << 1) + 1] & ~{rsc_flag};
                                 var {rsc} = captureTable{rid}.get({rep});
                                 if (!{rsc}) {{
                                     {rsc} = Object.create({local_name}.prototype);
                                     Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                     Object.defineProperty({rsc}, {symbol_resource_rep}, {{ writable: true, value: {rep} }});
                                 }}"
-                            );
+                                    );
                             if is_own {
                                 // An own lifting is a transfer to JS, so existing own handle is implicitly dropped.
                                 uwriteln!(
@@ -1340,7 +1343,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             let cur_resource_borrows =
                                 self.intrinsic(Intrinsic::CurResourceBorrows);
                             uwriteln!(self.src, "{cur_resource_borrows}.push({rsc});");
-                            self.cur_resource_borrows = true;
+                            self.clear_resource_borrows = true;
                         }
                     }
 
@@ -1357,12 +1360,12 @@ impl Bindgen for FunctionBindgen<'_> {
                             if is_own {
                                 uwriteln!(self.src, "var {rsc} = repTable.get($resource_{prefix}rep${lower_camel}({handle})).rep;");
                                 uwrite!(
-                                    self.src,
-                                    "repTable.delete({handle});
+                                            self.src,
+                                            "repTable.delete({handle});
                                      delete {rsc}[{symbol_resource_handle}];
                                      finalizationRegistry_export${prefix}{lower_camel}.unregister({rsc});
                                     "
-                                );
+                                        );
                             } else {
                                 uwriteln!(self.src, "var {rsc} = repTable.get({handle}).rep;");
                             }
@@ -1370,22 +1373,22 @@ impl Bindgen for FunctionBindgen<'_> {
                             let upper_camel = resource_name.to_upper_camel_case();
 
                             uwrite!(
-                                self.src,
-                                "var {rsc} = new.target === import_{prefix}{upper_camel} ? this : Object.create(import_{prefix}{upper_camel}.prototype);
+                                        self.src,
+                                        "var {rsc} = new.target === import_{prefix}{upper_camel} ? this : Object.create(import_{prefix}{upper_camel}.prototype);
                                  Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                 "
-                            );
+                                    );
 
                             uwriteln!(
-                                self.src,
-                                "finalizationRegistry_import${prefix}{lower_camel}.register({rsc}, {handle}, {rsc});",
-                            );
+                                        self.src,
+                                        "finalizationRegistry_import${prefix}{lower_camel}.register({rsc}, {handle}, {rsc});",
+                                    );
 
                             if !is_own {
                                 let cur_resource_borrows =
                                     self.intrinsic(Intrinsic::CurResourceBorrows);
                                 uwriteln!(self.src, "{cur_resource_borrows}.push({{ rsc: {rsc}, drop: $resource_import${prefix}drop${lower_camel} }});");
-                                self.cur_resource_borrows = true;
+                                self.clear_resource_borrows = true;
                             }
                         }
                     }
@@ -1418,15 +1421,15 @@ impl Bindgen for FunctionBindgen<'_> {
                             if is_own {
                                 let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
                                 uwriteln!(
-                                    self.src,
-                                    "var {handle} = {op}[{symbol_resource_handle}];
+                                            self.src,
+                                            "var {handle} = {op}[{symbol_resource_handle}];
                                     if (!{handle}) {{
                                         throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                     }}
                                     finalizationRegistry{tid}.unregister({op});
                                     {op}[{symbol_dispose}] = {empty_func};
                                     {op}[{symbol_resource_handle}] = undefined;",
-                                );
+                                        );
                             } else {
                                 // When expecting a borrow, the JS resource provided will always be an own
                                 // handle. This is because it is not possible for borrow handles to be passed
@@ -1435,23 +1438,23 @@ impl Bindgen for FunctionBindgen<'_> {
                                 let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
                                 let own_handle = format!("handle{}", self.tmp());
                                 uwriteln!(self.src,
-                                    "var {own_handle} = {op}[{symbol_resource_handle}];
+                                            "var {own_handle} = {op}[{symbol_resource_handle}];
                                     if (!{own_handle} || (handleTable{tid}[({own_handle} << 1) + 1] & {rsc_flag}) === 0) {{
                                         throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                     }}
                                     var {handle} = handleTable{tid}[({own_handle} << 1) + 1] & ~{rsc_flag};",
-                                );
+                                        );
                             }
                         } else {
                             // Imported resources may already have a handle if they were constructed
                             // by a component and then passed out.
                             uwriteln!(
-                                self.src,
-                                "if (!({op} instanceof {local_name})) {{
+                                        self.src,
+                                        "if (!({op} instanceof {local_name})) {{
                                      throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                  }}
                                  var {handle} = {op}[{symbol_resource_handle}];",
-                            );
+                                    );
                             // Otherwise, in hybrid bindgen we check for a Symbol.for('cabiRep')
                             // to get the resource rep.
                             // Fall back to assign a new rep in the capture table, when the imported
@@ -1485,17 +1488,17 @@ impl Bindgen for FunctionBindgen<'_> {
                         if !imported {
                             let local_rep = format!("localRep{}", self.tmp());
                             uwriteln!(
-                                self.src,
-                                "if (!({op} instanceof {upper_camel})) {{
+                                        self.src,
+                                        "if (!({op} instanceof {upper_camel})) {{
                                     throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
                                 }}
                                 let {handle} = {op}[{symbol_resource_handle}];",
-                            );
+                                    );
 
                             if is_own {
                                 uwriteln!(
-                                    self.src,
-                                    "if ({handle} === undefined) {{
+                                            self.src,
+                                            "if ({handle} === undefined) {{
                                         var {local_rep} = repCnt++;
                                         repTable.set({local_rep}, {{ rep: {op}, own: true }});
                                         {handle} = $resource_{prefix}new${lower_camel}({local_rep});
@@ -1503,7 +1506,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                         finalizationRegistry_export${prefix}{lower_camel}.register({op}, {handle}, {op});
                                     }}
                                     "
-                                );
+                                        );
                             } else {
                                 uwriteln!(
                                     self.src,
@@ -1530,25 +1533,22 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(handle);
             }
 
-            // For most non-Promise objects, flushing or evaluating the object is a no-op,
-            // so until async is implemented, we can only pass through objects without modification
-            //
-            // During async implementation this flush should check for Promises and await them
-            // as necessary
+            Instruction::DropHandle { ty } => {
+                let _ = ty;
+                todo!()
+            }
+
             Instruction::Flush { amt } => {
                 for n in 0..*amt {
                     results.push(operands[n].clone());
                 }
             }
 
-            // TODO: implement async
             Instruction::FutureLower { .. }
             | Instruction::FutureLift { .. }
             | Instruction::StreamLower { .. }
             | Instruction::StreamLift { .. }
-            | Instruction::AsyncCallWasm { .. }
-            | Instruction::AsyncPostCallInterface { .. }
-            | Instruction::AsyncCallReturn { .. }
+            | Instruction::AsyncTaskReturn { .. }
             | Instruction::ErrorContextLift { .. }
             | Instruction::ErrorContextLower { .. } => {
                 uwrite!(self.src, "throw new Error('async is not yet implemented');");
