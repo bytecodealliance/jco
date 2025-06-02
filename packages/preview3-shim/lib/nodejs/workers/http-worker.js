@@ -166,9 +166,7 @@ async function handleRequest({
     const req = request(reqOpts);
 
     if (firstByteTimeout) {
-        req.setTimeout(msecs(firstByteTimeout), () => {
-            req.destroy(new HttpError('connection-timeout'));
-        });
+        req.setTimeout(msecs(firstByteTimeout));
     }
 
     if (body) {
@@ -192,7 +190,6 @@ async function handleRequest({
         };
         const onError = (err) => {
             cleanup();
-            req.destroy(err);
             reject(err);
         };
         const onTimeout = () => {
