@@ -545,6 +545,7 @@ class Descriptor {
         if (!preopenEntries.length) throw new FsError('access');
 
         const fullPath = this.#getFullPath(path, pf.symlinkFollow);
+        const target = stripTrailingSlash(fullPath);
 
         // prettier-ignore
         const makeFsFlags = () => {
@@ -591,9 +592,6 @@ class Descriptor {
         }
 
         try {
-            const target = fullPath.endsWith('/')
-                ? fullPath.slice(0, -1)
-                : fullPath;
             const handle = await fs.open(target, fsFlags);
             const desc = descriptorCreate(handle, df, fullPath);
 
@@ -698,16 +696,19 @@ class Descriptor {
     async symlinkAt(target, path) {
         if (target.startsWith('/')) throw new FsError('not-permitted');
         const full = this.#getFullPath(path, false);
+
         try {
             await fs.symlink(target, full);
         } catch (e) {
             if (full.endsWith('/') && e.code === 'EEXIST') {
                 const isDir = (await fs.stat(full)).isDirectory();
-                if (!isDir)
-                    throw process.platform === 'win32'
-                        ? 'no-entry'
-                        : 'not-directory';
+                const isWin = process.platform === 'win32';
+                if (!isDir) {
+                    const tag = isWin ? 'no-entry' : 'not-directory';
+                    throw new FsError(tag);
+                }
             }
+
             if (
                 process.platform === 'win32' &&
                 ['EPERM', 'EEXIST'].includes(e.code)
@@ -750,8 +751,9 @@ class Descriptor {
         } catch (err) {
             if (process.platform === 'win32' && err.code === 'EPERM') {
                 throw new FsError('access');
+            } else {
+                throw FsError.from(err);
             }
-            throw FsError.from(err);
         }
     }
 
@@ -880,7 +882,7 @@ class Descriptor {
             return base;
         }
 
-        const baseNormalized = base.replace(/\/$/, '');
+        const baseNormalized = stripTrailingSlash(base);
         return `${baseNormalized}/${segments.join('/')}`;
     }
 
@@ -911,6 +913,11 @@ function nsToDateTime(ns) {
 
 function timestampToSec({ seconds, nanoseconds }) {
     return Number(seconds) + nanoseconds / 1e9;
+}
+
+function stripTrailingSlash(path) {
+    if (path === '/') return '/';
+    return path.replace(/\/+$/, '');
 }
 
 const descriptorCreatePreopen = Descriptor._createPreopen;
