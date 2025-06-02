@@ -340,14 +340,31 @@ class Descriptor {
      * @throws {FsError} `payload.tag` contains mapped WASI error code.
      */
     async sync() {
-        this.#ensureHandle();
-        try {
-            await this.#handle.sync();
-        } catch (e) {
-            // On windows, `sync_data` uses `FileFlushBuffers` which fails with `EPERM` if
-            // the file is not upen for writing. Ignore this error, for POSIX compatibility.
-            if (process.platform === 'win32' && e.code === 'EPERM') return;
-            throw FsError.from(e);
+        if (this.#hostPreopen) {
+            try {
+                // For preopened directories, try to sync using fsync on the directory
+                const handle = await fs.open(
+                    this.#hostPreopen,
+                    fs.constants.O_RDONLY
+                );
+                try {
+                    await handle.sync();
+                } finally {
+                    await handle.close();
+                }
+            } catch (e) {
+                throw FsError.from(e);
+            }
+        } else {
+            this.#ensureHandle();
+            try {
+                await this.#handle.sync();
+            } catch (e) {
+                // On windows, `sync_data` uses `FileFlushBuffers` which fails with `EPERM` if
+                // the file is not upen for writing. Ignore this error, for POSIX compatibility.
+                if (process.platform === 'win32' && e.code === 'EPERM') return;
+                throw FsError.from(e);
+            }
         }
     }
 
