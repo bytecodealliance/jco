@@ -60,11 +60,12 @@ let stderrStream = outputStreamCreate(STDERR, 2);
 export const stdin = {
     InputStream,
     getStdin() {
-        if (!stdinStream)
+        if (!stdinStream) {
             stdinStream = inputStreamCreate(
                 STDIN,
                 ioCall(INPUT_STREAM_CREATE | STDIN, null, null)
             );
+        }
         return stdinStream;
     },
 };

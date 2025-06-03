@@ -37,9 +37,12 @@ getRandomBytes[Symbol.for('cabiLower')] = ({ memory, realloc }) => {
         len = Number(len);
         const ptr = realloc(0, 0, 1, len);
         randomFillSync(memory.buffer, ptr, len);
-        if (memory.buffer !== buf32.buffer)
+        if (memory.buffer !== buf32.buffer) {
             buf32 = new Uint32Array(memory.buffer);
-        if (retptr % 4) throw new Error('wasi-io trap: retptr not aligned');
+        }
+        if (retptr % 4) {
+            throw new Error('wasi-io trap: retptr not aligned');
+        }
         buf32[retptr >> 2] = ptr;
         buf32[(retptr >> 2) + 1] = len;
     };
