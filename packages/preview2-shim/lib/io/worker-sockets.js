@@ -78,12 +78,15 @@ export function socketResolveAddress(name) {
             parsedUrl.pathname !== '/' ||
             parsedUrl.search.length ||
             parsedUrl.hash.length
-        )
+        ) {
             parsedUrl = null;
+        }
     } catch {
         // empty
     }
-    if (!parsedUrl) throw 'invalid-argument';
+    if (!parsedUrl) {
+        throw 'invalid-argument';
+    }
 
     return lookup(name, dnsLookupOptions).then(
         (addresses) => {
@@ -263,14 +266,14 @@ export function isUnicastIpAddress(ipSocketAddress) {
  */
 export function isWildcardAddress(ipSocketAddress) {
     const { address } = ipSocketAddress.val;
-    if (ipSocketAddress.tag === 'ipv4')
+    if (ipSocketAddress.tag === 'ipv4') {
         return (
             address[0] === 0 &&
             address[1] === 0 &&
             address[2] === 0 &&
             address[3] === 0
         );
-    else
+    } else {
         return (
             address[0] === 0 &&
             address[1] === 0 &&
@@ -281,6 +284,7 @@ export function isWildcardAddress(ipSocketAddress) {
             address[6] === 0 &&
             address[7] === 0
         );
+    }
 }
 
 /**
@@ -305,7 +309,9 @@ export function isBroadcastIpAddress(ipSocketAddress) {
  * @returns {string}
  */
 export function serializeIpAddress(addr) {
-    if (addr.tag === 'ipv4') return tupleToIpv4(addr.val.address);
+    if (addr.tag === 'ipv4') {
+        return tupleToIpv4(addr.val.address);
+    }
     return tupleToIPv6(addr.val.address);
 }
 
@@ -331,7 +337,7 @@ export function ipv4ToTuple(ipv4) {
  * @returns {IpSocketAddress}
  */
 export function ipSocketAddress(family, addr, port) {
-    if (family === 'ipv4')
+    if (family === 'ipv4') {
         return {
             tag: 'ipv4',
             val: {
@@ -339,6 +345,7 @@ export function ipSocketAddress(family, addr, port) {
                 address: ipv4ToTuple(addr),
             },
         };
+    }
     return {
         tag: 'ipv6',
         val: {
@@ -364,11 +371,15 @@ async function getDefaultBufferSizes() {
 }
 
 export async function getDefaultSendBufferSize() {
-    if (!_sendBufferSize) await getDefaultBufferSizes();
+    if (!_sendBufferSize) {
+        await getDefaultBufferSizes();
+    }
     return _sendBufferSize;
 }
 
 export async function getDefaultReceiveBufferSize() {
-    if (!_recvBufferSize) await getDefaultBufferSizes();
+    if (!_recvBufferSize) {
+        await getDefaultBufferSizes();
+    }
     return _recvBufferSize;
 }

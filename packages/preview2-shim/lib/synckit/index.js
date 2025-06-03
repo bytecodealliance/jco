@@ -57,10 +57,11 @@ export function createSyncFn(workerPath, debug, callbackHandler) {
         execArgv: [],
     });
     worker.on('message', ({ type, id, payload }) => {
-        if (!type)
+        if (!type) {
             throw new Error(
                 'Internal error: Expected a type of a worker callback'
             );
+        }
         callbackHandler(type, id, payload);
     });
     let nextID = 0;
@@ -86,12 +87,16 @@ export function createSyncFn(workerPath, debug, callbackHandler) {
             );
         }
         if (error) {
-            if (error instanceof Error) throw Object.assign(error, properties);
+            if (error instanceof Error) {
+                throw Object.assign(error, properties);
+            }
             throw error;
         }
         return result;
     };
-    if (worker.unref) worker.unref();
+    if (worker.unref) {
+        worker.unref();
+    }
     return syncFn;
 }
 

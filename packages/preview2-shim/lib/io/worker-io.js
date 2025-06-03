@@ -61,22 +61,25 @@ const DEBUG =
 export let ioCall = createSyncFn(workerPath, DEBUG, (type, id, payload) => {
     // 'callbacks' from the worker
     // ONLY happens for an http server incoming handler, and NOTHING else (not even sockets, since accept is sync!)
-    if (type !== HTTP_SERVER_INCOMING_HANDLER)
+    if (type !== HTTP_SERVER_INCOMING_HANDLER) {
         throw new Error(
             'Internal error: only incoming handler callback is permitted'
         );
+    }
     const handler = httpIncomingHandlers.get(id);
-    if (!handler)
+    if (!handler) {
         throw new Error(
             `Internal error: no incoming handler registered for server ${id}`
         );
+    }
     handler(payload);
 });
 if (DEBUG) {
     const _ioCall = ioCall;
     ioCall = function ioCall(num, id, payload) {
-        if (typeof id !== 'number' && id !== null)
+        if (typeof id !== 'number' && id !== null) {
             throw new Error('id must be a number or null');
+        }
         let ret;
         try {
             _rawDebug(
@@ -124,7 +127,9 @@ export function registerDispose(resource, parentResource, id, disposeFn) {
         // that we can never finalize a parent resource before a child resource.
         // This makes the generational JS GC become piecewise over child resource
         // graphs (generational at each resource hierarchy level at least).
-        if (parentResource?.[dummySymbol]) return;
+        if (parentResource?.[dummySymbol]) {
+            return;
+        }
         disposeFn(id);
     }
     finalizationRegistry.register(resource, finalizer, finalizer);
@@ -151,7 +156,9 @@ function streamIoErrorCall(call, id, payload) {
     try {
         return ioCall(call, id, payload);
     } catch (e) {
-        if (e.tag === 'closed') throw e;
+        if (e.tag === 'closed') {
+            throw e;
+        }
         if (e.tag === 'last-operation-failed') {
             e.val = new IoError(Object.assign(new Error(e.val.message), e.val));
             throw e;
@@ -275,7 +282,9 @@ class OutputStream {
         );
     }
     write(buf) {
-        if (this.#streamType <= STDERR) return this.blockingWriteAndFlush(buf);
+        if (this.#streamType <= STDERR) {
+            return this.blockingWriteAndFlush(buf);
+        }
         return streamIoErrorCall(
             OUTPUT_STREAM_WRITE | this.#streamType,
             this.#id,

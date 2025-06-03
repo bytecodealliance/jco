@@ -34,26 +34,35 @@ function getChildEntry(parentEntry, subpath, openFlags) {
         descriptorGetEntry(_rootPreopen[0]) === parentEntry
     ) {
         subpath = _cwd;
-        if (subpath.startsWith('/') && subpath !== '/')
+        if (subpath.startsWith('/') && subpath !== '/') {
             subpath = subpath.slice(1);
+        }
     }
     let entry = parentEntry;
     let segmentIdx;
     do {
-        if (!entry || !entry.dir) throw 'not-directory';
+        if (!entry || !entry.dir) {
+            throw 'not-directory';
+        }
         segmentIdx = subpath.indexOf('/');
         const segment =
             segmentIdx === -1 ? subpath : subpath.slice(0, segmentIdx);
-        if (segment === '..') throw 'no-entry';
-        if (segment === '.' || segment === '');
-        else if (!entry.dir[segment] && openFlags.create)
+        if (segment === '..') {
+            throw 'no-entry';
+        }
+        if (segment === '.' || segment === '') {
+        } else if (!entry.dir[segment] && openFlags.create) {
             entry = entry.dir[segment] = openFlags.directory
                 ? { dir: {} }
                 : { source: new Uint8Array([]) };
-        else entry = entry.dir[segment];
+        } else {
+            entry = entry.dir[segment];
+        }
         subpath = subpath.slice(segmentIdx + 1);
     } while (segmentIdx !== -1);
-    if (!entry) throw 'no-entry';
+    if (!entry) {
+        throw 'no-entry';
+    }
     return entry;
 }
 
@@ -70,7 +79,9 @@ class DirectoryEntryStream {
         this.entries = entries;
     }
     readDirectoryEntry() {
-        if (this.idx === this.entries.length) return null;
+        if (this.idx === this.entries.length) {
+            return null;
+        }
         const [name, entry] = this.entries[this.idx];
         this.idx += 1;
         return {
@@ -90,8 +101,11 @@ class Descriptor {
     }
 
     constructor(entry, isStream) {
-        if (isStream) this.#stream = entry;
-        else this.#entry = entry;
+        if (isStream) {
+            this.#stream = entry;
+        } else {
+            this.#entry = entry;
+        }
     }
 
     readViaStream(_offset) {
@@ -99,7 +113,9 @@ class Descriptor {
         let offset = Number(_offset);
         return new InputStream({
             blockingRead(len) {
-                if (offset === source.byteLength) throw { tag: 'closed' };
+                if (offset === source.byteLength) {
+                    throw { tag: 'closed' };
+                }
                 const bytes = source.slice(offset, offset + Number(len));
                 offset += bytes.byteLength;
                 return bytes;
@@ -141,9 +157,15 @@ class Descriptor {
     }
 
     getType() {
-        if (this.#stream) return 'fifo';
-        if (this.#entry.dir) return 'directory';
-        if (this.#entry.source) return 'regular-file';
+        if (this.#stream) {
+            return 'fifo';
+        }
+        if (this.#entry.dir) {
+            return 'directory';
+        }
+        if (this.#entry.source) {
+            return 'regular-file';
+        }
         return 'unknown';
     }
 
@@ -168,13 +190,17 @@ class Descriptor {
     }
 
     write(buffer, offset) {
-        if (offset !== 0) throw 'invalid-seek';
+        if (offset !== 0) {
+            throw 'invalid-seek';
+        }
         this.#entry.source = buffer;
         return buffer.byteLength;
     }
 
     readDirectory() {
-        if (!this.#entry?.dir) throw 'bad-descriptor';
+        if (!this.#entry?.dir) {
+            throw 'bad-descriptor';
+        }
         return new DirectoryEntryStream(
             Object.entries(this.#entry.dir).sort(([a], [b]) => (a > b ? 1 : -1))
         );
@@ -189,7 +215,9 @@ class Descriptor {
             create: true,
             directory: true,
         });
-        if (entry.source) throw 'exist';
+        if (entry.source) {
+            throw 'exist';
+        }
     }
 
     stat() {

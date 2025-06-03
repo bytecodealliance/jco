@@ -122,6 +122,8 @@ export const reverseMap = {};
 import * as calls from './calls.js';
 
 for (const name of Object.getOwnPropertyNames(calls)) {
-    if (name === 'reverseMap') continue;
+    if (name === 'reverseMap') {
+        continue;
+    }
     reverseMap[calls[name]] = name;
 }

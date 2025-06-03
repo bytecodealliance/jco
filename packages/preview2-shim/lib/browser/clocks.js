@@ -11,7 +11,9 @@ export const monotonicClock = {
     subscribeInstant(instant) {
         instant = BigInt(instant);
         const now = this.now();
-        if (instant <= now) return this.subscribeDuration(0);
+        if (instant <= now) {
+            return this.subscribeDuration(0);
+        }
         return this.subscribeDuration(instant - now);
     },
     subscribeDuration(_duration) {
