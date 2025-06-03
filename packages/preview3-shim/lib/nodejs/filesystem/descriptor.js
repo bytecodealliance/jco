@@ -233,7 +233,7 @@ class Descriptor {
         if (this.#hostPreopen) return 'directory';
         try {
             const stats = await this.#handle.stat();
-            return getFileType(stats);
+            return wasiTypeFromDirent(stats);
         } catch (e) {
             throw FSError.from(e);
         }
@@ -309,6 +309,11 @@ class Descriptor {
      */
     readDirectory() {
         if (!this.#fullPath) throw new FSError('invalid');
+
+        const preopens = preopenEntries.map(
+            ([desc, _virtualPath]) => desc.#hostPreopen
+        );
+
         const transform = new TransformStream();
         const promise = _worker
             .run(
@@ -316,6 +321,7 @@ class Descriptor {
                     op: 'readDir',
                     fullPath: this.#fullPath,
                     stream: transform.writable,
+                    preopens,
                 },
                 [transform.writable]
             )
@@ -387,7 +393,7 @@ class Descriptor {
             }
 
             return {
-                type: getFileType(s),
+                type: wasiTypeFromDirent(s),
                 linkCount: s.nlink,
                 size: s.size,
                 dataAccessTimestamp: nsToDateTime(s.atimeNs),
@@ -425,7 +431,7 @@ class Descriptor {
             const statFn = flags.symlinkFollow ? fs.stat : fs.lstat;
             const s = await statFn(full, { bigint: true });
             return {
-                type: getFileType(s),
+                type: wasiTypeFromDirent(s),
                 linkCount: s.nlink,
                 size: s.size,
                 dataAccessTimestamp: nsToDateTime(s.atimeNs),
@@ -925,7 +931,7 @@ delete Descriptor._createPreopen;
 const descriptorCreate = Descriptor._create;
 delete Descriptor._create;
 
-function getFileType(obj) {
+function wasiTypeFromDirent(obj) {
     if (obj.isFile()) return 'regular-file';
     else if (obj.isSocket()) return 'socket';
     else if (obj.isSymbolicLink()) return 'symbolic-link';

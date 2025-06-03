@@ -1,4 +1,5 @@
 import { promisify } from 'util';
+import { FSError } from '../filesystem/error.js';
 import { Router } from '../workers/resource-worker.js';
 
 // Use fs callback API for BigInt offset support
@@ -17,8 +18,8 @@ Router()
     .op('write', handleWrite)
     .op('readDir', handleReadDir);
 
-/** Map fs.Dirent → WASI type */
-function getFileType(obj) {
+/** Map fs.Dirent -> WASI type */
+function wasiTypeFromDirent(obj) {
     if (obj.isFile()) return 'regular-file';
     if (obj.isSocket()) return 'socket';
     if (obj.isSymbolicLink()) return 'symbolic-link';
@@ -29,8 +30,15 @@ function getFileType(obj) {
     return 'unknown';
 }
 
-/** Read loop → writes into a TransformStream */
 async function handleRead({ fd, offset, stream }) {
+    if (typeof fd !== 'number' || fd < 0) {
+        throw new TypeError(`Invalid file descriptor: ${fd}`);
+    }
+
+    if (!stream || typeof stream.getWriter !== 'function') {
+        throw new TypeError('stream must have a getWriter() method');
+    }
+
     const writer = stream.getWriter();
     try {
         let pos = BigInt(offset);
@@ -60,6 +68,14 @@ async function handleRead({ fd, offset, stream }) {
 }
 
 async function handleWrite({ fd, offset, stream }) {
+    if (typeof fd !== 'number' || fd < 0) {
+        throw new TypeError(`Invalid file descriptor: ${fd}`);
+    }
+
+    if (!stream || typeof stream.getReader !== 'function') {
+        throw new TypeError('stream must have a getReader() method');
+    }
+
     const reader = stream.getReader();
     try {
         let pos = BigInt(offset);
@@ -85,7 +101,21 @@ async function handleWrite({ fd, offset, stream }) {
     }
 }
 
-async function handleReadDir({ fullPath, stream }) {
+async function handleReadDir({ fullPath, stream, preopens }) {
+    if (!stream || typeof stream.getWriter !== 'function') {
+        throw new TypeError('stream must have a getWriter() method');
+    }
+
+    const canAccess = preopens.some(
+        (p) => fullPath === p || fullPath.startsWith(p + '/')
+    );
+
+    if (!canAccess) {
+        const err = new FSError('not-permitted');
+        await writer.abort(err);
+        throw err;
+    }
+
     const writer = stream.getWriter();
 
     try {
@@ -93,7 +123,7 @@ async function handleReadDir({ fullPath, stream }) {
         for await (const dirent of walker) {
             await writer.write({
                 name: dirent.name,
-                type: getFileType(dirent),
+                type: wasiTypeFromDirent(dirent),
             });
         }
         await writer.close();
