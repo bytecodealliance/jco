@@ -128,9 +128,12 @@ class ResolveAddressStream {
             this.#data = res.val;
             this.#error = res.tag === 'err';
         }
-        if (this.#error) throw this.#data;
-        if (this.#curItem < this.#data.length)
+        if (this.#error) {
+            throw this.#data;
+        }
+        if (this.#curItem < this.#data.length) {
             return this.#data[this.#curItem++];
+        }
         return undefined;
     }
     subscribe() {
@@ -140,7 +143,9 @@ class ResolveAddressStream {
         );
     }
     static _resolveAddresses(network, name) {
-        if (!mayDnsLookup(network)) throw 'permanent-resolver-failure';
+        if (!mayDnsLookup(network)) {
+            throw 'permanent-resolver-failure';
+        }
         const res = new ResolveAddressStream();
         res.#id = ioCall(SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST, null, name);
         res.#finalizer = registerDispose(
@@ -210,7 +215,9 @@ class TcpSocket {
         return socket;
     }
     startBind(network, localAddress) {
-        if (!mayTcp(network)) throw 'access-denied';
+        if (!mayTcp(network)) {
+            throw 'access-denied';
+        }
         ioCall(SOCKET_TCP_BIND_START, this.#id, {
             localAddress,
             family: this.#family,
@@ -221,9 +228,12 @@ class TcpSocket {
         ioCall(SOCKET_TCP_BIND_FINISH, this.#id, null);
     }
     startConnect(network, remoteAddress) {
-        if (this.#network && network !== this.#network)
+        if (this.#network && network !== this.#network) {
             throw 'invalid-argument';
-        if (!mayTcp(network)) throw 'access-denied';
+        }
+        if (!mayTcp(network)) {
+            throw 'access-denied';
+        }
         ioCall(SOCKET_TCP_CONNECT_START, this.#id, {
             remoteAddress,
             family: this.#family,
@@ -242,14 +252,18 @@ class TcpSocket {
         ];
     }
     startListen() {
-        if (!mayTcp(this.#network)) throw 'access-denied';
+        if (!mayTcp(this.#network)) {
+            throw 'access-denied';
+        }
         ioCall(SOCKET_TCP_LISTEN_START, this.#id, null);
     }
     finishListen() {
         ioCall(SOCKET_TCP_LISTEN_FINISH, this.#id, null);
     }
     accept() {
-        if (!mayTcp(this.#network)) throw 'access-denied';
+        if (!mayTcp(this.#network)) {
+            throw 'access-denied';
+        }
         const [socketId, inputStreamId, outputStreamId] = ioCall(
             SOCKET_TCP_ACCEPT,
             this.#id,
@@ -276,7 +290,9 @@ class TcpSocket {
         return this.#family;
     }
     setListenBacklogSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) {
+            throw 'invalid-argument';
+        }
         ioCall(SOCKET_TCP_SET_LISTEN_BACKLOG_SIZE, this.#id, value);
     }
     keepAliveEnabled() {
@@ -293,8 +309,12 @@ class TcpSocket {
         return this.#options.keepAliveIdleTime;
     }
     setKeepAliveIdleTime(value) {
-        if (value < 1n) throw 'invalid-argument';
-        if (value < 1_000_000_000n) value = 1_000_000_000n;
+        if (value < 1n) {
+            throw 'invalid-argument';
+        }
+        if (value < 1_000_000_000n) {
+            value = 1_000_000_000n;
+        }
         if (value !== this.#options.keepAliveIdleTime) {
             this.#options.keepAliveIdleTime = value;
             if (this.#options.keepAlive) {
@@ -309,47 +329,59 @@ class TcpSocket {
         return this.#options.keepAliveInterval;
     }
     setKeepAliveInterval(value) {
-        if (value < 1n) throw 'invalid-argument';
+        if (value < 1n) {
+            throw 'invalid-argument';
+        }
         this.#options.keepAliveInterval = value;
     }
     keepAliveCount() {
         return this.#options.keepAliveCount;
     }
     setKeepAliveCount(value) {
-        if (value < 1) throw 'invalid-argument';
+        if (value < 1) {
+            throw 'invalid-argument';
+        }
         this.#options.keepAliveCount = value;
     }
     hopLimit() {
         return this.#options.hopLimit;
     }
     setHopLimit(value) {
-        if (value < 1) throw 'invalid-argument';
+        if (value < 1) {
+            throw 'invalid-argument';
+        }
         this.#options.hopLimit = value;
     }
     receiveBufferSize() {
-        if (!this.#options.receiveBufferSize)
+        if (!this.#options.receiveBufferSize) {
             this.#options.receiveBufferSize = ioCall(
                 SOCKET_GET_DEFAULT_RECEIVE_BUFFER_SIZE,
                 null,
                 null
             );
+        }
         return this.#options.receiveBufferSize;
     }
     setReceiveBufferSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) {
+            throw 'invalid-argument';
+        }
         this.#options.receiveBufferSize = value;
     }
     sendBufferSize() {
-        if (!this.#options.sendBufferSize)
+        if (!this.#options.sendBufferSize) {
             this.#options.sendBufferSize = ioCall(
                 SOCKET_GET_DEFAULT_SEND_BUFFER_SIZE,
                 null,
                 null
             );
+        }
         return this.#options.sendBufferSize;
     }
     setSendBufferSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) {
+            throw 'invalid-argument';
+        }
         this.#options.sendBufferSize = value;
     }
     subscribe() {
@@ -378,8 +410,9 @@ delete TcpSocket._create;
 
 export const tcpCreateSocket = {
     createTcpSocket(addressFamily) {
-        if (addressFamily !== 'ipv4' && addressFamily !== 'ipv6')
+        if (addressFamily !== 'ipv4' && addressFamily !== 'ipv6') {
             throw 'not-supported';
+        }
         return tcpSocketCreate(
             addressFamily,
             ioCall(SOCKET_TCP_CREATE_HANDLE, null, null)
@@ -397,8 +430,9 @@ class UdpSocket {
     #family;
     #finalizer;
     static _create(addressFamily) {
-        if (addressFamily !== 'ipv4' && addressFamily !== 'ipv6')
+        if (addressFamily !== 'ipv4' && addressFamily !== 'ipv6') {
             throw 'not-supported';
+        }
         const socket = new UdpSocket();
         socket.#id = ioCall(SOCKET_UDP_CREATE_HANDLE, null, {
             family: addressFamily,
@@ -417,7 +451,9 @@ class UdpSocket {
         return socket;
     }
     startBind(network, localAddress) {
-        if (!mayUdp(network)) throw 'access-denied';
+        if (!mayUdp(network)) {
+            throw 'access-denied';
+        }
         ioCall(SOCKET_UDP_BIND_START, this.#id, {
             localAddress,
             family: this.#family,
@@ -428,7 +464,9 @@ class UdpSocket {
         ioCall(SOCKET_UDP_BIND_FINISH, this.#id, null);
     }
     stream(remoteAddress) {
-        if (!mayUdp(this.#network)) throw 'access-denied';
+        if (!mayUdp(this.#network)) {
+            throw 'access-denied';
+        }
         const [incomingDatagramStreamId, outgoingDatagramStreamId] = ioCall(
             SOCKET_UDP_STREAM,
             this.#id,
@@ -452,21 +490,27 @@ class UdpSocket {
         return ioCall(SOCKET_UDP_GET_UNICAST_HOP_LIMIT, this.#id);
     }
     setUnicastHopLimit(value) {
-        if (value < 1) throw 'invalid-argument';
+        if (value < 1) {
+            throw 'invalid-argument';
+        }
         ioCall(SOCKET_UDP_SET_UNICAST_HOP_LIMIT, this.#id, value);
     }
     receiveBufferSize() {
         return ioCall(SOCKET_UDP_GET_RECEIVE_BUFFER_SIZE, this.#id);
     }
     setReceiveBufferSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) {
+            throw 'invalid-argument';
+        }
         ioCall(SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE, this.#id, value);
     }
     sendBufferSize() {
         return ioCall(SOCKET_UDP_GET_SEND_BUFFER_SIZE, this.#id);
     }
     setSendBufferSize(value) {
-        if (value === 0n) throw 'invalid-argument';
+        if (value === 0n) {
+            throw 'invalid-argument';
+        }
         ioCall(SOCKET_UDP_SET_SEND_BUFFER_SIZE, this.#id, value);
     }
     subscribe() {

@@ -89,19 +89,21 @@ export async function createHttpRequest(
         try {
             ({ stream } = getStreamOrThrow(bodyId));
         } catch (e) {
-            if (e.tag === 'closed')
+            if (e.tag === 'closed') {
                 throw {
                     tag: 'internal-error',
                     val: 'Unexpected closed body stream',
                 };
+            }
             // it should never be possible for the body stream to already
             // be closed, or for there to be a write error
             // we therefore just throw internal error here
-            if (e.tag === 'last-operation-failed')
+            if (e.tag === 'last-operation-failed') {
                 throw {
                     tag: 'internal-error',
                     val: e.val,
                 };
+            }
             // entirely unknown error -> trap
             throw e;
         }
@@ -155,12 +157,14 @@ export async function createHttpRequest(
             req.once('close', () => reject);
             req.once('error', reject);
         });
-        if (firstByteTimeout)
+        if (firstByteTimeout) {
             res.setTimeout(Number(firstByteTimeout / 1_000_000n));
-        if (betweenBytesTimeout)
+        }
+        if (betweenBytesTimeout) {
             res.once('readable', () => {
                 res.setTimeout(Number(betweenBytesTimeout / 1_000_000n));
             });
+        }
         const bodyStreamId = createReadableStream(res);
         return {
             status: res.statusCode,
@@ -168,7 +172,9 @@ export async function createHttpRequest(
             bodyStreamId,
         };
     } catch (e) {
-        if (e?.tag) throw e;
+        if (e?.tag) {
+            throw e;
+        }
         const err = getFirstError(e);
         switch (err.code) {
             case 'ECONNRESET':
@@ -194,8 +200,14 @@ export async function createHttpRequest(
 }
 
 function getFirstError(e) {
-    if (typeof e !== 'object' || e === null) return e;
-    if (e.cause) return getFirstError(e.cause);
-    if (e instanceof AggregateError) return getFirstError(e.errors[0]);
+    if (typeof e !== 'object' || e === null) {
+        return e;
+    }
+    if (e.cause) {
+        return getFirstError(e.cause);
+    }
+    if (e instanceof AggregateError) {
+        return getFirstError(e.errors[0]);
+    }
     return e;
 }

@@ -139,7 +139,9 @@ function createIncomingDatagramStream(socket) {
             data,
             remoteAddress: ipSocketAddress(family, rinfo.address, rinfo.port),
         });
-        if (!pollState.ready) pollStateReady(pollState);
+        if (!pollState.ready) {
+            pollStateReady(pollState);
+        }
     }
     function onError(err) {
         datagramStream.error = err;
@@ -185,12 +187,15 @@ function createOutgoingDatagramStream(socket) {
 export function socketUdpBindStart(id, localAddress, family) {
     const socket = udpSockets.get(id);
 
-    if (family !== localAddress.tag || isIPv4MappedAddress(localAddress))
+    if (family !== localAddress.tag || isIPv4MappedAddress(localAddress)) {
         throw 'invalid-argument';
+    }
 
     const serializedLocalAddress = serializeIpAddress(localAddress);
 
-    if (socket.state !== SOCKET_STATE_INIT) throw 'invalid-state';
+    if (socket.state !== SOCKET_STATE_INIT) {
+        throw 'invalid-state';
+    }
     socket.state = SOCKET_STATE_BIND;
     const { udpSocket } = socket;
     socket.future = createFuture(
@@ -213,8 +218,12 @@ export function socketUdpBindStart(id, localAddress, family) {
 
 export function socketUdpBindFinish(id) {
     const socket = udpSockets.get(id);
-    if (socket.state !== SOCKET_STATE_BIND) throw 'not-in-progress';
-    if (!socket.pollState.ready) throw 'would-block';
+    if (socket.state !== SOCKET_STATE_BIND) {
+        throw 'not-in-progress';
+    }
+    if (!socket.pollState.ready) {
+        throw 'would-block';
+    }
     const { tag, val } = futureTakeValue(socket.future).val;
     futureDispose(socket.future, false);
     socket.future = null;
@@ -225,10 +234,12 @@ export function socketUdpBindFinish(id) {
         // once bound, we can now set the options
         // since Node.js doesn't support setting them until bound
         socket.udpSocket.setTTL(socket.unicastHopLimit);
-        if (socket.sendBufferSize)
+        if (socket.sendBufferSize) {
             socket.udpSocket.setRecvBufferSize(socket.sendBufferSize);
-        if (socket.receieveBufferSize)
+        }
+        if (socket.receieveBufferSize) {
             socket.udpSocket.setSendBufferSize(socket.receiveBufferSize);
+        }
         socket.state = SOCKET_STATE_BOUND;
         return val;
     }
@@ -271,11 +282,13 @@ export function socketUdpStream(id, remoteAddress) {
     if (
         socket.state !== SOCKET_STATE_BOUND &&
         socket.state !== SOCKET_STATE_CONNECTION
-    )
+    ) {
         throw 'invalid-state';
+    }
 
-    if (socket.state === SOCKET_STATE_INIT && !remoteAddress)
+    if (socket.state === SOCKET_STATE_INIT && !remoteAddress) {
         throw 'invalid-state';
+    }
 
     if (
         remoteAddress &&
@@ -283,8 +296,9 @@ export function socketUdpStream(id, remoteAddress) {
             isWildcardAddress(remoteAddress) ||
             (remoteAddress.tag === 'ipv6' &&
                 isIPv4MappedAddress(remoteAddress)))
-    )
+    ) {
         throw 'invalid-argument';
+    }
 
     if (socket.state === SOCKET_STATE_CONNECTION) {
         socketDatagramStreamClear(socket.incomingDatagramStream);
@@ -388,7 +402,9 @@ export function socketUdpSetUnicastHopLimit(id, hopLimit) {
 
 export async function socketUdpGetReceiveBufferSize(id) {
     const socket = udpSockets.get(id);
-    if (socket.receiveBufferSize) return BigInt(socket.receiveBufferSize);
+    if (socket.receiveBufferSize) {
+        return BigInt(socket.receiveBufferSize);
+    }
     if (
         socket.state !== SOCKET_STATE_INIT &&
         socket.state !== SOCKET_STATE_BIND
@@ -410,7 +426,9 @@ export async function socketUdpGetReceiveBufferSize(id) {
 
 export async function socketUdpGetSendBufferSize(id) {
     const socket = udpSockets.get(id);
-    if (socket.sendBufferSize) return BigInt(socket.sendBufferSize);
+    if (socket.sendBufferSize) {
+        return BigInt(socket.sendBufferSize);
+    }
     if (
         socket.state !== SOCKET_STATE_INIT &&
         socket.state !== SOCKET_STATE_BIND
@@ -446,21 +464,27 @@ export function socketUdpDispose(id) {
 
 export function socketIncomingDatagramStreamReceive(id, maxResults) {
     const datagramStream = datagramStreams.get(id);
-    if (!datagramStream.active)
+    if (!datagramStream.active) {
         throw new Error(
             'wasi-io trap: attempt to receive on inactive incoming datagram stream'
         );
-    if (maxResults === 0n || datagramStream.queue.length === 0) return [];
-    if (datagramStream.error) throw convertSocketError(datagramStream.error);
+    }
+    if (maxResults === 0n || datagramStream.queue.length === 0) {
+        return [];
+    }
+    if (datagramStream.error) {
+        throw convertSocketError(datagramStream.error);
+    }
     return datagramStream.queue.splice(0, Number(maxResults));
 }
 
 export async function socketOutgoingDatagramStreamSend(id, datagrams) {
     const { active, socket } = datagramStreams.get(id);
-    if (!active)
+    if (!active) {
         throw new Error(
             'wasi-io trap: writing to inactive outgoing datagram stream'
         );
+    }
 
     const { udpSocket } = socket;
     let sendQueue = [],
@@ -486,7 +510,9 @@ export async function socketOutgoingDatagramStreamSend(id, datagrams) {
         }
         if (sendLastBatch) {
             const err = await doSendBatch();
-            if (err) return BigInt(datagramsSent);
+            if (err) {
+                return BigInt(datagramsSent);
+            }
             if (UDP_BATCH_SENDS) {
                 sendQueue = [data];
                 sendQueuePort = port;
@@ -500,13 +526,16 @@ export async function socketOutgoingDatagramStreamSend(id, datagrams) {
     }
     if (sendQueue.length) {
         const err = await doSendBatch();
-        if (err) return BigInt(datagramsSent);
+        if (err) {
+            return BigInt(datagramsSent);
+        }
     }
 
-    if (datagramsSent !== datagrams.length)
+    if (datagramsSent !== datagrams.length) {
         throw new Error(
             'wasi-io trap: expected to have sent all the datagrams'
         );
+    }
     return BigInt(datagramsSent);
 
     function doSendBatch() {
@@ -515,11 +544,14 @@ export async function socketOutgoingDatagramStreamSend(id, datagrams) {
                 if (
                     sendQueueAddress !== socket.remoteAddress ||
                     sendQueuePort !== socket.remotePort
-                )
+                ) {
                     return void reject('invalid-argument');
+                }
                 udpSocket.send(sendQueue, handler);
             } else {
-                if (!sendQueueAddress) return void reject('invalid-argument');
+                if (!sendQueueAddress) {
+                    return void reject('invalid-argument');
+                }
                 udpSocket.send(
                     sendQueue,
                     sendQueuePort,
@@ -532,8 +564,11 @@ export async function socketOutgoingDatagramStreamSend(id, datagrams) {
                     // TODO: update datagramsSent properly on error for multiple sends
                     //       to enable send batching. Perhaps a Node.js PR could
                     //       still set the second sendBytes arg?
-                    if (datagramsSent > 0) resolve(datagramsSent);
-                    else reject(convertSocketError(err));
+                    if (datagramsSent > 0) {
+                        resolve(datagramsSent);
+                    } else {
+                        reject(convertSocketError(err));
+                    }
                     return;
                 }
                 datagramsSent += sendQueue.length;
@@ -574,12 +609,15 @@ function pollSend(socket) {
 
 export function socketOutgoingDatagramStreamCheckSend(id) {
     const { active, socket } = datagramStreams.get(id);
-    if (!active)
+    if (!active) {
         throw new Error(
             'wasi-io trap: check send on inactive outgoing datagram stream'
         );
+    }
     const remaining = checkSend(socket);
-    if (remaining <= 0) pollSend(socket);
+    if (remaining <= 0) {
+        pollSend(socket);
+    }
     return BigInt(remaining);
 }
 

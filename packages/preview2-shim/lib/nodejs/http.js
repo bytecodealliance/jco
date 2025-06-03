@@ -33,14 +33,17 @@ class IncomingBody {
     #finished = false;
     #stream = undefined;
     stream() {
-        if (!this.#stream) throw undefined;
+        if (!this.#stream) {
+            throw undefined;
+        }
         const stream = this.#stream;
         this.#stream = null;
         return stream;
     }
     static finish(incomingBody) {
-        if (incomingBody.#finished)
+        if (incomingBody.#finished) {
             throw new Error('incoming body already finished');
+        }
         incomingBody.#finished = true;
         return futureTrailersCreate();
     }
@@ -107,7 +110,9 @@ class FutureTrailers {
         return pollableCreate(0, this);
     }
     get() {
-        if (this.#requested) return { tag: 'err' };
+        if (this.#requested) {
+            return { tag: 'err' };
+        }
         this.#requested = true;
         return {
             tag: 'ok',
@@ -154,10 +159,11 @@ class OutgoingResponse {
     body() {
         let contentLengthValues = this.#headers.get('content-length');
         let contentLength;
-        if (contentLengthValues.length > 0)
+        if (contentLengthValues.length > 0) {
             contentLength = Number(
                 new TextDecoder().decode(contentLengthValues[0])
             );
+        }
         this.#body = outgoingBodyCreate(contentLength);
         return this.#body;
     }
@@ -222,17 +228,21 @@ class OutgoingRequest {
         fieldsLock(headers);
         this.#headers = headers;
         let contentLengthValues = this.#headers.get('content-length');
-        if (contentLengthValues.length === 0)
+        if (contentLengthValues.length === 0) {
             contentLengthValues = this.#headers.get('Content-Length');
+        }
         let contentLength;
-        if (contentLengthValues.length > 0)
+        if (contentLengthValues.length > 0) {
             contentLength = Number(
                 new TextDecoder().decode(contentLengthValues[0])
             );
+        }
         this.#body = outgoingBodyCreate(contentLength);
     }
     body() {
-        if (this.#bodyRequested) throw new Error('Body already requested');
+        if (this.#bodyRequested) {
+            throw new Error('Body already requested');
+        }
         this.#bodyRequested = true;
         return this.#body;
     }
@@ -240,8 +250,9 @@ class OutgoingRequest {
         return this.#method;
     }
     setMethod(method) {
-        if (method.tag === 'other' && !method.val.match(/^[a-zA-Z-]+$/))
+        if (method.tag === 'other' && !method.val.match(/^[a-zA-Z-]+$/)) {
             throw undefined;
+        }
         this.#method = method;
     }
     pathWithQuery() {
@@ -251,16 +262,18 @@ class OutgoingRequest {
         if (
             pathWithQuery &&
             !pathWithQuery.match(/^[a-zA-Z0-9.\-_~!$&'()*+,;=:@%?/]+$/)
-        )
+        ) {
             throw undefined;
+        }
         this.#pathWithQuery = pathWithQuery;
     }
     scheme() {
         return this.#scheme;
     }
     setScheme(scheme) {
-        if (scheme?.tag === 'other' && !scheme.val.match(/^[a-zA-Z]+$/))
+        if (scheme?.tag === 'other' && !scheme.val.match(/^[a-zA-Z]+$/)) {
             throw undefined;
+        }
         this.#scheme = scheme;
     }
     authority() {
@@ -275,8 +288,9 @@ class OutgoingRequest {
                 (port !== undefined &&
                     (portNum.toString() !== port || portNum > 65535)) ||
                 !host.match(/^[a-zA-Z0-9-.]+$/)
-            )
+            ) {
                 throw undefined;
+            }
         }
         this.#authority = authority;
     }
@@ -295,7 +309,9 @@ class OutgoingRequest {
         for (const [key, value] of request.#headers.entries()) {
             headers.push([key, decoder.decode(value)]);
         }
-        if (!request.#pathWithQuery) throw { tag: 'HTTP-request-URI-invalid' };
+        if (!request.#pathWithQuery) {
+            throw { tag: 'HTTP-request-URI-invalid' };
+        }
         return futureIncomingResponseCreate(
             request.#method.val || request.#method.tag,
             scheme,
@@ -321,7 +337,9 @@ class OutgoingBody {
     write() {
         // can only call write once
         const outputStream = this.#outputStream;
-        if (outputStream === null) throw undefined;
+        if (outputStream === null) {
+            throw undefined;
+        }
         this.#outputStream = null;
         return outputStream;
     }
@@ -330,8 +348,9 @@ class OutgoingBody {
      * @param {Fields | undefined} trailers
      */
     static finish(body, trailers) {
-        if (trailers)
+        if (trailers) {
             throw { tag: 'internal-error', val: 'trailers unsupported' };
+        }
         // this will verify content length, and also verify not already finished
         // throwing errors as appropriate
         ioCall(HTTP_OUTPUT_STREAM_FINISH, body.#outputStreamId, null);
@@ -388,13 +407,17 @@ class IncomingResponse {
         return this.#headers;
     }
     consume() {
-        if (this.#bodyStream === undefined) throw undefined;
+        if (this.#bodyStream === undefined) {
+            throw undefined;
+        }
         const bodyStream = this.#bodyStream;
         this.#bodyStream = undefined;
         return bodyStream;
     }
     [symbolDispose]() {
-        if (this.#bodyStream) this.#bodyStream[symbolDispose]();
+        if (this.#bodyStream) {
+            this.#bodyStream[symbolDispose]();
+        }
     }
     static _create(status, headers, bodyStreamId) {
         const res = new IncomingResponse();
@@ -419,7 +442,9 @@ class FutureIncomingResponse {
     }
     get() {
         const ret = ioCall(FUTURE_TAKE_VALUE | HTTP, this.#id, null);
-        if (ret === undefined) return undefined;
+        if (ret === undefined) {
+            return undefined;
+        }
         if (ret.tag === 'ok' && ret.val.tag === 'ok') {
             const textEncoder = new TextEncoder();
             const { status, headers, bodyStreamId } = ret.val.val;
@@ -496,11 +521,15 @@ class Fields {
     }
     get(name) {
         const tableEntries = this.#table.get(name.toLowerCase());
-        if (!tableEntries) return [];
+        if (!tableEntries) {
+            return [];
+        }
         return tableEntries.map(([, v]) => v);
     }
     set(name, values) {
-        if (this.#immutable) throw { tag: 'immutable' };
+        if (this.#immutable) {
+            throw { tag: 'immutable' };
+        }
         try {
             validateHeaderName(name);
         } catch {
@@ -515,12 +544,15 @@ class Fields {
             throw { tag: 'invalid-syntax' };
         }
         const lowercased = name.toLowerCase();
-        if (_forbiddenHeaders.has(lowercased)) throw { tag: 'forbidden' };
+        if (_forbiddenHeaders.has(lowercased)) {
+            throw { tag: 'forbidden' };
+        }
         const tableEntries = this.#table.get(lowercased);
-        if (tableEntries)
+        if (tableEntries) {
             this.#entries = this.#entries.filter(
                 (entry) => !tableEntries.includes(entry)
             );
+        }
         tableEntries.splice(0, tableEntries.length);
         for (const value of values) {
             const entry = [name, value];
@@ -532,7 +564,9 @@ class Fields {
         return this.#table.has(name.toLowerCase());
     }
     delete(name) {
-        if (this.#immutable) throw { tag: 'immutable' };
+        if (this.#immutable) {
+            throw { tag: 'immutable' };
+        }
         const lowercased = name.toLowerCase();
         const tableEntries = this.#table.get(lowercased);
         if (tableEntries) {
@@ -543,7 +577,9 @@ class Fields {
         }
     }
     append(name, value) {
-        if (this.#immutable) throw { tag: 'immutable' };
+        if (this.#immutable) {
+            throw { tag: 'immutable' };
+        }
         try {
             validateHeaderName(name);
         } catch {
@@ -555,7 +591,9 @@ class Fields {
             throw { tag: 'invalid-syntax' };
         }
         const lowercased = name.toLowerCase();
-        if (_forbiddenHeaders.has(lowercased)) throw { tag: 'forbidden' };
+        if (_forbiddenHeaders.has(lowercased)) {
+            throw { tag: 'forbidden' };
+        }
         const entry = [name, value];
         this.#entries.push(entry);
         const tableEntries = this.#table.get(lowercased);
@@ -606,7 +644,9 @@ export const outgoingHandler = {
 };
 
 function httpErrorCode(err) {
-    if (err.payload) return err.payload;
+    if (err.payload) {
+        return err.payload;
+    }
     return {
         tag: 'internal-error',
         val: err.message,
@@ -629,7 +669,9 @@ export const types = {
 };
 
 function schemeString(scheme) {
-    if (!scheme) return 'https:';
+    if (!scheme) {
+        return 'https:';
+    }
     switch (scheme.tag) {
         case 'HTTP':
             return 'http:';
@@ -653,8 +695,9 @@ const supportedMethods = [
 ];
 function parseMethod(method) {
     const lowercase = method.toLowerCase();
-    if (supportedMethods.includes(method.toLowerCase()))
+    if (supportedMethods.includes(method.toLowerCase())) {
         return { tag: lowercase };
+    }
     return { tag: 'other', val: lowercase };
 }
 

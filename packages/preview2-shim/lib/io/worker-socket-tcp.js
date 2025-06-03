@@ -86,8 +86,12 @@ export function createTcpSocket() {
 
 export function socketTcpFinish(id, fromState, toState) {
     const socket = tcpSockets.get(id);
-    if (socket.state !== fromState) throw 'not-in-progress';
-    if (!socket.pollState.ready) throw 'would-block';
+    if (socket.state !== fromState) {
+        throw 'not-in-progress';
+    }
+    if (!socket.pollState.ready) {
+        throw 'would-block';
+    }
     const { tag, val } = futureTakeValue(socket.future).val;
     futureDispose(socket.future, false);
     socket.future = null;
@@ -97,20 +101,25 @@ export function socketTcpFinish(id, fromState, toState) {
     } else {
         socket.state = toState;
         // for the listener, we must immediately transition back to unresolved
-        if (toState === SOCKET_STATE_LISTENER) socket.pollState.ready = false;
+        if (toState === SOCKET_STATE_LISTENER) {
+            socket.pollState.ready = false;
+        }
         return val;
     }
 }
 
 export function socketTcpBindStart(id, localAddress, family) {
     const socket = tcpSockets.get(id);
-    if (socket.state !== SOCKET_STATE_INIT) throw 'invalid-state';
+    if (socket.state !== SOCKET_STATE_INIT) {
+        throw 'invalid-state';
+    }
     if (
         family !== localAddress.tag ||
         !isUnicastIpAddress(localAddress) ||
         isIPv4MappedAddress(localAddress)
-    )
+    ) {
         throw 'invalid-argument';
+    }
     socket.state = SOCKET_STATE_BIND;
     const { handle } = socket;
     socket.future = createFuture(
@@ -121,13 +130,17 @@ export function socketTcpBindStart(id, localAddress, family) {
                 localAddress.tag === 'ipv6'
                     ? handle.bind6(address, port, TCPConstants.UV_TCP_IPV6ONLY)
                     : handle.bind(address, port);
-            if (code !== 0) throw convertSocketErrorCode(-code);
+            if (code !== 0) {
+                throw convertSocketErrorCode(-code);
+            }
             // This is a Node.js / libuv quirk to force the bind error to be thrown
             // (specifically address-in-use).
             {
                 const out = {};
                 const code = handle.getsockname(out);
-                if (code !== 0) throw convertSocketErrorCode(-code);
+                if (code !== 0) {
+                    throw convertSocketErrorCode(-code);
+                }
             }
         })(),
         socket.pollState
@@ -139,8 +152,9 @@ export function socketTcpConnectStart(id, remoteAddress, family) {
     if (
         socket.state !== SOCKET_STATE_INIT &&
         socket.state !== SOCKET_STATE_BOUND
-    )
+    ) {
         throw 'invalid-state';
+    }
     if (
         isWildcardAddress(remoteAddress) ||
         family !== remoteAddress.tag ||
@@ -184,7 +198,9 @@ export function socketTcpConnectStart(id, remoteAddress, family) {
 
 export function socketTcpListenStart(id) {
     const socket = tcpSockets.get(id);
-    if (socket.state !== SOCKET_STATE_BOUND) throw 'invalid-state';
+    if (socket.state !== SOCKET_STATE_BOUND) {
+        throw 'invalid-state';
+    }
     const { handle } = socket;
     socket.state = SOCKET_STATE_LISTEN;
     socket.future = createFuture(
@@ -228,14 +244,20 @@ export function socketTcpListenStart(id) {
 
 export function socketTcpAccept(id) {
     const socket = tcpSockets.get(id);
-    if (socket.state !== SOCKET_STATE_LISTENER) throw 'invalid-state';
-    if (socket.pendingAccepts.length === 0) throw 'would-block';
+    if (socket.state !== SOCKET_STATE_LISTENER) {
+        throw 'invalid-state';
+    }
+    if (socket.pendingAccepts.length === 0) {
+        throw 'would-block';
+    }
     const accept = socket.pendingAccepts.shift();
     if (accept.err) {
         socket.state = SOCKET_STATE_CLOSED;
         throw convertSocketError(accept.err);
     }
-    if (socket.pendingAccepts.length === 0) socket.pollState.ready = false;
+    if (socket.pendingAccepts.length === 0) {
+        socket.pollState.ready = false;
+    }
     tcpSockets.set(++tcpSocketCnt, {
         state: SOCKET_STATE_CONNECTION,
         future: null,
@@ -257,14 +279,16 @@ export function socketTcpSetListenBacklogSize(id, backlogSize) {
     if (
         socket.state === SOCKET_STATE_LISTEN ||
         socket.state === SOCKET_STATE_LISTENER
-    )
+    ) {
         throw 'not-supported';
+    }
     if (
         socket.state !== SOCKET_STATE_INIT &&
         socket.state !== SOCKET_STATE_BIND &&
         socket.state !== SOCKET_STATE_BOUND
-    )
+    ) {
         throw 'invalid-state';
+    }
     socket.listenBacklogSize = Number(backlogSize);
 }
 
@@ -272,7 +296,9 @@ export function socketTcpGetLocalAddress(id) {
     const { handle } = tcpSockets.get(id);
     const out = {};
     const code = handle.getsockname(out);
-    if (code !== 0) throw convertSocketErrorCode(-code);
+    if (code !== 0) {
+        throw convertSocketErrorCode(-code);
+    }
     return ipSocketAddress(out.family.toLowerCase(), out.address, out.port);
 }
 
@@ -280,15 +306,22 @@ export function socketTcpGetRemoteAddress(id) {
     const { handle } = tcpSockets.get(id);
     const out = {};
     const code = handle.getpeername(out);
-    if (code !== 0) throw convertSocketErrorCode(-code);
+    if (code !== 0) {
+        throw convertSocketErrorCode(-code);
+    }
     return ipSocketAddress(out.family.toLowerCase(), out.address, out.port);
 }
 
 export function socketTcpShutdown(id, _shutdownType) {
     const socket = tcpSockets.get(id);
-    if (socket.state !== SOCKET_STATE_CONNECTION) throw 'invalid-state';
-    if (win && socket.tcpSocket.destroySoon) socket.tcpSocket.destroySoon();
-    else socket.tcpSocket.destroy();
+    if (socket.state !== SOCKET_STATE_CONNECTION) {
+        throw 'invalid-state';
+    }
+    if (win && socket.tcpSocket.destroySoon) {
+        socket.tcpSocket.destroySoon();
+    } else {
+        socket.tcpSocket.destroy();
+    }
 }
 
 export function socketTcpSetKeepAlive(id, { keepAlive, keepAliveIdleTime }) {
@@ -297,7 +330,9 @@ export function socketTcpSetKeepAlive(id, { keepAlive, keepAliveIdleTime }) {
         keepAlive,
         Number(keepAliveIdleTime / 1_000_000_000n)
     );
-    if (code !== 0) throw convertSocketErrorCode(-code);
+    if (code !== 0) {
+        throw convertSocketErrorCode(-code);
+    }
 }
 
 export function socketTcpDispose(id) {

@@ -23,7 +23,8 @@
     }
   },
   "scripts": {
-    "lint": "eslint -c ../../eslintrc.mjs ./lib/**/*.js",
+    "lint": "eslint -c ../../eslint.config.mjs ./lib/**/*.js",
+    "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts"
   },
   "files": [

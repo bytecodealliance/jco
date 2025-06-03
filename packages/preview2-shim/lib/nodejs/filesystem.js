@@ -47,13 +47,21 @@ function nsToDateTime(ns) {
 }
 
 function lookupType(obj) {
-    if (obj.isFile()) return 'regular-file';
-    else if (obj.isSocket()) return 'socket';
-    else if (obj.isSymbolicLink()) return 'symbolic-link';
-    else if (obj.isFIFO()) return 'fifo';
-    else if (obj.isDirectory()) return 'directory';
-    else if (obj.isCharacterDevice()) return 'character-device';
-    else if (obj.isBlockDevice()) return 'block-device';
+    if (obj.isFile()) {
+        return 'regular-file';
+    } else if (obj.isSocket()) {
+        return 'socket';
+    } else if (obj.isSymbolicLink()) {
+        return 'symbolic-link';
+    } else if (obj.isFIFO()) {
+        return 'fifo';
+    } else if (obj.isDirectory()) {
+        return 'directory';
+    } else if (obj.isCharacterDevice()) {
+        return 'character-device';
+    } else if (obj.isBlockDevice()) {
+        return 'block-device';
+    }
     return 'unknown';
 }
 
@@ -82,7 +90,9 @@ class Descriptor {
                 /\\/g,
                 '/'
             );
-            if (descriptor.#hostPreopen === '/') descriptor.#hostPreopen = '//';
+            if (descriptor.#hostPreopen === '/') {
+                descriptor.#hostPreopen = '//';
+            }
         }
         return descriptor;
     }
@@ -109,7 +119,9 @@ class Descriptor {
     }
 
     readViaStream(offset) {
-        if (this.#hostPreopen) throw 'is-directory';
+        if (this.#hostPreopen) {
+            throw 'is-directory';
+        }
         return inputStreamCreate(
             FILE,
             ioCall(INPUT_STREAM_CREATE | FILE, null, {
@@ -120,7 +132,9 @@ class Descriptor {
     }
 
     writeViaStream(offset) {
-        if (this.#hostPreopen) throw 'is-directory';
+        if (this.#hostPreopen) {
+            throw 'is-directory';
+        }
         return outputStreamCreate(
             FILE,
             ioCall(OUTPUT_STREAM_CREATE | FILE, null, { fd: this.#fd, offset })
@@ -132,15 +146,21 @@ class Descriptor {
     }
 
     advise(_offset, _length, _advice) {
-        if (this.getType() === 'directory') throw 'bad-descriptor';
+        if (this.getType() === 'directory') {
+            throw 'bad-descriptor';
+        }
     }
 
     syncData() {
-        if (this.#hostPreopen) throw 'invalid';
+        if (this.#hostPreopen) {
+            throw 'invalid';
+        }
         try {
             fdatasyncSync(this.#fd);
         } catch (e) {
-            if (e.code === 'EPERM') return;
+            if (e.code === 'EPERM') {
+                return;
+            }
             throw convertFsError(e);
         }
     }
@@ -150,29 +170,38 @@ class Descriptor {
     }
 
     getType() {
-        if (this.#hostPreopen) return 'directory';
+        if (this.#hostPreopen) {
+            return 'directory';
+        }
         const stats = fstatSync(this.#fd);
         return lookupType(stats);
     }
 
     setSize(size) {
-        if (this.#hostPreopen) throw 'is-directory';
+        if (this.#hostPreopen) {
+            throw 'is-directory';
+        }
         try {
             ftruncateSync(this.#fd, Number(size));
         } catch (e) {
-            if (isWindows && e.code === 'EPERM') throw 'access';
+            if (isWindows && e.code === 'EPERM') {
+                throw 'access';
+            }
             throw convertFsError(e);
         }
     }
 
     setTimes(dataAccessTimestamp, dataModificationTimestamp) {
-        if (this.#hostPreopen) throw 'invalid';
+        if (this.#hostPreopen) {
+            throw 'invalid';
+        }
         let stats;
         if (
             dataAccessTimestamp.tag === 'no-change' ||
             dataModificationTimestamp.tag === 'no-change'
-        )
+        ) {
             stats = this.stat();
+        }
         const atime = this.#getNewTimestamp(
             dataAccessTimestamp,
             dataAccessTimestamp.tag === 'no-change' && stats.dataAccessTimestamp
@@ -201,7 +230,9 @@ class Descriptor {
     }
 
     read(length, offset) {
-        if (!this.#fullPath) throw 'bad-descriptor';
+        if (!this.#fullPath) {
+            throw 'bad-descriptor';
+        }
         const buf = new Uint8Array(Number(length));
         const bytesRead = readSync(
             this.#fd,
@@ -215,14 +246,18 @@ class Descriptor {
     }
 
     write(buffer, offset) {
-        if (!this.#fullPath) throw 'bad-descriptor';
+        if (!this.#fullPath) {
+            throw 'bad-descriptor';
+        }
         return BigInt(
             writeSync(this.#fd, buffer, 0, buffer.byteLength, Number(offset))
         );
     }
 
     readDirectory() {
-        if (!this.#fullPath) throw 'bad-descriptor';
+        if (!this.#fullPath) {
+            throw 'bad-descriptor';
+        }
         try {
             const dir = opendirSync(this.#fullPath);
             return directoryEntryStreamCreate(dir);
@@ -232,11 +267,15 @@ class Descriptor {
     }
 
     sync() {
-        if (this.#hostPreopen) throw 'invalid';
+        if (this.#hostPreopen) {
+            throw 'invalid';
+        }
         try {
             fsyncSync(this.#fd);
         } catch (e) {
-            if (e.code === 'EPERM') return;
+            if (e.code === 'EPERM') {
+                return;
+            }
             throw convertFsError(e);
         }
     }
@@ -251,7 +290,9 @@ class Descriptor {
     }
 
     stat() {
-        if (this.#hostPreopen) throw 'invalid';
+        if (this.#hostPreopen) {
+            throw 'invalid';
+        }
         let stats;
         try {
             stats = fstatSync(this.#fd, { bigint: true });
@@ -301,8 +342,9 @@ class Descriptor {
         if (
             dataAccessTimestamp.tag === 'no-change' ||
             dataModificationTimestamp.tag === 'no-change'
-        )
+        ) {
             stats = this.stat();
+        }
         const atime = this.#getNewTimestamp(
             dataAccessTimestamp,
             dataAccessTimestamp.tag === 'no-change' && stats.dataAccessTimestamp
@@ -335,7 +377,9 @@ class Descriptor {
         );
         const newFullPath = newDescriptor.#getFullPath(newPath, false);
         // Windows doesn't automatically fail on trailing slashes
-        if (isWindows && newFullPath.endsWith('/')) throw 'no-entry';
+        if (isWindows && newFullPath.endsWith('/')) {
+            throw 'no-entry';
+        }
         try {
             linkSync(oldFullPath, newFullPath);
         } catch (e) {
@@ -344,31 +388,52 @@ class Descriptor {
     }
 
     openAt(pathFlags, path, openFlags, descriptorFlags) {
-        if (preopenEntries.length === 0) throw 'access';
+        if (preopenEntries.length === 0) {
+            throw 'access';
+        }
         const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
         let fsOpenFlags = 0x0;
-        if (openFlags.create) fsOpenFlags |= constants.O_CREAT;
-        if (openFlags.directory) fsOpenFlags |= constants.O_DIRECTORY;
-        if (openFlags.exclusive) fsOpenFlags |= constants.O_EXCL;
-        if (openFlags.truncate) fsOpenFlags |= constants.O_TRUNC;
-        if (descriptorFlags.read && descriptorFlags.write)
+        if (openFlags.create) {
+            fsOpenFlags |= constants.O_CREAT;
+        }
+        if (openFlags.directory) {
+            fsOpenFlags |= constants.O_DIRECTORY;
+        }
+        if (openFlags.exclusive) {
+            fsOpenFlags |= constants.O_EXCL;
+        }
+        if (openFlags.truncate) {
+            fsOpenFlags |= constants.O_TRUNC;
+        }
+        if (descriptorFlags.read && descriptorFlags.write) {
             fsOpenFlags |= constants.O_RDWR;
-        else if (descriptorFlags.write) fsOpenFlags |= constants.O_WRONLY;
-        else if (descriptorFlags.read) fsOpenFlags |= constants.O_RDONLY;
-        if (descriptorFlags.fileIntegritySync) fsOpenFlags |= constants.O_SYNC;
-        if (descriptorFlags.dataIntegritySync) fsOpenFlags |= constants.O_DSYNC;
-        if (!pathFlags.symlinkFollow) fsOpenFlags |= constants.O_NOFOLLOW;
+        } else if (descriptorFlags.write) {
+            fsOpenFlags |= constants.O_WRONLY;
+        } else if (descriptorFlags.read) {
+            fsOpenFlags |= constants.O_RDONLY;
+        }
+        if (descriptorFlags.fileIntegritySync) {
+            fsOpenFlags |= constants.O_SYNC;
+        }
+        if (descriptorFlags.dataIntegritySync) {
+            fsOpenFlags |= constants.O_DSYNC;
+        }
+        if (!pathFlags.symlinkFollow) {
+            fsOpenFlags |= constants.O_NOFOLLOW;
+        }
         if (
             descriptorFlags.requestedWriteSync ||
             descriptorFlags.mutateDirectory
-        )
+        ) {
             throw 'unsupported';
+        }
         // Currently throw to match Wasmtime
         if (
             descriptorFlags.fileIntegritySync ||
             descriptorFlags.dataIntegritySync
-        )
+        ) {
             throw 'unsupported';
+        }
         if (isWindows) {
             if (!pathFlags.symlinkFollow && !openFlags.create) {
                 let isSymlink = false;
@@ -377,8 +442,9 @@ class Descriptor {
                 } catch {
                     //
                 }
-                if (isSymlink)
+                if (isSymlink) {
                     throw openFlags.directory ? 'not-directory' : 'loop';
+                }
             }
             if (pathFlags.symlinkFollow && openFlags.directory) {
                 let isFile = false;
@@ -387,7 +453,9 @@ class Descriptor {
                 } catch {
                     //
                 }
-                if (isFile) throw 'not-directory';
+                if (isFile) {
+                    throw 'not-directory';
+                }
             }
         }
         try {
@@ -410,8 +478,9 @@ class Descriptor {
             }
             return descriptor;
         } catch (e) {
-            if (e.code === 'ERR_INVALID_ARG_VALUE')
+            if (e.code === 'ERR_INVALID_ARG_VALUE') {
                 throw isWindows ? 'no-entry' : 'invalid';
+            }
             throw convertFsError(e);
         }
     }
@@ -430,7 +499,9 @@ class Descriptor {
         try {
             rmdirSync(fullPath);
         } catch (e) {
-            if (isWindows && e.code === 'ENOENT') throw 'not-directory';
+            if (isWindows && e.code === 'ENOENT') {
+                throw 'not-directory';
+            }
             throw convertFsError(e);
         }
     }
@@ -441,14 +512,18 @@ class Descriptor {
         try {
             renameSync(oldFullPath, newFullPath);
         } catch (e) {
-            if (isWindows && e.code === 'EPERM') throw 'access';
+            if (isWindows && e.code === 'EPERM') {
+                throw 'access';
+            }
             throw convertFsError(e);
         }
     }
 
     symlinkAt(target, path) {
         const fullPath = this.#getFullPath(path, false);
-        if (target.startsWith('/')) throw 'not-permitted';
+        if (target.startsWith('/')) {
+            throw 'not-permitted';
+        }
         try {
             symlinkSync(target, fullPath);
         } catch (e) {
@@ -459,10 +534,14 @@ class Descriptor {
                 } catch {
                     //
                 }
-                if (!isDir) throw isWindows ? 'no-entry' : 'not-directory';
+                if (!isDir) {
+                    throw isWindows ? 'no-entry' : 'not-directory';
+                }
             }
             if (isWindows) {
-                if (e.code === 'EPERM' || e.code === 'EEXIST') throw 'no-entry';
+                if (e.code === 'EPERM' || e.code === 'EEXIST') {
+                    throw 'no-entry';
+                }
             }
             throw convertFsError(e);
         }
@@ -488,7 +567,9 @@ class Descriptor {
             }
             unlinkSync(fullPath);
         } catch (e) {
-            if (isWindows && e.code === 'EPERM') throw 'access';
+            if (isWindows && e.code === 'EPERM') {
+                throw 'access';
+            }
             throw convertFsError(e);
         }
     }
@@ -498,7 +579,9 @@ class Descriptor {
     }
 
     metadataHash() {
-        if (this.#hostPreopen) return { upper: 0n, lower: BigInt(this._id) };
+        if (this.#hostPreopen) {
+            return { upper: 0n, lower: BigInt(this._id) };
+        }
         try {
             const stats = fstatSync(this.#fd, { bigint: true });
             return { upper: stats.mtimeNs, lower: stats.ino };
@@ -525,10 +608,15 @@ class Descriptor {
     // TODO: support followSymlinks
     #getFullPath(subpath, _followSymlinks) {
         let descriptor = this;
-        if (subpath.indexOf('\\') !== -1) subpath = subpath.replace(/\\/g, '/');
-        if (subpath.indexOf('//') !== -1)
+        if (subpath.indexOf('\\') !== -1) {
+            subpath = subpath.replace(/\\/g, '/');
+        }
+        if (subpath.indexOf('//') !== -1) {
             subpath = subpath.replace(/\/\/+/g, '/');
-        if (subpath[0] === '/') throw 'not-permitted';
+        }
+        if (subpath[0] === '/') {
+            throw 'not-permitted';
+        }
 
         // segment resolution
         const segments = [];
@@ -549,7 +637,9 @@ class Descriptor {
                     subpath[i + 1] === '.' &&
                     (subpath[i + 2] === '/' || i + 2 === subpath.length)
                 ) {
-                    if (segments.pop() === undefined) throw 'not-permitted';
+                    if (segments.pop() === undefined) {
+                        throw 'not-permitted';
+                    }
                     i += 2;
                     continue;
                 }
@@ -560,15 +650,19 @@ class Descriptor {
                 }
             }
             // it is the start of a new segment
-            while (subpath[i] === '/') i++;
+            while (subpath[i] === '/') {
+                i++;
+            }
             segmentIndex = i;
         }
         // finish reading out the last segment
-        if (segmentIndex !== -1) segments.push(subpath.slice(segmentIndex));
+        if (segmentIndex !== -1) {
+            segments.push(subpath.slice(segmentIndex));
+        }
 
         subpath = segments.join('');
 
-        if (descriptor.#hostPreopen)
+        if (descriptor.#hostPreopen) {
             return (
                 descriptor.#hostPreopen +
                 (descriptor.#hostPreopen.endsWith('/')
@@ -578,6 +672,7 @@ class Descriptor {
                       : '') +
                 subpath
             );
+        }
         return descriptor.#fullPath + (subpath.length > 0 ? '/' : '') + subpath;
     }
 }

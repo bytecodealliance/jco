@@ -18,6 +18,7 @@
     "build": "cargo xtask build debug",
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types",
-    "lint": "npm run lint --ws --if-present"
+    "lint": "npm run lint --ws --if-present",
+    "lint:fix": "npm run lint:fix --ws --if-present"
   }
 }
