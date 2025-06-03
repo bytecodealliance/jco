@@ -127,7 +127,7 @@ export class StreamReader {
      *
      * @returns {ReadableStream} The original readable stream that implements `getReader()`.
      */
-    intoStream() {
+    intoReadableStream() {
         this.close();
         const stream = this.#stream;
         this.#stream = null;
@@ -215,7 +215,7 @@ export class StreamWriter {
      *
      * @returns {WritableStream} The original writable stream that implements `getWriter()`.
      */
-    async intoStream() {
+    async intoWritableStream() {
         const stream = this.#stream;
         this.#writer = null;
         this.#stream = null;

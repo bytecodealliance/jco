@@ -123,14 +123,14 @@ class Descriptor {
      * ```
      *
      * @async
-     * @param {object} data A data source implementing `intoStream()`.
+     * @param {object} data A data source implementing `intoReadableStream()`.
      * @param {bigint} offset The offset within the file.
      * @returns {Promise<void>}
      * @throws {FSError} `payload.tag` contains mapped WASI error code.
      */
     async writeViaStream(data, offset) {
         this.#ensureHandle();
-        const stream = await data.intoStream();
+        const stream = await data.intoReadableStream();
 
         try {
             await _worker.run(
@@ -150,7 +150,7 @@ class Descriptor {
      * ```
      *
      * @async
-     * @param {object} data A data source implementing `intoStream()`.
+     * @param {object} data A data source implementing `intoReadableStream()`.
      * @returns {Promise<void>}
      * @throws {FSError} `payload.tag` contains mapped WASI error code.
      */

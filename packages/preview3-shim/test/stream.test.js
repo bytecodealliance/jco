@@ -88,11 +88,11 @@ describe('Node.js Preview3 canon stream writer', () => {
         );
     });
 
-    test('intoStream() returns original after close', async () => {
+    test('intoReadableStream() returns original after close', async () => {
         const ws = new WritableStream({ write() {} });
         const writer = new StreamWriter(ws);
         await writer.close();
-        const orig = await writer.intoStream();
+        const orig = await writer.intoWritableStream();
         expect(orig).toBe(ws);
     });
 });
