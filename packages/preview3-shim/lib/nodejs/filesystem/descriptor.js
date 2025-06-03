@@ -2,10 +2,12 @@ import fs from 'node:fs/promises';
 import process from 'node:process';
 
 import { StreamReader } from '../stream.js';
-import { FSError } from './error.js';
 import { FutureReader } from '../future.js';
 import { ResourceWorker } from '../workers/resource-worker.js';
 import { earlyDispose, registerDispose } from '../finalization.js';
+
+import { FSError } from './error.js';
+import { wasiTypeFromDirent } from './utils.js';
 
 const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 
@@ -946,25 +948,6 @@ delete Descriptor._createPreopen;
 
 const descriptorCreate = Descriptor._create;
 delete Descriptor._create;
-
-function wasiTypeFromDirent(obj) {
-    if (obj.isFile()) {
-        return 'regular-file';
-    } else if (obj.isSocket()) {
-        return 'socket';
-    } else if (obj.isSymbolicLink()) {
-        return 'symbolic-link';
-    } else if (obj.isFIFO()) {
-        return 'fifo';
-    } else if (obj.isDirectory()) {
-        return 'directory';
-    } else if (obj.isCharacterDevice()) {
-        return 'character-device';
-    } else if (obj.isBlockDevice()) {
-        return 'block-device';
-    }
-    return 'unknown';
-}
 
 const NS_PER_SEC = 1_000_000_000n;
 function nsToDateTime(ns) {

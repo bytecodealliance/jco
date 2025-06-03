@@ -1,6 +1,8 @@
 import { promisify } from 'util';
+
+import { Router } from './resource-worker.js';
 import { FSError } from '../filesystem/error.js';
-import { Router } from '../workers/resource-worker.js';
+import { wasiTypeFromDirent } from '../filesystem/utils.js';
 
 // Use fs callback API for BigInt offset support
 import fs from 'fs';
@@ -17,26 +19,6 @@ Router()
     .op('read', handleRead)
     .op('write', handleWrite)
     .op('readDir', handleReadDir);
-
-/** Map fs.Dirent -> WASI type */
-function wasiTypeFromDirent(obj) {
-    if (obj.isFile()) {
-        return 'regular-file';
-    } else if (obj.isSocket()) {
-        return 'socket';
-    } else if (obj.isSymbolicLink()) {
-        return 'symbolic-link';
-    } else if (obj.isFIFO()) {
-        return 'fifo';
-    } else if (obj.isDirectory()) {
-        return 'directory';
-    } else if (obj.isCharacterDevice()) {
-        return 'character-device';
-    } else if (obj.isBlockDevice()) {
-        return 'block-device';
-    }
-    return 'unknown';
-}
 
 async function handleRead({ fd, offset, stream }) {
     if (typeof fd !== 'number' || fd < 0) {
