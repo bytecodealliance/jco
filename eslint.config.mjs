@@ -1,6 +1,6 @@
 import { defineConfig, globalIgnores } from 'eslint/config';
 import prettier from 'eslint-plugin-prettier';
-import { default as prettierConfig } from './prettier.mjs';
+import { default as prettierConfig } from './prettier.config.mjs';
 
 const config = defineConfig([
     globalIgnores(['test/output/**/*.js']),

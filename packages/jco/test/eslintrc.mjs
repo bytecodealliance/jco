@@ -1,1 +1,1 @@
-../../../eslintrc.mjs
+../../../eslint.config.mjs
