@@ -16,7 +16,6 @@ export class ResourceWorker {
     }
 
     #getWorker() {
-        // TODO(tandr): Use a pool of workers instead of a single one.
         if (this.#worker) {
             return this.#worker;
         }
@@ -43,8 +42,12 @@ export class ResourceWorker {
         return new Promise((resolve, reject) => {
             port1.once('message', ({ result, error }) => {
                 port1.close();
-                if (error) reject(error);
-                else resolve(result);
+
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(result);
             });
 
             worker.postMessage({ ...msg, _reply: port2 }, [
@@ -58,19 +61,19 @@ export class ResourceWorker {
     runSync(msg, transferable = []) {
         const worker = this.#getWorker();
 
-        const { port1, port2 } = new MessageChannel();
+        const { port1: rx, port2: tx } = new MessageChannel();
         const _condvar = new SharedArrayBuffer(4);
         const lock = new Int32Array(_condvar);
 
-        worker.postMessage({ ...msg, _condvar, _reply: port2 }, [
-            port2,
+        worker.postMessage({ ...msg, _condvar, _reply: tx }, [
+            tx,
             ...transferable,
         ]);
 
         Atomics.wait(lock, 0, 0);
 
-        const { message } = receiveMessageOnPort(port1) || {};
-        port1.close();
+        const { message } = receiveMessageOnPort(rx) || {};
+        rx.close();
 
         if (!message) throw new Error('No response from worker');
         const { result, error } = message;

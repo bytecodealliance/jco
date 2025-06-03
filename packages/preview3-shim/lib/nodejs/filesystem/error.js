@@ -43,6 +43,8 @@ function mapError(e) {
         return ERROR_MAP[e.code];
     }
 
+    // Windows gives this error for badly structured `//` reads, this seems like
+    // a slightly better error than unknown given that it's a common footgun.
     if (e.code === -4094 || (e.code === 'UNKNOWN' && e.errno === -4094)) {
         return 'no-such-device';
     }
@@ -53,33 +55,33 @@ function mapError(e) {
 /**
  * Custom error for File operations with JCO compatible payload.
  */
-export class FsError extends Error {
+export class FSError extends Error {
     /**
      * @param {string} tag        – machine‐readable error tag
      * @param {string} [message]  – human‐readable message
      * @param {any}    [val]      – optional extra data
+     * @param {object} [opts]
+     * @param {Error} [opts.cause]
      */
     constructor(tag, message, val, opts = {}) {
         super(message ?? `Error: ${tag}`, { cause: opts.cause });
-        this.name = 'FsError';
+        this.name = 'FSError';
         this.payload = val !== undefined ? { tag, val } : { tag };
     }
 
     /**
-     * Create or rewrap an error into SocketError
-     * @param {any} err – number, string, Error, or SocketError
+     * Create or rewrap an error into FSError
+     * @param {any} err – number, string, Error, or FSError
      */
     static from(err) {
-        if (err instanceof FsError) return err;
+        if (err instanceof FSError) return err;
 
         const tag = mapError(err);
         const message = err?.message;
-        return new FsError(tag, message, undefined, { cause: err });
+        return new FSError(tag, message, undefined, { cause: err });
     }
 }
 
-export const types = {
-    filesystemErrorCode(err) {
-        return mapError(err.payload);
-    },
-};
+export function filesystemErrorCode(err) {
+    return mapError(err.payload);
+}

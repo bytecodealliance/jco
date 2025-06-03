@@ -307,7 +307,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        workspace: [preview2-shim, preview3-shim]
+        workspace:
+          - preview2-shim
+          - preview3-shim
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

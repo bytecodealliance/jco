@@ -1,5 +1,4 @@
 const registry = new FinalizationRegistry((dispose) => dispose());
-const dummySymbol = Symbol();
 
 // While strictly speaking all components should handle their disposal,
 // this acts as a last-resort to catch all missed drops through the JS GC.
@@ -8,6 +7,8 @@ const dummySymbol = Symbol();
 // for various reasons may end up leaning on JS GC inadvertantly.
 
 export function registerDispose(resource, parent = null, id, disposeFn) {
+    const dummySymbol = Symbol();
+
     const finalizer = () => {
         if (parent?.[dummySymbol]) return;
         disposeFn(id);

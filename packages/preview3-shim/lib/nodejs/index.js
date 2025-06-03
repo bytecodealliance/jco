@@ -1,5 +1,3 @@
-import * as filesystem from './filesystem.js';
-import * as stream from './stream.js';
-import * as future from './future.js';
-
-export { filesystem, future, stream };
+export * as filesystem from './filesystem.js';
+export * as stream from './stream.js';
+export * as future from './future.js';
