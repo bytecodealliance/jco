@@ -87,7 +87,9 @@ export async function typesComponent(witPath, opts) {
         instantiation = { tag: opts.instantiation };
     }
     let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
-    if (!outDir.endsWith('/') && outDir !== '') outDir += '/';
+    if (!outDir.endsWith('/') && outDir !== '') {
+        outDir += '/';
+    }
 
     let features = null;
     if (opts.allFeatures) {
@@ -96,10 +98,12 @@ export async function typesComponent(witPath, opts) {
         features = { tag: 'list', val: opts.feature };
     }
 
-    if (opts.asyncWasiImports)
+    if (opts.asyncWasiImports) {
         opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
-    if (opts.asyncWasiExports)
+    }
+    if (opts.asyncWasiExports) {
         opts.asyncExports = ASYNC_WASI_EXPORTS.concat(opts.asyncExports || []);
+    }
 
     const asyncMode =
         !opts.asyncMode || opts.asyncMode === 'sync'
@@ -165,7 +169,9 @@ async function writeFiles(files, summaryTitle) {
             await writeFile(name, file);
         })
     );
-    if (!summaryTitle) return;
+    if (!summaryTitle) {
+        return;
+    }
     console.log(c`
   {bold ${summaryTitle}:}
 
@@ -179,8 +185,9 @@ ${table(
 
 export async function transpile(componentPath, opts, program) {
     const varIdx = program?.parent.rawArgs.indexOf('--');
-    if (varIdx !== undefined && varIdx !== -1)
+    if (varIdx !== undefined && varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
+    }
 
     let component;
     if (!opts.stub) {
@@ -196,20 +203,26 @@ export async function transpile(componentPath, opts, program) {
         );
     }
 
-    if (!opts.quiet) setShowSpinner(true);
-    if (!opts.name)
+    if (!opts.quiet) {
+        setShowSpinner(true);
+    }
+    if (!opts.name) {
         opts.name = basename(
             componentPath.slice(0, -extname(componentPath).length || Infinity)
         );
-    if (opts.map)
+    }
+    if (opts.map) {
         opts.map = Object.fromEntries(
             opts.map.map((mapping) => mapping.split('='))
         );
+    }
 
-    if (opts.asyncWasiImports)
+    if (opts.asyncWasiImports) {
         opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
-    if (opts.asyncWasiExports)
+    }
+    if (opts.asyncWasiExports) {
         opts.asyncExports = ASYNC_WASI_EXPORTS.concat(opts.asyncExports || []);
+    }
 
     const { files } = await transpileComponent(component, opts);
     await writeFiles(
@@ -230,8 +243,9 @@ async function wasm2Js(source) {
     try {
         return await spawnIOTmp(wasm2jsPath, source, ['-Oz', '-o']);
     } catch (e) {
-        if (e.toString().includes('BasicBlock requested'))
+        if (e.toString().includes('BasicBlock requested')) {
             return wasm2Js(source);
+        }
         throw e;
     }
 }
@@ -265,13 +279,17 @@ async function wasm2Js(source) {
  */
 export async function transpileComponent(component, opts = {}) {
     await $init;
-    if (opts.instantiation) opts.wasiShim = false;
+    if (opts.instantiation) {
+        opts.wasiShim = false;
+    }
 
     let spinner;
     const showSpinner = getShowSpinner();
 
     if (opts.optimize) {
-        if (showSpinner) setShowSpinner(true);
+        if (showSpinner) {
+            setShowSpinner(true);
+        }
         ({ component } = await optimizeComponent(component, opts));
     }
 
@@ -333,7 +351,9 @@ export async function transpileComponent(component, opts = {}) {
     });
 
     let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
-    if (!outDir.endsWith('/') && outDir !== '') outDir += '/';
+    if (!outDir.endsWith('/') && outDir !== '') {
+        outDir += '/';
+    }
     files = files.map(([name, source]) => [`${outDir}${name}`, source]);
 
     const jsFile = files.find(([name]) => name.endsWith('.js'));
@@ -583,7 +603,9 @@ ${autoInstantiate}`;
 // for imports to match up we must do the same
 // See https://github.com/WebAssembly/binaryen/blob/main/src/asmjs/asmangle.cpp
 function asmMangle(name) {
-    if (name === '') return '$';
+    if (name === '') {
+        return '$';
+    }
 
     let mightBeKeyword = true;
     let i = 1;
@@ -657,11 +679,15 @@ function asmMangle(name) {
     if (mightBeKeyword && len >= 2 && len <= 10) {
         switch (name[0]) {
             case 'a': {
-                if (name == 'arguments') return name + '_';
+                if (name == 'arguments') {
+                    return name + '_';
+                }
                 break;
             }
             case 'b': {
-                if (name == 'break') return name + '_';
+                if (name == 'break') {
+                    return name + '_';
+                }
                 break;
             }
             case 'c': {
@@ -671,13 +697,15 @@ function asmMangle(name) {
                     name == 'catch' ||
                     name == 'const' ||
                     name == 'class'
-                )
+                ) {
                     return name + '_';
+                }
                 break;
             }
             case 'd': {
-                if (name == 'do' || name == 'default' || name == 'debugger')
+                if (name == 'do' || name == 'default' || name == 'debugger') {
                     return name + '_';
+                }
                 break;
             }
             case 'e': {
@@ -687,8 +715,9 @@ function asmMangle(name) {
                     name == 'eval' || // to be sure
                     name == 'export' ||
                     name == 'extends'
-                )
+                ) {
                     return name + '_';
+                }
                 break;
             }
             case 'f': {
@@ -697,8 +726,9 @@ function asmMangle(name) {
                     name == 'false' ||
                     name == 'finally' ||
                     name == 'function'
-                )
+                ) {
                     return name + '_';
+                }
                 break;
             }
             case 'i': {
@@ -709,16 +739,21 @@ function asmMangle(name) {
                     name == 'interface' ||
                     name == 'implements' ||
                     name == 'instanceof'
-                )
+                ) {
                     return name + '_';
+                }
                 break;
             }
             case 'l': {
-                if (name == 'let') return name + '_';
+                if (name == 'let') {
+                    return name + '_';
+                }
                 break;
             }
             case 'n': {
-                if (name == 'new' || name == 'null') return name + '_';
+                if (name == 'new' || name == 'null') {
+                    return name + '_';
+                }
                 break;
             }
             case 'p': {
@@ -727,17 +762,21 @@ function asmMangle(name) {
                     name == 'package' ||
                     name == 'private' ||
                     name == 'protected'
-                )
+                ) {
                     return name + '_';
+                }
                 break;
             }
             case 'r': {
-                if (name == 'return') return name + '_';
+                if (name == 'return') {
+                    return name + '_';
+                }
                 break;
             }
             case 's': {
-                if (name == 'super' || name == 'static' || name == 'switch')
+                if (name == 'super' || name == 'static' || name == 'switch') {
                     return name + '_';
+                }
                 break;
             }
             case 't': {
@@ -747,20 +786,27 @@ function asmMangle(name) {
                     name == 'true' ||
                     name == 'throw' ||
                     name == 'typeof'
-                )
+                ) {
                     return name + '_';
+                }
                 break;
             }
             case 'v': {
-                if (name == 'var' || name == 'void') return name + '_';
+                if (name == 'var' || name == 'void') {
+                    return name + '_';
+                }
                 break;
             }
             case 'w': {
-                if (name == 'with' || name == 'while') return name + '_';
+                if (name == 'with' || name == 'while') {
+                    return name + '_';
+                }
                 break;
             }
             case 'y': {
-                if (name == 'yield') return name + '_';
+                if (name == 'yield') {
+                    return name + '_';
+                }
                 break;
             }
         }

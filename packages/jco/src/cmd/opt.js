@@ -17,10 +17,14 @@ import ora from '#ora';
 export async function opt(componentPath, opts, program) {
     await $init;
     const varIdx = program.parent.rawArgs.indexOf('--');
-    if (varIdx !== -1) opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
+    if (varIdx !== -1) {
+        opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
+    }
     const componentBytes = await readFile(componentPath);
 
-    if (!opts.quiet) setShowSpinner(true);
+    if (!opts.quiet) {
+        setShowSpinner(true);
+    }
     const optPromise = optimizeComponent(componentBytes, opts);
     const { component, compressionInfo } = await optPromise;
 
@@ -29,7 +33,7 @@ export async function opt(componentPath, opts, program) {
     let totalBeforeBytes = 0,
         totalAfterBytes = 0;
 
-    if (!opts.quiet)
+    if (!opts.quiet) {
         console.log(c`
 {bold Optimized WebAssembly Component Internal Core Modules:}
 
@@ -57,6 +61,7 @@ ${table(
     ],
     [, , , , 'right']
 )}`);
+    }
 }
 
 /**
@@ -117,7 +122,9 @@ export async function optimizeComponent(componentBytes, opts) {
                   '--enable-bulk-memory',
                   '--strip-debug',
               ];
-        if (opts?.asyncify) args.push('--asyncify');
+        if (opts?.asyncify) {
+            args.push('--asyncify');
+        }
 
         // process core Wasm modules with wasm-opt
         await Promise.all(
@@ -262,7 +269,9 @@ export async function optimizeComponent(componentBytes, opts) {
             })),
         };
     } finally {
-        if (spinner) spinner.stop();
+        if (spinner) {
+            spinner.stop();
+        }
     }
 }
 
@@ -279,8 +288,9 @@ async function wasmOpt(source, args) {
     try {
         return await spawnIOTmp(wasmOptPath, source, [...args, '-o']);
     } catch (e) {
-        if (e.toString().includes('BasicBlock requested'))
+        if (e.toString().includes('BasicBlock requested')) {
             return wasmOpt(source, args);
+        }
         throw e;
     }
 }
