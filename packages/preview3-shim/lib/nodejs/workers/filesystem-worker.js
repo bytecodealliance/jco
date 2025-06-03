@@ -20,13 +20,21 @@ Router()
 
 /** Map fs.Dirent -> WASI type */
 function wasiTypeFromDirent(obj) {
-    if (obj.isFile()) return 'regular-file';
-    if (obj.isSocket()) return 'socket';
-    if (obj.isSymbolicLink()) return 'symbolic-link';
-    if (obj.isFIFO()) return 'fifo';
-    if (obj.isDirectory()) return 'directory';
-    if (obj.isCharacterDevice()) return 'character-device';
-    if (obj.isBlockDevice()) return 'block-device';
+    if (obj.isFile()) {
+        return 'regular-file';
+    } else if (obj.isSocket()) {
+        return 'socket';
+    } else if (obj.isSymbolicLink()) {
+        return 'symbolic-link';
+    } else if (obj.isFIFO()) {
+        return 'fifo';
+    } else if (obj.isDirectory()) {
+        return 'directory';
+    } else if (obj.isCharacterDevice()) {
+        return 'character-device';
+    } else if (obj.isBlockDevice()) {
+        return 'block-device';
+    }
     return 'unknown';
 }
 
@@ -52,7 +60,9 @@ async function handleRead({ fd, offset, stream }) {
                 CHUNK_BYTES,
                 pos
             );
-            if (bytesRead === 0) break;
+            if (bytesRead === 0) {
+                break;
+            }
 
             await writer.write(BUFFER.subarray(0, bytesRead));
             pos += BigInt(bytesRead);
@@ -83,7 +93,9 @@ async function handleWrite({ fd, offset, stream }) {
 
         while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                break;
+            }
             const buf = Buffer.from(value);
             const { bytesWritten } = await writeAsync(
                 fd,

@@ -26,7 +26,9 @@ export class ResourceWorker {
     }
 
     terminate() {
-        if (!this.#worker) return;
+        if (!this.#worker) {
+            return;
+        }
 
         this.#pending.clear();
         this.#worker.removeAllListeners();
@@ -75,10 +77,14 @@ export class ResourceWorker {
         const { message } = receiveMessageOnPort(rx) || {};
         rx.close();
 
-        if (!message) throw new Error('No response from worker');
+        if (!message) {
+            throw new Error('No response from worker');
+        }
         const { result, error } = message;
 
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
         return result;
     }
 }
@@ -100,10 +106,14 @@ export function Router() {
             transfer = [];
 
         try {
-            if (_hooks.beforeAll) _hooks.beforeAll(rest);
+            if (_hooks.beforeAll) {
+                _hooks.beforeAll(rest);
+            }
 
             const handler = _hooks.ops.get(rest.op);
-            if (!handler) throw new Error(`Unknown op ${rest.op}`);
+            if (!handler) {
+                throw new Error(`Unknown op ${rest.op}`);
+            }
 
             const outcome = await handler(rest);
 
@@ -123,7 +133,9 @@ export function Router() {
         // If this is a synchronous operation, notify the main thread.
         // This will wake up the waiting thread and read the message we
         // posted on reply channel.
-        if (_condvar) notify(_condvar);
+        if (_condvar) {
+            notify(_condvar);
+        }
     });
 
     return {

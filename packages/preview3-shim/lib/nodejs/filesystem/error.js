@@ -74,7 +74,9 @@ export class FSError extends Error {
      * @param {any} err – number, string, Error, or FSError
      */
     static from(err) {
-        if (err instanceof FSError) return err;
+        if (err instanceof FSError) {
+            return err;
+        }
 
         const tag = mapError(err);
         const message = err?.message;

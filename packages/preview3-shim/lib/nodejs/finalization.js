@@ -10,7 +10,9 @@ export function registerDispose(resource, parent = null, id, disposeFn) {
     const dummySymbol = Symbol();
 
     const finalizer = () => {
-        if (parent?.[dummySymbol]) return;
+        if (parent?.[dummySymbol]) {
+            return;
+        }
         disposeFn(id);
     };
 

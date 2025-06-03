@@ -14,8 +14,8 @@
     }
   },
   "scripts": {
-    "lint": "eslint -c ../../eslintrc.mjs --ext .js lib test",
-    "lint:fix": "eslint -c ../../eslintrc.mjs --ext .js lib test --fix",
+    "lint": "eslint -c ../../eslint.config.mjs --ext .js lib test",
+    "lint:fix": "eslint -c ../../eslint.config.mjs --ext .js lib test --fix",
     "test": "vitest --run",
     "bench": "vitest bench --run"
   },

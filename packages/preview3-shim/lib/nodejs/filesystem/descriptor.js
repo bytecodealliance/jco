@@ -67,7 +67,9 @@ class Descriptor {
         // Windows requires UNC paths at minimum
         if (process.platform === 'win32') {
             desc.#hostPreopen = desc.#hostPreopen.replace(/\\/g, '/');
-            if (desc.#hostPreopen === '/') desc.#hostPreopen = '//';
+            if (desc.#hostPreopen === '/') {
+                desc.#hostPreopen = '//';
+            }
         }
         return desc;
     }
@@ -177,7 +179,9 @@ class Descriptor {
     async advise(_offset, _length, _advice) {
         // TODO: This not directly suported on Node.js:
         // https://github.com/bytecodealliance/jco/issues/718
-        if (this.getType() === 'directory') throw new FSError('bad-descriptor');
+        if (this.getType() === 'directory') {
+            throw new FSError('bad-descriptor');
+        }
     }
 
     /**
@@ -198,7 +202,9 @@ class Descriptor {
         } catch (e) {
             // On windows, `sync_data` uses `FileFlushBuffers` which fails with `EPERM` if
             // the file is not upen for writing. Ignore this error, for POSIX compatibility.
-            if (process.platform === 'win32' && e.code === 'EPERM') return;
+            if (process.platform === 'win32' && e.code === 'EPERM') {
+                return;
+            }
             throw FSError.from(e);
         }
     }
@@ -230,7 +236,9 @@ class Descriptor {
      * @throws {FSError} `payload.tag` contains mapped WASI error code.
      */
     async getType() {
-        if (this.#hostPreopen) return 'directory';
+        if (this.#hostPreopen) {
+            return 'directory';
+        }
         try {
             const stats = await this.#handle.stat();
             return wasiTypeFromDirent(stats);
@@ -308,7 +316,9 @@ class Descriptor {
      * @throws {FSError} `payload.tag` contains mapped WASI error code.
      */
     readDirectory() {
-        if (!this.#fullPath) throw new FSError('invalid');
+        if (!this.#fullPath) {
+            throw new FSError('invalid');
+        }
 
         const preopens = preopenEntries.map(
             ([desc, _virtualPath]) => desc.#hostPreopen
@@ -552,17 +562,17 @@ class Descriptor {
         // prettier-ignore
         const makeFsFlags = () => {
             let fsFlags = 0;
-            if (of.create)                 fsFlags |= fs.constants.O_CREAT;
-            if (of.directory)              fsFlags |= fs.constants.O_DIRECTORY;
-            if (of.exclusive)              fsFlags |= fs.constants.O_EXCL;
-            if (of.truncate)               fsFlags |= fs.constants.O_TRUNC;
-            if (df.read && df.write)       fsFlags |= fs.constants.O_RDWR;
-            else if (df.write)             fsFlags |= fs.constants.O_WRONLY;
-            else if (df.read)              fsFlags |= fs.constants.O_RDONLY;
-            if (df.fileIntegritySync)      fsFlags |= fs.constants.O_SYNC;
-            if (df.requestedIntegritySync) fsFlags |= fs.constants.O_SYNC;
-            if (df.dataIntegritySync)      fsFlags |= fs.constants.O_DSYNC;
-            if (!pf.symlinkFollow)         fsFlags |= fs.constants.O_NOFOLLOW;
+            if (of.create)                 {fsFlags |= fs.constants.O_CREAT;}
+            if (of.directory)              {fsFlags |= fs.constants.O_DIRECTORY;}
+            if (of.exclusive)              {fsFlags |= fs.constants.O_EXCL;}
+            if (of.truncate)               {fsFlags |= fs.constants.O_TRUNC;}
+            if (df.read && df.write)       {fsFlags |= fs.constants.O_RDWR;}
+            else if (df.write)             {fsFlags |= fs.constants.O_WRONLY;}
+            else if (df.read)              {fsFlags |= fs.constants.O_RDONLY;}
+            if (df.fileIntegritySync)      {fsFlags |= fs.constants.O_SYNC;}
+            if (df.requestedIntegritySync) {fsFlags |= fs.constants.O_SYNC;}
+            if (df.dataIntegritySync)      {fsFlags |= fs.constants.O_DSYNC;}
+            if (!pf.symlinkFollow)         {fsFlags |= fs.constants.O_NOFOLLOW;}
             return fsFlags;
         }
 
@@ -697,7 +707,9 @@ class Descriptor {
      * @throws {FSError} `payload.tag` contains mapped WASI error code.
      */
     async symlinkAt(target, path) {
-        if (target.startsWith('/')) throw new FSError('not-permitted');
+        if (target.startsWith('/')) {
+            throw new FSError('not-permitted');
+        }
         const full = this.#getFullPath(path, false);
 
         try {
@@ -788,7 +800,9 @@ class Descriptor {
      * @throws {FSError} `payload.tag` contains mapped WASI error code.
      */
     async metadataHash() {
-        if (this.#hostPreopen) return { upper: 0n, lower: BigInt(this._id) };
+        if (this.#hostPreopen) {
+            return { upper: 0n, lower: BigInt(this._id) };
+        }
         try {
             const s = await this.#handle.stat();
             return { upper: s.mtimeNs, lower: s.ino };
@@ -844,7 +858,9 @@ class Descriptor {
         } catch (e) {
             // On windows, `sync_data` uses `FileFlushBuffers` which fails with `EPERM` if
             // the file is not upen for writing. Ignore this error, for POSIX compatibility.
-            if (process.platform === 'win32' && e.code === 'EPERM') return;
+            if (process.platform === 'win32' && e.code === 'EPERM') {
+                return;
+            }
             throw FSError.from(e);
         }
     }
@@ -932,13 +948,21 @@ const descriptorCreate = Descriptor._create;
 delete Descriptor._create;
 
 function wasiTypeFromDirent(obj) {
-    if (obj.isFile()) return 'regular-file';
-    else if (obj.isSocket()) return 'socket';
-    else if (obj.isSymbolicLink()) return 'symbolic-link';
-    else if (obj.isFIFO()) return 'fifo';
-    else if (obj.isDirectory()) return 'directory';
-    else if (obj.isCharacterDevice()) return 'character-device';
-    else if (obj.isBlockDevice()) return 'block-device';
+    if (obj.isFile()) {
+        return 'regular-file';
+    } else if (obj.isSocket()) {
+        return 'socket';
+    } else if (obj.isSymbolicLink()) {
+        return 'symbolic-link';
+    } else if (obj.isFIFO()) {
+        return 'fifo';
+    } else if (obj.isDirectory()) {
+        return 'directory';
+    } else if (obj.isCharacterDevice()) {
+        return 'character-device';
+    } else if (obj.isBlockDevice()) {
+        return 'block-device';
+    }
     return 'unknown';
 }
 
@@ -954,7 +978,9 @@ function timestampToSec({ seconds, nanoseconds }) {
 }
 
 function stripTrailingSlash(path) {
-    if (path === '/') return '/';
+    if (path === '/') {
+        return '/';
+    }
     return path.replace(/\/+$/, '');
 }
 

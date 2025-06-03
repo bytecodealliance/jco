@@ -62,7 +62,9 @@ export class FutureReader {
      * @throws {Error} If the promise is rejected.
      */
     async read() {
-        if (this.#consumed) return null;
+        if (this.#consumed) {
+            return null;
+        }
         try {
             return await this.#promise;
         } catch (err) {
