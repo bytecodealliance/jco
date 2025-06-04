@@ -85,6 +85,8 @@ export class StreamReader {
      * @returns {Promise<Buffer>} Resolves with the concatenated buffer.
      */
     async readAll() {
+        this.#ensureReader();
+
         const chunks = [];
         let c;
         try {
@@ -189,9 +191,7 @@ export class StreamWriter {
      * @returns {Promise<void>}
      */
     async close() {
-        if (!this.#writer) {
-            throw new Error('StreamWriter is already closed');
-        }
+        this.#ensureWriter();
         await this.#writer.close();
         this.#writer = null;
     }
@@ -203,9 +203,7 @@ export class StreamWriter {
      * @returns {Promise<void>}
      */
     async closeWithError(error) {
-        if (!this.#writer) {
-            throw new Error('StreamWriter is already closed');
-        }
+        this.#ensureWriter();
         await this.#writer.abort(error);
         this.#writer = null;
     }
