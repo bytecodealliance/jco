@@ -100,7 +100,7 @@ export class FutureReader {
     }
 }
 
-export class FutureWriter {
+class FutureWriter {
     /** Deferred object with resolve/reject methods for controlling promise state */
     #deferred;
     /** Tracks if writer has been used */
