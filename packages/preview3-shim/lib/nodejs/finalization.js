@@ -1,4 +1,11 @@
-const registry = new FinalizationRegistry((dispose) => dispose());
+let REGISTRY = null;
+
+function getRegistry() {
+    if (!REGISTRY) {
+        REGISTRY = new FinalizationRegistry((dispose) => dispose());
+    }
+    return REGISTRY;
+}
 
 // While strictly speaking all components should handle their disposal,
 // this acts as a last-resort to catch all missed drops through the JS GC.
@@ -16,11 +23,11 @@ export function registerDispose(resource, parent = null, id, disposeFn) {
         disposeFn(id);
     };
 
-    registry.register(resource, finalizer, finalizer);
+    getRegistry().register(resource, finalizer, finalizer);
     return finalizer;
 }
 
 export function earlyDispose(finalizer) {
-    registry.unregister(finalizer);
+    getRegistry().unregister(finalizer);
     finalizer();
 }
