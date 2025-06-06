@@ -1,0 +1,87 @@
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+header = """
+# Changelog\n
+"""
+# template for the changelog body
+# https://keats.github.io/tera/docs/#introduction
+body = """
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="preview3-shim-v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        * {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
+          {% if commit.breaking %}[**breaking**] {% endif %}\
+          {{ commit.message | split(pat="\n") | first | trim }}\
+          {% if commit.remote.username %} by @{{ commit.remote.username }}{%- endif %}\
+          {% if commit.remote.pr_number %} in #{{ commit.remote.pr_number }}{%- endif %}
+    {% endfor %}
+{% endfor %}\n
+
+{%- if github -%}
+{% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+  {% raw %}\n{% endraw -%}
+  ## New Contributors
+{%- endif %}\
+{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+  * @{{ contributor.username }} made their first contribution
+    {%- if contributor.pr_number %} in \
+      [#{{ contributor.pr_number }}]({{ self::remote_url() }}/pull/{{ contributor.pr_number }}) \
+    {%- endif %}
+{%- endfor -%}
+{% raw %}\n{% endraw -%}
+{% raw %}\n{% endraw -%}
+{% raw %}\n{% endraw -%}
+{%- endif -%}
+
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+"""
+# remove the leading and trailing spaces
+trim = true
+
+[git]
+# parse the commits based on https://www.conventionalcommits.org
+
+# regex for parsing and grouping commits
+commit_parsers = [
+  { message = '^feat\(p3-shim\)', group = '<!-- 0 -->🚀 Features' },
+  { message = '^fix\(p3-shim\)', group = '<!-- 1 -->🐛 Bug Fixes' },
+  { message = '^doc\(p3-shim\)', group = '<!-- 3 -->📚 Documentation' },
+  { message = '^perf\(p3-shim\)', group = '<!-- 4 -->⚡ Performance' },
+  { message = '^refactor\(p3-shim\)', group = '<!-- 3 -->🚜 Refactor' },
+  { message = '^style\(p3-shim\)', group = '<!-- 5 -->🎨 Styling' },
+  { message = '^test\(p3-shim\)', group = '<!-- 6 -->🧪 Testing' },
+  { message = '^release', skip = true },
+  { message = '^chore\(p3-shim\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
+]
+
+# filter out the commits that are not matched by commit parsers
+filter_commits = true
+
+filter = { exclude = { scopes = ["ci", "infra", "ops"] } }
+
+# sort the tags topologically
+topo_order = false
+
+# sort the commits inside sections by oldest/newest order
+sort_commits = "newest"
+
+# glob pattern for matching git tags
+tag_pattern = "preview3-shim-v[0-9]*"
+
+# regex for skipping tags
+#
+# NOTE: we don't skip taks for beta/rc/alpha since we want their features
+# to be included in the next stable release
+#
+#skip_tags = "beta|rc|alpha"
+
+# tags to ignore
+ignore_tags = "beta|rc|alpha"

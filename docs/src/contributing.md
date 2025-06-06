@@ -38,6 +38,7 @@ jco is effectively a monorepo consisting of the following projects:
 * `src/api.js`: The jco API which can be used as a library dependency on npm. Published as https://npmjs.org/package/@bytecodealliance/jco.
 * `src/jco.js`: The jco CLI. Published as https://npmjs.org/package/@bytecodealliance/jco.
 * `packages/preview2-shim`: The WASI Preview2 host implementations for Node.js & browsers. Published as https://www.npmjs.com/package/@bytecodealliance/preview2-shim.
+* `packages/preview3-shim`: The WASI Preview3 host implementations for Node.js
 
 ## Building
 
@@ -54,6 +55,7 @@ There are three test suites in jco:
 
 * `npm run test`: Project-level transpilation, CLI & API tests.
 * `npm run test --workspace packages/preview2-shim`: `preview2-shim` unit tests.
+* `npm run test --workspace packages/preview3-shim`: `preview3-shim` unit tests.
 * `test/browser.html`: Bare-minimum browser validation test.
 * `cargo test`: Wasmtime preview2 conformance tests (not currently passing).
 
