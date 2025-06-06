@@ -886,7 +886,8 @@ impl<'a> Instantiator<'a, '_> {
     fn is_early_trampoline(trampoline: &Trampoline) -> bool {
         matches!(
             trampoline,
-            Trampoline::ContextGet(_)
+            Trampoline::BackpressureSet { .. }
+                | Trampoline::ContextGet(_)
                 | Trampoline::ContextSet(_)
                 | Trampoline::ErrorContextDebugMessage { .. }
                 | Trampoline::ErrorContextDrop { .. }
@@ -932,8 +933,12 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::BackpressureSet { instance } => {
-                let _ = instance;
-                todo!("Trampoline::BackpressureSet");
+                let backpressure_set_fn = self.gen.intrinsic(Intrinsic::BackpressureSet);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {backpressure_set_fn}({}, ...args); }} \n",
+                    instance.as_u32(),
+                );
             }
 
             Trampoline::WaitableSetNew { instance } => {
