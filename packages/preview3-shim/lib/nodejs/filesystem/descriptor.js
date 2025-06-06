@@ -11,9 +11,12 @@ import { wasiTypeFromDirent } from './utils.js';
 
 const symbolDispose = Symbol.dispose || Symbol.for('dispose');
 
-const _worker = new ResourceWorker(
-    new URL('../workers/filesystem-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('../workers/filesystem-worker.js', import.meta.url)
+    ));
+}
 
 class Descriptor {
     /** Node.js file handle for file operations (FileHandle from fs.promises.open) */
@@ -99,7 +102,7 @@ class Descriptor {
     readViaStream(offset) {
         this.#ensureHandle();
         const transform = new TransformStream();
-        const promise = _worker
+        const promise = worker()
             .run(
                 {
                     op: 'read',
@@ -137,7 +140,7 @@ class Descriptor {
         const stream = await data.intoReadableStream();
 
         try {
-            await _worker.run(
+            await worker().run(
                 { op: 'write', fd: this.#handle.fd, offset, stream },
                 [stream]
             );
@@ -327,7 +330,7 @@ class Descriptor {
         );
 
         const transform = new TransformStream();
-        const promise = _worker
+        const promise = worker()
             .run(
                 {
                     op: 'readDir',
