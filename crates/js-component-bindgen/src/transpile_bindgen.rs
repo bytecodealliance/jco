@@ -910,14 +910,22 @@ impl<'a> Instantiator<'a, '_> {
         let i = i.as_u32();
         match trampoline {
             Trampoline::TaskCancel { instance } => {
-                let _ = instance;
-                // TODO: impl (won't compile without)
-                uwriteln!(self.src.js, "const trampoline{i} = () => {{ throw new Error('task-cancel not implemented') }};");
+                let task_cancel_fn = self.gen.intrinsic(Intrinsic::TaskCancel);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = () => {{ {task_cancel_fn}({}); }};\n",
+                    instance.as_u32()
+                );
             }
 
             Trampoline::SubtaskCancel { instance, async_ } => {
-                let _ = (instance, async_);
-                todo!("subtask.cancel not implemented")
+                let task_cancel_fn = self.gen.intrinsic(Intrinsic::TaskCancel);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {task_cancel_fn}({}, {}, ...args); }};\n",
+                    instance.as_u32(),
+                    async_.then(|| "true").unwrap_or("false")
+                );
             }
 
             Trampoline::SubtaskDrop { instance } => {

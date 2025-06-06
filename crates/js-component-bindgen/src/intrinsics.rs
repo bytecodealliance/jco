@@ -136,14 +136,22 @@ pub enum Intrinsic {
     /// You can consider the type of the global variable to be:
     ///
     /// ```ts
-    /// type Task = { componentIdx: number, storage: [number] }
+    /// type Task = {
+    ///     componentIdx: number,
+    ///     storage: [number]
+    ///     alwaysTaskReturn: boolean,
+    ///     returnCalls: number,
+    ///     requested: boolean,
+    ///     borrowedHandles: Record<number, boolean>,
+    ///     cancelled: boolean,
+    /// }
     ///
     /// type GlobalAsyncCurrentTaskMap = Map<number, Task>;
     /// ```
     GlobalAsyncCurrentTaskMap,
 
     /// Function that retrieves the current global async current task
-    AsyncGetCurrentTask,
+    GetCurrentTask,
 
     /// Global that stores backpressure by component instance
     ///
@@ -158,6 +166,19 @@ pub enum Intrinsic {
     /// type GlobalBackpressureMap = Map<number, bool>;
     /// ```
     GlobalBackpressureMap,
+
+    /// Global that stores async state by component instance
+    ///
+    /// ```ts
+    /// type ComponentAsyncState = {
+    ///     mayLeave: boolean,
+    /// };
+    /// type GlobalBackpressureMap = Map<number, ComponentAsyncState>;
+    /// ```
+    GlobalAsyncStateMap,
+
+    /// Function that retrieves or creates async state for a given component instance
+    GetOrCreateAsyncState,
 
     /// Storage of component-wide "global" `error-context` metadata
     ///
@@ -417,6 +438,17 @@ pub enum Intrinsic {
     /// function contextGet(componentIdx: number, taskId: i32, slot: SlotIndex): i32;
     /// ```
     BackpressureSet,
+
+    /// Cancel the current async task for a given component instance
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// function taskCancel(componentIdx: number, isAsync: boolean);
+    /// ```
+    TaskCancel,
 
     /// Lift a boolean into provided storage, given a core type
     ///
@@ -679,7 +711,7 @@ pub fn render_intrinsics(
     if intrinsics.contains(&Intrinsic::ContextGet) || intrinsics.contains(&Intrinsic::ContextSet) {
         intrinsics.extend([
             &Intrinsic::GlobalAsyncCurrentTaskMap,
-            &Intrinsic::AsyncGetCurrentTask,
+            &Intrinsic::GetCurrentTask,
         ]);
     }
 
@@ -1354,14 +1386,23 @@ pub fn render_intrinsics(
             // TODO(async): remove new task hack once tasks are present as they should be
             // TODO(async): context-get is NOT indexed by sub-component -- need to be able to get ONE task?
             // TODO(async): re-read docs on re-entrancy
-            Intrinsic::AsyncGetCurrentTask => {
-                let current_task_get_fn = Intrinsic::AsyncGetCurrentTask.name();
+            Intrinsic::GetCurrentTask => {
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
                 let global_task_map = Intrinsic::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!("
                     function {current_task_get_fn}(componentIdx) {{
                         componentIdx = componentIdx ?? 0;
                         if (!{global_task_map}.has(componentIdx)) {{
-                            {global_task_map}.set(componentIdx, {{ componentIdx, storage: [null, null] }});
+                            {global_task_map}.set(componentIdx, {{
+                                componentIdx,
+                                storage: [null, null],
+                                cancelled: false,
+                                alwaysTaskReturn: false,
+                                returnCalls: 0,
+                                requested: false,
+                                borrowedHandles: {{}},
+                                cancelled: false,
+                            }});
                         }}
 
                         return {global_task_map}.get(componentIdx);
@@ -1372,7 +1413,7 @@ pub fn render_intrinsics(
             Intrinsic::ContextSet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_set_fn = Intrinsic::ContextSet.name();
-                let current_task_get_fn = Intrinsic::AsyncGetCurrentTask.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
                 output.push_str(&format!("
                     function {context_set_fn}(slot, value) {{
                         {debug_log_fn}('[{context_set_fn}()] args', {{ slot, value }});
@@ -1387,7 +1428,7 @@ pub fn render_intrinsics(
             Intrinsic::ContextGet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_get_fn = Intrinsic::ContextGet.name();
-                let current_task_get_fn = Intrinsic::AsyncGetCurrentTask.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
                 output.push_str(&format!("
                     function {context_get_fn}(slot) {{
                         {debug_log_fn}('[{context_get_fn}()] args', {{ slot }});
@@ -1409,6 +1450,11 @@ pub fn render_intrinsics(
                 let var_name = Intrinsic::GlobalBackpressureMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
 
+            }
+
+            Intrinsic::GlobalAsyncStateMap => {
+                let var_name = Intrinsic::GlobalAsyncStateMap.name();
+                output.push_str(&format!("const {var_name} = new Map();\n"));
             }
 
             Intrinsic::DebugLog => {
@@ -1846,6 +1892,50 @@ pub fn render_intrinsics(
                 "));
             }
 
+            Intrinsic::TaskCancel => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let task_cancel_fn = Intrinsic::BackpressureSet.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {task_cancel_fn}(ciid, isAsync) {{
+                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ ciid, value }});
+
+                        const state = {get_or_create_async_state_fn}(ciid);
+                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+
+                        const task = {current_task_get_fn}(ciid);
+                        if (task.sync && !task.alwaysTaskReturn) {{
+                            throw new Error('cannot cancel sync tasks without always task return set');
+                        }}
+                        if (!task.requested) {{ throw new Error('task cancellation has not been requested'); }}
+                        if (task.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
+                        if (task.returnCalls > 0) {{ throw new Error('cannot cancel task that has already returned a value'); }}
+                        if (task.cancelled) {{ throw new Error('cannot cancel task that has already been cancelled'); }}
+
+                        task.cancelled = true;
+                    }}
+                "));
+            }
+
+            Intrinsic::GetOrCreateAsyncState => {
+                let get_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                let map = Intrinsic::GlobalAsyncStateMap.name();
+                output.push_str(&format!("
+                    function {get_state_fn}(componentIdx, init) {{
+                        if (!{map}.has(componentIdx)) {{
+                            {map}.set(componentIdx, {{
+                                mayLeave: false
+                                ...(init || {{}}),
+                            }});
+                        }}
+
+                        return {map}.get(componentIdx);
+                    }}
+                "));
+            },
+
+
         }
     }
 
@@ -2025,6 +2115,10 @@ impl Intrinsic {
             Intrinsic::ErrorContextCreateLocalHandle => "errCtxCreateLocalHandle",
             Intrinsic::ErrorContextReserveGlobalRep => "errCtxReserveGlobalRep",
 
+            // General Async
+            Intrinsic::GlobalAsyncStateMap => "ASYNC_STATE",
+            Intrinsic::GetOrCreateAsyncState => "getOrCreateAsyncState",
+
             // Tasks
             Intrinsic::TaskReturn => "taskReturn",
             Intrinsic::SubtaskDrop => "subtaskDrop",
@@ -2037,8 +2131,11 @@ impl Intrinsic {
             Intrinsic::BackpressureSet => "backpressureSet",
             Intrinsic::GlobalBackpressureMap => "BACKPRESSURE",
 
+            // Tasks
+            Intrinsic::TaskCancel => "taskCancel",
+
             // Helpers for working with async state
-            Intrinsic::AsyncGetCurrentTask => "asyncGetCurrentTask",
+            Intrinsic::GetCurrentTask => "getCurrentTask",
             Intrinsic::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
 
             // Type conversions
