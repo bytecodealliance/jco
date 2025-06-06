@@ -125,6 +125,40 @@ pub enum Intrinsic {
     ValidateGuestChar,
     ValidateHostChar,
 
+    /////////////////////
+    // Data structures //
+    /////////////////////
+    /// Global that stores the current task for a given invocation.
+    ///
+    /// This global variable is populated *only* when we are performing a call
+    /// that was triggered by an async lifted export.
+    ///
+    /// You can consider the type of the global variable to be:
+    ///
+    /// ```ts
+    /// type Task = { componentIdx: number, storage: [number] }
+    ///
+    /// type GlobalAsyncCurrentTaskMap = Map<number, Task>;
+    /// ```
+    GlobalAsyncCurrentTaskMap,
+
+    /// Function that retrieves the current global async current task
+    AsyncGetCurrentTask,
+
+    /// Global that stores backpressure by component instance
+    ///
+    /// A component instance *not* having a value in this map indicates that
+    /// `backpressure.set` has not been called.
+    ///
+    /// A `true`/`false` in the value corresponding to a component instance indicates that
+    /// backpressure.set has been called at least once, with the last call containing the
+    /// given value.
+    ///
+    /// ```ts
+    /// type GlobalBackpressureMap = Map<number, bool>;
+    /// ```
+    GlobalBackpressureMap,
+
     /// Storage of component-wide "global" `error-context` metadata
     ///
     /// Contexts are reference counted at both the global level, and locally for a single
@@ -368,22 +402,21 @@ pub enum Intrinsic {
     ///
     ContextGet,
 
-    /// Global that stores the current task for a given invocation.
+    /// Set the backpressure for a given component instance
     ///
-    /// This global variable is populated *only* when we are performing a call
-    /// that was triggered by an async lifted export.
+    /// Guest code generally uses this to reference internally stored context local storage,
+    /// whether that is task local or thread local.
     ///
-    /// You can consider the type of the global variable to be:
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// type Task = { componentIdx: number, storage: [number] }
-    ///
-    /// type GlobalAsyncCurrentTaskMap = Map<number, Task>;
+    /// type i32 = number;
+    /// type SlotIndex = 0 | 1;
+    /// function contextGet(componentIdx: number, taskId: i32, slot: SlotIndex): i32;
     /// ```
-    GlobalAsyncCurrentTaskMap,
-
-    /// Function that retrieves the current global async current task
-    AsyncGetCurrentTask,
+    BackpressureSet,
 
     /// Lift a boolean into provided storage, given a core type
     ///
@@ -648,6 +681,10 @@ pub fn render_intrinsics(
             &Intrinsic::GlobalAsyncCurrentTaskMap,
             &Intrinsic::AsyncGetCurrentTask,
         ]);
+    }
+
+    if intrinsics.contains(&Intrinsic::BackpressureSet) {
+        intrinsics.extend([&Intrinsic::GlobalBackpressureMap]);
     }
 
     for i in intrinsics.iter() {
@@ -1368,6 +1405,12 @@ pub fn render_intrinsics(
                 output.push_str(&format!("const {var_name} = new Map();\n"));
             }
 
+            Intrinsic::GlobalBackpressureMap => {
+                let var_name = Intrinsic::GlobalBackpressureMap.name();
+                output.push_str(&format!("const {var_name} = new Map();\n"));
+
+            }
+
             Intrinsic::DebugLog => {
                 let fn_name = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1790,6 +1833,19 @@ pub fn render_intrinsics(
                 "));
             }
 
+            Intrinsic::BackpressureSet => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let backpressure_set_fn = Intrinsic::BackpressureSet.name();
+                let bp_map = Intrinsic::GlobalBackpressureMap.name();
+                output.push_str(&format!("
+                    function {backpressure_set_fn}(ciid, value) {{
+                        {debug_log_fn}('[{backpressure_set_fn}()] args', {{ ciid, value }});
+                        if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
+                        {bp_map}.set(ciid, value !== 0);
+                    }}
+                "));
+            }
+
         }
     }
 
@@ -1976,6 +2032,10 @@ impl Intrinsic {
             // Context
             Intrinsic::ContextSet => "contextSet",
             Intrinsic::ContextGet => "contextGet",
+
+            // Backpressure
+            Intrinsic::BackpressureSet => "backpressureSet",
+            Intrinsic::GlobalBackpressureMap => "BACKPRESSURE",
 
             // Helpers for working with async state
             Intrinsic::AsyncGetCurrentTask => "asyncGetCurrentTask",
