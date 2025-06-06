@@ -6,9 +6,12 @@ import {
     IP_ADDRESS_FAMILY,
 } from './address.js';
 
-const _worker = new ResourceWorker(
-    new URL('../workers/udp-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('../workers/udp-worker.js', import.meta.url)
+    ));
+}
 
 const STATE = {
     UNBOUND: 'unbound',
@@ -72,7 +75,7 @@ export class UdpSocket {
         }
 
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'udp-bind',
                 socketId: this.#socketId,
                 localAddress,
@@ -111,7 +114,7 @@ export class UdpSocket {
         }
 
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'udp-connect',
                 socketId: this.#socketId,
                 remoteAddress,
@@ -140,7 +143,7 @@ export class UdpSocket {
             throw new SocketError('invalid-state');
         }
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'udp-disconnect',
                 socketId: this.#socketId,
             });
@@ -185,7 +188,7 @@ export class UdpSocket {
         }
 
         try {
-            await _worker.run(
+            await worker().run(
                 {
                     op: 'udp-send',
                     socketId: this.#socketId,
@@ -216,7 +219,7 @@ export class UdpSocket {
             throw new SocketError('invalid-state');
         }
         try {
-            const { data, remoteAddress } = await _worker.run({
+            const { data, remoteAddress } = await worker().run({
                 op: 'udp-receive',
                 socketId: this.#socketId,
             });
@@ -243,7 +246,7 @@ export class UdpSocket {
             throw new SocketError('invalid-state');
         }
         try {
-            return await _worker.run({
+            return await worker().run({
                 op: 'udp-get-local-address',
                 socketId: this.#socketId,
             });
@@ -315,7 +318,7 @@ export class UdpSocket {
         }
         this.#options.hopLimit = value;
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'udp-set-unicast-hop-limit',
                 socketId: this.#socketId,
                 value,
@@ -341,7 +344,7 @@ export class UdpSocket {
             return this.#options.receiveBufferSize;
         }
         try {
-            const size = await _worker.run({
+            const size = await worker().run({
                 op: 'udp-recv-buffer-size',
                 socketId: this.#socketId,
             });
@@ -385,7 +388,7 @@ export class UdpSocket {
             return this.#options.sendBufferSize;
         }
         try {
-            const size = await _worker.run({
+            const size = await worker().run({
                 op: 'udp-send-buffer-size',
                 socketId: this.#socketId,
             });
@@ -420,7 +423,7 @@ export class UdpSocket {
      */
     [Symbol.dispose]() {
         if (this.#socketId) {
-            void _worker.run({
+            void worker().run({
                 op: 'udp-dispose',
                 socketId: this.#socketId,
             });
@@ -455,7 +458,7 @@ export const udpCreateSocket = {
             throw new SocketError('invalid-argument');
         }
         try {
-            const { socketId } = await _worker.run({
+            const { socketId } = await worker().run({
                 op: 'udp-create',
                 family: addressFamily,
             });

@@ -11,9 +11,12 @@ import {
     IP_ADDRESS_FAMILY,
 } from './address.js';
 
-const _worker = new ResourceWorker(
-    new URL('../workers/tcp-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('../workers/tcp-worker.js', import.meta.url)
+    ));
+}
 
 const STATE = {
     UNBOUND: 'unbound',
@@ -95,7 +98,7 @@ export class TcpSocket {
             throw new SocketError('invalid-argument');
         }
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'tcp-bind',
                 localAddress,
                 socketId: this.#socketId,
@@ -137,7 +140,7 @@ export class TcpSocket {
         this.#state = STATE.CONNECTING;
 
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'tcp-connect',
                 remoteAddress,
                 socketId: this.#socketId,
@@ -179,7 +182,7 @@ export class TcpSocket {
                 },
             });
 
-            await _worker.run(
+            await worker().run(
                 {
                     op: 'tcp-listen',
                     socketId: this.#socketId,
@@ -222,7 +225,7 @@ export class TcpSocket {
 
         try {
             // Transfer the stream to the worker
-            await _worker.run(
+            await worker().run(
                 {
                     op: 'tcp-send',
                     socketId: this.#socketId,
@@ -252,7 +255,7 @@ export class TcpSocket {
         }
 
         const transform = new TransformStream();
-        const promise = _worker
+        const promise = worker()
             .run(
                 {
                     op: 'tcp-receive',
@@ -289,7 +292,7 @@ export class TcpSocket {
         }
 
         try {
-            return await _worker.run({
+            return await worker().run({
                 op: 'tcp-get-local-address',
                 socketId: this.#socketId,
             });
@@ -316,7 +319,7 @@ export class TcpSocket {
         }
 
         try {
-            return await _worker.run({
+            return await worker().run({
                 op: 'tcp-get-remote-address',
                 socketId: this.#socketId,
             });
@@ -384,7 +387,7 @@ export class TcpSocket {
 
         this.#options.listenBacklogSize = Number(value);
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'tcp-set-listen-backlog-size',
                 socketId: this.#socketId,
                 value,
@@ -424,7 +427,7 @@ export class TcpSocket {
         try {
             this.#options.keepAliveEnabled = value;
 
-            await _worker.run({
+            await worker().run({
                 op: 'tcp-set-keep-alive',
                 socketId: this.#socketId,
                 keepAliveEnabled: this.#options.keepAliveEnabled,
@@ -480,7 +483,7 @@ export class TcpSocket {
         this.#options.keepAliveIdleTime = value;
 
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'tcp-set-keep-alive',
                 socketId: this.#socketId,
                 keepAliveEnabled: this.#options.keepAliveEnabled,
@@ -601,7 +604,7 @@ export class TcpSocket {
         }
 
         try {
-            const result = await _worker.run({
+            const result = await worker().run({
                 op: 'tcp-recv-buffer-size',
                 socketId: this.#socketId,
             });
@@ -648,7 +651,7 @@ export class TcpSocket {
         }
 
         try {
-            const result = await _worker.run({
+            const result = await worker().run({
                 op: 'tcp-send-buffer-size',
                 socketId: this.#socketId,
             });
@@ -683,7 +686,7 @@ export class TcpSocket {
      */
     [Symbol.dispose]() {
         if (this.#socketId) {
-            void _worker.run({
+            void worker().run({
                 op: 'tcp-dispose',
                 socketId: this.#socketId,
             });
@@ -748,7 +751,7 @@ export const tcpCreateSocket = {
         }
 
         try {
-            const result = await _worker.run({
+            const result = await worker().run({
                 op: 'tcp-create',
                 family: addressFamily,
             });
