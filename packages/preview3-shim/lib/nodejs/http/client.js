@@ -5,9 +5,12 @@ import { _fieldsFromEntriesChecked } from './fields.js';
 import { HttpError } from './error.js';
 import { Response } from './response.js';
 
-const _worker = new ResourceWorker(
-    new URL('../workers/http-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('../workers/http-worker.js', import.meta.url)
+    ));
+}
 
 export const HttpClient = {
     /**
@@ -52,7 +55,7 @@ export const HttpClient = {
                 .catch((err) => tx.postMessage({ err }))
                 .finally(() => tx.close());
 
-            const parts = await _worker.run(
+            const parts = await worker().run(
                 {
                     op: 'client-request',
                     url,
