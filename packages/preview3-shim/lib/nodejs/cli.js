@@ -21,9 +21,12 @@ export {
     terminalStderr,
 } from '@bytecodealliance/preview2-shim/cli';
 
-const _worker = new ResourceWorker(
-    new URL('./workers/cli-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('./workers/cli-worker.js', import.meta.url)
+    ));
+}
 
 export const stdin = {
     /**
@@ -55,7 +58,7 @@ export const stdout = {
      */
     setStdout(streamReader) {
         const stream = streamReader.intoReadableStream();
-        _worker.run({ op: 'stdout', stream }, [stream]);
+        worker().run({ op: 'stdout', stream }, [stream]);
     },
 };
 
@@ -72,6 +75,6 @@ export const stderr = {
      */
     setStdout(streamReader) {
         const stream = streamReader.intoReadableStream();
-        _worker.run({ op: 'stderr', stream }, [stream]);
+        worker().run({ op: 'stderr', stream }, [stream]);
     },
 };
