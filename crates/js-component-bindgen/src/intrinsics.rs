@@ -128,6 +128,9 @@ pub enum Intrinsic {
     /////////////////////
     // Data structures //
     /////////////////////
+    /// Event codes used for async, as a JS enum
+    AsyncEventCodeEnum,
+
     /// Global that stores the current task for a given invocation.
     ///
     /// This global variable is populated *only* when we are performing a call
@@ -401,7 +404,7 @@ pub enum Intrinsic {
     /// ```ts
     /// type i32 = number;
     /// type SlotIndex = 0 | 1;
-    /// function contextSet(componentIdx: number, taskId: i32, slot: SlotIndex, value: number);
+    /// function contextSet(slot: SlotIndex, value: number);
     /// ```
     ///
     ContextSet,
@@ -418,7 +421,7 @@ pub enum Intrinsic {
     /// ```ts
     /// type i32 = number;
     /// type SlotIndex = 0 | 1;
-    /// function contextGet(componentIdx: number, taskId: i32, slot: SlotIndex): i32;
+    /// function contextGet(slot: SlotIndex): i32;
     /// ```
     ///
     ContextGet,
@@ -433,11 +436,23 @@ pub enum Intrinsic {
     /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// type i32 = number;
-    /// type SlotIndex = 0 | 1;
-    /// function contextGet(componentIdx: number, taskId: i32, slot: SlotIndex): i32;
+    /// type Value = 0 | 1;
+    /// function backpressureSet(componentIdx: number, value: val);
     /// ```
     BackpressureSet,
+
+    /// Yield a task
+    ///
+    /// Guest code generally uses this to yield control flow to the host (and possibly other components)
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// function yield_(isAsync: boolean);
+    /// ```
+    Yield,
 
     /// Cancel the current async task for a given component instance
     ///
@@ -636,6 +651,12 @@ pub enum Intrinsic {
 
     /// Lift an error-context into provided storage given core type(s)
     LiftFlatErrorContextFromStorage,
+
+    /////////////////////
+    // Utility Classes //
+    /////////////////////
+    /// The definition of the async task class
+    AsyncTaskClass,
 }
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
@@ -711,6 +732,8 @@ pub fn render_intrinsics(
     if intrinsics.contains(&Intrinsic::ContextGet) || intrinsics.contains(&Intrinsic::ContextSet) {
         intrinsics.extend([
             &Intrinsic::GlobalAsyncCurrentTaskMap,
+            &Intrinsic::AsyncTaskClass,
+            &Intrinsic::AsyncEventCodeEnum,
             &Intrinsic::GetCurrentTask,
         ]);
     }
@@ -776,7 +799,6 @@ pub fn render_intrinsics(
             Intrinsic::F64ToI64 => output.push_str("
                 const f64ToI64 = f => (i64ToF64F[0] = f, i64ToF64I[0]);
             "),
-
             Intrinsic::FetchCompile => if !no_nodejs_compat {
                 output.push_str("
                     const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
@@ -1239,6 +1261,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             },
+
             Intrinsic::ErrorContextDrop => {
                 let global_ref_count_add_fn = Intrinsic::ErrorContextGlobalRefCountAdd.name();
                 let global_tbl = Intrinsic::ErrorContextComponentGlobalTable.name();
@@ -1372,7 +1395,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::SubtaskDrop => {
                 // TODO: ensure task is marked "may_leave", drop task for relevant component
                 // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-subtaskdrop
@@ -1382,34 +1404,25 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
-            // TODO(async): remove new task hack once tasks are present as they should be
-            // TODO(async): context-get is NOT indexed by sub-component -- need to be able to get ONE task?
-            // TODO(async): re-read docs on re-entrancy
             Intrinsic::GetCurrentTask => {
+                // TODO: remove autovivication of tasks here, they should be created @ lift
+                let task_class = Intrinsic::AsyncTaskClass.name();
                 let current_task_get_fn = Intrinsic::GetCurrentTask.name();
                 let global_task_map = Intrinsic::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!("
+                    let CURRENT_TASK;
                     function {current_task_get_fn}(componentIdx) {{
-                        componentIdx = componentIdx ?? 0;
-                        if (!{global_task_map}.has(componentIdx)) {{
-                            {global_task_map}.set(componentIdx, {{
-                                componentIdx,
-                                storage: [null, null],
-                                cancelled: false,
-                                alwaysTaskReturn: false,
-                                returnCalls: 0,
-                                requested: false,
-                                borrowedHandles: {{}},
-                                cancelled: false,
-                            }});
+                        if (!componentIdx) {{
+                            if (!CURRENT_TASK) {{ CURRENT_TASK = new {task_class}(); }}
+                            return CURRENT_TASK;
                         }}
-
+                        if (!{global_task_map}.has(componentIdx)) {{
+                            {global_task_map}.set(componentIdx, new {task_class}());
+                        }}
                         return {global_task_map}.get(componentIdx);
                     }}
                 "));
             }
-
             Intrinsic::ContextSet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_set_fn = Intrinsic::ContextSet.name();
@@ -1424,7 +1437,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::ContextGet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_get_fn = Intrinsic::ContextGet.name();
@@ -1440,23 +1452,19 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::GlobalAsyncCurrentTaskMap => {
                 let var_name = Intrinsic::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
             }
-
             Intrinsic::GlobalBackpressureMap => {
                 let var_name = Intrinsic::GlobalBackpressureMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
 
             }
-
             Intrinsic::GlobalAsyncStateMap => {
                 let var_name = Intrinsic::GlobalAsyncStateMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
             }
-
             Intrinsic::DebugLog => {
                 let fn_name = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1466,7 +1474,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::I32ToCharUtf16 => {
                 output.push_str(&format!("
                     function _i32ToCharUTF16 = (n) => {{
@@ -1478,7 +1485,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::I32ToCharUtf8 => {
                 output.push_str(&format!("
                     function _i32ToCharUTF8 = (n) => {{
@@ -1490,9 +1496,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
-            // TODO(async): memory is sometimes missing (when we're dealing with stack values??)
-
             Intrinsic::LiftFlatBoolFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1505,7 +1508,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatS8FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1518,7 +1520,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatU8FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1531,7 +1532,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatS16FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1544,7 +1544,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatU16FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1557,7 +1556,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatS32FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1570,7 +1568,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatU32FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1583,7 +1580,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatS64FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1596,7 +1592,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatU64FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1609,7 +1604,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatFloat32FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1621,7 +1615,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatFloat64FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1633,7 +1626,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatCharUtf16FromStorage => {
                 let i32_to_char_fn = Intrinsic::I32ToCharUtf16.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
@@ -1646,7 +1638,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatCharUtf8FromStorage => {
                 let i32_to_char_fn = Intrinsic::I32ToCharUtf8.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
@@ -1659,7 +1650,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatStringUtf16FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1679,7 +1669,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatStringUtf8FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1699,10 +1688,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
-            // TODO(async): alignment -- before each read is performed, we need to align the pointer to the
-            // alignment of the type of the field...
-            // (this means moving forward slightly? going to the next point! => ceil(ptr / alignment) * alignment
             Intrinsic::LiftFlatRecordFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1718,7 +1703,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatVariantFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1734,8 +1718,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
-            // TODO(async): Determine list length! only know the byte size
             Intrinsic::LiftFlatListFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1752,7 +1734,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatTupleFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1768,7 +1749,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatFlagsFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1780,7 +1760,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatEnumFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1796,7 +1775,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatOptionFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1812,7 +1790,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatResultFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1828,7 +1805,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatOwnFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1838,7 +1814,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatBorrowFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1848,7 +1823,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatFutureFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1858,7 +1832,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatStreamFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1868,7 +1841,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::LiftFlatErrorContextFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1878,7 +1850,6 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
-
             Intrinsic::BackpressureSet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let backpressure_set_fn = Intrinsic::BackpressureSet.name();
@@ -1935,6 +1906,94 @@ pub fn render_intrinsics(
                 "));
             },
 
+            Intrinsic::Yield => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let yield_fn = Intrinsic::Yield.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                output.push_str(&format!("
+                    function {yield_fn}(isAsync) {{
+                        {debug_log_fn}('[{yield_fn}()] args', {{ ciid, value }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        await task.yield({{ isAsync }});
+                    }}
+                "));
+            }
+
+            Intrinsic::AsyncTaskClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                let task_class = Intrinsic::AsyncTaskClass.name();
+                // TODO: remove the public mutable members that are eagerly exposed for early impl
+                output.push_str(&format!("
+                    class {task_class} {{
+                        static TaskState = {{
+                            INITIAL: 'initial',
+                            CANCEL_PENDING: 'cancel-pending',
+                            CANCELLED: 'cancelled',
+                        }}
+
+                        #state;
+
+                        cancelled = false;
+                        requested = false;
+                        alwaysTaskReturn = false;
+
+                        componentIdx;
+                        returnCalls =  0;
+                        storage = [null, null];
+                        borrowedHandles = {{}};
+
+                        async waitOn(opts) {{
+                            const {{ promise, isAsync, isCancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ promise, isAsync, isCancellable }});
+                            throw new Error('not implemented');
+                        }}
+
+                        async yield(opts) {{
+                            const {{ isAsync }} = opts;
+                            {debug_log_fn}('[{task_class}#yield()] args', {{ isAsync }});
+
+                            if (this.status === TaskState.CANCEL_PENDING) {{
+                                this.#state = TaskState.CANCELLED;
+                                return {{
+                                    code: {event_code_enum}.TASK_CANCELLED,
+                                    something: 0,
+                                    something: 0,
+                                }};
+                            }}
+
+                            const promise = new Promise(resolve => setTimeout(resolve, 100));
+                            const waitResult = await this.waitOn({{ promise, isAsync, isCancellable: true }});
+                            if (waitResult) {{
+                                if (this.#state !== TaskState.INITIAL) {{ throw new Error('task should be in initial state found [' + this.#state + ']'); }}
+                                this.#state = TaskState.CANCELLED;
+                                return {{
+                                    code: {event_code_enum}.TASK_CANCELLED,
+                                    something: 0,
+                                    something: 0,
+                                }};
+                            }}
+
+                            return {{
+                                code: {event_code_enum}.NONE,
+                                something: 0,
+                                something: 0,
+                            }};
+                        }}
+                    }}
+                "));
+            }
+
+            Intrinsic::AsyncEventCodeEnum => {
+                let name = Intrinsic::AsyncEventCodeEnum.name();
+                output.push_str(&format!("
+                    const {name} = {{
+                        NONE: 'none',
+                        TASK_CANCELLED: 'task-cancelled',
+                    }};
+                "));
+            }
 
         }
     }
@@ -2122,6 +2181,7 @@ impl Intrinsic {
             // Tasks
             Intrinsic::TaskReturn => "taskReturn",
             Intrinsic::SubtaskDrop => "subtaskDrop",
+            Intrinsic::Yield => "asyncYield",
 
             // Context
             Intrinsic::ContextSet => "contextSet",
@@ -2137,6 +2197,8 @@ impl Intrinsic {
             // Helpers for working with async state
             Intrinsic::GetCurrentTask => "getCurrentTask",
             Intrinsic::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
+            Intrinsic::AsyncTaskClass => "AsyncTask",
+            Intrinsic::AsyncEventCodeEnum => "ASYNC_EVENT_CODE",
 
             // Type conversions
             Intrinsic::I32ToCharUtf8 => "_i32ToCharUtf8",

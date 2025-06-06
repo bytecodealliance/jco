@@ -986,8 +986,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::Yield { async_ } => {
-                let _ = async_;
-                todo!("Trampoline::Yield");
+                let yield_fn = self.gen.intrinsic(Intrinsic::Yield);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = () => {{ {yield_fn}({async_}); }};\n",
+                );
             }
 
             Trampoline::StreamNew { ty } => {
