@@ -6,9 +6,12 @@ import { Request } from './request.js';
 import { HttpError } from './error.js';
 import { _fieldsFromEntriesChecked } from './fields.js';
 
-const _worker = new ResourceWorker(
-    new URL('../workers/http-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('../workers/http-worker.js', import.meta.url)
+    ));
+}
 
 /**
  * HttpServer uses a background worker thread to handle raw HTTP connections,
@@ -31,7 +34,7 @@ export class HttpServer {
     }
 
     async listen(port, host) {
-        this.#serverId = await _worker.run({
+        this.#serverId = await worker().run({
             op: 'server-start',
             port,
             host,
@@ -45,7 +48,7 @@ export class HttpServer {
             return;
         }
 
-        await _worker.run({
+        await worker().run({
             op: 'server-stop',
             serverId: this.#serverId,
         });
@@ -59,7 +62,7 @@ export class HttpServer {
         }
 
         await this.stop();
-        await _worker.run({
+        await worker().run({
             op: 'server-close',
             serverId: this.#serverId,
         });
@@ -71,7 +74,7 @@ export class HttpServer {
         let next;
 
         const nextRequest = async () =>
-            await _worker.run({
+            await worker().run({
                 op: 'server-next',
                 serverId: this.#serverId,
             });
@@ -97,7 +100,7 @@ export class HttpServer {
                         .catch((err) => tx.postMessage({ err }))
                         .finally(() => tx.close());
 
-                    await _worker.run(
+                    await worker().run(
                         {
                             op: 'server-response',
                             serverId: this.#serverId,
@@ -110,7 +113,7 @@ export class HttpServer {
                         [stream, rx]
                     );
                 } else {
-                    await _worker.run({
+                    await worker().run({
                         op: 'server-response',
                         serverId: this.#serverId,
                         requestId,
