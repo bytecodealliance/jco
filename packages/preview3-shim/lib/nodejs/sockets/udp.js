@@ -45,6 +45,7 @@ export function createUdpSocket(addressFamily) {
     ) {
         throw new SocketError('invalid-argument');
     }
+
     try {
         const { socketId } = worker().runSync({
             op: 'udp-create',
@@ -83,6 +84,13 @@ export class UdpSocket {
     static _create(t, addressFamily, socketId) {
         if (t !== token()) {
             throw new Error('Use createUdpSocket to create a Socket');
+        }
+
+        if (
+            addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
+            addressFamily !== IP_ADDRESS_FAMILY.IPV6
+        ) {
+            throw new SocketError('invalid-argument');
         }
 
         const sock = new UdpSocket();

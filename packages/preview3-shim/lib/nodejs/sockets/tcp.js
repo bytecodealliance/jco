@@ -107,6 +107,13 @@ export class TcpSocket {
             throw new Error('Use createTcpSocket to create a Socket');
         }
 
+        if (
+            addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
+            addressFamily !== IP_ADDRESS_FAMILY.IPV6
+        ) {
+            throw new SocketError('invalid-argument');
+        }
+
         const socket = new TcpSocket();
         socket.#family = addressFamily;
         socket.#socketId = socketId;
