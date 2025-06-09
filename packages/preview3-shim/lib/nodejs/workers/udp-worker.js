@@ -60,7 +60,6 @@ async function handleBind({ socketId, localAddress }) {
     socket.udp.bind(port, addr);
 
     await Promise.race([onListening, onError]);
-    return { success: true };
 }
 
 function handleConnect({ socketId, remoteAddress }) {
@@ -70,16 +69,12 @@ function handleConnect({ socketId, remoteAddress }) {
 
     socket.udp.connect(port, addr);
     socket.connected = remoteAddress;
-
-    return { success: true };
 }
 
 function handleDisconnect({ socketId }) {
     const socket = sockets.get(socketId);
     socket.udp.disconnect();
     socket.connected = null;
-
-    return { success: true };
 }
 
 async function handleSend({ socketId, data, remoteAddress }) {
@@ -98,8 +93,6 @@ async function handleSend({ socketId, data, remoteAddress }) {
             );
         }
     });
-
-    return { success: true };
 }
 
 async function handleReceive({ socketId }) {
@@ -137,7 +130,6 @@ function handleGetLocal({ socketId }) {
 function handleSetHop({ socketId, value }) {
     const socket = sockets.get(socketId);
     socket.udp.setTTL(value);
-    return { success: true };
 }
 
 function handleRecvBuffer({ socketId }) {
@@ -154,5 +146,4 @@ function handleDispose({ socketId }) {
     const socket = sockets.get(socketId);
     socket.udp.close();
     sockets.delete(socketId);
-    return { success: true };
 }

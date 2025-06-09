@@ -1,5 +1,4 @@
 import { Socket, Server } from 'node:net';
-import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { once } from 'node:events';
@@ -13,6 +12,9 @@ const { TCP, constants: TCPConstants } = process.binding('tcp_wrap');
 
 // Socket instances stored by ID
 const sockets = new Map();
+// Unique IDs for sockets and servers
+let NEXT_SOCKET_ID = 0n;
+let NEXT_SERVER_ID = 0n;
 
 // Handle worker messages
 Router()
@@ -37,7 +39,7 @@ Router()
 
 // Create a new TCP socket
 function handleTcpCreate({ family }) {
-    const socketId = randomUUID();
+    const socketId = NEXT_SOCKET_ID++;
     const handle = new TCP(TCPConstants.SOCKET);
 
     sockets.set(socketId, {
@@ -72,8 +74,6 @@ async function handleTcpBind({ socketId, localAddress }) {
             resolve();
         }
     });
-
-    return { success: true };
 }
 
 // Connect a socket to remote address
@@ -97,8 +97,6 @@ async function handleTcpConnect({ socketId, remoteAddress }) {
     tcp.connect({ port, host });
 
     await Promise.race([onConnect, onError]);
-
-    return { success: true };
 }
 
 async function handleTcpListen({ socketId, stream }) {
@@ -121,15 +119,13 @@ async function handleTcpListen({ socketId, stream }) {
     await Promise.race([onListening, onError]);
 
     server.on('connection', (conn) => {
-        const id = randomUUID();
+        const id = NEXT_SERVER_ID++;
         sockets.set(id, { handle: conn._handle, family, backlog, tcp: conn });
         writer.write({ family, socketId: id });
     });
 
     server.on('error', (err) => stream.abort(err));
     // TODO(tandr): Handle server close
-
-    return { success: true };
 }
 
 async function handleTcpSend({ socketId, stream }) {
@@ -139,7 +135,6 @@ async function handleTcpSend({ socketId, stream }) {
 
     // TODO(tandr): Should we handle FIN packet?
     await pipeline(readable, tcp);
-    return { success: true };
 }
 
 async function handleTcpReceive({ socketId, stream }) {
@@ -148,7 +143,6 @@ async function handleTcpReceive({ socketId, stream }) {
 
     const writable = Writable.fromWeb(stream);
     await pipeline(tcp, writable);
-    return { success: true };
 }
 
 async function handleGetLocalAddress({ socketId }) {
@@ -228,7 +222,7 @@ function handleTcpDispose({ socketId }) {
 
 let _recvBufferSize, _sendBufferSize;
 async function getDefaultBufferSizes() {
-    var s = new Socket({ type: 'udp4' });
+    var s = new Socket();
     s.bind(0);
     await new Promise((resolve, reject) => {
         s.once('error', reject);

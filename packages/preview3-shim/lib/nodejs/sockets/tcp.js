@@ -18,6 +18,11 @@ function worker() {
     ));
 }
 
+let TCP_CREATE_TOKEN = null;
+function token() {
+    return (TCP_CREATE_TOKEN ??= Symbol('TcpCreateToken'));
+}
+
 const STATE = {
     UNBOUND: 'unbound',
     BOUND: 'bound',
@@ -26,6 +31,36 @@ const STATE = {
     CONNECTED: 'connected',
     CLOSED: 'closed',
 };
+
+/**
+ * Creates a new TCP socket
+ * WIT: createTcpSocket: func(address-family: ip-address-family) -> result<tcp-socket, error-code>
+ *
+ * @async
+ * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
+ * @returns {TcpSocket>} A new TCP socket instance
+ * @throws {SocketError} with payload.tag 'invalid-argument' if `addressFamily` is not IPV4 or IPV6
+ * @throws {SocketError} for other errors, payload.tag maps the low-level system error_
+ */
+export async function createTcpSocket(addressFamily) {
+    if (
+        addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
+        addressFamily !== IP_ADDRESS_FAMILY.IPV6
+    ) {
+        throw new SocketError('invalid-argument');
+    }
+
+    try {
+        const result = await worker().run({
+            op: 'tcp-create',
+            family: addressFamily,
+        });
+
+        return TcpSocket._create(token(), addressFamily, result.socketId);
+    } catch (error) {
+        throw SocketError.from(error);
+    }
+}
 
 export class TcpSocket {
     #socketId = null;
@@ -68,7 +103,11 @@ export class TcpSocket {
      * @returns {TcpSocket} A new TcpSocket instance
      * @private
      */
-    static _create(addressFamily, socketId) {
+    static _create(t, addressFamily, socketId) {
+        if (t !== token()) {
+            throw new Error('Use createTcpSocket to create a Socket');
+        }
+
         const socket = new TcpSocket();
         socket.#family = addressFamily;
         socket.#socketId = socketId;
@@ -176,7 +215,7 @@ export class TcpSocket {
             // Convert incoming connections from worker to TcpSocket instances
             const transform = new TransformStream({
                 transform({ family, socketId }, controller) {
-                    const socket = tcpSocketCreate(family, socketId);
+                    const socket = TcpSocket._create(token(), family, socketId);
                     socket.#state = STATE.CONNECTED;
                     controller.enqueue(socket);
                 },
@@ -364,13 +403,13 @@ export class TcpSocket {
      * @async
      * @param {bigint} value - The backlog size
      * @returns {Promise<void>}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is 0
      * @throws {SocketError} with payload.tag 'not-supported' if socket is CONNECTING or CONNECTED
      * @throws {SocketError} with payload.tag 'invalid-state' if socket is not UNBOUND or BOUND
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async setListenBacklogSize(value) {
-        if (value === 0n) {
+        if (value <= 0n) {
             throw new SocketError('invalid-argument');
         }
 
@@ -385,7 +424,7 @@ export class TcpSocket {
             throw new SocketError('invalid-state');
         }
 
-        this.#options.listenBacklogSize = Number(value);
+        this.#options.listenBacklogSize = value;
         try {
             await worker().run({
                 op: 'tcp-set-listen-backlog-size',
@@ -461,7 +500,7 @@ export class TcpSocket {
      * @async
      * @param {bigint} value - The idle time in nanoseconds
      * @returns {Promise<void>}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is less than 1
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
     async setKeepAliveIdleTime(value) {
@@ -469,6 +508,7 @@ export class TcpSocket {
             throw new SocketError('invalid-argument');
         }
 
+        // Ensure that the value passed to the worker never gets rounded down to 0.
         if (value < 1_000_000_000n) {
             value = 1_000_000_000n;
         }
@@ -516,7 +556,7 @@ export class TcpSocket {
      *
      * @param {bigint} value - The interval in nanoseconds
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is less than 1
      */
     setKeepAliveInterval(value) {
         if (value < 1n) {
@@ -547,7 +587,7 @@ export class TcpSocket {
      *
      * @param {number} value - The keep-alive count
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is less than 1
      */
     setKeepAliveCount(value) {
         if (value < 1) {
@@ -578,7 +618,7 @@ export class TcpSocket {
      *
      * @param {number} value - The hop limit
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is less than 1
      */
     setHopLimit(value) {
         if (value < 1) {
@@ -625,10 +665,10 @@ export class TcpSocket {
      *
      * @param {bigint} value - The receive buffer size in bytes
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is 0
      */
     setReceiveBufferSize(value) {
-        if (value === 0n) {
+        if (value <= 0n) {
             throw new SocketError('invalid-argument');
         }
         this.#options.receiveBufferSize = value;
@@ -672,10 +712,10 @@ export class TcpSocket {
      *
      * @param {bigint} value - The send buffer size in bytes
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is 0
      */
     setSendBufferSize(value) {
-        if (value === 0n) {
+        if (value <= 0n) {
             throw new SocketError('invalid-argument');
         }
         this.#options.sendBufferSize = value;
@@ -727,38 +767,3 @@ export class TcpSocket {
         );
     }
 }
-
-const tcpSocketCreate = TcpSocket._create;
-delete TcpSocket._create;
-
-export const tcpCreateSocket = {
-    /**
-     * Creates a new TCP socket
-     * WIT: createTcpSocket: func(address-family: ip-address-family) -> result<tcp-socket, error-code>
-     *
-     * @async
-     * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
-     * @returns {TcpSocket>} A new TCP socket instance
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~addressFamily~ is not IPV4 or IPV6
-     * @throws {SocketError} for other errors, payload.tag maps the low-level system error_
-     */
-    async createTcpSocket(addressFamily) {
-        if (
-            addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
-            addressFamily !== IP_ADDRESS_FAMILY.IPV6
-        ) {
-            throw new SocketError('invalid-argument');
-        }
-
-        try {
-            const result = await worker().run({
-                op: 'tcp-create',
-                family: addressFamily,
-            });
-
-            return tcpSocketCreate(addressFamily, result.socketId);
-        } catch (error) {
-            throw SocketError.from(error);
-        }
-    },
-};

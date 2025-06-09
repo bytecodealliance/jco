@@ -1,11 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import { StreamReader, stream } from '@bytecodealliance/preview3-shim/stream';
 
-import net from 'net';
+import net from 'node:net';
 
 import {
     TcpSocket,
-    tcpCreateSocket,
+    createTcpSocket,
     makeIpAddress,
     IP_ADDRESS_FAMILY,
 } from '@bytecodealliance/preview3-shim/sockets';
@@ -13,34 +13,28 @@ import {
 const ipv4LocalAddress = makeIpAddress('ipv4', '127.0.0.1', 0);
 const ipv6LocalAddress = makeIpAddress('ipv6', '::1', 0);
 
-const createIpv4Socket = () =>
-    tcpCreateSocket.createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
-const createIpv6Socket = () =>
-    tcpCreateSocket.createTcpSocket(IP_ADDRESS_FAMILY.IPV6);
+const createIpv4Socket = () => createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
+const createIpv6Socket = () => createTcpSocket(IP_ADDRESS_FAMILY.IPV6);
 
 describe('TCP Socket Creation', () => {
     test('should create an IPv4 socket', async () => {
-        const socket = await tcpCreateSocket.createTcpSocket(
-            IP_ADDRESS_FAMILY.IPV4
-        );
+        const socket = await createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
 
         expect(socket).toBeInstanceOf(TcpSocket);
         expect(socket.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
     });
 
     test('should create an IPv6 socket', async () => {
-        const socket = await tcpCreateSocket.createTcpSocket(
-            IP_ADDRESS_FAMILY.IPV6
-        );
+        const socket = await createTcpSocket(IP_ADDRESS_FAMILY.IPV6);
 
         expect(socket).toBeInstanceOf(TcpSocket);
         expect(socket.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV6);
     });
 
     test('should throw on invalid address family', async () => {
-        await expect(
-            tcpCreateSocket.createTcpSocket('invalid')
-        ).rejects.toSatisfy((err) => err.payload.tag === 'invalid-argument');
+        await expect(createTcpSocket('invalid')).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-argument'
+        );
     });
 });
 
@@ -178,7 +172,7 @@ describe('TCP Socket Listen', () => {
     });
 });
 
-describe('Intagration: TCP Socket Send', () => {
+describe('Integration: TCP Socket Send', () => {
     let server;
     let port;
     let received = Buffer.alloc(0);

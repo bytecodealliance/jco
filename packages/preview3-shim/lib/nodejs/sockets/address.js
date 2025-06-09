@@ -64,8 +64,16 @@ export const isUnicastIpAddress = (a) =>
  * @param {{tag:string,val:{address:number[]}}} ipAddr
  * @returns {string|null}
  */
-export const serializeIpAddress = ({ tag, val: { address } }) =>
-    tag === 'ipv4' ? tupleToIpv4(address) : tupleToIpv6(address);
+export const serializeIpAddress = ({ tag, val: { address } }) => {
+    switch (tag) {
+        case 'ipv4':
+            return tupleToIpv4(address);
+        case 'ipv6':
+            return tupleToIpv6(address);
+        default:
+            throw new Error(`Unknown IP tag: ${tag}`);
+    }
+};
 
 /**
  * Create a socket‐address object.
@@ -75,7 +83,17 @@ export const serializeIpAddress = ({ tag, val: { address } }) =>
  * @returns {{tag:string,val:Object}}
  */
 export const makeIpAddress = (family, host, port) => {
-    const address = family === 'ipv4' ? ipv4ToTuple(host) : ipv6ToTuple(host);
+    let address;
+    switch (family) {
+        case 'ipv4':
+            address = ipv4ToTuple(host);
+            break;
+        case 'ipv6':
+            address = ipv6ToTuple(host);
+            break;
+        default:
+            throw new Error(`Unknown IP family: ${family}`);
+    }
 
     const base = { address, port };
     return family === 'ipv4'

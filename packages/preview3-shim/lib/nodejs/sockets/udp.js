@@ -13,12 +13,48 @@ function worker() {
     ));
 }
 
+let UDP_CREATE_TOKEN = null;
+function token() {
+    return (UDP_CREATE_TOKEN ??= Symbol('UdpCreateToken'));
+}
+
 const STATE = {
     UNBOUND: 'unbound',
     BOUND: 'bound',
     CONNECTED: 'connected',
     CLOSED: 'closed',
 };
+
+/**
+ * Create a new UDP socket.
+ * WIT:
+ * ```
+ * createUdpSocket: func(address-family: ip-address-family) -> result<udp-socket, error-code>
+ * ```
+ *
+ * @async
+ * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family
+ * @returns {Promise<UdpSocket>}
+ * @throws {SocketError} with payload.tag 'invalid-argument' if ~addressFamily~ is not IPv4 or IPv6
+ * @throws {SocketError} for other errors, payload.tag maps the system error
+ */
+export async function createUdpSocket(addressFamily) {
+    if (
+        addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
+        addressFamily !== IP_ADDRESS_FAMILY.IPV6
+    ) {
+        throw new SocketError('invalid-argument');
+    }
+    try {
+        const { socketId } = await worker().run({
+            op: 'udp-create',
+            family: addressFamily,
+        });
+        return UdpSocket._create(token(), addressFamily, socketId);
+    } catch (e) {
+        throw SocketError.from(e);
+    }
+}
 
 export class UdpSocket {
     #socketId = null;
@@ -44,7 +80,11 @@ export class UdpSocket {
      * @returns {UdpSocket} A new UdpSocket instance
      * @private
      */
-    static _create(addressFamily, socketId) {
+    static _create(t, addressFamily, socketId) {
+        if (t !== token()) {
+            throw new Error('Use createUdpSocket to create a Socket');
+        }
+
         const sock = new UdpSocket();
         sock.#family = addressFamily;
         sock.#socketId = socketId;
@@ -433,38 +473,4 @@ export class UdpSocket {
     }
 }
 
-const udpSocketCreate = UdpSocket._create;
-delete UdpSocket._create;
-
-export const udpCreateSocket = {
-    /**
-     * Create a new UDP socket.
-     * WIT:
-     * ```
-     * createUdpSocket: func(address-family: ip-address-family) -> result<udp-socket, error-code>
-     * ```
-     *
-     * @async
-     * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family
-     * @returns {Promise<UdpSocket>}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~addressFamily~ is not IPv4 or IPv6
-     * @throws {SocketError} for other errors, payload.tag maps the system error
-     */
-    async createUdpSocket(addressFamily) {
-        if (
-            addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
-            addressFamily !== IP_ADDRESS_FAMILY.IPV6
-        ) {
-            throw new SocketError('invalid-argument');
-        }
-        try {
-            const { socketId } = await worker().run({
-                op: 'udp-create',
-                family: addressFamily,
-            });
-            return udpSocketCreate(addressFamily, socketId);
-        } catch (e) {
-            throw SocketError.from(e);
-        }
-    },
-};
+export const udpCreateSocket = {};

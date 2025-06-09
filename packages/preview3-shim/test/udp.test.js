@@ -1,8 +1,9 @@
-import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import dgram from 'node:dgram';
+
+import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import {
     UdpSocket,
-    udpCreateSocket,
+    createUdpSocket,
     makeIpAddress,
     IP_ADDRESS_FAMILY,
 } from '@bytecodealliance/preview3-shim/sockets';
@@ -10,16 +11,12 @@ import {
 const ipv4LocalAddress = makeIpAddress('ipv4', '127.0.0.1', 0);
 const ipv6LocalAddress = makeIpAddress('ipv6', '::1', 0);
 
-const createIpv4Socket = () =>
-    udpCreateSocket.createUdpSocket(IP_ADDRESS_FAMILY.IPV4);
-const createIpv6Socket = () =>
-    udpCreateSocket.createUdpSocket(IP_ADDRESS_FAMILY.IPV6);
+const createIpv4Socket = () => createUdpSocket(IP_ADDRESS_FAMILY.IPV4);
+const createIpv6Socket = () => createUdpSocket(IP_ADDRESS_FAMILY.IPV6);
 
 describe('UDP Socket Creation', () => {
     test('creates an IPv4 UDP socket', async () => {
-        const sock = await udpCreateSocket.createUdpSocket(
-            IP_ADDRESS_FAMILY.IPV4
-        );
+        const sock = await createUdpSocket(IP_ADDRESS_FAMILY.IPV4);
         expect(sock).toBeInstanceOf(UdpSocket);
         expect(sock.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
 
@@ -35,14 +32,13 @@ describe('UDP Socket Creation', () => {
     });
 
     test('throws on invalid address family', async () => {
-        await expect(
-            udpCreateSocket.createUdpSocket('invalid')
-        ).rejects.toSatisfy((err) => err.payload.tag === 'invalid-argument');
+        await expect(createUdpSocket('invalid')).rejects.toSatisfy(
+            (err) => err.payload.tag === 'invalid-argument'
+        );
     });
 });
 
 describe('UDP Socket Bind', () => {
-    //
     test('binds to a local IPv4 address', async () => {
         const sock = await createIpv4Socket();
         await expect(sock.bind(ipv4LocalAddress)).resolves.toBeUndefined();
