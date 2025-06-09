@@ -43,10 +43,11 @@ With Jco (and related projects in this repository), you can:
 
 As Jco aims to do many things, it contains many subprojects that are organized in this repository:
 
-| Subproject                          | Language   | Directory                               | Description                                                                                     |
+| Subproject                       | Language   | Directory                               | Description                                                                                     |
 |----------------------------------|------------|-----------------------------------------|-------------------------------------------------------------------------------------------------|
 | `jco`                            | Javascript | `packages/jco`                          | The `jco` CLI                                                                                   |
-| `preview2-shim`                  | Javascript | `packages/preview2-shim`                | Library that provides a mapping of [WASI Preview2][wasi-p2] for NodeJS and Browsers             |
+| `preview2-shim`                  | Javascript | `packages/preview2-shim`                | Library that provides a mapping of [WASI Preview 2][wasi-p2] for NodeJS and Browsers            |
+| `preview3-shim`                  | Javascript | `packages/preview3-shim`                | Library that provides a mapping of WASI Preview 3 for NodeJS                                    |
 | `js-component-bindgen`           | Rust       | `crates/js-component-bindgen`           | Enables `jco transpile` and other features, reusing the Rust WebAssembly ecosystem              |
 | `js-component-bindgen-component` | Rust       | `crates/js-component-bindgen-component` | WebAssembly component that (when transipled) makes `js-component-bindgen` available in JS `jco` |
 | `wasm-tools-component`           | Rust       | `crates/wasm-tools-component`           | WebAssembly component containing pieces of [`wasm-tools`][wt] used by `jco`                     |

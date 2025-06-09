@@ -9,6 +9,7 @@ updates:
     directories:
       - '/'
       - '/packages/preview2-shim'
+      - '/packages/preview3-shim'
       - '/examples/components/*'
     groups:
       example-dependencies:

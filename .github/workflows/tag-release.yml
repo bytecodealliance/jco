@@ -19,6 +19,7 @@ on:
           - jco
           - js-component-bindgen
           - preview2-shim
+          - preview3-shim
         description: |
           Project to tag for release (ex. `0.1.0`)
 
