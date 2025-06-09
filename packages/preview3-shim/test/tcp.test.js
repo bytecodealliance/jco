@@ -18,7 +18,7 @@ const createIpv6Socket = () => createTcpSocket(IP_ADDRESS_FAMILY.IPV6);
 
 describe('TCP Socket Creation', () => {
     test('should create an IPv4 socket', async () => {
-        const socket = await createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
+        const socket = createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
 
         expect(socket).toBeInstanceOf(TcpSocket);
         expect(socket.addressFamily()).toBe(IP_ADDRESS_FAMILY.IPV4);
@@ -32,42 +32,42 @@ describe('TCP Socket Creation', () => {
     });
 
     test('should throw on invalid address family', async () => {
-        await expect(createTcpSocket('invalid')).rejects.toSatisfy(
-            (err) => err.payload.tag === 'invalid-argument'
+        expect(() => createTcpSocket('invalid')).toThrow(
+            expect.objectContaining({ payload: { tag: 'invalid-argument' } })
         );
     });
 });
 
 describe('TCP Socket Bind', () => {
     test('should bind to a local IPv4 address', async () => {
-        const client = await createIpv4Socket();
-        await expect(client.bind(ipv4LocalAddress)).resolves;
+        const client = createIpv4Socket();
+        expect(client.bind(ipv4LocalAddress)).toBeUndefined();
     });
 
     test('should bind to a local IPv6 address', async () => {
-        const client = await createIpv6Socket();
-        await expect(client.bind(ipv6LocalAddress)).resolves;
+        const client = createIpv6Socket();
+        expect(client.bind(ipv6LocalAddress)).toBeUndefined();
     });
 
     test('should throw when binding with mismatched address family', async () => {
-        const client = await createIpv4Socket();
-        await expect(client.bind(ipv6LocalAddress)).rejects.toSatisfy(
-            (err) => err.payload.tag === 'invalid-argument'
+        const client = createIpv4Socket();
+        await expect(() => client.bind(ipv6LocalAddress)).toThrow(
+            expect.objectContaining({ payload: { tag: 'invalid-argument' } })
         );
     });
 
     test('should throw when binding already bound socket', async () => {
         const client = await createIpv4Socket();
         await client.bind(ipv4LocalAddress);
-        await expect(client.bind(ipv4LocalAddress)).rejects.toSatisfy(
-            (err) => err.payload.tag === 'invalid-state'
+        expect(() => client.bind(ipv4LocalAddress)).toThrow(
+            expect.objectContaining({ payload: { tag: 'invalid-state' } })
         );
     });
 
     test('should return local address after binding', async () => {
-        const client = await createIpv4Socket();
-        await client.bind(ipv4LocalAddress);
-        const localAddr = await client.localAddress();
+        const client = createIpv4Socket();
+        client.bind(ipv4LocalAddress);
+        const localAddr = client.localAddress();
 
         expect(localAddr).toBeDefined();
         expect(localAddr.tag).toBe(IP_ADDRESS_FAMILY.IPV4);
@@ -79,41 +79,36 @@ describe('TCP Socket Bind', () => {
 
 describe('TCP Socket Listen', () => {
     test('should listen on a bound socket', async () => {
-        const client = await createIpv4Socket();
-        await client.bind(ipv4LocalAddress);
-        const stream = await client.listen();
+        const client = createIpv4Socket();
+        client.bind(ipv4LocalAddress);
+        const stream = client.listen();
 
         expect(stream).toBeInstanceOf(StreamReader);
         expect(client.isListening()).toBe(true);
     });
 
-    test('should throw when listening on unbound socket', async () => {
-        const client = await createIpv4Socket();
-
-        try {
-            await client.listen();
-            expect.unreachable();
-        } catch (error) {
-            expect(error).toBeDefined();
-        }
+    test('should allow to listen on unbound socket', async () => {
+        const client = createIpv4Socket();
+        expect(() => client.listen()).not.toThrow();
+        expect(client.isListening()).toBe(true);
     });
 
     test('should throw when listening on already listening socket', async () => {
-        const client = await createIpv4Socket();
-        await client.bind(ipv4LocalAddress);
-        await client.listen();
+        const client = createIpv4Socket();
+        client.bind(ipv4LocalAddress);
+        client.listen();
 
-        await expect(client.listen()).rejects.toSatisfy(
-            (err) => err.payload.tag === 'invalid-state'
+        expect(() => client.listen()).toThrow(
+            expect.objectContaining({ payload: { tag: 'invalid-state' } })
         );
     });
 
     test('should allow backlog size configuration before listening', async () => {
-        const client = await createIpv4Socket();
+        const client = createIpv4Socket();
 
-        await client.setListenBacklogSize(1000n);
-        await client.bind(ipv4LocalAddress);
-        const stream = await client.listen();
+        client.setListenBacklogSize(1000n);
+        client.bind(ipv4LocalAddress);
+        const stream = client.listen();
 
         expect(stream).toBeInstanceOf(StreamReader);
         expect(client.isListening()).toBe(true);
@@ -122,29 +117,29 @@ describe('TCP Socket Listen', () => {
     test('should throw when setting backlog size to 0', async () => {
         const client = await createIpv4Socket();
 
-        await expect(client.setListenBacklogSize(0n)).rejects.toSatisfy(
-            (err) => err.payload.tag === 'invalid-argument'
+        await expect(() => client.setListenBacklogSize(0n)).toThrow(
+            expect.objectContaining({ payload: { tag: 'invalid-argument' } })
         );
     });
 
     test('should throw when setting backlog size on listening socket', async () => {
-        const client = await createIpv4Socket();
-        await client.bind(ipv4LocalAddress);
-        await client.listen();
+        const client = createIpv4Socket();
+        client.bind(ipv4LocalAddress);
+        client.listen();
 
-        await expect(client.setListenBacklogSize(1000n)).rejects.toSatisfy(
-            (err) => err.payload.tag === 'invalid-state'
+        expect(() => client.setListenBacklogSize(1000n)).toThrow(
+            expect.objectContaining({ payload: { tag: 'invalid-state' } })
         );
     });
 
     test('accepts a preview3 client and exchanges data', async () => {
-        const listener = await createIpv4Socket();
-        await listener.bind(makeIpAddress('ipv4', '127.0.0.1', 0));
-        const localAddr = await listener.localAddress();
-        const acceptStream = await listener.listen();
+        const listener = createIpv4Socket();
+        listener.bind(makeIpAddress('ipv4', '127.0.0.1', 0));
+        const localAddr = listener.localAddress();
+        const acceptStream = listener.listen();
 
         // Create and connect client
-        const client = await createIpv4Socket();
+        const client = createIpv4Socket();
         await client.connect(localAddr);
 
         // Accept the incoming connection
@@ -177,14 +172,18 @@ describe('Integration: TCP Socket Send', () => {
     let port;
     let received = Buffer.alloc(0);
 
-    beforeAll(() => {
+    beforeAll(async () => {
         server = net.createServer((sock) => {
             sock.on('data', (chunk) => {
                 received = Buffer.concat([received, chunk]);
             });
         });
-        server.listen(0, '127.0.0.1', () => {
-            port = server.address().port;
+
+        await new Promise((resolve) => {
+            server.listen(0, '127.0.0.1', () => {
+                port = server.address().port;
+                resolve();
+            });
         });
     });
 
@@ -193,7 +192,7 @@ describe('Integration: TCP Socket Send', () => {
     });
 
     test('sends multiple chunks via stream()', async () => {
-        const client = await createIpv4Socket();
+        const client = createIpv4Socket();
         const addr = makeIpAddress('ipv4', '127.0.0.1', port);
         await client.connect(addr);
 
