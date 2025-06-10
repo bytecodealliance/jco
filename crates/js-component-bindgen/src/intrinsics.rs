@@ -11,7 +11,6 @@ pub enum Intrinsic {
     ComponentError,
     CurResourceBorrows,
     DataView,
-    DefinedResourceTables,
     EmptyFunc,
     F32ToI32,
     F64ToI64,
@@ -20,7 +19,6 @@ pub enum Intrinsic {
     GetErrorPayload,
     GetErrorPayloadString,
     GlobalThisIdlProxy,
-    HandleTables,
     HasOwnProperty,
     I32ToF32,
     I64ToF64,
@@ -128,8 +126,28 @@ pub enum Intrinsic {
     /////////////////////
     // Data structures //
     /////////////////////
+    DefinedResourceTables,
+    HandleTables,
+
+    /// Reusable table structure for holding canonical ABI objects by their representation/identifier of (e.g. resources, waitables, etc)
+    ///
+    /// Representations of objects stored in one of these tables is a u32 (0 is expected to be an invalid index).
+    RepTableClass,
+
     /// Event codes used for async, as a JS enum
     AsyncEventCodeEnum,
+
+    /// The definition of the `AsyncTask` JS class
+    AsyncTaskClass,
+
+    /// The definition of the `AsyncSubtask` JS class
+    AsyncSubtaskClass,
+
+    /// The definition of the `WaitableSet` JS class
+    WaitableSetClass,
+
+    /// The definition of the `Waitable` JS class
+    WaitableClass,
 
     /// Global that stores the current task for a given invocation.
     ///
@@ -156,6 +174,9 @@ pub enum Intrinsic {
     /// Function that retrieves the current global async current task
     GetCurrentTask,
 
+    /// Write an async event (e.g. result of waitable-set.wait) to linear memory
+    WriteAsyncEventToMemory,
+
     /// Global that stores backpressure by component instance
     ///
     /// A component instance *not* having a value in this map indicates that
@@ -176,7 +197,7 @@ pub enum Intrinsic {
     /// type ComponentAsyncState = {
     ///     mayLeave: boolean,
     /// };
-    /// type GlobalBackpressureMap = Map<number, ComponentAsyncState>;
+    /// type GlobalAsyncStateMap = Map<number, ComponentAsyncState>;
     /// ```
     GlobalAsyncStateMap,
 
@@ -411,7 +432,7 @@ pub enum Intrinsic {
 
     /// Gets the value stored in context local storage for the current task/thread
     ///
-    /// Guest code generally uses this to reference internally stored context local storage,
+    /// Guest code uses this to reference internally stored context local storage,
     /// whether that is task local or thread local.
     ///
     /// # Intrinsic implementation function
@@ -428,7 +449,7 @@ pub enum Intrinsic {
 
     /// Set the backpressure for a given component instance
     ///
-    /// Guest code generally uses this to reference internally stored context local storage,
+    /// Guest code uses this to reference internally stored context local storage,
     /// whether that is task local or thread local.
     ///
     /// # Intrinsic implementation function
@@ -443,7 +464,7 @@ pub enum Intrinsic {
 
     /// Yield a task
     ///
-    /// Guest code generally uses this to yield control flow to the host (and possibly other components)
+    /// Guest code uses this to yield control flow to the host (and possibly other components)
     ///
     /// # Intrinsic implementation function
     ///
@@ -454,16 +475,133 @@ pub enum Intrinsic {
     /// ```
     Yield,
 
-    /// Cancel the current async task for a given component instance
+    /// Cancel the current async subtask for a given component instance
     ///
     /// # Intrinsic implementation function
     ///
     /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// function taskCancel(componentIdx: number, isAsync: boolean);
+    /// type i32 = number;
+    /// function subtaskCancel(componentIdx: number, isAsync: boolean);
+    /// ```
+    SubtaskCancel,
+
+    /// Cancel the current task
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// function taskCancel(componentIdx: i32);
     /// ```
     TaskCancel,
+
+    /// Create a new waitable set
+    ///
+    /// Guest code uses this to create new waitable/pollable groups of events that can be waited on.
+    /// The waitable set is tied to the implicit current task
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// function waitableSetNew(componentInstanceId: number): i32;
+    /// ```
+    ///
+    /// The function returns the index of the waitable set that was created, so it can be used later (e.g. waitableSetWait)
+    WaitableSetNew,
+
+    /// Wait on a given waitable
+    ///
+    /// Guest code uses this to wait on a waitable that has been already created
+    /// The waitable set index is relevant to the implicit current task.
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-waitable-setwait
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// function waitableSetWait(
+    ///     componentInstanceID: i32,
+    ///     isAsync: boolean,
+    ///     memory: i32,
+    ///     waitableSetRep: i32,
+    ///     resultPtr: i32
+    /// );
+    /// ```
+    ///
+    /// The results of the poll should be set in the provided pointer
+    WaitableSetWait,
+
+    /// Poll a given waitable set
+    ///
+    /// Guest code uses this builtin to poll whether a waitable set is finished or not,
+    /// yielding to other tasks while doing so.
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-waitable-setpoll
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// function waitableSetPoll(
+    ///     componentInstanceID: i32,
+    ///     isAsync: boolean,
+    ///     memory: i32,
+    ///     waitableSetRep: i32,
+    ///     resultPtr: i32
+    /// );
+    /// ```
+    ///
+    /// The results of the poll should be set in the provided pointer
+    WaitableSetPoll,
+
+    /// Drop a given waitable set
+    ///
+    /// Guest code uses this builtin to remove the waitable set in it's entirety from a component instance's tables.
+    /// The component instance is known via the current task.
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-waitable-setdrop
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// function waitableSetDrop(componentInstanceID: i32, waitableSetRep: i32);
+    /// ```
+    WaitableSetDrop,
+
+    /// JS helper function for removing a waitable set
+    RemoveWaitableSet,
+
+    /// Join a given waitable set
+    ///
+    /// Guest code uses this builtin to add a provided waitable to an existing waitable set.
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-waitablejoin
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// function waitableJoin(componentInstanceID: i32, waitableSetRep: i32, waitableRep: i32);
+    /// ```
+    ///
+    /// If the waitable set index is zero (an otherwise invalid table index), join should *remove* the given waitable from any sets
+    /// that it may be a part of (of which there should only be one).
+    WaitableJoin,
 
     /// Lift a boolean into provided storage, given a core type
     ///
@@ -651,20 +789,36 @@ pub enum Intrinsic {
 
     /// Lift an error-context into provided storage given core type(s)
     LiftFlatErrorContextFromStorage,
+}
 
-    /////////////////////
-    // Utility Classes //
-    /////////////////////
-    /// The definition of the async task class
-    AsyncTaskClass,
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) enum DeterminismProfile {
+    #[default]
+    Deterministic,
+    Random,
+}
+
+/// Arguments to `render_intrinsics`
+pub struct RenderIntrinsicsArgs<'a> {
+    /// List of intrinsics being built for use
+    pub(crate) intrinsics: &'a mut BTreeSet<Intrinsic>,
+    /// Whether to use NodeJS compat
+    pub(crate) no_nodejs_compat: bool,
+    /// Whether instantiation has occurred
+    pub(crate) instantiation: bool,
+    /// The kind of determinism to use
+    pub(crate) determinism: DeterminismProfile,
 }
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
 /// intrinsic.
 pub fn render_intrinsics(
-    intrinsics: &mut BTreeSet<Intrinsic>,
-    no_nodejs_compat: bool,
-    instantiation: bool,
+    RenderIntrinsicsArgs {
+        intrinsics,
+        no_nodejs_compat,
+        instantiation,
+        determinism,
+    }: RenderIntrinsicsArgs,
 ) -> Source {
     let mut output = Source::default();
 
@@ -740,6 +894,10 @@ pub fn render_intrinsics(
 
     if intrinsics.contains(&Intrinsic::BackpressureSet) {
         intrinsics.extend([&Intrinsic::GlobalBackpressureMap]);
+    }
+
+    if intrinsics.contains(&Intrinsic::GetOrCreateAsyncState) {
+        intrinsics.extend([&Intrinsic::RepTableClass]);
     }
 
     for i in intrinsics.iter() {
@@ -1395,15 +1553,27 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::SubtaskDrop => {
                 // TODO: ensure task is marked "may_leave", drop task for relevant component
                 // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-subtaskdrop
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let subtask_drop_fn = Intrinsic::SubtaskDrop.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
-                    function {subtask_drop_fn}(componentId, taskId) {{
+                    function {subtask_drop_fn}(componentInstanceID, subtaskID) {{
+                        {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentInstanceID, taskId }});
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+
+                        const subtask =  state.subtasks.remove(subtaskID);
+                        if (!subtask) {{ throw new Error('missing/invalid subtask specified for drop in component instance'); }}
+
+                        subtask.drop();
                     }}
                 "));
             }
+
             Intrinsic::GetCurrentTask => {
                 // TODO: remove autovivication of tasks here, they should be created @ lift
                 let task_class = Intrinsic::AsyncTaskClass.name();
@@ -1423,6 +1593,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::ContextSet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_set_fn = Intrinsic::ContextSet.name();
@@ -1437,6 +1608,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::ContextGet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_get_fn = Intrinsic::ContextGet.name();
@@ -1452,19 +1624,23 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::GlobalAsyncCurrentTaskMap => {
                 let var_name = Intrinsic::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
             }
+
             Intrinsic::GlobalBackpressureMap => {
                 let var_name = Intrinsic::GlobalBackpressureMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
 
             }
+
             Intrinsic::GlobalAsyncStateMap => {
                 let var_name = Intrinsic::GlobalAsyncStateMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
             }
+
             Intrinsic::DebugLog => {
                 let fn_name = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1855,27 +2031,27 @@ pub fn render_intrinsics(
                 let backpressure_set_fn = Intrinsic::BackpressureSet.name();
                 let bp_map = Intrinsic::GlobalBackpressureMap.name();
                 output.push_str(&format!("
-                    function {backpressure_set_fn}(ciid, value) {{
-                        {debug_log_fn}('[{backpressure_set_fn}()] args', {{ ciid, value }});
+                    function {backpressure_set_fn}(componentInstanceID, value) {{
+                        {debug_log_fn}('[{backpressure_set_fn}()] args', {{ componentInstanceID, value }});
                         if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
-                        {bp_map}.set(ciid, value !== 0);
+                        {bp_map}.set(componentInstanceID, value !== 0);
                     }}
                 "));
             }
 
-            Intrinsic::TaskCancel => {
+            Intrinsic::SubtaskCancel => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let task_cancel_fn = Intrinsic::BackpressureSet.name();
+                let task_cancel_fn = Intrinsic::SubtaskCancel.name();
                 let current_task_get_fn = Intrinsic::GetCurrentTask.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
-                    function {task_cancel_fn}(ciid, isAsync) {{
-                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ ciid, value }});
+                    function {task_cancel_fn}(componentInstanceID, isAsync) {{
+                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentInstanceID, isAsync }});
 
-                        const state = {get_or_create_async_state_fn}(ciid);
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
                         if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
 
-                        const task = {current_task_get_fn}(ciid);
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (task.sync && !task.alwaysTaskReturn) {{
                             throw new Error('cannot cancel sync tasks without always task return set');
                         }}
@@ -1889,19 +2065,43 @@ pub fn render_intrinsics(
                 "));
             }
 
+            Intrinsic::TaskCancel => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let task_cancel_fn = Intrinsic::TaskCancel.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {task_cancel_fn}(componentInstanceID) {{
+                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentInstanceID, isAsync }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+
+                        const task = {current_task_get_fn}(componentInstanceID);
+                        if (task.sync && !task.alwaysTaskReturn) {{
+                            throw new Error('cannot cancel sync tasks without always task return set');
+                        }}
+                        task.cancel();
+                    }}
+                "));
+            }
+
             Intrinsic::GetOrCreateAsyncState => {
                 let get_state_fn = Intrinsic::GetOrCreateAsyncState.name();
-                let map = Intrinsic::GlobalAsyncStateMap.name();
+                let async_state_map = Intrinsic::GlobalAsyncStateMap.name();
+                let rep_table_class = Intrinsic::RepTableClass.name();
                 output.push_str(&format!("
                     function {get_state_fn}(componentIdx, init) {{
-                        if (!{map}.has(componentIdx)) {{
-                            {map}.set(componentIdx, {{
-                                mayLeave: false
+                        if (!{async_state_map}.has(componentIdx)) {{
+                            {async_state_map}.set(componentIdx, {{
+                                mayLeave: false,
+                                waitableSets: new {rep_table_class}(),
+                                waitables: new {rep_table_class}(),
                                 ...(init || {{}}),
                             }});
                         }}
 
-                        return {map}.get(componentIdx);
+                        return {async_state_map}.get(componentIdx);
                     }}
                 "));
             },
@@ -1912,7 +2112,7 @@ pub fn render_intrinsics(
                 let current_task_get_fn = Intrinsic::GetCurrentTask.name();
                 output.push_str(&format!("
                     function {yield_fn}(isAsync) {{
-                        {debug_log_fn}('[{yield_fn}()] args', {{ ciid, value }});
+                        {debug_log_fn}('[{yield_fn}()] args', {{ isAsync }});
                         const task = {current_task_get_fn}();
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
                         await task.yield({{ isAsync }});
@@ -1920,20 +2120,127 @@ pub fn render_intrinsics(
                 "));
             }
 
+            Intrinsic::WaitableSetClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let waitable_set_class = Intrinsic::WaitableSetClass.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+
+                let maybe_shuffle = if determinism == DeterminismProfile::Random {
+                    "this.shuffleWaitables();"
+                } else {
+                    ""
+                };
+
+                // TODO: remove the public mutable members that are eagerly exposed for early impl
+                output.push_str(&format!("
+                    class {waitable_set_class} {{
+                        #componentInstanceID;
+                        #waitables = [];
+                        #pendingEvent = null;
+                        #waiting = 0;
+
+                        constructor(componentInstanceID) {{
+                            this.#componentInstanceID = componentInstanceID;
+                        }}
+
+                        numWaitables() {{ return this.#waitable.length; }}
+                        numWaiting() {{ return this.#waiting; }}
+
+                        shuffleWaitables() {{
+                            this.#waitables = this.#waitables
+                                .map(value => ({{ value, sort: Math.random() }}))
+                                .sort((a, b) => a.sort - b.sort)
+                                .map(({{ value }}) => value);
+                        }}
+
+                        async poll() {{
+                            {debug_log_fn}('[{waitable_set_class}#poll()] args', {{ }});
+
+                            const state = {get_or_create_async_state_fn}(this.#componentInstanceID);
+
+                            {maybe_shuffle}
+
+                            for (const waitableRep of this.#waitables) {{
+                                const w = state.waitables.get(waitableRep);
+                                if (!w) {{ throw new Error('no waitable with rep [' + waitableRep + ']'); }}
+                                waitables.push(w);
+                            }}
+
+                            const event = await Promise.race(waitables.map((w) => w.promise));
+
+                            throw new Error('not implemented');
+                        }}
+                    }}
+                "));
+            }
+
+            Intrinsic::WaitableClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let waitable_class = Intrinsic::WaitableClass.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                // TODO: remove the public mutable members that are eagerly exposed for early impl
+                output.push_str(&format!("
+                    class {waitable_class} {{
+                        #componentInstanceID;
+                        #pendingEvent;
+
+                        constructor(componentInstanceID) {{
+                            this.#componentInstanceID = componentInstanceID;
+                        }}
+
+                        hasPendingEvent() {{
+                            return !!this.#pendingEvent;
+                        }}
+
+                        getPendingEvent() {{
+                            {debug_log_fn}('[{waitable_class}#getPendingEvent()] args', {{ }});
+                            if (!this.#pendingEvent) {{ return null; }}
+                            const e = this.#pendingEvent;
+                            this.#pendingEvent = null;
+                            return e;
+                        }}
+
+                        async poll() {{
+                            {debug_log_fn}('[{waitable_class}#poll()] args', {{ }});
+
+                            const state = {get_or_create_async_state_fn}(this.#componentInstanceID);
+
+                            const waitables = [];
+                            for (const waitableRep in waitableSet.waitables) {{
+                                const w = state.waitables.get(waitableRep);
+                                if (!w) {{ throw new Error('no waitable with rep [' + waitableRep + ']'); }}
+                                waitables.push(w);
+                            }}
+
+                            const event = await Promise.race(waitables.map((w) => w.promise));
+
+                            throw new Error('not implemented');
+                        }}
+
+                        async join() {{
+                            throw new Error('not implemented');
+                        }}
+                    }}
+                "));
+            }
+
             Intrinsic::AsyncTaskClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let task_class = Intrinsic::AsyncTaskClass.name();
                 // TODO: remove the public mutable members that are eagerly exposed for early impl
                 output.push_str(&format!("
                     class {task_class} {{
-                        static TaskState = {{
+                        static State = {{
                             INITIAL: 'initial',
                             CANCEL_PENDING: 'cancel-pending',
-                            CANCELLED: 'cancelled',
+                            CANCEL_DELIVERED: 'cancel-delivered',
+                            RESOLVED: 'resolved',
                         }}
 
                         #state;
+                        #onResolve = () => {{}};
 
                         cancelled = false;
                         requested = false;
@@ -1944,9 +2251,66 @@ pub fn render_intrinsics(
                         storage = [null, null];
                         borrowedHandles = {{}};
 
+                        taskState() {{ return this.#state.slice(); }}
+
+                        async waitForEvent(opts) {{
+                            const {{ waitableSetRep, isAsync }} = opts;
+                            {debug_log_fn}('[{task_class}#waitForEvent()] args', {{ waitableSetRep, isAsync }});
+
+                            if (this.status === {task_class}.State.CANCEL_PENDING) {{
+                                this.#state = {task_class}.State.CANCEL_DELIVERED;
+                                return {{
+                                    code: {event_code_enum}.TASK_CANCELLED,
+                                    something: 0,
+                                    something: 0,
+                                }};
+                            }}
+
+                            const state = {get_or_create_async_state_fn}(this.componentIdx);
+                            const waitableSet = state.waitableSets.get(waitableSetRep);
+                            if (!waitableSet) {{ throw new Error('missing/invalid waitable set'); }}
+
+                            waitableSet.numWaiting += 1;
+                            let event = null;
+
+                            while (event == null) {{
+                                const promise = waitableSet.getPendingEvent();
+
+                                const waited = await this.waitOn({{ promise, isAsync, isCancellable: true }});
+                                if (waited) {{
+                                    if (this.#state !== {task_class}.State.INITIAL) {{
+                                        throw new Error('task should be in initial state found [' + this.#state + ']');
+                                    }}
+                                    this.#state = {task_class}.State.CANCELLED;
+                                    return {{
+                                        code: {event_code_enum}.TASK_CANCELLED,
+                                        something: 0,
+                                        something: 0,
+                                    }};
+                                }}
+
+                                event = waitableSet.poll();
+                            }}
+
+                            waitableSet.numWaiting -= 1;
+                            return event;
+                        }}
+
+                        async pollForEvent(opts) {{
+                            const {{ waitableSetRep, isAsync }} = opts;
+                            {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ waitableSetRep, isAsync }});
+
+                            throw new Error('not implemented');
+                        }}
+
                         async waitOn(opts) {{
                             const {{ promise, isAsync, isCancellable }} = opts;
                             {debug_log_fn}('[{task_class}#waitOn()] args', {{ promise, isAsync, isCancellable }});
+
+                            if (!promise) {{
+                                // TODO
+                            }}
+
                             throw new Error('not implemented');
                         }}
 
@@ -1954,8 +2318,8 @@ pub fn render_intrinsics(
                             const {{ isAsync }} = opts;
                             {debug_log_fn}('[{task_class}#yield()] args', {{ isAsync }});
 
-                            if (this.status === TaskState.CANCEL_PENDING) {{
-                                this.#state = TaskState.CANCELLED;
+                            if (this.status === {task_class}.State.CANCEL_PENDING) {{
+                                this.#state = {task_class}.State.CANCELLED;
                                 return {{
                                     code: {event_code_enum}.TASK_CANCELLED,
                                     something: 0,
@@ -1966,8 +2330,10 @@ pub fn render_intrinsics(
                             const promise = new Promise(resolve => setTimeout(resolve, 100));
                             const waitResult = await this.waitOn({{ promise, isAsync, isCancellable: true }});
                             if (waitResult) {{
-                                if (this.#state !== TaskState.INITIAL) {{ throw new Error('task should be in initial state found [' + this.#state + ']'); }}
-                                this.#state = TaskState.CANCELLED;
+                                if (this.#state !== {task_class}.State.INITIAL) {{
+                                    throw new Error('task should be in initial state found [' + this.#state + ']');
+                                }}
+                                this.#state = {task_class}.State.CANCELLED;
                                 return {{
                                     code: {event_code_enum}.TASK_CANCELLED,
                                     something: 0,
@@ -1981,6 +2347,44 @@ pub fn render_intrinsics(
                                 something: 0,
                             }};
                         }}
+
+                        cancel() {{
+                            {debug_log_fn}('[{task_class}#cancel()] args', {{ }});
+                            if (!task.taskState() !== {task_class}.State.CANCEL_DELIVERED) {{
+                                throw new Error('invalid task state for cancellation');
+                            }}
+                            if (task.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
+
+                            this.#onResolve();
+                            this.#state = {task_class}.State.RESOLVED;
+                        }}
+
+                    }}
+                "));
+            }
+
+            Intrinsic::AsyncSubtaskClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let subtask_class = Intrinsic::AsyncSubtaskClass.name();
+                // TODO: remove the public mutable members that are eagerly exposed for early impl
+                output.push_str(&format!("
+                    class {subtask_class} {{
+                        #lenders = null;
+                        #waitable = null;
+
+                        resolveDelivered() {{
+                            {debug_log_fn}('[{subtask_class}#resolveDelivered()] args', {{ }});
+                            if (this.#lenders || self.resolved) {{
+                                throw new Error('subtask has no lendors or has already been resolved');
+                            }}
+                           return this.#lenders !== null;
+                        }}
+
+                        drop() {{
+                            {debug_log_fn}('[{subtask_class}#drop()] args', {{ }});
+                            this.resolveDelivered();
+                            if (#this.waitable) {{ this.#waitable.drop(); }}
+                        }}
                     }}
                 "));
             }
@@ -1992,6 +2396,184 @@ pub fn render_intrinsics(
                         NONE: 'none',
                         TASK_CANCELLED: 'task-cancelled',
                     }};
+                "));
+            }
+
+            Intrinsic::WaitableSetNew => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                let waitable_set_new_fn = Intrinsic::WaitableSetNew.name();
+                output.push_str(&format!("
+                    function {waitable_set_new_fn}(componentInstanceID) {{
+                        {debug_log_fn}('[{waitable_set_new_fn}()] args', {{ componentInstanceID }});
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state) {{ throw new Error('invalid/missing async state for component instance [' + componentInstanceID + ']'); }}
+                        const rep = state.waitableSets.insert({{ waitables: [] }});
+                        if (typeof rep !== 'number') {{ throw new Error('invalid/missing waitable set rep'); }}
+                        return rep;
+                    }}
+                "));
+            },
+
+            Intrinsic::WaitableSetWait => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let waitable_set_wait_fn = Intrinsic::WaitableSetWait.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
+                output.push_str(&format!("
+                    async function {waitable_set_wait_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
+                        {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw Error('invalid/missing async task'); }}
+                        if (task.componentIdx !== componentInstanceID) {{
+                            throw Error(['task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
+                        }}
+                        const event = await task.waitForEvent({{ waitableSetRep, isAsync }});
+                        {write_async_event_to_memory_fn}(memory, task, event, resultPtr);
+                    }}
+                "));
+            },
+
+            Intrinsic::WaitableSetPoll => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let waitable_set_poll_fn = Intrinsic::WaitableSetPoll.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
+                output.push_str(&format!("
+                    function {waitable_set_poll_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
+                        {debug_log_fn}('[{waitable_set_poll_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw Error('invalid/missing async task'); }}
+                        if (task.componentIdx !== componentInstanceID) {{
+                            throw Error(['task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
+                        }}
+                        const event = await task.pollForEvent({{ waitableSetRep, isAsync }});
+                        {write_async_event_to_memory_fn}(memory, task, event, resultPtr);
+                    }}
+                "));
+            },
+
+            Intrinsic::WaitableSetDrop => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let waitable_set_drop_fn = Intrinsic::WaitableSetDrop.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                let remove_waitable_set_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {waitable_set_drop_fn}(componentInstanceID, waitableSetRep) {{
+                        {debug_log_fn}('[{waitable_set_drop_fn}()] args', {{ componentInstanceID, waitableSetRep }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        if (task.componentIdx !== componentInstanceID) {{
+                            throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
+                        }}
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+                        {remove_waitable_set_fn}({{ state, waitableSetRep, task }});
+                    }}
+                "));
+            },
+
+            Intrinsic::RemoveWaitableSet => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let remove_waitable_set_fn = Intrinsic::RemoveWaitableSet.name();
+                output.push_str(&format!("
+                    function {remove_waitable_set_fn}({{ state, waitableSetRep, task }}) {{
+                        {debug_log_fn}('[{remove_waitable_set_fn}()] args', {{ componentInstanceID, waitableSetRep }});
+
+                        const ws = state.waitableSets.get(waitableSetRep);
+                        if (!ws) {{ throw new Error('missing/invalid waitable set specified for removal'); }}
+                        if (waitableSet.hasPendingEvent()) {{ throw new Error('waitable set cannot be removed with pending items remaining'); }}
+
+                        const waitableSet = state.waitableSets.get(waitableSetRep);
+                        if (waitableSet.numWaitables() > 0) {{
+                            throw new Error('waitable set still contains waitables');
+                        }}
+                        if (waitableSet.numWaiting() > 0) {{
+                            throw new Error('waitable set still has other tasks waiting on it');
+                        }}
+
+                        state.waitableSets.remove(waitableSetRep);
+                    }}
+                "));
+            },
+
+            Intrinsic::WaitableJoin => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let waitable_join_fn = Intrinsic::WaitableJoin.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                output.push_str(&format!("
+                    function {waitable_join_fn}(componentInstanceID, waitableSetRep, waitableRep) {{
+                        {debug_log_fn}('[{waitable_join_fn}()] args', {{ componentInstanceID, waitableSetRep, waitableRep }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        throw new Error('not implemented!');
+                    }}
+                "));
+            },
+
+            Intrinsic::WriteAsyncEventToMemory => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
+                output.push_str(&format!("
+                    function {write_async_event_to_memory_fn}(memory, task, event, ptr) {{
+                        {debug_log_fn}('[{write_async_event_to_memory_fn}()] args', {{ memory, task, event, ptr }});
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::RepTableClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                output.push_str(&format!("
+                    class {rep_table_class} {{
+                        #data = [0, null];
+
+                        insert(val) {{
+                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val }});
+                            const freeIdx = this.#data[0];
+                            if (freeIdx === 0) {{
+                                this.#data.push(val);
+                                this.#data.push(null);
+                                return (this.#data.length >> 1) - 1;
+                            }}
+                            this.#data[0] = this.#data[freeIdx];
+                            const newFreeIdx = freeIdx << 1;
+                            this.#data[newFreeIdx] = val;
+                            this.#data[newFreeIdx + 1] = null;
+                            return free;
+                        }}
+
+                        get(rep) {{
+                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ rep }});
+                            const baseIdx = idx << 1;
+                            const val = this.#data[baseIdx];
+                            return val;
+                        }}
+
+                        contains(rep) {{
+                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ rep }});
+                            const baseIdx = idx << 1;
+                            return !!this.#data[baseIdx];
+                        }}
+
+                        remove(rep) {{
+                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ idx }});
+                            if (this.#data.length === 2) {{ throw new Error('invalid'); }}
+
+                            const baseIdx = idx << 1;
+                            const val = this.#data[baseIdx];
+                            if (val === 0) {{ throw new Error('invalid resource rep (cannot be 0)'); }}
+                            this.#data[baseIdx] = this.#data[0];
+                            this.#data[0] = idx;
+                            return val;
+                        }}
+
+                        clear() {{
+                            this.#data = [0, null];
+                        }}
+                    }}
                 "));
             }
 
@@ -2161,6 +2743,9 @@ impl Intrinsic {
 
             Intrinsic::DebugLog => "_debugLog",
 
+            // Data structures
+            Intrinsic::RepTableClass => "RepTable",
+
             // Dealing with error-contexts
             Intrinsic::ErrorContextComponentGlobalTable => "errCtxGlobal",
             Intrinsic::ErrorContextComponentLocalTable => "errCtxLocal",
@@ -2193,12 +2778,25 @@ impl Intrinsic {
 
             // Tasks
             Intrinsic::TaskCancel => "taskCancel",
+            Intrinsic::SubtaskCancel => "subtaskCancel",
+
+            // WaitableSets
+            Intrinsic::RemoveWaitableSet => "_removeWaitableSet",
+            Intrinsic::WaitableSetNew => "waitableSetNew",
+            Intrinsic::WaitableSetWait => "waitableSetWait",
+            Intrinsic::WaitableSetPoll => "waitableSetPoll",
+            Intrinsic::WaitableSetDrop => "waitableSetDrop",
+            Intrinsic::WaitableJoin => "waitableJoin",
+            Intrinsic::WaitableSetClass => "WaitableSet",
+            Intrinsic::WaitableClass => "Waitable",
 
             // Helpers for working with async state
             Intrinsic::GetCurrentTask => "getCurrentTask",
             Intrinsic::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
             Intrinsic::AsyncTaskClass => "AsyncTask",
+            Intrinsic::AsyncSubtaskClass => "AsyncSubtask",
             Intrinsic::AsyncEventCodeEnum => "ASYNC_EVENT_CODE",
+            Intrinsic::WriteAsyncEventToMemory => "writeAsyncEventToMemory",
 
             // Type conversions
             Intrinsic::I32ToCharUtf8 => "_i32ToCharUtf8",
