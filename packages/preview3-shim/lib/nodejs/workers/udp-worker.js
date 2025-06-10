@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 
 import { Router } from '../workers/resource-worker.js';
@@ -7,6 +6,8 @@ import { serializeIpAddress, makeIpAddress } from '../sockets/address.js';
 import dgram from 'node:dgram';
 
 const sockets = new Map();
+// Unique IDs for sockets
+let NEXT_SOCKET_ID = 0n;
 
 export function noLookup(ip, _opts, cb) {
     cb(null, ip);
@@ -31,7 +32,7 @@ Router()
     .op('udp-dispose', handleDispose);
 
 function handleCreate({ family }) {
-    const socketId = randomUUID();
+    const socketId = NEXT_SOCKET_ID++;
     const type = family === 'ipv6' ? 'udp6' : 'udp4';
     const ipv6Only = family === 'ipv6';
     const udp = dgram.createSocket({
