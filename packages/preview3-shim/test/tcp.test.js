@@ -167,6 +167,25 @@ describe('TCP Socket Listen', () => {
     });
 });
 
+describe('Server closure', () => {
+    test('disposing listener closes server and ends accept stream', async () => {
+        const listener = createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
+        listener.bind(makeIpAddress('ipv4', '127.0.0.1', 0));
+        const addr = listener.localAddress();
+        const acceptStream = listener.listen();
+
+        listener[Symbol.dispose]();
+        expect(listener.isListening()).toBe(false);
+
+        const client = createTcpSocket(IP_ADDRESS_FAMILY.IPV4);
+        await expect(client.connect(addr)).rejects.toThrow();
+        client[Symbol.dispose]();
+
+        const val = await acceptStream.read();
+        expect(val).toBeNull();
+    });
+});
+
 describe('Integration: TCP Socket Send', () => {
     let server;
     let port;
