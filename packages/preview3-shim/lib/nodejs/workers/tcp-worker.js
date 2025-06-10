@@ -46,6 +46,7 @@ function handleTcpCreate({ family }) {
         handle,
         family,
         tcp: null,
+        server: null,
         backlog: 128,
     });
 
@@ -124,8 +125,9 @@ async function handleTcpListen({ socketId, stream }) {
         writer.write({ family, socketId: id });
     });
 
+    socket.server = server;
     server.on('error', (err) => stream.abort(err));
-    // TODO(tandr): Handle server close
+    server.on('close', () => writer.close());
 }
 
 async function handleTcpSend({ socketId, stream }) {
@@ -209,6 +211,13 @@ async function handleSendBufferSize({ socketId }) {
 
 function handleTcpDispose({ socketId }) {
     const socket = sockets.get(socketId);
+    if (!socket) {
+        return;
+    }
+
+    if (socket.server) {
+        socket.server.close();
+    }
 
     if (socket.tcp) {
         socket.tcp.destroy();
