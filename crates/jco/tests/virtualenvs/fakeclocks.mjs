@@ -1,4 +1,4 @@
-import "./base.js";
+import "./base.mjs";
 import {
   monotonicClock,
   wallClock,
