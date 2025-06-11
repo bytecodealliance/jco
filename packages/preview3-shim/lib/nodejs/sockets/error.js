@@ -66,7 +66,9 @@ export class SocketError extends Error {
      * @param {any} err – number, string, Error, or SocketError
      */
     static from(err) {
-        if (err instanceof SocketError) return err;
+        if (err instanceof SocketError) {
+            return err;
+        }
 
         let tag,
             message = undefined;

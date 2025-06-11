@@ -11,9 +11,17 @@ import {
     IP_ADDRESS_FAMILY,
 } from './address.js';
 
-const _worker = new ResourceWorker(
-    new URL('../workers/tcp-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('../workers/tcp-worker.js', import.meta.url)
+    ));
+}
+
+let TCP_CREATE_TOKEN = null;
+function token() {
+    return (TCP_CREATE_TOKEN ??= Symbol('TcpCreateToken'));
+}
 
 const STATE = {
     UNBOUND: 'unbound',
@@ -23,6 +31,35 @@ const STATE = {
     CONNECTED: 'connected',
     CLOSED: 'closed',
 };
+
+/**
+ * Creates a new TCP socket
+ * WIT: createTcpSocket: func(address-family: ip-address-family) -> result<tcp-socket, error-code>
+ *
+ * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
+ * @returns {TcpSocket>} A new TCP socket instance
+ * @throws {SocketError} with payload.tag 'invalid-argument' if `addressFamily` is not IPV4 or IPV6
+ * @throws {SocketError} for other errors, payload.tag maps the low-level system error_
+ */
+export function createTcpSocket(addressFamily) {
+    if (
+        addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
+        addressFamily !== IP_ADDRESS_FAMILY.IPV6
+    ) {
+        throw new SocketError('invalid-argument');
+    }
+
+    try {
+        const result = worker().runSync({
+            op: 'tcp-create',
+            family: addressFamily,
+        });
+
+        return TcpSocket._create(token(), addressFamily, result.socketId);
+    } catch (error) {
+        throw SocketError.from(error);
+    }
+}
 
 export class TcpSocket {
     #socketId = null;
@@ -65,7 +102,18 @@ export class TcpSocket {
      * @returns {TcpSocket} A new TcpSocket instance
      * @private
      */
-    static _create(addressFamily, socketId) {
+    static _create(t, addressFamily, socketId) {
+        if (t !== token()) {
+            throw new Error('Use createTcpSocket to create a Socket');
+        }
+
+        if (
+            addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
+            addressFamily !== IP_ADDRESS_FAMILY.IPV6
+        ) {
+            throw new SocketError('invalid-argument');
+        }
+
         const socket = new TcpSocket();
         socket.#family = addressFamily;
         socket.#socketId = socketId;
@@ -79,14 +127,13 @@ export class TcpSocket {
      * bind: func(local-address: ip-socket-address) -> result<_, error-code>
      * ```
      *
-     * @async
      * @param {Object} localAddress - The local address to bind to
-     * @returns {Promise<void>}
+     * @returns {void}
      * @throws {SocketError} with payload.tag 'invalid-state' if the socket is not in ~STATE.UNBOUND~
      * @throws {SocketError} with payload.tag 'invalid-argument' if ~localAddress~ is invalid
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async bind(localAddress) {
+    bind(localAddress) {
         if (this.#state !== STATE.UNBOUND) {
             throw new SocketError('invalid-state');
         }
@@ -95,7 +142,7 @@ export class TcpSocket {
             throw new SocketError('invalid-argument');
         }
         try {
-            await _worker.run({
+            worker().runSync({
                 op: 'tcp-bind',
                 localAddress,
                 socketId: this.#socketId,
@@ -111,7 +158,7 @@ export class TcpSocket {
      * Connects to a remote endpoint
      * WIT:
      * ```
-     * connect: func(remote-address: ip-socket-address) -> result<_, error-code>
+     * connect: async func(remote-address: ip-socket-address) -> result<_, error-code>
      * ```
      *
      * @async
@@ -137,7 +184,7 @@ export class TcpSocket {
         this.#state = STATE.CONNECTING;
 
         try {
-            await _worker.run({
+            await worker().run({
                 op: 'tcp-connect',
                 remoteAddress,
                 socketId: this.#socketId,
@@ -157,12 +204,11 @@ export class TcpSocket {
      * listen: func() -> result<stream<tcp-socket>, error-code>
      * ```
      *
-     * @async
-     * @returns {Promise<StreamReader>} A stream of incoming TCP socket connections
+     * @returns {StreamReader} A stream of incoming TCP socket connections
      * @throws {SocketError} with payload.tag 'invalid-state' if socket is LISTENING or CONNECTED
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async listen() {
+    listen() {
         if (
             this.#state === STATE.LISTENING ||
             this.#state === STATE.CONNECTED
@@ -173,13 +219,13 @@ export class TcpSocket {
             // Convert incoming connections from worker to TcpSocket instances
             const transform = new TransformStream({
                 transform({ family, socketId }, controller) {
-                    const socket = tcpSocketCreate(family, socketId);
+                    const socket = TcpSocket._create(token(), family, socketId);
                     socket.#state = STATE.CONNECTED;
                     controller.enqueue(socket);
                 },
             });
 
-            await _worker.run(
+            worker().runSync(
                 {
                     op: 'tcp-listen',
                     socketId: this.#socketId,
@@ -200,7 +246,7 @@ export class TcpSocket {
      * Sends data to the connected peer
      * WIT:
      * ```
-     * send: func(data: stream<u8>) -> result<_, error-code>
+     * send: async func(data: stream<u8>) -> result<_, error-code>
      * ```
      *
      * @async
@@ -218,11 +264,11 @@ export class TcpSocket {
             throw new SocketError('invalid-argument');
         }
 
-        const stream = data.intoStream();
+        const stream = data.intoReadableStream();
 
         try {
             // Transfer the stream to the worker
-            await _worker.run(
+            await worker().run(
                 {
                     op: 'tcp-send',
                     socketId: this.#socketId,
@@ -252,7 +298,7 @@ export class TcpSocket {
         }
 
         const transform = new TransformStream();
-        const promise = _worker
+        const promise = worker()
             .run(
                 {
                     op: 'tcp-receive',
@@ -278,18 +324,17 @@ export class TcpSocket {
      * local-address: func() -> result<ip-socket-address, error-code>
      * ```
      *
-     * @async
-     * @returns {Promise<Object>} The local socket address
+     * @returns {Object} The local socket address
      * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not BOUND
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async localAddress() {
+    localAddress() {
         if (this.#state === STATE.UNBOUND) {
             throw new SocketError('invalid-state');
         }
 
         try {
-            return await _worker.run({
+            return worker().runSync({
                 op: 'tcp-get-local-address',
                 socketId: this.#socketId,
             });
@@ -305,18 +350,17 @@ export class TcpSocket {
      * remote-address: func() -> result<ip-socket-address, error-code>
      * ```
      *
-     * @async
-     * @returns {Promise<Object>} The remote socket address
+     * @returns {Object} The remote socket address
      * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not CONNECTED
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async remoteAddress() {
+    remoteAddress() {
         if (this.#state !== STATE.CONNECTED) {
             throw new SocketError('invalid-state');
         }
 
         try {
-            return await _worker.run({
+            return worker().runSync({
                 op: 'tcp-get-remote-address',
                 socketId: this.#socketId,
             });
@@ -358,16 +402,15 @@ export class TcpSocket {
      * set-listen-backlog-size: func(value: u64) -> result<_, error-code>
      * ```
      *
-     * @async
      * @param {bigint} value - The backlog size
-     * @returns {Promise<void>}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
+     * @returns {void}
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is 0
      * @throws {SocketError} with payload.tag 'not-supported' if socket is CONNECTING or CONNECTED
      * @throws {SocketError} with payload.tag 'invalid-state' if socket is not UNBOUND or BOUND
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async setListenBacklogSize(value) {
-        if (value === 0n) {
+    setListenBacklogSize(value) {
+        if (value <= 0n) {
             throw new SocketError('invalid-argument');
         }
 
@@ -382,9 +425,9 @@ export class TcpSocket {
             throw new SocketError('invalid-state');
         }
 
-        this.#options.listenBacklogSize = Number(value);
+        this.#options.listenBacklogSize = value;
         try {
-            await _worker.run({
+            worker().runSync({
                 op: 'tcp-set-listen-backlog-size',
                 socketId: this.#socketId,
                 value,
@@ -401,10 +444,9 @@ export class TcpSocket {
      * keep-alive-enabled: func() -> result<bool, error-code>
      * ```
      *
-     * @async
-     * @returns {Promise<boolean>} True if keep-alive is enabled, false otherwise
+     * @returns {boolean} True if keep-alive is enabled, false otherwise
      */
-    async keepAliveEnabled() {
+    keepAliveEnabled() {
         return this.#options.keepAliveEnabled;
     }
 
@@ -417,14 +459,14 @@ export class TcpSocket {
      *
      * @async
      * @param {boolean} value - Whether to enable keep-alive
-     * @returns {Promise<void>}
+     * @returns {void}
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async setKeepAliveEnabled(value) {
+    setKeepAliveEnabled(value) {
         try {
             this.#options.keepAliveEnabled = value;
 
-            await _worker.run({
+            worker().runSync({
                 op: 'tcp-set-keep-alive',
                 socketId: this.#socketId,
                 keepAliveEnabled: this.#options.keepAliveEnabled,
@@ -455,17 +497,17 @@ export class TcpSocket {
      * set-keep-alive-idle-time: func(value: duration) -> result<_, error-code>
      * ```
      *
-     * @async
      * @param {bigint} value - The idle time in nanoseconds
-     * @returns {Promise<void>}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @returns {void}
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is less than 1
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async setKeepAliveIdleTime(value) {
+    setKeepAliveIdleTime(value) {
         if (value < 1n) {
             throw new SocketError('invalid-argument');
         }
 
+        // Ensure that the value passed to the worker never gets rounded down to 0.
         if (value < 1_000_000_000n) {
             value = 1_000_000_000n;
         }
@@ -480,7 +522,7 @@ export class TcpSocket {
         this.#options.keepAliveIdleTime = value;
 
         try {
-            await _worker.run({
+            worker().runSync({
                 op: 'tcp-set-keep-alive',
                 socketId: this.#socketId,
                 keepAliveEnabled: this.#options.keepAliveEnabled,
@@ -513,10 +555,12 @@ export class TcpSocket {
      *
      * @param {bigint} value - The interval in nanoseconds
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is less than 1
      */
     setKeepAliveInterval(value) {
-        if (value < 1n) throw new SocketError('invalid-argument');
+        if (value < 1n) {
+            throw new SocketError('invalid-argument');
+        }
         this.#options.keepAliveInterval = value;
     }
 
@@ -542,10 +586,12 @@ export class TcpSocket {
      *
      * @param {number} value - The keep-alive count
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is less than 1
      */
     setKeepAliveCount(value) {
-        if (value < 1) throw new SocketError('invalid-argument');
+        if (value < 1) {
+            throw new SocketError('invalid-argument');
+        }
         this.#options.keepAliveCount = value;
     }
 
@@ -571,10 +617,12 @@ export class TcpSocket {
      *
      * @param {number} value - The hop limit
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is less than 1
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is less than 1
      */
     setHopLimit(value) {
-        if (value < 1) throw new SocketError('invalid-argument');
+        if (value < 1) {
+            throw new SocketError('invalid-argument');
+        }
         this.#options.hopLimit = value;
     }
 
@@ -585,17 +633,16 @@ export class TcpSocket {
      * receive-buffer-size: func() -> result<u64, error-code>
      * ```
      *
-     * @async
-     * @returns {Promise<bigint>} The receive buffer size in bytes
+     * @returns {bigint} The receive buffer size in bytes
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async receiveBufferSize() {
+    receiveBufferSize() {
         if (this.#options.receiveBufferSize) {
             return this.#options.receiveBufferSize;
         }
 
         try {
-            const result = await _worker.run({
+            const result = worker().runSync({
                 op: 'tcp-recv-buffer-size',
                 socketId: this.#socketId,
             });
@@ -616,10 +663,12 @@ export class TcpSocket {
      *
      * @param {bigint} value - The receive buffer size in bytes
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is 0
      */
     setReceiveBufferSize(value) {
-        if (value === 0n) throw new SocketError('invalid-argument');
+        if (value <= 0n) {
+            throw new SocketError('invalid-argument');
+        }
         this.#options.receiveBufferSize = value;
     }
 
@@ -630,17 +679,16 @@ export class TcpSocket {
      * send-buffer-size: func() -> result<u64, error-code>
      * ```
      *
-     * @async
-     * @returns {Promise<bigint>} The send buffer size in bytes
+     * @returns {bigint} The send buffer size in bytes
      * @throws {SocketError} for other errors, payload.tag maps the system error
      */
-    async sendBufferSize() {
+    sendBufferSize() {
         if (this.#options.sendBufferSize) {
             return this.#options.sendBufferSize;
         }
 
         try {
-            const result = await _worker.run({
+            const result = worker().runSync({
                 op: 'tcp-send-buffer-size',
                 socketId: this.#socketId,
             });
@@ -661,10 +709,12 @@ export class TcpSocket {
      *
      * @param {bigint} value - The send buffer size in bytes
      * @returns {void}
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~value~ is 0
+     * @throws {SocketError} with payload.tag 'invalid-argument' if `value` is 0
      */
     setSendBufferSize(value) {
-        if (value === 0n) throw new SocketError('invalid-argument');
+        if (value <= 0n) {
+            throw new SocketError('invalid-argument');
+        }
         this.#options.sendBufferSize = value;
     }
 
@@ -673,7 +723,7 @@ export class TcpSocket {
      */
     [Symbol.dispose]() {
         if (this.#socketId) {
-            void _worker.run({
+            worker().runSync({
                 op: 'tcp-dispose',
                 socketId: this.#socketId,
             });
@@ -714,38 +764,3 @@ export class TcpSocket {
         );
     }
 }
-
-const tcpSocketCreate = TcpSocket._create;
-delete TcpSocket._create;
-
-export const tcpCreateSocket = {
-    /**
-     * Creates a new TCP socket
-     * WIT: createTcpSocket: func(address-family: ip-address-family) -> result<tcp-socket, error-code>
-     *
-     * @async
-     * @param {IP_ADDRESS_FAMILY} addressFamily - The IP address family (IPv4 or IPv6)
-     * @returns {TcpSocket>} A new TCP socket instance
-     * @throws {SocketError} with payload.tag 'invalid-argument' if ~addressFamily~ is not IPV4 or IPV6
-     * @throws {SocketError} for other errors, payload.tag maps the low-level system error_
-     */
-    async createTcpSocket(addressFamily) {
-        if (
-            addressFamily !== IP_ADDRESS_FAMILY.IPV4 &&
-            addressFamily !== IP_ADDRESS_FAMILY.IPV6
-        ) {
-            throw new SocketError('invalid-argument');
-        }
-
-        try {
-            const result = await _worker.run({
-                op: 'tcp-create',
-                family: addressFamily,
-            });
-
-            return tcpSocketCreate(addressFamily, result.socketId);
-        } catch (error) {
-            throw SocketError.from(error);
-        }
-    },
-};

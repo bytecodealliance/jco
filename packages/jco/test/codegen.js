@@ -56,7 +56,7 @@ suite(`Transpiler codegen`, async () => {
             new URL(`./output/${testName}/${testName}.js`, import.meta.url)
           ),
           "-c",
-          fileURLToPath(new URL(`./eslintrc.mjs`, import.meta.url))
+          fileURLToPath(new URL(`./eslint.config.mjs`, import.meta.url))
         );
         assert.strictEqual(eslintOutput.stderr, "");
       });

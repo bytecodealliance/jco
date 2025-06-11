@@ -1,4 +1,4 @@
-# Preview3 Shim
+# Preview 3 Shim
 
 Experimental WASI Preview 3 implementations for Node.js.
 

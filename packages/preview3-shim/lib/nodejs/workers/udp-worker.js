@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 
 import { Router } from '../workers/resource-worker.js';
@@ -7,6 +6,8 @@ import { serializeIpAddress, makeIpAddress } from '../sockets/address.js';
 import dgram from 'node:dgram';
 
 const sockets = new Map();
+// Unique IDs for sockets
+let NEXT_SOCKET_ID = 0n;
 
 export function noLookup(ip, _opts, cb) {
     cb(null, ip);
@@ -31,7 +32,7 @@ Router()
     .op('udp-dispose', handleDispose);
 
 function handleCreate({ family }) {
-    const socketId = randomUUID();
+    const socketId = NEXT_SOCKET_ID++;
     const type = family === 'ipv6' ? 'udp6' : 'udp4';
     const ipv6Only = family === 'ipv6';
     const udp = dgram.createSocket({
@@ -60,7 +61,6 @@ async function handleBind({ socketId, localAddress }) {
     socket.udp.bind(port, addr);
 
     await Promise.race([onListening, onError]);
-    return { success: true };
 }
 
 function handleConnect({ socketId, remoteAddress }) {
@@ -70,16 +70,12 @@ function handleConnect({ socketId, remoteAddress }) {
 
     socket.udp.connect(port, addr);
     socket.connected = remoteAddress;
-
-    return { success: true };
 }
 
 function handleDisconnect({ socketId }) {
     const socket = sockets.get(socketId);
     socket.udp.disconnect();
     socket.connected = null;
-
-    return { success: true };
 }
 
 async function handleSend({ socketId, data, remoteAddress }) {
@@ -98,8 +94,6 @@ async function handleSend({ socketId, data, remoteAddress }) {
             );
         }
     });
-
-    return { success: true };
 }
 
 async function handleReceive({ socketId }) {
@@ -137,7 +131,6 @@ function handleGetLocal({ socketId }) {
 function handleSetHop({ socketId, value }) {
     const socket = sockets.get(socketId);
     socket.udp.setTTL(value);
-    return { success: true };
 }
 
 function handleRecvBuffer({ socketId }) {
@@ -154,5 +147,4 @@ function handleDispose({ socketId }) {
     const socket = sockets.get(socketId);
     socket.udp.close();
     sockets.delete(socketId);
-    return { success: true };
 }

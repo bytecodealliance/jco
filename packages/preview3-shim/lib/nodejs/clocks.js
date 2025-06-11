@@ -26,7 +26,9 @@ export const monotonicClock = {
         const nowNs = this.now();
         const diffNs = targetNs - nowNs;
 
-        if (diffNs <= 0n) return;
+        if (diffNs <= 0n) {
+            return;
+        }
 
         const ms = diffNs / 1_000_000n;
         if (ms > BigInt(Number.MAX_SAFE_INTEGER)) {

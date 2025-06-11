@@ -16,7 +16,6 @@ export class ResourceWorker {
     }
 
     #getWorker() {
-        // TODO(tandr): Use a pool of workers instead of a single one.
         if (this.#worker) {
             return this.#worker;
         }
@@ -27,7 +26,9 @@ export class ResourceWorker {
     }
 
     terminate() {
-        if (!this.#worker) return;
+        if (!this.#worker) {
+            return;
+        }
 
         this.#pending.clear();
         this.#worker.removeAllListeners();
@@ -43,8 +44,12 @@ export class ResourceWorker {
         return new Promise((resolve, reject) => {
             port1.once('message', ({ result, error }) => {
                 port1.close();
-                if (error) reject(error);
-                else resolve(result);
+
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(result);
             });
 
             worker.postMessage({ ...msg, _reply: port2 }, [
@@ -58,24 +63,28 @@ export class ResourceWorker {
     runSync(msg, transferable = []) {
         const worker = this.#getWorker();
 
-        const { port1, port2 } = new MessageChannel();
+        const { port1: rx, port2: tx } = new MessageChannel();
         const _condvar = new SharedArrayBuffer(4);
         const lock = new Int32Array(_condvar);
 
-        worker.postMessage({ ...msg, _condvar, _reply: port2 }, [
-            port2,
+        worker.postMessage({ ...msg, _condvar, _reply: tx }, [
+            tx,
             ...transferable,
         ]);
 
         Atomics.wait(lock, 0, 0);
 
-        const { message } = receiveMessageOnPort(port1) || {};
-        port1.close();
+        const { message } = receiveMessageOnPort(rx) || {};
+        rx.close();
 
-        if (!message) throw new Error('No response from worker');
+        if (!message) {
+            throw new Error('No response from worker');
+        }
         const { result, error } = message;
 
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
         return result;
     }
 }
@@ -97,10 +106,14 @@ export function Router() {
             transfer = [];
 
         try {
-            if (_hooks.beforeAll) _hooks.beforeAll(rest);
+            if (_hooks.beforeAll) {
+                _hooks.beforeAll(rest);
+            }
 
             const handler = _hooks.ops.get(rest.op);
-            if (!handler) throw new Error(`Unknown op ${rest.op}`);
+            if (!handler) {
+                throw new Error(`Unknown op ${rest.op}`);
+            }
 
             const outcome = await handler(rest);
 
@@ -120,7 +133,9 @@ export function Router() {
         // If this is a synchronous operation, notify the main thread.
         // This will wake up the waiting thread and read the message we
         // posted on reply channel.
-        if (_condvar) notify(_condvar);
+        if (_condvar) {
+            notify(_condvar);
+        }
     });
 
     return {

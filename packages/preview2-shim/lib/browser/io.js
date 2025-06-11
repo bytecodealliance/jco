@@ -44,19 +44,25 @@ class InputStream {
      * @param {InputStreamHandler} handler
      */
     constructor(handler) {
-        if (!handler) console.trace('no handler');
+        if (!handler) {
+            console.trace('no handler');
+        }
         this.id = ++id;
         this.handler = handler;
     }
     read(len) {
-        if (this.handler.read) return this.handler.read(len);
+        if (this.handler.read) {
+            return this.handler.read(len);
+        }
         return this.handler.blockingRead.call(this, len);
     }
     blockingRead(len) {
         return this.handler.blockingRead.call(this, len);
     }
     skip(len) {
-        if (this.handler.skip) return this.handler.skip.call(this, len);
+        if (this.handler.skip) {
+            return this.handler.skip.call(this, len);
+        }
         if (this.handler.read) {
             const bytes = this.handler.read.call(this, len);
             return BigInt(bytes.byteLength);
@@ -64,8 +70,9 @@ class InputStream {
         return this.blockingSkip.call(this, len);
     }
     blockingSkip(len) {
-        if (this.handler.blockingSkip)
+        if (this.handler.blockingSkip) {
             return this.handler.blockingSkip.call(this, len);
+        }
         const bytes = this.handler.blockingRead.call(this, len);
         return BigInt(bytes.byteLength);
     }
@@ -73,7 +80,9 @@ class InputStream {
         console.log(`[streams] Subscribe to input stream ${this.id}`);
     }
     [symbolDispose]() {
-        if (this.handler.drop) this.handler.drop.call(this);
+        if (this.handler.drop) {
+            this.handler.drop.call(this);
+        }
     }
 }
 
@@ -82,15 +91,20 @@ class OutputStream {
      * @param {OutputStreamHandler} handler
      */
     constructor(handler) {
-        if (!handler) console.trace('no handler');
+        if (!handler) {
+            console.trace('no handler');
+        }
         this.id = ++id;
         this.open = true;
         this.handler = handler;
     }
     checkWrite(len) {
-        if (!this.open) return 0n;
-        if (this.handler.checkWrite)
+        if (!this.open) {
+            return 0n;
+        }
+        if (this.handler.checkWrite) {
             return this.handler.checkWrite.call(this, len);
+        }
         return 1_000_000n;
     }
     write(buf) {
@@ -124,7 +138,9 @@ class OutputStream {
         this.handler.write.call(this, buf);
     }
     flush() {
-        if (this.handler.flush) this.handler.flush.call(this);
+        if (this.handler.flush) {
+            this.handler.flush.call(this);
+        }
     }
     blockingFlush() {
         this.open = true;

@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'vitest';
 
 import process from 'node:process';
-import { Readable } from 'stream';
+import { Readable } from 'node:stream';
 
 describe('Node.js Preview3 wasi-cli', () => {
     test('setStdout to Readable stream', async () => {
@@ -18,7 +18,9 @@ describe('Node.js Preview3 wasi-cli', () => {
             process.stdout.write = (chunk, _enc, cb) => {
                 output += chunk;
                 cb?.();
-                if (output === message) resolve();
+                if (output === message) {
+                    resolve();
+                }
             };
         });
 
@@ -68,7 +70,9 @@ describe('Node.js Preview3 wasi-cli', () => {
             process.stdout.write = (chunk, _enc, cb) => {
                 output += chunk;
                 cb?.();
-                if (output === message) resolve();
+                if (output === message) {
+                    resolve();
+                }
             };
         });
 

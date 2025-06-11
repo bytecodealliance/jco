@@ -46,9 +46,10 @@ export async function componentNew(file, opts) {
     await $init;
     const source = file ? await readFile(file) : null;
     let adapters = [];
-    if (opts.wasiReactor && opts.wasiCommand)
+    if (opts.wasiReactor && opts.wasiCommand) {
         throw new Error('Must select one of --wasi-command or --wasi-reactor');
-    if (opts.wasiReactor)
+    }
+    if (opts.wasiReactor) {
         adapters = [
             [
                 'wasi_snapshot_preview1',
@@ -62,7 +63,7 @@ export async function componentNew(file, opts) {
                 ).buffer,
             ],
         ];
-    else if (opts.wasiCommand)
+    } else if (opts.wasiCommand) {
         adapters = [
             [
                 'wasi_snapshot_preview1',
@@ -76,34 +77,39 @@ export async function componentNew(file, opts) {
                 ).buffer,
             ],
         ];
-    if (opts.adapt)
+    }
+    if (opts.adapt) {
         adapters = adapters.concat(
             await Promise.all(
                 opts.adapt.map(async (adapt) => {
                     let adapter;
-                    if (adapt.includes('=')) adapter = adapt.split('=');
-                    else
+                    if (adapt.includes('=')) {
+                        adapter = adapt.split('=');
+                    } else {
                         adapter = [
                             basename(adapt).slice(0, -extname(adapt).length),
                             adapt,
                         ];
+                    }
                     adapter[1] = await readFile(adapter[1]);
                     return adapter;
                 })
             )
         );
+    }
     const output = componentNewFn(source, adapters);
     await writeFile(opts.output, output);
 }
 
 export async function componentEmbed(file, opts) {
     await $init;
-    if (opts.metadata)
+    if (opts.metadata) {
         opts.metadata = opts.metadata.map((meta) => {
             const [field, data = ''] = meta.split('=');
             const [name, version = ''] = data.split('@');
             return [field, [[name, version]]];
         });
+    }
     const source = file ? await readFile(file) : null;
     opts.binary = source;
     opts.witPath = (isWindows ? '//?/' : '') + resolve(opts.wit);
@@ -137,18 +143,24 @@ export async function metadataShow(file, opts) {
             const indent = '  '.repeat(stack.length);
             if (metaType.tag === 'component') {
                 output += c`{bold [component${name ? ' ' + name : ''}]}\n`;
-                if (metaType.val > 0) stack.push(metaType.val);
+                if (metaType.val > 0) {
+                    stack.push(metaType.val);
+                }
             } else {
                 output += c`{bold [module${name ? ' ' + name : ''}]}\n`;
             }
-            if (producers.length === 0) output += `${indent}(no metadata)\n`;
+            if (producers.length === 0) {
+                output += `${indent}(no metadata)\n`;
+            }
             for (const [field, items] of producers) {
                 for (const [name, version] of items) {
                     output += `${indent}${(field + ':').padEnd(13, ' ')} ${name}${version ? c`{cyan  ${version}}` : ''}\n`;
                 }
             }
             output += '\n';
-            if (stack[stack.length - 1] === 0) stack.pop();
+            if (stack[stack.length - 1] === 0) {
+                stack.pop();
+            }
             stack[stack.length - 1]--;
         }
         process.stdout.write(output);

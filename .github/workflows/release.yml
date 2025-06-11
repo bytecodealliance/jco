@@ -9,6 +9,8 @@ on:
       - "jco-v[0-9]+.[0-9]+.[0-9]+-*"
       - "preview2-shim-v[0-9]+.[0-9]+.[0-9]+*"
       - "preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "preview3-shim-v[0-9]+.[0-9]+.[0-9]+*"
+      - "preview3-shim-v[0-9]+.[0-9]+.[0-9]+-*"
       - "js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+*"
       - "js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+-*"
     branches:
@@ -16,6 +18,8 @@ on:
       - "prep-release-jco-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "prep-release-preview3-shim-v[0-9]+.[0-9]+.[0-9]+*"
+      - "prep-release-preview3-shim-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+-*"
 
@@ -29,6 +33,7 @@ on:
           - jco
           - js-component-bindgen
           - preview2-shim
+          - preview3-shim
         description: |
           Project to tag for release (ex. `0.1.0`)
 
@@ -126,6 +131,13 @@ jobs:
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="packages/preview2-shim/bytecodealliance-preview2-shim-*.tgz";
               export ARTIFACT_NAME="bytecodealliance-preview2-shim-$NEXT_VERSION.tgz";
+              ;;
+            preview3-shim)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              export ARTIFACTS_GLOB="packages/preview3-shim/bytecodealliance-preview3-shim-*.tgz";
+              export ARTIFACT_NAME="bytecodealliance-preview3-shim-$NEXT_VERSION.tgz";
               ;;
             js-component-bindgen)
               export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
@@ -360,7 +372,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: taiki-e/install-action@84c20235bedc3797c7e1ddf685c574a4a6c666da # v2.52.2
+      - uses: taiki-e/install-action@92f69c195229fe62d58b4d697ab4bc75def98e76 # v2.52.7
         with:
           fallback: none
           tool: git-cliff
@@ -391,7 +403,7 @@ jobs:
           path: artifacts
 
       - name: Create GH release
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        uses: softprops/action-gh-release@f3cad8bcbf209fe591aa1823e372c5d96b7fc800 # v2.3.1
         with:
           token: ${{ secrets.RELEASE_PAT || github.token }}
           prerelease: ${{ github.ref_type != 'tag' }}

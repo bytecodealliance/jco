@@ -132,7 +132,9 @@ async function runComponent(componentPath, args, opts, executor) {
                 'dir'
             );
         } catch (e) {
-            if (e.code !== 'EEXIST') throw e;
+            if (e.code !== 'EEXIST') {
+                throw e;
+            }
         }
 
         const runPath = resolve(outDir, '_run.js');
@@ -169,7 +171,9 @@ async function runComponent(componentPath, args, opts, executor) {
         });
     } finally {
         try {
-            if (!opts.jcoDir) await rm(outDir, { recursive: true });
+            if (!opts.jcoDir) {
+                await rm(outDir, { recursive: true });
+            }
         } catch {
             // empty
         }

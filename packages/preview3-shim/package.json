@@ -2,20 +2,20 @@
   "name": "@bytecodealliance/preview3-shim",
   "version": "0.1.0",
   "description": "WASI Preview3 shim for JS environments",
-  "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com, Tomasz Andrzejak>",
+  "author": "Tomasz Andrzejak",
   "type": "module",
   "types": "./types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
       "node": "./lib/nodejs/index.js"
     },
     "./*": {
-      "types": "./types/*.d.ts",
       "node": "./lib/nodejs/*.js"
     }
   },
   "scripts": {
+    "lint": "eslint -c ../../eslint.config.mjs --ext .js lib test",
+    "lint:fix": "eslint -c ../../eslint.config.mjs --ext .js lib test --fix",
     "test": "vitest --run",
     "bench": "vitest bench --run"
   },
@@ -24,7 +24,7 @@
     "lib"
   ],
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "file:../preview2-shim"
+    "@bytecodealliance/preview2-shim": "^0.17.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
@@ -42,5 +42,5 @@
   "bugs": {
     "url": "https://github.com/bytecodealliance/jco/issues"
   },
-  "homepage": "https://github.com/bytecodealliance/jco#readme"
+  "homepage": "https://github.com/bytecodealliance/jco/blob/main/packages/preview3-shim/#readme"
 }

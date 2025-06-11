@@ -6,7 +6,6 @@ use std::mem;
 use base64::engine::general_purpose;
 use base64::Engine as _;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
-use wasmtime_environ::component;
 use wasmtime_environ::component::{
     CanonicalOptions, Component, ComponentTranslation, ComponentTypes, CoreDef, CoreExport, Export,
     ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule, InterfaceType, LoweredIndex,
@@ -887,7 +886,8 @@ impl<'a> Instantiator<'a, '_> {
     fn is_early_trampoline(trampoline: &Trampoline) -> bool {
         matches!(
             trampoline,
-            Trampoline::ContextGet(_)
+            Trampoline::BackpressureSet { .. }
+                | Trampoline::ContextGet(_)
                 | Trampoline::ContextSet(_)
                 | Trampoline::ErrorContextDebugMessage { .. }
                 | Trampoline::ErrorContextDrop { .. }
@@ -909,72 +909,23 @@ impl<'a> Instantiator<'a, '_> {
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
         let i = i.as_u32();
         match trampoline {
-            Trampoline::TaskReturn { results, .. } => {
-                let result_types = &self.types[*results].types;
-                assert!(
-                    result_types.is_empty(),
-                    "non-empty task returns not yet supported"
-                );
-
-                // TODO: Call the appropriate lift here to move the type from inside the component
-                // to outside (and eventually into the caller, who initiated the call that lead to this task.return)
-                for result_ty in result_types {
-                    let _abi = self.types.canonical_abi(result_ty);
-                    match result_ty {
-                        InterfaceType::Bool => todo!(),
-                        InterfaceType::S8 => todo!(),
-                        InterfaceType::U8 => todo!(),
-                        InterfaceType::S16 => todo!(),
-                        InterfaceType::U16 => todo!(),
-                        InterfaceType::S32 => todo!(),
-                        InterfaceType::U32 => todo!(),
-                        InterfaceType::S64 => todo!(),
-                        InterfaceType::U64 => todo!(),
-                        InterfaceType::Float32 => todo!(),
-                        InterfaceType::Float64 => todo!(),
-                        InterfaceType::Char => todo!(),
-                        InterfaceType::String => todo!(),
-                        InterfaceType::Record(_type_record_index) => todo!(),
-                        InterfaceType::Variant(_type_variant_index) => todo!(),
-                        InterfaceType::List(_type_list_index) => todo!(),
-                        InterfaceType::Tuple(_type_tuple_index) => todo!(),
-                        InterfaceType::Flags(_type_flags_index) => todo!(),
-                        InterfaceType::Enum(_type_enum_index) => todo!(),
-                        InterfaceType::Option(_type_option_index) => todo!(),
-                        InterfaceType::Result(_type_result_index) => todo!(),
-                        InterfaceType::Own(_type_resource_table_index) => todo!(),
-                        InterfaceType::Borrow(_type_resource_table_index) => todo!(),
-                        InterfaceType::Future(_type_future_table_index) => todo!(),
-                        InterfaceType::Stream(_type_stream_table_index) => todo!(),
-                        InterfaceType::ErrorContext(
-                            _type_component_local_error_context_table_index,
-                        ) => todo!(),
-                    }
-                }
-
-                // TODO: get the current in-flight call/task (currently passing 0!) -- we'll need it to know
-                // what component to return the results to. This might be stored in the trampoline data
-                let lift_fns = "[]"; // TODO: build the lifting functions list
-                let task_return_fn = self.gen.intrinsic(Intrinsic::TaskReturn);
+            Trampoline::TaskCancel { instance } => {
+                let task_cancel_fn = self.gen.intrinsic(Intrinsic::TaskCancel);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {task_return_fn}.bind(
-                         null,
-                         0,
-                         {lift_fns},
-                     );"
+                    "const trampoline{i} = () => {{ {task_cancel_fn}({}); }};\n",
+                    instance.as_u32()
                 );
-            }
-
-            Trampoline::TaskCancel { instance } => {
-                let _ = instance;
-                // TODO: impl (won't compile without)
-                uwriteln!(self.src.js, "const trampoline{i} = () => {{ throw new Error('task-cancel not implemented') }};");
             }
 
             Trampoline::SubtaskCancel { instance, async_ } => {
-                let _ = (instance, async_);
-                todo!()
+                let task_cancel_fn = self.gen.intrinsic(Intrinsic::TaskCancel);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {task_cancel_fn}({}, {}, ...args); }};\n",
+                    instance.as_u32(),
+                    async_.then(|| "true").unwrap_or("false")
+                );
             }
 
             Trampoline::SubtaskDrop { instance } => {
@@ -990,8 +941,12 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::BackpressureSet { instance } => {
-                let _ = instance;
-                todo!("Trampoline::BackpressureSet");
+                let backpressure_set_fn = self.gen.intrinsic(Intrinsic::BackpressureSet);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {backpressure_set_fn}({}, ...args); }} \n",
+                    instance.as_u32(),
+                );
             }
 
             Trampoline::WaitableSetNew { instance } => {
@@ -1031,8 +986,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::Yield { async_ } => {
-                let _ = async_;
-                todo!("Trampoline::Yield");
+                let yield_fn = self.gen.intrinsic(Intrinsic::Yield);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = () => {{ {yield_fn}({async_}); }};\n",
+                );
             }
 
             Trampoline::StreamNew { ty } => {
@@ -1244,7 +1202,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::SyncStartCall { callback } => {
                 let _ = callback;
-                todo!();
+                todo!("sync-start-call not implemented");
             }
 
             Trampoline::AsyncStartCall {
@@ -1252,7 +1210,7 @@ impl<'a> Instantiator<'a, '_> {
                 post_return,
             } => {
                 let _ = (callback, post_return);
-                todo!();
+                todo!("async-start-call not implemented");
             }
 
             Trampoline::LowerImport {
@@ -1489,22 +1447,230 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::PrepareCall { memory } => {
                 let _ = memory;
-                todo!()
+                todo!("prepare-call not implemented")
             }
 
-            Trampoline::ContextGet(_) => {
-                // TODO: impl (won't compile without)
+            Trampoline::ContextSet(slot) => {
+                let context_set_fn = self.gen.intrinsic(Intrinsic::ContextSet);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = () => {{ throw new Error('context-get not implemented') }};"
+                    "const trampoline{i} = (...args) => {context_set_fn}({slot}, ...args);"
                 );
             }
 
-            Trampoline::ContextSet(_) => {
-                // TODO: impl (won't compile without)
+            Trampoline::ContextGet(slot) => {
+                let context_get_fn = self.gen.intrinsic(Intrinsic::ContextGet);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = () => {{ throw new Error('context-set not implemented') }};"
+                    "const trampoline{i} = (...args) => {context_get_fn}({slot}, ...args);"
+                );
+            }
+
+            Trampoline::TaskReturn { results, options } => {
+                let result_types = &self.types[*results].types;
+
+                let CanonicalOptions {
+                    instance,
+                    string_encoding,
+                    memory,
+                    realloc,
+                    callback,
+                    post_return,
+                    async_,
+                } = options;
+
+                // Validate canonopts
+                // TODO: these should be traps at runtime rather than failures at transpilation time
+                if realloc.is_some() && memory.is_none() {
+                    panic!("memory must be present if realloc is");
+                }
+                if *async_ && post_return.is_some() {
+                    panic!("async and post return must not be specified together");
+                }
+                if *async_ && callback.is_none() {
+                    panic!("callback must be specified for async");
+                }
+                if let Some(cb_idx) = callback {
+                    let cb_fn = &self.types[TypeFuncIndex::from_u32(cb_idx.as_u32())];
+                    match self.types[cb_fn.params].types[..] {
+                        [InterfaceType::S32, InterfaceType::S32, InterfaceType::S32] => {}
+                        _ => panic!("unexpected params for async callback fn"),
+                    }
+                    match self.types[cb_fn.results].types[..] {
+                        [InterfaceType::S32] => {}
+                        _ => panic!("unexpected results for async callback fn"),
+                    }
+                }
+
+                // TODO: save the async callback that should be called later, to the current task?
+                // TODO: save the instance with the async callback
+
+                // TODO: Call the appropriate lift here to move the type from inside the component
+                // to outside (and eventually into the caller, who initiated the call that lead to this task.return)
+
+                // Build up a list of all the lifting functions that will be needed for the types
+                // that are actually being task.return'd by this call
+                let mut lift_fns: Vec<String> = Vec::with_capacity(result_types.len());
+                for result_ty in result_types {
+                    let result_ty_abi = self.types.canonical_abi(result_ty);
+                    lift_fns.push(match result_ty {
+                        InterfaceType::Bool => {
+                            self.gen.intrinsic(Intrinsic::LiftFlatBoolFromStorage)
+                        }
+                        InterfaceType::S8 => self.gen.intrinsic(Intrinsic::LiftFlatS8FromStorage),
+                        InterfaceType::U8 => self.gen.intrinsic(Intrinsic::LiftFlatU8FromStorage),
+                        InterfaceType::S16 => self.gen.intrinsic(Intrinsic::LiftFlatS16FromStorage),
+                        InterfaceType::U16 => self.gen.intrinsic(Intrinsic::LiftFlatU16FromStorage),
+                        InterfaceType::S32 => self.gen.intrinsic(Intrinsic::LiftFlatS32FromStorage),
+                        InterfaceType::U32 => self.gen.intrinsic(Intrinsic::LiftFlatU32FromStorage),
+                        InterfaceType::S64 => self.gen.intrinsic(Intrinsic::LiftFlatS64FromStorage),
+                        InterfaceType::U64 => self.gen.intrinsic(Intrinsic::LiftFlatU64FromStorage),
+                        InterfaceType::Float32 => {
+                            self.gen.intrinsic(Intrinsic::LiftFlatFloat32FromStorage)
+                        }
+                        InterfaceType::Float64 => {
+                            self.gen.intrinsic(Intrinsic::LiftFlatFloat64FromStorage)
+                        }
+                        InterfaceType::Char => match string_encoding {
+                            wasmtime_environ::component::StringEncoding::Utf8 => {
+                                self.gen.intrinsic(Intrinsic::LiftFlatCharUtf8FromStorage)
+                            }
+                            wasmtime_environ::component::StringEncoding::Utf16 => {
+                                self.gen.intrinsic(Intrinsic::LiftFlatCharUtf16FromStorage)
+                            }
+                            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                                todo!("latin1+utf8 not supported")
+                            }
+                        },
+                        InterfaceType::String => match string_encoding {
+                            wasmtime_environ::component::StringEncoding::Utf8 => {
+                                self.gen.intrinsic(Intrinsic::LiftFlatStringUtf8FromStorage)
+                            }
+                            wasmtime_environ::component::StringEncoding::Utf16 => self
+                                .gen
+                                .intrinsic(Intrinsic::LiftFlatStringUtf16FromStorage),
+                            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                                todo!("latin1+utf8 not supported")
+                            }
+                        },
+                        InterfaceType::Record(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatRecordFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Variant(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatVariantFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::List(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatListFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Tuple(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatTupleFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Flags(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatFlagsFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Enum(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatEnumFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Option(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatOptionFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Result(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatResultFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Own(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatOwnFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Borrow(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatOwnFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::Future(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatFutureFromStorage);
+                            format!("(...args) => {{ {lift_fn}({}, ...args) }}", 4)
+                        }
+                        InterfaceType::Stream(_ty_idx) => {
+                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatStreamFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                        InterfaceType::ErrorContext(_ty_idx) => {
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::LiftFlatErrorContextFromStorage);
+                            format!(
+                                "(...args) => {{ {lift_fn}({}, ...args) }}",
+                                result_ty_abi.size32
+                            )
+                        }
+                    });
+                }
+                let lift_fns_js = format!("[{}]", lift_fns.join(","));
+
+                // TODO: get the current in-flight call/task (currently passing null!) -- we'll need it to know
+                // what component to return the results to. This might be stored in the trampoline data
+
+                // TODO: should be (task, result_ty, liftoptions, flat_args)
+
+                let memory_js = memory
+                    .map(|idx| format!("memory{}", idx.as_u32()))
+                    .unwrap_or_else(|| "null".into());
+                let component_idx = instance.as_u32();
+                let vals = "[]"; // TODO: build values to pass along to task return
+                let task_return_fn = self.gen.intrinsic(Intrinsic::TaskReturn);
+                let callback_fn_idx = callback
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
+
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {task_return_fn}.bind(
+                         {component_idx},
+                         {memory_js},
+                         {callback_fn_idx},
+                         {lift_fns_js},
+                         {vals},
+                     );",
                 );
             }
         }
@@ -1868,9 +2034,11 @@ impl<'a> Instantiator<'a, '_> {
                 .map(|idx| format!(" postReturn: postReturn{},", idx.as_u32()))
                 .unwrap_or("".into());
             let string_encoding = match options.string_encoding {
-                component::StringEncoding::Utf8 => "",
-                component::StringEncoding::Utf16 => " stringEncoding: 'utf16',",
-                component::StringEncoding::CompactUtf16 => " stringEncoding: 'compact-utf16',",
+                wasmtime_environ::component::StringEncoding::Utf8 => "",
+                wasmtime_environ::component::StringEncoding::Utf16 => " stringEncoding: 'utf16',",
+                wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                    " stringEncoding: 'compact-utf16',"
+                }
             };
 
             let callee_name = match func.kind {
@@ -2484,9 +2652,11 @@ impl<'a> Instantiator<'a, '_> {
                 None
             },
             encoding: match opts.string_encoding {
-                component::StringEncoding::Utf8 => StringEncoding::UTF8,
-                component::StringEncoding::Utf16 => StringEncoding::UTF16,
-                component::StringEncoding::CompactUtf16 => StringEncoding::CompactUTF16,
+                wasmtime_environ::component::StringEncoding::Utf8 => StringEncoding::UTF8,
+                wasmtime_environ::component::StringEncoding::Utf16 => StringEncoding::UTF16,
+                wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                    StringEncoding::CompactUTF16
+                }
             },
             src: source::Source::default(),
             resolve: self.resolve,
@@ -2640,6 +2810,7 @@ impl<'a> Instantiator<'a, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
+    // TODO: record whether all exports are lifted sync/async (if they are all sync, no tasks!)
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
         for (export_name, export_idx) in exports.raw_iter() {
             let export = &self.component.export_items[*export_idx];

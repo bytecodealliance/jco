@@ -14,6 +14,7 @@ on:
           - jco
           - js-component-bindgen
           - preview2-shim
+          - preview3-shim
         description: |
           Project to prep for release (ex. `0.1.0`)
 
@@ -84,6 +85,11 @@ jobs:
               export IS_JS_PROJECT=true;
               ;;
             preview2-shim)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              ;;
+            preview3-shim)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;

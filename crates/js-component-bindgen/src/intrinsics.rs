@@ -1,7 +1,8 @@
-use crate::source::Source;
-use crate::uwrite;
 use std::collections::BTreeSet;
 use std::fmt::Write;
+
+use crate::source::Source;
+use crate::uwrite;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Intrinsic {
@@ -25,6 +26,60 @@ pub enum Intrinsic {
     I64ToF64,
     InstantiateCore,
     IsLE,
+
+    /// Enable debug logging
+    DebugLog,
+
+    /// Convert a i32 to a char with the i32 representing a UTF16 point
+    I32ToCharUtf16,
+
+    /// Convert a i32 to a char with the i32 representing a UTF8 point
+    I32ToCharUtf8,
+
+    /// # Resource table slab implementation
+    ///
+    /// Resource table slab implementation on top of a fixed "SMI" array in JS engines,
+    /// a fixed contiguous array of u32s, for performance. We don't use a typed array because
+    /// we need resizability without reserving a large buffer.
+    ///
+    /// The flag bit for all data values is 1 << 30. We avoid the use of the highest bit
+    /// entirely to not trigger SMI deoptimization.
+    ///
+    /// Each entry consists of a pair of u32s, either a free list entry, or a data entry.
+    ///
+    /// ## Free List Entries:
+    ///
+    ///  |    index (x, u30)   |       ~unused~      |
+    ///  |------ 32 bits ------|------ 32 bits ------|
+    ///  | 01xxxxxxxxxxxxxxxxx | ################### |
+    ///
+    /// Free list entries use only the first value in the pair, with the high bit always set
+    /// to indicate that the pair is part of the free list. The first pair of entries at
+    /// indices 0 and 1 is the free list head, with the initial values of 1 << 30 and 0
+    /// respectively. Removing the 1 << 30 flag gives 0, which indicates the end of the free
+    /// list.
+    ///
+    /// ## Data Entries:
+    ///
+    ///  |    scope (x, u30)   | own(o), rep(x, u30) |
+    ///  |------ 32 bits ------|------ 32 bits ------|
+    ///  | 00xxxxxxxxxxxxxxxxx | 0oxxxxxxxxxxxxxxxxx |
+    ///
+    /// Data entry pairs consist of a first u30 scope entry and a second rep entry. The field
+    /// is only called the scope for interface shape consistency, but is actually used for the
+    /// ref count for own handles and the scope id for borrow handles. The high bit is never
+    /// set for this first entry to distinguish the pair from the free list. The second item
+    /// in the pair is the rep for  the resource, with the high bit in this entry indicating
+    /// if it is an own handle.
+    ///
+    /// The free list numbering and the handle numbering are the same, indexing by pair, so to
+    /// get from a handle or free list numbering to an index, we multiply by two.
+    ///
+    /// For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
+    /// the array to get the context and rep respectively. If the high bit is set on the
+    /// context, we throw for an invalid handle. The rep value is masked out from the
+    /// ownership high bit, also throwing for an invalid zero rep.
+    ///
     ResourceTableFlag,
     ResourceTableCreateBorrow,
     ResourceTableCreateOwn,
@@ -69,6 +124,64 @@ pub enum Intrinsic {
     Utf8EncodedLen,
     ValidateGuestChar,
     ValidateHostChar,
+
+    /////////////////////
+    // Data structures //
+    /////////////////////
+    /// Event codes used for async, as a JS enum
+    AsyncEventCodeEnum,
+
+    /// Global that stores the current task for a given invocation.
+    ///
+    /// This global variable is populated *only* when we are performing a call
+    /// that was triggered by an async lifted export.
+    ///
+    /// You can consider the type of the global variable to be:
+    ///
+    /// ```ts
+    /// type Task = {
+    ///     componentIdx: number,
+    ///     storage: [number]
+    ///     alwaysTaskReturn: boolean,
+    ///     returnCalls: number,
+    ///     requested: boolean,
+    ///     borrowedHandles: Record<number, boolean>,
+    ///     cancelled: boolean,
+    /// }
+    ///
+    /// type GlobalAsyncCurrentTaskMap = Map<number, Task>;
+    /// ```
+    GlobalAsyncCurrentTaskMap,
+
+    /// Function that retrieves the current global async current task
+    GetCurrentTask,
+
+    /// Global that stores backpressure by component instance
+    ///
+    /// A component instance *not* having a value in this map indicates that
+    /// `backpressure.set` has not been called.
+    ///
+    /// A `true`/`false` in the value corresponding to a component instance indicates that
+    /// backpressure.set has been called at least once, with the last call containing the
+    /// given value.
+    ///
+    /// ```ts
+    /// type GlobalBackpressureMap = Map<number, bool>;
+    /// ```
+    GlobalBackpressureMap,
+
+    /// Global that stores async state by component instance
+    ///
+    /// ```ts
+    /// type ComponentAsyncState = {
+    ///     mayLeave: boolean,
+    /// };
+    /// type GlobalBackpressureMap = Map<number, ComponentAsyncState>;
+    /// ```
+    GlobalAsyncStateMap,
+
+    /// Function that retrieves or creates async state for a given component instance
+    GetOrCreateAsyncState,
 
     /// Storage of component-wide "global" `error-context` metadata
     ///
@@ -281,6 +394,269 @@ pub enum Intrinsic {
     /// ```
     ///
     SubtaskDrop,
+
+    /// Set the value of a context local storage for the current task/thread
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type SlotIndex = 0 | 1;
+    /// function contextSet(slot: SlotIndex, value: number);
+    /// ```
+    ///
+    ContextSet,
+
+    /// Gets the value stored in context local storage for the current task/thread
+    ///
+    /// Guest code generally uses this to reference internally stored context local storage,
+    /// whether that is task local or thread local.
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type SlotIndex = 0 | 1;
+    /// function contextGet(slot: SlotIndex): i32;
+    /// ```
+    ///
+    ContextGet,
+
+    /// Set the backpressure for a given component instance
+    ///
+    /// Guest code generally uses this to reference internally stored context local storage,
+    /// whether that is task local or thread local.
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type Value = 0 | 1;
+    /// function backpressureSet(componentIdx: number, value: val);
+    /// ```
+    BackpressureSet,
+
+    /// Yield a task
+    ///
+    /// Guest code generally uses this to yield control flow to the host (and possibly other components)
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// function yield_(isAsync: boolean);
+    /// ```
+    Yield,
+
+    /// Cancel the current async task for a given component instance
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// function taskCancel(componentIdx: number, isAsync: boolean);
+    /// ```
+    TaskCancel,
+
+    /// Lift a boolean into provided storage, given a core type
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value.
+    LiftFlatBoolFromStorage,
+
+    /// Lift a s8 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value,
+    /// which is bounded from -128 to 127.
+    LiftFlatS8FromStorage,
+
+    /// Lift a u8 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value,
+    /// which is bounded from 0 to 255.
+    LiftFlatU8FromStorage,
+
+    /// Lift a s16 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value,
+    /// which is bounded from -32,768 to 32,767.
+    LiftFlatS16FromStorage,
+
+    /// Lift a u16 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value,
+    /// which is bounded from 0 to 65,535.
+    LiftFlatU16FromStorage,
+
+    /// Lift a s32 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value,
+    /// which is bounded from -2,147,483,648 to 2,147,483,647.
+    LiftFlatS32FromStorage,
+
+    /// Lift a u32 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value,
+    /// which is bounded from 0 to 4,294,967,295.
+    LiftFlatU32FromStorage,
+
+    /// Lift a s64 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value,
+    /// which is bounded from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
+    LiftFlatS64FromStorage,
+
+    /// Lift a u64 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    ///
+    /// In this case, coreVals is expected to contain precisely *one* numerical (u32-equivalent) value,
+    /// which is bounded from 0 to 18,446,744,073,709,551,615.
+    LiftFlatU64FromStorage,
+
+    /// Lift a f32 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    LiftFlatFloat32FromStorage,
+
+    /// Lift a f64 into provided storage given core type(s)
+    ///
+    /// This function is of the form:
+    ///
+    /// ```ts
+    /// type u32 = number;
+    /// (coreVals: u32[], ptr: u32, len: u32) => void;
+    /// ```
+    LiftFlatFloat64FromStorage,
+
+    /// Lift a char into provided storage given core type(s) that represent utf8
+    LiftFlatCharUtf8FromStorage,
+
+    /// Lift a char into provided storage given core type(s) that represent utf16
+    LiftFlatCharUtf16FromStorage,
+
+    /// Lift a UTF8 string into provided storage given core type(s)
+    LiftFlatStringUtf8FromStorage,
+
+    /// Lift a UTF16 string into provided storage given core type(s)
+    LiftFlatStringUtf16FromStorage,
+
+    /// Lift a record into provided storage given core type(s)
+    LiftFlatRecordFromStorage,
+
+    /// Lift a variant into provided storage given core type(s)
+    LiftFlatVariantFromStorage,
+
+    /// Lift a list into provided storage given core type(s)
+    LiftFlatListFromStorage,
+
+    /// Lift a tuple into provided storage given core type(s)
+    LiftFlatTupleFromStorage,
+
+    /// Lift flags into provided storage given core type(s)
+    LiftFlatFlagsFromStorage,
+
+    /// Lift flags into provided storage given core type(s)
+    LiftFlatEnumFromStorage,
+
+    /// Lift an option into provided storage given core type(s)
+    LiftFlatOptionFromStorage,
+
+    /// Lift a result into provided storage given core type(s)
+    LiftFlatResultFromStorage,
+
+    /// Lift a owned resource into provided storage given core type(s)
+    LiftFlatOwnFromStorage,
+
+    /// Lift a borrowed resource into provided storage given core type(s)
+    LiftFlatBorrowFromStorage,
+
+    /// Lift a future into provided storage given core type(s)
+    LiftFlatFutureFromStorage,
+
+    /// Lift a stream into provided storage given core type(s)
+    LiftFlatStreamFromStorage,
+
+    /// Lift an error-context into provided storage given core type(s)
+    LiftFlatErrorContextFromStorage,
+
+    /////////////////////
+    // Utility Classes //
+    /////////////////////
+    /// The definition of the async task class
+    AsyncTaskClass,
 }
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
@@ -291,6 +667,9 @@ pub fn render_intrinsics(
     instantiation: bool,
 ) -> Source {
     let mut output = Source::default();
+
+    // Always include debug logging
+    intrinsics.insert(Intrinsic::DebugLog);
 
     // Handle intrinsic "dependence"
     if intrinsics.contains(&Intrinsic::GetErrorPayload)
@@ -350,6 +729,19 @@ pub fn render_intrinsics(
         ]);
     }
 
+    if intrinsics.contains(&Intrinsic::ContextGet) || intrinsics.contains(&Intrinsic::ContextSet) {
+        intrinsics.extend([
+            &Intrinsic::GlobalAsyncCurrentTaskMap,
+            &Intrinsic::AsyncTaskClass,
+            &Intrinsic::AsyncEventCodeEnum,
+            &Intrinsic::GetCurrentTask,
+        ]);
+    }
+
+    if intrinsics.contains(&Intrinsic::BackpressureSet) {
+        intrinsics.extend([&Intrinsic::GlobalBackpressureMap]);
+    }
+
     for i in intrinsics.iter() {
         match i {
             Intrinsic::Base64Compile => if !no_nodejs_compat {
@@ -365,7 +757,7 @@ pub fn render_intrinsics(
             Intrinsic::ClampGuest => output.push_str("
                 function clampGuest(i, min, max) {
                     if (i < min || i > max) \
-                        throw new TypeError(`must be between ${min} and ${max}`);
+                    throw new TypeError(`must be between ${min} and ${max}`);
                     return i;
                 }
             "),
@@ -407,7 +799,6 @@ pub fn render_intrinsics(
             Intrinsic::F64ToI64 => output.push_str("
                 const f64ToI64 = f => (i64ToF64F[0] = f, i64ToF64I[0]);
             "),
-
             Intrinsic::FetchCompile => if !no_nodejs_compat {
                 output.push_str("
                     const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
@@ -518,9 +909,11 @@ pub fn render_intrinsics(
             Intrinsic::I32ToF32 => output.push_str("
                 const i32ToF32 = i => (i32ToF32I[0] = i, i32ToF32F[0]);
             "),
+
             Intrinsic::F32ToI32 => output.push_str("
                 const f32ToI32 = f => (i32ToF32F[0] = f, i32ToF32I[0]);
             "),
+
             Intrinsic::I64ToF64 => output.push_str("
                 const i64ToF64 = i => (i64ToF64I[0] = i, i64ToF64F[0]);
             "),
@@ -537,50 +930,6 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
 
-            // # Resource table slab implementation
-            //
-            // Resource table slab implementation on top of a fixed "SMI" array in JS engines,
-            // a fixed contiguous array of u32s, for performance. We don't use a typed array because
-            // we need resizability without reserving a large buffer.
-            //
-            // The flag bit for all data values is 1 << 30. We avoid the use of the highest bit
-            // entirely to not trigger SMI deoptimization.
-            //
-            // Each entry consists of a pair of u32s, either a free list entry, or a data entry.
-            //
-            // ## Free List Entries:
-            //
-            //  |    index (x, u30)   |       ~unused~      |
-            //  |------ 32 bits ------|------ 32 bits ------|
-            //  | 01xxxxxxxxxxxxxxxxx | ################### |
-            //
-            // Free list entries use only the first value in the pair, with the high bit always set
-            // to indicate that the pair is part of the free list. The first pair of entries at
-            // indices 0 and 1 is the free list head, with the initial values of 1 << 30 and 0
-            // respectively. Removing the 1 << 30 flag gives 0, which indicates the end of the free
-            // list.
-            //
-            // ## Data Entries:
-            //
-            //  |    scope (x, u30)   | own(o), rep(x, u30) |
-            //  |------ 32 bits ------|------ 32 bits ------|
-            //  | 00xxxxxxxxxxxxxxxxx | 0oxxxxxxxxxxxxxxxxx |
-            //
-            // Data entry pairs consist of a first u30 scope entry and a second rep entry. The field
-            // is only called the scope for interface shape consistency, but is actually used for the
-            // ref count for own handles and the scope id for borrow handles. The high bit is never
-            // set for this first entry to distinguish the pair from the free list. The second item
-            // in the pair is the rep for  the resource, with the high bit in this entry indicating
-            // if it is an own handle.
-            //
-            // The free list numbering and the handle numbering are the same, indexing by pair, so to
-            // get from a handle or free list numbering to an index, we multiply by two.
-            //
-            // For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
-            // the array to get the context and rep respectively. If the high bit is set on the
-            // context, we throw for an invalid handle. The rep value is masked out from the
-            // ownership high bit, also throwing for an invalid zero rep.
-            //
             Intrinsic::ResourceTableFlag => output.push_str("
                 const T_FLAG = 1 << 30;
             "),
@@ -646,9 +995,6 @@ pub fn render_intrinsics(
                 }
             "),
 
-            // For own transfer, in the case of a resource transfer where that resource is never dropped,
-            // it is possible to transfer in to a table that is otherwise fully uninitialized by the
-            // bindgen.
             Intrinsic::ResourceTransferBorrow => {
                 let handle_tables = Intrinsic::HandleTables.name();
                 let resource_borrows = Intrinsic::ResourceCallBorrows.name();
@@ -784,10 +1130,6 @@ pub fn render_intrinsics(
                 }
             "),
 
-            // Calling `String` almost directly calls `ToString`, except that it also allows symbols,
-            // which is why we have the symbol-rejecting branch above.
-            //
-            // Definition of `String`: https://tc39.es/ecma262/#sec-string-constructor-string-value
             Intrinsic::ToString => output.push_str("
                 function toString(val) {
                     if (typeof val === 'symbol') throw new TypeError('symbols cannot be converted to strings');
@@ -851,7 +1193,7 @@ pub fn render_intrinsics(
                 let utf8EncodedLen = 0;
                 function utf8Encode(s, realloc, memory) {
                     if (typeof s !== 'string') \
-                        throw new TypeError('expected a string');
+                    throw new TypeError('expected a string');
                     if (s.length === 0) {
                         utf8EncodedLen = 0;
                         return 1;
@@ -867,18 +1209,15 @@ pub fn render_intrinsics(
             Intrinsic::ValidateGuestChar => output.push_str("
                 function validateGuestChar(i) {
                     if ((i > 0x10ffff) || (i >= 0xd800 && i <= 0xdfff)) \
-                        throw new TypeError(`not a valid char`);
+                    throw new TypeError(`not a valid char`);
                     return String.fromCodePoint(i);
                 }
             "),
 
-            // TODO: this is incorrect. It at least allows strings of length > 0
-            // but it probably doesn't do the right thing for unicode or invalid
-            // utf16 strings either.
             Intrinsic::ValidateHostChar => output.push_str("
                 function validateHostChar(s) {
                     if (typeof s !== 'string') \
-                        throw new TypeError(`must be a string`);
+                    throw new TypeError(`must be a string`);
                     return s.codePointAt(0);
                 }
             "),
@@ -988,6 +1327,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::ErrorContextGetLocalTable => {
                 let get_local_tbl_fn = Intrinsic::ErrorContextGetLocalTable.name();
                 let local_tbl_var = Intrinsic::ErrorContextComponentLocalTable.name();
@@ -1033,23 +1373,28 @@ pub fn render_intrinsics(
             }
 
             Intrinsic::TaskReturn => {
-                // TODO: write results into provided memory, perform checks for task & result types
+                // TODO(async): write results into provided memory, perform checks for task & result types
                 // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-taskreturn
                 let task_return_fn = Intrinsic::TaskReturn.name();
+                let task_map = Intrinsic::GlobalAsyncCurrentTaskMap.name();
+
                 output.push_str(&format!("
-                    function {task_return_fn}(taskId, liftFns, storagePtr, storageLen) {{
+                    function {task_return_fn}(componentIdx, memory, callbackFnIdx, liftFns, vals, storagePtr, storageLen) {{
+                        const task = {task_map}.get(componentIdx);
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        task.callbackFnIdx = callbackFnIdx;
+
                         const originalPtr = storagePtr;
                         const results = [];
                         for (const liftFn of liftFns) {{
-                            const [ componentIdx, typeIdx, val, bytesRead ] =  liftFn(storagePtr, storageLen);
-                            storagePtr += bytesRead;
-                            storageLen -= bytesRead;
-                            results.push([componentIdx, typeIdx, val]);
+                            if (storageLen <= 0) {{ throw new Error('ran out of storage while writing'); }}
+                            const bytesWritten = liftFn(memory, vals, storagePtr, storageLen);
+                            storagePtr += bytesWritten;
+                            storageLen -= bytesWritten;
                         }}
                     }}
                 "));
             }
-
             Intrinsic::SubtaskDrop => {
                 // TODO: ensure task is marked "may_leave", drop task for relevant component
                 // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-subtaskdrop
@@ -1057,6 +1402,596 @@ pub fn render_intrinsics(
                 output.push_str(&format!("
                     function {subtask_drop_fn}(componentId, taskId) {{
                     }}
+                "));
+            }
+            Intrinsic::GetCurrentTask => {
+                // TODO: remove autovivication of tasks here, they should be created @ lift
+                let task_class = Intrinsic::AsyncTaskClass.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let global_task_map = Intrinsic::GlobalAsyncCurrentTaskMap.name();
+                output.push_str(&format!("
+                    let CURRENT_TASK;
+                    function {current_task_get_fn}(componentIdx) {{
+                        if (!componentIdx) {{
+                            if (!CURRENT_TASK) {{ CURRENT_TASK = new {task_class}(); }}
+                            return CURRENT_TASK;
+                        }}
+                        if (!{global_task_map}.has(componentIdx)) {{
+                            {global_task_map}.set(componentIdx, new {task_class}());
+                        }}
+                        return {global_task_map}.get(componentIdx);
+                    }}
+                "));
+            }
+            Intrinsic::ContextSet => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let context_set_fn = Intrinsic::ContextSet.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                output.push_str(&format!("
+                    function {context_set_fn}(slot, value) {{
+                        {debug_log_fn}('[{context_set_fn}()] args', {{ slot, value }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw new Error('failed to retrieve current task'); }}
+                        if (slot < 0 || value.len < slot) {{ throw new Error('invalid slot for current task'); }}
+                        task.storage[slot] = value;
+                    }}
+                "));
+            }
+            Intrinsic::ContextGet => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let context_get_fn = Intrinsic::ContextGet.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                output.push_str(&format!("
+                    function {context_get_fn}(slot) {{
+                        {debug_log_fn}('[{context_get_fn}()] args', {{ slot }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw new Error('failed to retrieve current task'); }}
+                        if (slot < 0 || slot > task.storage.length) {{ throw new Error('invalid slot for current task'); }}
+                        if (task.storage[slot] === null) {{ throw new Error('slot not set before get'); }}
+                        return task.storage[slot];
+                    }}
+                "));
+            }
+            Intrinsic::GlobalAsyncCurrentTaskMap => {
+                let var_name = Intrinsic::GlobalAsyncCurrentTaskMap.name();
+                output.push_str(&format!("const {var_name} = new Map();\n"));
+            }
+            Intrinsic::GlobalBackpressureMap => {
+                let var_name = Intrinsic::GlobalBackpressureMap.name();
+                output.push_str(&format!("const {var_name} = new Map();\n"));
+
+            }
+            Intrinsic::GlobalAsyncStateMap => {
+                let var_name = Intrinsic::GlobalAsyncStateMap.name();
+                output.push_str(&format!("const {var_name} = new Map();\n"));
+            }
+            Intrinsic::DebugLog => {
+                let fn_name = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    const {fn_name} = (...args) => {{
+                        if (!globalThis?.process?.env?.JCO_DEBUG) {{ return; }}
+                        console.debug(...args);
+                    }}
+                "));
+            }
+            Intrinsic::I32ToCharUtf16 => {
+                output.push_str(&format!("
+                    function _i32ToCharUTF16 = (n) => {{
+                        if (!n || typeof n !== 'number') {{ throw new Error('invalid i32'); }}
+                        if (n < 0) {{ throw new Error('i32 must be greater than zero'); }}
+                        if (n >= 0x110000) {{ throw new Error('invalid i32, out of range'); }}
+                        if (0xD800 <= n && n <= 0xDFFF) {{ throw new Error('invalid i32 out of range'); }}
+                        return String.fromCharCode(n);
+                    }}
+                "));
+            }
+            Intrinsic::I32ToCharUtf8 => {
+                output.push_str(&format!("
+                    function _i32ToCharUTF8 = (n) => {{
+                        if (!n || typeof n !== 'number') {{ throw new Error('invalid i32'); }}
+                        if (n < 0) {{ throw new Error('i32 must be greater than zero'); }}
+                        if (n >= 0x110000) {{ throw new Error('invalid i32, out of range'); }}
+                        if (0xD800 <= n && n <= 0xDFFF) {{ throw new Error('invalid i32 out of range'); }}
+                        return new TextDecoder().decode(new Uint8Array([n]));
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatBoolFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatBoolFromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatBoolFromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] !== 0 && vals[0] !== 1) {{ throw new Error('invalid value for core value representing bool'); }}
+                        new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
+                        return 1;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatS8FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatS8FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatS8FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] > 127 || vals[0] < -128) {{ throw new Error('invalid value for core value representing s8'); }}
+                        new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
+                        return 8;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatU8FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatU8FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatU8FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] > 255 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u8'); }}
+                        new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
+                        return 8;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatS16FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatS16FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatS16FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] > 32_767 || vals[0] < -32_768) {{ throw new Error('invalid value for core value representing s16'); }}
+                        new DataView(memory.buffer).setInt16(storagePtr, vals[0], true);
+                        return 16;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatU16FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatU16FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatU16FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] > 65_535 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u16'); }}
+                        new DataView(memory.buffer).setUint16(storagePtr, vals[0], true);
+                        return 16;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatS32FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatS32FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatS32FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] > 2_147_483_647 || vals[0] < -2_147_483_648) {{ throw new Error('invalid value for core value representing s32'); }}
+                        new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
+                        return 32;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatU32FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatU32FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatU32FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
+                        new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
+                        return 32;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatS64FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatS64FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatS64FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] > 9_223_372_036_854_775_807n || vals[0] < -9_223_372_036_854_775_808n) {{ throw new Error('invalid value for core value representing s64'); }}
+                        new DataView(memory.buffer).setBigInt64(storagePtr, vals[0], true);
+                        return 64;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatU64FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatU64FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatU64FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals[0] > 18_446_744_073_709_551_615n || vals[0] < 0n) {{ throw new Error('invalid value for core value representing u64'); }}
+                        new DataView(memory.buffer).setBigUint64(storagePtr, vals[0], true);
+                        return 64;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatFloat32FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatFloat32FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatFloat32FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        new DataView(memory.buffer).setFloat32(storagePtr, vals[0], true);
+                        return 32;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatFloat64FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatFloat64FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatFloat64FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        new DataView(memory.buffer).setFloat64(storagePtr, vals[0], true);
+                        return 64;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatCharUtf16FromStorage => {
+                let i32_to_char_fn = Intrinsic::I32ToCharUtf16.name();
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatCharUTF16FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatCharUTF16FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        new DataView(memory.buffer).setFloat64(storagePtr, {i32_to_char_fn}(vals[0]), true);
+                        return 4;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatCharUtf8FromStorage => {
+                let i32_to_char_fn = Intrinsic::I32ToCharUtf8.name();
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatCharUTF8FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatStringUTF16FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        new DataView(memory.buffer).setUint32(storagePtr, {i32_to_char_fn}(vals[0]), true);
+                        return 4;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatStringUtf16FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatStringUTF16FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatStringUTF16FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        const start = new DataView(memory.buffer).getUint32(storagePtr, vals[0], true);
+                        const codeUnits = new DataView(memory.buffer).getUint32(storagePtr, vals[0] + 4, true);
+                        var bytes = new Uint16Array(memory.buffer, start, codeUnits);
+                        if (memory.buffer.byteLength < start + bytes.byteLength) {{
+                            throw new Error('memory out of bounds');
+                        }}
+                        if (storageLen !== bytes.byteLength) {{
+                            throw new Error('storage length (' + storageLen + ') != (' + bytes.byteLength + ')');
+                        }}
+                        new Uint16Array(memory.buffer, storagePtr).set(bytes);
+                        return bytes.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatStringUtf8FromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatStringUTF8FromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatStringUTF8FromStorage()] args', {{ memory, vals, storagePtr, storageLen }});
+                        const start = new DataView(memory.buffer).getUint32(storagePtr, vals[0], true);
+                        const codeUnits = new DataView(memory.buffer).getUint32(storagePtr, vals[0] + 4, true);
+                        var bytes = new Uint8Array(memory.buffer, start, codeUnits);
+                        if (memory.buffer.byteLength < start + bytes.byteLength) {{
+                            throw new Error('memory out of bounds');
+                        }}
+                        if (storageLen !== bytes.byteLength) {{
+                            throw new Error('storage length (' + storageLen + ') != (' + bytes.byteLength + ')');
+                        }}
+                        new Uint8Array(memory.buffer, storagePtr).set(bytes);
+                        return bytes.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatRecordFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatRecordFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatVariantFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        const [start] = vals;
+                        if (size > storageLen) {{
+                            throw new Error('not enough storage remaining for record flat lift');
+                        }}
+                        const data = new Uint8Array(memory.buffer, start, size);
+                        new Uint8Array(memory.buffer, storagePtr, size).set(data);
+                        return data.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatVariantFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatVariantFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatVariantFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        let [start, totalSize] = vals;
+                        if (size > storageLen) {{
+                            throw new Error('not enough storage remaining for variant flat lift');
+                        }}
+                        const data = new Uint8Array(memory.buffer, start, totalSize);
+                        new Uint8Array(memory.buffer, storagePtr, totalSize).set(data);
+                        return data.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatListFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatListFromStorage(elemSize, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatListFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        let [start, len] = vals;
+                        const totalSizeBytes = len * elemSize;
+                        if (totalSizeBytes > storageLen) {{
+                            throw new Error('not enough storage remaining for list flat lift');
+                        }}
+                        const data = new Uint8Array(memory.buffer, start, totalSizeBytes);
+                        new Uint8Array(memory.buffer, storagePtr, totalSizeBytes).set(data);
+                        return data.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatTupleFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatTupleFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatTupleFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        let [start, size] = vals;
+                        if (size > storageLen) {{
+                            throw new Error('not enough storage remaining for tuple flat lift');
+                        }}
+                        const data = new Uint8Array(memory.buffer, start, size);
+                        new Uint8Array(memory.buffer, storagePtr, size).set(data);
+                        return data.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatFlagsFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatFlagsFromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatFlagsFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
+                        return 4;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatEnumFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatEnumFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatEnumFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        let [start] = vals;
+                        if (size > storageLen) {{
+                            throw new Error('not enough storage remaining for enum flat lift');
+                        }}
+                        const data = new Uint8Array(memory.buffer, start, size);
+                        new Uint8Array(memory.buffer, storagePtr, size).set(data);
+                        return data.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatOptionFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatOptionFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatOptionFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        let [start] = vals;
+                        if (size > storageLen) {{
+                            throw new Error('not enough storage remaining for option flat lift');
+                        }}
+                        const data = new Uint8Array(memory.buffer, start, size);
+                        new Uint8Array(memory.buffer, storagePtr, size).set(data);
+                        return data.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatResultFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatResultFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatResultFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        let [start, totalSize] = vals;
+                        if (totalSize !== storageLen) {{
+                            throw new Error('storage length doesn't match variant size');
+                        }}
+                        const data = new Uint8Array(memory.buffer, start, totalSize);
+                        new Uint8Array(memory.buffer, storagePtr, totalSize).set(data);
+                        return data.byteLength;
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatOwnFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatOwnFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatOwnFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        throw new Error('flat lift for owned resources not yet implemented!');
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatBorrowFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatBorrowFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatBorrowFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        throw new Error('flat lift for borrowed resources not yet implemented!');
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatFutureFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatFutureFromStorage(memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatFutureFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        throw new Error('flat lift for futures not yet implemented!');
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatStreamFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatStreamFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatStreamFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        throw new Error('flat lift for streams not yet implemented!');
+                    }}
+                "));
+            }
+            Intrinsic::LiftFlatErrorContextFromStorage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!("
+                    function _liftFlatErrorContextFromStorage(size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_liftFlatErrorContextFromStorage()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                        throw new Error('flat lift for error-contexts not yet implemented!');
+                    }}
+                "));
+            }
+            Intrinsic::BackpressureSet => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let backpressure_set_fn = Intrinsic::BackpressureSet.name();
+                let bp_map = Intrinsic::GlobalBackpressureMap.name();
+                output.push_str(&format!("
+                    function {backpressure_set_fn}(ciid, value) {{
+                        {debug_log_fn}('[{backpressure_set_fn}()] args', {{ ciid, value }});
+                        if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
+                        {bp_map}.set(ciid, value !== 0);
+                    }}
+                "));
+            }
+
+            Intrinsic::TaskCancel => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let task_cancel_fn = Intrinsic::BackpressureSet.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {task_cancel_fn}(ciid, isAsync) {{
+                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ ciid, value }});
+
+                        const state = {get_or_create_async_state_fn}(ciid);
+                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+
+                        const task = {current_task_get_fn}(ciid);
+                        if (task.sync && !task.alwaysTaskReturn) {{
+                            throw new Error('cannot cancel sync tasks without always task return set');
+                        }}
+                        if (!task.requested) {{ throw new Error('task cancellation has not been requested'); }}
+                        if (task.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
+                        if (task.returnCalls > 0) {{ throw new Error('cannot cancel task that has already returned a value'); }}
+                        if (task.cancelled) {{ throw new Error('cannot cancel task that has already been cancelled'); }}
+
+                        task.cancelled = true;
+                    }}
+                "));
+            }
+
+            Intrinsic::GetOrCreateAsyncState => {
+                let get_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                let map = Intrinsic::GlobalAsyncStateMap.name();
+                output.push_str(&format!("
+                    function {get_state_fn}(componentIdx, init) {{
+                        if (!{map}.has(componentIdx)) {{
+                            {map}.set(componentIdx, {{
+                                mayLeave: false
+                                ...(init || {{}}),
+                            }});
+                        }}
+
+                        return {map}.get(componentIdx);
+                    }}
+                "));
+            },
+
+            Intrinsic::Yield => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let yield_fn = Intrinsic::Yield.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                output.push_str(&format!("
+                    function {yield_fn}(isAsync) {{
+                        {debug_log_fn}('[{yield_fn}()] args', {{ ciid, value }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        await task.yield({{ isAsync }});
+                    }}
+                "));
+            }
+
+            Intrinsic::AsyncTaskClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                let task_class = Intrinsic::AsyncTaskClass.name();
+                // TODO: remove the public mutable members that are eagerly exposed for early impl
+                output.push_str(&format!("
+                    class {task_class} {{
+                        static TaskState = {{
+                            INITIAL: 'initial',
+                            CANCEL_PENDING: 'cancel-pending',
+                            CANCELLED: 'cancelled',
+                        }}
+
+                        #state;
+
+                        cancelled = false;
+                        requested = false;
+                        alwaysTaskReturn = false;
+
+                        componentIdx;
+                        returnCalls =  0;
+                        storage = [null, null];
+                        borrowedHandles = {{}};
+
+                        async waitOn(opts) {{
+                            const {{ promise, isAsync, isCancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ promise, isAsync, isCancellable }});
+                            throw new Error('not implemented');
+                        }}
+
+                        async yield(opts) {{
+                            const {{ isAsync }} = opts;
+                            {debug_log_fn}('[{task_class}#yield()] args', {{ isAsync }});
+
+                            if (this.status === TaskState.CANCEL_PENDING) {{
+                                this.#state = TaskState.CANCELLED;
+                                return {{
+                                    code: {event_code_enum}.TASK_CANCELLED,
+                                    something: 0,
+                                    something: 0,
+                                }};
+                            }}
+
+                            const promise = new Promise(resolve => setTimeout(resolve, 100));
+                            const waitResult = await this.waitOn({{ promise, isAsync, isCancellable: true }});
+                            if (waitResult) {{
+                                if (this.#state !== TaskState.INITIAL) {{ throw new Error('task should be in initial state found [' + this.#state + ']'); }}
+                                this.#state = TaskState.CANCELLED;
+                                return {{
+                                    code: {event_code_enum}.TASK_CANCELLED,
+                                    something: 0,
+                                    something: 0,
+                                }};
+                            }}
+
+                            return {{
+                                code: {event_code_enum}.NONE,
+                                something: 0,
+                                something: 0,
+                            }};
+                        }}
+                    }}
+                "));
+            }
+
+            Intrinsic::AsyncEventCodeEnum => {
+                let name = Intrinsic::AsyncEventCodeEnum.name();
+                output.push_str(&format!("
+                    const {name} = {{
+                        NONE: 'none',
+                        TASK_CANCELLED: 'task-cancelled',
+                    }};
                 "));
             }
 
@@ -1224,6 +2159,8 @@ impl Intrinsic {
             Intrinsic::ValidateGuestChar => "validateGuestChar",
             Intrinsic::ValidateHostChar => "validateHostChar",
 
+            Intrinsic::DebugLog => "_debugLog",
+
             // Dealing with error-contexts
             Intrinsic::ErrorContextComponentGlobalTable => "errCtxGlobal",
             Intrinsic::ErrorContextComponentLocalTable => "errCtxLocal",
@@ -1237,9 +2174,65 @@ impl Intrinsic {
             Intrinsic::ErrorContextCreateLocalHandle => "errCtxCreateLocalHandle",
             Intrinsic::ErrorContextReserveGlobalRep => "errCtxReserveGlobalRep",
 
+            // General Async
+            Intrinsic::GlobalAsyncStateMap => "ASYNC_STATE",
+            Intrinsic::GetOrCreateAsyncState => "getOrCreateAsyncState",
+
             // Tasks
             Intrinsic::TaskReturn => "taskReturn",
             Intrinsic::SubtaskDrop => "subtaskDrop",
+            Intrinsic::Yield => "asyncYield",
+
+            // Context
+            Intrinsic::ContextSet => "contextSet",
+            Intrinsic::ContextGet => "contextGet",
+
+            // Backpressure
+            Intrinsic::BackpressureSet => "backpressureSet",
+            Intrinsic::GlobalBackpressureMap => "BACKPRESSURE",
+
+            // Tasks
+            Intrinsic::TaskCancel => "taskCancel",
+
+            // Helpers for working with async state
+            Intrinsic::GetCurrentTask => "getCurrentTask",
+            Intrinsic::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
+            Intrinsic::AsyncTaskClass => "AsyncTask",
+            Intrinsic::AsyncEventCodeEnum => "ASYNC_EVENT_CODE",
+
+            // Type conversions
+            Intrinsic::I32ToCharUtf8 => "_i32ToCharUtf8",
+            Intrinsic::I32ToCharUtf16 => "_i32ToCharUtf16",
+
+            // Lift helpers for various types
+            Intrinsic::LiftFlatBoolFromStorage => "_liftFlatBoolFromStorage",
+            Intrinsic::LiftFlatS8FromStorage => "_liftFlatS8FromStorage",
+            Intrinsic::LiftFlatU8FromStorage => "_liftFlatU8FromStorage",
+            Intrinsic::LiftFlatS16FromStorage => "_liftFlatS16FromStorage",
+            Intrinsic::LiftFlatU16FromStorage => "_liftFlatU16FromStorage",
+            Intrinsic::LiftFlatS32FromStorage => "_liftFlatS32FromStorage",
+            Intrinsic::LiftFlatU32FromStorage => "_liftFlatU32FromStorage",
+            Intrinsic::LiftFlatS64FromStorage => "_liftFlatS64FromStorage",
+            Intrinsic::LiftFlatU64FromStorage => "_liftFlatU64FromStorage",
+            Intrinsic::LiftFlatFloat32FromStorage => "_liftFlatFloat32FromStorage",
+            Intrinsic::LiftFlatFloat64FromStorage => "_liftFlatFloat64FromStorage",
+            Intrinsic::LiftFlatCharUtf16FromStorage => "_liftFlatCharUTF16FromStorage",
+            Intrinsic::LiftFlatCharUtf8FromStorage => "_liftFlatCharUTF8FromStorage",
+            Intrinsic::LiftFlatStringUtf8FromStorage => "_liftFlatStringUTF8FromStorage",
+            Intrinsic::LiftFlatStringUtf16FromStorage => "_liftFlatStringUTF16FromStorage",
+            Intrinsic::LiftFlatRecordFromStorage => "_liftFlatRecordFromStorage",
+            Intrinsic::LiftFlatVariantFromStorage => "_liftFlatVariantFromStorage",
+            Intrinsic::LiftFlatListFromStorage => "_liftFlatListFromStorage",
+            Intrinsic::LiftFlatTupleFromStorage => "_liftFlatTupleFromStorage",
+            Intrinsic::LiftFlatFlagsFromStorage => "_liftFlatFlagsFromStorage",
+            Intrinsic::LiftFlatEnumFromStorage => "_liftFlatEnumFromStorage",
+            Intrinsic::LiftFlatOptionFromStorage => "_liftFlatOptionFromStorage",
+            Intrinsic::LiftFlatResultFromStorage => "_liftFlatResultFromStorage",
+            Intrinsic::LiftFlatOwnFromStorage => "_liftFlatOwnFromStorage",
+            Intrinsic::LiftFlatBorrowFromStorage => "_liftFlatBorrowFromStorage",
+            Intrinsic::LiftFlatFutureFromStorage => "_liftFlatFutureFromStorage",
+            Intrinsic::LiftFlatStreamFromStorage => "_liftFlatStreamFromStorage",
+            Intrinsic::LiftFlatErrorContextFromStorage => "_liftFlatErrorContextFromStorage",
         }
     }
 }

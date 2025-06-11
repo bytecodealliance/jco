@@ -1,10 +1,7 @@
-import * as cli from './cli.js';
-import * as clocks from './clocks.js';
-import * as filesystem from './filesystem.js';
-import * as http from './http.js';
-import * as random from './random.js';
-import * as sockets from './sockets.js';
-import * as stream from './stream.js';
-import * as future from './future.js';
-
-export { cli, clocks, filesystem, future, http, random, sockets, stream };
+export * as cli from './cli.js';
+export * as clocks from './clocks.js';
+export * as filesystem from './filesystem.js';
+export * as future from './future.js';
+export * as random from './random.js';
+export * as sockets from './sockets.js';
+export * as stream from './stream.js';

@@ -1,3 +1,32 @@
+/**
+ * Creates a future with a reader and writer.
+ *
+ * @returns {Object} An object containing:
+ *   - `tx` {FutureWriter}: The writer for the future.
+ *   - `rx` {FutureReader}: The reader for the future.
+ *
+ * @example
+ * // Basic usage - creating a communication channel
+ * const { tx, rx } = future();
+ *
+ * const message = 'Hello world!';
+ * await tx.write(message);
+ *
+ * // first read yields the message
+ * const value = await rx.read();
+ * expect(value).toBe(message);
+ *
+ * // subsequent reads yield null
+ * const noValue = await rx.read();
+ * expect(noValue).toBeNull();
+ */
+export function future() {
+    const def = deferred();
+    const tx = new FutureWriter(def);
+    const rx = new FutureReader(def.promise);
+    return { tx, rx };
+}
+
 function deferred() {
     let resolve, reject;
     const promise = new Promise((res, rej) => {
@@ -8,7 +37,9 @@ function deferred() {
 }
 
 export class FutureReader {
+    /** The underlying Promise to read from */
     #promise;
+    /** Tracks if read() has been called (prevents multiple reads) */
     #consumed = false;
 
     /**
@@ -18,7 +49,7 @@ export class FutureReader {
      * @throws {Error} If the provided argument is not a promise.
      */
     constructor(promise) {
-        if (!(promise instanceof Promise)) {
+        if (!promise || typeof promise.then !== 'function') {
             throw new Error('Provided future must be a Promise');
         }
         this.#promise = promise;
@@ -27,18 +58,19 @@ export class FutureReader {
     /**
      * Reads the value from the promise. Can only be called once.
      *
-     * @returns {Promise<*>} Resolves with the value of the promise or null if already consumed.
+     * @returns {Promise<any>} Resolves with the value of the promise or null if already consumed.
      * @throws {Error} If the promise is rejected.
      */
     async read() {
-        if (this.#consumed) return null;
+        if (this.#consumed) {
+            return null;
+        }
         try {
-            const value = await this.#promise;
-            this.#consumed = true;
-            return value;
+            return await this.#promise;
         } catch (err) {
-            this.#consumed = true;
             throw err;
+        } finally {
+            this.#consumed = true;
         }
     }
 
@@ -46,7 +78,7 @@ export class FutureReader {
      * Cancels the future. Not supported for FutureReader.
      */
     async cancel() {
-        // FutureReader does not support cancel
+        throw new Error('FutureReader does not support cancel');
     }
 
     /**
@@ -61,14 +93,17 @@ export class FutureReader {
      *
      * @returns {Promise} The original promise.
      */
-    intoFuture() {
-        this.close();
-        return this.#promise;
+    intoPromise() {
+        const promise = this.#promise;
+        this.#promise = null;
+        return promise;
     }
 }
 
 export class FutureWriter {
+    /** Deferred object with resolve/reject methods for controlling promise state */
     #deferred;
+    /** Tracks if writer has been used */
     #written = false;
 
     /**
@@ -89,11 +124,11 @@ export class FutureWriter {
     /**
      * Resolves the promise with the given value.
      *
-     * @param {*} value - The value to resolve the promise with.
+     * @param {any} value - The value to resolve the promise with.
      * @throws {Error} If the writer is already closed.
      */
     async write(value) {
-        if (this.#written) throw new Error('FutureWriter is closed');
+        this.#ensureState();
         this.#written = true;
         this.#deferred.resolve(value);
     }
@@ -101,11 +136,11 @@ export class FutureWriter {
     /**
      * Rejects the promise with the given reason.
      *
-     * @param {*} reason - The reason for rejecting the promise.
+     * @param {any} reason - The reason for rejecting the promise.
      * @throws {Error} If the writer is already closed.
      */
     async abort(reason) {
-        if (this.#written) throw new Error('FutureWriter is closed');
+        this.#ensureState();
         this.#written = true;
         this.#deferred.reject(reason);
     }
@@ -114,7 +149,7 @@ export class FutureWriter {
      * Resolves the promise with null and closes the writer.
      */
     async close() {
-        if (this.#written) return;
+        this.#ensureState();
         this.#written = true;
         this.#deferred.resolve(null);
     }
@@ -125,7 +160,7 @@ export class FutureWriter {
      * @param {Error} error - The error to reject the promise with.
      */
     async closeWithError(error) {
-        if (this.#written) return;
+        this.#ensureState();
         this.#written = true;
         this.#deferred.reject(error);
     }
@@ -135,22 +170,16 @@ export class FutureWriter {
      *
      * @returns {Promise} The original promise.
      */
-    intoFuture() {
+    intoPromise() {
         this.close();
-        return this.#deferred.promise;
+        const promise = this.#deferred.promise;
+        this.#deferred = null;
+        return promise;
     }
-}
 
-/**
- * Creates a future with a reader and writer.
- *
- * @returns {Object} An object containing:
- *   - `tx` {FutureWriter}: The writer for the future.
- *   - `rx` {FutureReader}: The reader for the future.
- */
-export function future() {
-    const def = deferred();
-    const tx = new FutureWriter(def);
-    const rx = new FutureReader(def.promise);
-    return { tx, rx };
+    #ensureState() {
+        if (this.#written) {
+            throw new Error('FutureWriter is closed (already written)');
+        }
+    }
 }

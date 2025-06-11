@@ -1,3 +1,9 @@
+import os from 'node:os';
+import path from 'node:path';
+import process from 'node:process';
+import * as fs from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
 import {
     describe,
     test,
@@ -8,10 +14,6 @@ import {
     afterEach,
     vi,
 } from 'vitest';
-import os from 'node:os';
-import path from 'node:path';
-import { promises as fsPromises } from 'fs';
-import { fileURLToPath } from 'node:url';
 
 const { stream } = await import('@bytecodealliance/preview3-shim/stream');
 
@@ -23,17 +25,21 @@ describe('Descriptor with os.tmpdir()', () => {
 
     beforeAll(async () => {
         ({ filesystem } = await import('@bytecodealliance/preview3-shim'));
+
+        const ROOT_PREOPEN = process.platform === 'win32' ? '//' : '/';
+        filesystem._addPreopen('/', ROOT_PREOPEN);
+
         [[rootDescriptor]] = filesystem.preopens.getDirectories();
 
         const base = os.tmpdir();
-        tmpDir = await fsPromises.mkdtemp(path.join(base, 'preview3-test-'));
+        tmpDir = await fs.mkdtemp(path.join(base, 'preview3-test-'));
 
         const rootPath = path.parse(tmpDir).root;
         relBase = path.relative(rootPath, tmpDir).replaceAll(path.sep, '/');
     });
 
     afterAll(async () => {
-        await fsPromises.rm(tmpDir, { recursive: true, force: true });
+        await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
     test('read current test module contains UNIQUE STRING', async () => {
@@ -213,7 +219,7 @@ describe('Descriptor with os.tmpdir()', () => {
         const realPath = path.join(tmpDir, 'statat-file.txt');
         const linkSub = `${relBase}/statat-link.txt`;
         const linkPath = path.join(tmpDir, 'statat-link.txt');
-        await fsPromises.symlink(realPath, linkPath);
+        await fs.symlink(realPath, linkPath);
 
         const stats2 = await rootDescriptor.statAt(
             { symlinkFollow: false },
@@ -237,10 +243,14 @@ describe('Descriptor#setTimes and #setTimesAt', () => {
 
     beforeAll(async () => {
         ({ filesystem } = await import('@bytecodealliance/preview3-shim'));
+
+        const ROOT_PREOPEN = process.platform === 'win32' ? '//' : '/';
+        filesystem._addPreopen('/', ROOT_PREOPEN);
+
         [[rootDescriptor]] = filesystem.preopens.getDirectories();
 
         const base = os.tmpdir();
-        tmpDir = await fsPromises.mkdtemp(path.join(base, 'preview3-test-'));
+        tmpDir = await fs.mkdtemp(path.join(base, 'preview3-test-'));
 
         const rootPath = path.parse(tmpDir).root;
         relBase = path.relative(rootPath, tmpDir).replaceAll(path.sep, '/');
@@ -250,7 +260,7 @@ describe('Descriptor#setTimes and #setTimesAt', () => {
     });
 
     afterAll(async () => {
-        await fsPromises.rm(tmpDir, { recursive: true, force: true });
+        await fs.rm(tmpDir, { recursive: true, force: true });
     });
 
     beforeEach(() => {
