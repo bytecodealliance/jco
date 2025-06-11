@@ -4,7 +4,22 @@ import { _fieldsLock, Fields } from './fields.js';
 import { FutureReader, future } from '../future.js';
 import { StreamReader } from '../stream.js';
 
-const REQUEST_PRIV_SYM = Symbol('RequestPrivSym');
+const SUPPORTED_METHODS = [
+    'get',
+    'head',
+    'post',
+    'put',
+    'delete',
+    'connect',
+    'options',
+    'trace',
+    'patch',
+];
+
+let REQUEST_CREATE_TOKEN = null;
+function token() {
+    return (REQUEST_CREATE_TOKEN ??= Symbol('RequestCreateToken'));
+}
 
 export class RequestOptions {
     #connectTimeout = null;
@@ -159,8 +174,8 @@ export class Request {
     #trailersFuture = null;
     #requestFuture = null;
 
-    constructor(token) {
-        if (token !== REQUEST_PRIV_SYM) {
+    constructor(t) {
+        if (t !== token()) {
             throw new Error('Use Request.new(...) to create a Request');
         }
     }
@@ -212,7 +227,7 @@ export class Request {
             );
         }
 
-        let request = new Request(REQUEST_PRIV_SYM);
+        let request = new Request(token());
         request.#headers = headers;
         request.#contents = contents;
         request.#options = options;
@@ -263,7 +278,7 @@ export class Request {
         }
 
         const lowercase = method.toLowerCase();
-        if (supportedMethods.includes(lowercase)) {
+        if (SUPPORTED_METHODS.includes(lowercase)) {
             this.#method = { tag: lowercase };
         } else {
             this.#method = { tag: 'other', val: lowercase };
@@ -440,15 +455,3 @@ export class Request {
         }
     }
 }
-
-const supportedMethods = [
-    'get',
-    'head',
-    'post',
-    'put',
-    'delete',
-    'connect',
-    'options',
-    'trace',
-    'patch',
-];

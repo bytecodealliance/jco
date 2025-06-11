@@ -21,40 +21,40 @@ export const HttpClient = {
      * @throws {HttpError}
      */
     async request(req) {
+        const scheme = req.scheme() ?? 'http';
+        const authority = req.authority();
+
+        if (!authority) {
+            throw new HttpError(
+                'internal-error',
+                'Request.authority must be set for client.request'
+            );
+        }
+
+        const path = req.pathWithQuery() ?? '/';
+        const url = `${scheme}://${authority}${path}`;
+
+        const opts = req.options();
+        const connectTimeout = opts?.connectTimeout() ?? null;
+        const firstByteTimeout = opts?.firstByteTimeout() ?? null;
+        const betweenBytesTimeout = opts?.betweenBytesTimeout() ?? null;
+
+        const { body, trailers } = req.body();
+        const { port1: tx, port2: rx } = new MessageChannel();
+
+        const transfer = [rx];
+        const stream = body?.intoReadableStream();
+        if (stream) {
+            transfer.unshift(stream);
+        }
+
+        trailers
+            .read()
+            .then((val) => tx.postMessage({ val }))
+            .catch((err) => tx.postMessage({ err }))
+            .finally(() => tx.close());
+
         try {
-            const scheme = req.scheme() ?? 'http';
-            const authority = req.authority();
-
-            if (!authority) {
-                throw new HttpError(
-                    'internal-error',
-                    'Request.authority must be set for client.request'
-                );
-            }
-
-            const path = req.pathWithQuery() ?? '/';
-            const url = `${scheme}://${authority}${path}`;
-
-            const opts = req.options();
-            const connectTimeout = opts?.connectTimeout() ?? null;
-            const firstByteTimeout = opts?.firstByteTimeout() ?? null;
-            const betweenBytesTimeout = opts?.betweenBytesTimeout() ?? null;
-
-            const { body, trailers } = req.body();
-            const { port1: tx, port2: rx } = new MessageChannel();
-
-            const transfer = [rx];
-            const stream = body?.intoReadableStream();
-            if (stream) {
-                transfer.unshift(stream);
-            }
-
-            trailers
-                .read()
-                .then((val) => tx.postMessage({ val }))
-                .catch((err) => tx.postMessage({ err }))
-                .finally(() => tx.close());
-
             const parts = await worker().run(
                 {
                     op: 'client-request',
