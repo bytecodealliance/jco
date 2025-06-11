@@ -12,7 +12,7 @@ function worker() {
     ));
 }
 
-export const HttpClient = {
+export class HttpClient {
     /**
      * Send a Request, return a fully-formed Response object
      *
@@ -20,7 +20,7 @@ export const HttpClient = {
      * @returns {Promise<Response>}
      * @throws {HttpError}
      */
-    async request(req) {
+    static async request(req) {
         const scheme = req.scheme() ?? 'http';
         const authority = req.authority();
 
@@ -76,8 +76,8 @@ export const HttpClient = {
         } catch (err) {
             throw HttpError.from(err);
         }
-    },
-};
+    }
+}
 
 const responseFromParts = (parts) => {
     const { headers, body, trailers, statusCode } = parts;
