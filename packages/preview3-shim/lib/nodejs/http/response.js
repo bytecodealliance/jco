@@ -14,6 +14,8 @@ export class Response {
     #contents = null;
     #trailersFuture = null;
     #responseFuture = null;
+    #bodyOpen = false;
+    #bodyEnded = false;
 
     /**
      * @private
@@ -137,10 +139,49 @@ export class Response {
      * ```
      *
      * @returns {{ body: StreamReader, trailers: FutureReader }}
-     * @throws {HttpError} with payload.tag 'invalid-state' if body has already been opened
+     * @throws {HttpError} with payload.tag 'invalid-state' if body has already been opened or consumed.
      */
     body() {
-        // TODO: enforce single-stream semantics
+        if (this.#bodyOpen) {
+            throw new HttpError(
+                'invalid-state',
+                'body() already called and not yet closed'
+            );
+        }
+
+        if (this.#bodyEnded) {
+            throw new HttpError(
+                'invalid-state',
+                'body() has already been consumed'
+            );
+        }
+
+        if (!this.#contents) {
+            this.#bodyEnded = true;
+            return { body: this.#contents, trailers: this.#trailersFuture };
+        }
+
+        const reader = this.#contents;
+        this.#bodyOpen = true;
+
+        const readFn = reader.read.bind(reader);
+        reader.read = () => {
+            const chunk = readFn();
+            if (chunk === null) {
+                this.#bodyEnded = true;
+                this.#bodyOpen = false;
+            }
+
+            return chunk;
+        };
+
+        const closedFn = reader.close.bind(reader);
+        reader.close = () => {
+            closedFn();
+            this.#bodyEnded = true;
+            this.#bodyOpen = false;
+        };
+
         return { body: this.#contents, trailers: this.#trailersFuture };
     }
 

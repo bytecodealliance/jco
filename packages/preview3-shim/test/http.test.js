@@ -307,6 +307,66 @@ describe('Response', () => {
     });
 });
 
+describe('Request.body single-stream semantics', () => {
+    test('throws if body() called twice without closing', async () => {
+        const headers = new Fields();
+        const { tx: bodyTx, rx: bodyRx } = stream();
+        const { tx: trailersTx, rx: trailersRx } = future();
+        const { req } = Request.new(headers, bodyRx, trailersRx);
+
+        req.body();
+        expect(() => req.body()).toThrowError(HttpError);
+
+        await bodyTx.close();
+        await trailersTx.write(null);
+    });
+
+    test('throws after the stream has ended', async () => {
+        const headers = new Fields();
+        const { tx: bodyTx, rx: bodyRx } = stream();
+        const { tx: trailersTx, rx: trailersRx } = future();
+        const { req } = Request.new(headers, bodyRx, trailersRx);
+
+        const { body } = req.body();
+        await bodyTx.write(Buffer.from('data'));
+        await bodyTx.close();
+        await trailersTx.write(null);
+
+        while ((await body.read()) !== null) {}
+        expect(() => req.body()).toThrowError(HttpError);
+    });
+});
+
+describe('Response.body single-stream semantics', () => {
+    test('throws if body() called twice without closing', async () => {
+        const headers = new Fields();
+        const { tx: bodyTx, rx: bodyRx } = stream();
+        const { tx: trailersTx, rx: trailersRx } = future();
+        const { res } = Response.new(headers, bodyRx, trailersRx);
+
+        res.body();
+        expect(() => res.body()).toThrowError(HttpError);
+
+        await bodyTx.close();
+        await trailersTx.write(null);
+    });
+
+    test('throws after the stream has ended', async () => {
+        const headers = new Fields();
+        const { tx: bodyTx, rx: bodyRx } = stream();
+        const { tx: trailersTx, rx: trailersRx } = future();
+        const { res } = Response.new(headers, bodyRx, trailersRx);
+
+        const { body } = res.body();
+        await bodyTx.write(Buffer.from('x'));
+        await bodyTx.close();
+        await trailersTx.write(null);
+
+        while ((await body.read()) !== null) {}
+        expect(() => res.body()).toThrowError(HttpError);
+    });
+});
+
 describe('HttpServer Integration', () => {
     const HOST = '127.0.0.1';
     const PORT = 3000;
