@@ -490,7 +490,7 @@ use std::fs;
 #[test]
 fn {test_name}() -> anyhow::Result<()> {{
     {windows_skip_prefix}
-    let _ = fs::remove_dir_all("{deno_test_file}");
+    let _ = fs::remove_dir_all(r#"{deno_test_file}"#);
     {code}
     Ok(())
 }}
@@ -563,7 +563,7 @@ fn generate_command_invocation(args: GenerateCommandArgs<'_>) -> String {
         format!(
             "
         {cmd_name}.env(\"JCO_RUN_PATH\", \"deno\")
-            .env(\"JCO_RUN_ARGS\", \"run --importmap {import_map_path} -A\");"
+            .env(\"JCO_RUN_ARGS\", r#\"run --importmap {import_map_path} -A\"#);"
         )
     } else {
         "".into()
@@ -573,17 +573,17 @@ fn generate_command_invocation(args: GenerateCommandArgs<'_>) -> String {
     // NOTE: the jco script path needs to be relative to where this file is written
     format!(
         r##"let mut {cmd_name} = Command::new("node");
-        {cmd_name}.arg("{jco_script_path}");
+        {cmd_name}.arg(r#"{jco_script_path}"#);
         {cmd_name}.arg("run");
         {trace}
         {deno}
         {cmd_name}.arg("--jco-dir");
-        {cmd_name}.arg("{rundir_path}");
+        {cmd_name}.arg(r#"{rundir_path}"#);
         {cmd_name}.arg("--jco-import");
-        {cmd_name}.arg("{virtual_env_path}");
+        {cmd_name}.arg(r#"{virtual_env_path}"#);
         {cmd_name}.arg("--jco-import-bindings");
         {cmd_name}.arg("hybrid");
-        {cmd_name}.arg("{}");
+        {cmd_name}.arg(r#"{}"#);
         {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
         {cmd_name}.stdin({stdin_setting});"##,
         component_path.display(),
