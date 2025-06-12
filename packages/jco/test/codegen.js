@@ -108,7 +108,7 @@ suite(`Transpiler codegen`, async () => {
             assert.strictEqual(stderr, 'writing to stderr: hello, world\n');
         });
 
-        test('wasi-http-proxy', async () => {
+        test.each(['p2'])('wasi-http-proxy-%s', async (ver) => {
             const tmpDir = await getTmpDir();
             const outFile = resolve(tmpDir, 'out-component-file');
 
@@ -147,7 +147,9 @@ suite(`Transpiler codegen`, async () => {
                         )
                     ),
                     '-w',
-                    fileURLToPath(new URL('./fixtures/wit', import.meta.url)),
+                    fileURLToPath(
+                        new URL(`./fixtures/${ver}/wit`, import.meta.url)
+                    ),
                     '--world-name',
                     'test:jco/command-extended',
                     '-o',

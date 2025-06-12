@@ -98,7 +98,7 @@ suite('API', () => {
     });
 
     test('Type generation', async () => {
-        const files = await types('test/fixtures/wit', {
+        const files = await types('test/fixtures/wits/flavorful', {
             worldName: 'test:flavorful/flavorful',
         });
         assert.strictEqual(Object.keys(files).length, 2);
@@ -120,7 +120,7 @@ suite('API', () => {
     });
 
     test('Type generation (guest)', async () => {
-        const files = await types('test/fixtures/wit', {
+        const files = await types('test/fixtures/wits/flavorful', {
             worldName: 'test:flavorful/flavorful',
             guest: true,
         });
@@ -151,7 +151,7 @@ suite('API', () => {
 
     test('Wit & New', async () => {
         const wit = await readFile(
-            `test/fixtures/wit/deps/flavorful/flavorful.wit`,
+            `test/fixtures/wits/flavorful/flavorful.wit`,
             'utf8'
         );
 
