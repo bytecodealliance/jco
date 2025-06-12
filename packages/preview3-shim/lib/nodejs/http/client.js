@@ -35,9 +35,9 @@ export class HttpClient {
         const url = `${scheme}://${authority}${path}`;
 
         const opts = req.options();
-        const connectTimeout = opts?.connectTimeout() ?? null;
-        const firstByteTimeout = opts?.firstByteTimeout() ?? null;
-        const betweenBytesTimeout = opts?.betweenBytesTimeout() ?? null;
+        const connectTimeoutNs = opts?.connectTimeout() ?? null;
+        const firstByteTimeoutNs = opts?.firstByteTimeout() ?? null;
+        const betweenBytesTimeoutNs = opts?.betweenBytesTimeout() ?? null;
 
         const { body, trailers } = req.body();
         const { port1: tx, port2: rx } = new MessageChannel();
@@ -62,9 +62,9 @@ export class HttpClient {
                     method: req.method().tag,
                     headers: req.headers().entries(),
                     timeouts: {
-                        connectTimeout,
-                        firstByteTimeout,
-                        betweenBytesTimeout,
+                        connectTimeoutNs,
+                        firstByteTimeoutNs,
+                        betweenBytesTimeoutNs,
                     },
                     trailers: rx,
                     body: stream,

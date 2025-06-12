@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+
 import { ResourceWorker } from '../workers/resource-worker.js';
 import { StreamReader } from '../stream.js';
 import { FutureReader } from '../future.js';
@@ -18,12 +20,14 @@ function worker() {
  * while the main thread invokes the user-provided handler and sends back the
  * response.
  */
-export class HttpServer {
+export class HttpServer extends EventEmitter {
     #serverId = null;
     #handler = null;
     #shutdown = null;
 
     constructor(handler) {
+        super();
+
         if (typeof handler?.handle !== 'function') {
             throw HttpError(
                 'invalid-argument',
@@ -122,7 +126,7 @@ export class HttpServer {
                     });
                 }
             } catch (err) {
-                console.error('Serve loop failure:', err);
+                this.emit('error', err);
             }
         }
     }

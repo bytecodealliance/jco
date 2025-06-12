@@ -145,7 +145,7 @@ export class Response {
         if (this.#bodyOpen) {
             throw new HttpError(
                 'invalid-state',
-                'body() already called and not yet closed'
+                'body() already opened and not yet closed'
             );
         }
 

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Readable, Writable, PassThrough } from 'node:stream';
 import { pipeline } from 'stream/promises';
 
@@ -8,6 +7,10 @@ import { request as httpsRequest, Agent as HttpsAgent } from 'node:https';
 
 import { HttpError } from '../http/error.js';
 import { Router } from '../workers/resource-worker.js';
+
+// Unique IDs for servers and requests
+let NEXT_SERVER_ID = 0n;
+let NEXT_REQUEST_ID = 0n;
 
 Router()
     .op('server-start', handleHttpServerStart)
@@ -47,12 +50,12 @@ class Queue {
 const servers = new Map();
 
 async function handleHttpServerStart({ port, host }) {
-    const serverId = randomUUID();
+    const serverId = NEXT_SERVER_ID++;
     const pending = new Queue();
     const inflight = new Map();
 
     const server = createServer((req, res) => {
-        const requestId = randomUUID();
+        const requestId = NEXT_REQUEST_ID++;
         pending.push(requestId);
         inflight.set(requestId, { req, res });
     });
@@ -156,7 +159,8 @@ async function handleRequest({
         throw new HttpError('HTTP-protocol-error');
     }
 
-    const { connectTimeout, firstByteTimeout, betweenBytesTimeout } = timeouts;
+    const { connectTimeoutNs, firstByteTimeoutNs, betweenBytesTimeoutNs } =
+        timeouts;
     const isHttps = parsed.protocol === 'https:';
 
     const AgentClass = isHttps ? HttpsAgent : HttpAgent;
@@ -170,13 +174,13 @@ async function handleRequest({
         port: parsed.port,
         path: parsed.pathname + parsed.search,
         headers: toObject(headers),
-        timeout: connectTimeout ? msecs(connectTimeout) : undefined,
+        timeout: connectTimeoutNs ? msecs(connectTimeoutNs) : undefined,
     };
 
     const req = request(reqOpts);
 
-    if (firstByteTimeout) {
-        req.setTimeout(msecs(firstByteTimeout));
+    if (firstByteTimeoutNs) {
+        req.setTimeout(msecs(firstByteTimeoutNs));
     }
 
     if (body) {
@@ -226,9 +230,9 @@ async function handleRequest({
         req.once('close', onClose);
     });
 
-    if (betweenBytesTimeout) {
+    if (betweenBytesTimeoutNs) {
         res.once('readable', () =>
-            res.setTimeout(msecs(betweenBytesTimeout), () => {
+            res.setTimeout(msecs(betweenBytesTimeoutNs), () => {
                 res.destroy(new HttpError('connection-timeout'));
             })
         );

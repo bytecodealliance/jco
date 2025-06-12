@@ -22,9 +22,9 @@ function token() {
 }
 
 export class RequestOptions {
-    #connectTimeout = null;
-    #firstByteTimeout = null;
-    #betweenBytesTimeout = null;
+    #connectTimeoutNs = null;
+    #firstByteTimeoutNs = null;
+    #betweenBytesTimeoutNs = null;
     #immutable = false;
 
     /**
@@ -46,7 +46,7 @@ export class RequestOptions {
      * @returns {?number} Duration in milliseconds, or `null` if not set
      */
     connectTimeout() {
-        return this.#connectTimeout;
+        return this.#connectTimeoutNs;
     }
 
     /**
@@ -56,12 +56,12 @@ export class RequestOptions {
      * set-connect-timeout: func(duration: option<duration>) -> result<_, request-options-error>
      * ```
      *
-     * @param {?number} duration Duration in milliseconds, or `null` to clear
+     * @param {?bigint} duration Duration in nanoseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
      */
     setConnectTimeout(duration) {
         this._ensureMutable();
-        this.#connectTimeout = duration;
+        this.#connectTimeoutNs = duration;
     }
 
     /**
@@ -71,10 +71,10 @@ export class RequestOptions {
      * first-byte-timeout: func() -> option<duration>
      * ```
      *
-     * @returns {?number} Duration in milliseconds, or `null` if not set
+     * @returns {?bigint} Duration in nanoseconds, or `null` if not set
      */
     firstByteTimeout() {
-        return this.#firstByteTimeout;
+        return this.#firstByteTimeoutNs;
     }
 
     /**
@@ -84,12 +84,12 @@ export class RequestOptions {
      * set-first-byte-timeout: func(duration: option<duration>) -> result<_, request-options-error>
      * ```
      *
-     * @param {?number} duration Duration in milliseconds, or `null` to clear
+     * @param {?bigint} duration Duration in nanoseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
      */
     setFirstByteTimeout(duration) {
         this._ensureMutable();
-        this.#firstByteTimeout = duration;
+        this.#firstByteTimeoutNs = duration;
     }
 
     /**
@@ -99,10 +99,10 @@ export class RequestOptions {
      * between-bytes-timeout: func() -> option<duration>
      * ```
      *
-     * @returns {?number} Duration in milliseconds, or `null` if not set
+     * @returns {?bigint} Duration in nanoseconds, or `null` if not set
      */
     betweenBytesTimeout() {
-        return this.#betweenBytesTimeout;
+        return this.#betweenBytesTimeoutNs;
     }
 
     /**
@@ -112,12 +112,12 @@ export class RequestOptions {
      * set-between-bytes-timeout: func(duration: option<duration>) -> result<_, request-options-error>
      * ```
      *
-     * @param {?number} duration Duration in milliseconds, or `null` to clear
+     * @param {?bigint} duration Duration in nanoseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
      */
     setBetweenBytesTimeout(duration) {
         this._ensureMutable();
-        this.#betweenBytesTimeout = duration;
+        this.#betweenBytesTimeoutNs = duration;
     }
 
     /**
@@ -131,9 +131,9 @@ export class RequestOptions {
      */
     clone() {
         const cloned = new RequestOptions();
-        cloned.#connectTimeout = this.#connectTimeout;
-        cloned.#firstByteTimeout = this.#firstByteTimeout;
-        cloned.#betweenBytesTimeout = this.#betweenBytesTimeout;
+        cloned.#connectTimeoutNs = this.#connectTimeoutNs;
+        cloned.#firstByteTimeoutNs = this.#firstByteTimeoutNs;
+        cloned.#betweenBytesTimeoutNs = this.#betweenBytesTimeoutNs;
         return cloned;
     }
 
@@ -160,8 +160,9 @@ export class RequestOptions {
     }
 }
 
-export const _optionsLock = RequestOptions._lock;
-delete RequestOptions._lock;
+export function _optionsLock(fields) {
+    return RequestOptions._lock(fields);
+}
 
 export class Request {
     #method = 'get';

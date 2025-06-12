@@ -3,6 +3,17 @@ import { HttpError } from './error.js';
 import * as http from 'node:http';
 const { validateHeaderName = () => {}, validateHeaderValue = () => {} } = http;
 
+let FORBIDDEN_HEADERS = null;
+export const _forbiddenHeaders = {
+    get value() {
+        return (FORBIDDEN_HEADERS ??= new Set([
+            'connection',
+            'keep-alive',
+            'host',
+        ]));
+    },
+};
+
 /**
  * Implements the WASI Preview3 fields resource for HTTP headers and trailers
  */
@@ -260,7 +271,7 @@ export class Fields {
             );
         }
 
-        if (_forbiddenHeaders.has(name.toLowerCase())) {
+        if (_forbiddenHeaders.value.has(name.toLowerCase())) {
             throw new HttpError('forbidden', `Header ${name} is forbidden`);
         }
     }
@@ -283,10 +294,10 @@ export class Fields {
     }
 }
 
-export const _fieldsLock = Fields._lock;
-delete Fields._lock;
+export function _fieldsLock(fields) {
+    return Fields._lock(fields);
+}
 
-export const _fieldsFromEntriesChecked = Fields._fromEntriesChecked;
-delete Fields._fromEntriesChecked;
-
-export const _forbiddenHeaders = new Set(['connection', 'keep-alive', 'host']);
+export function _fieldsFromEntriesChecked(entries) {
+    return Fields._fromEntriesChecked(entries);
+}

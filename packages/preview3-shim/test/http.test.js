@@ -15,6 +15,7 @@ import {
     RequestOptions,
     Request,
     Response,
+    _forbiddenHeaders,
 } from '@bytecodealliance/preview3-shim/http';
 
 import { FutureReader, future } from '@bytecodealliance/preview3-shim/future';
@@ -47,6 +48,11 @@ describe('Fields tests', () => {
             expect(err).toBeInstanceOf(HttpError);
             expect(err.payload.tag).toBe('forbidden');
         }
+
+        _forbiddenHeaders.value.add('new-forbidden');
+        expect(() => {
+            Fields.fromList([['New-Forbidden', encoder.encode('example')]]);
+        }).toThrow(HttpError);
     });
 
     test('appends and retrieves values correctly', () => {
@@ -406,6 +412,30 @@ describe('HttpServer Integration', () => {
         const text = await res.text();
         expect(text).toBe('hello world');
         expect(res.headers.get('content-type')).toBe('text/plain');
+    });
+});
+
+describe('HttpServer Error', () => {
+    const HOST = '127.0.0.1';
+    const PORT = 3001;
+
+    test('emits error event when handler throws', (done) => {
+        const throwingHandler = {
+            async handle() {
+                throw new Error('handler failure');
+            },
+        };
+
+        const server = new HttpServer(throwingHandler);
+        server.on('error', (err) => {
+            expect(err).toBeInstanceOf(Error);
+            expect(err.message).toBe('handler failure');
+            server.close().then(done);
+        });
+
+        server.listen(PORT, HOST).then(() => {
+            fetch(`http://${HOST}:${PORT}/`).catch(() => {});
+        });
     });
 });
 
