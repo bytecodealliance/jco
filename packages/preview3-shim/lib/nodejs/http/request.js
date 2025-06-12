@@ -314,17 +314,7 @@ export class Request {
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid URI component
      */
     setPathWithQuery(pathWithQuery) {
-        if (pathWithQuery != null) {
-            try {
-                new URL(pathWithQuery, 'http://example');
-            } catch {
-                throw new HttpError(
-                    'invalid-syntax',
-                    `Invalid path-with-query: ${pathWithQuery}`
-                );
-            }
-        }
-
+        validateUrlPart(pathWithQuery, UrlPart.PATH_WITH_QUERY);
         this.#pathWithQuery = pathWithQuery;
     }
 
@@ -354,16 +344,7 @@ export class Request {
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid scheme
      */
     setScheme(scheme) {
-        if (scheme != null) {
-            try {
-                new URL(`${scheme}://example`);
-            } catch {
-                throw new HttpError(
-                    'invalid-syntax',
-                    `Invalid scheme: ${scheme}`
-                );
-            }
-        }
+        validateUrlPart(scheme, UrlPart.SCHEME);
         this.#scheme = scheme;
     }
 
@@ -393,16 +374,7 @@ export class Request {
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid authority
      */
     setAuthority(authority) {
-        if (authority != null) {
-            try {
-                new URL(`http://${authority}`);
-            } catch {
-                throw new HttpError(
-                    'invalid-syntax',
-                    `Invalid authority: ${authority}`
-                );
-            }
-        }
+        validateUrlPart(authority, UrlPart.AUTHORITY);
         this.#authority = authority;
     }
 
@@ -495,5 +467,35 @@ export class Request {
             this.#requestFuture.write(result);
             this.#requestFuture = null;
         }
+    }
+}
+
+const UrlPart = {
+    PATH_WITH_QUERY: 'pathWithQuery',
+    SCHEME: 'scheme',
+    AUTHORITY: 'authority',
+};
+
+function validateUrlPart(value, part) {
+    if (value == null) {
+        return;
+    }
+
+    try {
+        switch (part) {
+            case UrlPart.PATH_WITH_QUERY:
+                new URL(value, 'http://example');
+                break;
+            case UrlPart.SCHEME:
+                new URL(`${value}://example`);
+                break;
+            case UrlPart.AUTHORITY:
+                new URL(`http://${value}`);
+                break;
+            default:
+                throw new Error(`Unknown URL part: ${part}`);
+        }
+    } catch {
+        throw new HttpError('invalid-syntax', `Invalid ${part}: ${value}`);
     }
 }
