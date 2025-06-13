@@ -10,6 +10,7 @@
       "node": "./lib/nodejs/index.js"
     },
     "./*": {
+      "types": "./types/*.d.ts",
       "node": "./lib/nodejs/*.js"
     }
   },
