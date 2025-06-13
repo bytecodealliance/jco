@@ -4,7 +4,7 @@ import {
   _setTerminalStdout,
   _setTerminalStderr,
 } from "@bytecodealliance/preview2-shim/cli";
-import './base.js';
+import './base.mjs';
 
 _setTerminalStderr();
 _setTerminalStdin();

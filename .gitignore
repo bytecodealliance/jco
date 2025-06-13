@@ -17,7 +17,7 @@
 
 # Package management
 node_modules
-package-lock.json
+**/*/package-lock.json
 pnpm-lock.yaml
 
 # Test output
