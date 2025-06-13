@@ -691,7 +691,7 @@ function handle(call, id, payload) {
                 stream.stream.writableHighWaterMark -
                     stream.stream.writableLength
             ) {
-                new Error(
+                throw new Error(
                     'wasi-io trap: Cannot write more than permitted writable length'
                 );
             }
