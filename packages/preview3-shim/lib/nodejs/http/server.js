@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+
 import { ResourceWorker } from '../workers/resource-worker.js';
 import { StreamReader } from '../stream.js';
 import { FutureReader } from '../future.js';
@@ -6,21 +8,26 @@ import { Request } from './request.js';
 import { HttpError } from './error.js';
 import { _fieldsFromEntriesChecked } from './fields.js';
 
-const _worker = new ResourceWorker(
-    new URL('../workers/http-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('../workers/http-worker.js', import.meta.url)
+    ));
+}
 
 /**
  * HttpServer uses a background worker thread to handle raw HTTP connections,
  * while the main thread invokes the user-provided handler and sends back the
  * response.
  */
-export class HttpServer {
+export class HttpServer extends EventEmitter {
     #serverId = null;
     #handler = null;
     #shutdown = null;
 
     constructor(handler) {
+        super();
+
         if (typeof handler?.handle !== 'function') {
             throw HttpError(
                 'invalid-argument',
@@ -31,7 +38,7 @@ export class HttpServer {
     }
 
     async listen(port, host) {
-        this.#serverId = await _worker.run({
+        this.#serverId = await worker().run({
             op: 'server-start',
             port,
             host,
@@ -41,9 +48,11 @@ export class HttpServer {
     }
 
     async stop() {
-        if (!this.#serverId) return;
+        if (!this.#serverId) {
+            return;
+        }
 
-        await _worker.run({
+        await worker().run({
             op: 'server-stop',
             serverId: this.#serverId,
         });
@@ -52,10 +61,12 @@ export class HttpServer {
     }
 
     async close() {
-        if (!this.#serverId) return;
+        if (!this.#serverId) {
+            return;
+        }
 
         await this.stop();
-        await _worker.run({
+        await worker().run({
             op: 'server-close',
             serverId: this.#serverId,
         });
@@ -67,7 +78,7 @@ export class HttpServer {
         let next;
 
         const nextRequest = async () =>
-            await _worker.run({
+            await worker().run({
                 op: 'server-next',
                 serverId: this.#serverId,
             });
@@ -84,7 +95,7 @@ export class HttpServer {
                     const { body, trailers } = res.body();
                     const { port1: tx, port2: rx } = new MessageChannel();
 
-                    const stream = body.intoStream();
+                    const stream = body.intoReadableStream();
 
                     // Send trailers when ready
                     trailers
@@ -93,7 +104,7 @@ export class HttpServer {
                         .catch((err) => tx.postMessage({ err }))
                         .finally(() => tx.close());
 
-                    await _worker.run(
+                    await worker().run(
                         {
                             op: 'server-response',
                             serverId: this.#serverId,
@@ -106,7 +117,7 @@ export class HttpServer {
                         [stream, rx]
                     );
                 } else {
-                    await _worker.run({
+                    await worker().run({
                         op: 'server-response',
                         serverId: this.#serverId,
                         requestId,
@@ -115,7 +126,7 @@ export class HttpServer {
                     });
                 }
             } catch (err) {
-                console.error('Serve loop failure:', err);
+                this.emit('error', err);
             }
         }
     }
@@ -128,8 +139,11 @@ const requestFromParts = (parts) => {
     const promise = new Promise((resolve, reject) => {
         trailers.once('message', ({ val, err }) => {
             trailers.close();
-            if (err) reject(err);
-            else resolve(val);
+            if (err) {
+                reject(err);
+            } else {
+                resolve(val);
+            }
         });
     });
 

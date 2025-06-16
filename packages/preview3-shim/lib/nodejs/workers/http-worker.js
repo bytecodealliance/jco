@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Readable, Writable, PassThrough } from 'node:stream';
 import { pipeline } from 'stream/promises';
 
@@ -8,6 +7,10 @@ import { request as httpsRequest, Agent as HttpsAgent } from 'node:https';
 
 import { HttpError } from '../http/error.js';
 import { Router } from '../workers/resource-worker.js';
+
+// Unique IDs for servers and requests
+let NEXT_SERVER_ID = 0n;
+let NEXT_REQUEST_ID = 0n;
 
 Router()
     .op('server-start', handleHttpServerStart)
@@ -47,12 +50,12 @@ class Queue {
 const servers = new Map();
 
 async function handleHttpServerStart({ port, host }) {
-    const serverId = randomUUID();
+    const serverId = NEXT_SERVER_ID++;
     const pending = new Queue();
     const inflight = new Map();
 
     const server = createServer((req, res) => {
-        const requestId = randomUUID();
+        const requestId = NEXT_REQUEST_ID++;
         pending.push(requestId);
         inflight.set(requestId, { req, res });
     });
@@ -68,10 +71,14 @@ async function handleHttpServerStart({ port, host }) {
 
 async function handleNext({ serverId }) {
     const srv = servers.get(serverId);
-    if (!srv) throw new Error(`No such server: ${serverId}`);
+    if (!srv) {
+        throw new Error(`No such server: ${serverId}`);
+    }
 
     const requestId = await srv.pending.pop();
-    if (requestId == null) return null;
+    if (requestId == null) {
+        return null;
+    }
 
     const { req } = srv.inflight.get(requestId);
     const { port1: tx, port2: trailers } = new MessageChannel();
@@ -108,10 +115,14 @@ async function handleResponse({
     stream,
 }) {
     const srv = servers.get(serverId);
-    if (!srv) throw new Error(`No such server: ${serverId}`);
+    if (!srv) {
+        throw new Error(`No such server: ${serverId}`);
+    }
 
     const entry = srv.inflight.get(requestId);
-    if (!entry) throw new Error(`No inflight ${requestId}`);
+    if (!entry) {
+        throw new Error(`No inflight ${requestId}`);
+    }
     const { res } = entry;
 
     try {
@@ -119,7 +130,9 @@ async function handleResponse({
         if (stream) {
             await pipeline(Readable.fromWeb(stream), res);
             const fields = await recvTrailers(trailers);
-            if (fields) res.addTrailers(toObject(fields));
+            if (fields) {
+                res.addTrailers(toObject(fields));
+            }
         } else {
             res.end();
         }
@@ -146,7 +159,8 @@ async function handleRequest({
         throw new HttpError('HTTP-protocol-error');
     }
 
-    const { connectTimeout, firstByteTimeout, betweenBytesTimeout } = timeouts;
+    const { connectTimeoutNs, firstByteTimeoutNs, betweenBytesTimeoutNs } =
+        timeouts;
     const isHttps = parsed.protocol === 'https:';
 
     const AgentClass = isHttps ? HttpsAgent : HttpAgent;
@@ -160,13 +174,13 @@ async function handleRequest({
         port: parsed.port,
         path: parsed.pathname + parsed.search,
         headers: toObject(headers),
-        timeout: connectTimeout ? msecs(connectTimeout) : undefined,
+        timeout: connectTimeoutNs ? msecs(connectTimeoutNs) : undefined,
     };
 
     const req = request(reqOpts);
 
-    if (firstByteTimeout) {
-        req.setTimeout(msecs(firstByteTimeout));
+    if (firstByteTimeoutNs) {
+        req.setTimeout(msecs(firstByteTimeoutNs));
     }
 
     if (body) {
@@ -174,7 +188,9 @@ async function handleRequest({
             const stream = Readable.fromWeb(body);
             await pipeline(stream, req);
             const fields = await recvTrailers(trailers);
-            if (fields) req.addTrailers(toObject(fields));
+            if (fields) {
+                req.addTrailers(toObject(fields));
+            }
         } catch (err) {
             req.destroy();
             throw err;
@@ -214,9 +230,9 @@ async function handleRequest({
         req.once('close', onClose);
     });
 
-    if (betweenBytesTimeout) {
+    if (betweenBytesTimeoutNs) {
         res.once('readable', () =>
-            res.setTimeout(msecs(betweenBytesTimeout), () => {
+            res.setTimeout(msecs(betweenBytesTimeoutNs), () => {
                 res.destroy(new HttpError('connection-timeout'));
             })
         );
@@ -244,7 +260,9 @@ async function handleRequest({
 
 function handleHttpServerStop({ serverId }) {
     const srv = servers.get(serverId);
-    if (!srv) throw new Error(`No such server: ${serverId}`);
+    if (!srv) {
+        throw new Error(`No such server: ${serverId}`);
+    }
 
     srv.pending.push(null);
     return serverId;
@@ -252,7 +270,9 @@ function handleHttpServerStop({ serverId }) {
 
 async function handleHttpServerClose({ serverId }) {
     const srv = servers.get(serverId);
-    if (!srv) throw new Error(`No such server: ${serverId}`);
+    if (!srv) {
+        throw new Error(`No such server: ${serverId}`);
+    }
 
     await new Promise((resolve) => srv.server.close(resolve));
     servers.delete(serverId);
@@ -261,13 +281,18 @@ async function handleHttpServerClose({ serverId }) {
 }
 
 async function recvTrailers(port) {
-    if (!port) return null;
+    if (!port) {
+        return null;
+    }
 
     return new Promise((resolve, reject) => {
         port.once('message', ({ val, err }) => {
             port.close();
-            if (err) reject(err);
-            else resolve(val);
+            if (err) {
+                reject(err);
+            } else {
+                resolve(val);
+            }
         });
     });
 }

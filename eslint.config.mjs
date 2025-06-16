@@ -13,7 +13,7 @@ const config = defineConfig([
             'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
             'no-fallthrough': 0,
             'no-constant-condition': 0,
-            'curly': ['error', 'all'],
+            curly: ['error', 'all'],
             'prettier/prettier': ['error', prettierConfig],
         },
     },

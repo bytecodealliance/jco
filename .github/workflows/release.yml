@@ -191,7 +191,7 @@ jobs:
         run: |
           cargo package
 
-      - uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
@@ -240,7 +240,7 @@ jobs:
         run: |
           npm pack
 
-      - uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
@@ -372,7 +372,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: taiki-e/install-action@92f69c195229fe62d58b4d697ab4bc75def98e76 # v2.52.7
+      - uses: taiki-e/install-action@7b20dfd705618832f20d29066e34aa2f2f6194c2 # v2.52.8
         with:
           fallback: none
           tool: git-cliff
@@ -403,7 +403,7 @@ jobs:
           path: artifacts
 
       - name: Create GH release
-        uses: softprops/action-gh-release@f3cad8bcbf209fe591aa1823e372c5d96b7fc800 # v2.3.1
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           token: ${{ secrets.RELEASE_PAT || github.token }}
           prerelease: ${{ github.ref_type != 'tag' }}

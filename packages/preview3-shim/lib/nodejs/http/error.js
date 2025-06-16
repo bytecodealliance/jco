@@ -58,8 +58,14 @@ export class HttpError extends Error {
 }
 
 function getFirstError(e) {
-    if (typeof e !== 'object' || e === null) return e;
-    if (e.cause) return getFirstError(e.cause);
-    if (e instanceof AggregateError) return getFirstError(e.errors[0]);
+    if (typeof e !== 'object' || e === null) {
+        return e;
+    }
+    if (e.cause) {
+        return getFirstError(e.cause);
+    }
+    if (e instanceof AggregateError) {
+        return getFirstError(e.errors[0]);
+    }
     return e;
 }

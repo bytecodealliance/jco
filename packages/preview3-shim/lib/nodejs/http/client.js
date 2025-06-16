@@ -5,11 +5,14 @@ import { _fieldsFromEntriesChecked } from './fields.js';
 import { HttpError } from './error.js';
 import { Response } from './response.js';
 
-const _worker = new ResourceWorker(
-    new URL('../workers/http-worker.js', import.meta.url)
-);
+let WORKER = null;
+function worker() {
+    return (WORKER ??= new ResourceWorker(
+        new URL('../workers/http-worker.js', import.meta.url)
+    ));
+}
 
-export const HttpClient = {
+export class HttpClient {
     /**
      * Send a Request, return a fully-formed Response object
      *
@@ -17,49 +20,51 @@ export const HttpClient = {
      * @returns {Promise<Response>}
      * @throws {HttpError}
      */
-    async request(req) {
+    static async request(req) {
+        const scheme = req.scheme() ?? 'http';
+        const authority = req.authority();
+
+        if (!authority) {
+            throw new HttpError(
+                'internal-error',
+                'Request.authority must be set for client.request'
+            );
+        }
+
+        const path = req.pathWithQuery() ?? '/';
+        const url = `${scheme}://${authority}${path}`;
+
+        const opts = req.options();
+        const connectTimeoutNs = opts?.connectTimeout() ?? null;
+        const firstByteTimeoutNs = opts?.firstByteTimeout() ?? null;
+        const betweenBytesTimeoutNs = opts?.betweenBytesTimeout() ?? null;
+
+        const { body, trailers } = req.body();
+        const { port1: tx, port2: rx } = new MessageChannel();
+
+        const transfer = [rx];
+        const stream = body?.intoReadableStream();
+        if (stream) {
+            transfer.unshift(stream);
+        }
+
+        trailers
+            .read()
+            .then((val) => tx.postMessage({ val }))
+            .catch((err) => tx.postMessage({ err }))
+            .finally(() => tx.close());
+
         try {
-            const scheme = req.scheme() ?? 'http';
-            const authority = req.authority();
-
-            if (!authority) {
-                throw new HttpError(
-                    'internal-error',
-                    'Request.authority must be set for client.request'
-                );
-            }
-
-            const path = req.pathWithQuery() ?? '/';
-            const url = `${scheme}://${authority}${path}`;
-
-            const opts = req.options();
-            const connectTimeout = opts?.connectTimeout() ?? null;
-            const firstByteTimeout = opts?.firstByteTimeout() ?? null;
-            const betweenBytesTimeout = opts?.betweenBytesTimeout() ?? null;
-
-            const { body, trailers } = req.body();
-            const { port1: tx, port2: rx } = new MessageChannel();
-
-            const transfer = [rx];
-            const stream = body?.intoStream();
-            if (stream) transfer.unshift(stream);
-
-            trailers
-                .read()
-                .then((val) => tx.postMessage({ val }))
-                .catch((err) => tx.postMessage({ err }))
-                .finally(() => tx.close());
-
-            const parts = await _worker.run(
+            const parts = await worker().run(
                 {
                     op: 'client-request',
                     url,
                     method: req.method().tag,
                     headers: req.headers().entries(),
                     timeouts: {
-                        connectTimeout,
-                        firstByteTimeout,
-                        betweenBytesTimeout,
+                        connectTimeoutNs,
+                        firstByteTimeoutNs,
+                        betweenBytesTimeoutNs,
                     },
                     trailers: rx,
                     body: stream,
@@ -71,8 +76,8 @@ export const HttpClient = {
         } catch (err) {
             throw HttpError.from(err);
         }
-    },
-};
+    }
+}
 
 const responseFromParts = (parts) => {
     const { headers, body, trailers, statusCode } = parts;
@@ -81,8 +86,11 @@ const responseFromParts = (parts) => {
     const promise = new Promise((resolve, reject) => {
         trailers.once('message', ({ val, err }) => {
             trailers.close();
-            if (err) reject(err);
-            else resolve(val);
+            if (err) {
+                reject(err);
+            } else {
+                resolve(val);
+            }
         });
     });
 

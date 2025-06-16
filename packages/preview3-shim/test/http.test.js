@@ -15,6 +15,7 @@ import {
     RequestOptions,
     Request,
     Response,
+    _forbiddenHeaders,
 } from '@bytecodealliance/preview3-shim/http';
 
 import { FutureReader, future } from '@bytecodealliance/preview3-shim/future';
@@ -47,6 +48,11 @@ describe('Fields tests', () => {
             expect(err).toBeInstanceOf(HttpError);
             expect(err.payload.tag).toBe('forbidden');
         }
+
+        _forbiddenHeaders.value.add('new-forbidden');
+        expect(() => {
+            Fields.fromList([['New-Forbidden', encoder.encode('example')]]);
+        }).toThrow(HttpError);
     });
 
     test('appends and retrieves values correctly', () => {
@@ -307,6 +313,66 @@ describe('Response', () => {
     });
 });
 
+describe('Request.body single-stream semantics', () => {
+    test('throws if body() called twice without closing', async () => {
+        const headers = new Fields();
+        const { tx: bodyTx, rx: bodyRx } = stream();
+        const { tx: trailersTx, rx: trailersRx } = future();
+        const { req } = Request.new(headers, bodyRx, trailersRx);
+
+        req.body();
+        expect(() => req.body()).toThrowError(HttpError);
+
+        await bodyTx.close();
+        await trailersTx.write(null);
+    });
+
+    test('throws after the stream has ended', async () => {
+        const headers = new Fields();
+        const { tx: bodyTx, rx: bodyRx } = stream();
+        const { tx: trailersTx, rx: trailersRx } = future();
+        const { req } = Request.new(headers, bodyRx, trailersRx);
+
+        const { body } = req.body();
+        await bodyTx.write(Buffer.from('data'));
+        await bodyTx.close();
+        await trailersTx.write(null);
+
+        while ((await body.read()) !== null) {}
+        expect(() => req.body()).toThrowError(HttpError);
+    });
+});
+
+describe('Response.body single-stream semantics', () => {
+    test('throws if body() called twice without closing', async () => {
+        const headers = new Fields();
+        const { tx: bodyTx, rx: bodyRx } = stream();
+        const { tx: trailersTx, rx: trailersRx } = future();
+        const { res } = Response.new(headers, bodyRx, trailersRx);
+
+        res.body();
+        expect(() => res.body()).toThrowError(HttpError);
+
+        await bodyTx.close();
+        await trailersTx.write(null);
+    });
+
+    test('throws after the stream has ended', async () => {
+        const headers = new Fields();
+        const { tx: bodyTx, rx: bodyRx } = stream();
+        const { tx: trailersTx, rx: trailersRx } = future();
+        const { res } = Response.new(headers, bodyRx, trailersRx);
+
+        const { body } = res.body();
+        await bodyTx.write(Buffer.from('x'));
+        await bodyTx.close();
+        await trailersTx.write(null);
+
+        while ((await body.read()) !== null) {}
+        expect(() => res.body()).toThrowError(HttpError);
+    });
+});
+
 describe('HttpServer Integration', () => {
     const HOST = '127.0.0.1';
     const PORT = 3000;
@@ -346,6 +412,30 @@ describe('HttpServer Integration', () => {
         const text = await res.text();
         expect(text).toBe('hello world');
         expect(res.headers.get('content-type')).toBe('text/plain');
+    });
+});
+
+describe('HttpServer Error', () => {
+    const HOST = '127.0.0.1';
+    const PORT = 3001;
+
+    test('emits error event when handler throws', (done) => {
+        const throwingHandler = {
+            async handle() {
+                throw new Error('handler failure');
+            },
+        };
+
+        const server = new HttpServer(throwingHandler);
+        server.on('error', (err) => {
+            expect(err).toBeInstanceOf(Error);
+            expect(err.message).toBe('handler failure');
+            server.close().then(done);
+        });
+
+        server.listen(PORT, HOST).then(() => {
+            fetch(`http://${HOST}:${PORT}/`).catch(() => {});
+        });
     });
 });
 
@@ -421,13 +511,15 @@ describe('HttpClient Integration', () => {
         checkHeader('x-test-header', 'test-value');
 
         const { body } = response.body();
-        const stream = body.intoStream();
+        const stream = body.intoReadableStream();
         const reader = stream.getReader();
         let result = '';
 
         while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                break;
+            }
             result += new TextDecoder().decode(value);
         }
 
@@ -463,12 +555,14 @@ describe('HttpClient Integration', () => {
         expect(response.statusCode()).toBe(200);
 
         const { body } = response.body();
-        const reader = body.intoStream().getReader();
+        const reader = body.intoReadableStream().getReader();
         let result = '';
 
         while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                break;
+            }
             result += new TextDecoder().decode(value);
         }
 
@@ -494,13 +588,15 @@ describe('HttpClient Integration', () => {
         expect(response.statusCode()).toBe(500);
 
         const { body } = response.body();
-        const stream = body.intoStream();
+        const stream = body.intoReadableStream();
         const reader = stream.getReader();
         let result = '';
 
         while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                break;
+            }
             result += new TextDecoder().decode(value);
         }
 

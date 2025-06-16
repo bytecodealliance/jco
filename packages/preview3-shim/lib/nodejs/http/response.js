@@ -3,7 +3,10 @@ import { StreamReader } from '../stream.js';
 import { HttpError } from './error.js';
 import { Fields, _fieldsLock } from './fields.js';
 
-const RESPONSE_PRIV_SYM = Symbol('ResponsePrivSym');
+let RESPONSE_CREATE_TOKEN = null;
+function token() {
+    return (RESPONSE_CREATE_TOKEN ??= Symbol('ResponseCreateToken'));
+}
 
 export class Response {
     #statusCode = 200;
@@ -11,13 +14,15 @@ export class Response {
     #contents = null;
     #trailersFuture = null;
     #responseFuture = null;
+    #bodyOpen = false;
+    #bodyEnded = false;
 
     /**
      * @private
      * Use Response.new(...) to create an instance
      */
-    constructor(token) {
-        if (token !== RESPONSE_PRIV_SYM) {
+    constructor(t) {
+        if (t !== token()) {
             throw new Error('Use Response.new(...) to create a Response');
         }
     }
@@ -59,7 +64,7 @@ export class Response {
             );
         }
 
-        const response = new Response(RESPONSE_PRIV_SYM);
+        const response = new Response(token());
         response.#headers = _fieldsLock(headers);
         response.#contents = contents;
         response.#trailersFuture = trailers;
@@ -134,10 +139,49 @@ export class Response {
      * ```
      *
      * @returns {{ body: StreamReader, trailers: FutureReader }}
-     * @throws {HttpError} with payload.tag 'invalid-state' if body has already been opened
+     * @throws {HttpError} with payload.tag 'invalid-state' if body has already been opened or consumed.
      */
     body() {
-        // TODO: enforce single-stream semantics
+        if (this.#bodyOpen) {
+            throw new HttpError(
+                'invalid-state',
+                'body() already opened and not yet closed'
+            );
+        }
+
+        if (this.#bodyEnded) {
+            throw new HttpError(
+                'invalid-state',
+                'body() has already been consumed'
+            );
+        }
+
+        if (!this.#contents) {
+            this.#bodyEnded = true;
+            return { body: this.#contents, trailers: this.#trailersFuture };
+        }
+
+        const reader = this.#contents;
+        this.#bodyOpen = true;
+
+        const readFn = reader.read.bind(reader);
+        reader.read = () => {
+            const chunk = readFn();
+            if (chunk === null) {
+                this.#bodyEnded = true;
+                this.#bodyOpen = false;
+            }
+
+            return chunk;
+        };
+
+        const closedFn = reader.close.bind(reader);
+        reader.close = () => {
+            closedFn();
+            this.#bodyEnded = true;
+            this.#bodyOpen = false;
+        };
+
         return { body: this.#contents, trailers: this.#trailersFuture };
     }
 

@@ -6,13 +6,7 @@ import { fileURLToPath } from 'url';
 
 import { suite, test, assert, expect } from 'vitest';
 
-import {
-    exec,
-    jcoPath,
-    getTmpDir,
-    setupAsyncTest,
-    skipWithoutJSPI,
-} from './helpers.js';
+import { exec, jcoPath, getTmpDir, setupAsyncTest } from './helpers.js';
 import { AsyncFunction } from './common.js';
 
 const P3_COMPONENT_FIXTURES_DIR = fileURLToPath(
@@ -79,7 +73,7 @@ suite('Async', () => {
             'dir'
         );
 
-        const { instance, cleanup, component } = await setupAsyncTest({
+        const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
                 name: 'async_call',
@@ -152,7 +146,7 @@ suite('Async', () => {
                 'dir'
             );
             const testMessage = 'Hello from Async Function!';
-            const { instance, cleanup, component } = await setupAsyncTest({
+            const { instance, cleanup } = await setupAsyncTest({
                 asyncMode: 'jspi',
                 component: {
                     name: 'async_call',
@@ -201,7 +195,7 @@ suite('Async', () => {
             t.skip();
         }
 
-        const { esModule, cleanup, esModuleOutputDir } = await setupAsyncTest({
+        const { esModule, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
                 name: 'async-error-context',
@@ -245,7 +239,7 @@ suite('Async', () => {
         await cleanup();
     });
 
-    test('context.get/set (sync export, sync call)', async (t) => {
+    test('context.get/set (sync export, sync call)', async () => {
         const componentName = 'context-sync';
         const componentPath = join(
             P3_COMPONENT_FIXTURES_DIR,
@@ -316,7 +310,7 @@ suite('Async', () => {
         await cleanup();
     });
 
-    test('backpressure.get (sync export, sync call)', async (t) => {
+    test('backpressure.get (sync export, sync call)', async () => {
         const componentName = 'backpressure-sync';
         const componentPath = join(
             P3_COMPONENT_FIXTURES_DIR,

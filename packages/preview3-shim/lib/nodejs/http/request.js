@@ -4,14 +4,27 @@ import { _fieldsLock, Fields } from './fields.js';
 import { FutureReader, future } from '../future.js';
 import { StreamReader } from '../stream.js';
 
-const defaultHttpTimeout = 600_000_000_000n;
+const SUPPORTED_METHODS = [
+    'get',
+    'head',
+    'post',
+    'put',
+    'delete',
+    'connect',
+    'options',
+    'trace',
+    'patch',
+];
 
-const REQUEST_PRIV_SYM = Symbol('RequestPrivSym');
+let REQUEST_CREATE_TOKEN = null;
+function token() {
+    return (REQUEST_CREATE_TOKEN ??= Symbol('RequestCreateToken'));
+}
 
 export class RequestOptions {
-    #connectTimeout = null;
-    #firstByteTimeout = null;
-    #betweenBytesTimeout = null;
+    #connectTimeoutNs = null;
+    #firstByteTimeoutNs = null;
+    #betweenBytesTimeoutNs = null;
     #immutable = false;
 
     /**
@@ -33,7 +46,7 @@ export class RequestOptions {
      * @returns {?number} Duration in milliseconds, or `null` if not set
      */
     connectTimeout() {
-        return this.#connectTimeout;
+        return this.#connectTimeoutNs;
     }
 
     /**
@@ -43,12 +56,12 @@ export class RequestOptions {
      * set-connect-timeout: func(duration: option<duration>) -> result<_, request-options-error>
      * ```
      *
-     * @param {?number} duration Duration in milliseconds, or `null` to clear
+     * @param {?bigint} duration Duration in nanoseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
      */
     setConnectTimeout(duration) {
         this._ensureMutable();
-        this.#connectTimeout = duration;
+        this.#connectTimeoutNs = duration;
     }
 
     /**
@@ -58,10 +71,10 @@ export class RequestOptions {
      * first-byte-timeout: func() -> option<duration>
      * ```
      *
-     * @returns {?number} Duration in milliseconds, or `null` if not set
+     * @returns {?bigint} Duration in nanoseconds, or `null` if not set
      */
     firstByteTimeout() {
-        return this.#firstByteTimeout;
+        return this.#firstByteTimeoutNs;
     }
 
     /**
@@ -71,12 +84,12 @@ export class RequestOptions {
      * set-first-byte-timeout: func(duration: option<duration>) -> result<_, request-options-error>
      * ```
      *
-     * @param {?number} duration Duration in milliseconds, or `null` to clear
+     * @param {?bigint} duration Duration in nanoseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
      */
     setFirstByteTimeout(duration) {
         this._ensureMutable();
-        this.#firstByteTimeout = duration;
+        this.#firstByteTimeoutNs = duration;
     }
 
     /**
@@ -86,10 +99,10 @@ export class RequestOptions {
      * between-bytes-timeout: func() -> option<duration>
      * ```
      *
-     * @returns {?number} Duration in milliseconds, or `null` if not set
+     * @returns {?bigint} Duration in nanoseconds, or `null` if not set
      */
     betweenBytesTimeout() {
-        return this.#betweenBytesTimeout;
+        return this.#betweenBytesTimeoutNs;
     }
 
     /**
@@ -99,12 +112,12 @@ export class RequestOptions {
      * set-between-bytes-timeout: func(duration: option<duration>) -> result<_, request-options-error>
      * ```
      *
-     * @param {?number} duration Duration in milliseconds, or `null` to clear
+     * @param {?bigint} duration Duration in nanoseconds, or `null` to clear
      * @throws {HttpError} with payload.tag 'immutable' if this handle is immutable
      */
     setBetweenBytesTimeout(duration) {
         this._ensureMutable();
-        this.#betweenBytesTimeout = duration;
+        this.#betweenBytesTimeoutNs = duration;
     }
 
     /**
@@ -118,9 +131,9 @@ export class RequestOptions {
      */
     clone() {
         const cloned = new RequestOptions();
-        cloned.#connectTimeout = this.#connectTimeout;
-        cloned.#firstByteTimeout = this.#firstByteTimeout;
-        cloned.#betweenBytesTimeout = this.#betweenBytesTimeout;
+        cloned.#connectTimeoutNs = this.#connectTimeoutNs;
+        cloned.#firstByteTimeoutNs = this.#firstByteTimeoutNs;
+        cloned.#betweenBytesTimeoutNs = this.#betweenBytesTimeoutNs;
         return cloned;
     }
 
@@ -131,7 +144,9 @@ export class RequestOptions {
      * @returns {RequestOptions} The same instance, now immutable
      */
     static _lock(fields) {
-        if (fields) fields.#immutable = true;
+        if (fields) {
+            fields.#immutable = true;
+        }
         return fields;
     }
 
@@ -145,8 +160,9 @@ export class RequestOptions {
     }
 }
 
-export const _optionsLock = RequestOptions._lock;
-delete RequestOptions._lock;
+export function _optionsLock(fields) {
+    return RequestOptions._lock(fields);
+}
 
 export class Request {
     #method = 'get';
@@ -158,9 +174,11 @@ export class Request {
     #pathWithQuery = null;
     #trailersFuture = null;
     #requestFuture = null;
+    #bodyOpen = false;
+    #bodyEnded = false;
 
-    constructor(token) {
-        if (token !== REQUEST_PRIV_SYM) {
+    constructor(t) {
+        if (t !== token()) {
             throw new Error('Use Request.new(...) to create a Request');
         }
     }
@@ -212,7 +230,7 @@ export class Request {
             );
         }
 
-        let request = new Request(REQUEST_PRIV_SYM);
+        let request = new Request(token());
         request.#headers = headers;
         request.#contents = contents;
         request.#options = options;
@@ -263,7 +281,7 @@ export class Request {
         }
 
         const lowercase = method.toLowerCase();
-        if (supportedMethods.includes(lowercase)) {
+        if (SUPPORTED_METHODS.includes(lowercase)) {
             this.#method = { tag: lowercase };
         } else {
             this.#method = { tag: 'other', val: lowercase };
@@ -296,17 +314,7 @@ export class Request {
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid URI component
      */
     setPathWithQuery(pathWithQuery) {
-        if (pathWithQuery != null) {
-            try {
-                new URL(pathWithQuery, 'http://example');
-            } catch {
-                throw new HttpError(
-                    'invalid-syntax',
-                    `Invalid path-with-query: ${pathWithQuery}`
-                );
-            }
-        }
-
+        validateUrlPart(pathWithQuery, UrlPart.PATH_WITH_QUERY);
         this.#pathWithQuery = pathWithQuery;
     }
 
@@ -336,16 +344,7 @@ export class Request {
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid scheme
      */
     setScheme(scheme) {
-        if (scheme != null) {
-            try {
-                new URL(`${scheme}://example`);
-            } catch {
-                throw new HttpError(
-                    'invalid-syntax',
-                    `Invalid scheme: ${scheme}`
-                );
-            }
-        }
+        validateUrlPart(scheme, UrlPart.SCHEME);
         this.#scheme = scheme;
     }
 
@@ -375,16 +374,7 @@ export class Request {
      * @throws {HttpError} with payload.tag 'invalid-syntax' if invalid authority
      */
     setAuthority(authority) {
-        if (authority != null) {
-            try {
-                new URL(`http://${authority}`);
-            } catch {
-                throw new HttpError(
-                    'invalid-syntax',
-                    `Invalid authority: ${authority}`
-                );
-            }
-        }
+        validateUrlPart(authority, UrlPart.AUTHORITY);
         this.#authority = authority;
     }
 
@@ -425,10 +415,49 @@ export class Request {
      * ```
      *
      * @returns {{ req: StreamReader, trailers: FutureReader }}
-     * @throws {HttpError} with payload.tag 'invalid-state' if body already open
+     * @throws {HttpError} with payload.tag 'invalid-state' if body already open or consumed.
      */
     body() {
-        // TODO: enforce single-stream semantics
+        if (this.#bodyOpen) {
+            throw new HttpError(
+                'invalid-state',
+                'body() already called and not yet closed'
+            );
+        }
+
+        if (this.#bodyEnded) {
+            throw new HttpError(
+                'invalid-state',
+                'body() has already been consumed'
+            );
+        }
+
+        if (!this.#contents) {
+            this.#bodyEnded = true;
+            return { body: this.#contents, trailers: this.#trailersFuture };
+        }
+
+        const reader = this.#contents;
+        this.#bodyOpen = true;
+
+        const readFn = reader.read.bind(reader);
+        reader.read = () => {
+            const chunk = readFn();
+            if (chunk === null) {
+                this.#bodyEnded = true;
+                this.#bodyOpen = false;
+            }
+
+            return chunk;
+        };
+
+        const closedFn = reader.close.bind(reader);
+        reader.close = () => {
+            closedFn();
+            this.#bodyEnded = true;
+            this.#bodyOpen = false;
+        };
+
         return { body: this.#contents, trailers: this.#trailersFuture };
     }
 
@@ -441,14 +470,32 @@ export class Request {
     }
 }
 
-const supportedMethods = [
-    'get',
-    'head',
-    'post',
-    'put',
-    'delete',
-    'connect',
-    'options',
-    'trace',
-    'patch',
-];
+const UrlPart = {
+    PATH_WITH_QUERY: 'pathWithQuery',
+    SCHEME: 'scheme',
+    AUTHORITY: 'authority',
+};
+
+function validateUrlPart(value, part) {
+    if (value == null) {
+        return;
+    }
+
+    try {
+        switch (part) {
+            case UrlPart.PATH_WITH_QUERY:
+                new URL(value, 'http://example');
+                break;
+            case UrlPart.SCHEME:
+                new URL(`${value}://example`);
+                break;
+            case UrlPart.AUTHORITY:
+                new URL(`http://${value}`);
+                break;
+            default:
+                throw new Error(`Unknown URL part: ${part}`);
+        }
+    } catch {
+        throw new HttpError('invalid-syntax', `Invalid ${part}: ${value}`);
+    }
+}
