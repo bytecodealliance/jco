@@ -52,7 +52,7 @@
     "build": "cargo xtask build debug",
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "npm run build:types:preview2-shim --include-workspace-root",
-    "lint": "eslint -c ../../eslint.config.mjs ./src/**/*.js",
+    "lint": "eslint -c ../../eslint.config.mjs --ext .js src test",
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
     "test:lts": "vitest run -c test/vitest.lts.ts",
