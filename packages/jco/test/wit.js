@@ -16,7 +16,7 @@ suite('WIT', () => {
 
     var witFixturesPath;
 
-    beforeAll(async function () {
+    beforeAll(async function() {
         tmpDir = await getTmpDir();
         outFile = resolve(tmpDir, 'out-component-file');
         featureGatesWitPath = resolve('test/fixtures/wits/feature-gates.wit');
@@ -25,13 +25,13 @@ suite('WIT', () => {
         witFixturesPath = resolve('test/fixtures/wits');
     });
 
-    afterAll(async function () {
+    afterAll(async function() {
         try {
             await rm(tmpDir, { recursive: true });
         } catch {}
     });
 
-    afterEach(async function () {
+    afterEach(async function() {
         try {
             await rm(outFile);
         } catch {}

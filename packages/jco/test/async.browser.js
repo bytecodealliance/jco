@@ -19,7 +19,7 @@ suite(`Async`, async () => {
     var outDir;
     var outFile;
 
-    beforeAll(async function () {
+    beforeAll(async function() {
         tmpDir = await getTmpDir();
         outDir = resolve(tmpDir, 'out-component-dir');
         outFile = resolve(tmpDir, 'out-component-file');
@@ -35,13 +35,13 @@ suite(`Async`, async () => {
         );
     });
 
-    afterAll(async function () {
+    afterAll(async function() {
         try {
             await rm(tmpDir, { recursive: true });
         } catch {}
     });
 
-    afterEach(async function () {
+    afterEach(async function() {
         try {
             await rm(outDir, { recursive: true });
             await rm(outFile);

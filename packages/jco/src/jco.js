@@ -425,7 +425,7 @@ program.showHelpAfterError();
 program.parse();
 
 function asyncAction(cmd) {
-    return function () {
+    return function() {
         const args = [...arguments];
         (async () => {
             try {
