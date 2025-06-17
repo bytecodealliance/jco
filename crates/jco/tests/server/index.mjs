@@ -34,7 +34,7 @@ const servers = [];
 export async function createIncomingServer(serverName) {
     const serverProcess = fork(
         fileURLToPath(import.meta.url.split('/').slice(0, -1).join('/')) +
-            '/http-server.js',
+            '/http-server.mjs',
         {
             env: Object.assign(process.env, {
                 PREVIEW2_SHIM_DEBUG: '0',

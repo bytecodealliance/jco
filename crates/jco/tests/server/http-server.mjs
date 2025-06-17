@@ -1,6 +1,7 @@
+import process from "node:process";
+
 import { _forbiddenHeaders, HTTPServer } from '@bytecodealliance/preview2-shim/http';
 import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
-import process from "node:process";
 
 _forbiddenHeaders.add('custom-forbidden-header');
 
@@ -33,10 +34,10 @@ process.on('message', async msg => {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     } while (retry);
-    
+
     console.error(`Server listening on ${port}`);
     process.send(`localhost:${port}`);
-    
+
     process.on('exit', () => {
       server.stop();
     });
