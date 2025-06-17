@@ -87,7 +87,7 @@ struct TranspileArgs {
     build_type: BuildType,
 }
 
-fn transpile<'a>(args: TranspileArgs) -> Result<()> {
+fn transpile(args: TranspileArgs) -> Result<()> {
     let TranspileArgs {
         component_path,
         name,
@@ -111,7 +111,7 @@ fn transpile<'a>(args: TranspileArgs) -> Result<()> {
     })?;
 
     let adapter_path = &*WORKSPACE_DIR.join("packages/jco/lib/wasi_snapshot_preview1.reactor.wasm");
-    let adapter = fs::read(&adapter_path).with_context(|| {
+    let adapter = fs::read(adapter_path).with_context(|| {
         format!(
             "preview1 adapter file missing @ [{}]",
             adapter_path.display()
@@ -146,9 +146,13 @@ fn transpile<'a>(args: TranspileArgs) -> Result<()> {
             transpile_components(BuildType::Debug).context("transpiling all components (debug)")?;
         }
 
+        let jco_script_path = format!(
+            "{}",
+            WORKSPACE_DIR.join("packages/jco/src/jco.js").display()
+        );
         cmd!(
             sh,
-            "node ./src/jco.js opt {component_path} -o {component_path}"
+            "node {jco_script_path} opt {component_path} -o {component_path}"
         )
         .read()?;
         adapted_component = fs::read(component_path)?;

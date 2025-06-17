@@ -1,5 +1,7 @@
 import { _appendEnv } from "@bytecodealliance/preview2-shim/cli";
-import { createIncomingServer } from "../server/index.js";
+
+import server from '../server/index.mjs';
+const { createIncomingServer } = server;
 
 const authority = await createIncomingServer('api_proxy');
 

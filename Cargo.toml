@@ -7,7 +7,6 @@ members = [
   "crates/xtask",
   "crates/jco",
 ]
-default-members = ["crates/js-component-bindgen"]
 
 [workspace.package]
 edition = "2021"
