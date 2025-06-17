@@ -23,7 +23,7 @@
  * - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
  * - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
  */
-export async function resolveAddresses(name: string): Array<IpAddress>;
+export function resolveAddresses(name: string): Promise<Array<IpAddress>>;
 export type IpAddress = import('./wasi-sockets-types.js').IpAddress;
 /**
  * Lookup error codes.

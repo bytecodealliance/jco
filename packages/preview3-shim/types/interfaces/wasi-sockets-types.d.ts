@@ -1,119 +1,4 @@
 /** @module Interface wasi:sockets/types@0.3.0 **/
-/**
- * Connect to a remote endpoint.
- * 
- * On success, the socket is transitioned into the `connected` state and this function returns a connection resource.
- * 
- * After a failed connection attempt, the socket will be in the `closed`
- * state and the only valid action left is to `drop` the socket. A single
- * socket can not be used to connect more than once.
- * 
- * # Typical errors
- * - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
- * - `invalid-argument`:          `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
- * - `invalid-argument`:          `remote-address` is an IPv4-mapped IPv6 address. (EINVAL, EADDRNOTAVAIL on Illumos)
- * - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EADDRNOTAVAIL on Windows)
- * - `invalid-argument`:          The port in `remote-address` is set to 0. (EADDRNOTAVAIL on Windows)
- * - `invalid-state`:             The socket is already in the `connecting` state. (EALREADY)
- * - `invalid-state`:             The socket is already in the `connected` state. (EISCONN)
- * - `invalid-state`:             The socket is already in the `listening` state. (EOPNOTSUPP, EINVAL on Windows)
- * - `timeout`:                   Connection timed out. (ETIMEDOUT)
- * - `connection-refused`:        The connection was forcefully rejected. (ECONNREFUSED)
- * - `connection-reset`:          The connection was reset. (ECONNRESET)
- * - `connection-aborted`:        The connection was aborted. (ECONNABORTED)
- * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
- * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
- * 
- * # References
- * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
- * - <https://man7.org/linux/man-pages/man2/connect.2.html>
- * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
- * - <https://man.freebsd.org/cgi/man.cgi?connect>
- */
-async connect(remoteAddress: IpSocketAddress): void;
-/**
- * Transmit data to peer.
- * 
- * The caller should close the stream when it has no more data to send
- * to the peer. Under normal circumstances this will cause a FIN packet
- * to be sent out. Closing the stream is equivalent to calling
- * `shutdown(SHUT_WR)` in POSIX.
- * 
- * This function may be called at most once and returns once the full
- * contents of the stream are transmitted or an error is encountered.
- * 
- * # Typical errors
- * - `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
- * - `connection-reset`:          The connection was reset. (ECONNRESET)
- * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
- * 
- *  # References
- * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/send.html>
- * - <https://man7.org/linux/man-pages/man2/send.2.html>
- * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
- * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
- */
-async send(data: ReadableStream<number>): void;
-/**
- * Send a message on the socket to a particular peer.
- * 
- * If the socket is connected, the peer address may be left empty. In
- * that case this is equivalent to `send` in POSIX. Otherwise it is
- * equivalent to `sendto`.
- * 
- * Additionally, if the socket is connected, a `remote-address` argument
- * _may_ be provided but then it must be identical to the address
- * passed to `connect`.
- * 
- * Implementations may trap if the `data` length exceeds 64 KiB.
- * 
- * # Typical errors
- * - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
- * - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
- * - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
- * - `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `connect`. (EISCONN)
- * - `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
- * - `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
- * - `connection-refused`:      The connection was refused. (ECONNREFUSED)
- * - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
- * 
- * # References
- * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
- * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
- * - <https://man7.org/linux/man-pages/man2/send.2.html>
- * - <https://man7.org/linux/man-pages/man2/sendmmsg.2.html>
- * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
- * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
- * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
- * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
- */
-async send(data: Uint8Array, remoteAddress: IpSocketAddress | undefined): void;
-/**
- * Receive a message on the socket.
- * 
- * On success, the return value contains a tuple of the received data
- * and the address of the sender. Theoretical maximum length of the
- * data is 64 KiB. Though in practice, it will typically be less than
- * 1500 bytes.
- * 
- * If the socket is connected, the sender address is guaranteed to
- * match the remote address passed to `connect`.
- * 
- * # Typical errors
- * - `invalid-state`:        The socket has not been bound yet.
- * - `remote-unreachable`:   The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
- * - `connection-refused`:   The connection was refused. (ECONNREFUSED)
- * 
- * # References
- * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
- * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
- * - <https://man7.org/linux/man-pages/man2/recv.2.html>
- * - <https://man7.org/linux/man-pages/man2/recvmmsg.2.html>
- * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
- * - <https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_wsarecvmsg>
- * - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
- */
-async receive(): [Uint8Array, IpSocketAddress];
 export type Duration = import('./wasi-clocks-monotonic-clock.js').Duration;
 /**
  * Error codes.
@@ -296,6 +181,38 @@ export class TcpSocket {
   */
   bind(localAddress: IpSocketAddress): void;
   /**
+  * Connect to a remote endpoint.
+  * 
+  * On success, the socket is transitioned into the `connected` state and this function returns a connection resource.
+  * 
+  * After a failed connection attempt, the socket will be in the `closed`
+  * state and the only valid action left is to `drop` the socket. A single
+  * socket can not be used to connect more than once.
+  * 
+  * # Typical errors
+  * - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+  * - `invalid-argument`:          `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
+  * - `invalid-argument`:          `remote-address` is an IPv4-mapped IPv6 address. (EINVAL, EADDRNOTAVAIL on Illumos)
+  * - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EADDRNOTAVAIL on Windows)
+  * - `invalid-argument`:          The port in `remote-address` is set to 0. (EADDRNOTAVAIL on Windows)
+  * - `invalid-state`:             The socket is already in the `connecting` state. (EALREADY)
+  * - `invalid-state`:             The socket is already in the `connected` state. (EISCONN)
+  * - `invalid-state`:             The socket is already in the `listening` state. (EOPNOTSUPP, EINVAL on Windows)
+  * - `timeout`:                   Connection timed out. (ETIMEDOUT)
+  * - `connection-refused`:        The connection was forcefully rejected. (ECONNREFUSED)
+  * - `connection-reset`:          The connection was reset. (ECONNRESET)
+  * - `connection-aborted`:        The connection was aborted. (ECONNABORTED)
+  * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+  * - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+  * 
+  * # References
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
+  * - <https://man7.org/linux/man-pages/man2/connect.2.html>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
+  * - <https://man.freebsd.org/cgi/man.cgi?connect>
+  */
+  connect(remoteAddress: IpSocketAddress): Promise<void>;
+  /**
   * Start listening return a stream of new inbound connections.
   * 
   * Transitions the socket into the `listening` state. This can be called
@@ -362,6 +279,29 @@ export class TcpSocket {
   * - <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
   */
   listen(): ReadableStream<TcpSocket>;
+  /**
+  * Transmit data to peer.
+  * 
+  * The caller should close the stream when it has no more data to send
+  * to the peer. Under normal circumstances this will cause a FIN packet
+  * to be sent out. Closing the stream is equivalent to calling
+  * `shutdown(SHUT_WR)` in POSIX.
+  * 
+  * This function may be called at most once and returns once the full
+  * contents of the stream are transmitted or an error is encountered.
+  * 
+  * # Typical errors
+  * - `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
+  * - `connection-reset`:          The connection was reset. (ECONNRESET)
+  * - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+  * 
+  *  # References
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/send.html>
+  * - <https://man7.org/linux/man-pages/man2/send.2.html>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
+  * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
+  */
+  send(data: ReadableStream<number>): Promise<void>;
   /**
   * Read data from peer.
   * 
@@ -633,6 +573,66 @@ export class UdpSocket {
   * - <https://man.freebsd.org/cgi/man.cgi?connect>
   */
   disconnect(): void;
+  /**
+  * Send a message on the socket to a particular peer.
+  * 
+  * If the socket is connected, the peer address may be left empty. In
+  * that case this is equivalent to `send` in POSIX. Otherwise it is
+  * equivalent to `sendto`.
+  * 
+  * Additionally, if the socket is connected, a `remote-address` argument
+  * _may_ be provided but then it must be identical to the address
+  * passed to `connect`.
+  * 
+  * Implementations may trap if the `data` length exceeds 64 KiB.
+  * 
+  * # Typical errors
+  * - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+  * - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+  * - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+  * - `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `connect`. (EISCONN)
+  * - `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
+  * - `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+  * - `connection-refused`:      The connection was refused. (ECONNREFUSED)
+  * - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
+  * 
+  * # References
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
+  * - <https://man7.org/linux/man-pages/man2/send.2.html>
+  * - <https://man7.org/linux/man-pages/man2/sendmmsg.2.html>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
+  * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
+  */
+  send(data: Uint8Array, remoteAddress: IpSocketAddress | undefined): Promise<void>;
+  /**
+  * Receive a message on the socket.
+  * 
+  * On success, the return value contains a tuple of the received data
+  * and the address of the sender. Theoretical maximum length of the
+  * data is 64 KiB. Though in practice, it will typically be less than
+  * 1500 bytes.
+  * 
+  * If the socket is connected, the sender address is guaranteed to
+  * match the remote address passed to `connect`.
+  * 
+  * # Typical errors
+  * - `invalid-state`:        The socket has not been bound yet.
+  * - `remote-unreachable`:   The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+  * - `connection-refused`:   The connection was refused. (ECONNREFUSED)
+  * 
+  * # References
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
+  * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
+  * - <https://man7.org/linux/man-pages/man2/recv.2.html>
+  * - <https://man7.org/linux/man-pages/man2/recvmmsg.2.html>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
+  * - <https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_wsarecvmsg>
+  * - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
+  */
+  receive(): Promise<[Uint8Array, IpSocketAddress]>;
   /**
   * Get the current bound address.
   * 

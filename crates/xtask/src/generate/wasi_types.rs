@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use std::fs;
 use std::path::PathBuf;
 
-use js_component_bindgen::{generate_types, source::wit_parser::Resolve, BindingsMode};
+use js_component_bindgen::{generate_types, source::wit_parser::Resolve, AsyncMode, BindingsMode};
 
 use crate::WasiVersion;
 
@@ -10,6 +10,7 @@ struct WasiTypes<'a> {
     wit_path: &'a str,
     target_path: &'a str,
     worlds: &'a [&'a str],
+    async_mode: Option<AsyncMode>,
 }
 
 pub(crate) fn run(version: WasiVersion) -> Result<()> {
@@ -18,11 +19,19 @@ pub(crate) fn run(version: WasiVersion) -> Result<()> {
             wit_path: "./packages/jco/test/fixtures/p2/wit/",
             target_path: "./packages/preview2-shim/types/",
             worlds: &["wasi:http/proxy", "wasi:cli/command"],
+            async_mode: None,
         },
         WasiVersion::Preview3 => WasiTypes {
             wit_path: "./packages/jco/test/fixtures/p3/wit/",
             target_path: "./packages/preview3-shim/types/",
             worlds: &["wasi:http/proxy", "wasi:cli/command"],
+            async_mode: Some(AsyncMode::JavaScriptPromiseIntegration {
+                exports: vec![],
+                imports: vec![
+                    "descriptor.write-via-stream".to_string(),
+                    "descriptor.append-via-stream".to_string(),
+                ],
+            }),
         },
     };
 
@@ -32,6 +41,7 @@ pub(crate) fn run(version: WasiVersion) -> Result<()> {
 fn process_wasi_types(wasi: WasiTypes<'_>) -> Result<()> {
     for world in wasi.worlds {
         let name = world.replace([':', '/'], "-");
+        let mode = wasi.async_mode.clone();
 
         let mut resolve = Resolve::default();
         let (_, _) = resolve.push_dir(PathBuf::from(wasi.wit_path))?;
@@ -52,6 +62,7 @@ fn process_wasi_types(wasi: WasiTypes<'_>) -> Result<()> {
             name: "component".to_string(),
             import_bindings: Some(BindingsMode::Js),
             no_namespaced_exports: true,
+            async_mode: mode,
             ..Default::default()
         };
 

@@ -7,7 +7,7 @@
  * When imported, this function may be used to either send an outgoing
  * request over the network or pass it to another component.
  */
-export async function handle(request: Request): Response;
+export function handle(request: Request): Promise<Response>;
 export type Request = import('./wasi-http-types.js').Request;
 export type Response = import('./wasi-http-types.js').Response;
 export type ErrorCode = import('./wasi-http-types.js').ErrorCode;

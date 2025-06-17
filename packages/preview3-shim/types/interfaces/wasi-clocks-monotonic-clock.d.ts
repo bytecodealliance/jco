@@ -14,11 +14,11 @@ export function resolution(): Duration;
 /**
  * Wait until the specified instant has occurred.
  */
-export async function waitUntil(when: Instant): void;
+export function waitUntil(when: Instant): Promise<void>;
 /**
  * Wait for the specified duration has elapsed.
  */
-export async function waitFor(howLong: Duration): void;
+export function waitFor(howLong: Duration): Promise<void>;
 /**
  * An instant in time, in nanoseconds. An instant is relative to an
  * unspecified initial value, and can only be compared to instances from
