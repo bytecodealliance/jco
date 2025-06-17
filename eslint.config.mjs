@@ -14,7 +14,22 @@ const config = defineConfig([
             'no-fallthrough': 0,
             'no-constant-condition': 0,
             curly: ['error', 'all'],
-            'prettier/prettier': ['error', prettierConfig],
+            'space-before-function-paren': [
+                'error',
+                {
+                    anonymous: 'never',
+                    named: 'never',
+                    asyncArrow: 'always',
+                },
+            ],
+
+            // NOTE: for some reason, prettier defaults are now 'function ()',
+            // so we use prettier fo format and eslint *after* to fix up issues.
+            //
+            // https://github.com/prettier/prettier/issues/1139
+            // https://github.com/prettier/prettier/issues/3847
+            // https://github.com/prettier/prettier/issues/3845
+            'prettier/prettier': ['off', prettierConfig],
         },
     },
 ]);

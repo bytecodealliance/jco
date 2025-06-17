@@ -35,12 +35,12 @@ jobs:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
       - name: Cache npm install
-        id: cache-node-modules
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
             node_modules
+
       - name: Install NPM packages
         run: npm install
 
@@ -126,10 +126,9 @@ jobs:
           mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
 
       - name: Cache npm install
-        id: cache-npm
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
             node_modules
       - name: Install NPM packages
@@ -168,50 +167,26 @@ jobs:
         run: |
           npm run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
-  build-wasi-tests:
-    name: WASI Test Generation
-    runs-on: ubuntu-latest
-    outputs:
-      cache-key: ${{ steps.cache-wasi-tests.outputs.cache-primary-key }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          submodules: recursive
-      - name: Cache WASI Tests
-        id: cache-wasi-tests
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: crates/jco/tests/gen
-          key: wasi-${{ hashFiles('xtask/src/generate/preview2_tests.rs', 'submodules/wasmtime/Cargo.lock') }}
-      - name: Install Rust
-        if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-        run: rustup update stable --no-self-update && rustup default stable
-      - name: Install wasm32-unknown-unknown target
-        if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-        run: rustup target add wasm32-unknown-unknown
-      - name: Install wasm32-wasip1 target
-        if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-        run: rustup target add wasm32-wasip1
-      - name: Install wasm-tools
-        if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-        run: cargo install wasm-tools
-      - name: Generate WASI Tests
-        if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-        run: cargo xtask generate tests preview2
-      - name: Upload Generated WASI Tests
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: wasi-tests
-          path: crates/jco/tests/gen
-
   test-wasi-deno:
     name: Jco Deno WASI Conformance Tests
     runs-on: "ubuntu-latest"
     needs:
       - build
-      - build-wasi-tests
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - name: Install Rust deps
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add wasm32-unknown-unknown
+          rustup target add wasm32-wasip1
+
+      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
+        with:
+          tool: wasm-tools
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "latest"
@@ -221,12 +196,12 @@ jobs:
           deno-version: v1.x
 
       - name: Cache npm install
-        id: cache-npm
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
             node_modules
+
       - name: Install NPM packages
         run: npm install
 
@@ -237,16 +212,14 @@ jobs:
           path: |
             packages/jco/obj
 
-      - name: Download WASI Tests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: wasi-tests
-          path: crates/jco/tests/gen
+      - name: Generate tests
+        run: |
+          cargo xtask generate tests preview2
 
       - name: WASI Preview 2 Conformance
         run: cargo test deno_
 
-  test-wasi:
+  test-wasi-node:
     name: Jco Node.js WASI Conformance Tests
     strategy:
       matrix:
@@ -271,20 +244,39 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs:
       - build
-      - build-wasi-tests
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - name: Install Rust deps
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add wasm32-unknown-unknown
+          rustup target add wasm32-wasip1
+
+      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
+        with:
+          tool: wasm-tools
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
 
       - name: Cache npm install
-        id: cache-npm
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
             node_modules
+
+      - name: Download Build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: jco-build
+          path: |
+            packages/jco/obj
+
       - name: Install NPM packages
         run: npm install
 
@@ -294,13 +286,14 @@ jobs:
           name: jco-build
           path: |
             packages/jco/obj
-      - name: Download WASI Tests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: wasi-tests
-          path: crates/jco/tests/gen
+
+      - name: Generate tests
+        run: |
+          cargo xtask generate preview2-tests
+
       - name: WASI Preview 2 Conformance
-        run: cargo test node_
+        run: |
+          cargo test node_
 
   test-shims:
     name: Test ${{ matrix.workspace }} Shims
@@ -314,12 +307,12 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Cache npm install
-        id: cache-npm
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
             node_modules
+
       - name: Install NPM packages
         run: npm install
 
@@ -333,12 +326,12 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Cache npm install
-        id: cache-npm
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
             node_modules
+
       - name: Install NPM packages
         run: npm install
 
@@ -423,13 +416,14 @@ jobs:
           chmod: 0755
 
       - name: Cache npm install
-        id: cache-npm
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package.json') }}
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
             node_modules
+
       - run: npm install
+
       - name: Run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
         run: npm run all --workspace ${{ matrix.project.workspace }}

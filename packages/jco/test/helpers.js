@@ -29,12 +29,11 @@ import { parse } from 'smol-toml';
 
 import { transpile } from '../src/api.js';
 import { componentize } from '../src/cmd/componentize.js';
-import { NODE_MODULES_TSC_BIN_PATH } from './common.js';
+import { NODE_MODULES_TSC_BIN_PATH, JCO_JS_PATH } from './common.js';
 
 export const isWindows = platform === 'win32';
 
-// Path to the jco binary
-export const jcoPath = 'src/jco.js';
+export const jcoPath = JCO_JS_PATH;
 
 // Simple debug logging for tests
 export function log(args, ..._rest) {
@@ -61,6 +60,9 @@ export function log(args, ..._rest) {
 //
 // Note: argv[0] is expected to be `node` (or some incantation that spawned this process)
 export async function exec(cmd, ...args) {
+    if (!cmd) {
+        throw new Error('cmd not specified');
+    }
     let stdout = '',
         stderr = '';
     await new Promise((resolve, reject) => {
@@ -123,11 +125,9 @@ export async function getTmpDir() {
  */
 export async function setupAsyncTest(args) {
     const { asyncMode, jco, component } = args;
-
     let componentName = component.name;
     let componentPath = component.path;
     let componentImports = component.imports;
-
     if (component.path && component.build) {
         throw new Error(
             'Both component.path and component.build should not be specified at the same time'
@@ -478,7 +478,7 @@ export async function loadTestPage(args) {
 export async function getRandomPort() {
     return await new Promise((resolve) => {
         const server = createNetServer();
-        server.listen(0, function () {
+        server.listen(0, function() {
             const port = this.address().port;
             server.on('close', () => resolve(port));
             server.close();

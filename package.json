@@ -19,6 +19,7 @@
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types preview2",
     "build:types:preview3-shim": "cargo xtask generate wasi-types preview3",
+    "fmt": "npm run fmt --ws --if-present",
     "lint": "npm run lint --ws --if-present",
     "lint:fix": "npm run lint:fix --ws --if-present"
   }
