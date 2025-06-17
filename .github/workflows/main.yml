@@ -289,7 +289,7 @@ jobs:
 
       - name: Generate tests
         run: |
-          cargo xtask generate preview2-tests
+          cargo xtask generate tests preview2
 
       - name: WASI Preview 2 Conformance
         run: |
