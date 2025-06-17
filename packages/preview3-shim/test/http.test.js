@@ -1,3 +1,6 @@
+import http from 'node:http';
+import { TextEncoder, TextDecoder } from 'node:util';
+
 import {
     describe,
     test,
@@ -21,29 +24,28 @@ import {
 import { FutureReader, future } from '@bytecodealliance/preview3-shim/future';
 import { stream } from '@bytecodealliance/preview3-shim/stream';
 
-import { TextEncoder, TextDecoder } from 'util';
-import http from 'node:http';
+import { getRandomPort } from './helpers';
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+const ENCODER = new TextEncoder();
+const DECODER = new TextDecoder();
 
 describe('Fields tests', () => {
     test('constructs fields with multiple values per name', () => {
         const fields = Fields.fromList([
-            ['X-Test', [encoder.encode('one'), encoder.encode('two')]],
+            ['X-Test', [ENCODER.encode('one'), ENCODER.encode('two')]],
         ]);
-        const values = fields.get('x-test').map((v) => decoder.decode(v));
+        const values = fields.get('x-test').map((v) => DECODER.decode(v));
         expect(values).toEqual(['one', 'two']);
         expect(fields.has('X-TEST')).toBe(true);
     });
 
     test('throws forbidden error for a forbidden header name', () => {
         expect(() => {
-            Fields.fromList([['Host', encoder.encode('example')]]);
+            Fields.fromList([['Host', ENCODER.encode('example')]]);
         }).toThrow(HttpError);
 
         try {
-            Fields.fromList([['Connection', encoder.encode('keep-alive')]]);
+            Fields.fromList([['Connection', ENCODER.encode('keep-alive')]]);
         } catch (err) {
             expect(err).toBeInstanceOf(HttpError);
             expect(err.payload.tag).toBe('forbidden');
@@ -51,24 +53,24 @@ describe('Fields tests', () => {
 
         _forbiddenHeaders.value.add('new-forbidden');
         expect(() => {
-            Fields.fromList([['New-Forbidden', encoder.encode('example')]]);
+            Fields.fromList([['New-Forbidden', ENCODER.encode('example')]]);
         }).toThrow(HttpError);
     });
 
     test('appends and retrieves values correctly', () => {
         const f = new Fields();
-        f.append('X-Custom', encoder.encode('a'));
-        f.append('x-custom', encoder.encode('b'));
+        f.append('X-Custom', ENCODER.encode('a'));
+        f.append('x-custom', ENCODER.encode('b'));
         expect(f.has('X-CUSTOM')).toBe(true);
-        const result = f.get('x-custom').map((v) => decoder.decode(v));
+        const result = f.get('x-custom').map((v) => DECODER.decode(v));
         expect(result).toEqual(['a', 'b']);
     });
 
     test('preserves insertion order in entries()', () => {
         const f = new Fields();
-        f.append('A', encoder.encode('1'));
-        f.append('B', encoder.encode('2'));
-        const ents = f.entries().map(([n, v]) => [n, decoder.decode(v)]);
+        f.append('A', ENCODER.encode('1'));
+        f.append('B', ENCODER.encode('2'));
+        const ents = f.entries().map(([n, v]) => [n, DECODER.decode(v)]);
         expect(ents).toEqual([
             ['A', '1'],
             ['B', '2'],
@@ -77,15 +79,15 @@ describe('Fields tests', () => {
 
     test('set replaces previous values', () => {
         const f = new Fields();
-        f.append('Tok', encoder.encode('one'));
-        f.set('Tok', [encoder.encode('two'), encoder.encode('three')]);
-        const vals = f.get('tok').map((v) => decoder.decode(v));
+        f.append('Tok', ENCODER.encode('one'));
+        f.set('Tok', [ENCODER.encode('two'), ENCODER.encode('three')]);
+        const vals = f.get('tok').map((v) => DECODER.decode(v));
         expect(vals).toEqual(['two', 'three']);
     });
 
     test('delete removes the header entirely', () => {
         const f = new Fields();
-        f.append('D', encoder.encode('x'));
+        f.append('D', ENCODER.encode('x'));
         f.delete('d');
         expect(f.has('D')).toBe(false);
         expect(f.get('d')).toEqual([]);
@@ -93,27 +95,27 @@ describe('Fields tests', () => {
 
     test('getAndDelete returns old values and deletes', () => {
         const f = new Fields();
-        f.append('G', encoder.encode('v1'));
-        f.append('G', encoder.encode('v2'));
-        const old = f.getAndDelete('g').map((v) => decoder.decode(v));
+        f.append('G', ENCODER.encode('v1'));
+        f.append('G', ENCODER.encode('v2'));
+        const old = f.getAndDelete('g').map((v) => DECODER.decode(v));
         expect(old).toEqual(['v1', 'v2']);
         expect(f.has('G')).toBe(false);
     });
 
     test('throws invalid-syntax on setting an invalid name', () => {
         const f = new Fields();
-        expect(() => f.set('\nBad', [encoder.encode('x')])).toThrow(HttpError);
+        expect(() => f.set('\nBad', [ENCODER.encode('x')])).toThrow(HttpError);
     });
 
     test('throws forbidden on setting a forbidden name', () => {
         const f = new Fields();
-        expect(() => f.set('Host', [encoder.encode('h')])).toThrow(HttpError);
+        expect(() => f.set('Host', [ENCODER.encode('h')])).toThrow(HttpError);
     });
 });
 
 describe('Request', () => {
     const headers = new Fields();
-    headers.append('x-test', encoder.encode('a'));
+    headers.append('x-test', ENCODER.encode('a'));
 
     const options = new RequestOptions();
     const contents = null;
@@ -209,7 +211,7 @@ describe('Response', () => {
 
     beforeEach(() => {
         headers = new Fields();
-        headers.append('content-type', encoder.encode('text/plain'));
+        headers.append('content-type', ENCODER.encode('text/plain'));
 
         const { bodyRx } = stream();
         contents = bodyRx;
@@ -288,7 +290,7 @@ describe('Response', () => {
 
         expect(respHeaders).toBe(headers);
         expect(() =>
-            respHeaders.append('x-test', encoder.encode('value'))
+            respHeaders.append('x-test', ENCODER.encode('value'))
         ).toThrow(expect.objectContaining({ payload: { tag: 'immutable' } }));
     });
 
@@ -374,9 +376,9 @@ describe('Response.body single-stream semantics', () => {
 });
 
 describe('HttpServer Integration', () => {
-    const HOST = '127.0.0.1';
-    const PORT = 3000;
     let server;
+    let host;
+    let port;
 
     beforeAll(async () => {
         const handler = {
@@ -384,8 +386,8 @@ describe('HttpServer Integration', () => {
                 const { tx: bodyTx, rx: bodyRx } = stream();
                 const { tx: trailersTx, rx: trailersRx } = future();
                 const headers = new Fields();
-                headers.append('content-type', encoder.encode('text/plain'));
-                headers.append('trailer', encoder.encode('content-md5'));
+                headers.append('content-type', ENCODER.encode('text/plain'));
+                headers.append('trailer', ENCODER.encode('content-md5'));
 
                 const { res } = Response.new(headers, bodyRx, trailersRx);
 
@@ -398,7 +400,9 @@ describe('HttpServer Integration', () => {
         };
 
         server = new HttpServer(handler);
-        await server.listen(PORT, HOST);
+        host = '127.0.0.1';
+        port = await getRandomPort();
+        await server.listen(port, host);
     });
 
     afterAll(async () => {
@@ -406,7 +410,7 @@ describe('HttpServer Integration', () => {
     });
 
     test('responds with 200 and "hello world"', async () => {
-        const res = await fetch(`http:${HOST}:${PORT}/`);
+        const res = await fetch(`http:${host}:${port}/`);
         expect(res.status).toBe(200);
 
         const text = await res.text();
@@ -416,10 +420,10 @@ describe('HttpServer Integration', () => {
 });
 
 describe('HttpServer Error', () => {
-    const HOST = '127.0.0.1';
-    const PORT = 3001;
+    test('emits error event when handler throws', async (done) => {
+        let host = '127.0.0.1';
+        let port = await getRandomPort();
 
-    test('emits error event when handler throws', (done) => {
         const throwingHandler = {
             async handle() {
                 throw new Error('handler failure');
@@ -433,18 +437,17 @@ describe('HttpServer Error', () => {
             server.close().then(done);
         });
 
-        server.listen(PORT, HOST).then(() => {
-            fetch(`http://${HOST}:${PORT}/`).catch(() => {});
+        server.listen(port, host).then(() => {
+            fetch(`http://${host}:${port}/`).catch(() => {});
         });
     });
 });
 
 describe('HttpClient Integration', () => {
-    const HOST = '127.0.0.1';
-    const PORT = 3002;
     let server;
+    let authority;
 
-    beforeAll(() => {
+    beforeAll(async () => {
         server = http.createServer((req, res) => {
             if (req.url === '/error') {
                 res.statusCode = 500;
@@ -475,22 +478,25 @@ describe('HttpClient Integration', () => {
             });
         });
 
-        server.listen(PORT, HOST);
+        const host = '127.0.0.1';
+        const port = await getRandomPort();
+        authority = `${host}:${port}`;
+        server.listen(port);
     });
 
-    afterAll(() => {
-        server.close();
+    afterAll(async () => {
+        await new Promise((resolve) => server.close(resolve));
     });
 
     test('makes a GET request', async () => {
         const headers = new Fields();
-        headers.append('accept', encoder.encode('application/json'));
+        headers.append('accept', ENCODER.encode('application/json'));
 
         const { tx: trailersTx, rx: trailersRx } = future();
         const { req } = Request.new(headers, null, trailersRx);
 
         req.setMethod('GET');
-        req.setAuthority(`${HOST}:${PORT}`);
+        req.setAuthority(authority);
         req.setPathWithQuery('/test');
 
         trailersTx.write(null);
@@ -504,7 +510,7 @@ describe('HttpClient Integration', () => {
                 ([k]) => k === name
             );
             const value = entry ? entry[1] : undefined;
-            expect(value).toEqual(encoder.encode(expectedValue));
+            expect(value).toEqual(ENCODER.encode(expectedValue));
         };
 
         checkHeader('content-type', 'application/json');
@@ -530,14 +536,14 @@ describe('HttpClient Integration', () => {
 
     test('makes a POST request with body', async () => {
         const headers = new Fields();
-        headers.append('content-type', encoder.encode('application/json'));
+        headers.append('content-type', ENCODER.encode('application/json'));
 
         const { tx: bodyTx, rx: bodyRx } = stream();
         const { tx: trailersTx, rx: trailersRx } = future();
 
         const { req } = Request.new(headers, bodyRx, trailersRx);
         req.setMethod('POST');
-        req.setAuthority(`${HOST}:${PORT}`);
+        req.setAuthority(authority);
         req.setPathWithQuery('/submit');
 
         const requestData = JSON.stringify({
@@ -573,13 +579,12 @@ describe('HttpClient Integration', () => {
     });
 
     test('handles server errors properly', async () => {
-        //
         const headers = new Fields();
         const { tx: trailersTx, rx: trailersRx } = future();
 
         const { req } = Request.new(headers, null, trailersRx);
         req.setMethod('GET');
-        req.setAuthority(`${HOST}:${PORT}`);
+        req.setAuthority(authority);
         req.setPathWithQuery('/error');
 
         await trailersTx.write(null);
@@ -628,7 +633,7 @@ describe('HttpClient Integration', () => {
 
         const { req } = Request.new(headers, null, trailersRx, opts);
         req.setMethod('GET');
-        req.setAuthority(`${HOST}:${PORT}`);
+        req.setAuthority(authority);
         req.setPathWithQuery('/delayed-first-byte');
 
         await trailersTx.write(null);
