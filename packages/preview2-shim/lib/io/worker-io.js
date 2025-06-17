@@ -455,7 +455,7 @@ class Pollable {
 const cabiLowerSymbol = Symbol.for('cabiLower');
 const T_FLAG = 1 << 30;
 
-Pollable.prototype.ready[cabiLowerSymbol] = function ({
+Pollable.prototype.ready[cabiLowerSymbol] = function({
     resourceTables: [table],
 }) {
     return function pollableReady(handle) {
@@ -465,7 +465,7 @@ Pollable.prototype.ready[cabiLowerSymbol] = function ({
     };
 };
 
-Pollable.prototype.block[cabiLowerSymbol] = function ({
+Pollable.prototype.block[cabiLowerSymbol] = function({
     resourceTables: [table],
 }) {
     return function pollableBlock(handle) {
@@ -492,7 +492,7 @@ export const poll = {
     },
 };
 
-poll.poll[cabiLowerSymbol] = function ({
+poll.poll[cabiLowerSymbol] = function({
     memory,
     realloc,
     resourceTables: [table],
@@ -520,7 +520,7 @@ export function createPoll(call, id, initPayload) {
 }
 
 export function createPollLower(call, id, table) {
-    return function (initPayload) {
+    return function(initPayload) {
         const rep = ioCall(call, id, initPayload);
         const free = table[0] & ~T_FLAG;
         if (free === 0) {

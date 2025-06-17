@@ -23,7 +23,7 @@ suite('Browser', () => {
     let tmpDir, outDir, outFile, outDirUrl;
     let server, port, browser;
 
-    beforeAll(async function () {
+    beforeAll(async function() {
         tmpDir = await getTmpDir();
         outDir = resolve(tmpDir, 'out-component-dir');
         outDirUrl = pathToFileURL(outDir + '/');
@@ -85,7 +85,7 @@ suite('Browser', () => {
         browser = await puppeteer.launch();
     });
 
-    afterAll(async function () {
+    afterAll(async function() {
         try {
             await rm(tmpDir, { recursive: true });
         } catch {}
@@ -93,7 +93,7 @@ suite('Browser', () => {
         await new Promise((resolve) => server.close(resolve));
     });
 
-    afterEach(async function () {
+    afterEach(async function() {
         try {
             await rm(outDir, { recursive: true });
             await rm(outFile);
