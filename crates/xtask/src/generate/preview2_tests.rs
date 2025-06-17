@@ -562,7 +562,7 @@ fn generate_command_invocation(args: GenerateCommandArgs<'_>) -> String {
     let import_map_path = format!(
         "{}",
         jco_crate_dir
-            .join(format!("tests/importmap.json"))
+            .join(format!("tests/importmap.deno.json"))
             .display()
     );
 
