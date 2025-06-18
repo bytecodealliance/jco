@@ -339,8 +339,25 @@ jobs:
         run: rustup update stable && rustup default stable && rustup component add rustfmt
       - name: Remove tests mod
         run: rm -r crates/jco/tests/mod.rs
+      - uses: Swatinem/rust-cache@v2
       - name: Format source code
         run: cargo fmt -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # to upload sarif results
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Rust
+      run: rustup update stable && rustup default stable
+    - name: Remove tests mod
+      run: rm -r crates/jco/tests/mod.rs
+    - uses: Swatinem/rust-cache@v2
+    - name: Run clippy
+      run: cargo clippy --workspace --all-features --all-targets --keep-going -- -D warnings
 
   examples:
     name: Example ${{ matrix.project.name }}

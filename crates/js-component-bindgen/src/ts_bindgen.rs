@@ -136,7 +136,7 @@ pub fn ts_bindgen(
                     {
                         let import_specifier = resolve.id_of(*id).unwrap();
                         let (_, _, iface) = parse_world_key(&import_specifier).unwrap();
-                        debug!("skipping imported interface [{}] feature gate due to feature gate visibility", iface.to_string());
+                        debug!("skipping imported interface [{}] feature gate due to feature gate visibility", iface);
                         continue;
                     }
 
@@ -996,7 +996,7 @@ impl<'a> TsInterface<'a> {
             iface.src.push_str("Promise<");
         }
 
-        if let Some((ok_ty, _)) = get_thrown_type(&iface.resolve, func.result) {
+        if let Some((ok_ty, _)) = get_thrown_type(iface.resolve, func.result) {
             iface.print_optional_ty(ok_ty);
         } else {
             match func.result {

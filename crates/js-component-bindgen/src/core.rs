@@ -790,12 +790,14 @@ macro_rules! define_translate {
     ));
 }
 
+#[allow(clippy::diverging_sub_expression)]
 impl<'a> VisitOperator<'a> for Translator<'_, 'a> {
     type Output = ();
 
     wasmparser::for_each_visit_operator!(define_translate);
 }
 
+#[allow(clippy::diverging_sub_expression)]
 impl<'a> VisitSimdOperator<'a> for Translator<'_, 'a> {
     wasmparser::for_each_visit_simd_operator!(define_translate);
 }

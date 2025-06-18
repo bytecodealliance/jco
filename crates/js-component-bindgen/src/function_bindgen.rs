@@ -55,8 +55,7 @@ pub enum ResourceData {
 ///
 /// For a given resource table id {x}, with resource index {y} the local variables are assumed:
 /// - handleTable{x}
-/// - captureTable{y} (rep to instance map for captured imported tables, only for JS import bindgen,
-///                    not hybrid)
+/// - captureTable{y} (rep to instance map for captured imported tables, only for JS import bindgen, not hybrid)
 /// - captureCnt{y} for assigning capture rep
 ///
 /// For component-defined resources:
@@ -1109,7 +1108,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     // result<_, string> allows JS error coercion only, while
                     // any other result type will trap for arbitrary JS errors.
                     let err_payload = if let (_, Some(Type::Id(err_ty))) =
-                        get_thrown_type(&self.resolve, func.result).unwrap()
+                        get_thrown_type(self.resolve, func.result).unwrap()
                     {
                         match &self.resolve.types[*err_ty].kind {
                             TypeDefKind::Type(Type::String) => {
@@ -1539,8 +1538,8 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::Flush { amt } => {
-                for n in 0..*amt {
-                    results.push(operands[n].clone());
+                for item in operands.iter().take(*amt) {
+                    results.push(item.clone());
                 }
             }
 
