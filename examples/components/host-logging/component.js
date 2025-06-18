@@ -1,5 +1,5 @@
 /**
- * This module is the JS implementation of the `reverser` WIT world
+ * This module is the JS implementation of the `component` WIT world
  */
 
 
@@ -17,7 +17,8 @@ export const logCharacters = {
    */
   call(s) {
     for (let char of s.split("")) {
-      log('info', "stdout", char)
+      // log `char` with log level `info`
+      log("info", "stdout", char)
     }
   }
 };
