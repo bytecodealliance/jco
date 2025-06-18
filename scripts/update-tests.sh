@@ -25,7 +25,7 @@ do
 done
 
 # copy flavorful wit case
-cp tests/runtime/flavorful/world.wit ../../test/fixtures/wit/deps/flavorful/flavorful.wit
+cp tests/runtime/flavorful/world.wit ../../test/fixtures/wits/flavorful/flavorful.wit
 cd ../..
 
 # convert the js test fixtures into a wasm component

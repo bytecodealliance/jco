@@ -10,6 +10,6 @@ npm := env_var_or_default("NPM", "npm")
 [group("test")]
 test-preview2:
     {{npm}} run build
-    {{cargo}} xtask generate preview2-tests
+    {{cargo}} xtask generate tests preview2
     {{cargo}} test -p jco node_
     {{cargo}} test -p jco deno_

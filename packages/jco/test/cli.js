@@ -235,7 +235,7 @@ suite('CLI', () => {
         const { stderr } = await exec(
             jcoPath,
             'types',
-            'test/fixtures/wit',
+            'test/fixtures/wits/flavorful',
             '--world-name',
             'test:flavorful/flavorful',
             '-o',
@@ -329,7 +329,7 @@ suite('CLI', () => {
         const { stderr } = await exec(
             jcoPath,
             'guest-types',
-            'test/fixtures/wit',
+            'test/fixtures/wits/flavorful',
             '--world-name',
             'test:flavorful/flavorful',
             '-o',
@@ -352,7 +352,7 @@ suite('CLI', () => {
         const { stderr } = await exec(
             jcoPath,
             'transpile',
-            `test/fixtures/wit/deps/ts-check/ts-check.wit`,
+            `test/fixtures/wits/ts-check/ts-check.wit`,
             '--stub',
             '-o',
             outDir
@@ -538,7 +538,7 @@ suite('CLI', () => {
         const { stderr } = await exec(
             jcoPath,
             'transpile',
-            `test/fixtures/wit/deps/app/app.wit`,
+            `test/fixtures/wits/app/app.wit`,
             '-o',
             outDir,
             '--stub'
@@ -563,7 +563,7 @@ suite('CLI', () => {
                 'embed',
                 '--dummy',
                 '--wit',
-                'test/fixtures/wit/deps/flavorful/flavorful.wit',
+                'test/fixtures/wits/flavorful/flavorful.wit',
                 '-m',
                 'language=javascript',
                 '-m',

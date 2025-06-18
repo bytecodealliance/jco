@@ -68,7 +68,7 @@ pub fn generate_types(
 ) -> Result<Vec<(String, Vec<u8>)>, anyhow::Error> {
     let mut files = files::Files::default();
 
-    ts_bindgen(&name, &resolve, world_id, &opts, &mut files)
+    ts_bindgen(name, &resolve, world_id, &opts, &mut files)
         .context("failed to generate Typescript bindings")?;
 
     let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
@@ -226,10 +226,10 @@ fn feature_gate_allowed(
 }
 
 /// Utility function for deducing whether a type can throw
-pub fn get_thrown_type<'a>(
-    resolve: &'a Resolve,
+pub fn get_thrown_type(
+    resolve: &Resolve,
     return_type: Option<Type>,
-) -> Option<(Option<&'a Type>, Option<&'a Type>)> {
+) -> Option<(Option<&Type>, Option<&Type>)> {
     match return_type {
         None => None,
         Some(ty) => match ty {
