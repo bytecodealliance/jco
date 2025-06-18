@@ -34,7 +34,7 @@ world component {
 }
 ```
 
-A component that implements the `component` world exports a single interface called `log-characters`, which consists of one function called `call`, which takes a string and outputs earch character on a new line using the `log-host.js` host function.
+A component that implements the `component` world exports a single interface called `log-characters`, which consists of one function called `call`, which takes a string and outputs each character on a new line using the `log-host.js` host function.
 
 > [!NOTE]
 > You can read more about [the WIT syntax][wit] online.
