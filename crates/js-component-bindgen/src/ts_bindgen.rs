@@ -136,7 +136,7 @@ pub fn ts_bindgen(
                     {
                         let import_specifier = resolve.id_of(*id).unwrap();
                         let (_, _, iface) = parse_world_key(&import_specifier).unwrap();
-                        debug!("skipping imported interface [{}] feature gate due to feature gate visibility", iface);
+                        debug!("skipping imported interface [{iface}] feature gate due to feature gate visibility");
                         continue;
                     }
 
