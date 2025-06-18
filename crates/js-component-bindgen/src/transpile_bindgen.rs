@@ -30,7 +30,7 @@ use crate::files::Files;
 use crate::function_bindgen::{
     ErrHandling, FunctionBindgen, RemoteResourceMap, ResourceData, ResourceMap, ResourceTable,
 };
-use crate::intrinsics::{render_intrinsics, Intrinsic};
+use crate::intrinsics::{render_intrinsics, DeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source;
 use crate::{core, get_thrown_type};
@@ -319,11 +319,12 @@ impl JsBindgen<'_> {
             }
         }
 
-        let js_intrinsics = render_intrinsics(
-            &mut self.all_intrinsics,
-            self.opts.no_nodejs_compat,
-            self.opts.instantiation.is_some(),
-        );
+        let js_intrinsics = render_intrinsics(RenderIntrinsicsArgs {
+            intrinsics: &mut self.all_intrinsics,
+            no_nodejs_compat: self.opts.no_nodejs_compat,
+            instantiation: self.opts.instantiation.is_some(),
+            determinism: DeterminismProfile::default(),
+        });
 
         if let Some(instantiation) = &self.opts.instantiation {
             uwrite!(
@@ -913,18 +914,17 @@ impl<'a> Instantiator<'a, '_> {
                 let task_cancel_fn = self.gen.intrinsic(Intrinsic::TaskCancel);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = () => {{ {task_cancel_fn}({}); }};\n",
-                    instance.as_u32()
+                    "const trampoline{i} = {task_cancel_fn}.bind(null, {instance_idx});\n",
+                    instance_idx = instance.as_u32(),
                 );
             }
 
             Trampoline::SubtaskCancel { instance, async_ } => {
-                let task_cancel_fn = self.gen.intrinsic(Intrinsic::TaskCancel);
+                let task_cancel_fn = self.gen.intrinsic(Intrinsic::SubtaskCancel);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {{ {task_cancel_fn}({}, {}, ...args); }};\n",
-                    instance.as_u32(),
-                    async_.then(|| "true").unwrap_or("false")
+                    "const trampoline{i} = {task_cancel_fn}.bind(null, {instance_idx}, {async_});\n",
+                    instance_idx = instance.as_u32(),
                 );
             }
 
@@ -944,15 +944,18 @@ impl<'a> Instantiator<'a, '_> {
                 let backpressure_set_fn = self.gen.intrinsic(Intrinsic::BackpressureSet);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {{ {backpressure_set_fn}({}, ...args); }} \n",
+                    "const trampoline{i} = {backpressure_set_fn}.bind(null, {});\n",
                     instance.as_u32(),
                 );
             }
 
             Trampoline::WaitableSetNew { instance } => {
-                let _ = instance;
-                // TODO: impl (won't compile without)
-                uwriteln!(self.src.js, "const trampoline{i} = () => {{ throw new Error('waitable-set-new not implemented') }};");
+                let waitable_set_new_fn = self.gen.intrinsic(Intrinsic::WaitableSetNew);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {waitable_set_new_fn}.bind(null, {});\n",
+                    instance.as_u32(),
+                );
             }
 
             Trampoline::WaitableSetWait {
@@ -960,8 +963,13 @@ impl<'a> Instantiator<'a, '_> {
                 async_,
                 memory,
             } => {
-                let _ = (instance, async_, memory);
-                todo!("Trampoline::WaitableSetWait");
+                let waitable_set_wait_fn = self.gen.intrinsic(Intrinsic::WaitableSetWait);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {waitable_set_wait_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
+                    instance_idx = instance.as_u32(),
+                    memory_idx = memory.as_u32(),
+                );
             }
 
             Trampoline::WaitableSetPoll {
@@ -969,27 +977,38 @@ impl<'a> Instantiator<'a, '_> {
                 async_,
                 memory,
             } => {
-                let _ = (instance, async_, memory);
-                todo!("Trampoline::WaitableSetPoll");
+                let waitable_set_poll_fn = self.gen.intrinsic(Intrinsic::WaitableSetPoll);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {waitable_set_poll_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
+                    instance_idx = instance.as_u32(),
+                    memory_idx = memory.as_u32(),
+                );
             }
 
             Trampoline::WaitableSetDrop { instance } => {
-                let _ = instance;
-                // TODO: impl (won't compile without)
-                uwriteln!(self.src.js, "const trampoline{i} = () => {{ throw new Error('waitable-set-drop not implemented') }};");
+                let waitable_set_drop_fn = self.gen.intrinsic(Intrinsic::WaitableSetDrop);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {waitable_set_drop_fn}.bind(null, {instance_idx});\n",
+                    instance_idx = instance.as_u32(),
+                );
             }
 
             Trampoline::WaitableJoin { instance } => {
-                let _ = instance;
-                // TODO: impl (won't compile without)
-                uwriteln!(self.src.js, "const trampoline{i} = () => {{ throw new Error('waitable-join not implemented') }};");
+                let waitable_join_fn = self.gen.intrinsic(Intrinsic::WaitableJoin);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {waitable_join_fn}.bind(null, {instance_idx});\n",
+                    instance_idx = instance.as_u32(),
+                );
             }
 
             Trampoline::Yield { async_ } => {
                 let yield_fn = self.gen.intrinsic(Intrinsic::Yield);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = () => {{ {yield_fn}({async_}); }};\n",
+                    "const trampoline{i} = {yield_fn}.bind(null, {async_});\n",
                 );
             }
 
