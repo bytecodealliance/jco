@@ -745,7 +745,7 @@ impl<'a> Instantiator<'a, '_> {
             uwrite!(definitions, "const {defined_resource_tables} = [");
             // Table per-resource
             for tidx in 0..self.component.num_resources {
-                let tid = TypeResourceTableIndex::from_u32(tidx as u32);
+                let tid = TypeResourceTableIndex::from_u32(tidx);
                 let rid = self.types[tid].ty;
                 if let Some(defined_index) = self.component.defined_resource_index(rid) {
                     if self.types[tid].instance
@@ -862,7 +862,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
         uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
-        self.resource_tables_initialized.insert(id.clone(), true);
+        self.resource_tables_initialized.insert(id, true);
     }
 
     fn instance_flags(&mut self) {
@@ -2190,7 +2190,7 @@ impl<'a> Instantiator<'a, '_> {
 
         // Build the import path depending on the kind of interface
         let mut import_path = Vec::with_capacity(2);
-        import_path.push(import_specifier.into());
+        import_path.push(import_specifier);
         if let Some(_iface_name) = iface_name {
             // Mapping can be used to construct virtual nested namespaces
             // which is used eg to support WASI interface groupings
@@ -2955,6 +2955,7 @@ impl<'a> Instantiator<'a, '_> {
         self.gen.esm_bindgen.populate_export_aliases();
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn export_bindgen(
         &mut self,
         local_name: &str,
@@ -2990,8 +2991,8 @@ impl<'a> Instantiator<'a, '_> {
             }
             None => {
                 // Strip prefix modifier for async, if present
-                let bare_fn_name = if func_name.starts_with("[async]") {
-                    &func_name[7..]
+                let bare_fn_name = if let Some(stripped) = func_name.strip_prefix("[async]") {
+                    stripped
                 } else {
                     func_name
                 };

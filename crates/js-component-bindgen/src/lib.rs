@@ -232,12 +232,10 @@ pub fn get_thrown_type(
 ) -> Option<(Option<&Type>, Option<&Type>)> {
     match return_type {
         None => None,
-        Some(ty) => match ty {
-            Type::Id(id) => match &resolve.types[id].kind {
-                TypeDefKind::Result(r) => Some((r.ok.as_ref(), r.err.as_ref())),
-                _ => None,
-            },
+        Some(Type::Id(id)) => match &resolve.types[id].kind {
+            TypeDefKind::Result(r) => Some((r.ok.as_ref(), r.err.as_ref())),
             _ => None,
         },
+        _ => None,
     }
 }

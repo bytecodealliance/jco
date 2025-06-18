@@ -1475,26 +1475,26 @@ pub fn render_intrinsics(
                 "));
             }
             Intrinsic::I32ToCharUtf16 => {
-                output.push_str(&format!("
-                    function _i32ToCharUTF16 = (n) => {{
-                        if (!n || typeof n !== 'number') {{ throw new Error('invalid i32'); }}
-                        if (n < 0) {{ throw new Error('i32 must be greater than zero'); }}
-                        if (n >= 0x110000) {{ throw new Error('invalid i32, out of range'); }}
-                        if (0xD800 <= n && n <= 0xDFFF) {{ throw new Error('invalid i32 out of range'); }}
+                output.push_str("
+                    function _i32ToCharUTF16 = (n) => {
+                        if (!n || typeof n !== 'number') { throw new Error('invalid i32'); }
+                        if (n < 0) { throw new Error('i32 must be greater than zero'); }
+                        if (n >= 0x110000) { throw new Error('invalid i32, out of range'); }
+                        if (0xD800 <= n && n <= 0xDFFF) { throw new Error('invalid i32 out of range'); }
                         return String.fromCharCode(n);
-                    }}
-                "));
+                    }
+                ");
             }
             Intrinsic::I32ToCharUtf8 => {
-                output.push_str(&format!("
-                    function _i32ToCharUTF8 = (n) => {{
-                        if (!n || typeof n !== 'number') {{ throw new Error('invalid i32'); }}
-                        if (n < 0) {{ throw new Error('i32 must be greater than zero'); }}
-                        if (n >= 0x110000) {{ throw new Error('invalid i32, out of range'); }}
-                        if (0xD800 <= n && n <= 0xDFFF) {{ throw new Error('invalid i32 out of range'); }}
+                output.push_str("
+                    function _i32ToCharUTF8 = (n) => {
+                        if (!n || typeof n !== 'number') { throw new Error('invalid i32'); }
+                        if (n < 0) { throw new Error('i32 must be greater than zero'); }
+                        if (n >= 0x110000) { throw new Error('invalid i32, out of range'); }
+                        if (0xD800 <= n && n <= 0xDFFF) { throw new Error('invalid i32 out of range'); }
                         return new TextDecoder().decode(new Uint8Array([n]));
-                    }}
-                "));
+                    }
+                ");
             }
             Intrinsic::LiftFlatBoolFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
