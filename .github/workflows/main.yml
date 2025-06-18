@@ -183,10 +183,6 @@ jobs:
           rustup target add wasm32-unknown-unknown
           rustup target add wasm32-wasip1
 
-      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
-        with:
-          tool: wasm-tools
-
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "latest"
@@ -254,10 +250,6 @@ jobs:
           rustup update stable --no-self-update && rustup default stable
           rustup target add wasm32-unknown-unknown
           rustup target add wasm32-wasip1
-
-      - uses: taiki-e/cache-cargo-install-action@4d586f211d9b0bca9e7b59e57e2a0febf36c0929 # v2.1.1
-        with:
-          tool: wasm-tools
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
