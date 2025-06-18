@@ -1,0 +1,12 @@
+package example:host-logging@0.1.0;
+
+@since(version = 0.1.0)
+interface log-characters {
+    call: func(s: string);
+}
+
+world component {
+    import wasi:logging/logging@0.1.0-draft;
+
+    export log-characters;
+}
