@@ -33,14 +33,12 @@ wasm-tools metadata add \
     -o ../../lib/wasi_snapshot_preview1.command.wasm
 
 # replace the existing fixtures with our newly created files
-mv ../../test/fixtures/wit/deps/flavorful ../../test/fixtures/wit/
-rm -r ../../test/fixtures/wit/deps/cli
-rm -r ../../test/fixtures/wit/deps/clocks
-rm -r ../../test/fixtures/wit/deps/filesystem
-rm -r ../../test/fixtures/wit/deps/http
-rm -r ../../test/fixtures/wit/deps/io
-rm -r ../../test/fixtures/wit/deps/random
-rm -r ../../test/fixtures/wit/deps/sockets
-cp -r crates/wasi/wit/deps ../../test/fixtures/wit/
-cp -r crates/wasi-http/wit/deps/http ../../test/fixtures/wit/deps/
-mv ../../test/fixtures/wit/flavorful ../../test/fixtures/wit/deps/
+rm -r ../../test/fixtures/p2/wit/deps/cli
+rm -r ../../test/fixtures/p2/wit/deps/clocks
+rm -r ../../test/fixtures/p2/wit/deps/filesystem
+rm -r ../../test/fixtures/p2/wit/deps/http
+rm -r ../../test/fixtures/p2/wit/deps/io
+rm -r ../../test/fixtures/p2/wit/deps/random
+rm -r ../../test/fixtures/p2/wit/deps/sockets
+cp -r crates/wasi/wit/deps ../../test/fixtures/p2/wit/
+cp -r crates/wasi-http/wit/deps/http ../../test/fixtures/p2/wit/deps/

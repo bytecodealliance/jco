@@ -136,7 +136,7 @@ pub fn ts_bindgen(
                     {
                         let import_specifier = resolve.id_of(*id).unwrap();
                         let (_, _, iface) = parse_world_key(&import_specifier).unwrap();
-                        debug!("skipping imported interface [{}] feature gate due to feature gate visibility", iface);
+                        debug!("skipping imported interface [{iface}] feature gate due to feature gate visibility");
                         continue;
                     }
 
@@ -528,21 +528,13 @@ impl TsBindgen {
         declaration: bool,
     ) {
         let mut gen = TsInterface::new(resolve, false, self.is_guest);
-        let async_exports = self.async_exports.clone();
         let id_name = &resolve.worlds[world].name;
+
         for (_, func) in funcs {
-            let func_name = &func.name;
-            let is_async = async_exports.contains(func_name)
-                || async_exports.contains(&format!("{id_name}#{func_name}"))
-                || id_name
-                    .find('@')
-                    .map(|i| {
-                        async_exports
-                            .contains(&format!("{}#{func_name}", id_name.get(0..i).unwrap()))
-                    })
-                    .unwrap_or(false);
+            let is_async = should_render_async(func, id_name, &self.async_exports);
             gen.ts_func(func, false, declaration, is_async);
         }
+
         let (src, references) = gen.finish();
         self.export_object.push_str(&src);
         self.references.extend(references);
@@ -599,15 +591,17 @@ impl TsBindgen {
             // Generate function definitions
             let is_world_export = false; // TODO
             let async_funcs = if is_world_export {
-                self.async_exports.clone()
+                &self.async_exports
             } else {
-                self.async_imports.clone()
+                &self.async_imports
             };
+
             let iface = &resolve.interfaces[id];
             let package = resolve
                 .packages
                 .get(iface.package.expect("missing package on interface"))
                 .expect("unexpectedly missing package");
+
             for (_, func) in iface.functions.iter() {
                 // Ensure that the function  the world item for stability guarantees and exclude if they do not match
                 if !feature_gate_allowed(resolve, package, &func.stability, &func.name)
@@ -615,16 +609,7 @@ impl TsBindgen {
                 {
                     continue;
                 }
-                let func_name = &func.name;
-                let is_async = is_world_export && async_funcs.contains(func_name)
-                    || async_funcs.contains(&format!("{id_name}#{func_name}"))
-                    || id_name
-                        .find('@')
-                        .map(|i| {
-                            async_funcs
-                                .contains(&format!("{}#{func_name}", id_name.get(0..i).unwrap()))
-                        })
-                        .unwrap_or(false);
+                let is_async = should_render_async(func, &id_name, async_funcs);
                 gen.ts_func(func, false, true, is_async);
             }
 
@@ -856,20 +841,25 @@ impl<'a> TsInterface<'a> {
         self.src.push_str("]");
     }
 
-    fn ts_func(&mut self, func: &Function, default: bool, declaration: bool, is_async: bool) {
-        let iface = if let FunctionKind::Method(ty)
-        | FunctionKind::Static(ty)
-        | FunctionKind::Constructor(ty) = func.kind
+    fn iface_for<'i>(&'i mut self, func: &Function) -> &'i mut TsInterface<'a> {
+        if let FunctionKind::Method(idx)
+        | FunctionKind::AsyncMethod(idx)
+        | FunctionKind::Static(idx)
+        | FunctionKind::AsyncStatic(idx)
+        | FunctionKind::Constructor(idx) = func.kind
         {
-            let ty = &self.resolve.types[ty];
+            let ty = &self.resolve.types[idx];
             let resource = ty.name.clone().unwrap();
             self.resources
                 .entry(resource)
                 .or_insert_with(|| TsInterface::new(self.resolve, false, self.is_guest))
         } else {
             self
-        };
+        }
+    }
 
+    fn ts_func(&mut self, func: &Function, default: bool, declaration: bool, is_async: bool) {
+        let iface = self.iface_for(func);
         iface.docs(&func.docs);
 
         let out_name = if default {
@@ -878,15 +868,17 @@ impl<'a> TsInterface<'a> {
             func.item_name().to_lower_camel_case()
         };
 
-        let maybe_async = if is_async { "async " } else { "" };
+        let escaped_name = if is_js_identifier(&out_name) {
+            out_name.to_string()
+        } else {
+            format!("'{out_name}'")
+        };
 
         if declaration {
             match func.kind {
-                FunctionKind::Freestanding => {
+                FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                     if is_js_identifier(&out_name) {
-                        iface
-                            .src
-                            .push_str(&format!("export {maybe_async}function {out_name}"));
+                        iface.src.push_str(&format!("export function {out_name}"));
                     } else {
                         let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
                         iface
@@ -894,68 +886,23 @@ impl<'a> TsInterface<'a> {
                             .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
                         iface
                             .src
-                            .push_str(&format!("declare {maybe_async}function {local_name}"));
-                    };
-                }
-                FunctionKind::Method(_) => {
-                    if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("{maybe_async}{out_name}"));
-                    } else {
-                        iface.src.push_str(&format!("{maybe_async}'{out_name}'"));
-                    }
-                }
-                FunctionKind::Static(_) => {
-                    if is_js_identifier(&out_name) {
-                        iface
-                            .src
-                            .push_str(&format!("static {maybe_async}{out_name}"))
-                    } else {
-                        iface
-                            .src
-                            .push_str(&format!("static {maybe_async}'{out_name}'"))
+                            .push_str(&format!("declare function {local_name}"));
                     }
                 }
                 FunctionKind::Constructor(_) => {
                     iface.has_constructor = true;
                     iface.src.push_str("constructor");
                 }
-                FunctionKind::AsyncFreestanding => {
-                    if is_js_identifier(&out_name) {
-                        iface
-                            .src
-                            .push_str(&format!("export async function {out_name}"));
-                    } else {
-                        let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
-                        iface
-                            .src
-                            .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
-                        iface
-                            .src
-                            .push_str(&format!("declare async function {local_name}"));
-                    };
+                FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
+                    iface.src.push_str(&format!("static {escaped_name}"));
                 }
-                FunctionKind::AsyncMethod(_) => {
-                    if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("async {out_name}"));
-                    } else {
-                        iface.src.push_str(&format!("async '{out_name}'"));
-                    }
-                }
-                FunctionKind::AsyncStatic(_) => {
-                    if is_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("static async {out_name}"))
-                    } else {
-                        iface.src.push_str(&format!("static async '{out_name}'"))
-                    }
+                FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
+                    iface.src.push_str(&escaped_name);
                 }
             }
-        } else if is_js_identifier(&out_name) {
-            iface.src.push_str(&format!("{maybe_async}{out_name}"));
         } else {
-            iface.src.push_str(&format!("{maybe_async}'{out_name}'"));
+            iface.src.push_str(&escaped_name);
         }
-
-        let end_character = if declaration { ';' } else { ',' };
 
         iface.src.push_str("(");
 
@@ -1010,6 +957,7 @@ impl<'a> TsInterface<'a> {
             iface.src.push_str(">");
         }
 
+        let end_character = if declaration { ';' } else { ',' };
         iface.src.push_str(format!("{}\n", end_character).as_str());
     }
 
@@ -1264,4 +1212,34 @@ fn generate_references(references: &BTreeSet<String>) -> String {
         uwriteln!(out, "/// <reference path=\"{}\" />", reference);
     }
     out
+}
+
+fn should_render_async(func: &Function, id: &str, async_funcs: &HashSet<String>) -> bool {
+    let name = func.name.as_str();
+
+    if async_funcs.contains(name) {
+        return true;
+    }
+
+    let qualified_name = format!("{id}#{name}");
+    if async_funcs.contains(&qualified_name) {
+        return true;
+    }
+
+    if let Some(pos) = id.find('@') {
+        let namespace = &id[..pos];
+        let namespaced_name = format!("{namespace}#{name}");
+
+        if async_funcs.contains(&namespaced_name) {
+            return true;
+        }
+    }
+
+    // Fallback to taking value straight from wit
+    matches!(
+        func.kind,
+        FunctionKind::AsyncMethod(_)
+            | FunctionKind::AsyncStatic(_)
+            | FunctionKind::AsyncFreestanding
+    )
 }

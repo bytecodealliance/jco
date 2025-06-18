@@ -7,13 +7,16 @@
   "types": "./types/index.d.ts",
   "exports": {
     ".": {
-      "node": "./lib/nodejs/index.js"
+      "node": "./lib/nodejs/index.js",
+      "types": "./types/index.d.ts"
     },
     "./*": {
-      "node": "./lib/nodejs/*.js"
+      "node": "./lib/nodejs/*.js",
+      "types": "./types/*.d.ts"
     }
   },
   "scripts": {
+    "compile:check": "tsc --noEmit types/index.d.ts",
     "fmt": "prettier . --write",
     "lint": "eslint -c ../../eslint.config.mjs --ext .js lib test",
     "lint:fix": "eslint -c ../../eslint.config.mjs --ext .js lib test --fix",

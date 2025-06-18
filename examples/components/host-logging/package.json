@@ -1,0 +1,15 @@
+{
+  "name": "host-logging",
+  "description": "Codebase for implementing a host function via WebAssembly with jco",
+  "type": "module",
+  "scripts": {
+    "build": "jco componentize component.js --wit wit --world-name component --out component.wasm --disable all",
+    "transpile": "jco transpile component.wasm --map 'wasi:logging/logging=./log-host.js' -o dist/transpiled; cp log-host.js dist/transpiled",
+    "transpiled-js": "node run-transpiled.js",
+    "all": "npm run build; npm run transpile; npm run transpiled-js"
+  },
+  "dependencies": {
+    "@bytecodealliance/jco": "^1.11.1",
+    "@bytecodealliance/componentize-js": "0.17.0"
+  }
+}
