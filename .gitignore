@@ -29,3 +29,8 @@ test/fixtures/modules/hello_stdout.component.wasm
 # Jco
 packages/jco/obj
 packages/jco/test/output
+
+# Pre-compiled output used by subprojects
+#
+# While the vendor folder should be present, no contents should be checked in
+packages/jco-transpile/vendor/*

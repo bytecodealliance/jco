@@ -17,7 +17,7 @@ This means we can WebAssembly components built in Javascript (or other languages
 
 ## Transpiling a Component
 
-Given an existing WebAssembly component (e.g. `add.wasm`), we can "transpile" the component into runnable Javscript by using `jco tranpsile`:
+Given an existing WebAssembly component (e.g. `add.wasm`), we can "transpile" the component into runnable Javscript by using `jco transpile`:
 
 ```console
 jco transpile add.wasm -o out-dir

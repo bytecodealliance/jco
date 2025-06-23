@@ -1,3 +1,4 @@
+/** Browser shim for Ora */
 export default function ora(): Ora;
 declare class Ora {
     start(): void;

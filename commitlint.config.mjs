@@ -24,7 +24,7 @@ const config = {
         'scope-enum': [
             1,
             'always',
-            ['jco', 'bindgen', 'p2-shim', 'p3-shim', 'deps', 'ci'],
+            ['jco', 'bindgen', 'p2-shim', 'p3-shim', 'deps', 'ci', 'transpile'],
         ],
         'scope-case': [2, 'always', 'lower-case'],
         'body-max-line-length': [1, 'always', 100],

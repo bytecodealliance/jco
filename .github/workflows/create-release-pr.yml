@@ -12,6 +12,7 @@ on:
         default: "jco"
         options:
           - jco
+          - jco-transpile
           - js-component-bindgen
           - preview2-shim
           - preview3-shim
@@ -80,6 +81,11 @@ jobs:
 
           case $PROJECT in
             jco)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              ;;
+            jco-transpile)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;

@@ -7,6 +7,8 @@ on:
     tags:
       - "jco-v[0-9]+.[0-9]+.[0-9]+*"
       - "jco-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "jco-transpile-v[0-9]+.[0-9]+.[0-9]+*"
+      - "jco-transpile-v[0-9]+.[0-9]+.[0-9]+-*"
       - "preview2-shim-v[0-9]+.[0-9]+.[0-9]+*"
       - "preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
       - "preview3-shim-v[0-9]+.[0-9]+.[0-9]+*"
@@ -16,6 +18,8 @@ on:
     branches:
       - "prep-release-jco-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-jco-v[0-9]+.[0-9]+.[0-9]+-*"
+      - "prep-release-jco-transpile-v[0-9]+.[0-9]+.[0-9]+*"
+      - "prep-release-jco-transpile-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+*"
       - "prep-release-preview2-shim-v[0-9]+.[0-9]+.[0-9]+-*"
       - "prep-release-preview3-shim-v[0-9]+.[0-9]+.[0-9]+*"
@@ -31,6 +35,7 @@ on:
         default: "jco"
         options:
           - jco
+          - jco-transpile
           - js-component-bindgen
           - preview2-shim
           - preview3-shim
@@ -124,6 +129,13 @@ jobs:
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
               export ARTIFACT_NAME="bytecodealliance-jco-$NEXT_VERSION.tgz";
+              ;;
+            jco-transpile)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              export ARTIFACTS_GLOB="bytecodealliance-jco-transpile-*.tgz";
+              export ARTIFACT_NAME="bytecodealliance-jco-transpile-$NEXT_VERSION.tgz";
               ;;
             preview2-shim)
               export PROJECT_DIR="$PWD/packages/$PROJECT";

@@ -2,6 +2,7 @@
   "name": "jco",
   "workspaces": [
     "packages/jco",
+    "packages/jco-transpile",
     "packages/preview2-shim",
     "packages/preview3-shim",
     "examples/components/add",

@@ -145,7 +145,7 @@ suite('WIT', () => {
         );
     });
 
-    // (transpile): features marked @unstable shoudl be present in exports when only the specific feature is enabled
+    // (transpile): features marked @unstable should be present in exports when only the specific feature is enabled
     //
     // NOTE: this works primarily the features are fed through to the `wit_parser::Resolve` that is used,
     // not due to active filtering on the jco side.
@@ -201,7 +201,7 @@ suite('WIT', () => {
         );
     });
 
-    // (transpile): features marked @unstable shoudl be present in exports when all features are enabled
+    // (transpile): features marked @unstable should be present in exports when all features are enabled
     //
     // NOTE: this works primarily the features are fed through to the `wit_parser::Resolve` that is used,
     // not due to active filtering on the jco side.
@@ -294,7 +294,7 @@ suite('WIT', () => {
     test('Feature gates (types, single feature enabled)', async () => {
         const files = await types(featureGatesWitPath, {
             worldName: 'import-and-export',
-            feature: ['fancier-foo'],
+            features: ['fancier-foo'],
         });
         assert.ok(
             files['import-and-export.d.ts'],

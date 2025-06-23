@@ -155,7 +155,7 @@ npm run transpiled-js
 > [!NOTE]
 > You might have noticed that [Typescript declaration files][ts-decl-files] were also produced.
 >
-> As Typescript tranpsiles to Javascript, you *can* build WebAssembly components with Typescript
+> As Typescript transpiles to Javascript, you *can* build WebAssembly components with Typescript
 > granted you bring a transpiler (like `tsc`), and use the generated declaration files.
 >
 

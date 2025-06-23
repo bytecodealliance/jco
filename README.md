@@ -46,6 +46,7 @@ As Jco aims to do many things, it contains many subprojects that are organized i
 | Subproject                       | Language   | Directory                               | Description                                                                                     |
 |----------------------------------|------------|-----------------------------------------|-------------------------------------------------------------------------------------------------|
 | `jco`                            | Javascript | `packages/jco`                          | The `jco` CLI                                                                                   |
+| `jco-transpile`                  | Javascript | `packages/jco-transpile`                | WebAssembly Component Transpilation functionaltiy                                               |
 | `preview2-shim`                  | Javascript | `packages/preview2-shim`                | Library that provides a mapping of [WASI Preview 2][wasi-p2] for NodeJS and Browsers            |
 | `preview3-shim`                  | Javascript | `packages/preview3-shim`                | Library that provides a mapping of WASI Preview 3 for NodeJS                                    |
 | `js-component-bindgen`           | Rust       | `crates/js-component-bindgen`           | Enables `jco transpile` and other features, reusing the Rust WebAssembly ecosystem              |
