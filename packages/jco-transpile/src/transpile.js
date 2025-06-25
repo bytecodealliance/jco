@@ -1,19 +1,11 @@
 import { Buffer } from 'node:buffer';
 import { extname, basename, resolve } from 'node:path';
 
-import ora from 'ora';
-import c from 'chalk-template';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
 
 import { runOptimizeComponent } from './opt.js';
-import {
-    readFile,
-    runWASMTransformProgram,
-    setShowSpinner,
-    getShowSpinner,
-    isWindows,
-} from './common.js';
+import { readFile, runWASMTransformProgram, isWindows } from './common.js';
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 
 import {
@@ -91,10 +83,6 @@ export async function transpile(componentPath, opts) {
         }
     }
 
-    if (!opts?.quiet) {
-        setShowSpinner(true);
-    }
-
     if (!opts?.name) {
         opts.name = basename(
             componentPath.slice(0, -extname(componentPath).length || Infinity)
@@ -155,13 +143,7 @@ export async function runTranspileComponent(component, opts = {}) {
         opts.wasiShim = false;
     }
 
-    let spinner;
-    const showSpinner = getShowSpinner();
-
     if (opts.optimize) {
-        if (showSpinner) {
-            setShowSpinner(true);
-        }
         ({ component } = await runOptimizeComponent(component, opts));
     }
 
@@ -237,8 +219,6 @@ export async function runTranspileComponent(component, opts = {}) {
                 opts,
                 inputJS: jsFiles[1],
                 files,
-                showSpinner,
-                spinner,
                 instantiation,
                 imports,
                 exports,
@@ -316,15 +296,7 @@ export async function runTranspileComponent(component, opts = {}) {
  * @returns {Promise<string>} A Promise that resolves when javascript has been generated
  */
 async function generateJS(args) {
-    const {
-        opts,
-        inputJS,
-        showSpinner,
-        spinner,
-        instantiation,
-        imports,
-        exports,
-    } = args;
+    const { opts, inputJS, instantiation, imports, exports } = args;
     let files = args.files;
 
     const withInstantiation = opts.instantiation !== undefined;
@@ -350,34 +322,17 @@ async function generateJS(args) {
     // Filter out wasm files
     files = files.filter(([name]) => !name.endsWith('.wasm'));
 
-    // Configure the spinner.
-    let completed = 0;
-    const spinnerText = () =>
-        c`{cyan ${completed} / ${wasmFiles.length}} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
-    if (showSpinner) {
-        spinner = ora({
-            color: 'cyan',
-            spinner: 'bouncingBar',
-        }).start();
-        spinner.text = spinnerText();
-    }
-
     // Compile all Wasm modules into ASM.js codes.
-    try {
-        const asmFiles = await Promise.all(
-            wasmFiles.map(async ([, source]) => {
-                const output = (await wasm2Js(source)).toString('utf8');
-                if (spinner) {
-                    completed++;
-                    spinner.text = spinnerText();
-                }
-                return output;
-            })
-        );
+    const asmFiles = await Promise.all(
+        wasmFiles.map(async ([, source]) => {
+            const output = (await wasm2Js(source)).toString('utf8');
+            return output;
+        })
+    );
 
-        const asms = asmFiles
-            .map(
-                (asm, nth) => `function asm${nth}(imports) {
+    const asms = asmFiles
+        .map(
+            (asm, nth) => `function asm${nth}(imports) {
   ${
       // strip and replace the asm instantiation wrapper
       asm
@@ -389,13 +344,13 @@ async function generateJS(args) {
           .replace('memory.grow = __wasm_memory_grow;', '')
           .trim()
   }`
-            )
-            .join(',\n');
+        )
+        .join(',\n');
 
-        // The `instantiate` function.
-        const instantiateFunction = `${
-            withInstantiation ? 'export ' : ''
-        }${async_}function instantiate(imports) {
+    // The `instantiate` function.
+    const instantiateFunction = `${
+        withInstantiation ? 'export ' : ''
+    }${async_}function instantiate(imports) {
   const wasm_file_to_asm_index = {
     ${wasmFiles
         .map(([path], nth) => `'${basename(path)}': ${nth}`)
@@ -409,41 +364,41 @@ async function generateJS(args) {
   );
 }`;
 
-        // If `--js` is used without `--instantiation`.
-        let importDirectives = '';
-        let exportDirectives = '';
-        let exportTrampolines = '';
-        let autoInstantiate = '';
+    // If `--js` is used without `--instantiation`.
+    let importDirectives = '';
+    let exportDirectives = '';
+    let exportTrampolines = '';
+    let autoInstantiate = '';
 
-        if (!withInstantiation) {
-            importDirectives = imports
-                .map(
-                    (import_file, nth) =>
-                        `import * as import${nth} from '${import_file}';`
-                )
-                .join('\n');
+    if (!withInstantiation) {
+        importDirectives = imports
+            .map(
+                (import_file, nth) =>
+                    `import * as import${nth} from '${import_file}';`
+            )
+            .join('\n');
 
-            if (exports.length > 0 || opts.tlaCompat) {
-                exportDirectives = `export {
+        if (exports.length > 0 || opts.tlaCompat) {
+            exportDirectives = `export {
 ${
     // Exporting `$init` must come first to not break the transpiling tests.
     opts.tlaCompat ? '  $init,\n' : ''
 }${exports
-                    .map(([name]) => {
-                        if (name === asmMangle(name)) {
-                            return `  ${name},`;
-                        } else {
-                            return `  ${asmMangle(name)} as '${name}',`;
-                        }
-                    })
-                    .join('\n')}
+                .map(([name]) => {
+                    if (name === asmMangle(name)) {
+                        return `  ${name},`;
+                    } else {
+                        return `  ${asmMangle(name)} as '${name}',`;
+                    }
+                })
+                .join('\n')}
 }`;
-            }
+        }
 
-            exportTrampolines = `let ${exports
-                .filter(([, ty]) => ty === 'function')
-                .map(([name]) => `_${asmMangle(name)}`)
-                .join(', ')};
+        exportTrampolines = `let ${exports
+            .filter(([, ty]) => ty === 'function')
+            .map(([name]) => `_${asmMangle(name)}`)
+            .join(', ')};
 ${exports
     .map(([name, ty]) => {
         if (ty === 'function') {
@@ -456,7 +411,7 @@ ${exports
     })
     .join('\n')}`;
 
-            autoInstantiate = `${async_}function $init() {
+        autoInstantiate = `${async_}function $init() {
   ( {
 ${exports
     .map(([name, ty]) => {
@@ -479,10 +434,10 @@ ${imports
 }
 
 ${opts.tlaCompat ? '' : `${await_}$init();`}`;
-        }
+    }
 
-        // Prepare the final generated code.
-        const outSource = `${importDirectives}
+    // Prepare the final generated code.
+    const outSource = `${importDirectives}
 
 ${source}
 
@@ -496,12 +451,7 @@ ${exportDirectives}
 
 ${autoInstantiate}`;
 
-        return outSource;
-    } finally {
-        if (spinner) {
-            spinner.stop();
-        }
-    }
+    return outSource;
 }
 
 // emscripten asm mangles specifiers to be valid identifiers

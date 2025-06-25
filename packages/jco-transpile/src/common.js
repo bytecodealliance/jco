@@ -15,27 +15,6 @@ import c from 'chalk-template';
 /** Detect a windows environment */
 export const isWindows = platform === 'win32';
 
-let _showSpinner = false;
-/**
- * Set whether the spinner is shown
- *
- * @param {boolean} val - whether the spinner is shown
- */
-export function setShowSpinner(val) {
-    _showSpinner = val;
-}
-
-/**
- * Get whether the spinner is shown
- *
- * @returns {boolean} whether the spinner is shown
- */
-export function getShowSpinner() {
-    const showSpinner = _showSpinner;
-    _showSpinner = false;
-    return showSpinner;
-}
-
 /** Default number of significant figures to use */
 const DEFAULT_SIGNIFICANT_DIGITS = 4;
 
