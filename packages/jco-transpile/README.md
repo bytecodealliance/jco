@@ -24,7 +24,7 @@ To transpile an existing WebAssembly component (path on disk, `Buffer`):
 import { transpile } from '@bytecodealliance/jco-transpile';
 
 async function example() {
-    await transpile('path/to/your/component.wasm');
+    await transpile('path/to/component.wasm');
 }
 ```
 
@@ -39,7 +39,7 @@ To generate host types:
 import { generateHostTypes } from '@bytecodealliance/jco-transpile';
 
 async function example() {
-    await generateHostTypes('path/to/your/wit, { outDir: 'path/to/output/dir' });
+    await generateHostTypes('path/to/wit/dir-or-file, { outDir: 'path/to/output/dir' });
 }
 ```
 
@@ -56,7 +56,7 @@ To generate guest types:
 import { generateGuestTypes } from '@bytecodealliance/jco-transpile';
 
 async function example() {
-    await generateGuestTypes('path/to/your/wit, { outDir: 'path/to/output/dir' });
+    await generateGuestTypes('path/to/wit/dir-or-file, { outDir: 'path/to/output/dir' });
 }
 ```
 
