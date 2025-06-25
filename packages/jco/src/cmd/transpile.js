@@ -70,7 +70,11 @@ export async function guestTypes(witPath, opts) {
  *   asyncImports?: string[],
  *   asyncExports?: string[],
  *   outDir?: string,
+ *   allFeatures?: bool,
+ *   feature?: string[] | 'all', // backwards compat
  *   features?: string[] | 'all',
+ *   asyncWasiImports?: string[],
+ *   asyncWasiExports?: string[],
  *   guest?: bool,
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
@@ -96,6 +100,8 @@ export async function typesComponent(witPath, opts) {
         features = { tag: 'all' };
     } else if (Array.isArray(opts.feature)) {
         features = { tag: 'list', val: opts.feature };
+    } else if (Array.isArray(opts.features)) {
+        features = { tag: 'list', val: opts.features };
     }
 
     if (opts.asyncWasiImports) {
