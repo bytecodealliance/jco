@@ -20,13 +20,13 @@ export function typesComponent(witPath: string, opts: {
     name?: string;
     worldName?: string;
     instantiation?: "async" | "sync";
-    tlaCompat?: bool;
+    tlaCompat?: boolean;
     asyncMode?: string;
     asyncImports?: string[];
     asyncExports?: string[];
     outDir?: string;
     features?: string[] | "all";
-    guest?: bool;
+    guest?: boolean;
 }): Promise<{
     [filename: string]: Uint8Array;
 }>;
@@ -66,18 +66,18 @@ export function transpileComponent(component: Uint8Array, opts?: {
     asyncMode?: string;
     asyncImports?: string[];
     asyncExports?: string[];
-    validLiftingOptimization?: bool;
-    tracing?: bool;
-    nodejsCompat?: bool;
-    tlaCompat?: bool;
-    base64Cutoff?: bool;
-    js?: bool;
-    minify?: bool;
-    optimize?: bool;
-    namespacedExports?: bool;
+    validLiftingOptimization?: boolean;
+    tracing?: boolean;
+    nodejsCompat?: boolean;
+    tlaCompat?: boolean;
+    base64Cutoff?: boolean;
+    js?: boolean;
+    minify?: boolean;
+    optimize?: boolean;
+    namespacedExports?: boolean;
     outDir?: string;
-    multiMemory?: bool;
-    experimentalIdlImports?: bool;
+    multiMemory?: boolean;
+    experimentalIdlImports?: boolean;
     optArgs?: string[];
 }): Promise<{
     files: {
