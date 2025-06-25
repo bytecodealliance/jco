@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 
 import {
     $init as $initBindgenComponent,
