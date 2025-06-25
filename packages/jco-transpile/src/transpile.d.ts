@@ -1,10 +1,10 @@
 import { Command } from 'commander';
 
-type TypeGEnerationOptions = {
+type TypeGenerationOptions = {
     name?: string;
     worldName?: string;
     instantiation?: 'async' | 'sync';
-    tlaCompat?: bool;
+    tlaCompat?: boolean;
     asyncMode?: string;
     asyncImports?: string[];
     asyncExports?: string[];
@@ -13,7 +13,7 @@ type TypeGEnerationOptions = {
     allFeatures?: boolean;
     asyncWasiImports?: boolean;
     asyncWasiExports?: boolean;
-    guest?: bool;
+    guest?: boolean;
 };
 
 export function types(
@@ -62,18 +62,18 @@ type TranspilationOptions = {
     asyncExports?: string[];
     asyncWasiImports?: string[];
     asyncWasiExports?: string[];
-    validLiftingOptimization?: bool;
-    tracing?: bool;
-    nodejsCompat?: bool;
-    tlaCompat?: bool;
-    base64Cutoff?: bool;
-    js?: bool;
-    minify?: bool;
-    optimize?: bool;
-    namespacedExports?: bool;
+    validLiftingOptimization?: boolean;
+    tracing?: boolean;
+    nodejsCompat?: boolean;
+    tlaCompat?: boolean;
+    base64Cutoff?: boolean;
+    js?: boolean;
+    minify?: boolean;
+    optimize?: boolean;
+    namespacedExports?: boolean;
     outDir?: string;
-    multiMemory?: bool;
-    experimentalIdlImports?: bool;
+    multiMemory?: boolean;
+    experimentalIdlImports?: boolean;
     optArgs?: string[];
 };
 

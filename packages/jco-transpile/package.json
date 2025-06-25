@@ -15,12 +15,26 @@
       "email": "vadossi@cosmonic.com"
     }
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytecodealliance/jco.git"
+  },
+  "license": "(Apache-2.0 WITH LLVM-exception)",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/jco/issues"
+  },
+  "homepage": "https://github.com/bytecodealliance/jco#readme",
   "keywords": [
     "Wasm",
     "WebAssembly",
     "Component"
   ],
   "type": "module",
+  "files": [
+    "types",
+    "vendor",
+    "src"
+  ],
   "types": "./types/index.d.ts",
   "exports": {
     ".": {
@@ -35,18 +49,9 @@
     "setup:vendor": "npm run -w @bytecodealliance/jco build && cp -r ../jco/obj/* vendor",
     "prepack": "npm run setup:vendor"
   },
-  "files": [
-    "types",
-    "vendor",
-    "src"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/bytecodealliance/jco.git"
-  },
-  "license": "(Apache-2.0 WITH LLVM-exception)",
-  "bugs": {
-    "url": "https://github.com/bytecodealliance/jco/issues"
-  },
-  "homepage": "https://github.com/bytecodealliance/jco#readme"
+  "dependencies": {
+    "@bytecodealliance/preview2-shim": "^0.17.2",
+    "chalk-template": "^1",
+    "terser": "^5"
+  }
 }

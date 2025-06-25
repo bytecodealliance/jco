@@ -1,5 +1,5 @@
 /** WASI imports that should be considered asynchronous when present */
-const ASYNC_WASI_IMPORTS = [
+export const ASYNC_WASI_IMPORTS = [
     'wasi:io/poll#poll',
     'wasi:io/poll#[method]pollable.block',
     'wasi:io/streams#[method]input-stream.blocking-read',
@@ -11,7 +11,7 @@ const ASYNC_WASI_IMPORTS = [
 ];
 
 /** WASI exports that should be considered asynchronous when present */
-const ASYNC_WASI_EXPORTS = [
+export const ASYNC_WASI_EXPORTS = [
     'wasi:cli/run#run',
     'wasi:http/incoming-handler#handle',
 ];

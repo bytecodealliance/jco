@@ -4,7 +4,7 @@ type TypeGenerationOptions = {
     name?: string;
     worldName?: string;
     instantiation?: 'async' | 'sync';
-    tlaCompat?: bool;
+    tlaCompat?: boolean;
     asyncMode?: string;
     asyncImports?: string[];
     asyncExports?: string[];
@@ -13,7 +13,7 @@ type TypeGenerationOptions = {
     allFeatures?: boolean;
     asyncWasiImports?: boolean;
     asyncWasiExports?: boolean;
-    guest?: bool;
+    guest?: boolean;
 };
 
 export function generateHostTypes(

@@ -1,11 +1,10 @@
-import { dirname, normalize, resolve, sep } from 'node:path';
+import { normalize, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
     readFile as fsReadFile,
     writeFile,
     rm,
     mkdtemp,
-    mkdir,
 } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
@@ -14,27 +13,6 @@ import c from 'chalk-template';
 
 /** Detect a windows environment */
 export const isWindows = platform === 'win32';
-
-let _showSpinner = false;
-/**
- * Set whether the spinner is shown
- *
- * @param {boolean} val - whether the spinner is shown
- */
-export function setShowSpinner(val) {
-    _showSpinner = val;
-}
-
-/**
- * Get whether the spinner is shown
- *
- * @returns {boolean} whether the spinner is shown
- */
-export function getShowSpinner() {
-    const showSpinner = _showSpinner;
-    _showSpinner = false;
-    return showSpinner;
-}
 
 /** Default number of significant figures to use */
 const DEFAULT_SIGNIFICANT_DIGITS = 4;
@@ -141,7 +119,7 @@ export async function getTmpDir() {
 export async function readFile(file, encoding) {
     try {
         return await fsReadFile(file, encoding);
-    } catch (err) {
+    } catch {
         throw c`Unable to read file {bold ${file}}`;
     }
 }
@@ -202,41 +180,4 @@ export function byteLengthLEB128(val) {
         len++;
     } while (val !== 0);
     return len;
-}
-
-/**
- * Write out files with a summary for CLI users
- *
- * @param {import('./cmd/transpile.js').FileBytes} files
- * @returns {Promise<void>} A Promise that returns when all the files have been written
- */
-export async function writeFiles(files) {
-    await Promise.all(
-        Object.entries(files).map(async ([name, contents]) => {
-            await mkdir(dirname(name), { recursive: true });
-            await writeFile(name, contents);
-        })
-    );
-}
-
-/**
- * Print summary for written files
- *
- * @param {import('./cmd/transpile.js').FileBytes} files
- * @param {string} title
- * @returns {Promise<void>} A Promise that returns when all the files have been written
- */
-export async function printFileSummary(files, title) {
-    if (!title) {
-        throw new TypeError('missing/invalid title');
-    }
-    console.log(c`
-  {bold ${title}:}
-
-${table(
-    Object.entries(files).map(([name, source]) => [
-        c` - {italic ${name}}  `,
-        c`{black.italic ${sizeStr(source.length)}}`,
-    ])
-)}`);
 }
