@@ -21,25 +21,56 @@ To use `@bytecodealliance/jco-transpile` as a library in your own code, you can 
 To transpile an existing WebAssembly component (path on disk, `Buffer`):
 
 ```js
+import { dirname } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+
 import { transpile } from '@bytecodealliance/jco-transpile';
 
 async function example() {
-    await transpile('path/to/component.wasm');
+    const { files, imports, exports } = await transpile('path/to/component.wasm', { outDir: 'path/to/output/dir' });
+
+    // NOTE: Files is a serialization of the files produced of the following type:
+    // type FileBytes = { [filepath: string]: Uint8Array; };
+    //
+    // You can use the code below to write out all files to a given directory
+    await Promise.all(
+        Object.entries(files).map(async ([filePath, bytes]) => {
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(filePath, bytes);
+        })
+    );
 }
 ```
 
 > [!NOTE]
 > `transpile` takes many options -- consult [`transpile.d.ts`](./src/transpile.d.ts) for more detailed type information.
+>
+> `outDir` controls the prefix of generated file paths, so it is specified, despite the fact that no files
+> are actually written to disk.
 
 ## Generating host types
 
 To generate host types:
 
 ```js
+import { dirname } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+
 import { generateHostTypes } from '@bytecodealliance/jco-transpile';
 
 async function example() {
-    await generateHostTypes('path/to/wit/dir-or-file, { outDir: 'path/to/output/dir' });
+    const files = await generateHostTypes('path/to/wit/dir-or-file, { outDir: 'path/to/output/dir' });
+
+    // NOTE: Files is a serialization of the files produced of the following type:
+    // type FileBytes = { [filepath: string]: Uint8Array; };
+    //
+    // You can use the code below to write out all files to a given directory
+    await Promise.all(
+        Object.entries(files).map(async ([filePath, bytes]) => {
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(filePath, bytes);
+        })
+    );
 }
 ```
 
@@ -53,10 +84,24 @@ For a given import in a WIT world, this type generation would enable *implementa
 To generate guest types:
 
 ```js
+import { dirname } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+
 import { generateGuestTypes } from '@bytecodealliance/jco-transpile';
 
 async function example() {
-    await generateGuestTypes('path/to/wit/dir-or-file, { outDir: 'path/to/output/dir' });
+    const files = await generateGuestTypes('path/to/wit/dir-or-file, { outDir: 'path/to/output/dir' });
+
+    // NOTE: Files is a serialization of the files produced of the following type:
+    // type FileBytes = { [filepath: string]: Uint8Array; };
+    //
+    // You can use the code below to write out all files to a given directory
+    await Promise.all(
+        Object.entries(files).map(async ([filePath, bytes]) => {
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(filePath, bytes);
+        })
+    );
 }
 ```
 
