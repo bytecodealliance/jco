@@ -70,7 +70,11 @@ export async function guestTypes(witPath, opts) {
  *   asyncImports?: string[],
  *   asyncExports?: string[],
  *   outDir?: string,
+ *   allFeatures?: bool,
+ *   feature?: string[] | 'all', // backwards compat
  *   features?: string[] | 'all',
+ *   asyncWasiImports?: string[],
+ *   asyncWasiExports?: string[],
  *   guest?: bool,
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
@@ -96,6 +100,8 @@ export async function typesComponent(witPath, opts) {
         features = { tag: 'all' };
     } else if (Array.isArray(opts.feature)) {
         features = { tag: 'list', val: opts.feature };
+    } else if (Array.isArray(opts.features)) {
+        features = { tag: 'list', val: opts.features };
     }
 
     if (opts.asyncWasiImports) {
@@ -183,7 +189,7 @@ ${table(
 )}`);
 }
 
-export async function transpile(componentPath, opts, program) {
+export async function transpile(witPath, opts, program) {
     const varIdx = program?.parent.rawArgs.indexOf('--');
     if (varIdx !== undefined && varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
@@ -191,13 +197,13 @@ export async function transpile(componentPath, opts, program) {
 
     let component;
     if (!opts.stub) {
-        component = await readFile(componentPath);
+        component = await readFile(witPath);
     } else {
         await wasmToolsInit;
         component = componentNew(
             componentEmbed({
                 dummy: true,
-                witPath: (isWindows ? '//?/' : '') + resolve(componentPath),
+                witPath: (isWindows ? '//?/' : '') + resolve(witPath),
             }),
             []
         );
@@ -208,7 +214,7 @@ export async function transpile(componentPath, opts, program) {
     }
     if (!opts.name) {
         opts.name = basename(
-            componentPath.slice(0, -extname(componentPath).length || Infinity)
+            witPath.slice(0, -extname(witPath).length || Infinity)
         );
     }
     if (opts.map) {
@@ -251,6 +257,8 @@ async function wasm2Js(source) {
 }
 
 /**
+ * Execute the bundled pre-transpiled component that can perform component transpilation,
+ * for the given component.
  *
  * @param {Uint8Array} component
  * @param {{

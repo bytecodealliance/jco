@@ -6,7 +6,7 @@ import { simpleRequest } from "./dist/transpiled/component.js";
 const DEFAULT_URL = "https://jsonplaceholder.typicode.com/posts/1";
 
 async function main() {
-  // NOTE: argv shoudl look like [path/to/node, path/to/script, ...args]
+  // NOTE: argv should look like [path/to/node, path/to/script, ...args]
   let requestURL = DEFAULT_URL;
   if (argv[2]) {
     try {

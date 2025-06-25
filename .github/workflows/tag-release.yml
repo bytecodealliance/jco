@@ -17,6 +17,7 @@ on:
         default: "jco"
         options:
           - jco
+          - jco-transpile
           - js-component-bindgen
           - preview2-shim
           - preview3-shim

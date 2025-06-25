@@ -5,7 +5,13 @@
   "homepage": "https://github.com/bytecodealliance/jco#readme",
   "author": "Guy Bedford",
   "contributors": [
-    "Victor Adossi <vadossi@cosmonic.com>"
+    {
+      "name": "Guy Bedford"
+    },
+    {
+      "name": "Victor Adossi",
+      "email": "vadossi@cosmonic.com"
+    }
   ],
   "type": "module",
   "license": "(Apache-2.0 WITH LLVM-exception)",

@@ -1,90 +1,40 @@
-import { $init, tools } from '../../obj/wasm-tools.js';
-const { metadataShow, print } = tools;
-import { writeFile } from 'fs/promises';
-import { fileURLToPath } from 'url';
-import c from 'chalk-template';
+import { fileURLToPath } from 'node:url';
+
+import ora from 'ora';
+
 import {
-    readFile,
-    sizeStr,
-    fixedDigitDisplay,
-    table,
-    spawnIOTmp,
-    setShowSpinner,
     getShowSpinner,
-} from '../common.js';
-import ora from '#ora';
+    byteLengthLEB128,
+    runWASMTransformProgram,
+} from './common.js';
 
-export async function opt(componentPath, opts, program) {
-    await $init;
-    const varIdx = program.parent.rawArgs.indexOf('--');
-    if (varIdx !== -1) {
-        opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
-    }
-    const componentBytes = await readFile(componentPath);
-
-    if (!opts.quiet) {
-        setShowSpinner(true);
-    }
-    const optPromise = optimizeComponent(componentBytes, opts);
-    const { component, compressionInfo } = await optPromise;
-
-    await writeFile(opts.output, component);
-
-    let totalBeforeBytes = 0,
-        totalAfterBytes = 0;
-
-    if (!opts.quiet) {
-        console.log(c`
-{bold Optimized WebAssembly Component Internal Core Modules:}
-
-${table(
-    [
-        ...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
-            totalBeforeBytes += beforeBytes;
-            totalAfterBytes += afterBytes;
-            return [
-                ` - Core Module ${i + 1}:  `,
-                sizeStr(beforeBytes),
-                ' -> ',
-                c`{cyan ${sizeStr(afterBytes)}} `,
-                `(${fixedDigitDisplay((afterBytes / beforeBytes) * 100, 2)}%)`,
-            ];
-        }),
-        ['', '', '', '', ''],
-        [
-            ` = Total:  `,
-            `${sizeStr(totalBeforeBytes)}`,
-            ` => `,
-            c`{cyan ${sizeStr(totalAfterBytes)}} `,
-            `(${fixedDigitDisplay((totalAfterBytes / totalBeforeBytes) * 100, 2)}%)`,
-        ],
-    ],
-    [, , , , 'right']
-)}`);
-    }
-}
+import { $init, tools } from '../vendor/wasm-tools.js';
+const { metadataShow, print } = tools;
 
 /**
- * Counts the byte length for the LEB128 encoding of a number.
- * @param {number} val
- * @returns {number}
+ * @typedef {{
+ *  quiet: boolean,
+ *  asyncify?: boolean,
+ *  optArgs?: string[],
+ *  noVerify?: boolean
+ * }} OptimizeOptions
  */
-function byteLengthLEB128(val) {
-    let len = 0;
-    do {
-        val >>>= 7;
-        len++;
-    } while (val !== 0);
-    return len;
-}
 
 /**
+ * @typedef {{
+ *  component: Uint8Array,
+ *  compressionInfo: { beforeBytes: number, afterBytes: number }[],
+ * }} OptimizeResult
+ */
+
+/**
+ * Perform optimization for a given component
  *
  * @param {Uint8Array} componentBytes
- * @param {{ quiet: boolean, asyncify?: boolean, optArgs?: string[], noVerify?: boolean }} opts?
- * @returns {Promise<{ component: Uint8Array, compressionInfo: { beforeBytes: number, afterBytes: number }[] >}
+ * @param {OptimizeOptions} [opts]
+ * @returns {Promise<OptimizeResult>}
  */
-export async function optimizeComponent(componentBytes, opts) {
+export async function runOptimizeComponent(componentBytes, opts) {
     await $init;
     const showSpinner = getShowSpinner();
     let spinner;
@@ -131,7 +81,7 @@ export async function optimizeComponent(componentBytes, opts) {
             coreModules.map(async (metadata) => {
                 if (metadata.metaType.tag === 'module') {
                     // store the wasm-opt processed module in the metadata
-                    metadata.optimized = await wasmOpt(
+                    metadata.optimized = await runWasmOptCLI(
                         componentBytes.subarray(
                             metadata.range[0],
                             metadata.range[1]
@@ -276,17 +226,22 @@ export async function optimizeComponent(componentBytes, opts) {
 }
 
 /**
+ * Run wasm-opt on a given component
+ *
  * @param {Uint8Array} source
  * @param {Array<string>} args
  * @returns {Promise<Uint8Array>}
  */
-async function wasmOpt(source, args) {
+async function runWasmOptCLI(source, args) {
     const wasmOptPath = fileURLToPath(
         import.meta.resolve('binaryen/bin/wasm-opt')
     );
 
     try {
-        return await spawnIOTmp(wasmOptPath, source, [...args, '-o']);
+        return await runWASMTransformProgram(wasmOptPath, source, [
+            ...args,
+            '-o',
+        ]);
     } catch (e) {
         if (e.toString().includes('BasicBlock requested')) {
             return wasmOpt(source, args);
