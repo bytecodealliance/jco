@@ -1,11 +1,10 @@
-import { dirname, normalize, resolve, sep } from 'node:path';
+import { normalize, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
     readFile as fsReadFile,
     writeFile,
     rm,
     mkdtemp,
-    mkdir,
 } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
@@ -181,41 +180,4 @@ export function byteLengthLEB128(val) {
         len++;
     } while (val !== 0);
     return len;
-}
-
-/**
- * Write out files with a summary for CLI users
- *
- * @param {import('./cmd/transpile.js').FileBytes} files
- * @returns {Promise<void>} A Promise that returns when all the files have been written
- */
-export async function writeFiles(files) {
-    await Promise.all(
-        Object.entries(files).map(async ([name, contents]) => {
-            await mkdir(dirname(name), { recursive: true });
-            await writeFile(name, contents);
-        })
-    );
-}
-
-/**
- * Print summary for written files
- *
- * @param {import('./cmd/transpile.js').FileBytes} files
- * @param {string} title
- * @returns {Promise<void>} A Promise that returns when all the files have been written
- */
-export async function printFileSummary(files, title) {
-    if (!title) {
-        throw new TypeError('missing/invalid title');
-    }
-    console.log(c`
-  {bold ${title}:}
-
-${table(
-    Object.entries(files).map(([name, source]) => [
-        c` - {italic ${name}}  `,
-        c`{black.italic ${sizeStr(source.length)}}`,
-    ])
-)}`);
 }
