@@ -119,7 +119,7 @@ export async function getTmpDir() {
 export async function readFile(file, encoding) {
     try {
         return await fsReadFile(file, encoding);
-    } catch (err) {
+    } catch {
         throw c`Unable to read file {bold ${file}}`;
     }
 }

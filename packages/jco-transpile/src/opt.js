@@ -30,22 +30,19 @@ const { metadataShow, print } = tools;
  */
 export async function runOptimizeComponent(componentBytes, opts) {
     await $init;
+
     let componentMetadata = metadataShow(componentBytes);
     componentMetadata.forEach((metadata, index) => {
-        // add index to the metadata object
         metadata.index = index;
         const size = metadata.range[1] - metadata.range[0];
-        // compute previous LEB128 encoding length
         metadata.prevLEBLen = byteLengthLEB128(size);
     });
+
     const coreModules = componentMetadata.filter(
         ({ metaType }) => metaType.tag === 'module'
     );
 
-    // log number of core Wasm modules to be run with wasm-opt
-    let completed = 0;
-
-    // gather the options for wasm-opt. optionally, adding the asyncify flag
+    // Gather the options for wasm-opt. optionally, adding the asyncify flag
     const args = opts?.optArgs
         ? [...opts.optArgs]
         : [
