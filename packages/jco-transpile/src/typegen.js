@@ -1,4 +1,4 @@
-import { basename, resolve } from 'node:path';
+import { basename, resolve, extname } from 'node:path';
 
 import {
     $init as $initBindgenComponent,
@@ -100,48 +100,16 @@ export async function runTypesComponent(witPath, opts) {
                   },
               };
 
-    let types;
     const absWitPath = resolve(witPath);
-    try {
-        types = generateTypes(name, {
-            wit: { tag: 'path', val: (isWindows ? '//?/' : '') + absWitPath },
-            instantiation,
-            tlaCompat: opts.tlaCompat ?? false,
-            world: opts.worldName,
-            features,
-            guest: opts.guest ?? false,
-            asyncMode,
-        }).map(([name, file]) => [`${outDir}${name}`, file]);
-    } catch (err) {
-        if (err.toString().includes('does not match previous package name')) {
-            const hint = await printWITLayoutHint(absWitPath);
-            if (err.message) {
-                err.message += `\n${hint}`;
-            }
-            throw err;
-        }
-        throw err;
-    }
+    const types = generateTypes(name, {
+        wit: { tag: 'path', val: (isWindows ? '//?/' : '') + absWitPath },
+        instantiation,
+        tlaCompat: opts.tlaCompat ?? false,
+        world: opts.worldName,
+        features,
+        guest: opts.guest ?? false,
+        asyncMode,
+    }).map(([name, file]) => [`${outDir}${name}`, file]);
 
     return Object.fromEntries(types);
-}
-
-/**
- * Print a hint about WIT folder layout
- *
- * @param {(string, any) => void} consoleFn
- */
-async function printWITLayoutHint(witPath) {
-    const pathMeta = await stat(witPath);
-    let output = '\n';
-    if (!pathMeta.isFile() && !pathMeta.isDirectory()) {
-        output += c`{yellow.bold warning} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
-        return output;
-    }
-    const ftype = pathMeta.isDirectory() ? 'directory' : 'file';
-    output += c`{yellow.bold warning} Your WIT ${ftype} [${witPath}] may be laid out incorrectly\n`;
-    output += c`{yellow.bold warning} Keep in mind the following rules:\n`;
-    output += c`{yellow.bold warning}     - Top level WIT files are in the same package (i.e. "ns:pkg" in "wit/*.wit")\n`;
-    output += c`{yellow.bold warning}     - All package dependencies should be in "wit/deps" (i.e. "some:dep" in "wit/deps/some-dep.wit"\n`;
-    return output;
 }
