@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 
-type TypeGEnerationOptions = {
+type TypeGenerationOptions = {
     name?: string;
     worldName?: string;
     instantiation?: 'async' | 'sync';
