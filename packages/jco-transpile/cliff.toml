@@ -85,3 +85,6 @@ tag_pattern = "jco-transpile-v[0-9]*"
 #
 # tags to ignore
 #ignore_tags = "beta|rc|alpha"
+
+# explicitly count tags
+count_tags = "beta|rc|alpha"
