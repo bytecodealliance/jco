@@ -713,7 +713,7 @@ const CACHE_COMPONENTIZE_OUTPUT = {};
  * output in memory
  *
  * @param {string} outputPath - path to where to write the component
- * @param {string[]} args - arguments to be fed to `jco componentize` (*without* "compnentize" or "-o/--output")
+ * @param {string[]} args - arguments to be fed to `jco componentize` (*without* "componentize" or "-o/--output")
  */
 export async function cachedComponentize(outputPath, args) {
     const cacheKey = args.join('+');

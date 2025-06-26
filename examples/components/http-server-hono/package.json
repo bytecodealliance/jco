@@ -10,7 +10,7 @@
     "build:component": "jco componentize -w wit -o dist/component.wasm dist/component.js",
     "build": "npm run gen:types && npm run build:js && npm run build:component",
     "transpile": "jco transpile -o dist/transpiled dist/component.wasm",
-    "serve": "jco serve dist/compnent.wasm",
+    "serve": "jco serve dist/component.wasm",
     "demo": "node scripts/demo.js",
     "all": "npm run build && npm run demo"
   },
