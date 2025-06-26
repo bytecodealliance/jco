@@ -82,6 +82,6 @@ tag_pattern = "jco-transpile-v[0-9]*"
 # to be included in the next stable release
 #
 #skip_tags = "beta|rc|alpha"
-
+#
 # tags to ignore
-ignore_tags = "beta|rc|alpha"
+#ignore_tags = "beta|rc|alpha"
