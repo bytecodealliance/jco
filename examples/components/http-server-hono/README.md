@@ -136,7 +136,7 @@ wkg wit fetch
 
 > [!NOTE]
 > Generally, files in `wit/deps` are usually third party dependencies managed by WebAssembly ecosystem tooling,
-> contrasted with the first party WIT for your component (ex. `wit/compnent.wit`).
+> contrasted with the first party WIT for your component (ex. `wit/component.wit`).
 
 [wkg]: https://github.com/bytecodealliance/wasm-pkg-tools/tree/main
 [wasi-cli]: https://github.com/WebAssembly/wasi-cli
