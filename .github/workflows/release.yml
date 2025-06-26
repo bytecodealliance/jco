@@ -127,14 +127,14 @@ jobs:
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
-              export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
+              export ARTIFACTS_GLOB="packages/jco/bytecodealliance-jco-*.tgz";
               export ARTIFACT_NAME="bytecodealliance-jco-$NEXT_VERSION.tgz";
               ;;
             jco-transpile)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
-              export ARTIFACTS_GLOB="bytecodealliance-jco-transpile-*.tgz";
+              export ARTIFACTS_GLOB="packages/jco-transpile/bytecodealliance-jco-transpile-*.tgz";
               export ARTIFACT_NAME="bytecodealliance-jco-transpile-$NEXT_VERSION.tgz";
               ;;
             preview2-shim)
@@ -253,6 +253,7 @@ jobs:
           npm pack
 
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        working-directory: ${{ needs.meta.outputs.project-dir }}
         with:
           subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
