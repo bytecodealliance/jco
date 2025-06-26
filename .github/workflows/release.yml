@@ -403,7 +403,7 @@ jobs:
           else
             git cliff \
               --repository=${{ github.workspace }}/.git \
-              --unreleased \
+              --latest \
               --tag=${{ needs.meta.outputs.next-release-tag }} \
               > CHANGELOG.current;
           fi
