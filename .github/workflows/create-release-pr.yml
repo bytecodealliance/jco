@@ -151,6 +151,9 @@ jobs:
           fi
 
       # Generate changelog
+      #
+      # NOTE: we use the 'latest' tag here, because starting from an rc/alpha/beta release
+      # the rc/alpha/beta release tags are ignored and the "latest" tag is the previous stable version
       - name: Generate changelog
         working-directory: ${{ steps.project-meta.outputs.project-dir }}
         env:
@@ -159,7 +162,7 @@ jobs:
           git cliff \
             --repository=${{ github.workspace }}/.git \
             --config=./cliff.toml \
-            --unreleased \
+            --latest \
             --tag=${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }} \
             --prepend=CHANGELOG.md
 
