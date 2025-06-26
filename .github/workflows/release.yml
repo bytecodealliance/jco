@@ -253,7 +253,6 @@ jobs:
           npm pack
 
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
-        working-directory: ${{ needs.meta.outputs.project-dir }}
         with:
           subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
