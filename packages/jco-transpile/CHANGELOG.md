@@ -11,7 +11,3 @@
 
 * *(transpile)* check in vendor folder (#777) by @vados-cosmonic in #777
 
-
-
-
-# Changelog
