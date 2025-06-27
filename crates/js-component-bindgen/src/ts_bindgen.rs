@@ -686,7 +686,7 @@ impl<'a> TsInterface<'a> {
     fn docs_raw(&mut self, docs: &str) {
         self.src.push_str("/**\n");
         for line in docs.lines() {
-            self.src.push_str(&format!(" * {}\n", line));
+            self.src.push_str(&format!(" * {line}\n"));
         }
         self.src.push_str(" */\n");
     }
@@ -925,7 +925,7 @@ impl<'a> TsInterface<'a> {
                 .binary_search(&param_name.as_str())
                 .is_ok()
             {
-                param_name = format!("{}_", param_name);
+                param_name = format!("{param_name}_");
             }
             iface.src.push_str(&param_name);
             iface.src.push_str(": ");
@@ -958,7 +958,7 @@ impl<'a> TsInterface<'a> {
         }
 
         let end_character = if declaration { ';' } else { ',' };
-        iface.src.push_str(format!("{}\n", end_character).as_str());
+        iface.src.push_str(format!("{end_character}\n").as_str());
     }
 
     fn post_types(&mut self) {
@@ -1165,7 +1165,7 @@ impl<'a> TsInterface<'a> {
             }
             _ => {
                 self.docs(docs);
-                self.src.push_str(&format!("export type {} = ", type_name));
+                self.src.push_str(&format!("export type {type_name} = "));
                 self.print_ty(ty);
                 self.src.push_str(";\n");
             }

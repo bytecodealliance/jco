@@ -110,12 +110,15 @@ jobs:
               exit 1;
           esac
 
+          export IS_PRERELEASE=$(node scripts/semver-is-prerelease.mjs $NEXT_VERSION);
+
           echo -e "project=$PROJECT"
           echo -e "project-dir=$PROJECT_DIR"
           echo -e "current-version=$CURRENT_VERSION"
           echo -e "next-version=$NEXT_VERSION"
           echo -e "is-rust-project=$IS_RUST_PROJECT"
           echo -e "is-js-project=$IS_JS_PROJECT"
+          echo -e "is-prerelease=$IS_PRERELEASE"
 
           echo -e "project=$PROJECT" >> $GITHUB_OUTPUT
           echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
@@ -123,6 +126,7 @@ jobs:
           echo -e "next-version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT
           echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
+          echo -e "is-prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
 
       - name: Ensure next version is after current
         run: |
@@ -159,10 +163,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
-          export IS_PRERELEASE=$(node scripts/semver-is-prerelease.mjs ${{ steps.project-meta.outputs.next-version }});
-
           export START_ARG="--latest";
-          if [ "true" == "$IS_PRERELEASE" ]; then
+          if [ "true" == "${{ steps.project-meta.outputs.is-prerelease }}" ]; then
             export START_ARG="--unreleased";
           fi
 

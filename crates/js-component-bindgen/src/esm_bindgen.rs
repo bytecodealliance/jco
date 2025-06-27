@@ -103,8 +103,7 @@ impl EsmBindgen {
             iface = match iface.get_mut(&iface_id_or_kebab).unwrap() {
                 ExportBinding::Interface(iface) => iface,
                 ExportBinding::Local(_) => panic!(
-                    "Exported interface {} cannot be both a function and an interface",
-                    iface_id_or_kebab
+                    "Exported interface {iface_id_or_kebab} cannot be both a function and an interface"
                 ),
             };
         }
@@ -191,7 +190,7 @@ impl EsmBindgen {
             }
             let local_name = match &self.exports[export_name] {
                 ExportBinding::Local(local_name) => local_name,
-                ExportBinding::Interface(_) => local_names.get(format!("export:{}", export_name)),
+                ExportBinding::Interface(_) => local_names.get(format!("export:{export_name}")),
             };
             let alias_maybe_quoted = maybe_quote_id(alias);
             if local_name == alias_maybe_quoted {
@@ -211,7 +210,7 @@ impl EsmBindgen {
             }
             let local_name = match export {
                 ExportBinding::Local(local_name) => local_name,
-                ExportBinding::Interface(_) => local_names.get(format!("export:{}", export_name)),
+                ExportBinding::Interface(_) => local_names.get(format!("export:{export_name}")),
             };
             let export_name_maybe_quoted = maybe_quote_id(export_name);
             if local_name == export_name_maybe_quoted {

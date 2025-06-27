@@ -286,7 +286,7 @@ impl JsBindgen<'_> {
         // Setup the compilation data and compilation promises
         let mut removed = BTreeSet::new();
         for i in 0..self.core_module_cnt {
-            let local_name = format!("module{}", i);
+            let local_name = format!("module{i}");
             let mut name_idx = core_file_name(name, i as u32);
             if self.opts.instantiation.is_some() {
                 uwriteln!(
@@ -644,7 +644,7 @@ impl<'a> Instantiator<'a, '_> {
                     if i > 0 {
                         self.src.js_init.push_str(", ");
                     }
-                    self.src.js_init.push_str(&format!("module{}", i));
+                    self.src.js_init.push_str(&format!("module{i}"));
                 }
                 uwriteln!(self.src.js_init, "]).catch(() => {{}});");
             }
@@ -3254,5 +3254,5 @@ fn core_file_name(name: &str, idx: u32) -> String {
     } else {
         (idx + 1).to_string()
     };
-    format!("{}.core{i_str}.wasm", name)
+    format!("{name}.core{i_str}.wasm")
 }
