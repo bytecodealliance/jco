@@ -436,7 +436,11 @@ let mut _cmd2_child = cmd2.spawn().expect("failed to spawn test program");
     };
 
     // Generate code for feature detection
-    let windows_skip_prefix = if windows_skip { "#[cfg(not(windows))]" } else { Default::default() };
+    let windows_skip_prefix = if windows_skip {
+        "#[cfg(not(windows))]"
+    } else {
+        Default::default()
+    };
     let deno_prefix = if deno { "deno_" } else { Default::default() };
     let deno_test_file = format!(
         "{}",

@@ -188,8 +188,7 @@ impl Guest for WasmToolsJs {
     }
 
     fn metadata_show(binary: Vec<u8>) -> Result<Vec<ModuleMetadata>, String> {
-        let payload =
-            wasm_metadata::Payload::from_binary(&binary).map_err(|e| format!("{e:?}"))?;
+        let payload = wasm_metadata::Payload::from_binary(&binary).map_err(|e| format!("{e:?}"))?;
         let mut module_metadata: Vec<ModuleMetadata> = Vec::new();
         let mut to_flatten: VecDeque<(Option<u32>, wasm_metadata::Payload)> = VecDeque::new();
         to_flatten.push_back((None, payload));
