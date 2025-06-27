@@ -159,10 +159,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
+          export IS_PRERELEASE=$(node scripts/semver-is-prerelease.mjs ${{ steps.project-meta.outputs.next-version }});
+
+          export START_ARG="--latest";
+          if [ "true" == "$IS_PRERELEASE" ]; then
+            export START_ARG="--unreleased";
+          fi
+
           git cliff \
             --repository=${{ github.workspace }}/.git \
             --config=./cliff.toml \
-            --latest \
+            $START_ARG \
             --tag=${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }} \
             --prepend=CHANGELOG.md
 
