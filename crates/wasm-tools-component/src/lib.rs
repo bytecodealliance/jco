@@ -24,11 +24,11 @@ struct WasmToolsJs;
 
 impl Guest for WasmToolsJs {
     fn parse(wat: String) -> Result<Vec<u8>, String> {
-        wat::parse_str(wat).map_err(|e| format!("{:?}", e))
+        wat::parse_str(wat).map_err(|e| format!("{e:?}"))
     }
 
     fn print(component: Vec<u8>) -> Result<String, String> {
-        wasmprinter::print_bytes(component).map_err(|e| format!("{:?}", e))
+        wasmprinter::print_bytes(component).map_err(|e| format!("{e:?}"))
     }
 
     fn component_new(
@@ -38,26 +38,26 @@ impl Guest for WasmToolsJs {
         let mut encoder = ComponentEncoder::default()
             .validate(true)
             .module(&binary)
-            .map_err(|e| format!("Failed to decode Wasm\n{:?}", e))?;
+            .map_err(|e| format!("Failed to decode Wasm\n{e:?}"))?;
 
         if let Some(adapters) = adapters {
             for (name, binary) in adapters {
                 encoder = encoder
                     .adapter(&name, &binary)
-                    .map_err(|e| format!("{:?}", e))?;
+                    .map_err(|e| format!("{e:?}"))?;
             }
         }
 
         let bytes = encoder
             .encode()
-            .map_err(|e| format!("failed to encode a component from module\n${:?}", e))?;
+            .map_err(|e| format!("failed to encode a component from module\n${e:?}"))?;
 
         Ok(bytes)
     }
 
     fn component_wit(binary: Vec<u8>) -> Result<String, String> {
         let decoded = wit_component::decode(&binary)
-            .map_err(|e| format!("Failed to decode wit component\n{:?}", e))?;
+            .map_err(|e| format!("Failed to decode wit component\n{e:?}"))?;
 
         // let world = decode_world("component", &binary);
 
@@ -69,7 +69,7 @@ impl Guest for WasmToolsJs {
         let mut printer = WitPrinter::default();
         printer
             .print(decoded.resolve(), doc, &[])
-            .map_err(|e| format!("Unable to print wit\n${:?}", e))?;
+            .map_err(|e| format!("Unable to print wit\n${e:?}"))?;
 
         Ok(printer.output.to_string())
     }
@@ -189,7 +189,7 @@ impl Guest for WasmToolsJs {
 
     fn metadata_show(binary: Vec<u8>) -> Result<Vec<ModuleMetadata>, String> {
         let payload =
-            wasm_metadata::Payload::from_binary(&binary).map_err(|e| format!("{:?}", e))?;
+            wasm_metadata::Payload::from_binary(&binary).map_err(|e| format!("{e:?}"))?;
         let mut module_metadata: Vec<ModuleMetadata> = Vec::new();
         let mut to_flatten: VecDeque<(Option<u32>, wasm_metadata::Payload)> = VecDeque::new();
         to_flatten.push_back((None, payload));

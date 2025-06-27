@@ -211,7 +211,7 @@ impl FunctionBindgen<'_> {
                         uwrite!(self.src, ", ");
                     }
                     uwrite!(self.src, "ret{}", i);
-                    results.push(format!("ret{}", i));
+                    results.push(format!("ret{i}"));
                 }
                 uwrite!(self.src, "] = ");
             }
@@ -234,7 +234,7 @@ impl FunctionBindgen<'_> {
             }
             Bitcast::F64ToI64 => {
                 let cvt = self.intrinsic(Intrinsic::F64ToI64);
-                format!("{}({})", cvt, op)
+                format!("{cvt}({op})")
             }
             Bitcast::I32ToI64 => format!("BigInt({op})"),
             Bitcast::I64ToI32 => format!("Number({op})"),
@@ -399,7 +399,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     if i > 0 {
                         expr.push_str(", ");
                     }
-                    let name = format!("v{}_{}", tmp, i);
+                    let name = format!("v{tmp}_{i}");
                     expr.push_str(&field.name.to_lower_camel_case());
                     expr.push_str(": ");
                     expr.push_str(&name);
@@ -428,7 +428,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     if i > 0 {
                         expr.push_str(", ");
                     }
-                    let name = format!("tuple{}_{}", tmp, i);
+                    let name = format!("tuple{tmp}_{i}");
                     expr.push_str(&name);
                     results.push(name);
                 }
@@ -531,7 +531,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 for i in 0..result_types.len() {
                     uwriteln!(self.src, "let variant{tmp}_{i};");
-                    results.push(format!("variant{}_{}", tmp, i));
+                    results.push(format!("variant{tmp}_{i}"));
                 }
 
                 let expr_to_match = format!("variant{tmp}.tag");
@@ -611,7 +611,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
                 uwriteln!(self.src, "}}");
-                results.push(format!("variant{}", tmp));
+                results.push(format!("variant{tmp}"));
             }
             Instruction::OptionLower {
                 payload,
@@ -939,8 +939,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.src,
                     "(new Uint8Array({memory}.buffer, ptr{tmp}, len{tmp} * {size})).set(src{tmp});",
                 );
-                results.push(format!("ptr{}", tmp));
-                results.push(format!("len{}", tmp));
+                results.push(format!("ptr{tmp}"));
+                results.push(format!("len{tmp}"));
             }
             Instruction::ListCanonLift { element, .. } => {
                 let tmp = self.tmp();
@@ -983,8 +983,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     uwriteln!(self.src, "var len{tmp} = {}.length;", operands[0]);
                 }
-                results.push(format!("ptr{}", tmp));
-                results.push(format!("len{}", tmp));
+                results.push(format!("ptr{tmp}"));
+                results.push(format!("len{tmp}"));
             }
             Instruction::StringLift => {
                 // Only Utf8 and Utf16 supported for now
@@ -1013,9 +1013,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 assert!(body_results.is_empty());
                 let tmp = self.tmp();
-                let vec = format!("vec{}", tmp);
-                let result = format!("result{}", tmp);
-                let len = format!("len{}", tmp);
+                let vec = format!("vec{tmp}");
+                let result = format!("result{tmp}");
+                let len = format!("len{tmp}");
                 let size = self.sizes.size(element).size_wasm32();
                 let align = ArchitectureSize::from(self.sizes.align(element)).size_wasm32();
 

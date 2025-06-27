@@ -177,7 +177,7 @@ fn core_file_name(name: &str, idx: u32) -> String {
     } else {
         (idx + 1).to_string()
     };
-    format!("{}.core{i_str}.wasm", name)
+    format!("{name}.core{i_str}.wasm")
 }
 
 pub fn dealias(resolve: &Resolve, mut id: TypeId) -> TypeId {

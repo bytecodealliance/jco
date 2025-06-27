@@ -76,7 +76,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             imports,
             mut exports,
         } = transpile(&component, opts)
-            .map_err(|e| format!("{:?}", e))
+            .map_err(|e| format!("{e:?}"))
             .map_err(|e| e.to_string())?;
 
         Ok(Transpiled {
@@ -131,13 +131,13 @@ impl bindings::Guest for JsComponentBindgenComponent {
                     resolve
                         .push_dir(&path)
                         .with_context(|| format!("reading WIT dir at [{}]", path.display()))
-                        .map_err(|e| format!("{:?}", e))?
+                        .map_err(|e| format!("{e:?}"))?
                         .0
                 } else {
                     resolve
                         .push_file(&path)
                         .with_context(|| format!("reading WIT file at [{}]", path.display()))
-                        .map_err(|e| format!("{:?}", e))?
+                        .map_err(|e| format!("{e:?}"))?
                 }
             }
             Wit::Binary(_) => todo!(),
