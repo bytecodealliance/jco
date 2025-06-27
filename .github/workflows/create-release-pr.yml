@@ -110,7 +110,7 @@ jobs:
               exit 1;
           esac
 
-          export IS_PRERELEASE=$(node scripts/semver-is-prerelease.mjs ${{ steps.project-meta.outputs.next-version }});
+          export IS_PRERELEASE=$(node scripts/semver-is-prerelease.mjs $NEXT_VERSION);
 
           echo -e "project=$PROJECT"
           echo -e "project-dir=$PROJECT_DIR"
