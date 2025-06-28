@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.3-rc.0] - 2025-06-28
+
+### 🐛 Bug Fixes
+
+* *(jco)* run linter on jco package source code (#758) by @andreiltd in #758
+
+
+
+
 ## [1.11.2] - 2025-05-12
 
 ### 🐛 Bug Fixes
