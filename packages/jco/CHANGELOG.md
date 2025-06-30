@@ -2,6 +2,11 @@
 
 ## [1.11.3] - 2025-06-30
 
+### 🐛 Bug Fixes
+
+* *(jco)* run linter on jco package source code (#758)
+
+
 
 
 ## [1.11.3-rc.1] - 2025-06-30
