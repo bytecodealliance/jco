@@ -340,12 +340,25 @@ jobs:
       - meta
       - test-npm-release
     steps:
-      # NOTE: we need to checkout to pull npmrc
+      # NOTE: We need to checkout to pull npmrc
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
+
+      # NOTE: We install node modules because the pre-pack for various projects may require
+      # the cargo xtask build in release mode (even though we're using),
+      - name: Cache npm install
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
+          path: |
+            node_modules
+
+      - name: Install NPM packages
+        run: |
+          npm install
 
       - name: Publish ${{ needs.meta.outputs.project }} to NPM
         env:
@@ -364,7 +377,10 @@ jobs:
             export OPT_RELEASE_TAG="--tag ${{ needs.meta.outputs.prerelease-tag }}";
           fi
 
-          npm publish -w @bytecodealliance/${{ needs.meta.outputs.project }} $OPT_DRY_RUN $OPT_RELEASE_TAG $PACKAGE_DIR
+          npm publish -w @bytecodealliance/${{ needs.meta.outputs.project }} \
+              $OPT_DRY_RUN \
+              $OPT_RELEASE_TAG \
+              $PACKAGE_DIR
 
   create-gh-release:
     runs-on: ubuntu-24.04
