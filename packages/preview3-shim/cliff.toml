@@ -74,7 +74,7 @@ topo_order = false
 sort_commits = "newest"
 
 # glob pattern for matching git tags
-tag_pattern = "^preview3-shim-v[0-9]+.[0-9]+.[0-9]+(beta|rc|alpha)"
+tag_pattern = "^preview3-shim-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?"
 
 # regex for skipping tags
 #
