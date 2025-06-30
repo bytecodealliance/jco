@@ -74,7 +74,7 @@ topo_order = false
 sort_commits = "newest"
 
 # glob pattern for matching git tags
-tag_pattern = "jco-transpile-v[0-9]*"
+tag_pattern = "^jco-transpile-v[0-9]+.[0-9]+.[0-9]+(beta|rc|alpha)"
 
 # regex for skipping tags
 #
