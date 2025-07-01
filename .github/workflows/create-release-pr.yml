@@ -43,16 +43,16 @@ jobs:
 
       # Install Rust deps
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-      - uses: taiki-e/cache-cargo-install-action@5c9abe9a3f79d831011df7c47177debbeb320405 # v2.1.2
+      - uses: taiki-e/cache-cargo-install-action@1bb5728d7988b14bfdd9690a8e5399fc8a3f75ab # v2.2.0
         with:
           tool: just
-      - uses: taiki-e/cache-cargo-install-action@5c9abe9a3f79d831011df7c47177debbeb320405 # v2.1.2
+      - uses: taiki-e/cache-cargo-install-action@1bb5728d7988b14bfdd9690a8e5399fc8a3f75ab # v2.2.0
         with:
           tool: git-cliff
-      - uses: taiki-e/cache-cargo-install-action@5c9abe9a3f79d831011df7c47177debbeb320405 # v2.1.2
+      - uses: taiki-e/cache-cargo-install-action@1bb5728d7988b14bfdd9690a8e5399fc8a3f75ab # v2.2.0
         with:
           tool: cargo-get
-      - uses: taiki-e/cache-cargo-install-action@5c9abe9a3f79d831011df7c47177debbeb320405 # v2.1.2
+      - uses: taiki-e/cache-cargo-install-action@1bb5728d7988b14bfdd9690a8e5399fc8a3f75ab # v2.2.0
         with:
           tool: cargo-edit
 
