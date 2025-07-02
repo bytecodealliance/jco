@@ -1,11 +1,12 @@
+use std::collections::BTreeMap;
+use std::fmt::Write;
+
 use heck::ToLowerCamelCase;
 
-use crate::intrinsics::Intrinsic;
+use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source::Source;
 use crate::{uwrite, uwriteln, TranspileOpts};
-use std::collections::BTreeMap;
-use std::fmt::Write;
 
 type LocalName = String;
 
@@ -335,7 +336,11 @@ impl EsmBindgen {
                             maybe_quote_member(specifier)
                         );
                     } else if let Some(idl_binding) = idl_binding {
-                        uwrite!(output, "}} = {}()", Intrinsic::GlobalThisIdlProxy.name());
+                        uwrite!(
+                            output,
+                            "}} = {}()",
+                            WebIdlIntrinsic::GlobalThisIdlProxy.name()
+                        );
                         if !idl_binding.is_empty() {
                             for segment in idl_binding.split('-') {
                                 uwrite!(output, ".{}()", segment.to_lowercase());
