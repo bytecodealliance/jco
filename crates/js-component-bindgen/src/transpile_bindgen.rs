@@ -31,6 +31,16 @@ use crate::files::Files;
 use crate::function_bindgen::{
     ErrHandling, FunctionBindgen, RemoteResourceMap, ResourceData, ResourceMap, ResourceTable,
 };
+use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::lift::LiftIntrinsic;
+use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
+use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
+use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
+use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
+use crate::intrinsics::p3::waitable::WaitableIntrinsic;
+use crate::intrinsics::resource::ResourceIntrinsic;
+use crate::intrinsics::string::StringIntrinsic;
+use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::intrinsics::{render_intrinsics, DeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source;
@@ -166,9 +176,11 @@ pub fn transpile_bindgen(
         all_intrinsics: BTreeSet::new(),
         all_core_exported_funcs: Vec::new(),
     };
-    bindgen
-        .local_names
-        .exclude_globals(Intrinsic::get_global_names());
+    bindgen.local_names.exclude_globals(
+        &Intrinsic::get_global_names()
+            .into_iter()
+            .collect::<Vec<_>>(),
+    );
     bindgen.core_module_cnt = modules.len();
 
     // Bindings are generated when the `instantiate` method is called on the
@@ -734,15 +746,11 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         // Write out the defined resource table indices for the runtime
-        if self
-            .gen
-            .all_intrinsics
-            .contains(&Intrinsic::ResourceTransferBorrow)
-            || self
-                .gen
-                .all_intrinsics
-                .contains(&Intrinsic::ResourceTransferBorrowValidLifting)
-        {
+        if self.gen.all_intrinsics.contains(&Intrinsic::Resource(
+            ResourceIntrinsic::ResourceTransferBorrow,
+        )) || self.gen.all_intrinsics.contains(&Intrinsic::Resource(
+            ResourceIntrinsic::ResourceTransferBorrowValidLifting,
+        )) {
             let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
             uwrite!(definitions, "const {defined_resource_tables} = [");
             // Table per-resource
@@ -782,7 +790,7 @@ impl<'a> Instantiator<'a, '_> {
         }
         let err_ctx_local_tables = self
             .gen
-            .intrinsic(Intrinsic::ErrorContextComponentLocalTable);
+            .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentLocalTable));
         let c = component_idx.as_u32();
         if !self.error_context_component_initialized[component_idx] {
             uwriteln!(self.src.js, "{err_ctx_local_tables}.set({c}, new Map());");
@@ -833,8 +841,12 @@ impl<'a> Instantiator<'a, '_> {
             };
 
         let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
-        let rsc_table_flag = self.gen.intrinsic(Intrinsic::ResourceTableFlag);
-        let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
+        let rsc_table_flag = self
+            .gen
+            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
+        let rsc_table_remove = self
+            .gen
+            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
 
         let rtid = id.as_u32();
         if is_imported {
@@ -913,7 +925,9 @@ impl<'a> Instantiator<'a, '_> {
         let i = i.as_u32();
         match trampoline {
             Trampoline::TaskCancel { instance } => {
-                let task_cancel_fn = self.gen.intrinsic(Intrinsic::TaskCancel);
+                let task_cancel_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskCancel));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {task_cancel_fn}.bind(null, {instance_idx});\n",
@@ -922,7 +936,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::SubtaskCancel { instance, async_ } => {
-                let task_cancel_fn = self.gen.intrinsic(Intrinsic::SubtaskCancel);
+                let task_cancel_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {task_cancel_fn}.bind(null, {instance_idx}, {async_});\n",
@@ -932,7 +948,9 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::SubtaskDrop { instance } => {
                 let component_idx = instance.as_u32();
-                let subtask_drop_fn = self.gen.intrinsic(Intrinsic::SubtaskDrop);
+                let subtask_drop_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskDrop));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {subtask_drop_fn}.bind(
@@ -943,7 +961,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::BackpressureSet { instance } => {
-                let backpressure_set_fn = self.gen.intrinsic(Intrinsic::BackpressureSet);
+                let backpressure_set_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureSet));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {backpressure_set_fn}.bind(null, {});\n",
@@ -952,7 +972,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::WaitableSetNew { instance } => {
-                let waitable_set_new_fn = self.gen.intrinsic(Intrinsic::WaitableSetNew);
+                let waitable_set_new_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {waitable_set_new_fn}.bind(null, {});\n",
@@ -965,7 +987,9 @@ impl<'a> Instantiator<'a, '_> {
                 async_,
                 memory,
             } => {
-                let waitable_set_wait_fn = self.gen.intrinsic(Intrinsic::WaitableSetWait);
+                let waitable_set_wait_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {waitable_set_wait_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
@@ -979,7 +1003,9 @@ impl<'a> Instantiator<'a, '_> {
                 async_,
                 memory,
             } => {
-                let waitable_set_poll_fn = self.gen.intrinsic(Intrinsic::WaitableSetPoll);
+                let waitable_set_poll_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {waitable_set_poll_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
@@ -989,7 +1015,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::WaitableSetDrop { instance } => {
-                let waitable_set_drop_fn = self.gen.intrinsic(Intrinsic::WaitableSetDrop);
+                let waitable_set_drop_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {waitable_set_drop_fn}.bind(null, {instance_idx});\n",
@@ -998,7 +1026,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::WaitableJoin { instance } => {
-                let waitable_join_fn = self.gen.intrinsic(Intrinsic::WaitableJoin);
+                let waitable_join_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableJoin));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {waitable_join_fn}.bind(null, {instance_idx});\n",
@@ -1007,7 +1037,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::Yield { async_ } => {
-                let yield_fn = self.gen.intrinsic(Intrinsic::Yield);
+                let yield_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {yield_fn}.bind(null, {async_});\n",
@@ -1018,7 +1050,9 @@ impl<'a> Instantiator<'a, '_> {
             // Need to have a way to look up/serialize the type indices per component into
             // a lookup of lifting functions? Or just use the cabiLower?
             Trampoline::StreamNew { ty } => {
-                let stream_new_fn = self.gen.intrinsic(Intrinsic::StreamNew);
+                let stream_new_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {stream_new_fn}.bind(null, {});\n",
@@ -1045,7 +1079,9 @@ impl<'a> Instantiator<'a, '_> {
                     .as_u32();
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
-                let stream_read_fn = self.gen.intrinsic(Intrinsic::StreamRead);
+                let stream_read_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead));
                 uwriteln!(
                     self.src.js,
                     r#"const trampoline{i} = {stream_read_fn}.bind(
@@ -1082,7 +1118,9 @@ impl<'a> Instantiator<'a, '_> {
                     .as_u32();
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
-                let stream_write_fn = self.gen.intrinsic(Intrinsic::StreamWrite);
+                let stream_write_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite));
                 uwriteln!(
                     self.src.js,
                     r#"const trampoline{i} = {stream_write_fn}.bind(
@@ -1099,7 +1137,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamCancelRead { ty, async_ } => {
-                let stream_cancel_read_fn = self.gen.intrinsic(Intrinsic::StreamCancelRead);
+                let stream_cancel_read_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::StreamCancelRead,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {stream_cancel_read_fn}.bind(null, {stream_idx}, {async_});\n",
@@ -1108,7 +1148,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamCancelWrite { ty, async_ } => {
-                let stream_cancel_write_fn = self.gen.intrinsic(Intrinsic::StreamCancelWrite);
+                let stream_cancel_write_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::StreamCancelWrite,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {stream_cancel_write_fn}.bind(null, {stream_idx}, {async_});\n",
@@ -1117,7 +1159,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamCloseReadable { ty } => {
-                let stream_drop_readable_fn = self.gen.intrinsic(Intrinsic::StreamDropReadable);
+                let stream_drop_readable_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::StreamDropReadable,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {stream_drop_readable_fn}.bind(null, {stream_idx});\n",
@@ -1126,7 +1170,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamCloseWritable { ty } => {
-                let stream_drop_writable_fn = self.gen.intrinsic(Intrinsic::StreamDropWritable);
+                let stream_drop_writable_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::StreamDropWritable,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {stream_drop_writable_fn}.bind(null, {stream_idx});\n",
@@ -1137,7 +1183,9 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::StreamTransfer => todo!("Trampoline::StreamTransfer"),
 
             Trampoline::FutureNew { ty } => {
-                let future_new_fn = self.gen.intrinsic(Intrinsic::FutureNew);
+                let future_new_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {future_new_fn}.bind(null, {});\n",
@@ -1172,7 +1220,9 @@ impl<'a> Instantiator<'a, '_> {
                     "post_return should not be present for future read"
                 );
 
-                let future_read_fn = self.gen.intrinsic(Intrinsic::FutureRead);
+                let future_read_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead));
                 uwriteln!(
                     self.src.js,
                     r#"const trampoline{i} = {future_read_fn}.bind(
@@ -1209,7 +1259,9 @@ impl<'a> Instantiator<'a, '_> {
                     .as_u32();
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
-                let future_write_fn = self.gen.intrinsic(Intrinsic::FutureWrite);
+                let future_write_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite));
                 uwriteln!(
                     self.src.js,
                     r#"const trampoline{i} = {future_write_fn}.bind(
@@ -1226,7 +1278,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureCancelRead { ty, async_ } => {
-                let future_cancel_read_fn = self.gen.intrinsic(Intrinsic::FutureCancelRead);
+                let future_cancel_read_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::FutureCancelRead,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {future_cancel_read_fn}.bind(null, {future_idx}, {async_});\n",
@@ -1235,7 +1289,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureCancelWrite { ty, async_ } => {
-                let future_cancel_write_fn = self.gen.intrinsic(Intrinsic::FutureCancelWrite);
+                let future_cancel_write_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::FutureCancelWrite,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {future_cancel_write_fn}.bind(null, {future_idx}, {async_});\n",
@@ -1244,7 +1300,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureCloseReadable { ty } => {
-                let future_drop_readable_fn = self.gen.intrinsic(Intrinsic::FutureDropReadable);
+                let future_drop_readable_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::FutureDropReadable,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {future_drop_readable_fn}.bind(null, {future_idx});\n",
@@ -1253,7 +1311,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureCloseWritable { ty } => {
-                let future_drop_writable_fn = self.gen.intrinsic(Intrinsic::FutureDropWritable);
+                let future_drop_writable_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::FutureDropWritable,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {future_drop_writable_fn}.bind(null, {future_idx});\n",
@@ -1276,12 +1336,12 @@ impl<'a> Instantiator<'a, '_> {
 
                 // Generate a string decoding function to match this trampoline that does appropriate encoding
                 let decoder = match options.string_encoding {
-                    wasmtime_environ::component::StringEncoding::Utf8 => {
-                        self.gen.intrinsic(Intrinsic::Utf8Decoder)
-                    }
-                    wasmtime_environ::component::StringEncoding::Utf16 => {
-                        self.gen.intrinsic(Intrinsic::Utf16Decoder)
-                    }
+                    wasmtime_environ::component::StringEncoding::Utf8 => self
+                        .gen
+                        .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Decoder)),
+                    wasmtime_environ::component::StringEncoding::Utf16 => self
+                        .gen
+                        .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder)),
                     enc => panic!(
                         "unsupported string encoding [{enc:?}] for error-context.debug-message"
                     ),
@@ -1293,7 +1353,7 @@ impl<'a> Instantiator<'a, '_> {
                     }}"
                 );
 
-                let err_ctx_new_fn = self.gen.intrinsic(Intrinsic::ErrorContextNew);
+                let err_ctx_new_fn = self.gen.intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::New));
                 // Store the options associated with this new error context for later use in the global array
                 uwriteln!(
                     self.src.js,
@@ -1308,7 +1368,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ErrorContextDebugMessage { ty, options } => {
-                let debug_message_fn = self.gen.intrinsic(Intrinsic::ErrorContextDebugMessage);
+                let debug_message_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::DebugMessage));
                 let realloc_fn_idx = options
                     .realloc
                     .expect("missing realloc fn idx for error-context.debug-message")
@@ -1321,8 +1383,11 @@ impl<'a> Instantiator<'a, '_> {
                 // Generate a string encoding function to match this trampoline that does appropriate encoding
                 match options.string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => {
-                        let encode_fn = self.gen.intrinsic(Intrinsic::Utf8Encode);
-                        let encode_len_var = Intrinsic::Utf8EncodedLen.name();
+                        let encode_fn = self
+                            .gen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
+                        let encode_len_var =
+                            Intrinsic::String(StringIntrinsic::Utf8EncodedLen).name();
                         uwriteln!(
                             self.src.js,
                             "function trampoline{i}OutputStr(s, outputPtr) {{
@@ -1336,7 +1401,9 @@ impl<'a> Instantiator<'a, '_> {
                         );
                     }
                     wasmtime_environ::component::StringEncoding::Utf16 => {
-                        let encode_fn = self.gen.intrinsic(Intrinsic::Utf16Encode);
+                        let encode_fn = self
+                            .gen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Encode));
                         uwriteln!(
                             self.src.js,
                             "function trampoline{i}OutputStr(s, outputPtr) {{
@@ -1382,7 +1449,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ErrorContextDrop { ty } => {
-                let drop_fn = self.gen.intrinsic(Intrinsic::ErrorContextDrop);
+                let drop_fn = self.gen.intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::Drop));
                 let local_err_tbl_idx = ty.as_u32();
                 let component_idx = self.types[*ty].instance.as_u32();
                 uwriteln!(
@@ -1392,7 +1459,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ErrorContextTransfer => {
-                let transfer_fn = self.gen.intrinsic(Intrinsic::ErrorContextTransfer);
+                let transfer_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::Transfer));
                 uwriteln!(self.src.js, "const trampoline{i} = {transfer_fn};");
             }
 
@@ -1498,7 +1567,9 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceNew(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
-                let rsc_table_create_own = self.gen.intrinsic(Intrinsic::ResourceTableCreateOwn);
+                let rsc_table_create_own = self.gen.intrinsic(Intrinsic::Resource(
+                    ResourceIntrinsic::ResourceTableCreateOwn,
+                ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {rsc_table_create_own}.bind(null, handleTable{rid});"
@@ -1508,7 +1579,9 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceRep(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
-                let rsc_flag = self.gen.intrinsic(Intrinsic::ResourceTableFlag);
+                let rsc_flag = self
+                    .gen
+                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
                 uwriteln!(
                     self.src.js,
                     "function trampoline{i} (handle) {{
@@ -1580,7 +1653,9 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 };
 
-                let rsc_table_remove = self.gen.intrinsic(Intrinsic::ResourceTableRemove);
+                let rsc_table_remove = self
+                    .gen
+                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
@@ -1594,7 +1669,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ResourceTransferOwn => {
-                let resource_transfer = self.gen.intrinsic(Intrinsic::ResourceTransferOwn);
+                let resource_transfer = self
+                    .gen
+                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTransferOwn));
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
 
@@ -1602,9 +1679,11 @@ impl<'a> Instantiator<'a, '_> {
                 let resource_transfer =
                     self.gen
                         .intrinsic(if self.gen.opts.valid_lifting_optimization {
-                            Intrinsic::ResourceTransferBorrowValidLifting
+                            Intrinsic::Resource(
+                                ResourceIntrinsic::ResourceTransferBorrowValidLifting,
+                            )
                         } else {
-                            Intrinsic::ResourceTransferBorrow
+                            Intrinsic::Resource(ResourceIntrinsic::ResourceTransferBorrow)
                         });
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
@@ -1622,7 +1701,9 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ResourceExitCall => {
                 let scope_id = self.gen.intrinsic(Intrinsic::ScopeId);
-                let resource_borrows = self.gen.intrinsic(Intrinsic::ResourceCallBorrows);
+                let resource_borrows = self
+                    .gen
+                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows));
                 let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
                 // To verify that borrows are dropped, it is enough to verify that the handle
                 // either no longer exists (part of free list) or belongs to another scope, since
@@ -1647,7 +1728,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ContextSet(slot) => {
-                let context_set_fn = self.gen.intrinsic(Intrinsic::ContextSet);
+                let context_set_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = (...args) => {context_set_fn}({slot}, ...args);"
@@ -1655,7 +1738,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ContextGet(slot) => {
-                let context_get_fn = self.gen.intrinsic(Intrinsic::ContextGet);
+                let context_get_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = (...args) => {context_get_fn}({slot}, ...args);"
@@ -1710,134 +1795,138 @@ impl<'a> Instantiator<'a, '_> {
                 for result_ty in result_types {
                     let result_ty_abi = self.types.canonical_abi(result_ty);
                     lift_fns.push(match result_ty {
-                        InterfaceType::Bool => {
-                            self.gen.intrinsic(Intrinsic::LiftFlatBoolFromStorage)
-                        }
-                        InterfaceType::S8 => self.gen.intrinsic(Intrinsic::LiftFlatS8FromStorage),
-                        InterfaceType::U8 => self.gen.intrinsic(Intrinsic::LiftFlatU8FromStorage),
-                        InterfaceType::S16 => self.gen.intrinsic(Intrinsic::LiftFlatS16FromStorage),
-                        InterfaceType::U16 => self.gen.intrinsic(Intrinsic::LiftFlatU16FromStorage),
-                        InterfaceType::S32 => self.gen.intrinsic(Intrinsic::LiftFlatS32FromStorage),
-                        InterfaceType::U32 => self.gen.intrinsic(Intrinsic::LiftFlatU32FromStorage),
-                        InterfaceType::S64 => self.gen.intrinsic(Intrinsic::LiftFlatS64FromStorage),
-                        InterfaceType::U64 => self.gen.intrinsic(Intrinsic::LiftFlatU64FromStorage),
-                        InterfaceType::Float32 => {
-                            self.gen.intrinsic(Intrinsic::LiftFlatFloat32FromStorage)
-                        }
-                        InterfaceType::Float64 => {
-                            self.gen.intrinsic(Intrinsic::LiftFlatFloat64FromStorage)
-                        }
+                        InterfaceType::Bool => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool)),
+                        InterfaceType::S8 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8)),
+                        InterfaceType::U8 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8)),
+                        InterfaceType::S16 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16)),
+                        InterfaceType::U16 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16)),
+                        InterfaceType::S32 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32)),
+                        InterfaceType::U32 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32)),
+                        InterfaceType::S64 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64)),
+                        InterfaceType::U64 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64)),
+                        InterfaceType::Float32 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32)),
+                        InterfaceType::Float64 => self
+                            .gen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64)),
                         InterfaceType::Char => match string_encoding {
-                            wasmtime_environ::component::StringEncoding::Utf8 => {
-                                self.gen.intrinsic(Intrinsic::LiftFlatCharUtf8FromStorage)
-                            }
-                            wasmtime_environ::component::StringEncoding::Utf16 => {
-                                self.gen.intrinsic(Intrinsic::LiftFlatCharUtf16FromStorage)
-                            }
+                            wasmtime_environ::component::StringEncoding::Utf8 => self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatCharUtf8)),
+                            wasmtime_environ::component::StringEncoding::Utf16 => self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatCharUtf16)),
                             wasmtime_environ::component::StringEncoding::CompactUtf16 => {
                                 todo!("latin1+utf8 not supported")
                             }
                         },
                         InterfaceType::String => match string_encoding {
-                            wasmtime_environ::component::StringEncoding::Utf8 => {
-                                self.gen.intrinsic(Intrinsic::LiftFlatStringUtf8FromStorage)
-                            }
+                            wasmtime_environ::component::StringEncoding::Utf8 => self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8)),
                             wasmtime_environ::component::StringEncoding::Utf16 => self
                                 .gen
-                                .intrinsic(Intrinsic::LiftFlatStringUtf16FromStorage),
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16)),
                             wasmtime_environ::component::StringEncoding::CompactUtf16 => {
                                 todo!("latin1+utf8 not supported")
                             }
                         },
                         InterfaceType::Record(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatRecordFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Variant(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatVariantFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::List(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatListFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Tuple(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatTupleFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Flags(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatFlagsFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Enum(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatEnumFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Option(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatOptionFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Result(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatResultFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Own(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatOwnFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Borrow(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatOwnFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                         InterfaceType::Future(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatFutureFromStorage);
-                            format!("(...args) => {{ {lift_fn}({}, ...args) }}", 4)
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
+                            format!("{lift_fn}.bind(null, 4)")
                         }
                         InterfaceType::Stream(_ty_idx) => {
-                            let lift_fn = self.gen.intrinsic(Intrinsic::LiftFlatStreamFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                            let lift_fn = self
+                                .gen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
+                            format!("{lift_fn}.bind(null {})", result_ty_abi.size32)
                         }
                         InterfaceType::ErrorContext(_ty_idx) => {
                             let lift_fn = self
                                 .gen
-                                .intrinsic(Intrinsic::LiftFlatErrorContextFromStorage);
-                            format!(
-                                "(...args) => {{ {lift_fn}({}, ...args) }}",
-                                result_ty_abi.size32
-                            )
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
+                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
                         }
                     });
                 }
@@ -1853,7 +1942,9 @@ impl<'a> Instantiator<'a, '_> {
                     .unwrap_or_else(|| "null".into());
                 let component_idx = instance.as_u32();
                 let vals = "[]"; // TODO: build values to pass along to task return
-                let task_return_fn = self.gen.intrinsic(Intrinsic::TaskReturn);
+                let task_return_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
                 let callback_fn_idx = callback
                     .map(|v| v.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
@@ -2381,7 +2472,8 @@ impl<'a> Instantiator<'a, '_> {
         local_name: String,
     ) {
         if import_specifier.starts_with("webidl:") {
-            self.gen.intrinsic(Intrinsic::GlobalThisIdlProxy);
+            self.gen
+                .intrinsic(Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy));
         }
 
         // Build the import path depending on the kind of interface

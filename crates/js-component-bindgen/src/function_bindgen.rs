@@ -11,6 +11,10 @@ use wit_parser::{
     Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
 };
 
+use crate::intrinsics::conversion::ConversionIntrinsic;
+use crate::intrinsics::js_helper::JsHelperIntrinsic;
+use crate::intrinsics::resource::ResourceIntrinsic;
+use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::Intrinsic;
 use crate::{get_thrown_type, source};
 use crate::{uwrite, uwriteln};
@@ -176,7 +180,7 @@ impl FunctionBindgen<'_> {
         operands: &[String],
         results: &mut Vec<String>,
     ) {
-        let view = self.intrinsic(Intrinsic::DataView);
+        let view = self.intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::DataView));
         let memory = self.memory.as_ref().unwrap();
         results.push(format!(
             "{view}({memory}).{method}({} + {offset}, true)",
@@ -186,7 +190,7 @@ impl FunctionBindgen<'_> {
     }
 
     fn store(&mut self, method: &str, offset: ArchitectureSize, operands: &[String]) {
-        let view = self.intrinsic(Intrinsic::DataView);
+        let view = self.intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::DataView));
         let memory = self.memory.as_ref().unwrap();
         uwriteln!(
             self.src,
@@ -221,29 +225,29 @@ impl FunctionBindgen<'_> {
     fn bitcast(&mut self, cast: &Bitcast, op: &str) -> String {
         match cast {
             Bitcast::I32ToF32 => {
-                let cvt = self.intrinsic(Intrinsic::I32ToF32);
+                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToF32));
                 format!("{cvt}({op})")
             }
             Bitcast::F32ToI32 => {
-                let cvt = self.intrinsic(Intrinsic::F32ToI32);
+                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::F32ToI32));
                 format!("{cvt}({op})")
             }
             Bitcast::I64ToF64 => {
-                let cvt = self.intrinsic(Intrinsic::I64ToF64);
+                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I64ToF64));
                 format!("{cvt}({op})")
             }
             Bitcast::F64ToI64 => {
-                let cvt = self.intrinsic(Intrinsic::F64ToI64);
+                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::F64ToI64));
                 format!("{cvt}({op})")
             }
             Bitcast::I32ToI64 => format!("BigInt({op})"),
             Bitcast::I64ToI32 => format!("Number({op})"),
             Bitcast::I64ToF32 => {
-                let cvt = self.intrinsic(Intrinsic::I32ToF32);
+                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToF32));
                 format!("{cvt}(Number({op}))")
             }
             Bitcast::F32ToI64 => {
-                let cvt = self.intrinsic(Intrinsic::F32ToI32);
+                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::F32ToI32));
                 format!("BigInt({cvt}({op}))")
             }
             Bitcast::None
@@ -325,35 +329,35 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(operands.pop().unwrap())
             }
             Instruction::I32FromU8 => {
-                let conv = self.intrinsic(Intrinsic::ToUint8);
+                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint8));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
             Instruction::I32FromS8 => {
-                let conv = self.intrinsic(Intrinsic::ToInt8);
+                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt8));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
             Instruction::I32FromU16 => {
-                let conv = self.intrinsic(Intrinsic::ToUint16);
+                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint16));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
             Instruction::I32FromS16 => {
-                let conv = self.intrinsic(Intrinsic::ToInt16);
+                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt16));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
             Instruction::I32FromU32 => {
-                let conv = self.intrinsic(Intrinsic::ToUint32);
+                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint32));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
             Instruction::I32FromS32 => {
-                let conv = self.intrinsic(Intrinsic::ToInt32);
+                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
             Instruction::I64FromU64 => {
-                let conv = self.intrinsic(Intrinsic::ToBigUint64);
+                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToBigUint64));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
             Instruction::I64FromS64 => {
-                let conv = self.intrinsic(Intrinsic::ToBigInt64);
+                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToBigInt64));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
             Instruction::F32FromCoreF32 | Instruction::F64FromCoreF64 => {
@@ -363,11 +367,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(format!("+{}", operands[0]))
             }
             Instruction::CharFromI32 => {
-                let validate = self.intrinsic(Intrinsic::ValidateGuestChar);
+                let validate =
+                    self.intrinsic(Intrinsic::String(StringIntrinsic::ValidateGuestChar));
                 results.push(format!("{}({})", validate, operands[0]));
             }
             Instruction::I32FromChar => {
-                let validate = self.intrinsic(Intrinsic::ValidateHostChar);
+                let validate = self.intrinsic(Intrinsic::String(StringIntrinsic::ValidateHostChar));
                 results.push(format!("{}({})", validate, operands[0]));
             }
             Instruction::Bitcasts { casts } => {
@@ -963,9 +968,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
                 let intrinsic = if self.encoding == StringEncoding::UTF16 {
-                    Intrinsic::Utf16Encode
+                    Intrinsic::String(StringIntrinsic::Utf16Encode)
                 } else {
-                    Intrinsic::Utf8Encode
+                    Intrinsic::String(StringIntrinsic::Utf8Encode)
                 };
                 let encode = self.intrinsic(intrinsic);
                 let tmp = self.tmp();
@@ -978,7 +983,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     operands[0],
                 );
                 if self.encoding == StringEncoding::UTF8 {
-                    let encoded_len = self.intrinsic(Intrinsic::Utf8EncodedLen);
+                    let encoded_len =
+                        self.intrinsic(Intrinsic::String(StringIntrinsic::Utf8EncodedLen));
                     uwriteln!(self.src, "var len{tmp} = {encoded_len};");
                 } else {
                     uwriteln!(self.src, "var len{tmp} = {}.length;", operands[0]);
@@ -993,9 +999,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
                 let intrinsic = if self.encoding == StringEncoding::UTF16 {
-                    Intrinsic::Utf16Decoder
+                    Intrinsic::String(StringIntrinsic::Utf16Decoder)
                 } else {
-                    Intrinsic::Utf8Decoder
+                    Intrinsic::String(StringIntrinsic::Utf8Decoder)
                 };
                 let decoder = self.intrinsic(intrinsic);
                 let tmp = self.tmp();
@@ -1075,7 +1081,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 if let Some(prefix) = self.tracing_prefix {
-                    let to_result_string = self.intrinsic(Intrinsic::ToResultString);
+                    let to_result_string =
+                        self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToResultString));
                     uwriteln!(
                         self.src,
                         "console.error(`{prefix} return {}`);",
@@ -1135,7 +1142,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 if let Some(prefix) = self.tracing_prefix {
-                    let to_result_string = self.intrinsic(Intrinsic::ToResultString);
+                    let to_result_string =
+                        self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToResultString));
                     uwriteln!(
                         self.src,
                         "console.error(`{prefix} return {}`);",
@@ -1150,7 +1158,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 // After a high level call, we need to deactivate the component resource borrows.
                 if self.clear_resource_borrows {
                     let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
-                    let cur_resource_borrows = self.intrinsic(Intrinsic::CurResourceBorrows);
+                    let cur_resource_borrows =
+                        self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::CurResourceBorrows));
                     let is_host = matches!(
                         self.resource_map.iter().nth(0).unwrap().1.data,
                         ResourceData::Host { .. }
@@ -1274,15 +1283,18 @@ impl Bindgen for FunctionBindgen<'_> {
                         let tid = tid.as_u32();
                         let rid = rid.as_u32();
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
-                        let rsc_table_remove = self.intrinsic(Intrinsic::ResourceTableRemove);
-                        let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
+                        let rsc_table_remove = self
+                            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+                        let rsc_flag = self
+                            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
                         if !imported {
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
                             uwriteln!(self.src, "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);");
                             if is_own {
                                 // Sending an own handle out to JS as a return value - set up finalizer and disposal.
-                                let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
+                                let empty_func = self
+                                    .intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
                                 uwriteln!(self.src,
                                             "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                     finalizationRegistry{tid}.register({rsc}, {handle}, {rsc});");
@@ -1339,8 +1351,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         // Borrow handles are tracked to release after the call by CallInterface.
                         if !is_own {
-                            let cur_resource_borrows =
-                                self.intrinsic(Intrinsic::CurResourceBorrows);
+                            let cur_resource_borrows = self.intrinsic(Intrinsic::Resource(
+                                ResourceIntrinsic::CurResourceBorrows,
+                            ));
                             uwriteln!(self.src, "{cur_resource_borrows}.push({rsc});");
                             self.clear_resource_borrows = true;
                         }
@@ -1384,8 +1397,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                     );
 
                             if !is_own {
-                                let cur_resource_borrows =
-                                    self.intrinsic(Intrinsic::CurResourceBorrows);
+                                let cur_resource_borrows = self.intrinsic(Intrinsic::Resource(
+                                    ResourceIntrinsic::CurResourceBorrows,
+                                ));
                                 uwriteln!(self.src, "{cur_resource_borrows}.push({{ rsc: {rsc}, drop: $resource_import${prefix}drop${lower_camel} }});");
                                 self.clear_resource_borrows = true;
                             }
@@ -1418,7 +1432,8 @@ impl Bindgen for FunctionBindgen<'_> {
                         let rid = rid.as_u32();
                         if !imported {
                             if is_own {
-                                let empty_func = self.intrinsic(Intrinsic::EmptyFunc);
+                                let empty_func = self
+                                    .intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));
                                 uwriteln!(
                                             self.src,
                                             "var {handle} = {op}[{symbol_resource_handle}];
@@ -1434,7 +1449,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                 // handle. This is because it is not possible for borrow handles to be passed
                                 // back reentrantly.
                                 // We then set the handle to the rep per the local borrow rule.
-                                let rsc_flag = self.intrinsic(Intrinsic::ResourceTableFlag);
+                                let rsc_flag = self.intrinsic(Intrinsic::Resource(
+                                    ResourceIntrinsic::ResourceTableFlag,
+                                ));
                                 let own_handle = format!("handle{}", self.tmp());
                                 uwriteln!(self.src,
                                             "var {own_handle} = {op}[{symbol_resource_handle}];
@@ -1460,10 +1477,14 @@ impl Bindgen for FunctionBindgen<'_> {
                             // resource was constructed externally.
                             let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
                             let rsc_table_create = if is_own {
-                                self.intrinsic(Intrinsic::ResourceTableCreateOwn)
+                                self.intrinsic(Intrinsic::Resource(
+                                    ResourceIntrinsic::ResourceTableCreateOwn,
+                                ))
                             } else {
                                 self.intrinsic(Intrinsic::ScopeId);
-                                self.intrinsic(Intrinsic::ResourceTableCreateBorrow)
+                                self.intrinsic(Intrinsic::Resource(
+                                    ResourceIntrinsic::ResourceTableCreateBorrow,
+                                ))
                             };
                             uwriteln!(
                                 self.src,
