@@ -1733,7 +1733,7 @@ impl<'a> Instantiator<'a, '_> {
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {context_set_fn}({slot}, ...args);"
+                    "const trampoline{i} = {context_set_fn}.bind(null, {slot});"
                 );
             }
 
@@ -1743,7 +1743,7 @@ impl<'a> Instantiator<'a, '_> {
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {context_get_fn}({slot}, ...args);"
+                    "const trampoline{i} = {context_get_fn}.bind(null, {slot});"
                 );
             }
 
@@ -3260,6 +3260,7 @@ impl<'a> Instantiator<'a, '_> {
         if self.async_exports.contains(func_name) {
             is_async = true;
         }
+
         // Allow using the func name (e.g. '[async]run')
         if self
             .async_exports
@@ -3267,6 +3268,7 @@ impl<'a> Instantiator<'a, '_> {
         {
             is_async = true;
         }
+
         // Allow using the versioned/unversioned exports
         match export_name.find('@') {
             Some(i) => {
