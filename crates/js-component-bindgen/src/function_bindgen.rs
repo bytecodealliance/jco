@@ -135,7 +135,10 @@ pub struct FunctionBindgen<'a> {
     pub post_return: Option<&'a String>,
 
     /// Prefix to use when printing tracing information
-    pub tracing_prefix: Option<&'a String>,
+    pub tracing_prefix: &'a String,
+
+    /// Whether tracing is enabled
+    pub tracing_enabled: bool,
 
     /// Method if string encoding
     pub encoding: StringEncoding,
@@ -1121,12 +1124,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{}[Instruction::CallWasm] {name}');",
-                    if let Some(prefix) = self.tracing_prefix {
-                        format!("{prefix} ")
-                    } else {
-                        "".into()
-                    }
+                    "{debug_log_fn}('{prefix}[Instruction::CallWasm] {name}');",
+                    prefix = self.tracing_prefix,
                 );
 
                 let sig_results_length = sig.results.len();
@@ -1139,7 +1138,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     operands.join(", ")
                 );
 
-                if let Some(prefix) = self.tracing_prefix {
+                if self.tracing_enabled {
+                    let prefix = self.tracing_prefix;
                     let to_result_string =
                         self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToResultString));
                     uwriteln!(
@@ -1158,13 +1158,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{}[Instruction::CallInterface] {} (async? {async_})');",
-                    if let Some(prefix) = self.tracing_prefix {
-                        format!("{prefix} ")
-                    } else {
-                        "".into()
-                    },
-                    func.item_name()
+                    "{debug_log_fn}('{prefix}[Instruction::CallInterface] {func_name} ({async_})');",
+                    prefix = self.tracing_prefix,
+                    func_name = func.name,
+                    async_ = async_.then_some("async").unwrap_or("sync"),
                 );
 
                 let results_length = if func.result.is_none() { 0 } else { 1 };
@@ -1213,7 +1210,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(self.src, "{call};");
                 }
 
-                if let Some(prefix) = self.tracing_prefix {
+                if self.tracing_enabled {
+                    let prefix = self.tracing_prefix;
                     let to_result_string =
                         self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToResultString));
                     uwriteln!(
