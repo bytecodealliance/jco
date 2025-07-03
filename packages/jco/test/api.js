@@ -23,8 +23,9 @@ import {
 
 const isWindows = platform === 'win32';
 
-// - (2025/02/04) incrased due to incoming implementations of async and new flush impl
-const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 28_500;
+// - (2025/02/04) increased due to incoming implementations of async and new flush impl
+// - (2025/08/07) increased due to async task implementations, refactors
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 60_000;
 
 suite('API', () => {
     let flavorfulWasmBytes;

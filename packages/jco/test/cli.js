@@ -221,12 +221,12 @@ suite('CLI', () => {
         assert.ok(source.includes('function toResultString('));
         assert.ok(
             source.includes(
-                'console.error(`[module="test:flavorful/test", function="f-list-in-record1"] call a'
+                'console.error(`[iface="test:flavorful/test", function="f-list-in-record1"] call a'
             )
         );
         assert.ok(
             source.includes(
-                'console.error(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);'
+                'console.error(`[iface="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);'
             )
         );
     });

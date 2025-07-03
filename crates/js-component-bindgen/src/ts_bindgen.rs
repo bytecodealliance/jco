@@ -15,7 +15,9 @@ use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
-use crate::{dealias, feature_gate_allowed, get_thrown_type, uwrite, uwriteln};
+use crate::{
+    dealias, feature_gate_allowed, get_thrown_type, requires_async_porcelain, uwrite, uwriteln,
+};
 
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the
@@ -200,9 +202,9 @@ pub fn ts_bindgen(
                         TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
-                        TypeDefKind::Unknown => unreachable!(),
+                        TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
                         TypeDefKind::Resource => gen.type_resource(*tid, ty),
-                        TypeDefKind::Handle(_) => todo!(),
+                        TypeDefKind::Handle(_) => todo!("type generation for handle"),
                     }
                     let (src, references) = gen.finish();
                     bindgen.src.push_str(&src);
@@ -234,7 +236,9 @@ pub fn ts_bindgen(
             WorldItem::Function(f) => {
                 let export_name = match name {
                     WorldKey::Name(export_name) => export_name,
-                    WorldKey::Interface(_) => unreachable!(),
+                    WorldKey::Interface(_) => {
+                        unreachable!("unexpected interface export during export processing")
+                    }
                 };
                 if !feature_gate_allowed(resolve, package, &f.stability, &f.name)
                     .context("failed to check feature gate for export")?
@@ -531,8 +535,9 @@ impl TsBindgen {
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
-            let is_async = should_render_async(func, id_name, &self.async_exports);
-            gen.ts_func(func, false, declaration, is_async);
+            let requires_async_porcelain =
+                requires_async_porcelain(func, id_name, &self.async_exports);
+            gen.ts_func(func, false, declaration, requires_async_porcelain);
         }
 
         let (src, references) = gen.finish();
@@ -609,8 +614,9 @@ impl TsBindgen {
                 {
                     continue;
                 }
-                let is_async = should_render_async(func, &id_name, async_funcs);
-                gen.ts_func(func, false, true, is_async);
+                let requires_async_porcelain =
+                    requires_async_porcelain(func, &id_name, async_funcs);
+                gen.ts_func(func, false, true, requires_async_porcelain);
             }
 
             gen.types(id);
@@ -716,9 +722,9 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
                 TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                 TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
-                TypeDefKind::Unknown => unreachable!(),
+                TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
                 TypeDefKind::Resource => self.type_resource(*id, ty),
-                TypeDefKind::Handle(_) => todo!(),
+                TypeDefKind::Handle(_) => todo!("types for handle"),
             }
         }
     }
@@ -783,8 +789,8 @@ impl<'a> TsInterface<'a> {
                         self.print_optional_ty(maybe_ty.as_ref());
                         self.src.push_str(">");
                     }
-                    TypeDefKind::Unknown => unreachable!(),
-                    TypeDefKind::Resource => todo!(),
+                    TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
+                    TypeDefKind::Resource => todo!("[print_ty()] resource"),
                     TypeDefKind::Handle(h) => {
                         let ty = match h {
                             Handle::Own(r) => r,
@@ -1212,34 +1218,4 @@ fn generate_references(references: &BTreeSet<String>) -> String {
         uwriteln!(out, "/// <reference path=\"{}\" />", reference);
     }
     out
-}
-
-fn should_render_async(func: &Function, id: &str, async_funcs: &HashSet<String>) -> bool {
-    let name = func.name.as_str();
-
-    if async_funcs.contains(name) {
-        return true;
-    }
-
-    let qualified_name = format!("{id}#{name}");
-    if async_funcs.contains(&qualified_name) {
-        return true;
-    }
-
-    if let Some(pos) = id.find('@') {
-        let namespace = &id[..pos];
-        let namespaced_name = format!("{namespace}#{name}");
-
-        if async_funcs.contains(&namespaced_name) {
-            return true;
-        }
-    }
-
-    // Fallback to taking value straight from wit
-    matches!(
-        func.kind,
-        FunctionKind::AsyncMethod(_)
-            | FunctionKind::AsyncStatic(_)
-            | FunctionKind::AsyncFreestanding
-    )
 }

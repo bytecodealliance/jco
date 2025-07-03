@@ -28,7 +28,6 @@ strip = true
 anyhow = { version = "1.0.95", default-features = false }
 base64 = { version = "0.22.1", default-features = false }
 heck = { version = "0.5.0", default-features = false }
-js-component-bindgen = { path = "./crates/js-component-bindgen" }
 log = { version = "0.4.22", default-features = false }
 semver = { version = "1.0.25", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
@@ -44,6 +43,8 @@ wit-bindgen = { version = "0.43.0", default-features = false }
 wit-bindgen-core = { version = "0.43.0", default-features = false }
 wit-component = { version = "0.235.0", features = ["dummy-module"] }
 wit-parser = { version = "0.235.0", default-features = false }
+
+js-component-bindgen = { path = "./crates/js-component-bindgen" }
 
 # TODO: move to upstream wasmtime
 wasmtime-environ = { git = "https://github.com/bytecodealliance/wasip3-prototyping", rev = "d025f02671800328ec170d0f948eaabb604e94af", features = [

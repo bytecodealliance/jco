@@ -1,3 +1,5 @@
+/* global Buffer */
+
 import { platform } from 'node:process';
 import { extname, basename, resolve } from 'node:path';
 
@@ -427,19 +429,24 @@ ${autoInstantiate}`;
     }
 
     if (opts.minify) {
-        ({ code: jsFile[1] } = await minify(
-            Buffer.from(jsFile[1]).toString('utf8'),
-            {
-                module: true,
-                compress: {
-                    ecma: 9,
-                    unsafe: true,
-                },
-                mangle: {
-                    keep_classnames: true,
-                },
-            }
-        ));
+        try {
+            ({ code: jsFile[1] } = await minify(
+                Buffer.from(jsFile[1]).toString('utf8'),
+                {
+                    module: true,
+                    compress: {
+                        ecma: 9,
+                        unsafe: true,
+                    },
+                    mangle: {
+                        keep_classnames: true,
+                    },
+                }
+            ));
+        } catch (err) {
+            console.error(`error while minifying JS: ${err}`);
+            throw err;
+        }
     }
 
     return { files: Object.fromEntries(files), imports, exports };

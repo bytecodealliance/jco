@@ -54,8 +54,22 @@ pub enum Intrinsic {
     AsyncFuture(AsyncFutureIntrinsic),
     Component(ComponentIntrinsic),
 
+    // Polyfills
+    PromiseWithResolversPolyfill,
+
     /// Enable debug logging
     DebugLog,
+
+    /// Global setting for determinism (used in async)
+    GlobalAsyncDeterminism,
+
+    /// Randomly produce a boolean true/false
+    CoinFlip,
+
+    // Basic type helpers
+    ConstantI32Max,
+    ConstantI32Min,
+    TypeCheckValidI32,
 
     Base64Compile,
     ClampGuest,
@@ -95,6 +109,10 @@ pub enum Intrinsic {
     /// Representations of objects stored in one of these tables is a u32 (0 is expected to be an invalid index).
     RepTableClass,
 
+    /// Class that wraps `Promise`s and other things that can be awaited so that we can
+    /// keep track of whether resolutions have happened
+    AwaitableClass,
+
     /// Event codes used for async, as a JS enum
     AsyncEventCodeEnum,
 
@@ -115,11 +133,29 @@ pub enum Intrinsic {
     IsBorrowedType,
 }
 
+/// Profile for determinism to be used by async implementation
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) enum DeterminismProfile {
+pub(crate) enum AsyncDeterminismProfile {
+    /// Allow random ordering non-determinism
     #[default]
-    Deterministic,
     Random,
+
+    /// Require determinism
+    #[allow(unused)]
+    Deterministic,
+}
+
+impl std::fmt::Display for AsyncDeterminismProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Deterministic => "deterministic",
+                Self::Random => "random",
+            }
+        )
+    }
 }
 
 /// Arguments to `render_intrinsics`
@@ -131,7 +167,7 @@ pub struct RenderIntrinsicsArgs<'a> {
     /// Whether instantiation has occurred
     pub(crate) instantiation: bool,
     /// The kind of determinism to use
-    pub(crate) determinism: DeterminismProfile,
+    pub(crate) determinism: AsyncDeterminismProfile,
 }
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
@@ -139,8 +175,24 @@ pub struct RenderIntrinsicsArgs<'a> {
 pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     let mut output = Source::default();
 
-    // Always include debug logging
+    // Intrinsics that should just always be present
     args.intrinsics.insert(Intrinsic::DebugLog);
+    args.intrinsics.insert(Intrinsic::GlobalAsyncDeterminism);
+    args.intrinsics.insert(Intrinsic::CoinFlip);
+    args.intrinsics.insert(Intrinsic::ConstantI32Min);
+    args.intrinsics.insert(Intrinsic::ConstantI32Max);
+    args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
+    args.intrinsics.insert(Intrinsic::AsyncTask(
+        AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId,
+    ));
+    args.intrinsics.insert(Intrinsic::AsyncTask(
+        AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx,
+    ));
+    args.intrinsics.insert(Intrinsic::AsyncTask(
+        AsyncTaskIntrinsic::UnpackCallbackResult,
+    ));
+    args.intrinsics
+        .insert(Intrinsic::PromiseWithResolversPolyfill);
 
     // Handle intrinsic "dependence"
     if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
@@ -249,7 +301,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         .contains(&Intrinsic::Component(ComponentIntrinsic::BackpressureSet))
     {
         args.intrinsics.extend([&Intrinsic::Component(
-            ComponentIntrinsic::GlobalBackpressureMap,
+            ComponentIntrinsic::GetOrCreateAsyncState,
         )]);
     }
 
@@ -259,6 +311,44 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         args.intrinsics.extend([&Intrinsic::RepTableClass]);
     }
 
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+            &Intrinsic::RepTableClass,
+            &Intrinsic::AwaitableClass,
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::Component(
+        ComponentIntrinsic::GetOrCreateAsyncState,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
+            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
+        ]);
+    }
+
+    // Render all provided intrinsics
     for current_intrinsic in args.intrinsics.iter() {
         match current_intrinsic {
             Intrinsic::JsHelper(i) => i.render(&mut output),
@@ -272,6 +362,65 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             Intrinsic::AsyncStream(i) => i.render(&mut output),
             Intrinsic::AsyncFuture(i) => i.render(&mut output),
             Intrinsic::Component(i) => i.render(&mut output),
+
+            Intrinsic::GlobalAsyncDeterminism => {
+                output.push_str(&format!(
+                    "const {var_name} = '{determinism}';\n",
+                    var_name = current_intrinsic.name(),
+                    determinism = args.determinism,
+                ));
+            }
+
+            Intrinsic::CoinFlip => {
+                output.push_str(&format!(
+                    "const {var_name} = () => {{ return Math.random() > 0.5; }};\n",
+                    var_name = current_intrinsic.name(),
+                ));
+            }
+
+            Intrinsic::AwaitableClass => {
+                output.push_str(&format!("
+                    class {class_name} {{
+                        static _ID = 0n;
+
+                        #id;
+                        #promise;
+                        #resolved = false;
+
+                        constructor(promise) {{
+                            if (!promise) {{ throw new TypeError('Awaitable must have an interior promise'); }}
+                            if (!('then' in promise) || typeof promise.then !== 'function') {{
+                                throw new Error('missing/invalid promise');
+                            }}
+                            promise.then(() => this.#resolved  = true);
+                            this.#promise = promise;
+                            this.#id = ++{class_name}._ID;
+                        }}
+
+                        id() {{ return this.#id; }}
+
+                        resolved() {{ return this.#resolved; }}
+
+                        then() {{ return this.#promise.then(...arguments); }}
+                    }}
+                ",
+                class_name = current_intrinsic.name(),
+                ));
+            }
+
+            Intrinsic::ConstantI32Min => output.push_str(&format!(
+                "const {const_name} = -2_147_483_648;\n",
+                const_name = current_intrinsic.name()
+            )),
+            Intrinsic::ConstantI32Max => output.push_str(&format!(
+                "const {const_name} = 2_147_483_647;\n",
+                const_name = current_intrinsic.name()
+            )),
+            Intrinsic::TypeCheckValidI32 => {
+                let i32_const_min = Intrinsic::ConstantI32Min.name();
+                let i32_const_max = Intrinsic::ConstantI32Max.name();
+                output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = current_intrinsic.name()))
+            }
 
             Intrinsic::Base64Compile => {
                 if !args.no_nodejs_compat {
@@ -464,6 +613,24 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 ));
             }
 
+            Intrinsic::PromiseWithResolversPolyfill => {
+                output.push_str(
+                    r#"
+                    if (!Promise.withResolvers) {
+                        Promise.withResolvers = () => {
+                            let resolve;
+                            let reject;
+                            const promise = new Promise((res, rej) => {
+                                resolve = res;
+                                reject = rej;
+                            });
+                            return { promise, resolve, reject };
+                        };
+                    }
+                "#,
+                );
+            }
+
             Intrinsic::AsyncEventCodeEnum => {
                 let name = Intrinsic::AsyncEventCodeEnum.name();
                 output.push_str(&format!(
@@ -572,7 +739,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 output.push_str(&format!("
                     function {write_async_event_to_memory_fn}(memory, task, event, ptr) {{
                         {debug_log_fn}('[{write_async_event_to_memory_fn}()] args', {{ memory, task, event, ptr }});
-                        throw new Error('not implemented');
+                        throw new Error('{write_async_event_to_memory_fn}() not implemented');
                     }}
                 "));
             }
@@ -724,9 +891,20 @@ impl Intrinsic {
             Intrinsic::ThrowInvalidBool => "throwInvalidBool",
             Intrinsic::ThrowUninitialized => "throwUninitialized",
 
+            // Debugging
+            Intrinsic::DebugLog => "_debugLog",
+            Intrinsic::PromiseWithResolversPolyfill => unreachable!(),
+
+            // Types
+            Intrinsic::ConstantI32Min => "I32_MIN",
+            Intrinsic::ConstantI32Max => "I32_MAX",
+            Intrinsic::TypeCheckValidI32 => "_typeCheckValidI32",
             Intrinsic::IsBorrowedType => "_isBorrowedType",
 
-            Intrinsic::DebugLog => "_debugLog",
+            // Async
+            Intrinsic::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",
+            Intrinsic::AwaitableClass => "Awaitable",
+            Intrinsic::CoinFlip => "_coinFlip",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",

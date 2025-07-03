@@ -42,11 +42,14 @@ use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
-use crate::intrinsics::{render_intrinsics, DeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{
+    render_intrinsics, AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs,
+};
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
-use crate::source;
-use crate::{core, get_thrown_type};
-use crate::{uwrite, uwriteln};
+use crate::{
+    core, get_thrown_type, is_guest_async_lifted_fn, requires_async_porcelain, source, uwrite,
+    uwriteln,
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct TranspileOpts {
@@ -148,6 +151,30 @@ struct JsBindgen<'a> {
     /// List of all core Wasm exported functions (and if is async) referenced in
     /// `src` so far.
     all_core_exported_funcs: Vec<(String, bool)>,
+}
+
+/// Arguments provided to `JSBindgen::bindgen`, normally called to perform bindgen on a given function
+struct JsFunctionBindgenArgs<'a> {
+    /// Number of params that the function expects
+    nparams: usize,
+    /// Internal convention for function calls (ex. whether the first argument is known to be 'this')
+    call_type: CallType,
+    /// Interface name (if inside an interface)
+    iface_name: Option<&'a str>,
+    /// Callee of the function
+    callee: &'a str,
+    /// Canon opts provided for the functions
+    opts: &'a CanonicalOptions,
+    /// Parsed function metadata
+    func: &'a Function,
+    resource_map: &'a ResourceMap,
+    remote_resource_map: &'a RemoteResourceMap,
+    /// ABI variant of the function
+    abi: AbiVariant,
+    /// Whether the function in question is a host async function (i.e. JSPI)
+    requires_async_porcelain: bool,
+    /// Whether the function in question is a guest async function (i.e. WASI P3)
+    is_guest_async_lifted: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -337,7 +364,7 @@ impl JsBindgen<'_> {
             intrinsics: &mut self.all_intrinsics,
             no_nodejs_compat: self.opts.no_nodejs_compat,
             instantiation: self.opts.instantiation.is_some(),
-            determinism: DeterminismProfile::default(),
+            determinism: AsyncDeterminismProfile::default(),
         });
 
         if let Some(instantiation) = &self.opts.instantiation {
@@ -556,8 +583,12 @@ impl<'a> Instantiator<'a, '_> {
                 .find(|(_, (impt_name, _))| impt_name == name)
             else {
                 match item {
-                    WorldItem::Interface { .. } => unreachable!(),
-                    WorldItem::Function(_) => unreachable!(),
+                    WorldItem::Interface { .. } => {
+                        unreachable!("unexpected interface in import types during initialization")
+                    }
+                    WorldItem::Function(_) => {
+                        unreachable!("unexpected function in import types during initialization")
+                    }
                     WorldItem::Type(ty) => {
                         assert!(!matches!(
                             self.resolve.types[*ty].kind,
@@ -570,7 +601,7 @@ impl<'a> Instantiator<'a, '_> {
             match item {
                 WorldItem::Interface { id, stability: _ } => {
                     let TypeDef::ComponentInstance(instance) = import else {
-                        unreachable!()
+                        unreachable!("unexpectedly non-component instance import in interface")
                     };
                     let import_ty = &self.types[*instance];
                     let iface = &self.resolve.interfaces[*id];
@@ -582,7 +613,7 @@ impl<'a> Instantiator<'a, '_> {
                                 self.imports_resource_types.insert(ty, resource_idx);
                             }
                             Some(TypeDef::Interface(_)) | None => {}
-                            Some(_) => unreachable!(),
+                            Some(_) => unreachable!("unexpected type in interface"),
                         }
                     }
                 }
@@ -594,7 +625,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.imports_resource_types.insert(ty, resource_idx);
                     }
                     TypeDef::Interface(_) => {}
-                    _ => unreachable!(),
+                    _ => unreachable!("unexpected type in import world item"),
                 },
             }
         }
@@ -613,7 +644,7 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Interface { id, stability: _ } => {
                     let iface = &self.resolve.interfaces[*id];
                     let Export::Instance { exports, .. } = &export else {
-                        unreachable!()
+                        unreachable!("unexpectedly non export instance item")
                     };
                     for (ty_name, ty) in &iface.types {
                         match self.component.export_items
@@ -625,12 +656,15 @@ impl<'a> Instantiator<'a, '_> {
                                 self.exports_resource_types.insert(ty, resource_idx);
                             }
                             Export::Type(_) => {}
-                            _ => unreachable!(),
+                            _ => unreachable!(
+                                "unexpected type in component export items on iface [{iface_name}]",
+                                iface_name = iface.name.as_deref().unwrap_or("<unknown>"),
+                            ),
                         }
                     }
                 }
                 WorldItem::Function(_) => {}
-                WorldItem::Type(_) => unreachable!(),
+                WorldItem::Type(_) => unreachable!("unexpected exported world item type"),
             }
         }
     }
@@ -1109,7 +1143,7 @@ impl<'a> Instantiator<'a, '_> {
                     ..
                 } = options
                 else {
-                    panic!("missing/invalid data model for options during stream.read")
+                    unreachable!("missing/invalid data model for options during stream.read")
                 };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
@@ -1155,7 +1189,7 @@ impl<'a> Instantiator<'a, '_> {
                     ..
                 } = options
                 else {
-                    panic!("unexpected memory data model during stream.write");
+                    unreachable!("unexpected memory data model during stream.write");
                 };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory
@@ -1261,7 +1295,7 @@ impl<'a> Instantiator<'a, '_> {
                     ..
                 } = options
                 else {
-                    panic!("unexpected memory data model during future.read");
+                    unreachable!("unexpected memory data model during future.read");
                 };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for future.read").as_u32();
@@ -1316,7 +1350,7 @@ impl<'a> Instantiator<'a, '_> {
                     ..
                 } = options
                 else {
-                    panic!("unexpected memory data model during future.write");
+                    unreachable!("unexpected memory data model during future.write");
                 };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory
@@ -1465,12 +1499,13 @@ impl<'a> Instantiator<'a, '_> {
                     .get(*options)
                     .expect("failed to find options")
                 else {
-                    panic!("unexpected memory data model");
+                    panic!("unexpected memory data model during error-context.debug-message");
                 };
 
                 let debug_message_fn = self
                     .gen
                     .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::DebugMessage));
+
                 let realloc_fn_idx = realloc
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
@@ -1828,7 +1863,7 @@ impl<'a> Instantiator<'a, '_> {
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {context_set_fn}({slot}, ...args);"
+                    "const trampoline{i} = {context_set_fn}.bind(null, {slot});"
                 );
             }
 
@@ -1838,13 +1873,11 @@ impl<'a> Instantiator<'a, '_> {
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {context_get_fn}({slot}, ...args);"
+                    "const trampoline{i} = {context_get_fn}.bind(null, {slot});"
                 );
             }
 
             Trampoline::TaskReturn { results, options } => {
-                let result_types = &self.types[*results].types;
-
                 let CanonicalOptions {
                     instance,
                     async_,
@@ -1860,7 +1893,7 @@ impl<'a> Instantiator<'a, '_> {
                     .get(*options)
                     .expect("failed to find options")
                 else {
-                    panic!("unexpected memory data model");
+                    unreachable!("unexpected memory data model during task.return");
                 };
 
                 // Validate canonopts
@@ -1886,14 +1919,12 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
 
-                // TODO: save the async callback that should be called later, to the current task?
-                // TODO: save the instance with the async callback
-
-                // TODO: Call the appropriate lift here to move the type from inside the component
-                // to outside (and eventually into the caller, who initiated the call that lead to this task.return)
+                // TODO: async callbacks always have a result, but that's not the *actual* return,
+                // it's the async one.
 
                 // Build up a list of all the lifting functions that will be needed for the types
                 // that are actually being task.return'd by this call
+                let result_types = &self.types[*results].types;
                 let mut lift_fns: Vec<String> = Vec::with_capacity(result_types.len());
                 for result_ty in result_types {
                     let result_ty_abi = self.types.canonical_abi(result_ty);
@@ -2044,7 +2075,6 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|idx| format!("memory{}", idx.as_u32()))
                     .unwrap_or_else(|| "null".into());
                 let component_idx = instance.as_u32();
-                let vals = "[]"; // TODO: build values to pass along to task return
                 let task_return_fn = self
                     .gen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
@@ -2055,11 +2085,11 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {task_return_fn}.bind(
+                         null,
                          {component_idx},
                          {memory_js},
                          {callback_fn_idx},
                          {lift_fns_js},
-                         {vals},
                      );",
                 );
             }
@@ -2092,7 +2122,7 @@ impl<'a> Instantiator<'a, '_> {
                 self.lower_import(*index, *import);
             }
             GlobalInitializer::ExtractMemory(m) => {
-                let def = self.core_export(&m.export);
+                let def = self.core_export_var_name(&m.export);
                 let idx = m.index.as_u32();
                 uwriteln!(self.src.js, "let memory{idx};");
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
@@ -2244,19 +2274,21 @@ impl<'a> Instantiator<'a, '_> {
                     );
                     bundle
                 }
-                WorldItem::Type(_) => unreachable!(),
+                WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
 
-        let is_async = self
-            .async_imports
-            .contains(&format!("{import_name}#{func_name}"))
-            || import_name
-                .find('@')
-                .map(|i| {
-                    self.async_imports
-                        .contains(&format!("{}#{func_name}", import_name.get(0..i).unwrap()))
-                })
-                .unwrap_or(false);
+        // WASI P3 async lifted functions should not have post returns
+        let is_guest_async_lifted = is_guest_async_lifted_fn(func, options);
+        if options.async_ {
+            assert!(
+                options.post_return.is_none(),
+                "async function {func_name} (import {import_name}) can't have post return",
+            );
+        }
+
+        // Host lifted async (i.e. JSPI)
+        let requires_async_porcelain =
+            requires_async_porcelain(func, import_name, &self.async_imports);
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
@@ -2369,7 +2401,7 @@ impl<'a> Instantiator<'a, '_> {
             .len();
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                if is_async {
+                if requires_async_porcelain {
                     uwrite!(
                         self.src.js,
                         "\nconst trampoline{} = new WebAssembly.Suspending(async function",
@@ -2378,24 +2410,26 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
                 }
-                self.bindgen(
+                self.bindgen(JsFunctionBindgenArgs {
                     nparams,
                     call_type,
-                    if import_name.is_empty() {
+                    iface_name: if import_name.is_empty() {
                         None
                     } else {
                         Some(import_name)
                     },
-                    &callee_name,
-                    options,
+                    callee: &callee_name,
+                    opts: options,
                     func,
-                    &import_resource_map,
-                    &import_remote_resource_map,
-                    AbiVariant::GuestImport,
-                    is_async,
-                );
+                    resource_map: &import_resource_map,
+                    remote_resource_map: &import_remote_resource_map,
+                    abi: AbiVariant::GuestImport,
+                    requires_async_porcelain,
+                    is_guest_async_lifted,
+                });
+
                 uwriteln!(self.src.js, "");
-                if is_async {
+                if requires_async_porcelain {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");
@@ -2411,17 +2445,22 @@ impl<'a> Instantiator<'a, '_> {
         // This is only necessary if an import binding mode is specified and not JS (the default),
         // (e.g. Optimized, Direct, Hybrid).
         if !matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
-            let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }) =
-                options.data_model
-            else {
-                panic!("missing/invalid data model");
-            };
-            let memory = memory
-                .map(|idx| format!(" memory: memory{},", idx.as_u32()))
-                .unwrap_or("".into());
-            let realloc = realloc
-                .map(|idx| format!(" realloc: realloc{},", idx.as_u32()))
-                .unwrap_or("".into());
+            let (memory, realloc) =
+                if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                    memory,
+                    realloc,
+                }) = options.data_model
+                {
+                    (
+                        memory.map(|idx| format!(" memory: memory{},", idx.as_u32())),
+                        realloc.map(|idx| format!(" realloc: realloc{},", idx.as_u32())),
+                    )
+                } else {
+                    (None, None)
+                };
+            let memory = memory.unwrap_or_default();
+            let realloc = realloc.unwrap_or_default();
+
             let post_return = options
                 .post_return
                 .map(|idx| format!(" postReturn: postReturn{},", idx.as_u32()))
@@ -2468,7 +2507,7 @@ impl<'a> Instantiator<'a, '_> {
                         ..
                     } = &data
                     else {
-                        unreachable!();
+                        unreachable!("unexpected non-host resource table");
                     };
                     resource_tables.push(*tid);
                 }
@@ -2511,7 +2550,7 @@ impl<'a> Instantiator<'a, '_> {
                         trampoline.as_u32()
                     );
                 }
-                None | Some(BindingsMode::Js) => unreachable!(),
+                None | Some(BindingsMode::Js) => unreachable!("invalid bindings mode"),
             };
         }
 
@@ -2937,36 +2976,52 @@ impl<'a> Instantiator<'a, '_> {
                 unreachable!("resource types do not need to be connected")
             }
             (TypeDefKind::Unknown, _) => unreachable!("unknown types cannot be connected"),
-            (_, _) => unreachable!(),
+            (tk1, tk2) => unreachable!("invalid typedef kind combination [{tk1:?}] [{tk2:?}]",),
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn bindgen(
-        &mut self,
-        nparams: usize,
-        call_type: CallType,
-        module_name: Option<&str>,
-        callee: &str,
-        opts: &CanonicalOptions,
-        func: &Function,
-        resource_map: &ResourceMap,
-        remote_resource_map: &RemoteResourceMap,
-        abi: AbiVariant,
-        is_async: bool,
-    ) {
-        let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }) =
-            opts.data_model
-        else {
-            panic!("unexpected data model, only linear memories supported");
-        };
+    fn bindgen(&mut self, args: JsFunctionBindgenArgs) {
+        let JsFunctionBindgenArgs {
+            nparams,
+            call_type,
+            iface_name,
+            callee,
+            opts,
+            func,
+            resource_map,
+            remote_resource_map,
+            abi,
+            requires_async_porcelain,
+            is_guest_async_lifted,
+        } = args;
 
-        let memory = memory.map(|idx| format!("memory{}", idx.as_u32()));
-        let realloc = realloc.map(|idx| format!("realloc{}", idx.as_u32()));
+        let (memory, realloc) =
+            if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                memory,
+                realloc,
+            }) = opts.data_model
+            {
+                (
+                    memory.map(|idx| format!("memory{}", idx.as_u32())),
+                    realloc.map(|idx| format!("realloc{}", idx.as_u32())),
+                )
+            } else {
+                (None, None)
+            };
+
         let post_return = opts
             .post_return
             .map(|idx| format!("postReturn{}", idx.as_u32()));
 
+        let tracing_prefix = format!(
+            "[iface=\"{}\", function=\"{}\"]",
+            iface_name.unwrap_or("<no iface>"),
+            func.name
+        );
+
+        // Write the function argument list
+        //
+        // At this point, only the function preamble (e.g. 'function nameOfFunc()') has been written
         self.src.js("(");
         let mut params = Vec::new();
         let mut first = true;
@@ -2986,12 +3041,7 @@ impl<'a> Instantiator<'a, '_> {
         }
         uwriteln!(self.src.js, ") {{");
 
-        let tracing_prefix = format!(
-            "[module=\"{}\", function=\"{}\"]",
-            module_name.unwrap_or("<no module>"),
-            func.name
-        );
-
+        // If tracing is enabled, output a function entry tracing message
         if self.gen.opts.tracing {
             let event_fields = func
                 .params
@@ -3006,6 +3056,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        // If TLA compat was enabled, ensure that it was initialized
         if self.gen.opts.tla_compat
             && matches!(abi, AbiVariant::GuestExport)
             && self.gen.opts.instantiation.is_none()
@@ -3019,6 +3070,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
             remote_resource_map,
@@ -3046,11 +3098,8 @@ impl<'a> Instantiator<'a, '_> {
             tmp: 0,
             params,
             post_return: post_return.as_ref(),
-            tracing_prefix: if self.gen.opts.tracing {
-                Some(&tracing_prefix)
-            } else {
-                None
-            },
+            tracing_prefix: &tracing_prefix,
+            tracing_enabled: self.gen.opts.tracing,
             encoding: match opts.string_encoding {
                 wasmtime_environ::component::StringEncoding::Utf8 => StringEncoding::UTF8,
                 wasmtime_environ::component::StringEncoding::Utf16 => StringEncoding::UTF16,
@@ -3060,27 +3109,37 @@ impl<'a> Instantiator<'a, '_> {
             },
             src: source::Source::default(),
             resolve: self.resolve,
-            is_async,
+            requires_async_porcelain,
+            is_guest_async_lifted,
+            canon_opts: opts,
+            iface_name,
         };
 
+        // Emit (and visit, via the `FunctionBindgen` object) an abstract sequence of
+        // instructions which represents the function being generated.
         abi::call(
             self.resolve,
             abi,
             match abi {
                 AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
-                AbiVariant::GuestExport => LiftLower::LowerArgsLiftResults,
+                AbiVariant::GuestExport => if is_guest_async_lifted {
+                    LiftLower::LiftArgsLowerResults
+                } else {
+                    LiftLower::LowerArgsLiftResults
+                },
                 AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (LIFT_LOWER) not yet implemented"),
                 AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (LIFT_LOWER) not yet implemented"),
                 AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (LIFT_LOWER) not yet implemented"),
             },
             func,
             &mut f,
-            // TODO: pass through async setting from bindgen object above
-            false,
+            is_guest_async_lifted,
         );
 
+        // Once visiting has completed, write the contents the `FunctionBindgen` generated to output
         self.src.js(&f.src);
 
+        // Close function body
         self.src.js("}");
     }
 
@@ -3180,7 +3239,7 @@ impl<'a> Instantiator<'a, '_> {
 
     fn core_def(&self, def: &CoreDef) -> String {
         match def {
-            CoreDef::Export(e) => self.core_export(e),
+            CoreDef::Export(e) => self.core_export_var_name(e),
             CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
@@ -3190,7 +3249,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn core_export<T>(&self, export: &CoreExport<T>) -> String
+    fn core_export_var_name<T>(&self, export: &CoreExport<T>) -> String
     where
         T: Into<EntityIndex> + Copy,
     {
@@ -3210,7 +3269,6 @@ impl<'a> Instantiator<'a, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    // TODO: record whether all exports are lifted sync/async (if they are all sync, no tasks!)
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
         for (export_name, export_idx) in exports.raw_iter() {
             let export = &self.component.export_items[*export_idx];
@@ -3226,7 +3284,9 @@ impl<'a> Instantiator<'a, '_> {
                 } => {
                     let func = match item {
                         WorldItem::Function(f) => f,
-                        WorldItem::Interface { .. } | WorldItem::Type(_) => unreachable!(),
+                        WorldItem::Interface { .. } | WorldItem::Type(_) => {
+                            unreachable!("unexpectedly non-function lifted function export")
+                        }
                     };
                     self.create_resource_fn_map(
                         func,
@@ -3287,14 +3347,16 @@ impl<'a> Instantiator<'a, '_> {
                 Export::Instance { exports, .. } => {
                     let id = match item {
                         WorldItem::Interface { id, stability: _ } => *id,
-                        WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
+                        WorldItem::Function(_) | WorldItem::Type(_) => {
+                            unreachable!("unexpectedly non-interface export instance")
+                        }
                     };
                     for (func_name, export_idx) in exports.raw_iter() {
                         let export = &self.component.export_items[*export_idx];
                         let (def, options, func_ty) = match export {
                             Export::LiftedFunction { func, options, ty } => (func, options, ty),
                             Export::Type(_) => continue, // ignored
-                            _ => unreachable!(),
+                            _ => unreachable!("unexpected non-lifted function export"),
                         };
 
                         let func = &self.resolve.interfaces[id].functions[func_name];
@@ -3379,45 +3441,22 @@ impl<'a> Instantiator<'a, '_> {
         export_resource_map: &ResourceMap,
         export_remote_resource_map: &RemoteResourceMap,
     ) {
-        // Determine whether the function should be async
-        let mut is_async = false;
-        let func_name = &func.name;
-        if self.async_exports.contains(func_name) {
-            is_async = true;
+        // Determine whether the function should be generated as async
+        let requires_async_porcelain =
+            requires_async_porcelain(func, export_name, &self.async_exports);
+        // If the function is *also* async lifted, it
+        if options.async_ {
+            assert!(
+                options.post_return.is_none(),
+                "async function {local_name} (export {export_name}) can't have post return"
+            );
         }
-        // Allow using the func name (e.g. '[async]run')
-        if self
-            .async_exports
-            .contains(&format!("{export_name}#{func_name}"))
-        {
-            is_async = true;
-        }
-        // Allow using the versioned/unversioned exports
-        match export_name.find('@') {
-            Some(i) => {
-                if self
-                    .async_exports
-                    .contains(&format!("{}#{func_name}", export_name.get(0..i).unwrap(),))
-                {
-                    is_async = true;
-                }
-            }
-            None => {
-                // Strip prefix modifier for async, if present
-                let bare_fn_name = if let Some(stripped) = func_name.strip_prefix("[async]") {
-                    stripped
-                } else {
-                    func_name
-                };
-                if self
-                    .async_exports
-                    .contains(&format!("{export_name}#{bare_fn_name}"))
-                {
-                    is_async = true;
-                }
-            }
-        }
-        let maybe_async = if is_async { "async " } else { "" };
+
+        let maybe_async = if requires_async_porcelain {
+            "async "
+        } else {
+            ""
+        };
 
         // Start building early variable declarations
         let core_export_fn = self.core_def(def);
@@ -3432,7 +3471,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let {local_name};");
                 self.gen
                     .all_core_exported_funcs
-                    .push((core_export_fn.clone(), is_async));
+                    .push((core_export_fn.clone(), requires_async_porcelain));
                 local_name
             }
         };
@@ -3512,25 +3551,26 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         // Perform bindgen
-        self.bindgen(
-            func.params.len(),
-            match func.kind {
+        self.bindgen(JsFunctionBindgenArgs {
+            nparams: func.params.len(),
+            call_type: match func.kind {
                 FunctionKind::Method(_) => CallType::FirstArgIsThis,
                 _ => CallType::Standard,
             },
-            if export_name.is_empty() {
+            iface_name: if export_name.is_empty() {
                 None
             } else {
                 Some(export_name)
             },
-            &callee,
-            options,
+            callee: &callee,
+            opts: options,
             func,
-            export_resource_map,
-            export_remote_resource_map,
-            AbiVariant::GuestExport,
-            is_async,
-        );
+            resource_map: export_resource_map,
+            remote_resource_map: export_remote_resource_map,
+            abi: AbiVariant::GuestExport,
+            requires_async_porcelain,
+            is_guest_async_lifted: is_guest_async_lifted_fn(func, options),
+        });
 
         // End the function
         match func.kind {
@@ -3661,25 +3701,21 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 }
 
 /// Perform basic canonical option validation
-///
-/// This validation expects only canon opts with linear memories
-fn is_valid_canonopt(opts: &CanonicalOptions) -> Result<()> {
-    let CanonicalOptions {
-        data_model:
-            CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
-                memory, realloc, ..
-            }),
-
+fn is_valid_canonopt(
+    CanonicalOptions {
+        data_model,
         callback,
         post_return,
         async_,
         ..
-    } = opts
-    else {
-        bail!("invalid data model for canonical options");
-    };
-    if realloc.is_some() && memory.is_none() {
-        bail!("memory must be present if realloc is");
+    }: &CanonicalOptions,
+) -> Result<()> {
+    if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }) =
+        data_model
+    {
+        if realloc.is_some() && memory.is_none() {
+            bail!("memory must be present if realloc is");
+        }
     }
     if *async_ && post_return.is_some() {
         bail!("async and post return must not be specified together");

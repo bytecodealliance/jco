@@ -75,7 +75,15 @@ JS tests are powered by [`vitest`][vitest], and a specific test suite can be run
 the filename to `npm run test`:
 
 ```console
+cd packages/jco
 npm run test runtime.js
+```
+
+For example, to run multiple tests in a given folder:
+
+```console
+cd packages/jco
+npm run test test/p3/*.js
 ```
 
 ## Commits
