@@ -15,7 +15,7 @@ use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
-use crate::{dealias, feature_gate_allowed, get_thrown_type, uwrite, uwriteln};
+use crate::{dealias, feature_gate_allowed, get_thrown_type, is_async_fn, uwrite, uwriteln};
 
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the
@@ -531,7 +531,7 @@ impl TsBindgen {
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
-            let is_async = should_render_async(func, id_name, &self.async_exports);
+            let is_async = is_async_fn(func, id_name, &self.async_exports);
             gen.ts_func(func, false, declaration, is_async);
         }
 
@@ -609,7 +609,7 @@ impl TsBindgen {
                 {
                     continue;
                 }
-                let is_async = should_render_async(func, &id_name, async_funcs);
+                let is_async = is_async_fn(func, &id_name, async_funcs);
                 gen.ts_func(func, false, true, is_async);
             }
 
@@ -1212,34 +1212,4 @@ fn generate_references(references: &BTreeSet<String>) -> String {
         uwriteln!(out, "/// <reference path=\"{}\" />", reference);
     }
     out
-}
-
-fn should_render_async(func: &Function, id: &str, async_funcs: &HashSet<String>) -> bool {
-    let name = func.name.as_str();
-
-    if async_funcs.contains(name) {
-        return true;
-    }
-
-    let qualified_name = format!("{id}#{name}");
-    if async_funcs.contains(&qualified_name) {
-        return true;
-    }
-
-    if let Some(pos) = id.find('@') {
-        let namespace = &id[..pos];
-        let namespaced_name = format!("{namespace}#{name}");
-
-        if async_funcs.contains(&namespaced_name) {
-            return true;
-        }
-    }
-
-    // Fallback to taking value straight from wit
-    matches!(
-        func.kind,
-        FunctionKind::AsyncMethod(_)
-            | FunctionKind::AsyncStatic(_)
-            | FunctionKind::AsyncFreestanding
-    )
 }
