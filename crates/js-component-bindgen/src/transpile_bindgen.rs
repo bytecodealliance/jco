@@ -2934,11 +2934,8 @@ impl<'a> Instantiator<'a, '_> {
             tmp: 0,
             params,
             post_return: post_return.as_ref(),
-            tracing_prefix: if self.gen.opts.tracing {
-                Some(&tracing_prefix)
-            } else {
-                None
-            },
+            tracing_prefix: &tracing_prefix,
+            tracing_enabled: self.gen.opts.tracing,
             encoding: match opts.string_encoding {
                 wasmtime_environ::component::StringEncoding::Utf8 => StringEncoding::UTF8,
                 wasmtime_environ::component::StringEncoding::Utf16 => StringEncoding::UTF16,
