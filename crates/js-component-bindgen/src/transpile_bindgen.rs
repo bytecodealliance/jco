@@ -43,9 +43,7 @@ use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::intrinsics::{render_intrinsics, DeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
-use crate::source;
-use crate::{core, get_thrown_type};
-use crate::{uwrite, uwriteln};
+use crate::{core, get_thrown_type, is_async_fn, source, uwrite, uwriteln};
 
 #[derive(Debug, Default, Clone)]
 pub struct TranspileOpts {
@@ -2144,16 +2142,11 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        let is_async = self
-            .async_imports
-            .contains(&format!("{import_name}#{func_name}"))
-            || import_name
-                .find('@')
-                .map(|i| {
-                    self.async_imports
-                        .contains(&format!("{}#{func_name}", import_name.get(0..i).unwrap()))
-                })
-                .unwrap_or(false);
+        let is_async = is_async_fn(func, import_name, &self.async_imports);
+        eprintln!(
+            "IMPORT [{import_name}] (fn name: [{}]) is async? [{is_async}]",
+            func.name
+        );
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
@@ -2840,7 +2833,7 @@ impl<'a> Instantiator<'a, '_> {
         &mut self,
         nparams: usize,
         call_type: CallType,
-        module_name: Option<&str>,
+        iface_name: Option<&str>,
         callee: &str,
         opts: &CanonicalOptions,
         func: &Function,
@@ -2875,8 +2868,8 @@ impl<'a> Instantiator<'a, '_> {
         uwriteln!(self.src.js, ") {{");
 
         let tracing_prefix = format!(
-            "[module=\"{}\", function=\"{}\"]",
-            module_name.unwrap_or("<no module>"),
+            "[iface=\"{}\", function=\"{}\"]",
+            iface_name.unwrap_or("<no iface>"),
             func.name
         );
 
@@ -2953,15 +2946,18 @@ impl<'a> Instantiator<'a, '_> {
             abi,
             match abi {
                 AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
-                AbiVariant::GuestExport => LiftLower::LowerArgsLiftResults,
+                AbiVariant::GuestExport => if is_async {
+                    LiftLower::LiftArgsLowerResults
+                } else {
+                    LiftLower::LowerArgsLiftResults
+                },
                 AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (LIFT_LOWER) not yet implemented"),
                 AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (LIFT_LOWER) not yet implemented"),
                 AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (LIFT_LOWER) not yet implemented"),
             },
             func,
             &mut f,
-            // TODO: pass through async setting from bindgen object above
-            false,
+            is_async,
         );
 
         self.src.js(&f.src);
@@ -3252,45 +3248,12 @@ impl<'a> Instantiator<'a, '_> {
         export_remote_resource_map: &RemoteResourceMap,
     ) {
         // Determine whether the function should be async
-        let mut is_async = false;
-        let func_name = &func.name;
-        if self.async_exports.contains(func_name) {
-            is_async = true;
-        }
+        let is_async = is_async_fn(func, export_name, &self.async_exports);
+        eprintln!(
+            "EXPORT [{export_name}] (fn name: [{}]) is async? [{is_async}]",
+            func.name
+        );
 
-        // Allow using the func name (e.g. '[async]run')
-        if self
-            .async_exports
-            .contains(&format!("{export_name}#{func_name}"))
-        {
-            is_async = true;
-        }
-
-        // Allow using the versioned/unversioned exports
-        match export_name.find('@') {
-            Some(i) => {
-                if self
-                    .async_exports
-                    .contains(&format!("{}#{func_name}", export_name.get(0..i).unwrap(),))
-                {
-                    is_async = true;
-                }
-            }
-            None => {
-                // Strip prefix modifier for async, if present
-                let bare_fn_name = if let Some(stripped) = func_name.strip_prefix("[async]") {
-                    stripped
-                } else {
-                    func_name
-                };
-                if self
-                    .async_exports
-                    .contains(&format!("{export_name}#{bare_fn_name}"))
-                {
-                    is_async = true;
-                }
-            }
-        }
         let maybe_async = if is_async { "async " } else { "" };
 
         // Start building early variable declarations
