@@ -1120,11 +1120,11 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::IterBasePointer => results.push("base".to_string()),
 
-            Instruction::CallWasm { name, sig } => {
+            Instruction::CallWasm { sig, .. } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{prefix}[Instruction::CallWasm] {name}');",
+                    "{debug_log_fn}('{prefix} [Instruction::CallWasm]');",
                     prefix = self.tracing_prefix,
                 );
 
@@ -1158,9 +1158,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{prefix}[Instruction::CallInterface] {func_name} ({async_})');",
+                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] ({async_})');",
                     prefix = self.tracing_prefix,
-                    func_name = func.name,
                     async_ = async_.then_some("async").unwrap_or("sync"),
                 );
 
