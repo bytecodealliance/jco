@@ -2143,10 +2143,6 @@ impl<'a> Instantiator<'a, '_> {
             };
 
         let is_async = is_async_fn(func, import_name, &self.async_imports);
-        eprintln!(
-            "IMPORT [{import_name}] (fn name: [{}]) is async? [{is_async}]",
-            func.name
-        );
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
@@ -3249,10 +3245,6 @@ impl<'a> Instantiator<'a, '_> {
     ) {
         // Determine whether the function should be async
         let is_async = is_async_fn(func, export_name, &self.async_exports);
-        eprintln!(
-            "EXPORT [{export_name}] (fn name: [{}]) is async? [{is_async}]",
-            func.name
-        );
 
         let maybe_async = if is_async { "async " } else { "" };
 
