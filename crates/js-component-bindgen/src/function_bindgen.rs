@@ -306,7 +306,9 @@ impl Bindgen for FunctionBindgen<'_> {
     ) {
         match inst {
             Instruction::GetArg { nth } => results.push(self.params[*nth].clone()),
+
             Instruction::I32Const { val } => results.push(val.to_string()),
+
             Instruction::ConstZero { tys } => {
                 for t in tys.iter() {
                     match t {
@@ -319,67 +321,88 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 }
             }
+
             Instruction::U8FromI32 => self.clamp_guest(results, operands, u8::MIN, u8::MAX),
+
             Instruction::S8FromI32 => self.clamp_guest(results, operands, i8::MIN, i8::MAX),
+
             Instruction::U16FromI32 => self.clamp_guest(results, operands, u16::MIN, u16::MAX),
+
             Instruction::S16FromI32 => self.clamp_guest(results, operands, i16::MIN, i16::MAX),
+
             Instruction::U32FromI32 => results.push(format!("{} >>> 0", operands[0])),
+
             Instruction::U64FromI64 => results.push(format!("BigInt.asUintN(64, {})", operands[0])),
+
             Instruction::S32FromI32 | Instruction::S64FromI64 => {
                 results.push(operands.pop().unwrap())
             }
+
             Instruction::I32FromU8 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint8));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromS8 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt8));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromU16 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint16));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromS16 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt16));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromU32 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint32));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromS32 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I64FromU64 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToBigUint64));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I64FromS64 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToBigInt64));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::F32FromCoreF32 | Instruction::F64FromCoreF64 => {
                 results.push(operands.pop().unwrap())
             }
+
             Instruction::CoreF32FromF32 | Instruction::CoreF64FromF64 => {
                 results.push(format!("+{}", operands[0]))
             }
+
             Instruction::CharFromI32 => {
                 let validate =
                     self.intrinsic(Intrinsic::String(StringIntrinsic::ValidateGuestChar));
                 results.push(format!("{}({})", validate, operands[0]));
             }
+
             Instruction::I32FromChar => {
                 let validate = self.intrinsic(Intrinsic::String(StringIntrinsic::ValidateHostChar));
                 results.push(format!("{}({})", validate, operands[0]));
             }
+
             Instruction::Bitcasts { casts } => {
                 for (cast, op) in casts.iter().zip(operands) {
                     results.push(self.bitcast(cast, op));
                 }
             }
+
             Instruction::BoolFromI32 => {
                 let tmp = self.tmp();
                 uwrite!(self.src, "var bool{} = {};\n", tmp, operands[0]);
@@ -392,9 +415,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     ));
                 }
             }
+
             Instruction::I32FromBool => {
                 results.push(format!("{} ? 1 : 0", operands[0]));
             }
+
             Instruction::RecordLower { record, .. } => {
                 // use destructuring field access to get each
                 // field individually.
@@ -412,6 +437,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 uwrite!(self.src, "{} }} = {};\n", expr, operands[0]);
             }
+
             Instruction::RecordLift { record, .. } => {
                 // records are represented as plain objects, so we
                 // make a new object and set all the fields with an object
@@ -423,6 +449,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 result.push('}');
                 results.push(result);
             }
+
             Instruction::TupleLower { tuple, .. } => {
                 // Tuples are represented as an array, sowe can use
                 // destructuring assignment to lower the tuple into its
@@ -439,11 +466,13 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 uwrite!(self.src, "{}] = {};\n", expr, operands[0]);
             }
+
             Instruction::TupleLift { .. } => {
                 // Tuples are represented as an array, so we just shove all
                 // the operands into an array.
                 results.push(format!("[{}]", operands.join(", ")));
             }
+
             Instruction::FlagsLower { flags, .. } => {
                 let op0 = &operands[0];
 
@@ -489,6 +518,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 // case, since that's interpreted as everything false, and we
                 // already defaulted everyting to 0.
             }
+
             Instruction::FlagsLift { flags, .. } => {
                 let tmp = self.tmp();
                 results.push(format!("flags{tmp}"));
@@ -519,7 +549,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 uwriteln!(self.src, "}};");
             }
+
             Instruction::VariantPayloadName => results.push("e".to_string()),
+
             Instruction::VariantLower {
                 variant,
                 results: result_types,
@@ -567,6 +599,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
                 uwriteln!(self.src, "}}");
             }
+
             Instruction::VariantLift { variant, name, .. } => {
                 let blocks = self
                     .blocks
@@ -618,6 +651,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "}}");
                 results.push(format!("variant{tmp}"));
             }
+
             Instruction::OptionLower {
                 payload,
                 results: result_types,
@@ -670,6 +704,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
             }
+
             Instruction::OptionLift { payload, .. } => {
                 let (some, some_results) = self.blocks.pop().unwrap();
                 let (none, none_results) = self.blocks.pop().unwrap();
@@ -730,6 +765,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 results.push(format!("variant{tmp}"));
             }
+
             Instruction::ResultLower {
                 results: result_types,
                 ..
@@ -770,6 +806,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     }}",
                 );
             }
+
             Instruction::ResultLift { result, .. } => {
                 let (err, err_results) = self.blocks.pop().unwrap();
                 let (ok, ok_results) = self.blocks.pop().unwrap();
@@ -837,6 +874,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 results.push(format!("variant{tmp}"));
             }
+
             Instruction::EnumLower { name, enum_, .. } => {
                 let tmp = self.tmp();
 
@@ -878,6 +916,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 results.push(format!("enum{tmp}"));
             }
+
             Instruction::EnumLift { name, enum_, .. } => {
                 let tmp = self.tmp();
 
@@ -910,6 +949,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 results.push(format!("enum{tmp}"));
             }
+
             Instruction::ListCanonLower { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
@@ -947,6 +987,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(format!("ptr{tmp}"));
                 results.push(format!("len{tmp}"));
             }
+
             Instruction::ListCanonLift { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
@@ -961,6 +1002,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         );
                 results.push(format!("result{tmp}"));
             }
+
             Instruction::StringLower { .. } => {
                 // Only Utf8 and Utf16 supported for now
                 assert!(matches!(
@@ -992,6 +1034,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(format!("ptr{tmp}"));
                 results.push(format!("len{tmp}"));
             }
+
             Instruction::StringLift => {
                 // Only Utf8 and Utf16 supported for now
                 assert!(matches!(
@@ -1015,6 +1058,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         );
                 results.push(format!("result{tmp}"));
             }
+
             Instruction::ListLower { element, .. } => {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 assert!(body_results.is_empty());
@@ -1048,6 +1092,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(result);
                 results.push(len);
             }
+
             Instruction::ListLift { element, .. } => {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 let tmp = self.tmp();
@@ -1067,9 +1112,23 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "{result}.push({});", body_results[0]);
                 uwrite!(self.src, "}}\n");
             }
+
             Instruction::IterElem { .. } => results.push("e".to_string()),
+
             Instruction::IterBasePointer => results.push("base".to_string()),
-            Instruction::CallWasm { sig, .. } => {
+
+            Instruction::CallWasm { name, sig } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{}[Instruction::CallWasm] {name}');",
+                    if let Some(prefix) = self.tracing_prefix {
+                        format!("{prefix} ")
+                    } else {
+                        "".into()
+                    }
+                );
+
                 let sig_results_length = sig.results.len();
                 self.bind_results(sig_results_length, results);
                 let maybe_async_await = if self.is_async { "await " } else { "" };
@@ -1094,7 +1153,20 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
             }
-            Instruction::CallInterface { func, .. } => {
+
+            Instruction::CallInterface { func, async_ } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{}[Instruction::CallInterface] {} (async? {async_})');",
+                    if let Some(prefix) = self.tracing_prefix {
+                        format!("{prefix} ")
+                    } else {
+                        "".into()
+                    },
+                    func.item_name()
+                );
+
                 let results_length = if func.result.is_none() { 0 } else { 1 };
                 let maybe_async_await = if self.is_async { "await " } else { "" };
                 let call = if self.callee_resource_dynamic {
@@ -1188,6 +1260,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.clear_resource_borrows = false;
                 }
             }
+
             Instruction::Return { amt, .. } => {
                 if *amt == 0 {
                     if let Some(f) = &self.post_return {
@@ -1227,25 +1300,43 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 }
             }
+
             Instruction::I32Load { offset } => self.load("getInt32", *offset, operands, results),
+
             Instruction::I64Load { offset } => self.load("getBigInt64", *offset, operands, results),
+
             Instruction::F32Load { offset } => self.load("getFloat32", *offset, operands, results),
+
             Instruction::F64Load { offset } => self.load("getFloat64", *offset, operands, results),
+
             Instruction::I32Load8U { offset } => self.load("getUint8", *offset, operands, results),
+
             Instruction::I32Load8S { offset } => self.load("getInt8", *offset, operands, results),
+
             Instruction::I32Load16U { offset } => {
                 self.load("getUint16", *offset, operands, results)
             }
+
             Instruction::I32Load16S { offset } => self.load("getInt16", *offset, operands, results),
+
             Instruction::I32Store { offset } => self.store("setInt32", *offset, operands),
+
             Instruction::I64Store { offset } => self.store("setBigInt64", *offset, operands),
+
             Instruction::F32Store { offset } => self.store("setFloat32", *offset, operands),
+
             Instruction::F64Store { offset } => self.store("setFloat64", *offset, operands),
+
             Instruction::I32Store8 { offset } => self.store("setInt8", *offset, operands),
+
             Instruction::I32Store16 { offset } => self.store("setInt16", *offset, operands),
+
             Instruction::LengthStore { offset } => self.store("setInt32", *offset, operands),
+
             Instruction::LengthLoad { offset } => self.load("getInt32", *offset, operands, results),
+
             Instruction::PointerStore { offset } => self.store("setInt32", *offset, operands),
+
             Instruction::PointerLoad { offset } => {
                 self.load("getInt32", *offset, operands, results)
             }
