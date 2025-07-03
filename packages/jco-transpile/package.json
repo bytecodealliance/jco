@@ -46,7 +46,7 @@
     "lint": "eslint -c ../../eslint.config.mjs ./src/**/*.js ./test/**/*.js",
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
-    "setup:vendor": "npm run -w @bytecodealliance/jco build && cp -r ../jco/obj/* vendor",
+    "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp -r ../jco/obj/{*.core*.wasm,*.js,*.ts,interfaces} vendor",
     "prepack": "npm run setup:vendor"
   },
   "dependencies": {
