@@ -163,9 +163,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
-          export START_ARG="--latest";
+          export START_ARG="--unreleased";
           if [ "true" == "${{ steps.project-meta.outputs.is-prerelease }}" ]; then
-            export START_ARG="--unreleased";
+            export START_ARG="--latest";
           fi
 
           git cliff \
