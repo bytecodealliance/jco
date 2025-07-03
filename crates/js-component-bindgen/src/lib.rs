@@ -1,4 +1,15 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+use std::collections::HashSet;
+
+use anyhow::{bail, ensure, Context, Result};
+use ts_bindgen::ts_bindgen;
+use wasmtime_environ::component::{ComponentTypesBuilder, Export, StaticModuleIndex};
+use wasmtime_environ::wasmparser::WasmFeatures;
+use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
+use wit_bindgen_core::wit_parser::{Function, FunctionKind};
+use wit_component::DecodedWasm;
+use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
+
 mod core;
 mod files;
 mod transpile_bindgen;
@@ -9,19 +20,9 @@ pub mod function_bindgen;
 pub mod intrinsics;
 pub mod names;
 pub mod source;
-pub use transpile_bindgen::{AsyncMode, BindingsMode, InstantiationMode, TranspileOpts};
 
-use anyhow::Result;
 use transpile_bindgen::transpile_bindgen;
-
-use anyhow::{bail, ensure, Context};
-use wasmtime_environ::component::{ComponentTypesBuilder, Export, StaticModuleIndex};
-use wasmtime_environ::wasmparser::WasmFeatures;
-use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
-use wit_component::DecodedWasm;
-
-use ts_bindgen::ts_bindgen;
-use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
+pub use transpile_bindgen::{AsyncMode, BindingsMode, InstantiationMode, TranspileOpts};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -238,4 +239,34 @@ pub fn get_thrown_type(
         },
         _ => None,
     }
+}
+
+pub(crate) fn is_async_fn(func: &Function, id: &str, async_funcs: &HashSet<String>) -> bool {
+    let name = func.name.as_str();
+
+    if async_funcs.contains(name) {
+        return true;
+    }
+
+    let qualified_name = format!("{id}#{name}");
+    if async_funcs.contains(&qualified_name) {
+        return true;
+    }
+
+    if let Some(pos) = id.find('@') {
+        let namespace = &id[..pos];
+        let namespaced_name = format!("{namespace}#{name}");
+
+        if async_funcs.contains(&namespaced_name) {
+            return true;
+        }
+    }
+
+    // Fallback to taking value straight from wit
+    matches!(
+        func.kind,
+        FunctionKind::AsyncMethod(_)
+            | FunctionKind::AsyncStatic(_)
+            | FunctionKind::AsyncFreestanding
+    )
 }
