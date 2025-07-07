@@ -346,7 +346,7 @@ impl AsyncStreamIntrinsic {
                     function {stream_new_fn}(componentInstanceID, elementTypeRep) {{
                         {debug_log_fn}('[{stream_new_fn}()] args', {{ componentInstanceID, elementTypeRep }});
 
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
@@ -461,7 +461,7 @@ impl AsyncStreamIntrinsic {
 
                         // If sync, wait forever but allow task to do other things
                         if (!isAsync && !streamEnd.hasPendingEvent()) {{
-                          const task = {current_task_get_fn}();
+                          const task = {current_task_get_fn}(componentInstanceID);
                           if (!task) {{ throw new Error('invalid/missing async task'); }}
                           await task.waitOn({{ promise: streamEnd.waitable, isAsync }});
                         }}
@@ -568,7 +568,15 @@ impl AsyncStreamIntrinsic {
                             streamEndIdx,
                         }});
 
-                        const task = {current_task_get_fn}();
+                        const stream = {global_stream_map}.get(streamIdx);
+                        if (!stream) {{ throw new Error('missing stream idx from drop stream'); }}
+
+                        const componentInstanceID = stream.componentInstanceID;
+                        if (componentInstanceID === undefined) {{
+                            throw new Error('missing/invalid component instance ID on stream');
+                        }}
+
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const state = {get_or_create_async_state_fn}(task.componentIdx);
@@ -581,7 +589,6 @@ impl AsyncStreamIntrinsic {
                           throw new Error('invalid stream end class, expected [{stream_end_class}]');
                         }}
 
-                        const stream = {global_stream_map}.get(streamIdx);
                         if (streamEnd.elementTypeRep() !== stream.elementTypeRep()) {{
                           throw new Error('stream type [' + stream.elementTypeRep() + '], does not match stream end type [' + streamEnd.elementTypeRep() + ']');
                         }}

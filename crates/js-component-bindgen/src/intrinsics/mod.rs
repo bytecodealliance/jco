@@ -259,6 +259,17 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         args.intrinsics.extend([&Intrinsic::RepTableClass]);
     }
 
+    if args.intrinsics.contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask)) ||
+        args.intrinsics.contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask)) ||
+        args.intrinsics.contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask))
+        {
+            args.intrinsics.extend([
+                &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+                &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
+            ]);
+        }
+
+
     for current_intrinsic in args.intrinsics.iter() {
         match current_intrinsic {
             Intrinsic::JsHelper(i) => i.render(&mut output),
