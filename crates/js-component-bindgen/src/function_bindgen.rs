@@ -1135,10 +1135,22 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Start an active task
                 let create_task_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
+                let task_id_global =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId));
+                let component_idx_global =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx));
                 let component_instance_idx = self.canon_opts.instance.as_u32();
                 uwriteln!(
                     self.src,
                     "const currentTaskID = {create_task_fn}({component_instance_idx});"
+                );
+                uwriteln!(
+                    self.src,
+                    "{task_id_global} = currentTaskID;"
+                );
+                uwriteln!(
+                    self.src,
+                    "{component_idx_global} = {component_instance_idx};"
                 );
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
@@ -1174,6 +1186,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 let end_task_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
                 uwriteln!(self.src, "{end_task_fn}({component_instance_idx}, currentTaskID);");
+                uwriteln!(
+                    self.src,
+                    "{task_id_global} = null;"
+                );
+                uwriteln!(
+                    self.src,
+                    "{component_idx_global} = null;"
+                );
             }
 
             // Call to an interface, usually but not always an externally imported interface
