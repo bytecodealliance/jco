@@ -155,7 +155,7 @@ pub enum AsyncTaskIntrinsic {
     /// This global variable is populated when a task is started, and cleared
     /// (reset to `null` in JS) when a task ends.
     ///
-    /// This global is used only when *necessary* -- for canonical builtins that 
+    /// This global is used only when *necessary* -- for canonical builtins that
     /// do not include/cannot access the current task any other way, often because
     /// they have no access to the current component instance index (e.g. `context.get`).
     ///
@@ -269,7 +269,10 @@ impl AsyncTaskIntrinsic {
                 let current_component_idx_global = Self::GlobalAsyncCurrentComponentIdx.name();
                 output.push_str(&format!("
                     function {context_get_fn}(slot) {{
-                        {debug_log_fn}('[{context_get_fn}()] args', {{ slot }});
+                        {debug_log_fn}('[{context_get_fn}()] args', {{ 
+                            _globals: {{ {current_component_idx_global}, {current_async_task_id_global} }}, 
+                            slot,
+                        }});
                         const task = {current_task_get_fn}({current_component_idx_global}, {current_async_task_id_global});
                         if (!task) {{ throw new Error('failed to retrieve current task'); }}
                         if (slot < 0 || slot > task.storage.length) {{ throw new Error('invalid slot for current task'); }}
@@ -389,36 +392,16 @@ impl AsyncTaskIntrinsic {
                 "));
             }
 
-            Self::GetCurrentTask => {
-                let current_task_get_fn = Self::GetCurrentTask.name();
-                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
-                output.push_str(&format!(
-                    "
-                    function {current_task_get_fn}(componentIdx) {{
-                        if (componentIdx === undefined) {{
-                            throw new Error('missing/invalid component instance index while getting current task');
-                        }}
-                        if (!{global_task_map}.has(componentIdx)) {{
-                            throw new Error('missing/invalid task lookup for component while getting current task');
-                        }}
-                        const {{ tasks }} = {global_task_map}.get(componentIdx);
-                        if (tasks.length === 0) {{
-                            throw new Error('missing/invalid tasks for component while getting current task');
-                        }}
-                        return tasks[tasks.length - 1];
-                    }}
-                "
-                ));
-            }
-
             Self::StartCurrentTask => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_class = Self::AsyncTaskClass.name();
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!(
                     "
                     let NEXT_TASK_ID = 0n;
                     function {fn_name}(componentIdx) {{
-                        if (componentIdx === undefined) {{
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                        if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while starting task');
                         }}
                         const tasks = {global_task_map}.get(componentIdx);
@@ -439,12 +422,38 @@ impl AsyncTaskIntrinsic {
                 ));
             }
 
+            Self::GetCurrentTask => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
+                output.push_str(&format!(
+                    "
+                    function {fn_name}(componentIdx) {{
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                        if (componentIdx === undefined || componentIdx === null) {{
+                            throw new Error('missing/invalid component instance index while getting current task');
+                        }}
+                        const tasks = {global_task_map}.get(componentIdx);
+                        if (tasks === undefined) {{
+                            throw new Error('missing task lookup for component ID [' + componentIdx + '] while getting current task');
+                        }}
+                        if (tasks.length === 0) {{
+                            throw new Error('missing/invalid tasks for component while getting current task');
+                        }}
+                        return tasks[tasks.length - 1];
+                    }}
+                ",
+                    fn_name = self.name(),
+                ));
+            }
+
             Self::EndCurrentTask => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!(
                     "
                     function {fn_name}(componentIdx, taskId) {{
-                        if (componentIdx === undefined) {{
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                        if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while ending current task');
                         }}
                         const tasks = {global_task_map}.get(componentIdx);

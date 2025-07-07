@@ -276,6 +276,66 @@ impl FunctionBindgen<'_> {
             }
         }
     }
+
+    /// Start the async current task
+    fn start_async_current_task(&mut self, instr: &Instruction) {
+        let prefix = match instr {
+            Instruction::CallWasm { .. } => "_wasm_call_",
+            Instruction::CallInterface { .. } => "_interface_call_",
+            _ => unreachable!(),
+        };
+        let start_current_task_fn =
+            self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
+        let task_id_global = self.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId,
+        ));
+        let component_idx_global = self.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx,
+        ));
+        let component_instance_idx = self.canon_opts.instance.as_u32();
+        uwriteln!(
+            self.src,
+            "const {prefix}currentTaskID = {start_current_task_fn}({component_instance_idx});"
+        );
+        uwriteln!(self.src, "{task_id_global} = {prefix}currentTaskID;");
+        uwriteln!(
+            self.src,
+            "{component_idx_global} = {component_instance_idx};"
+        );
+    }
+
+    /// End an an existing async current task
+    fn end_async_current_task(&mut self, instr: &Instruction) {
+        let prefix = match instr {
+            Instruction::CallWasm { .. } => "_wasm_call_",
+            Instruction::CallInterface { .. } => "_interface_call_",
+            _ => unreachable!(),
+        };
+        let end_current_task_fn =
+            self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
+        let task_id_global = self.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId,
+        ));
+        let component_idx_global = self.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx,
+        ));
+        let component_instance_idx = self.canon_opts.instance.as_u32();
+        uwriteln!(
+            self.src,
+            "{end_current_task_fn}({component_instance_idx}, {prefix}currentTaskID);"
+        );
+        uwriteln!(
+            self.src,
+            "if ({component_idx_global} === null) {{ throw new Error('global async current task component idx already null'); }}",
+        );
+        uwriteln!(self.src, "{component_idx_global} = null;");
+
+        uwriteln!(
+            self.src,
+            "if ({task_id_global} === null) {{ throw new Error('global async current task component idx already null'); }}"
+        );
+        uwriteln!(self.src, "{task_id_global} = null;");
+    }
 }
 
 impl Bindgen for FunctionBindgen<'_> {
@@ -1132,26 +1192,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     prefix = self.tracing_prefix,
                 );
 
-                // Start an active task
-                let create_task_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
-                let task_id_global =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId));
-                let component_idx_global =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx));
-                let component_instance_idx = self.canon_opts.instance.as_u32();
-                uwriteln!(
-                    self.src,
-                    "const currentTaskID = {create_task_fn}({component_instance_idx});"
-                );
-                uwriteln!(
-                    self.src,
-                    "{task_id_global} = currentTaskID;"
-                );
-                uwriteln!(
-                    self.src,
-                    "{component_idx_global} = {component_instance_idx};"
-                );
+                // Inject machinery for starting an async 'current' task
+                self.start_async_current_task(&inst);
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
@@ -1182,18 +1224,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
 
-                // Stop the active task
-                let end_task_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
-                uwriteln!(self.src, "{end_task_fn}({component_instance_idx}, currentTaskID);");
-                uwriteln!(
-                    self.src,
-                    "{task_id_global} = null;"
-                );
-                uwriteln!(
-                    self.src,
-                    "{component_idx_global} = null;"
-                );
+                // Inject machinery for ending an async 'current' task
+                self.end_async_current_task(&inst);
             }
 
             // Call to an interface, usually but not always an externally imported interface
@@ -1205,6 +1237,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     prefix = self.tracing_prefix,
                     async_ = async_.then_some("async").unwrap_or("sync"),
                 );
+
+                // Inject machinery for starting an async 'current' task
+                self.start_async_current_task(&inst);
 
                 let results_length = if func.result.is_none() { 0 } else { 1 };
                 let maybe_async_await = if self.is_async { "await " } else { "" };
@@ -1252,6 +1287,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.bind_results(results_length, results);
                     uwriteln!(self.src, "{call};");
                 }
+
+                // Inject machinery for ending an async 'current' task
+                self.end_async_current_task(&inst);
 
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
