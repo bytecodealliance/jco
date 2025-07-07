@@ -123,6 +123,12 @@ pub enum AsyncTaskIntrinsic {
     /// Function that retrieves the current global async current task
     GetCurrentTask,
 
+    /// Function that creates the current task
+    StartCurrentTask,
+
+    /// Function that stops the current task
+    EndCurrentTask,
+
     /// Global that stores the current task for a given invocation.
     ///
     /// This global variable is populated *only* when we are performing a call
@@ -174,6 +180,8 @@ impl AsyncTaskIntrinsic {
             Self::ContextGet => "contextGet",
             Self::ContextSet => "contextSet",
             Self::GetCurrentTask => "getCurrentTask",
+            Self::StartCurrentTask => "startCurrentTask",
+            Self::EndCurrentTask => "endCurrentTask",
             Self::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
             Self::SubtaskCancel => "subtaskCancel",
             Self::SubtaskDrop => "subtaskDrop",
@@ -338,8 +346,6 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::GetCurrentTask => {
-                // TODO: remove autovivication of tasks here, they should be created @ lift
-                let task_class = Self::AsyncTaskClass.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!(
@@ -347,15 +353,72 @@ impl AsyncTaskIntrinsic {
                     let CURRENT_TASK;
                     function {current_task_get_fn}(componentIdx) {{
                         if (!componentIdx) {{
-                            if (!CURRENT_TASK) {{ CURRENT_TASK = new {task_class}(); }}
-                            return CURRENT_TASK;
+                            throw new Error('missing/invalid component instance index');
                         }}
                         if (!{global_task_map}.has(componentIdx)) {{
-                            {global_task_map}.set(componentIdx, new {task_class}());
+                            throw new Error('missing/invalid task lookup for component');
                         }}
-                        return {global_task_map}.get(componentIdx);
+                        const {{ tasks }} = {global_task_map}.get(componentIdx);
+                        if (tasks.length === 0) {{
+                            throw new Error('missing/invalid tasks for component');
+                        }}
+                        return tasks[tasks.length - 1];
                     }}
                 "
+                ));
+            }
+
+            Self::StartCurrentTask => {
+                let task_class = Self::AsyncTaskClass.name();
+                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
+                output.push_str(&format!(
+                    "
+                    let CURRENT_TASK_ID = 0n;
+                    function {fn_name}(componentIdx) {{
+                        if (!componentIdx) {{
+                            throw new Error('missing/invalid component instance index');
+                        }}
+                        const tasks = {global_task_map}.get(componentIdx);
+
+                        const nextId = ++CURRENT_TASK_ID;
+                        const newTask = {{ id: nextId, task: new {task_class}() }};
+
+                        if (!tasks) {{
+                            {global_task_map}.set(componentIdx, [newTask]);
+                            return nextId;
+                        }}
+
+                        tasks.push(newTask);
+                        return nextId;
+                    }}
+                ",
+                    fn_name = self.name(),
+                ));
+            }
+
+            Self::EndCurrentTask => {
+                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
+                output.push_str(&format!(
+                    "
+                    function {fn_name}(componentIdx, taskId) {{
+                        if (!componentIdx) {{
+                            throw new Error('missing/invalid component instance index');
+                        }}
+                        const tasks = {global_task_map}.get(componentIdx);
+                        if (tasks) {{ throw new Error('missing tasks for component instance'); }}
+                        if (tasks.length == 0) {{ throw new Error('no current task(s) for component instance'); }}
+
+                        if (taskId) {{
+                            const last = tasks[tasks.length - 1];
+                            if (last.id !== taskId) {{
+                                throw new Error('current task does not match expected task ID');
+                            }}
+                        }}
+
+                        return task.pop();
+                    }}
+                ",
+                    fn_name = self.name()
                 ));
             }
 
