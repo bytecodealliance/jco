@@ -284,7 +284,7 @@ impl AsyncFutureIntrinsic {
                     function {future_new_fn}(componentInstanceID, elementTypeRep) {{
                         {debug_log_fn}('[{future_new_fn}()] args', {{ componentInstanceID, elementTypeRep }});
 
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const state = {get_or_create_async_state_fn}(componentInstanceID);

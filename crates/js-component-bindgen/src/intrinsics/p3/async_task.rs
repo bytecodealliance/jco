@@ -150,6 +150,30 @@ pub enum AsyncTaskIntrinsic {
     /// ```
     GlobalAsyncCurrentTaskMap,
 
+    /// Global that stores the current task ID
+    ///
+    /// This global variable is populated when a task is started, and cleared
+    /// (reset to `null` in JS) when a task ends.
+    ///
+    /// This global is used only when *necessary* -- for canonical builtins that 
+    /// do not include/cannot access the current task any other way, often because
+    /// they have no access to the current component instance index (e.g. `context.get`).
+    ///
+    /// ```ts
+    /// type GlobalAsyncCurrentTaskId = number | null;
+    /// ```
+    GlobalAsyncCurrentTaskId,
+
+    /// Global that stores the current component ID (for the current task)
+    ///
+    /// This global variable is populated when a task is started, and cleared
+    /// (reset to `null` in JS) when a task ends.
+    ///
+    /// ```ts
+    /// type GlobalAsyncCurrentTaskId = number | null;
+    /// ```
+    GlobalAsyncCurrentComponentIdx,
+
     /// The definition of the `AsyncTask` JS class
     AsyncTaskClass,
 
@@ -183,6 +207,8 @@ impl AsyncTaskIntrinsic {
             Self::StartCurrentTask => "startCurrentTask",
             Self::EndCurrentTask => "endCurrentTask",
             Self::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
+            Self::GlobalAsyncCurrentTaskId => "ASYNC_CURRENT_TASK_ID",
+            Self::GlobalAsyncCurrentComponentIdx => "ASYNC_CURRENT_COMPONENT_IDX",
             Self::SubtaskCancel => "subtaskCancel",
             Self::SubtaskDrop => "subtaskDrop",
             Self::TaskCancel => "taskCancel",
@@ -199,6 +225,20 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!("const {var_name} = new Map();\n"));
             }
 
+            Self::GlobalAsyncCurrentTaskId => {
+                output.push_str(&format!(
+                    "let {var_name} = null;\n",
+                    var_name = self.name(),
+                ));
+            }
+
+            Self::GlobalAsyncCurrentComponentIdx => {
+                output.push_str(&format!(
+                    "let {var_name} = null;\n",
+                    var_name = self.name(),
+                ));
+            }
+
             Self::AsyncBlockedConstant => {
                 let name = Self::AsyncBlockedConstant.name();
                 output.push_str(&format!("const {name} = 0xFFFF_FFFF;"));
@@ -208,10 +248,12 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_set_fn = Self::ContextSet.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
+                let current_async_task_id_global = Self::GlobalAsyncCurrentTaskId.name();
+                let current_component_idx_global = Self::GlobalAsyncCurrentComponentIdx.name();
                 output.push_str(&format!("
                     function {context_set_fn}(slot, value) {{
                         {debug_log_fn}('[{context_set_fn}()] args', {{ slot, value }});
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}({current_component_idx_global}, {current_async_task_id_global});
                         if (!task) {{ throw new Error('failed to retrieve current task'); }}
                         if (slot < 0 || value.len < slot) {{ throw new Error('invalid slot for current task'); }}
                         task.storage[slot] = value;
@@ -223,10 +265,12 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_get_fn = Self::ContextGet.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
+                let current_async_task_id_global = Self::GlobalAsyncCurrentTaskId.name();
+                let current_component_idx_global = Self::GlobalAsyncCurrentComponentIdx.name();
                 output.push_str(&format!("
                     function {context_get_fn}(slot) {{
                         {debug_log_fn}('[{context_get_fn}()] args', {{ slot }});
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}({current_component_idx_global}, {current_async_task_id_global});
                         if (!task) {{ throw new Error('failed to retrieve current task'); }}
                         if (slot < 0 || slot > task.storage.length) {{ throw new Error('invalid slot for current task'); }}
                         if (task.storage[slot] === null) {{ throw new Error('slot not set before get'); }}
@@ -350,17 +394,16 @@ impl AsyncTaskIntrinsic {
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!(
                     "
-                    let CURRENT_TASK;
                     function {current_task_get_fn}(componentIdx) {{
-                        if (!componentIdx) {{
-                            throw new Error('missing/invalid component instance index');
+                        if (componentIdx === undefined) {{
+                            throw new Error('missing/invalid component instance index while getting current task');
                         }}
                         if (!{global_task_map}.has(componentIdx)) {{
-                            throw new Error('missing/invalid task lookup for component');
+                            throw new Error('missing/invalid task lookup for component while getting current task');
                         }}
                         const {{ tasks }} = {global_task_map}.get(componentIdx);
                         if (tasks.length === 0) {{
-                            throw new Error('missing/invalid tasks for component');
+                            throw new Error('missing/invalid tasks for component while getting current task');
                         }}
                         return tasks[tasks.length - 1];
                     }}
@@ -373,15 +416,15 @@ impl AsyncTaskIntrinsic {
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!(
                     "
-                    let CURRENT_TASK_ID = 0n;
+                    let NEXT_TASK_ID = 0n;
                     function {fn_name}(componentIdx) {{
-                        if (!componentIdx) {{
-                            throw new Error('missing/invalid component instance index');
+                        if (componentIdx === undefined) {{
+                            throw new Error('missing/invalid component instance index while starting task');
                         }}
                         const tasks = {global_task_map}.get(componentIdx);
 
-                        const nextId = ++CURRENT_TASK_ID;
-                        const newTask = {{ id: nextId, task: new {task_class}() }};
+                        const nextId = ++NEXT_TASK_ID;
+                        const newTask = {{ id: nextId, componentIdx, task: new {task_class}() }};
 
                         if (!tasks) {{
                             {global_task_map}.set(componentIdx, [newTask]);
@@ -401,11 +444,13 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!(
                     "
                     function {fn_name}(componentIdx, taskId) {{
-                        if (!componentIdx) {{
-                            throw new Error('missing/invalid component instance index');
+                        if (componentIdx === undefined) {{
+                            throw new Error('missing/invalid component instance index while ending current task');
                         }}
                         const tasks = {global_task_map}.get(componentIdx);
-                        if (tasks) {{ throw new Error('missing tasks for component instance'); }}
+                        if (!tasks || !Array.isArray(tasks)) {{
+                            throw new Error('missing/invalid tasks for component instance while ending task');
+                        }}
                         if (tasks.length == 0) {{ throw new Error('no current task(s) for component instance'); }}
 
                         if (taskId) {{
@@ -415,7 +460,7 @@ impl AsyncTaskIntrinsic {
                             }}
                         }}
 
-                        return task.pop();
+                        return tasks.pop();
                     }}
                 ",
                     fn_name = self.name()
