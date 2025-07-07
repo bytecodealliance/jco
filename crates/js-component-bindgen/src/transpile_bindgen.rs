@@ -2844,6 +2844,15 @@ impl<'a> Instantiator<'a, '_> {
             .post_return
             .map(|idx| format!("postReturn{}", idx.as_u32()));
 
+        let tracing_prefix = format!(
+            "[iface=\"{}\", function=\"{}\"]",
+            iface_name.unwrap_or("<no iface>"),
+            func.name
+        );
+
+        // Write the function argument list
+        //
+        // At this point, only the function preamble (e.g. 'function nameOfFunc()') has been written
         self.src.js("(");
         let mut params = Vec::new();
         let mut first = true;
@@ -2863,12 +2872,7 @@ impl<'a> Instantiator<'a, '_> {
         }
         uwriteln!(self.src.js, ") {{");
 
-        let tracing_prefix = format!(
-            "[iface=\"{}\", function=\"{}\"]",
-            iface_name.unwrap_or("<no iface>"),
-            func.name
-        );
-
+        // If tracing is enabled, output a function entry tracing message
         if self.gen.opts.tracing {
             let event_fields = func
                 .params
@@ -2883,6 +2887,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        // If TLA compat was enabled, ensure that it was initialized
         if self.gen.opts.tla_compat
             && matches!(abi, AbiVariant::GuestExport)
             && self.gen.opts.instantiation.is_none()
@@ -2896,6 +2901,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
             remote_resource_map,
@@ -2935,8 +2941,13 @@ impl<'a> Instantiator<'a, '_> {
             src: source::Source::default(),
             resolve: self.resolve,
             is_async,
+            canon_opts: opts,
         };
 
+        // TODO: get the current component instance index
+
+        // Emit (and visit, via the `FunctionBindgen` object) an abstract sequence of
+        // instructions which represents the function being generated.
         abi::call(
             self.resolve,
             abi,
@@ -2956,8 +2967,10 @@ impl<'a> Instantiator<'a, '_> {
             is_async,
         );
 
+        // Once visiting has completed, write the contents the `FunctionBindgen` generated to output
         self.src.js(&f.src);
 
+        // Close function body
         self.src.js("}");
     }
 
@@ -3087,7 +3100,6 @@ impl<'a> Instantiator<'a, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    // TODO: record whether all exports are lifted sync/async (if they are all sync, no tasks!)
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
         for (export_name, export_idx) in exports.raw_iter() {
             let export = &self.component.export_items[*export_idx];
