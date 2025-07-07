@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::mem;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
-use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
+use wasmtime_environ::component::{CanonicalOptions, ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
@@ -13,6 +13,7 @@ use wit_parser::{
 
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
+use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::Intrinsic;
@@ -154,6 +155,9 @@ pub struct FunctionBindgen<'a> {
 
     /// Whether the function is async
     pub is_async: bool,
+
+    /// Canon opts
+    pub canon_opts: &'a CanonicalOptions,
 }
 
 impl FunctionBindgen<'_> {
@@ -1128,16 +1132,29 @@ impl Bindgen for FunctionBindgen<'_> {
                     prefix = self.tracing_prefix,
                 );
 
+                // Start an active task
+                let create_task_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
+                let component_instance_idx = self.canon_opts.instance.as_u32();
+                uwriteln!(
+                    self.src,
+                    "const currentTaskID = {create_task_fn}({component_instance_idx});"
+                );
+
+                // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
                 self.bind_results(sig_results_length, results);
+
+                // Output the function call
                 let maybe_async_await = if self.is_async { "await " } else { "" };
                 uwriteln!(
                     self.src,
-                    "{maybe_async_await}{}({});",
-                    self.callee,
-                    operands.join(", ")
+                    "{maybe_async_await}{callee}({args});",
+                    callee = self.callee,
+                    args = operands.join(", ")
                 );
 
+                // Print post-return if tracing is enabled
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
                     let to_result_string =
@@ -1152,8 +1169,14 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                     );
                 }
+
+                // Stop the active task
+                let end_task_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
+                uwriteln!(self.src, "{end_task_fn}({component_instance_idx}, currentTaskID);");
             }
 
+            // Call to an interface, usually but not always an externally imported interface
             Instruction::CallInterface { func, async_ } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
@@ -1179,6 +1202,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         operands.join(", ")
                     )
                 };
+
                 if self.err == ErrHandling::ResultCatchHandler {
                     // result<_, string> allows JS error coercion only, while
                     // any other result type will trap for arbitrary JS errors.
