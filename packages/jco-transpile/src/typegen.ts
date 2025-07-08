@@ -87,10 +87,10 @@ export async function runTypesComponent(
 ): Promise<import('./common.js').FileBytes> {
     await $initBindgenComponent;
     const name =
-        opts.name ||
-        (opts.worldName
-            ? opts.worldName.split(':').pop().split('/').pop()
-            : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
+        opts.name ??
+        opts.worldName?.split(':').pop()?.split('/').pop() ??
+        basename(witPath.slice(0, -extname(witPath).length || Infinity));
+
     let instantiation;
     if (opts.instantiation) {
         instantiation = { tag: opts.instantiation };
@@ -118,12 +118,12 @@ export async function runTypesComponent(
         !opts.asyncMode || opts.asyncMode === 'sync'
             ? null
             : {
-                  tag: opts.asyncMode,
-                  val: {
-                      imports: opts.asyncImports || [],
-                      exports: opts.asyncExports || [],
-                  },
-              };
+                tag: opts.asyncMode,
+                val: {
+                    imports: opts.asyncImports || [],
+                    exports: opts.asyncExports || [],
+                },
+            };
 
     const absWitPath = resolve(witPath);
     const types = generateTypes(name, {
@@ -131,9 +131,9 @@ export async function runTypesComponent(
         instantiation,
         tlaCompat: opts.tlaCompat ?? false,
         world: opts.worldName,
-        features,
+        features: features as any,
         guest: opts.guest ?? false,
-        asyncMode,
+        asyncMode: asyncMode as any,
     }).map(([name, file]) => [`${outDir}${name}`, file]);
 
     return Object.fromEntries(types);

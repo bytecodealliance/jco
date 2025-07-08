@@ -52,10 +52,9 @@ export async function generateGuestTypes(witPath, opts) {
  */
 export async function runTypesComponent(witPath, opts) {
     await $initBindgenComponent;
-    const name = opts.name ||
-        (opts.worldName
-            ? opts.worldName.split(':').pop().split('/').pop()
-            : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
+    const name = opts.name ??
+        opts.worldName?.split(':').pop()?.split('/').pop() ??
+        basename(witPath.slice(0, -extname(witPath).length || Infinity));
     let instantiation;
     if (opts.instantiation) {
         instantiation = { tag: opts.instantiation };
@@ -92,9 +91,9 @@ export async function runTypesComponent(witPath, opts) {
         instantiation,
         tlaCompat: opts.tlaCompat ?? false,
         world: opts.worldName,
-        features,
+        features: features,
         guest: opts.guest ?? false,
-        asyncMode,
+        asyncMode: asyncMode,
     }).map(([name, file]) => [`${outDir}${name}`, file]);
     return Object.fromEntries(types);
 }
