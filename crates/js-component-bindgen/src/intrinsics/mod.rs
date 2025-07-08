@@ -57,6 +57,11 @@ pub enum Intrinsic {
     /// Enable debug logging
     DebugLog,
 
+    // Basic type helpers
+    ConstantI32Max,
+    ConstantI32Min,
+    TypeCheckValidI32,
+
     Base64Compile,
     ClampGuest,
     FetchCompile,
@@ -139,8 +144,13 @@ pub struct RenderIntrinsicsArgs<'a> {
 pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     let mut output = Source::default();
 
-    // Always include debug logging
+    // Intrinsics that should just always be present
     args.intrinsics.insert(Intrinsic::DebugLog);
+    args.intrinsics.insert(Intrinsic::ConstantI32Min);
+    args.intrinsics.insert(Intrinsic::ConstantI32Max);
+    args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
+    args.intrinsics.insert(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId));
+    args.intrinsics.insert(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx));
 
     // Handle intrinsic "dependence"
     if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
@@ -283,6 +293,15 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             Intrinsic::AsyncStream(i) => i.render(&mut output),
             Intrinsic::AsyncFuture(i) => i.render(&mut output),
             Intrinsic::Component(i) => i.render(&mut output),
+
+            Intrinsic::ConstantI32Min => output.push_str(&format!("const {const_name} = -2_147_483_648;\n", const_name = current_intrinsic.name())),
+            Intrinsic::ConstantI32Max => output.push_str(&format!("const {const_name} = 2_147_483_647;\n", const_name = current_intrinsic.name())),
+            Intrinsic::TypeCheckValidI32 => {
+                let i32_const_min = Intrinsic::ConstantI32Min.name();
+                let i32_const_max = Intrinsic::ConstantI32Max.name();
+                output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = current_intrinsic.name()))
+
+            },
 
             Intrinsic::Base64Compile => {
                 if !args.no_nodejs_compat {
@@ -738,6 +757,10 @@ impl Intrinsic {
             Intrinsic::IsBorrowedType => "_isBorrowedType",
 
             Intrinsic::DebugLog => "_debugLog",
+
+            Intrinsic::ConstantI32Min => "I32_MIN",
+            Intrinsic::ConstantI32Max => "I32_MAX",
+            Intrinsic::TypeCheckValidI32 => "_typeCheckValidI32",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",
