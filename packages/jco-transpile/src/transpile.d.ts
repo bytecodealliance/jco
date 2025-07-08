@@ -5,7 +5,7 @@ export interface TranspilationOptions {
     instantiation?: 'async' | 'sync';
     importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized';
     map?: Record<string, string>;
-    asyncMode?: string;
+    asyncMode?: "sync" | "jspi";
     asyncImports?: string[];
     asyncExports?: string[];
     asyncWasiImports?: string[];
@@ -14,7 +14,7 @@ export interface TranspilationOptions {
     tracing?: boolean;
     nodejsCompat?: boolean;
     tlaCompat?: boolean;
-    base64Cutoff?: boolean;
+    base64Cutoff?: number;
     js?: boolean;
     minify?: boolean;
     optimize?: boolean;

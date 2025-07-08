@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { extname, basename, resolve } from 'node:path';
 
-import { minify } from 'terser';
+import { ECMA, minify } from 'terser';
 import { fileURLToPath } from 'url';
 
 import { runOptimizeComponent } from './opt.js';
@@ -11,13 +11,16 @@ import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 
 import {
     $init as $initBindgenComponent,
+    AsyncMode,
     generate,
+    InstantiationMode,
 } from '../vendor/js-component-bindgen-component.js';
 
 import {
     $init as $initWasmToolsComponent,
     tools,
 } from '../vendor/wasm-tools.js';
+import assert from 'node:assert';
 const { componentEmbed, componentNew } = tools;
 
 export interface TranspilationOptions {
@@ -25,7 +28,7 @@ export interface TranspilationOptions {
     instantiation?: 'async' | 'sync';
     importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized';
     map?: Record<string, string>;
-    asyncMode?: string;
+    asyncMode?: "sync" | "jspi";
     asyncImports?: string[];
     asyncExports?: string[];
     asyncWasiImports?: string[];
@@ -34,7 +37,7 @@ export interface TranspilationOptions {
     tracing?: boolean;
     nodejsCompat?: boolean;
     tlaCompat?: boolean;
-    base64Cutoff?: boolean;
+    base64Cutoff?: number;
     js?: boolean;
     minify?: boolean;
     optimize?: boolean;
@@ -110,16 +113,17 @@ export async function transpile(
     componentPath: Buffer | string | URL | FileHandle,
     opts: TranspilationOptions
 ): Promise<TranspilationResult> {
-    let component;
+    const componentPathString = String(componentPath)
+    let component: Buffer | Uint8Array;
     if (!opts?.stub) {
-        component = await readFile(componentPath);
+        component = await readFile(componentPath) as Buffer;
     } else {
         try {
             await $initWasmToolsComponent;
             component = componentNew(
                 componentEmbed({
                     dummy: true,
-                    witPath: (isWindows ? '//?/' : '') + resolve(componentPath),
+                    witPath: (isWindows ? '//?/' : '') + resolve(componentPathString),
                 }),
                 []
             );
@@ -131,15 +135,17 @@ export async function transpile(
 
     if (!opts?.name) {
         opts.name = basename(
-            componentPath.slice(0, -extname(componentPath).length || Infinity)
+            componentPathString.slice(0, -extname(componentPathString).length || Infinity)
         );
     }
 
-    if (opts?.map) {
-        opts.map = Object.fromEntries(
-            opts.map.map((mapping) => mapping.split('='))
-        );
-    }
+    // TODO is this used? either use it or remove!
+    //
+    // if (opts?.map) {
+    //     opts.map = Object.fromEntries(
+    //         opts.map.map((mapping) => mapping.split('='))
+    //     );
+    // }
 
     if (opts?.asyncWasiImports) {
         opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
@@ -169,7 +175,7 @@ async function wasm2Js(source: Uint8Array): Promise<Uint8Array> {
             '-o',
         ]);
     } catch (e) {
-        if (e.toString().includes('BasicBlock requested')) {
+        if (String(e).includes('BasicBlock requested')) {
             return wasm2Js(source);
         }
         throw e;
@@ -193,7 +199,7 @@ export async function runTranspileComponent(
     }
 
     if (opts.optimize) {
-        ({ component } = await runOptimizeComponent(component, opts));
+        ({ component } = await runOptimizeComponent(component, { ...opts, quiet: false }));
     }
 
     if (opts.wasiShim !== false) {
@@ -212,7 +218,7 @@ export async function runTranspileComponent(
         );
     }
 
-    let instantiation = null;
+    let instantiation: InstantiationMode | null = null;
 
     // Let's define `instantiation` from `--instantiation` if it's present.
     if (opts.instantiation) {
@@ -223,25 +229,25 @@ export async function runTranspileComponent(
         instantiation = { tag: 'async' };
     }
 
-    const asyncMode =
+    const asyncMode: AsyncMode | null =
         !opts.asyncMode || opts.asyncMode === 'sync'
             ? null
             : {
-                  tag: opts.asyncMode,
-                  val: {
-                      imports: opts.asyncImports || [],
-                      exports: opts.asyncExports || [],
-                  },
-              };
+                tag: opts.asyncMode,
+                val: {
+                    imports: opts.asyncImports || [],
+                    exports: opts.asyncExports || [],
+                },
+            };
 
     let { files, imports, exports } = generate(component, {
         name: opts.name ?? 'component',
         map: Object.entries(opts.map ?? {}),
-        instantiation,
-        asyncMode,
+        instantiation: instantiation ?? undefined,
+        asyncMode: asyncMode ?? undefined,
         importBindings: opts.importBindings
             ? { tag: opts.importBindings }
-            : null,
+            : undefined,
         validLiftingOptimization: opts.validLiftingOptimization ?? false,
         tracing: opts.tracing ?? false,
         noNodejsCompat: opts.nodejsCompat === false,
@@ -250,7 +256,8 @@ export async function runTranspileComponent(
         base64Cutoff: opts.js ? 0 : (opts.base64Cutoff ?? 5000),
         noNamespacedExports: opts.namespacedExports === false,
         multiMemory: opts.multiMemory === true,
-        idlImports: opts.experimentalIdlImports === true,
+        // TODO is this used or remove
+        // idlImports: opts.experimentalIdlImports === true,
     });
 
     let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
@@ -262,7 +269,9 @@ export async function runTranspileComponent(
     const jsFiles = files.find(([name]) => name.endsWith('.js'));
 
     // Generate JS if specified
-    if (opts.js) {
+    if (opts.js && jsFiles != null) {
+        assert(instantiation != null, "expect instantiation to be set")
+
         jsFiles[1] = Buffer.from(
             await generateJS({
                 opts,
@@ -276,20 +285,22 @@ export async function runTranspileComponent(
     }
 
     // Perform minification if configured
-    if (opts.minify) {
-        ({ code: jsFiles[1] } = await minify(
+    if (opts.minify && jsFiles != null) {
+        const { code } = await minify(
             Buffer.from(jsFiles[1]).toString('utf8'),
             {
                 module: true,
                 compress: {
-                    ecma: 9,
+                    ecma: 9 as ECMA, // TODO 9 is not a valid value!
                     unsafe: true,
                 },
                 mangle: {
                     keep_classnames: true,
                 },
             }
-        ));
+        );
+        assert(code != null, "expected code to be set")
+        jsFiles[1] = Uint8Array.from(code);
     }
 
     return { files: Object.fromEntries(files), imports, exports };
@@ -374,8 +385,9 @@ async function generateJS(args: GenerateJSArgs): Promise<string> {
     // Compile all Wasm modules into ASM.js codes.
     const asmFiles = await Promise.all(
         wasmFiles.map(async ([, source]) => {
-            const output = (await wasm2Js(source)).toString('utf8');
-            return output;
+            const output = await wasm2Js(source);
+            const outputBuffer = Buffer.from(output)
+            return outputBuffer.toString("utf8");
         })
     );
 
@@ -383,27 +395,26 @@ async function generateJS(args: GenerateJSArgs): Promise<string> {
         .map(
             (asm, nth) => `function asm${nth}(imports) {
   ${
-      // strip and replace the asm instantiation wrapper
-      asm
-          .replace(/import \* as [^ ]+ from '[^']*';/g, '')
-          .replace('function asmFunc(imports) {', '')
-          .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
-          .replace(/var retasmFunc = [\s\S]*$/, '')
-          .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
-          .replace('memory.grow = __wasm_memory_grow;', '')
-          .trim()
-  }`
+                // strip and replace the asm instantiation wrapper
+                asm
+                    .replace(/import \* as [^ ]+ from '[^']*';/g, '')
+                    .replace('function asmFunc(imports) {', '')
+                    .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
+                    .replace(/var retasmFunc = [\s\S]*$/, '')
+                    .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
+                    .replace('memory.grow = __wasm_memory_grow;', '')
+                    .trim()
+                }`
         )
         .join(',\n');
 
     // The `instantiate` function.
-    const instantiateFunction = `${
-        withInstantiation ? 'export ' : ''
-    }${async_}function instantiate(imports) {
+    const instantiateFunction = `${withInstantiation ? 'export ' : ''
+        }${async_}function instantiate(imports) {
   const wasm_file_to_asm_index = {
     ${wasmFiles
-        .map(([path], nth) => `'${basename(path)}': ${nth}`)
-        .join(',\n    ')}
+            .map(([path], nth) => `'${basename(path)}': ${nth}`)
+            .join(',\n    ')}
   };
 
   return ${await_}_instantiate(
@@ -430,17 +441,17 @@ async function generateJS(args: GenerateJSArgs): Promise<string> {
         if (exports.length > 0 || opts.tlaCompat) {
             exportDirectives = `export {
 ${
-    // Exporting `$init` must come first to not break the transpiling tests.
-    opts.tlaCompat ? '  $init,\n' : ''
-}${exports
-                .map(([name]) => {
-                    if (name === asmMangle(name)) {
-                        return `  ${name},`;
-                    } else {
-                        return `  ${asmMangle(name)} as '${name}',`;
-                    }
-                })
-                .join('\n')}
+                // Exporting `$init` must come first to not break the transpiling tests.
+                opts.tlaCompat ? '  $init,\n' : ''
+                }${exports
+                    .map(([name]) => {
+                        if (name === asmMangle(name)) {
+                            return `  ${name},`;
+                        } else {
+                            return `  ${asmMangle(name)} as '${name}',`;
+                        }
+                    })
+                    .join('\n')}
 }`;
         }
 
@@ -449,35 +460,35 @@ ${
             .map(([name]) => `_${asmMangle(name)}`)
             .join(', ')};
 ${exports
-    .map(([name, ty]) => {
-        if (ty === 'function') {
-            return `\nfunction ${asmMangle(name)} () {
+                .map(([name, ty]) => {
+                    if (ty === 'function') {
+                        return `\nfunction ${asmMangle(name)} () {
   return _${asmMangle(name)}.apply(this, arguments);
 }`;
-        } else {
-            return `\nlet ${asmMangle(name)};`;
-        }
-    })
-    .join('\n')}`;
+                    } else {
+                        return `\nlet ${asmMangle(name)};`;
+                    }
+                })
+                .join('\n')}`;
 
         autoInstantiate = `${async_}function $init() {
   ( {
 ${exports
-    .map(([name, ty]) => {
-        if (ty === 'function') {
-            return `    '${name}': _${asmMangle(name)},`;
-        } else if (asmMangle(name) === name) {
-            return `    ${name},`;
-        } else {
-            return `    '${name}': ${asmMangle(name)},`;
-        }
-    })
-    .join('\n')}
+                .map(([name, ty]) => {
+                    if (ty === 'function') {
+                        return `    '${name}': _${asmMangle(name)},`;
+                    } else if (asmMangle(name) === name) {
+                        return `    ${name},`;
+                    } else {
+                        return `    '${name}': ${asmMangle(name)},`;
+                    }
+                })
+                .join('\n')}
   } = ${await_}instantiate(
     {
 ${imports
-    .map((import_file, nth) => `      '${import_file}': import${nth},`)
-    .join('\n')}
+                .map((import_file, nth) => `      '${import_file}': import${nth},`)
+                .join('\n')}
     }
   ) )
 }
@@ -720,6 +731,6 @@ function asmMangle(name: string): string {
 
 // see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
 if (typeof __vite_ssr_import_meta__ !== 'undefined') {
-    __vite_ssr_import_meta__.resolve = (path) =>
+    __vite_ssr_import_meta__.resolve = (path:string) =>
         'file://' + globalCreateRequire(import.meta.url).resolve(path);
 }

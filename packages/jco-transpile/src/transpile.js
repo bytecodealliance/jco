@@ -7,6 +7,7 @@ import { readFile, runWASMTransformProgram, isWindows } from './common.js';
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 import { $init as $initBindgenComponent, generate, } from '../vendor/js-component-bindgen-component.js';
 import { $init as $initWasmToolsComponent, tools, } from '../vendor/wasm-tools.js';
+import assert from 'node:assert';
 const { componentEmbed, componentNew } = tools;
 /**
  * @typedef {{
@@ -51,6 +52,7 @@ const { componentEmbed, componentNew } = tools;
  * @returns {Promise<TranspilationResult>}
  */
 export async function transpile(componentPath, opts) {
+    const componentPathString = String(componentPath);
     let component;
     if (!opts?.stub) {
         component = await readFile(componentPath);
@@ -60,7 +62,7 @@ export async function transpile(componentPath, opts) {
             await $initWasmToolsComponent;
             component = componentNew(componentEmbed({
                 dummy: true,
-                witPath: (isWindows ? '//?/' : '') + resolve(componentPath),
+                witPath: (isWindows ? '//?/' : '') + resolve(componentPathString),
             }), []);
         }
         catch (err) {
@@ -69,11 +71,15 @@ export async function transpile(componentPath, opts) {
         }
     }
     if (!opts?.name) {
-        opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
+        opts.name = basename(componentPathString.slice(0, -extname(componentPathString).length || Infinity));
     }
-    if (opts?.map) {
-        opts.map = Object.fromEntries(opts.map.map((mapping) => mapping.split('=')));
-    }
+    // TODO is this used? either use it or remove!
+    //
+    // if (opts?.map) {
+    //     opts.map = Object.fromEntries(
+    //         opts.map.map((mapping) => mapping.split('='))
+    //     );
+    // }
     if (opts?.asyncWasiImports) {
         opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
     }
@@ -97,7 +103,7 @@ async function wasm2Js(source) {
         ]);
     }
     catch (e) {
-        if (e.toString().includes('BasicBlock requested')) {
+        if (String(e).includes('BasicBlock requested')) {
             return wasm2Js(source);
         }
         throw e;
@@ -116,7 +122,7 @@ export async function runTranspileComponent(component, opts) {
         opts.wasiShim = false;
     }
     if (opts.optimize) {
-        ({ component } = await runOptimizeComponent(component, opts));
+        ({ component } = await runOptimizeComponent(component, { ...opts, quiet: false }));
     }
     if (opts.wasiShim !== false) {
         opts.map = Object.assign({
@@ -150,11 +156,11 @@ export async function runTranspileComponent(component, opts) {
     let { files, imports, exports } = generate(component, {
         name: opts.name ?? 'component',
         map: Object.entries(opts.map ?? {}),
-        instantiation,
-        asyncMode,
+        instantiation: instantiation ?? undefined,
+        asyncMode: asyncMode ?? undefined,
         importBindings: opts.importBindings
             ? { tag: opts.importBindings }
-            : null,
+            : undefined,
         validLiftingOptimization: opts.validLiftingOptimization ?? false,
         tracing: opts.tracing ?? false,
         noNodejsCompat: opts.nodejsCompat === false,
@@ -163,7 +169,8 @@ export async function runTranspileComponent(component, opts) {
         base64Cutoff: opts.js ? 0 : (opts.base64Cutoff ?? 5000),
         noNamespacedExports: opts.namespacedExports === false,
         multiMemory: opts.multiMemory === true,
-        idlImports: opts.experimentalIdlImports === true,
+        // TODO is this used or remove
+        // idlImports: opts.experimentalIdlImports === true,
     });
     let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
     if (!outDir.endsWith('/') && outDir !== '') {
@@ -172,7 +179,8 @@ export async function runTranspileComponent(component, opts) {
     files = files.map(([name, source]) => [`${outDir}${name}`, source]);
     const jsFiles = files.find(([name]) => name.endsWith('.js'));
     // Generate JS if specified
-    if (opts.js) {
+    if (opts.js && jsFiles != null) {
+        assert(instantiation != null, "expect instantiation to be set");
         jsFiles[1] = Buffer.from(await generateJS({
             opts,
             inputJS: jsFiles[1],
@@ -183,17 +191,19 @@ export async function runTranspileComponent(component, opts) {
         }));
     }
     // Perform minification if configured
-    if (opts.minify) {
-        ({ code: jsFiles[1] } = await minify(Buffer.from(jsFiles[1]).toString('utf8'), {
+    if (opts.minify && jsFiles != null) {
+        const { code } = await minify(Buffer.from(jsFiles[1]).toString('utf8'), {
             module: true,
             compress: {
-                ecma: 9,
+                ecma: 9, // TODO 9 is not a valid value!
                 unsafe: true,
             },
             mangle: {
                 keep_classnames: true,
             },
-        }));
+        });
+        assert(code != null, "expected code to be set");
+        jsFiles[1] = Uint8Array.from(code);
     }
     return { files: Object.fromEntries(files), imports, exports };
 }
@@ -264,8 +274,9 @@ async function generateJS(args) {
     files = files.filter(([name]) => !name.endsWith('.wasm'));
     // Compile all Wasm modules into ASM.js codes.
     const asmFiles = await Promise.all(wasmFiles.map(async ([, source]) => {
-        const output = (await wasm2Js(source)).toString('utf8');
-        return output;
+        const output = await wasm2Js(source);
+        const outputBuffer = Buffer.from(output);
+        return outputBuffer.toString("utf8");
     }));
     const asms = asmFiles
         .map((asm, nth) => `function asm${nth}(imports) {

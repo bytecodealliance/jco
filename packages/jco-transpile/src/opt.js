@@ -160,7 +160,8 @@ async function runWasmOptCLI(source, args) {
         ]);
     }
     catch (e) {
-        if (e.toString().includes('BasicBlock requested')) {
+        if (String(e).includes('BasicBlock requested')) {
+            // TODO where does wasmopt come from
             return wasmOpt(source, args);
         }
         throw e;

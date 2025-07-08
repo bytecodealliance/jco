@@ -202,7 +202,7 @@ export async function runOptimizeComponent(
             print(outComponentBytes);
         } catch (e) {
             throw new Error(
-                `Internal error performing optimization.\n${e.message}`
+                `Internal error performing optimization.\n${(e as Error).message}`
             );
         }
     }
@@ -237,7 +237,9 @@ async function runWasmOptCLI(
             '-o',
         ]);
     } catch (e) {
-        if (String(e).includes('BasicBlock requested')) {
+        if (
+            String(e).includes('BasicBlock requested')) {
+            // TODO where does wasmopt come from
             return wasmOpt(source, args);
         }
         throw e;
@@ -246,6 +248,6 @@ async function runWasmOptCLI(
 
 // see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
 if (typeof __vite_ssr_import_meta__ !== 'undefined') {
-    __vite_ssr_import_meta__.resolve = (path) =>
+    __vite_ssr_import_meta__.resolve = (path: string) =>
         'file://' + globalCreateRequire(import.meta.url).resolve(path);
 }
