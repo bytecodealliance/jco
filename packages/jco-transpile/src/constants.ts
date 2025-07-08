@@ -9,9 +9,9 @@ export const ASYNC_WASI_IMPORTS = [
     'wasi:io/streams#[method]output-stream.blocking-write-zeroes-and-flush',
     'wasi:io/streams#[method]output-stream.blocking-splice',
 ];
+
 /** WASI exports that should be considered asynchronous when present */
 export const ASYNC_WASI_EXPORTS = [
     'wasi:cli/run#run',
     'wasi:http/incoming-handler#handle',
 ];
-//# sourceMappingURL=constants.js.map

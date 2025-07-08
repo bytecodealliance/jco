@@ -1,13 +1,24 @@
 import { Buffer } from 'node:buffer';
 import { extname, basename, resolve } from 'node:path';
+
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
+
 import { runOptimizeComponent } from './opt.js';
 import { readFile, runWASMTransformProgram, isWindows } from './common.js';
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
-import { $init as $initBindgenComponent, generate, } from '../vendor/js-component-bindgen-component.js';
-import { $init as $initWasmToolsComponent, tools, } from '../vendor/wasm-tools.js';
+
+import {
+    $init as $initBindgenComponent,
+    generate,
+} from '../vendor/js-component-bindgen-component.js';
+
+import {
+    $init as $initWasmToolsComponent,
+    tools,
+} from '../vendor/wasm-tools.js';
 const { componentEmbed, componentNew } = tools;
+
 /**
  * @typedef {{
  *   name: string,
@@ -42,6 +53,7 @@ const { componentEmbed, componentNew } = tools;
  *  exports: [string, 'function' | 'instance'][];
  * }} TranspilationResult
  */
+
 /**
  * Transpile a provided WebAssembly component to an ES module
  * that can be run in JS environments
@@ -55,34 +67,45 @@ export async function transpile(componentPath, opts) {
     let component;
     if (!opts?.stub) {
         component = await readFile(componentPath);
-    }
-    else {
+    } else {
         try {
             await $initWasmToolsComponent;
-            component = componentNew(componentEmbed({
-                dummy: true,
-                witPath: (isWindows ? '//?/' : '') + resolve(componentPath),
-            }), []);
-        }
-        catch (err) {
+            component = componentNew(
+                componentEmbed({
+                    dummy: true,
+                    witPath: (isWindows ? '//?/' : '') + resolve(componentPath),
+                }),
+                []
+            );
+        } catch (err) {
             console.error('failed to run component new:', err);
             throw err;
         }
     }
+
     if (!opts?.name) {
-        opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
+        opts.name = basename(
+            componentPath.slice(0, -extname(componentPath).length || Infinity)
+        );
     }
+
     if (opts?.map) {
-        opts.map = Object.fromEntries(opts.map.map((mapping) => mapping.split('=')));
+        opts.map = Object.fromEntries(
+            opts.map.map((mapping) => mapping.split('='))
+        );
     }
+
     if (opts?.asyncWasiImports) {
         opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
     }
+
     if (opts?.asyncWasiExports) {
         opts.asyncExports = ASYNC_WASI_EXPORTS.concat(opts.asyncExports || []);
     }
+
     return await runTranspileComponent(component, opts);
 }
+
 /**
  * Convert a WebAssembly module to JS (via Binaryen)
  *
@@ -90,20 +113,23 @@ export async function transpile(componentPath, opts) {
  * @returns {Promise<Uint8Array>}
  */
 async function wasm2Js(source) {
-    const wasm2jsPath = fileURLToPath(import.meta.resolve('binaryen/bin/wasm2js'));
+    const wasm2jsPath = fileURLToPath(
+        import.meta.resolve('binaryen/bin/wasm2js')
+    );
+
     try {
         return await runWASMTransformProgram(wasm2jsPath, source, [
             '-Oz',
             '-o',
         ]);
-    }
-    catch (e) {
+    } catch (e) {
         if (e.toString().includes('BasicBlock requested')) {
             return wasm2Js(source);
         }
         throw e;
     }
 }
+
 /**
  * Perform transpilation, using the transpiled js-component-bindgen Rust crate.
  *
@@ -116,21 +142,29 @@ export async function runTranspileComponent(component, opts = {}) {
     if (opts.instantiation) {
         opts.wasiShim = false;
     }
+
     if (opts.optimize) {
         ({ component } = await runOptimizeComponent(component, opts));
     }
+
     if (opts.wasiShim !== false) {
-        opts.map = Object.assign({
-            'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
-            'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
-            'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
-            'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
-            'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
-            'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
-            'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
-        }, opts.map || {});
+        opts.map = Object.assign(
+            {
+                'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
+                'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
+                'wasi:filesystem/*':
+                    '@bytecodealliance/preview2-shim/filesystem#*',
+                'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
+                'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
+                'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
+                'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
+            },
+            opts.map || {}
+        );
     }
+
     let instantiation = null;
+
     // Let's define `instantiation` from `--instantiation` if it's present.
     if (opts.instantiation) {
         instantiation = { tag: opts.instantiation };
@@ -139,15 +173,18 @@ export async function runTranspileComponent(component, opts = {}) {
     else if (opts.js) {
         instantiation = { tag: 'async' };
     }
-    const asyncMode = !opts.asyncMode || opts.asyncMode === 'sync'
-        ? null
-        : {
-            tag: opts.asyncMode,
-            val: {
-                imports: opts.asyncImports || [],
-                exports: opts.asyncExports || [],
-            },
-        };
+
+    const asyncMode =
+        !opts.asyncMode || opts.asyncMode === 'sync'
+            ? null
+            : {
+                  tag: opts.asyncMode,
+                  val: {
+                      imports: opts.asyncImports || [],
+                      exports: opts.asyncExports || [],
+                  },
+              };
+
     let { files, imports, exports } = generate(component, {
         name: opts.name ?? 'component',
         map: Object.entries(opts.map ?? {}),
@@ -166,38 +203,49 @@ export async function runTranspileComponent(component, opts = {}) {
         multiMemory: opts.multiMemory === true,
         idlImports: opts.experimentalIdlImports === true,
     });
+
     let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
     if (!outDir.endsWith('/') && outDir !== '') {
         outDir += '/';
     }
     files = files.map(([name, source]) => [`${outDir}${name}`, source]);
+
     const jsFiles = files.find(([name]) => name.endsWith('.js'));
+
     // Generate JS if specified
     if (opts.js) {
-        jsFiles[1] = Buffer.from(await generateJS({
-            opts,
-            inputJS: jsFiles[1],
-            files,
-            instantiation,
-            imports,
-            exports,
-        }));
+        jsFiles[1] = Buffer.from(
+            await generateJS({
+                opts,
+                inputJS: jsFiles[1],
+                files,
+                instantiation,
+                imports,
+                exports,
+            })
+        );
     }
+
     // Perform minification if configured
     if (opts.minify) {
-        ({ code: jsFiles[1] } = await minify(Buffer.from(jsFiles[1]).toString('utf8'), {
-            module: true,
-            compress: {
-                ecma: 9,
-                unsafe: true,
-            },
-            mangle: {
-                keep_classnames: true,
-            },
-        }));
+        ({ code: jsFiles[1] } = await minify(
+            Buffer.from(jsFiles[1]).toString('utf8'),
+            {
+                module: true,
+                compress: {
+                    ecma: 9,
+                    unsafe: true,
+                },
+                mangle: {
+                    keep_classnames: true,
+                },
+            }
+        ));
     }
+
     return { files: Object.fromEntries(files), imports, exports };
 }
+
 /** Generate code for the `--js` option.
  *
  * `--js` can be called with or without `--instantiation`. The generated code
@@ -250,39 +298,59 @@ export async function runTranspileComponent(component, opts = {}) {
 async function generateJS(args) {
     const { opts, inputJS, instantiation, imports, exports } = args;
     let files = args.files;
+
     const withInstantiation = opts.instantiation !== undefined;
     const async_ = instantiation.tag == 'async' ? 'async ' : '';
     const await_ = instantiation.tag == 'async' ? 'await ' : '';
+
     // Format the previously generated code.
     const source = Buffer.from(inputJS)
         .toString('utf8')
         // update imports manging to match emscripten asm
-        .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`)
-        .replace(/export (async )?function instantiate/, '$1function _instantiate');
+        .replace(
+            /exports(\d+)\['([^']+)']/g,
+            (_, i, s) => `exports${i}['${asmMangle(s)}']`
+        )
+        .replace(
+            /export (async )?function instantiate/,
+            '$1function _instantiate'
+        );
+
     // Filter to get all current generated wasm files
     const wasmFiles = files.filter(([name]) => name.endsWith('.wasm'));
+
     // Filter out wasm files
     files = files.filter(([name]) => !name.endsWith('.wasm'));
+
     // Compile all Wasm modules into ASM.js codes.
-    const asmFiles = await Promise.all(wasmFiles.map(async ([, source]) => {
-        const output = (await wasm2Js(source)).toString('utf8');
-        return output;
-    }));
+    const asmFiles = await Promise.all(
+        wasmFiles.map(async ([, source]) => {
+            const output = (await wasm2Js(source)).toString('utf8');
+            return output;
+        })
+    );
+
     const asms = asmFiles
-        .map((asm, nth) => `function asm${nth}(imports) {
+        .map(
+            (asm, nth) => `function asm${nth}(imports) {
   ${
-    // strip and replace the asm instantiation wrapper
-    asm
-        .replace(/import \* as [^ ]+ from '[^']*';/g, '')
-        .replace('function asmFunc(imports) {', '')
-        .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
-        .replace(/var retasmFunc = [\s\S]*$/, '')
-        .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
-        .replace('memory.grow = __wasm_memory_grow;', '')
-        .trim()}`)
+      // strip and replace the asm instantiation wrapper
+      asm
+          .replace(/import \* as [^ ]+ from '[^']*';/g, '')
+          .replace('function asmFunc(imports) {', '')
+          .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
+          .replace(/var retasmFunc = [\s\S]*$/, '')
+          .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
+          .replace('memory.grow = __wasm_memory_grow;', '')
+          .trim()
+  }`
+        )
         .join(',\n');
+
     // The `instantiate` function.
-    const instantiateFunction = `${withInstantiation ? 'export ' : ''}${async_}function instantiate(imports) {
+    const instantiateFunction = `${
+        withInstantiation ? 'export ' : ''
+    }${async_}function instantiate(imports) {
   const wasm_file_to_asm_index = {
     ${wasmFiles
         .map(([path], nth) => `'${basename(path)}': ${nth}`)
@@ -295,73 +363,79 @@ async function generateJS(args) {
       (module_index, imports) => ({ exports: asmInit[module_index](imports) })
   );
 }`;
+
     // If `--js` is used without `--instantiation`.
     let importDirectives = '';
     let exportDirectives = '';
     let exportTrampolines = '';
     let autoInstantiate = '';
+
     if (!withInstantiation) {
         importDirectives = imports
-            .map((import_file, nth) => `import * as import${nth} from '${import_file}';`)
+            .map(
+                (import_file, nth) =>
+                    `import * as import${nth} from '${import_file}';`
+            )
             .join('\n');
+
         if (exports.length > 0 || opts.tlaCompat) {
             exportDirectives = `export {
 ${
-            // Exporting `$init` must come first to not break the transpiling tests.
-            opts.tlaCompat ? '  $init,\n' : ''}${exports
+    // Exporting `$init` must come first to not break the transpiling tests.
+    opts.tlaCompat ? '  $init,\n' : ''
+}${exports
                 .map(([name]) => {
-                if (name === asmMangle(name)) {
-                    return `  ${name},`;
-                }
-                else {
-                    return `  ${asmMangle(name)} as '${name}',`;
-                }
-            })
+                    if (name === asmMangle(name)) {
+                        return `  ${name},`;
+                    } else {
+                        return `  ${asmMangle(name)} as '${name}',`;
+                    }
+                })
                 .join('\n')}
 }`;
         }
+
         exportTrampolines = `let ${exports
             .filter(([, ty]) => ty === 'function')
             .map(([name]) => `_${asmMangle(name)}`)
             .join(', ')};
 ${exports
-            .map(([name, ty]) => {
-            if (ty === 'function') {
-                return `\nfunction ${asmMangle(name)} () {
+    .map(([name, ty]) => {
+        if (ty === 'function') {
+            return `\nfunction ${asmMangle(name)} () {
   return _${asmMangle(name)}.apply(this, arguments);
 }`;
-            }
-            else {
-                return `\nlet ${asmMangle(name)};`;
-            }
-        })
-            .join('\n')}`;
+        } else {
+            return `\nlet ${asmMangle(name)};`;
+        }
+    })
+    .join('\n')}`;
+
         autoInstantiate = `${async_}function $init() {
   ( {
 ${exports
-            .map(([name, ty]) => {
-            if (ty === 'function') {
-                return `    '${name}': _${asmMangle(name)},`;
-            }
-            else if (asmMangle(name) === name) {
-                return `    ${name},`;
-            }
-            else {
-                return `    '${name}': ${asmMangle(name)},`;
-            }
-        })
-            .join('\n')}
+    .map(([name, ty]) => {
+        if (ty === 'function') {
+            return `    '${name}': _${asmMangle(name)},`;
+        } else if (asmMangle(name) === name) {
+            return `    ${name},`;
+        } else {
+            return `    '${name}': ${asmMangle(name)},`;
+        }
+    })
+    .join('\n')}
   } = ${await_}instantiate(
     {
 ${imports
-            .map((import_file, nth) => `      '${import_file}': import${nth},`)
-            .join('\n')}
+    .map((import_file, nth) => `      '${import_file}': import${nth},`)
+    .join('\n')}
     }
   ) )
 }
 
 ${opts.tlaCompat ? '' : `${await_}$init();`}`;
     }
+
     // Prepare the final generated code.
     const outSource = `${importDirectives}
 
@@ -376,8 +450,10 @@ ${instantiateFunction}
 ${exportDirectives}
 
 ${autoInstantiate}`;
+
     return outSource;
 }
+
 // emscripten asm mangles specifiers to be valid identifiers
 // for imports to match up we must do the same
 // See https://github.com/WebAssembly/binaryen/blob/main/src/asmjs/asmangle.cpp
@@ -385,8 +461,10 @@ function asmMangle(name) {
     if (name === '') {
         return '$';
     }
+
     let mightBeKeyword = true;
     let i = 1;
+
     // Names must start with a character, $ or _
     switch (name[0]) {
         case '0':
@@ -410,13 +488,16 @@ function asmMangle(name) {
         }
         default: {
             let chNum = name.charCodeAt(0);
-            if (!(chNum >= 97 && chNum <= 122) &&
-                !(chNum >= 65 && chNum <= 90)) {
+            if (
+                !(chNum >= 97 && chNum <= 122) &&
+                !(chNum >= 65 && chNum <= 90)
+            ) {
                 name = '$' + name.substr(1);
                 mightBeKeyword = false;
             }
         }
     }
+
     // Names must contain only characters, digits, $ or _
     let len = name.length;
     for (; i < len; ++i) {
@@ -438,14 +519,17 @@ function asmMangle(name) {
             }
             default: {
                 let chNum = name.charCodeAt(i);
-                if (!(chNum >= 97 && chNum <= 122) &&
-                    !(chNum >= 65 && chNum <= 90)) {
+                if (
+                    !(chNum >= 97 && chNum <= 122) &&
+                    !(chNum >= 65 && chNum <= 90)
+                ) {
                     name = name.substr(0, i) + '_' + name.substr(i + 1);
                     mightBeKeyword = false;
                 }
             }
         }
     }
+
     // Names must not collide with keywords
     if (mightBeKeyword && len >= 2 && len <= 10) {
         switch (name[0]) {
@@ -462,11 +546,13 @@ function asmMangle(name) {
                 break;
             }
             case 'c': {
-                if (name == 'case' ||
+                if (
+                    name == 'case' ||
                     name == 'continue' ||
                     name == 'catch' ||
                     name == 'const' ||
-                    name == 'class') {
+                    name == 'class'
+                ) {
                     return name + '_';
                 }
                 break;
@@ -478,31 +564,37 @@ function asmMangle(name) {
                 break;
             }
             case 'e': {
-                if (name == 'else' ||
+                if (
+                    name == 'else' ||
                     name == 'enum' ||
                     name == 'eval' || // to be sure
                     name == 'export' ||
-                    name == 'extends') {
+                    name == 'extends'
+                ) {
                     return name + '_';
                 }
                 break;
             }
             case 'f': {
-                if (name == 'for' ||
+                if (
+                    name == 'for' ||
                     name == 'false' ||
                     name == 'finally' ||
-                    name == 'function') {
+                    name == 'function'
+                ) {
                     return name + '_';
                 }
                 break;
             }
             case 'i': {
-                if (name == 'if' ||
+                if (
+                    name == 'if' ||
                     name == 'in' ||
                     name == 'import' ||
                     name == 'interface' ||
                     name == 'implements' ||
-                    name == 'instanceof') {
+                    name == 'instanceof'
+                ) {
                     return name + '_';
                 }
                 break;
@@ -520,10 +612,12 @@ function asmMangle(name) {
                 break;
             }
             case 'p': {
-                if (name == 'public' ||
+                if (
+                    name == 'public' ||
                     name == 'package' ||
                     name == 'private' ||
-                    name == 'protected') {
+                    name == 'protected'
+                ) {
                     return name + '_';
                 }
                 break;
@@ -541,11 +635,13 @@ function asmMangle(name) {
                 break;
             }
             case 't': {
-                if (name == 'try' ||
+                if (
+                    name == 'try' ||
                     name == 'this' ||
                     name == 'true' ||
                     name == 'throw' ||
-                    name == 'typeof') {
+                    name == 'typeof'
+                ) {
                     return name + '_';
                 }
                 break;
@@ -572,8 +668,9 @@ function asmMangle(name) {
     }
     return name;
 }
+
 // see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
 if (typeof __vite_ssr_import_meta__ !== 'undefined') {
-    __vite_ssr_import_meta__.resolve = (path) => 'file://' + globalCreateRequire(import.meta.url).resolve(path);
+    __vite_ssr_import_meta__.resolve = (path) =>
+        'file://' + globalCreateRequire(import.meta.url).resolve(path);
 }
-//# sourceMappingURL=transpile.js.map
