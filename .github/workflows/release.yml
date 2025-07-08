@@ -252,10 +252,6 @@ jobs:
         run: |
           npm pack
 
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
-        with:
-          subject-path: ${{ needs.meta.outputs.artifacts-glob }}
-
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           if-no-files-found: error
@@ -343,6 +339,10 @@ jobs:
       # NOTE: We need to checkout to pull npmrc
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ">=22"
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
@@ -365,7 +365,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
         shell: bash
         run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
 
           export OPT_DRY_RUN="--dry-run"
           if [ "tag" == "${{ github.ref_type }}" ]; then
@@ -377,10 +377,14 @@ jobs:
             export OPT_RELEASE_TAG="--tag ${{ needs.meta.outputs.prerelease-tag }}";
           fi
 
-          npm publish -w @bytecodealliance/${{ needs.meta.outputs.project }} \
-              $OPT_DRY_RUN \
-              $OPT_RELEASE_TAG \
-              $PACKAGE_DIR
+          npm publish \
+            --verbose \
+            -w @bytecodealliance/${{ needs.meta.outputs.project }} \
+            --access=public \
+            --provenance \
+            $OPT_DRY_RUN \
+            $OPT_RELEASE_TAG \
+            $PACKAGE_FILE_PATH
 
   create-gh-release:
     runs-on: ubuntu-24.04
@@ -398,7 +402,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: taiki-e/install-action@9185c192a96ba09167ad8663015b3fbbf007ec79 # v2.56.2
+      - uses: taiki-e/install-action@f3a27926ea13d7be3ee2f4cbb925883cf9442b56 # v2.56.7
         with:
           fallback: none
           tool: git-cliff
