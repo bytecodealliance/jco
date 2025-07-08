@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { byteLengthLEB128, runWASMTransformProgram } from './common.js';
 import { $init, tools } from '../vendor/wasm-tools.js';
+import assert from 'node:assert';
 const { metadataShow, print } = tools;
 /**
  * @typedef {{
@@ -66,8 +67,11 @@ export async function runOptimizeComponent(componentBytes, opts) {
             if (metadata.parentIndex === parentIndex) {
                 nodes.splice(i, 1); // remove from nodes
                 i--;
+                assert(metadata.index != null, "index should be set");
                 metadata.children = getChildren(metadata.index);
                 metadata.sizeChange = metadata.children.reduce((total, { prevLEBLen, newLEBLen, sizeChange }) => {
+                    assert(newLEBLen != null, "newLEBLen should be set");
+                    assert(prevLEBLen != null, "prevLEBLen should be set");
                     return sizeChange
                         ? total + sizeChange + newLEBLen - prevLEBLen
                         : total;
@@ -82,11 +86,15 @@ export async function runOptimizeComponent(componentBytes, opts) {
     const componentTree = getChildren(0);
     // compute the total size change in the component binary
     const sizeChange = componentTree.reduce((total, { prevLEBLen, newLEBLen, sizeChange }) => {
+        assert(newLEBLen != null, "newLEBLen should be set");
+        assert(prevLEBLen != null, "prevLEBLen should be set");
         return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
     }, 0);
     let outComponentBytes = new Uint8Array(componentBytes.byteLength + sizeChange);
     let nextReadPos = 0, nextWritePos = 0;
     const write = ({ prevLEBLen, range, optimized, children, sizeChange }) => {
+        assert(prevLEBLen != null, "prevLEBLen should be set");
+        assert(sizeChange != null, "sizeChange should be set");
         // write from the last read to the LEB byte start
         outComponentBytes.set(componentBytes.subarray(nextReadPos, range[0] - prevLEBLen), nextWritePos);
         nextWritePos += range[0] - prevLEBLen - nextReadPos;
@@ -103,7 +111,7 @@ export async function runOptimizeComponent(componentBytes, opts) {
             nextReadPos = range[1];
             nextWritePos += optimized.byteLength;
         }
-        else if (children.length > 0) {
+        else if (children != null && children.length > 0) {
             // write child components / modules
             nextReadPos = range[0];
             children.forEach(write);
@@ -132,7 +140,7 @@ export async function runOptimizeComponent(componentBytes, opts) {
         component: outComponentBytes,
         compressionInfo: coreModules.map(({ range, optimized }) => ({
             beforeBytes: range[1] - range[0],
-            afterBytes: optimized?.byteLength,
+            afterBytes: optimized?.byteLength ?? 0,
         })),
     };
 }

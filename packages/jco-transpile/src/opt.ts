@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { byteLengthLEB128, runWASMTransformProgram } from './common.js';
 
 import { $init, tools } from '../vendor/wasm-tools.js';
+import assert from 'node:assert';
 const { metadataShow, print } = tools;
 
 export interface OptimizeOptions {
@@ -15,6 +16,15 @@ export interface OptimizeOptions {
 export interface OptimizeResult {
     component: Uint8Array;
     compressionInfo: { beforeBytes: number; afterBytes: number }[];
+}
+
+interface ExtendedModuleMetadata extends tools.ModuleMetadata {
+    index?: number
+    prevLEBLen?: number
+    optimized?: Uint8Array
+    newLEBLen?: number
+    sizeChange?: number
+    children?: ExtendedModuleMetadata[]
 }
 
 /**
@@ -46,7 +56,7 @@ export async function runOptimizeComponent(
 ): Promise<OptimizeResult> {
     await $init;
 
-    let componentMetadata = metadataShow(componentBytes);
+    let componentMetadata: ExtendedModuleMetadata[] = metadataShow(componentBytes);
     componentMetadata.forEach((metadata, index) => {
         metadata.index = index;
         const size = metadata.range[1] - metadata.range[0];
@@ -61,11 +71,11 @@ export async function runOptimizeComponent(
     const args = opts?.optArgs
         ? [...opts.optArgs]
         : [
-              '-Oz',
-              '--low-memory-unused',
-              '--enable-bulk-memory',
-              '--strip-debug',
-          ];
+            '-Oz',
+            '--low-memory-unused',
+            '--enable-bulk-memory',
+            '--strip-debug',
+        ];
     if (opts?.asyncify) {
         args.push('--asyncify');
     }
@@ -95,16 +105,19 @@ export async function runOptimizeComponent(
 
     // organize components in modules into tree parent and children
     const nodes = componentMetadata.slice(1);
-    const getChildren = (parentIndex) => {
+    const getChildren = (parentIndex: number) => {
         const children = [];
         for (let i = 0; i < nodes.length; i++) {
             const metadata = nodes[i];
             if (metadata.parentIndex === parentIndex) {
                 nodes.splice(i, 1); // remove from nodes
                 i--;
+                assert(metadata.index != null, "index should be set")
                 metadata.children = getChildren(metadata.index);
                 metadata.sizeChange = metadata.children.reduce(
                     (total, { prevLEBLen, newLEBLen, sizeChange }) => {
+                        assert(newLEBLen != null, "newLEBLen should be set")
+                        assert(prevLEBLen != null, "prevLEBLen should be set")
                         return sizeChange
                             ? total + sizeChange + newLEBLen - prevLEBLen
                             : total;
@@ -125,6 +138,8 @@ export async function runOptimizeComponent(
     // compute the total size change in the component binary
     const sizeChange = componentTree.reduce(
         (total, { prevLEBLen, newLEBLen, sizeChange }) => {
+            assert(newLEBLen != null, "newLEBLen should be set")
+            assert(prevLEBLen != null, "prevLEBLen should be set")
             return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
         },
         0
@@ -136,7 +151,10 @@ export async function runOptimizeComponent(
     let nextReadPos = 0,
         nextWritePos = 0;
 
-    const write = ({ prevLEBLen, range, optimized, children, sizeChange }) => {
+    const write = ({ prevLEBLen, range, optimized, children, sizeChange }: ExtendedModuleMetadata) => {
+        assert(prevLEBLen != null, "prevLEBLen should be set")
+        assert(sizeChange != null, "sizeChange should be set")
+
         // write from the last read to the LEB byte start
         outComponentBytes.set(
             componentBytes.subarray(nextReadPos, range[0] - prevLEBLen),
@@ -157,7 +175,7 @@ export async function runOptimizeComponent(
             outComponentBytes.set(optimized, nextWritePos);
             nextReadPos = range[1];
             nextWritePos += optimized.byteLength;
-        } else if (children.length > 0) {
+        } else if (children != null && children.length > 0) {
             // write child components / modules
             nextReadPos = range[0];
             children.forEach(write);
@@ -193,7 +211,7 @@ export async function runOptimizeComponent(
         component: outComponentBytes,
         compressionInfo: coreModules.map(({ range, optimized }) => ({
             beforeBytes: range[1] - range[0],
-            afterBytes: optimized?.byteLength,
+            afterBytes: optimized?.byteLength ?? 0,
         })),
     };
 }
@@ -219,7 +237,7 @@ async function runWasmOptCLI(
             '-o',
         ]);
     } catch (e) {
-        if (e.toString().includes('BasicBlock requested')) {
+        if (String(e).includes('BasicBlock requested')) {
             return wasmOpt(source, args);
         }
         throw e;
