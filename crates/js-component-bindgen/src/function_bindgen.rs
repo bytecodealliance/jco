@@ -286,21 +286,10 @@ impl FunctionBindgen<'_> {
         };
         let start_current_task_fn =
             self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
-        let task_id_global = self.intrinsic(Intrinsic::AsyncTask(
-            AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId,
-        ));
-        let component_idx_global = self.intrinsic(Intrinsic::AsyncTask(
-            AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx,
-        ));
         let component_instance_idx = self.canon_opts.instance.as_u32();
         uwriteln!(
             self.src,
             "const {prefix}currentTaskID = {start_current_task_fn}({component_instance_idx});"
-        );
-        uwriteln!(self.src, "{task_id_global} = {prefix}currentTaskID;");
-        uwriteln!(
-            self.src,
-            "{component_idx_global} = {component_instance_idx};"
         );
     }
 
@@ -313,28 +302,11 @@ impl FunctionBindgen<'_> {
         };
         let end_current_task_fn =
             self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
-        let task_id_global = self.intrinsic(Intrinsic::AsyncTask(
-            AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId,
-        ));
-        let component_idx_global = self.intrinsic(Intrinsic::AsyncTask(
-            AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx,
-        ));
         let component_instance_idx = self.canon_opts.instance.as_u32();
         uwriteln!(
             self.src,
             "{end_current_task_fn}({component_instance_idx}, {prefix}currentTaskID);"
         );
-        uwriteln!(
-            self.src,
-            "if ({component_idx_global} === null) {{ throw new Error('global async current task component idx already null'); }}",
-        );
-        uwriteln!(self.src, "{component_idx_global} = null;");
-
-        uwriteln!(
-            self.src,
-            "if ({task_id_global} === null) {{ throw new Error('global async current task component idx already null'); }}"
-        );
-        uwriteln!(self.src, "{task_id_global} = null;");
     }
 }
 
@@ -1288,9 +1260,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(self.src, "{call};");
                 }
 
-                // Inject machinery for ending an async 'current' task
-                self.end_async_current_task(&inst);
-
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
                     let to_result_string =
@@ -1305,6 +1274,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                     );
                 }
+
+                // Inject machinery for ending an async 'current' task
+                self.end_async_current_task(&inst);
 
                 // After a high level call, we need to deactivate the component resource borrows.
                 if self.clear_resource_borrows {
@@ -1734,14 +1706,77 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::FutureLower { .. }
-            | Instruction::FutureLift { .. }
-            | Instruction::StreamLower { .. }
-            | Instruction::StreamLift { .. }
-            | Instruction::AsyncTaskReturn { .. }
-            | Instruction::ErrorContextLift { .. }
-            | Instruction::ErrorContextLower { .. } => {
-                uwrite!(self.src, "throw new Error('async is not yet implemented');");
+            Instruction::ErrorContextLift { .. } => {
+                uwrite!(self.src, "throw new Error('[Instruction::ErrorContextLift] async is not yet implemented');");
+            }
+            Instruction::ErrorContextLower { .. } => {
+                uwrite!(self.src, "throw new Error('[Instruction::ErrorContextLower] async is not yet implemented');");
+            }
+
+            Instruction::FutureLower { .. } => {
+                uwrite!(self.src, "throw new Error('[Instruction::FutureLower] async is not yet implemented');");
+            }
+            Instruction::FutureLift { .. } => {
+                uwrite!(self.src, "throw new Error('[Instruction::FutureLift] async is not yet implemented');");
+            }
+
+            Instruction::StreamLower { .. } => {
+                uwrite!(self.src, "throw new Error('[Instruction::StreamLower] async is not yet implemented');");
+            }
+
+            Instruction::StreamLift { .. } => {
+                uwrite!(self.src, "throw new Error('[Instruction::StreamLift] async is not yet implemented');");
+            }
+
+            Instruction::AsyncTaskReturn { params, .. }  => {
+                // TODO: deal with the actual list of params
+                // async task return should always be a pointer to some memory that we'll have to lower from?
+                
+                match params.len() {
+                    // No parameters
+                    0 => {
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(self.src, "{f}();");
+                        }
+                    }
+
+                    // Handle one paramater case in the special case of a result<t> 
+                    1 if self.err == ErrHandling::ThrowResultErr => {
+                        let component_err = self.intrinsic(Intrinsic::ComponentError);
+                        let op = &operands[0];
+                        uwriteln!(self.src, "const retVal = {op};");
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(self.src, "{f}(ret);");
+                        }
+                        uwriteln!(
+                            self.src,
+                            "if (typeof retVal === 'object' && retVal.tag === 'err') {{
+                            throw new {component_err}(retVal.val);
+                        }}
+                        return retVal.val;"
+                        );
+                    },
+
+                    // All other cases (including non result<t> single param)
+                    len => {
+                        let ret_assign = if self.post_return.is_some() {
+                            "const retVal ="
+                        } else {
+                            "return"
+                        };
+                        if len == 1 {
+                            uwriteln!(self.src, "{ret_assign} {};", operands[0]);
+                        } else {
+                            uwriteln!(self.src, "{ret_assign} [{}];", operands.join(", "));
+                        }
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(self.src,"{f}(ret);");
+                            uwriteln!(self.src, "return retVal;");
+                        }
+                    }
+                }
+
+                // uwrite!(self.src, "throw new Error('[Instruction::AsyncTaskReturn] async is not yet implemented');");
             }
 
             Instruction::GuestDeallocate { .. }

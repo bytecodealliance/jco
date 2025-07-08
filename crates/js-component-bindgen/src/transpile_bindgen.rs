@@ -1950,6 +1950,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {task_return_fn}.bind(
+                         null,
                          {component_idx},
                          {memory_js},
                          {callback_fn_idx},
