@@ -1,3 +1,16 @@
+export interface OptimizeOptions {
+    quiet: boolean;
+    asyncify?: boolean;
+    optArgs?: string[];
+    noVerify?: boolean;
+}
+export interface OptimizeResult {
+    component: Uint8Array;
+    compressionInfo: {
+        beforeBytes: number;
+        afterBytes: number;
+    }[];
+}
 /**
  * @typedef {{
  *  quiet: boolean,
@@ -19,7 +32,4 @@
  * @param {OptimizeOptions} [opts]
  * @returns {Promise<OptimizeResult>}
  */
-export declare function runOptimizeComponent(componentBytes: any, opts: any): Promise<{
-    component: Uint8Array<any>;
-    compressionInfo: any;
-}>;
+export declare function runOptimizeComponent(componentBytes: Uint8Array, opts?: OptimizeOptions): Promise<OptimizeResult>;

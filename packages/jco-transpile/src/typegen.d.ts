@@ -1,3 +1,18 @@
+export interface TypeGenerationOptions {
+    name?: string;
+    worldName?: string;
+    instantiation?: 'async' | 'sync';
+    tlaCompat?: boolean;
+    asyncMode?: string;
+    asyncImports?: string[];
+    asyncExports?: string[];
+    outDir?: string;
+    features?: string[] | 'all';
+    allFeatures?: boolean;
+    asyncWasiImports?: boolean;
+    asyncWasiExports?: boolean;
+    guest?: boolean;
+}
 /**
  * @typedef {{
  *   name?: string,
@@ -22,9 +37,7 @@
  * @param {import('./typegen.js').TypeGenerationOptions} opts - options for controlling type generation
  * @returns {Promise<import('./common.js').FileBytes>} A Promise that resolves when all files have been written
  */
-export declare function generateHostTypes(witPath: any, opts: any): Promise<{
-    [k: string]: any;
-}>;
+export declare function generateHostTypes(witPath: string, opts: TypeGenerationOptions): Promise<import('./common.js').FileBytes>;
 /**
  * Generate guest types for a given WIT world
  *
@@ -32,9 +45,7 @@ export declare function generateHostTypes(witPath: any, opts: any): Promise<{
  * @param {TypeGenerationOptions} opts - options for controlling type generation
  * @returns {Promise<import('./common.js').FileBytes>} A Promise that resolves when all files have been written
  */
-export declare function generateGuestTypes(witPath: any, opts: any): Promise<{
-    [k: string]: any;
-}>;
+export declare function generateGuestTypes(witPath: string, opts: TypeGenerationOptions): Promise<import('./common.js').FileBytes>;
 /**
  * Perform type generation for a given WIT file/directory, by running the transpiled
  * type generation component.
@@ -46,6 +57,4 @@ export declare function generateGuestTypes(witPath: any, opts: any): Promise<{
  * @param {TypeGenerationOptions} opts - options for controlling type generation
  * @returns {Promise<import('./transpile.js').FileBytes>}
  */
-export declare function runTypesComponent(witPath: any, opts: any): Promise<{
-    [k: string]: any;
-}>;
+export declare function runTypesComponent(witPath: string, opts: TypeGenerationOptions): Promise<import('./common.js').FileBytes>;

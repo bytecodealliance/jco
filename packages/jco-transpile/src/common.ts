@@ -18,7 +18,7 @@ export const isWindows = platform === 'win32';
 /** Default number of significant figures to use */
 const DEFAULT_SIGNIFICANT_DIGITS = 4;
 
-/** Nubmer of bytes in a kilobyte */
+/** Number of bytes in a kilobyte */
 const BYTES_MAGNITUDE = 1024;
 
 export type FileBytes = Record<string, Uint8Array>;
@@ -121,7 +121,7 @@ export async function getTmpDir(): Promise<string> {
 }
 
 /**
- * Read a file, throwing and error when a file coudl not be read
+ * Read a file, throwing and error when a file could not be read
  *
  * @param {string} file - file to read
  * @param {string} encoding - encoding of the file
@@ -162,7 +162,7 @@ export async function runWASMTransformProgram(
         });
 
         let stderr = '';
-        const p = new Promise((resolve, reject) => {
+        const p = new Promise<void>((resolve, reject) => {
             cp.stderr.on('data', (data) => (stderr += data.toString()));
             cp.on('error', (e) => {
                 reject(e);

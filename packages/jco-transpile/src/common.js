@@ -8,7 +8,7 @@ import c from 'chalk-template';
 export const isWindows = platform === 'win32';
 /** Default number of significant figures to use */
 const DEFAULT_SIGNIFICANT_DIGITS = 4;
-/** Nubmer of bytes in a kilobyte */
+/** Number of bytes in a kilobyte */
 const BYTES_MAGNITUDE = 1024;
 /**
  * Convert a given number into the string that would appropriately represent it,
@@ -93,7 +93,7 @@ export async function getTmpDir() {
     return await mkdtemp(normalize(tmpdir() + sep));
 }
 /**
- * Read a file, throwing and error when a file coudl not be read
+ * Read a file, throwing and error when a file could not be read
  *
  * @param {string} file - file to read
  * @param {string} encoding - encoding of the file
