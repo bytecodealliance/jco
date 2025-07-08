@@ -5,6 +5,18 @@ import { byteLengthLEB128, runWASMTransformProgram } from './common.js';
 import { $init, tools } from '../vendor/wasm-tools.js';
 const { metadataShow, print } = tools;
 
+export interface OptimizeOptions {
+    quiet: boolean;
+    asyncify?: boolean;
+    optArgs?: string[];
+    noVerify?: boolean;
+}
+
+export interface OptimizeResult {
+    component: Uint8Array;
+    compressionInfo: { beforeBytes: number; afterBytes: number }[];
+}
+
 /**
  * @typedef {{
  *  quiet: boolean,
@@ -28,7 +40,10 @@ const { metadataShow, print } = tools;
  * @param {OptimizeOptions} [opts]
  * @returns {Promise<OptimizeResult>}
  */
-export async function runOptimizeComponent(componentBytes, opts) {
+export async function runOptimizeComponent(
+    componentBytes: Uint8Array,
+    opts?: OptimizeOptions
+): Promise<OptimizeResult> {
     await $init;
 
     let componentMetadata = metadataShow(componentBytes);
@@ -190,7 +205,10 @@ export async function runOptimizeComponent(componentBytes, opts) {
  * @param {Array<string>} args
  * @returns {Promise<Uint8Array>}
  */
-async function runWasmOptCLI(source, args) {
+async function runWasmOptCLI(
+    source: Uint8Array,
+    args: string[]
+): Promise<Uint8Array> {
     const wasmOptPath = fileURLToPath(
         import.meta.resolve('binaryen/bin/wasm-opt')
     );
