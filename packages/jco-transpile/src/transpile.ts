@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 
 import { runOptimizeComponent } from './opt.js';
 import { readFile, runWASMTransformProgram, isWindows } from './common.js';
+import type { FileHandle } from 'node:fs/promises';
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 
 import {
@@ -18,6 +19,49 @@ import {
     tools,
 } from '../vendor/wasm-tools.js';
 const { componentEmbed, componentNew } = tools;
+
+export interface TranspilationOptions {
+    name: string;
+    instantiation?: 'async' | 'sync';
+    importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized';
+    map?: Record<string, string>;
+    asyncMode?: string;
+    asyncImports?: string[];
+    asyncExports?: string[];
+    asyncWasiImports?: string[];
+    asyncWasiExports?: string[];
+    validLiftingOptimization?: boolean;
+    tracing?: boolean;
+    nodejsCompat?: boolean;
+    tlaCompat?: boolean;
+    base64Cutoff?: boolean;
+    js?: boolean;
+    minify?: boolean;
+    optimize?: boolean;
+    namespacedExports?: boolean;
+    outDir?: string;
+    multiMemory?: boolean;
+    experimentalIdlImports?: boolean;
+    optArgs?: string[];
+    wasiShim?: boolean;
+    typescript?: boolean;
+    stub?: boolean;
+}
+
+export interface TranspilationResult {
+    files: import('./common.js').FileBytes;
+    imports: string[];
+    exports: [string, 'function' | 'instance'][];
+}
+
+interface GenerateJSArgs {
+    opts: TranspilationOptions;
+    inputJS: Uint8Array;
+    files: [string, Uint8Array][];
+    instantiation: { tag: string };
+    imports: string[];
+    exports: [string, 'function' | 'instance'][];
+}
 
 /**
  * @typedef {{
@@ -62,7 +106,10 @@ const { componentEmbed, componentNew } = tools;
  * @param {TranspilationOptions} [opts]
  * @returns {Promise<TranspilationResult>}
  */
-export async function transpile(componentPath, opts) {
+export async function transpile(
+    componentPath: Buffer | string | URL | FileHandle,
+    opts?: TranspilationOptions
+): Promise<TranspilationResult> {
     opts ??= {};
     let component;
     if (!opts?.stub) {
@@ -112,7 +159,7 @@ export async function transpile(componentPath, opts) {
  * @param {Uint8Array} source
  * @returns {Promise<Uint8Array>}
  */
-async function wasm2Js(source) {
+async function wasm2Js(source: Uint8Array): Promise<Uint8Array> {
     const wasm2jsPath = fileURLToPath(
         import.meta.resolve('binaryen/bin/wasm2js')
     );
@@ -137,7 +184,10 @@ async function wasm2Js(source) {
  * @param {TranspilationOptions} [opts]
  * @returns {Promise<TranspilationResult}>}
  */
-export async function runTranspileComponent(component, opts = {}) {
+export async function runTranspileComponent(
+    component: Uint8Array,
+    opts: TranspilationOptions = {}
+): Promise<TranspilationResult> {
     await $initBindgenComponent;
     if (opts.instantiation) {
         opts.wasiShim = false;
@@ -295,7 +345,7 @@ export async function runTranspileComponent(component, opts = {}) {
  * @param {TranspileOptions}
  * @returns {Promise<string>} A Promise that resolves when javascript has been generated
  */
-async function generateJS(args) {
+async function generateJS(args: GenerateJSArgs): Promise<string> {
     const { opts, inputJS, instantiation, imports, exports } = args;
     let files = args.files;
 
@@ -457,7 +507,7 @@ ${autoInstantiate}`;
 // emscripten asm mangles specifiers to be valid identifiers
 // for imports to match up we must do the same
 // See https://github.com/WebAssembly/binaryen/blob/main/src/asmjs/asmangle.cpp
-function asmMangle(name) {
+function asmMangle(name: string): string {
     if (name === '') {
         return '$';
     }

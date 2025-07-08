@@ -8,6 +8,22 @@ import {
 import { isWindows } from './common.js';
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 
+export interface TypeGenerationOptions {
+    name?: string;
+    worldName?: string;
+    instantiation?: 'async' | 'sync';
+    tlaCompat?: boolean;
+    asyncMode?: string;
+    asyncImports?: string[];
+    asyncExports?: string[];
+    outDir?: string;
+    features?: string[] | 'all';
+    allFeatures?: boolean;
+    asyncWasiImports?: boolean;
+    asyncWasiExports?: boolean;
+    guest?: boolean;
+}
+
 /**
  * @typedef {{
  *   name?: string,
@@ -33,7 +49,10 @@ import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
  * @param {import('./typegen.js').TypeGenerationOptions} opts - options for controlling type generation
  * @returns {Promise<import('./common.js').FileBytes>} A Promise that resolves when all files have been written
  */
-export async function generateHostTypes(witPath, opts) {
+export async function generateHostTypes(
+    witPath: string,
+    opts: TypeGenerationOptions
+): Promise<import('./common.js').FileBytes> {
     return await runTypesComponent(witPath, opts);
 }
 
@@ -44,7 +63,10 @@ export async function generateHostTypes(witPath, opts) {
  * @param {TypeGenerationOptions} opts - options for controlling type generation
  * @returns {Promise<import('./common.js').FileBytes>} A Promise that resolves when all files have been written
  */
-export async function generateGuestTypes(witPath, opts) {
+export async function generateGuestTypes(
+    witPath: string,
+    opts: TypeGenerationOptions
+): Promise<import('./common.js').FileBytes> {
     return await runTypesComponent(witPath, { ...opts, guest: true });
 }
 
@@ -59,7 +81,10 @@ export async function generateGuestTypes(witPath, opts) {
  * @param {TypeGenerationOptions} opts - options for controlling type generation
  * @returns {Promise<import('./transpile.js').FileBytes>}
  */
-export async function runTypesComponent(witPath, opts) {
+export async function runTypesComponent(
+    witPath: string,
+    opts: TypeGenerationOptions
+): Promise<import('./common.js').FileBytes> {
     await $initBindgenComponent;
     const name =
         opts.name ||

@@ -5,6 +5,7 @@ import {
     writeFile,
     rm,
     mkdtemp,
+    FileHandle,
 } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
@@ -20,13 +21,19 @@ const DEFAULT_SIGNIFICANT_DIGITS = 4;
 /** Nubmer of bytes in a kilobyte */
 const BYTES_MAGNITUDE = 1024;
 
+export type FileBytes = Record<string, Uint8Array>;
+
+export interface SizeStrOptions {
+    significantDigits?: number;
+}
+
 /**
  * Convert a given number into the string that would appropriately represent it,
  * in either KiB or MiB.
  *
  * @param {number} num
  */
-export function sizeStr(num, opts) {
+export function sizeStr(num: number, opts?: SizeStrOptions): string {
     const significantDigits =
         opts?.significantDigits ?? DEFAULT_SIGNIFICANT_DIGITS;
     num /= BYTES_MAGNITUDE;
@@ -53,7 +60,7 @@ export function sizeStr(num, opts) {
  * @param {number} maxChars - character limit
  * @returns {string} The number, displayed
  */
-export function fixedDigitDisplay(num, maxChars) {
+export function fixedDigitDisplay(num: number, maxChars: number): string {
     const significantDigits = String(num).split('.')[0].length;
     let str;
     if (significantDigits >= maxChars - 1) {
@@ -76,7 +83,10 @@ export function fixedDigitDisplay(num, maxChars) {
  * @param {string[]} align - preferred alignment of cells
  * @returns {string} Tabulated data
  */
-export function table(data, cellAlignment = []) {
+export function table(
+    data: any[][],
+    cellAlignment: string[] = []
+): string {
     if (data.length === 0) {
         return '';
     }
@@ -106,7 +116,7 @@ export function table(data, cellAlignment = []) {
  *
  * @return {Promise<string>} A Promise that resolves to the created temporary directory
  */
-export async function getTmpDir() {
+export async function getTmpDir(): Promise<string> {
     return await mkdtemp(normalize(tmpdir() + sep));
 }
 
@@ -116,7 +126,10 @@ export async function getTmpDir() {
  * @param {string} file - file to read
  * @param {string} encoding - encoding of the file
  */
-export async function readFile(file, encoding) {
+export async function readFile(
+    file: string | Buffer | URL | FileHandle,
+    encoding?: BufferEncoding
+): Promise<Buffer | string> {
     try {
         return await fsReadFile(file, encoding);
     } catch {
@@ -132,7 +145,11 @@ export async function readFile(file, encoding) {
  * @param {string} input - wasm input to write to a temporary input file
  * @param {string[]} args
  */
-export async function runWASMTransformProgram(cmd, input, args) {
+export async function runWASMTransformProgram(
+    cmd: string,
+    input: Uint8Array,
+    args: string[]
+): Promise<Buffer> {
     const tmpDir = await getTmpDir();
     try {
         const inFile = resolve(tmpDir, 'in.wasm');
@@ -173,7 +190,7 @@ export async function runWASMTransformProgram(cmd, input, args) {
  * @param {number} val
  * @returns {number}
  */
-export function byteLengthLEB128(val) {
+export function byteLengthLEB128(val: number): number {
     let len = 0;
     do {
         val >>>= 7;
