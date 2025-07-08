@@ -74,7 +74,7 @@ export interface TranspilationResult {
  * @param {TranspilationOptions} [opts]
  * @returns {Promise<TranspilationResult>}
  */
-export declare function transpile(componentPath: Buffer | string | URL | FileHandle, opts?: TranspilationOptions): Promise<TranspilationResult>;
+export declare function transpile(componentPath: Buffer | string | URL | FileHandle, opts: TranspilationOptions): Promise<TranspilationResult>;
 /**
  * Perform transpilation, using the transpiled js-component-bindgen Rust crate.
  *
@@ -82,4 +82,4 @@ export declare function transpile(componentPath: Buffer | string | URL | FileHan
  * @param {TranspilationOptions} [opts]
  * @returns {Promise<TranspilationResult}>}
  */
-export declare function runTranspileComponent(component: Uint8Array, opts?: TranspilationOptions): Promise<TranspilationResult>;
+export declare function runTranspileComponent(component: Uint8Array, opts: TranspilationOptions): Promise<TranspilationResult>;

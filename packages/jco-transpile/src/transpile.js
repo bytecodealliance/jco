@@ -51,7 +51,6 @@ const { componentEmbed, componentNew } = tools;
  * @returns {Promise<TranspilationResult>}
  */
 export async function transpile(componentPath, opts) {
-    opts ??= {};
     let component;
     if (!opts?.stub) {
         component = await readFile(componentPath);
@@ -111,7 +110,7 @@ async function wasm2Js(source) {
  * @param {TranspilationOptions} [opts]
  * @returns {Promise<TranspilationResult}>}
  */
-export async function runTranspileComponent(component, opts = {}) {
+export async function runTranspileComponent(component, opts) {
     await $initBindgenComponent;
     if (opts.instantiation) {
         opts.wasiShim = false;

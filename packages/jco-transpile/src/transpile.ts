@@ -108,9 +108,8 @@ interface GenerateJSArgs {
  */
 export async function transpile(
     componentPath: Buffer | string | URL | FileHandle,
-    opts?: TranspilationOptions
+    opts: TranspilationOptions
 ): Promise<TranspilationResult> {
-    opts ??= {};
     let component;
     if (!opts?.stub) {
         component = await readFile(componentPath);
@@ -186,7 +185,7 @@ async function wasm2Js(source: Uint8Array): Promise<Uint8Array> {
  */
 export async function runTranspileComponent(
     component: Uint8Array,
-    opts: TranspilationOptions = {}
+    opts: TranspilationOptions
 ): Promise<TranspilationResult> {
     await $initBindgenComponent;
     if (opts.instantiation) {
