@@ -3374,7 +3374,7 @@ impl<'a> Instantiator<'a, '_> {
         // Look up the callback function, if one is present
         let mut callback_fn_name = None;
         if let Some(callback_idx) = options.callback {
-            for (export_idx, export) in self.component.export_items.iter() {
+            for (_, export) in self.component.export_items.iter() {
                 let Export::LiftedFunction {
                     ty: exported_fn_ty,
                     func: CoreDef::Export(core_export),

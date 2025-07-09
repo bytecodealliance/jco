@@ -1865,7 +1865,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     while (true) {{
                         let [code, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
-                        switch retCopy {{
+                        switch (retCopy) {{
                             case 0: // EXIT
                                 task.exit();
                                 // TODO: extract values for the return of the actual function?
@@ -1874,10 +1874,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 taskRes = await task.yield({{ isAsync: true }});
                                 break;
                             case 2: // WAIT for a given waitable set
-                                taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx:  }});
+                                taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
                                 break;
                             case 3: // POLL
-                                taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx:  }});
+                                taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
                                 break;
                             default:
                                 throw new Error('invalid async return value [' + retCopy + ']');
