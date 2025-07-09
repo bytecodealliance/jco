@@ -8,7 +8,8 @@ use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
 use wit_parser::{
-    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
+    Alignment, ArchitectureSize, Handle, ManglingAndAbi, Resolve, SizeAlign, Type, TypeDefKind,
+    TypeId, WasmExport, WasmExportKind,
 };
 
 use crate::intrinsics::conversion::ConversionIntrinsic;
@@ -17,6 +18,7 @@ use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::Intrinsic;
+use crate::names::maybe_quote_member;
 use crate::{get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
@@ -158,6 +160,12 @@ pub struct FunctionBindgen<'a> {
 
     /// Canon opts
     pub canon_opts: &'a CanonicalOptions,
+
+    /// Interface name
+    pub iface_name: Option<&'a str>,
+
+    /// Callback function name (only present for async functions)
+    pub callback_fn_name: Option<&'a str>,
 }
 
 impl FunctionBindgen<'_> {
@@ -208,7 +216,17 @@ impl FunctionBindgen<'_> {
         );
     }
 
-    fn bind_results(&mut self, amt: usize, results: &mut Vec<String>) {
+    /// Write result assignment lines to output
+    ///
+    /// In general this either means writing preambles, for example that look like the following:
+    /// ```js
+    /// const ret =
+    /// ```
+    ///
+    /// ```
+    /// var [ ret0, ret1, ret2 ] =
+    /// ```
+    fn write_result_assignment(&mut self, amt: usize, results: &mut Vec<String>) {
         match amt {
             0 => {}
             1 => {
@@ -1169,7 +1187,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
-                self.bind_results(sig_results_length, results);
+                self.write_result_assignment(sig_results_length, results);
 
                 // Output the function call
                 let maybe_async_await = if self.is_async { "await " } else { "" };
@@ -1205,7 +1223,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] ({async_})');",
+                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] ({async_}, @ enter)');",
                     prefix = self.tracing_prefix,
                     async_ = async_.then_some("async").unwrap_or("sync"),
                 );
@@ -1256,9 +1274,19 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                     results.push("ret".to_string());
                 } else {
-                    self.bind_results(results_length, results);
+                    self.write_result_assignment(results_length, results);
                     uwriteln!(self.src, "{call};");
                 }
+
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] ({async_}, @ post-call)');",
+                    prefix = self.tracing_prefix,
+                    async_ = async_.then_some("async").unwrap_or("sync"),
+                );
+
+                // TODO: do async stuff with the results of the call, as they will indicate
+                // TODO: pass along the fact that the task is async to end_async_current_task()
 
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
@@ -1312,42 +1340,66 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::Return { amt, .. } => {
-                if *amt == 0 {
-                    if let Some(f) = &self.post_return {
-                        uwriteln!(self.src, "{f}();");
+            Instruction::Return { func, amt } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{prefix} [Instruction::Return]', {{
+                         funcName: '{func_name}',
+                         paramCount: {amt},
+                         postReturn: {post_return_present}
+                      }});",
+                    func_name = func.name,
+                    post_return_present = self.post_return.is_some(),
+                    prefix = self.tracing_prefix,
+                );
+
+                match amt {
+                    // Handle no result case
+                    0 => {
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(self.src, "{f}();");
+                        }
                     }
-                } else if *amt == 1 && self.err == ErrHandling::ThrowResultErr {
-                    let component_err = self.intrinsic(Intrinsic::ComponentError);
-                    let op = &operands[0];
-                    uwriteln!(self.src, "const retVal = {op};");
-                    if let Some(f) = &self.post_return {
-                        uwriteln!(self.src, "{f}(ret);");
-                    }
-                    uwriteln!(
-                        self.src,
-                        "if (typeof retVal === 'object' && retVal.tag === 'err') {{
-                            throw new {component_err}(retVal.val);
-                        }}
-                        return retVal.val;"
-                    );
-                } else {
-                    let ret_assign = if self.post_return.is_some() {
-                        "const retVal ="
-                    } else {
-                        "return"
-                    };
-                    if *amt == 1 {
-                        uwriteln!(self.src, "{ret_assign} {};", operands[0]);
-                    } else {
-                        uwriteln!(self.src, "{ret_assign} [{}];", operands.join(", "));
-                    }
-                    if let Some(f) = &self.post_return {
+
+                    // Handle single result<t> case
+                    1 if self.err == ErrHandling::ThrowResultErr => {
+                        let component_err = self.intrinsic(Intrinsic::ComponentError);
+                        let op = &operands[0];
+                        uwriteln!(self.src, "const retCopy = {op};");
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(self.src, "{f}(ret);");
+                        }
                         uwriteln!(
                             self.src,
-                            "{f}(ret);
-                            return retVal;"
+                            "if (typeof retCopy === 'object' && retCopy.tag === 'err') {{
+                            throw new {component_err}(retCopy.val);
+                        }}
+                        return retCopy.val;"
                         );
+                    }
+
+                    // Handle all other cases (including single parameter non-result<t>)
+                    amt => {
+                        let ret_assign = self
+                            .post_return
+                            .is_some()
+                            .then_some("const retCopy =")
+                            .unwrap_or("return");
+                        let ret_val = match amt {
+                            0 => unreachable!(),
+                            1 => format!("{}", operands[0]),
+                            _ => format!("[{}]", operands.join(", ")),
+                        };
+                        // Write out the assignment for the given return value
+                        uwriteln!(self.src, "{ret_assign} {ret_val};");
+
+                        // Perform the post return (if present) w/ the result, and
+                        // pass a copy fo the result to the actual caller
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(self.src, "{f}(ret);");
+                            uwriteln!(self.src, "return retCopy;");
+                        }
                     }
                 }
             }
@@ -1740,13 +1792,21 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
             }
 
-            Instruction::AsyncTaskReturn { params, .. } => {
-                // TODO: deal with the actual list of params
-                // async task return should always be a pointer to some memory that we'll have to lower from?
+            // Async task returns do *not* correspond to an task.return, but rather
+            // to a return from an async function (e.g. pre-callback)
+            //
+            // At this point, `ret` has already been declared as the original return value
+            // of the function that was called.
+            //
+            // For an async function 'some-func', this instruction is triggered w/ the following `name`s:
+            // - '[task-return]some-func'
+            //
+            Instruction::AsyncTaskReturn { name, params } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn]', {{
+                         funcName: '{name}',
                          paramCount: {param_count},
                          postReturn: {post_return_present}
                       }});",
@@ -1755,56 +1815,86 @@ impl Bindgen for FunctionBindgen<'_> {
                     prefix = self.tracing_prefix,
                 );
 
-                match params.len() {
-                    // No parameters
-                    0 => {
-                        if let Some(f) = &self.post_return {
-                            uwriteln!(self.src, "{f}();");
-                        }
-                    }
+                assert!(
+                    self.is_async && self.post_return.is_none(),
+                    "async fns cannot have post_return specified"
+                );
+                assert!(
+                    self.is_async,
+                    "non-async functions should not be performing async returns",
+                );
 
-                    // Handle one paramater case in the special case of a result<t>
-                    1 if self.err == ErrHandling::ThrowResultErr => {
-                        let component_err = self.intrinsic(Intrinsic::ComponentError);
-                        let op = &operands[0];
-                        uwriteln!(self.src, "const retVal = {op};");
-                        if let Some(f) = &self.post_return {
-                            uwriteln!(self.src, "{f}(ret);");
-                        }
-                        uwriteln!(
-                            self.src,
-                            "if (typeof retVal === 'object' && retVal.tag === 'err') {{
-                            throw new {component_err}(retVal.val);
+                // TODO: deal with the actual list of params
+                // async task return should always be a pointer to some memory that we'll have to lower from?
+
+                let [WasmType::I32] = params else {
+                    // 0 or more than 1 return parameters are not allowed
+                    unreachable!(
+                        "async returns *must* return a single value (the callback code), returned {}",
+                        params.len()
+                    );
+                };
+
+                // TODO: look up the callback function for this function
+
+                let get_current_task_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let component_idx = self.canon_opts.instance.as_u32();
+                let callback_fn_name = self
+                    .callback_fn_name
+                    .expect("async function missing callback");
+                let i32_typecheck = self.intrinsic(Intrinsic::TypeCheckValidI32);
+                let to_int32_fn =
+                    self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
+                let unpack_callback_result_fn = self.intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::UnpackCallbackResult,
+                ));
+                uwriteln!(
+                    self.src,
+                    "
+                    const retCopy = {first_op};
+                    if (!({i32_typecheck}(retCopy))) {{ throw new Error('invalid async return value, not a number'); }}
+                    if (retCopy < 0 || retCopy > 3) {{
+                        throw new Error('invalid async return value, outside callback code range');
+                    }}
+
+                    // TODO: extract code AND the waitable set idx if present
+
+                    let task = {get_current_task_fn}({component_idx});
+                    if (!task) {{ throw new Error('missing/invalid current async task'); }}
+
+                    let currentRes = retCopy;
+
+                    while (true) {{
+                        let [code, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
+                        switch retCopy {{
+                            case 0: // EXIT
+                                task.exit();
+                                // TODO: extract values for the return of the actual function?
+                                return;
+                            case 1: // YIELD
+                                taskRes = await task.yield({{ isAsync: true }});
+                                break;
+                            case 2: // WAIT for a given waitable set
+                                taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx:  }});
+                                break;
+                            case 3: // POLL
+                                taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx:  }});
+                                break;
+                            default:
+                                throw new Error('invalid async return value [' + retCopy + ']');
                         }}
-                        return retVal.val;"
-                        );
-                    }
 
-                    // All other cases (including single parameters that are *not* result<t>)
-                    len => {
-                        let ret_assign = self
-                            .post_return
-                            .is_some()
-                            .then_some("const retVal =")
-                            .unwrap_or("return");
-                        let ret_val = match len {
-                            0 => unreachable!(),
-                            1 => format!("{}", operands[0]),
-                            _ => format!("{}", operands.join(", ")),
-                        };
+                        eventCode = taskRes[0];
+                        index = taskRes[1];
+                        result = taskRes[2];
 
-                        // Write out the assignment for the given return value
-                        uwriteln!(self.src, "{ret_assign} {ret_val};");
-
-                        // Perform post-return, if present
-                        if let Some(f) = &self.post_return {
-                            uwriteln!(self.src, "{f}(ret);");
-                            uwriteln!(self.src, "return retVal;");
-                        }
-                    }
-                }
-
-                // uwrite!(self.src, "throw new Error('[Instruction::AsyncTaskReturn] async is not yet implemented');");
+                        // TODO: this should be async/scheduled?
+                        currentRes = {callback_fn_name}({to_int32_fn}(eventCode), {to_int32_fn}(index), {to_int32_fn}(result));
+                    }}
+                    ",
+                    first_op = &operands[0]
+                );
             }
 
             Instruction::GuestDeallocate { .. }

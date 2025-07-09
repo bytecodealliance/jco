@@ -450,7 +450,7 @@ impl AsyncStreamIntrinsic {
                             if (buf.length > 2**28) {{ throw new Error('buffer uses reserved space'); }}
 
                             let packedResult = result | (buffer.progress << 4);
-                            return [eventCode, i, packedResult); // TODO: event code??
+                            return [eventCode, i, packedResult]; // TODO: event code??
                         }}
 
                         streamEnd.copy({{

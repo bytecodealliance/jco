@@ -147,6 +147,21 @@ struct JsBindgen<'a> {
     all_core_exported_funcs: Vec<(String, bool)>,
 }
 
+/// Arguments provided to `JSBindgen::bindgen`, normally called to perform bindgen on a given function
+struct JsBindgenArgs<'a> {
+    nparams: usize,
+    call_type: CallType,
+    iface_name: Option<&'a str>,
+    callee: &'a str,
+    opts: &'a CanonicalOptions,
+    func: &'a Function,
+    resource_map: &'a ResourceMap,
+    remote_resource_map: &'a RemoteResourceMap,
+    abi: AbiVariant,
+    is_async: bool,
+    callback_fn_name: Option<String>,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn transpile_bindgen(
     name: &str,
@@ -1988,7 +2003,7 @@ impl<'a> Instantiator<'a, '_> {
                 self.lower_import(*index, *import);
             }
             GlobalInitializer::ExtractMemory(m) => {
-                let def = self.core_export(&m.export);
+                let def = self.core_export_var_name(&m.export);
                 let idx = m.index.as_u32();
                 uwriteln!(self.src.js, "let memory{idx};");
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
@@ -2265,22 +2280,24 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
                 }
-                self.bindgen(
+                self.bindgen(JsBindgenArgs {
                     nparams,
                     call_type,
-                    if import_name.is_empty() {
+                    iface_name: if import_name.is_empty() {
                         None
                     } else {
                         Some(import_name)
                     },
-                    &callee_name,
-                    options,
+                    callee: &callee_name,
+                    opts: options,
                     func,
-                    &import_resource_map,
-                    &import_remote_resource_map,
-                    AbiVariant::GuestImport,
+                    resource_map: &import_resource_map,
+                    remote_resource_map: &import_remote_resource_map,
+                    abi: AbiVariant::GuestImport,
                     is_async,
-                );
+                    callback_fn_name: None,
+                });
+
                 uwriteln!(self.src.js, "");
                 if is_async {
                     uwriteln!(self.src.js, ");");
@@ -2825,20 +2842,21 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn bindgen(
-        &mut self,
-        nparams: usize,
-        call_type: CallType,
-        iface_name: Option<&str>,
-        callee: &str,
-        opts: &CanonicalOptions,
-        func: &Function,
-        resource_map: &ResourceMap,
-        remote_resource_map: &RemoteResourceMap,
-        abi: AbiVariant,
-        is_async: bool,
-    ) {
+    fn bindgen(&mut self, args: JsBindgenArgs) {
+        let JsBindgenArgs {
+            nparams,
+            call_type,
+            iface_name,
+            callee,
+            opts,
+            func,
+            resource_map,
+            remote_resource_map,
+            abi,
+            is_async,
+            callback_fn_name,
+        } = args;
+
         let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
         let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
         let post_return = opts
@@ -2943,9 +2961,9 @@ impl<'a> Instantiator<'a, '_> {
             resolve: self.resolve,
             is_async,
             canon_opts: opts,
+            iface_name,
+            callback_fn_name: callback_fn_name.as_deref(),
         };
-
-        // TODO: get the current component instance index
 
         // Emit (and visit, via the `FunctionBindgen` object) an abstract sequence of
         // instructions which represents the function being generated.
@@ -3071,7 +3089,7 @@ impl<'a> Instantiator<'a, '_> {
 
     fn core_def(&self, def: &CoreDef) -> String {
         match def {
-            CoreDef::Export(e) => self.core_export(e),
+            CoreDef::Export(e) => self.core_export_var_name(e),
             CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
@@ -3081,7 +3099,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn core_export<T>(&self, export: &CoreExport<T>) -> String
+    fn core_export_var_name<T>(&self, export: &CoreExport<T>) -> String
     where
         T: Into<EntityIndex> + Copy,
     {
@@ -3353,26 +3371,46 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
+        // Look up the callback function, if one is present
+        let mut callback_fn_name = None;
+        if let Some(callback_idx) = options.callback {
+            for (export_idx, export) in self.component.export_items.iter() {
+                let Export::LiftedFunction {
+                    ty: exported_fn_ty,
+                    func: CoreDef::Export(core_export),
+                    ..
+                } = export
+                else {
+                    continue;
+                };
+                if exported_fn_ty.as_u32() != callback_idx.as_u32() {
+                    continue;
+                }
+                callback_fn_name = Some(self.core_export_var_name(core_export));
+            }
+        };
+
         // Perform bindgen
-        self.bindgen(
-            func.params.len(),
-            match func.kind {
+        self.bindgen(JsBindgenArgs {
+            nparams: func.params.len(),
+            call_type: match func.kind {
                 FunctionKind::Method(_) => CallType::FirstArgIsThis,
                 _ => CallType::Standard,
             },
-            if export_name.is_empty() {
+            iface_name: if export_name.is_empty() {
                 None
             } else {
                 Some(export_name)
             },
-            &callee,
-            options,
+            callee: &callee,
+            opts: options,
             func,
-            export_resource_map,
-            export_remote_resource_map,
-            AbiVariant::GuestExport,
+            resource_map: export_resource_map,
+            remote_resource_map: export_remote_resource_map,
+            abi: AbiVariant::GuestExport,
             is_async,
-        );
+            callback_fn_name,
+        });
 
         // End the function
         match func.kind {
