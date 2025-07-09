@@ -1714,24 +1714,47 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::FutureLower { .. } => {
-                uwrite!(self.src, "throw new Error('[Instruction::FutureLower] async is not yet implemented');");
+                uwrite!(
+                    self.src,
+                    "throw new Error('[Instruction::FutureLower] async is not yet implemented');"
+                );
             }
             Instruction::FutureLift { .. } => {
-                uwrite!(self.src, "throw new Error('[Instruction::FutureLift] async is not yet implemented');");
+                uwrite!(
+                    self.src,
+                    "throw new Error('[Instruction::FutureLift] async is not yet implemented');"
+                );
             }
 
             Instruction::StreamLower { .. } => {
-                uwrite!(self.src, "throw new Error('[Instruction::StreamLower] async is not yet implemented');");
+                uwrite!(
+                    self.src,
+                    "throw new Error('[Instruction::StreamLower] async is not yet implemented');"
+                );
             }
 
             Instruction::StreamLift { .. } => {
-                uwrite!(self.src, "throw new Error('[Instruction::StreamLift] async is not yet implemented');");
+                uwrite!(
+                    self.src,
+                    "throw new Error('[Instruction::StreamLift] async is not yet implemented');"
+                );
             }
 
-            Instruction::AsyncTaskReturn { params, .. }  => {
+            Instruction::AsyncTaskReturn { params, .. } => {
                 // TODO: deal with the actual list of params
                 // async task return should always be a pointer to some memory that we'll have to lower from?
-                
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn]', {{
+                         paramCount: {param_count},
+                         postReturn: {post_return_present}
+                      }});",
+                    param_count = params.len(),
+                    post_return_present = self.post_return.is_some(),
+                    prefix = self.tracing_prefix,
+                );
+
                 match params.len() {
                     // No parameters
                     0 => {
@@ -1740,7 +1763,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                     }
 
-                    // Handle one paramater case in the special case of a result<t> 
+                    // Handle one paramater case in the special case of a result<t>
                     1 if self.err == ErrHandling::ThrowResultErr => {
                         let component_err = self.intrinsic(Intrinsic::ComponentError);
                         let op = &operands[0];
@@ -1755,22 +1778,27 @@ impl Bindgen for FunctionBindgen<'_> {
                         }}
                         return retVal.val;"
                         );
-                    },
+                    }
 
-                    // All other cases (including non result<t> single param)
+                    // All other cases (including single parameters that are *not* result<t>)
                     len => {
-                        let ret_assign = if self.post_return.is_some() {
-                            "const retVal ="
-                        } else {
-                            "return"
+                        let ret_assign = self
+                            .post_return
+                            .is_some()
+                            .then_some("const retVal =")
+                            .unwrap_or("return");
+                        let ret_val = match len {
+                            0 => unreachable!(),
+                            1 => format!("{}", operands[0]),
+                            _ => format!("{}", operands.join(", ")),
                         };
-                        if len == 1 {
-                            uwriteln!(self.src, "{ret_assign} {};", operands[0]);
-                        } else {
-                            uwriteln!(self.src, "{ret_assign} [{}];", operands.join(", "));
-                        }
+
+                        // Write out the assignment for the given return value
+                        uwriteln!(self.src, "{ret_assign} {ret_val};");
+
+                        // Perform post-return, if present
                         if let Some(f) = &self.post_return {
-                            uwriteln!(self.src,"{f}(ret);");
+                            uwriteln!(self.src, "{f}(ret);");
                             uwriteln!(self.src, "return retVal;");
                         }
                     }
