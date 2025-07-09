@@ -182,6 +182,19 @@ pub enum AsyncTaskIntrinsic {
 
     /// The definition of the `AsyncSubtask` JS class
     AsyncSubtaskClass,
+
+    /// A utility function used for unpacking results to callbck that mostly contain
+    /// a callback code and possibly a waitable set index to be watied on or polled
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// function unpackCallbackResult(callbackResult: i32): [i32, i32];
+    /// ```
+    UnpackCallbackResult,
 }
 
 impl AsyncTaskIntrinsic {
@@ -214,6 +227,7 @@ impl AsyncTaskIntrinsic {
             Self::TaskCancel => "taskCancel",
             Self::TaskReturn => "taskReturn",
             Self::Yield => "asyncYield",
+            Self::UnpackCallbackResult => "unpackCallbackResult",
         }
     }
 
@@ -505,6 +519,7 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let task_class = Self::AsyncTaskClass.name();
+
                 // TODO: remove the public mutable members that are eagerly exposed for early impl
                 output.push_str(&format!("
                     class {task_class} {{
@@ -516,6 +531,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         #state;
+                        #isAsync;
                         #onResolve = () => {{}};
 
                         cancelled = false;
@@ -527,11 +543,19 @@ impl AsyncTaskIntrinsic {
                         storage = [0, 0];
                         borrowedHandles = {{}};
 
+                        constructor(opts) {{
+                           if (opts?.isAsync) {{ this.#isAsync = true; }}
+                        }}
+
                         taskState() {{ return this.#state.slice(); }}
 
                         async waitForEvent(opts) {{
                             const {{ waitableSetRep, isAsync }} = opts;
                             {debug_log_fn}('[{task_class}#waitForEvent()] args', {{ waitableSetRep, isAsync }});
+
+                            if (this.#isAsync !== isAsync) {{
+                                throw new Error('async waitForEvent called on non-async task');
+                            }}
 
                             if (this.status === {task_class}.State.CANCEL_PENDING) {{
                                 this.#state = {task_class}.State.CANCEL_DELIVERED;
@@ -576,12 +600,20 @@ impl AsyncTaskIntrinsic {
                             const {{ waitableSetRep, isAsync }} = opts;
                             {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ waitableSetRep, isAsync }});
 
+                            if (this.#isAsync !== isAsync) {{
+                                throw new Error('async pollForEvent called on non-async task');
+                            }}
+
                             throw new Error('not implemented');
                         }}
 
                         async waitOn(opts) {{
                             const {{ promise, isAsync, isCancellable }} = opts;
                             {debug_log_fn}('[{task_class}#waitOn()] args', {{ promise, isAsync, isCancellable }});
+
+                            if (this.#isAsync !== isAsync) {{
+                                throw new Error('async waitOn called on non-async task');
+                            }}
 
                             // TODO: promise might be a waitable thing (ex. StreamEnd with waitable inside)
 
@@ -595,6 +627,10 @@ impl AsyncTaskIntrinsic {
                         async yield(opts) {{
                             const {{ isAsync }} = opts;
                             {debug_log_fn}('[{task_class}#yield()] args', {{ isAsync }});
+
+                            if (this.#isAsync !== isAsync) {{
+                                throw new Error('async yield called on non-async task');
+                            }}
 
                             if (this.status === {task_class}.State.CANCEL_PENDING) {{
                                 this.#state = {task_class}.State.CANCELLED;
@@ -637,6 +673,29 @@ impl AsyncTaskIntrinsic {
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
+                        exit() {{
+                            // TODO: ensure there is only one task at a time (scheduler.lock() functionality)
+                            if (this.#state !== {task_class}.State.RESOLVED) {{
+                                throw new Error('task exited without resolution');
+                            }}
+                            if (this.borrowedHandles > 0) {{
+                                throw new Error('task exited without clearing borrowed handles');
+                            }}
+
+                            const state = {get_or_create_async_state_fn}(this.componentIdx);
+                            if (!state) {{ throw new Error('missing async state for component [' + this.componentIdx + ']'); }}
+                            if (!this.#isAsync && !state.inSyncExportCall) {{
+                                throw new Error('sync task must be run from components known to be in a sync export call');
+                            }}
+                            state.inSyncExportCall = false;
+
+                            this.startPendingTask();
+                        }}
+
+                        startPendingTask(opts) {{
+                            // TODO: implement
+                        }}
+
                     }}
                 "));
             }
@@ -665,6 +724,27 @@ impl AsyncTaskIntrinsic {
                         }}
                     }}
                 "));
+            }
+
+            Self::UnpackCallbackResult => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let unpack_callback_result_fn = Self::ContextGet.name();
+                let i32_typecheck_fn = Intrinsic::TypeCheckValidI32.name();
+                output.push_str(&format!("
+                    function {unpack_callback_result_fn}(result) {{
+                        {debug_log_fn}('[{unpack_callback_result_fn}()] args', {{ result }});
+                        if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value, not a valid i32'); }}
+                        const eventCode = result & 0xF;
+                        if (eventCode < 0 || eventCode > 3) {{
+                            throw new Error('invalid async return value [' + eventCode + '], outside callback code range');
+                        }}
+                        if (result < 2**32) {{ throw new Error('invalid callback result'); }} 
+                        // TODO: table max length check?
+                        const waitableSetIdx = result >> 4;
+                        return [eventCode, waitableSetIdx];
+                    }}
+                ",
+                ));
             }
         }
     }
