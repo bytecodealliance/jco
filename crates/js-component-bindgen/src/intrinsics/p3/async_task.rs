@@ -426,15 +426,15 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!(
                     "
                     let NEXT_TASK_ID = 0n;
-                    function {fn_name}(componentIdx) {{
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                    function {fn_name}(componentIdx, isAsync) {{
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isAsync }});
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while starting task');
                         }}
                         const tasks = {global_task_map}.get(componentIdx);
 
                         const nextId = ++NEXT_TASK_ID;
-                        const newTask = {{ id: nextId, componentIdx, task: new {task_class}() }};
+                        const newTask = {{ id: nextId, componentIdx, task: new {task_class}({{ isAsync }}) }};
 
                         {task_id_global} = nextId;
                         {component_idx_global} = componentIdx;
@@ -604,7 +604,7 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('async pollForEvent called on non-async task');
                             }}
 
-                            throw new Error('not implemented');
+                            throw new Error('{task_class}#pollForEvent() not implemented');
                         }}
 
                         async waitOn(opts) {{
@@ -621,7 +621,7 @@ impl AsyncTaskIntrinsic {
                                 // TODO
                             }}
 
-                            throw new Error('not implemented');
+                            throw new Error('{task_class}#waitOn() not implemented');
                         }}
 
                         async yield(opts) {{
@@ -728,7 +728,7 @@ impl AsyncTaskIntrinsic {
 
             Self::UnpackCallbackResult => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let unpack_callback_result_fn = Self::ContextGet.name();
+                let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
                 let i32_typecheck_fn = Intrinsic::TypeCheckValidI32.name();
                 output.push_str(&format!("
                     function {unpack_callback_result_fn}(result) {{
@@ -738,7 +738,7 @@ impl AsyncTaskIntrinsic {
                         if (eventCode < 0 || eventCode > 3) {{
                             throw new Error('invalid async return value [' + eventCode + '], outside callback code range');
                         }}
-                        if (result < 2**32) {{ throw new Error('invalid callback result'); }} 
+                        if (result < 0 || result >= 2**32) {{ throw new Error('invalid callback result'); }}
                         // TODO: table max length check?
                         const waitableSetIdx = result >> 4;
                         return [eventCode, waitableSetIdx];
