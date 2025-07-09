@@ -294,7 +294,7 @@ impl FunctionBindgen<'_> {
     }
 
     /// Start the async current task
-    fn start_async_current_task(&mut self, instr: &Instruction) {
+    fn start_current_task(&mut self, instr: &Instruction, is_async: bool) {
         let prefix = match instr {
             Instruction::CallWasm { .. } => "_wasm_call_",
             Instruction::CallInterface { .. } => "_interface_call_",
@@ -305,24 +305,16 @@ impl FunctionBindgen<'_> {
         let component_instance_idx = self.canon_opts.instance.as_u32();
         uwriteln!(
             self.src,
-            "const {prefix}currentTaskID = {start_current_task_fn}({component_instance_idx});"
+            "const {prefix}currentTaskID = {start_current_task_fn}({component_instance_idx}, {is_async});"
         );
     }
 
     /// End an an existing async current task
-    fn end_async_current_task(&mut self, instr: &Instruction) {
-        let prefix = match instr {
-            Instruction::CallWasm { .. } => "_wasm_call_",
-            Instruction::CallInterface { .. } => "_interface_call_",
-            _ => unreachable!(),
-        };
+    fn end_async_current_task(&mut self) {
         let end_current_task_fn =
             self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
         let component_instance_idx = self.canon_opts.instance.as_u32();
-        uwriteln!(
-            self.src,
-            "{end_current_task_fn}({component_instance_idx}, {prefix}currentTaskID);"
-        );
+        uwriteln!(self.src, "{end_current_task_fn}({component_instance_idx});");
     }
 }
 
@@ -1176,12 +1168,13 @@ impl Bindgen for FunctionBindgen<'_> {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{prefix} [Instruction::CallWasm]');",
+                    "{debug_log_fn}('{prefix} [Instruction::CallWasm] ({async_}, @ enter)');",
                     prefix = self.tracing_prefix,
+                    async_ = self.is_async,
                 );
 
                 // Inject machinery for starting an async 'current' task
-                self.start_async_current_task(&inst);
+                self.start_current_task(&inst, self.is_async);
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
@@ -1213,7 +1206,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 // Inject machinery for ending an async 'current' task
-                self.end_async_current_task(&inst);
+                self.end_async_current_task();
             }
 
             // Call to an interface, usually but not always an externally imported interface
@@ -1227,7 +1220,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 // Inject machinery for starting an async 'current' task
-                self.start_async_current_task(&inst);
+                self.start_current_task(&inst, *async_);
 
                 let results_length = if func.result.is_none() { 0 } else { 1 };
                 let maybe_async_await = if self.is_async { "await " } else { "" };
@@ -1300,9 +1293,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                     );
                 }
-
-                // Inject machinery for ending an async 'current' task
-                self.end_async_current_task(&inst);
 
                 // After a high level call, we need to deactivate the component resource borrows.
                 if self.clear_resource_borrows {
@@ -1379,6 +1369,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     // Handle all other cases (including single parameter non-result<t>)
                     amt => {
+                        // Inject machinery for ending an 'current' task
+                        self.end_async_current_task();
+
                         let ret_assign = self
                             .post_return
                             .is_some()
@@ -1856,10 +1849,13 @@ impl Bindgen for FunctionBindgen<'_> {
                         throw new Error('invalid async return value, outside callback code range');
                     }}
 
-                    // TODO: extract code AND the waitable set idx if present
+                    // TODO: current task is already gone at this point!
 
-                    let task = {get_current_task_fn}({component_idx});
-                    if (!task) {{ throw new Error('missing/invalid current async task'); }}
+                    const taskMeta = {get_current_task_fn}({component_idx});
+                    if (!taskMeta) {{ throw new Error('missing/invalid current task metadata'); }}
+
+                    const task = taskMeta.task;
+                    if (!task) {{ throw new Error('missing/invalid current task in metadata'); }}
 
                     let currentRes = retCopy;
 
@@ -1867,16 +1863,20 @@ impl Bindgen for FunctionBindgen<'_> {
                         let [code, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
                         switch (retCopy) {{
                             case 0: // EXIT
+                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] exit', {{ fn: '{name}' }});
                                 task.exit();
                                 // TODO: extract values for the return of the actual function?
                                 return;
                             case 1: // YIELD
+                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] yield', {{ fn: '{name}' }});
                                 taskRes = await task.yield({{ isAsync: true }});
                                 break;
                             case 2: // WAIT for a given waitable set
+                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] waiting for event', {{ waitableSetIdx }});
                                 taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
                                 break;
                             case 3: // POLL
+                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] polling for event', {{ waitableSetIdx }});
                                 taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
                                 break;
                             default:
@@ -1888,11 +1888,16 @@ impl Bindgen for FunctionBindgen<'_> {
                         result = taskRes[2];
 
                         // TODO: this should be async/scheduled?
+                        {debug_log_fn}('FINISHED??', {{ eventCode, index, result }});
                         currentRes = {callback_fn_name}({to_int32_fn}(eventCode), {to_int32_fn}(index), {to_int32_fn}(result));
                     }}
                     ",
-                    first_op = &operands[0]
+                    first_op = &operands[0],
+                    prefix = self.tracing_prefix,
                 );
+
+                // Inject machinery for ending an async 'current' task
+                self.end_async_current_task();
             }
 
             Instruction::GuestDeallocate { .. }

@@ -260,7 +260,7 @@ impl AsyncStreamIntrinsic {
                          copy() {
                              if (this.#done) { throw new Error('stream has completed'); }
                              if (!this.#writable) { throw new Error('missing/invalid writable'); }
-                             throw new Error('not implemented');
+                             throw new Error('{class_name}#copy() not implemented');
                          }
                     "
                     .to_string(),
@@ -268,7 +268,7 @@ impl AsyncStreamIntrinsic {
                          copy() {
                              if (this.#done) { throw new Error('stream has completed'); }
                              if (!this.#readable) { throw new Error('missing/invalid readable'); }
-                             throw new Error('not implemented');
+                             throw new Error('{class_name}#copy() not implemented');
                          }
                     "
                     .to_string(),
@@ -473,7 +473,7 @@ impl AsyncStreamIntrinsic {
                           return [ {async_blocked_const} ]
                         }}
 
-                        throw new Error('not implemented');
+                        throw new Error('{stream_fn}() not implemented');
                     }}
                 "));
             }
