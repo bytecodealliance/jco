@@ -8,8 +8,7 @@ use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
 use wit_parser::{
-    Alignment, ArchitectureSize, Handle, ManglingAndAbi, Resolve, SizeAlign, Type, TypeDefKind,
-    TypeId, WasmExport, WasmExportKind,
+    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
 };
 
 use crate::intrinsics::conversion::ConversionIntrinsic;
@@ -18,7 +17,6 @@ use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::Intrinsic;
-use crate::names::maybe_quote_member;
 use crate::{get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
