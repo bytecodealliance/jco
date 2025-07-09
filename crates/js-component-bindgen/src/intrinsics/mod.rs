@@ -151,6 +151,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
     args.intrinsics.insert(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId));
     args.intrinsics.insert(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx));
+    args.intrinsics.insert(Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult));
 
     // Handle intrinsic "dependence"
     if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
@@ -602,7 +603,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 output.push_str(&format!("
                     function {write_async_event_to_memory_fn}(memory, task, event, ptr) {{
                         {debug_log_fn}('[{write_async_event_to_memory_fn}()] args', {{ memory, task, event, ptr }});
-                        throw new Error('not implemented');
+                        throw new Error('{write_async_event_to_memory_fn}() not implemented');
                     }}
                 "));
             }
