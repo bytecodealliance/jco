@@ -196,7 +196,7 @@ impl WaitableIntrinsic {
 
                             const event = await Promise.race(waitables.map((w) => w.promise));
 
-                            throw new Error('not implemented');
+                            throw new Error('{waitable_set_class}#poll() not implemented');
                         }}
                     }}
                 "));
@@ -243,11 +243,11 @@ impl WaitableIntrinsic {
 
                             const event = await Promise.race(waitables.map((w) => w.promise));
 
-                            throw new Error('not implemented');
+                            throw new Error('{waitable_class}#poll() not implemented');
                         }}
 
                         async join() {{
-                            throw new Error('not implemented');
+                            throw new Error('{waitable_class}#join() not implemented');
                         }}
                     }}
                 "));
@@ -368,7 +368,7 @@ impl WaitableIntrinsic {
                         {debug_log_fn}('[{waitable_join_fn}()] args', {{ componentInstanceID, waitableSetRep, waitableRep }});
                         const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
-                        throw new Error('not implemented!');
+                        throw new Error('{waitable_join_fn}() not implemented!');
                     }}
                 "));
             }
