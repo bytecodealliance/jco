@@ -1,48 +1,47 @@
 {
-  "name": "@bytecodealliance/preview2-shim",
-  "version": "0.17.2",
-  "description": "WASI Preview2 shim for JS environments",
-  "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
-  "type": "module",
-  "types": "./types/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./types/index.d.ts",
-      "node": "./lib/nodejs/index.js",
-      "default": "./lib/browser/index.js"
+    "name": "@bytecodealliance/preview2-shim",
+    "version": "0.17.2",
+    "description": "WASI Preview2 shim for JS environments",
+    "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
+    "type": "module",
+    "types": "./types/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./types/index.d.ts",
+            "node": "./lib/nodejs/index.js",
+            "default": "./lib/browser/index.js"
+        },
+        "./*": {
+            "types": "./types/*.d.ts",
+            "node": "./lib/nodejs/*.js",
+            "default": "./lib/browser/*.js"
+        },
+        "./instantiation": {
+            "types": "./types/instantiation.d.ts",
+            "node": "./lib/common/instantiation.js",
+            "default": "./lib/common/instantiation.js"
+        }
     },
-    "./*": {
-      "types": "./types/*.d.ts",
-      "node": "./lib/nodejs/*.js",
-      "default": "./lib/browser/*.js"
+    "scripts": {
+        "lint": "eslint -c ../../eslint.config.mjs ./lib/**/*.js",
+        "lint:fix": "npm run lint -- --fix",
+        "test": "vitest run -c test/vitest.ts"
     },
-    "./instantiation": {
-      "types": "./types/instantiation.d.ts",
-      "node": "./lib/common/instantiation.js",
-      "default": "./lib/common/instantiation.js"
+    "files": [
+        "types",
+        "lib"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bytecodealliance/jco.git"
+    },
+    "license": "(Apache-2.0 WITH LLVM-exception)",
+    "bugs": {
+        "url": "https://github.com/bytecodealliance/jco/issues"
+    },
+    "homepage": "https://github.com/bytecodealliance/jco#readme",
+    "devDependencies": {
+        "@tsconfig/node20": "^20.1.6",
+        "typescript": "^5.8.3"
     }
-  },
-  "scripts": {
-    "lint": "eslint -c ../../eslint.config.mjs ./lib/**/*.js",
-    "lint:fix": "npm run lint -- --fix",
-    "test": "vitest run -c test/vitest.ts",
-    "compile": "tsc --build"
-  },
-  "files": [
-    "types",
-    "lib"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/bytecodealliance/jco.git"
-  },
-  "license": "(Apache-2.0 WITH LLVM-exception)",
-  "bugs": {
-    "url": "https://github.com/bytecodealliance/jco/issues"
-  },
-  "homepage": "https://github.com/bytecodealliance/jco#readme",
-  "devDependencies": {
-    "@tsconfig/node20": "^20.1.6",
-    "typescript": "^5.8.3"
-  }
 }
