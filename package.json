@@ -24,5 +24,8 @@
     "fmt": "npm run fmt --ws --if-present",
     "lint": "npm run lint --ws --if-present",
     "lint:fix": "npm run lint:fix --ws --if-present"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
   }
 }

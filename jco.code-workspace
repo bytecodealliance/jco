@@ -1,0 +1,31 @@
+{
+  "folders": [
+    {
+      "name": "jco",
+      "path": "packages/jco"
+    },
+    {
+      "name": "jco-transpile",
+      "path": "packages/jco-transpile"
+    },
+    {
+      "name": "preview2-shim",
+      "path": "packages/preview2-shim"
+    },
+    {
+      "name": "preview3-shim",
+      "path": "packages/preview3-shim"
+    }
+  ],
+  "settings": {
+    "npm.packageManager": "npm",
+    "npm.scriptRunner": "npm",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "always",
+      "source.organizeImports": "always"
+    },
+    "editor.rulers": [100],
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}
