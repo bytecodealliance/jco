@@ -25,7 +25,8 @@
   "scripts": {
     "lint": "eslint -c ../../eslint.config.mjs ./lib/**/*.js",
     "lint:fix": "npm run lint -- --fix",
-    "test": "vitest run -c test/vitest.ts"
+    "test": "vitest run -c test/vitest.ts",
+    "compile": "tsc --build"
   },
   "files": [
     "types",
@@ -39,5 +40,9 @@
   "bugs": {
     "url": "https://github.com/bytecodealliance/jco/issues"
   },
-  "homepage": "https://github.com/bytecodealliance/jco#readme"
+  "homepage": "https://github.com/bytecodealliance/jco#readme",
+  "devDependencies": {
+    "@tsconfig/node20": "^20.1.6",
+    "typescript": "^5.8.3"
+  }
 }
