@@ -42,6 +42,9 @@ pub enum ComponentIntrinsic {
     /// function backpressureSet(componentIdx: number, value: val);
     /// ```
     BackpressureSet,
+
+    /// A class that encapsulates component-level async state
+    ComponentAsyncStateClass,
 }
 
 impl ComponentIntrinsic {
@@ -62,6 +65,7 @@ impl ComponentIntrinsic {
             Self::GetOrCreateAsyncState => "getOrCreateAsyncState",
             Self::BackpressureSet => "backpressureSet",
             Self::GlobalBackpressureMap => "BACKPRESSURE",
+            Self::ComponentAsyncStateClass => "ComponentAsyncState",
         }
     }
 
@@ -91,22 +95,53 @@ impl ComponentIntrinsic {
                 "));
             }
 
+            Self::ComponentAsyncStateClass => {
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                output.push_str(&format!(
+                    "
+                    class {class_name} {{
+                        #callingAsyncImport = false;
+                        #syncImportWait = Promise.withResolvers();
+
+                        mayLeave = false;
+                        waitableSets = new {rep_table_class}();
+                        waitables = new {rep_table_class}();
+
+                        callingSyncImport(val) {{
+                            if (val === undefined) {{ return this.#callingAsyncImport; }}
+                            if (typeof val !== 'boolean') {{ throw new TypeError('invalid setting for async import'); }}
+                            const prev = this.#callingAsyncImport;
+                            this.#callingAsyncImport = val;
+                            if (prev === true && this.#callingAsyncImport === false) {{
+                                this.#notifySyncImportEnd();
+                            }}
+                        }}
+
+                        #notifySyncImportEnd() {{
+                            const existing = this.#syncImportWait;
+                            this.#syncImportWait = Promise.withResolvers();
+                            existing.resolve();
+                        }}
+
+                        async waitForSyncImportCallEnd() {{
+                            await this.#syncImportWait.promise;
+                        }}
+                    }}
+                    ",
+                    class_name = self.name(),
+                ));
+            }
+
             Self::GetOrCreateAsyncState => {
                 let get_state_fn = Self::GetOrCreateAsyncState.name();
                 let async_state_map = Self::GlobalAsyncStateMap.name();
-                let rep_table_class = Intrinsic::RepTableClass.name();
+                let component_async_state_class = Self::ComponentAsyncStateClass.name();
                 output.push_str(&format!(
                     "
                     function {get_state_fn}(componentIdx, init) {{
                         if (!{async_state_map}.has(componentIdx)) {{
-                            {async_state_map}.set(componentIdx, {{
-                                mayLeave: false,
-                                waitableSets: new {rep_table_class}(),
-                                waitables: new {rep_table_class}(),
-                                ...(init || {{}}),
-                            }});
+                            {async_state_map}.set(componentIdx, new {component_async_state_class}());
                         }}
-
                         return {async_state_map}.get(componentIdx);
                     }}
                 "

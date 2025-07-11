@@ -577,9 +577,9 @@ impl AsyncTaskIntrinsic {
                             let event = null;
 
                             while (event == null) {{
-                                const promise = waitableSet.getPendingEvent();
+                                const awaitable = new {awaitable_class}(waitableSet.getPendingEvent());
 
-                                const waited = await this.waitOn({{ promise, isAsync, isCancellable: true }});
+                                const waited = await this.waitOn({{ awaitable, isAsync, isCancellable: true }});
                                 if (waited) {{
                                     if (this.#state !== {task_class}.State.INITIAL) {{
                                         throw new Error('task should be in initial state found [' + this.#state + ']');
@@ -611,8 +611,8 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         async waitOn(opts) {{
-                            const {{ promise, isAsync, isCancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ promise, isAsync, isCancellable }});
+                            const {{ awaitable, isAsync, isCancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ awaitable, isAsync, isCancellable }});
 
                             if (this.#isAsync !== isAsync) {{
                                 throw new Error('async waitOn called on non-async task');
@@ -628,7 +628,7 @@ impl AsyncTaskIntrinsic {
                                 this.startPendingTask();
                             }}
 
-                            if (!(promise instanceof {awaitable_class})) {{
+                            if (!(awaitable instanceof {awaitable_class})) {{
                                 throw new Error('invalid awaitable');
                             }}
 
@@ -651,11 +651,11 @@ impl AsyncTaskIntrinsic {
 
                             if (isAsync) {{
                                 if (!state) {{ throw new Error('unexpectedly missing async state'); }}
-                                while (state.callingSyncImport) {{
-                                    await state.runNextWaitingTask();
+                                while (state.callingSyncImport()) {{
+                                    await state.waitForSyncImportCallEnd();
                                 }}
                             }} else {{
-                                state.callingSyncImport = false;
+                                state.callingSyncImport(false);
                                 state.notifyAllwaitingTasks();
                             }}
 
@@ -680,7 +680,7 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             const waitResult = await this.waitOn({{
-                                promise: new Promise(resolve => setTimeout(resolve, 0)),
+                                awaitable: new {awaitable_class}(new Promise(resolve => setTimeout(resolve, 0))),
                                 isAsync,
                                 isCancellable: true
                             }});

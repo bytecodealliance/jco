@@ -135,6 +135,7 @@ pub(crate) enum AsyncDeterminismProfile {
     Random,
 
     /// Require determinism
+    #[allow(unused)]
     Deterministic,
 }
 
@@ -303,6 +304,26 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+            &Intrinsic::RepTableClass,
+            &Intrinsic::AwaitableClass,
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::Component(
+        ComponentIntrinsic::GetOrCreateAsyncState,
+    )) {
+        args.intrinsics.extend([&Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        )]);
+    }
+
+    if args
+        .intrinsics
         .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask))
         || args
             .intrinsics
@@ -342,7 +363,10 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
             Intrinsic::AwaitableClass => {
                 output.push_str(&format!("
-                    class {name} {{
+                    class {class_name} {{
+                        static _ID = 0n;
+
+                        #id;
                         #promise;
                         #resolved = true;
 
@@ -353,13 +377,13 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                             }}
                             promise.then(() => this.#resolved  = true);
                             this.#promise = promise;
+                            this.#id = ++{class_name}._ID;
                         }}
-                        then() {{
-                            this.#promise(...arguments);
-                        }}
+
+                        then() {{ return this.#promise.then(...arguments); }}
                     }}
                 ",
-                name = current_intrinsic.name(),
+                class_name = current_intrinsic.name(),
                 ));
             }
 
