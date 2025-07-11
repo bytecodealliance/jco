@@ -520,6 +520,9 @@ impl AsyncTaskIntrinsic {
                 let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let task_class = Self::AsyncTaskClass.name();
 
+                let awaitable_class = Intrinsic::AwaitableClass.name();
+                let global_async_determinism = Intrinsic::GlobalAsyncDeterminism.name();
+
                 // TODO: remove the public mutable members that are eagerly exposed for early impl
                 output.push_str(&format!("
                     class {task_class} {{
@@ -615,13 +618,48 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('async waitOn called on non-async task');
                             }}
 
-                            // TODO: promise might be a waitable thing (ex. StreamEnd with waitable inside)
-
-                            if (!promise) {{
-                                // TODO
+                            const state = {get_or_create_async_state_fn}(this.componentIdx);
+                            if (isAsync) {{
+                                if (state.callingSyncImport) {{
+                                    throw new Error('cannot call async waitOn while calling a sync import');
+                                }}
+                                state.callingSyncImport = true;
+                            }} else {{
+                                this.startPendingTask();
                             }}
 
-                            throw new Error('{task_class}#waitOn() not implemented');
+                            if (!(promise instanceof {awaitable_class})) {{
+                                throw new Error('invalid awaitable');
+                            }}
+
+                            let cancelled;
+                            if (awaitable.resolved && {global_async_determinism} === 'random') {{
+                                cancelled = false;
+                            }} else {{
+                                cancelled = await this.onBlock(awaitable);
+                                if (cancelled && !cancellable) {{
+                                    if (this.#state !== {task_class}.State.INITIAL) {{
+                                        throw new Error('uncancellable tasks can only be cancelled from intiial state');
+                                    }}
+                                    this.#state = {task_class}.State.PENDING_CANCEL;
+                                    cancelled = await this.onBlock(awaitable);
+                                    if (cancelled) {{
+                                        throw new Error('uncancellable tasked cancelled during pending cancellation');
+                                    }}
+                                }}
+                            }}
+
+                            if (isAsync) {{
+                                if (!state) {{ throw new Error('unexpectedly missing async state'); }}
+                                while (state.callingSyncImport) {{
+                                    await state.runNextWaitingTask();
+                                }}
+                            }} else {{
+                                state.callingSyncImport = false;
+                                state.notifyAllwaitingTasks();
+                            }}
+
+                            return cancelled;
                         }}
 
                         async yield(opts) {{
@@ -641,8 +679,12 @@ impl AsyncTaskIntrinsic {
                                 }};
                             }}
 
-                            const promise = new Promise(resolve => setTimeout(resolve, 100));
-                            const waitResult = await this.waitOn({{ promise, isAsync, isCancellable: true }});
+                            const waitResult = await this.waitOn({{
+                                promise: new Promise(resolve => setTimeout(resolve, 0)),
+                                isAsync,
+                                isCancellable: true
+                            }});
+
                             if (waitResult) {{
                                 if (this.#state !== {task_class}.State.INITIAL) {{
                                     throw new Error('task should be in initial state found [' + this.#state + ']');

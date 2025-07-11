@@ -2,7 +2,7 @@
 
 use super::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
-use crate::intrinsics::{DeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
 /// This enum contains intrinsics that enable waitable sets
@@ -153,7 +153,7 @@ impl WaitableIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
-                let maybe_shuffle = if args.determinism == DeterminismProfile::Random {
+                let maybe_shuffle = if args.determinism == AsyncDeterminismProfile::Random {
                     "this.shuffleWaitables();"
                 } else {
                     ""
