@@ -41,11 +41,11 @@ use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
-use crate::intrinsics::{render_intrinsics, DeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{
+    render_intrinsics, AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs,
+};
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
-use crate::source;
-use crate::{core, get_thrown_type};
-use crate::{uwrite, uwriteln};
+use crate::{core, get_thrown_type, is_async_fn, source, uwrite, uwriteln};
 
 #[derive(Debug, Default, Clone)]
 pub struct TranspileOpts {
@@ -147,6 +147,21 @@ struct JsBindgen<'a> {
     /// List of all core Wasm exported functions (and if is async) referenced in
     /// `src` so far.
     all_core_exported_funcs: Vec<(String, bool)>,
+}
+
+/// Arguments provided to `JSBindgen::bindgen`, normally called to perform bindgen on a given function
+struct JsBindgenArgs<'a> {
+    nparams: usize,
+    call_type: CallType,
+    iface_name: Option<&'a str>,
+    callee: &'a str,
+    opts: &'a CanonicalOptions,
+    func: &'a Function,
+    resource_map: &'a ResourceMap,
+    remote_resource_map: &'a RemoteResourceMap,
+    abi: AbiVariant,
+    is_async: bool,
+    callback_fn_name: Option<String>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -336,7 +351,7 @@ impl JsBindgen<'_> {
             intrinsics: &mut self.all_intrinsics,
             no_nodejs_compat: self.opts.no_nodejs_compat,
             instantiation: self.opts.instantiation.is_some(),
-            determinism: DeterminismProfile::default(),
+            determinism: AsyncDeterminismProfile::default(),
         });
 
         if let Some(instantiation) = &self.opts.instantiation {
@@ -1733,7 +1748,7 @@ impl<'a> Instantiator<'a, '_> {
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {context_set_fn}({slot}, ...args);"
+                    "const trampoline{i} = {context_set_fn}.bind(null, {slot});"
                 );
             }
 
@@ -1743,7 +1758,7 @@ impl<'a> Instantiator<'a, '_> {
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {context_get_fn}({slot}, ...args);"
+                    "const trampoline{i} = {context_get_fn}.bind(null, {slot});"
                 );
             }
 
@@ -1952,6 +1967,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {task_return_fn}.bind(
+                         null,
                          {component_idx},
                          {memory_js},
                          {callback_fn_idx},
@@ -1989,7 +2005,7 @@ impl<'a> Instantiator<'a, '_> {
                 self.lower_import(*index, *import);
             }
             GlobalInitializer::ExtractMemory(m) => {
-                let def = self.core_export(&m.export);
+                let def = self.core_export_var_name(&m.export);
                 let idx = m.index.as_u32();
                 uwriteln!(self.src.js, "let memory{idx};");
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
@@ -2144,16 +2160,7 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             };
 
-        let is_async = self
-            .async_imports
-            .contains(&format!("{import_name}#{func_name}"))
-            || import_name
-                .find('@')
-                .map(|i| {
-                    self.async_imports
-                        .contains(&format!("{}#{func_name}", import_name.get(0..i).unwrap()))
-                })
-                .unwrap_or(false);
+        let is_async = is_async_fn(func, import_name, &self.async_imports);
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
@@ -2275,22 +2282,24 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
                 }
-                self.bindgen(
+                self.bindgen(JsBindgenArgs {
                     nparams,
                     call_type,
-                    if import_name.is_empty() {
+                    iface_name: if import_name.is_empty() {
                         None
                     } else {
                         Some(import_name)
                     },
-                    &callee_name,
-                    options,
+                    callee: &callee_name,
+                    opts: options,
                     func,
-                    &import_resource_map,
-                    &import_remote_resource_map,
-                    AbiVariant::GuestImport,
+                    resource_map: &import_resource_map,
+                    remote_resource_map: &import_remote_resource_map,
+                    abi: AbiVariant::GuestImport,
                     is_async,
-                );
+                    callback_fn_name: None,
+                });
+
                 uwriteln!(self.src.js, "");
                 if is_async {
                     uwriteln!(self.src.js, ");");
@@ -2835,26 +2844,36 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn bindgen(
-        &mut self,
-        nparams: usize,
-        call_type: CallType,
-        module_name: Option<&str>,
-        callee: &str,
-        opts: &CanonicalOptions,
-        func: &Function,
-        resource_map: &ResourceMap,
-        remote_resource_map: &RemoteResourceMap,
-        abi: AbiVariant,
-        is_async: bool,
-    ) {
+    fn bindgen(&mut self, args: JsBindgenArgs) {
+        let JsBindgenArgs {
+            nparams,
+            call_type,
+            iface_name,
+            callee,
+            opts,
+            func,
+            resource_map,
+            remote_resource_map,
+            abi,
+            is_async,
+            callback_fn_name,
+        } = args;
+
         let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
         let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
         let post_return = opts
             .post_return
             .map(|idx| format!("postReturn{}", idx.as_u32()));
 
+        let tracing_prefix = format!(
+            "[iface=\"{}\", function=\"{}\"]",
+            iface_name.unwrap_or("<no iface>"),
+            func.name
+        );
+
+        // Write the function argument list
+        //
+        // At this point, only the function preamble (e.g. 'function nameOfFunc()') has been written
         self.src.js("(");
         let mut params = Vec::new();
         let mut first = true;
@@ -2874,12 +2893,7 @@ impl<'a> Instantiator<'a, '_> {
         }
         uwriteln!(self.src.js, ") {{");
 
-        let tracing_prefix = format!(
-            "[module=\"{}\", function=\"{}\"]",
-            module_name.unwrap_or("<no module>"),
-            func.name
-        );
-
+        // If tracing is enabled, output a function entry tracing message
         if self.gen.opts.tracing {
             let event_fields = func
                 .params
@@ -2894,6 +2908,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        // If TLA compat was enabled, ensure that it was initialized
         if self.gen.opts.tla_compat
             && matches!(abi, AbiVariant::GuestExport)
             && self.gen.opts.instantiation.is_none()
@@ -2907,6 +2922,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
             remote_resource_map,
@@ -2934,11 +2950,8 @@ impl<'a> Instantiator<'a, '_> {
             tmp: 0,
             params,
             post_return: post_return.as_ref(),
-            tracing_prefix: if self.gen.opts.tracing {
-                Some(&tracing_prefix)
-            } else {
-                None
-            },
+            tracing_prefix: &tracing_prefix,
+            tracing_enabled: self.gen.opts.tracing,
             encoding: match opts.string_encoding {
                 wasmtime_environ::component::StringEncoding::Utf8 => StringEncoding::UTF8,
                 wasmtime_environ::component::StringEncoding::Utf16 => StringEncoding::UTF16,
@@ -2949,26 +2962,36 @@ impl<'a> Instantiator<'a, '_> {
             src: source::Source::default(),
             resolve: self.resolve,
             is_async,
+            canon_opts: opts,
+            iface_name,
+            callback_fn_name: callback_fn_name.as_deref(),
         };
 
+        // Emit (and visit, via the `FunctionBindgen` object) an abstract sequence of
+        // instructions which represents the function being generated.
         abi::call(
             self.resolve,
             abi,
             match abi {
                 AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
-                AbiVariant::GuestExport => LiftLower::LowerArgsLiftResults,
+                AbiVariant::GuestExport => if is_async {
+                    LiftLower::LiftArgsLowerResults
+                } else {
+                    LiftLower::LowerArgsLiftResults
+                },
                 AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (LIFT_LOWER) not yet implemented"),
                 AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (LIFT_LOWER) not yet implemented"),
                 AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (LIFT_LOWER) not yet implemented"),
             },
             func,
             &mut f,
-            // TODO: pass through async setting from bindgen object above
-            false,
+            is_async,
         );
 
+        // Once visiting has completed, write the contents the `FunctionBindgen` generated to output
         self.src.js(&f.src);
 
+        // Close function body
         self.src.js("}");
     }
 
@@ -3068,7 +3091,7 @@ impl<'a> Instantiator<'a, '_> {
 
     fn core_def(&self, def: &CoreDef) -> String {
         match def {
-            CoreDef::Export(e) => self.core_export(e),
+            CoreDef::Export(e) => self.core_export_var_name(e),
             CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
@@ -3078,7 +3101,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn core_export<T>(&self, export: &CoreExport<T>) -> String
+    fn core_export_var_name<T>(&self, export: &CoreExport<T>) -> String
     where
         T: Into<EntityIndex> + Copy,
     {
@@ -3098,7 +3121,6 @@ impl<'a> Instantiator<'a, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    // TODO: record whether all exports are lifted sync/async (if they are all sync, no tasks!)
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
         for (export_name, export_idx) in exports.raw_iter() {
             let export = &self.component.export_items[*export_idx];
@@ -3255,43 +3277,8 @@ impl<'a> Instantiator<'a, '_> {
         export_remote_resource_map: &RemoteResourceMap,
     ) {
         // Determine whether the function should be async
-        let mut is_async = false;
-        let func_name = &func.name;
-        if self.async_exports.contains(func_name) {
-            is_async = true;
-        }
-        // Allow using the func name (e.g. '[async]run')
-        if self
-            .async_exports
-            .contains(&format!("{export_name}#{func_name}"))
-        {
-            is_async = true;
-        }
-        // Allow using the versioned/unversioned exports
-        match export_name.find('@') {
-            Some(i) => {
-                if self
-                    .async_exports
-                    .contains(&format!("{}#{func_name}", export_name.get(0..i).unwrap(),))
-                {
-                    is_async = true;
-                }
-            }
-            None => {
-                // Strip prefix modifier for async, if present
-                let bare_fn_name = if let Some(stripped) = func_name.strip_prefix("[async]") {
-                    stripped
-                } else {
-                    func_name
-                };
-                if self
-                    .async_exports
-                    .contains(&format!("{export_name}#{bare_fn_name}"))
-                {
-                    is_async = true;
-                }
-            }
-        }
+        let is_async = is_async_fn(func, export_name, &self.async_exports);
+
         let maybe_async = if is_async { "async " } else { "" };
 
         // Start building early variable declarations
@@ -3386,26 +3373,46 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
+        // Look up the callback function, if one is present
+        let mut callback_fn_name = None;
+        if let Some(callback_idx) = options.callback {
+            for (_, export) in self.component.export_items.iter() {
+                let Export::LiftedFunction {
+                    ty: exported_fn_ty,
+                    func: CoreDef::Export(core_export),
+                    ..
+                } = export
+                else {
+                    continue;
+                };
+                if exported_fn_ty.as_u32() != callback_idx.as_u32() {
+                    continue;
+                }
+                callback_fn_name = Some(self.core_export_var_name(core_export));
+            }
+        };
+
         // Perform bindgen
-        self.bindgen(
-            func.params.len(),
-            match func.kind {
+        self.bindgen(JsBindgenArgs {
+            nparams: func.params.len(),
+            call_type: match func.kind {
                 FunctionKind::Method(_) => CallType::FirstArgIsThis,
                 _ => CallType::Standard,
             },
-            if export_name.is_empty() {
+            iface_name: if export_name.is_empty() {
                 None
             } else {
                 Some(export_name)
             },
-            &callee,
-            options,
+            callee: &callee,
+            opts: options,
             func,
-            export_resource_map,
-            export_remote_resource_map,
-            AbiVariant::GuestExport,
+            resource_map: export_resource_map,
+            remote_resource_map: export_remote_resource_map,
+            abi: AbiVariant::GuestExport,
             is_async,
-        );
+            callback_fn_name,
+        });
 
         // End the function
         match func.kind {

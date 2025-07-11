@@ -123,6 +123,12 @@ pub enum AsyncTaskIntrinsic {
     /// Function that retrieves the current global async current task
     GetCurrentTask,
 
+    /// Function that creates the current task
+    StartCurrentTask,
+
+    /// Function that stops the current task
+    EndCurrentTask,
+
     /// Global that stores the current task for a given invocation.
     ///
     /// This global variable is populated *only* when we are performing a call
@@ -144,6 +150,30 @@ pub enum AsyncTaskIntrinsic {
     /// ```
     GlobalAsyncCurrentTaskMap,
 
+    /// Global that stores the current task ID
+    ///
+    /// This global variable is populated when a task is started, and cleared
+    /// (reset to `null` in JS) when a task ends.
+    ///
+    /// This global is used only when *necessary* -- for canonical builtins that
+    /// do not include/cannot access the current task any other way, often because
+    /// they have no access to the current component instance index (e.g. `context.get`).
+    ///
+    /// ```ts
+    /// type GlobalAsyncCurrentTaskId = number | null;
+    /// ```
+    GlobalAsyncCurrentTaskId,
+
+    /// Global that stores the current component ID (for the current task)
+    ///
+    /// This global variable is populated when a task is started, and cleared
+    /// (reset to `null` in JS) when a task ends.
+    ///
+    /// ```ts
+    /// type GlobalAsyncCurrentTaskId = number | null;
+    /// ```
+    GlobalAsyncCurrentComponentIdx,
+
     /// The definition of the `AsyncTask` JS class
     AsyncTaskClass,
 
@@ -152,6 +182,19 @@ pub enum AsyncTaskIntrinsic {
 
     /// The definition of the `AsyncSubtask` JS class
     AsyncSubtaskClass,
+
+    /// A utility function used for unpacking results to callbck that mostly contain
+    /// a callback code and possibly a waitable set index to be watied on or polled
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// function unpackCallbackResult(callbackResult: i32): [i32, i32];
+    /// ```
+    UnpackCallbackResult,
 }
 
 impl AsyncTaskIntrinsic {
@@ -174,12 +217,17 @@ impl AsyncTaskIntrinsic {
             Self::ContextGet => "contextGet",
             Self::ContextSet => "contextSet",
             Self::GetCurrentTask => "getCurrentTask",
+            Self::StartCurrentTask => "startCurrentTask",
+            Self::EndCurrentTask => "endCurrentTask",
             Self::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
+            Self::GlobalAsyncCurrentTaskId => "ASYNC_CURRENT_TASK_ID",
+            Self::GlobalAsyncCurrentComponentIdx => "ASYNC_CURRENT_COMPONENT_IDX",
             Self::SubtaskCancel => "subtaskCancel",
             Self::SubtaskDrop => "subtaskDrop",
             Self::TaskCancel => "taskCancel",
             Self::TaskReturn => "taskReturn",
             Self::Yield => "asyncYield",
+            Self::UnpackCallbackResult => "unpackCallbackResult",
         }
     }
 
@@ -191,6 +239,14 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!("const {var_name} = new Map();\n"));
             }
 
+            Self::GlobalAsyncCurrentTaskId => {
+                output.push_str(&format!("let {var_name} = null;\n", var_name = self.name(),));
+            }
+
+            Self::GlobalAsyncCurrentComponentIdx => {
+                output.push_str(&format!("let {var_name} = null;\n", var_name = self.name(),));
+            }
+
             Self::AsyncBlockedConstant => {
                 let name = Self::AsyncBlockedConstant.name();
                 output.push_str(&format!("const {name} = 0xFFFF_FFFF;"));
@@ -200,12 +256,17 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_set_fn = Self::ContextSet.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
+                let current_async_task_id_global = Self::GlobalAsyncCurrentTaskId.name();
+                let current_component_idx_global = Self::GlobalAsyncCurrentComponentIdx.name();
+                let type_check_i32 = Intrinsic::TypeCheckValidI32.name();
                 output.push_str(&format!("
                     function {context_set_fn}(slot, value) {{
                         {debug_log_fn}('[{context_set_fn}()] args', {{ slot, value }});
-                        const task = {current_task_get_fn}();
-                        if (!task) {{ throw new Error('failed to retrieve current task'); }}
-                        if (slot < 0 || value.len < slot) {{ throw new Error('invalid slot for current task'); }}
+                        if (!({type_check_i32}(value))) {{ throw new Error('invalid value for context set (not valid i32)'); }}
+                        const taskMeta = {current_task_get_fn}({current_component_idx_global}, {current_async_task_id_global});
+                        if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
+                        const task = taskMeta.task;
+                        if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
                         task.storage[slot] = value;
                     }}
                 "));
@@ -215,13 +276,19 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_get_fn = Self::ContextGet.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
+                let current_async_task_id_global = Self::GlobalAsyncCurrentTaskId.name();
+                let current_component_idx_global = Self::GlobalAsyncCurrentComponentIdx.name();
                 output.push_str(&format!("
                     function {context_get_fn}(slot) {{
-                        {debug_log_fn}('[{context_get_fn}()] args', {{ slot }});
-                        const task = {current_task_get_fn}();
-                        if (!task) {{ throw new Error('failed to retrieve current task'); }}
-                        if (slot < 0 || slot > task.storage.length) {{ throw new Error('invalid slot for current task'); }}
-                        if (task.storage[slot] === null) {{ throw new Error('slot not set before get'); }}
+                        {debug_log_fn}('[{context_get_fn}()] args', {{
+                            _globals: {{ {current_component_idx_global}, {current_async_task_id_global} }},
+                            slot,
+                        }});
+                        const taskMeta = {current_task_get_fn}({current_component_idx_global}, {current_async_task_id_global});
+                        if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
+                        const task = taskMeta.task;
+                        if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
+                        if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
                         return task.storage[slot];
                     }}
                 "));
@@ -230,13 +297,26 @@ impl AsyncTaskIntrinsic {
             Self::TaskReturn => {
                 // TODO(async): write results into provided memory, perform checks for task & result types
                 // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-taskreturn
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_return_fn = Self::TaskReturn.name();
-                let task_map = Self::GlobalAsyncCurrentTaskMap.name();
+                let current_task_get_fn = Self::GetCurrentTask.name();
 
                 output.push_str(&format!("
                     function {task_return_fn}(componentIdx, memory, callbackFnIdx, liftFns, vals, storagePtr, storageLen) {{
-                        const task = {task_map}.get(componentIdx);
-                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        {debug_log_fn}('[{task_return_fn}()] args', {{
+                            componentIdx,
+                            memory,
+                            callbackFnIdx,
+                            liftFns,
+                            vals,
+                            storagePtr,
+                            storageLen,
+                        }});
+                        const taskMeta = {current_task_get_fn}(componentIdx);
+                        if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
+                        const task = taskMeta.task;
+                        if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
+
                         task.callbackFnIdx = callbackFnIdx;
 
                         const originalPtr = storagePtr;
@@ -337,25 +417,99 @@ impl AsyncTaskIntrinsic {
                 "));
             }
 
-            Self::GetCurrentTask => {
-                // TODO: remove autovivication of tasks here, they should be created @ lift
+            Self::StartCurrentTask => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_class = Self::AsyncTaskClass.name();
-                let current_task_get_fn = Self::GetCurrentTask.name();
+                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
+                let task_id_global = Self::GlobalAsyncCurrentTaskId.name();
+                let component_idx_global = Self::GlobalAsyncCurrentComponentIdx.name();
+                output.push_str(&format!(
+                    "
+                    let NEXT_TASK_ID = 0n;
+                    function {fn_name}(componentIdx, isAsync) {{
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isAsync }});
+                        if (componentIdx === undefined || componentIdx === null) {{
+                            throw new Error('missing/invalid component instance index while starting task');
+                        }}
+                        const tasks = {global_task_map}.get(componentIdx);
+
+                        const nextId = ++NEXT_TASK_ID;
+                        const newTask = {{ id: nextId, componentIdx, task: new {task_class}({{ isAsync }}) }};
+
+                        {task_id_global} = nextId;
+                        {component_idx_global} = componentIdx;
+
+                        if (!tasks) {{
+                            {global_task_map}.set(componentIdx, [newTask]);
+                            return nextId;
+                        }}
+
+                        tasks.push(newTask);
+                        return nextId;
+                    }}
+                ",
+                    fn_name = self.name(),
+                ));
+            }
+
+            Self::GetCurrentTask => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!(
                     "
-                    let CURRENT_TASK;
-                    function {current_task_get_fn}(componentIdx) {{
-                        if (!componentIdx) {{
-                            if (!CURRENT_TASK) {{ CURRENT_TASK = new {task_class}(); }}
-                            return CURRENT_TASK;
+                    function {fn_name}(componentIdx) {{
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                        if (componentIdx === undefined || componentIdx === null) {{
+                            throw new Error('missing/invalid component instance index [' + componentIdx + '] while getting current task');
                         }}
-                        if (!{global_task_map}.has(componentIdx)) {{
-                            {global_task_map}.set(componentIdx, new {task_class}());
+                        const tasks = {global_task_map}.get(componentIdx);
+                        if (tasks === undefined) {{
+                            throw new Error('missing task lookup for component ID [' + componentIdx + '] while getting current task');
                         }}
-                        return {global_task_map}.get(componentIdx);
+                        if (tasks.length === 0) {{
+                            throw new Error('missing/invalid tasks for component while getting current task');
+                        }}
+                        return tasks[tasks.length - 1];
                     }}
-                "
+                ",
+                    fn_name = self.name(),
+                ));
+            }
+
+            Self::EndCurrentTask => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
+                let task_id_global = Self::GlobalAsyncCurrentTaskId.name();
+                let component_idx_global = Self::GlobalAsyncCurrentComponentIdx.name();
+                output.push_str(&format!(
+                    "
+                    function {fn_name}(componentIdx, taskId) {{
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                        if (componentIdx === undefined || componentIdx === null) {{
+                            throw new Error('missing/invalid component instance index while ending current task');
+                        }}
+                        const tasks = {global_task_map}.get(componentIdx);
+                        if (!tasks || !Array.isArray(tasks)) {{
+                            throw new Error('missing/invalid tasks for component instance while ending task');
+                        }}
+                        if (tasks.length == 0) {{ throw new Error('no current task(s) for component instance'); }}
+
+                        if (taskId) {{
+                            const last = tasks[tasks.length - 1];
+                            if (last.id !== taskId) {{
+                                throw new Error('current task does not match expected task ID');
+                            }}
+                        }}
+
+                        const nextTaskID = tasks.pop();
+
+                        {task_id_global} = nextTaskID;
+                        {component_idx_global} = componentIdx;
+
+                        return nextTaskID;
+                    }}
+                ",
+                    fn_name = self.name()
                 ));
             }
 
@@ -365,6 +519,10 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let task_class = Self::AsyncTaskClass.name();
+
+                let awaitable_class = Intrinsic::AwaitableClass.name();
+                let global_async_determinism = Intrinsic::GlobalAsyncDeterminism.name();
+
                 // TODO: remove the public mutable members that are eagerly exposed for early impl
                 output.push_str(&format!("
                     class {task_class} {{
@@ -376,6 +534,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         #state;
+                        #isAsync;
                         #onResolve = () => {{}};
 
                         cancelled = false;
@@ -384,14 +543,22 @@ impl AsyncTaskIntrinsic {
 
                         componentIdx;
                         returnCalls =  0;
-                        storage = [null, null];
+                        storage = [0, 0];
                         borrowedHandles = {{}};
+
+                        constructor(opts) {{
+                           if (opts?.isAsync) {{ this.#isAsync = true; }}
+                        }}
 
                         taskState() {{ return this.#state.slice(); }}
 
                         async waitForEvent(opts) {{
                             const {{ waitableSetRep, isAsync }} = opts;
                             {debug_log_fn}('[{task_class}#waitForEvent()] args', {{ waitableSetRep, isAsync }});
+
+                            if (this.#isAsync !== isAsync) {{
+                                throw new Error('async waitForEvent called on non-async task');
+                            }}
 
                             if (this.status === {task_class}.State.CANCEL_PENDING) {{
                                 this.#state = {task_class}.State.CANCEL_DELIVERED;
@@ -410,9 +577,9 @@ impl AsyncTaskIntrinsic {
                             let event = null;
 
                             while (event == null) {{
-                                const promise = waitableSet.getPendingEvent();
+                                const awaitable = new {awaitable_class}(waitableSet.getPendingEvent());
 
-                                const waited = await this.waitOn({{ promise, isAsync, isCancellable: true }});
+                                const waited = await this.waitOn({{ awaitable, isAsync, isCancellable: true }});
                                 if (waited) {{
                                     if (this.#state !== {task_class}.State.INITIAL) {{
                                         throw new Error('task should be in initial state found [' + this.#state + ']');
@@ -436,25 +603,72 @@ impl AsyncTaskIntrinsic {
                             const {{ waitableSetRep, isAsync }} = opts;
                             {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ waitableSetRep, isAsync }});
 
-                            throw new Error('not implemented');
+                            if (this.#isAsync !== isAsync) {{
+                                throw new Error('async pollForEvent called on non-async task');
+                            }}
+
+                            throw new Error('{task_class}#pollForEvent() not implemented');
                         }}
 
                         async waitOn(opts) {{
-                            const {{ promise, isAsync, isCancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ promise, isAsync, isCancellable }});
+                            const {{ awaitable, isAsync, isCancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ awaitable, isAsync, isCancellable }});
 
-                            // TODO: promise might be a waitable thing (ex. StreamEnd with waitable inside)
-
-                            if (!promise) {{
-                                // TODO
+                            if (this.#isAsync !== isAsync) {{
+                                throw new Error('async waitOn called on non-async task');
                             }}
 
-                            throw new Error('not implemented');
+                            const state = {get_or_create_async_state_fn}(this.componentIdx);
+                            if (isAsync) {{
+                                if (state.callingSyncImport) {{
+                                    throw new Error('cannot call async waitOn while calling a sync import');
+                                }}
+                                state.callingSyncImport = true;
+                            }} else {{
+                                this.startPendingTask();
+                            }}
+
+                            if (!(awaitable instanceof {awaitable_class})) {{
+                                throw new Error('invalid awaitable');
+                            }}
+
+                            let cancelled;
+                            if (awaitable.resolved && {global_async_determinism} === 'random') {{
+                                cancelled = false;
+                            }} else {{
+                                cancelled = await this.onBlock(awaitable);
+                                if (cancelled && !cancellable) {{
+                                    if (this.#state !== {task_class}.State.INITIAL) {{
+                                        throw new Error('uncancellable tasks can only be cancelled from intiial state');
+                                    }}
+                                    this.#state = {task_class}.State.PENDING_CANCEL;
+                                    cancelled = await this.onBlock(awaitable);
+                                    if (cancelled) {{
+                                        throw new Error('uncancellable tasked cancelled during pending cancellation');
+                                    }}
+                                }}
+                            }}
+
+                            if (isAsync) {{
+                                if (!state) {{ throw new Error('unexpectedly missing async state'); }}
+                                while (state.callingSyncImport()) {{
+                                    await state.waitForSyncImportCallEnd();
+                                }}
+                            }} else {{
+                                state.callingSyncImport(false);
+                                state.notifyAllwaitingTasks();
+                            }}
+
+                            return cancelled;
                         }}
 
                         async yield(opts) {{
                             const {{ isAsync }} = opts;
                             {debug_log_fn}('[{task_class}#yield()] args', {{ isAsync }});
+
+                            if (this.#isAsync !== isAsync) {{
+                                throw new Error('async yield called on non-async task');
+                            }}
 
                             if (this.status === {task_class}.State.CANCEL_PENDING) {{
                                 this.#state = {task_class}.State.CANCELLED;
@@ -465,8 +679,12 @@ impl AsyncTaskIntrinsic {
                                 }};
                             }}
 
-                            const promise = new Promise(resolve => setTimeout(resolve, 100));
-                            const waitResult = await this.waitOn({{ promise, isAsync, isCancellable: true }});
+                            const waitResult = await this.waitOn({{
+                                awaitable: new {awaitable_class}(new Promise(resolve => setTimeout(resolve, 0))),
+                                isAsync,
+                                isCancellable: true
+                            }});
+
                             if (waitResult) {{
                                 if (this.#state !== {task_class}.State.INITIAL) {{
                                     throw new Error('task should be in initial state found [' + this.#state + ']');
@@ -497,6 +715,29 @@ impl AsyncTaskIntrinsic {
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
+                        exit() {{
+                            // TODO: ensure there is only one task at a time (scheduler.lock() functionality)
+                            if (this.#state !== {task_class}.State.RESOLVED) {{
+                                throw new Error('task exited without resolution');
+                            }}
+                            if (this.borrowedHandles > 0) {{
+                                throw new Error('task exited without clearing borrowed handles');
+                            }}
+
+                            const state = {get_or_create_async_state_fn}(this.componentIdx);
+                            if (!state) {{ throw new Error('missing async state for component [' + this.componentIdx + ']'); }}
+                            if (!this.#isAsync && !state.inSyncExportCall) {{
+                                throw new Error('sync task must be run from components known to be in a sync export call');
+                            }}
+                            state.inSyncExportCall = false;
+
+                            this.startPendingTask();
+                        }}
+
+                        startPendingTask(opts) {{
+                            // TODO: implement
+                        }}
+
                     }}
                 "));
             }
@@ -525,6 +766,27 @@ impl AsyncTaskIntrinsic {
                         }}
                     }}
                 "));
+            }
+
+            Self::UnpackCallbackResult => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
+                let i32_typecheck_fn = Intrinsic::TypeCheckValidI32.name();
+                output.push_str(&format!("
+                    function {unpack_callback_result_fn}(result) {{
+                        {debug_log_fn}('[{unpack_callback_result_fn}()] args', {{ result }});
+                        if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value, not a valid i32'); }}
+                        const eventCode = result & 0xF;
+                        if (eventCode < 0 || eventCode > 3) {{
+                            throw new Error('invalid async return value [' + eventCode + '], outside callback code range');
+                        }}
+                        if (result < 0 || result >= 2**32) {{ throw new Error('invalid callback result'); }}
+                        // TODO: table max length check?
+                        const waitableSetIdx = result >> 4;
+                        return [eventCode, waitableSetIdx];
+                    }}
+                ",
+                ));
             }
         }
     }

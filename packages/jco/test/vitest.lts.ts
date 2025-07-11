@@ -10,7 +10,7 @@ const REPORTERS = process.env.GITHUB_ACTIONS
 
 export default defineConfig({
   test: {
-    retry: 3,
+    retry: 0,
     reporters: REPORTERS,
     maxConcurrency: Math.max(availableParallelism() / 2, 5),
     disableConsoleIntercept: true,
