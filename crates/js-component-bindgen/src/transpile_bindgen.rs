@@ -41,7 +41,9 @@ use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
-use crate::intrinsics::{render_intrinsics, DeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{
+    render_intrinsics, AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs,
+};
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::{core, get_thrown_type, is_async_fn, source, uwrite, uwriteln};
 
@@ -349,7 +351,7 @@ impl JsBindgen<'_> {
             intrinsics: &mut self.all_intrinsics,
             no_nodejs_compat: self.opts.no_nodejs_compat,
             instantiation: self.opts.instantiation.is_some(),
-            determinism: DeterminismProfile::default(),
+            determinism: AsyncDeterminismProfile::default(),
         });
 
         if let Some(instantiation) = &self.opts.instantiation {
