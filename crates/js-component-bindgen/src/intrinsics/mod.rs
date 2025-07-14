@@ -292,7 +292,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         .contains(&Intrinsic::Component(ComponentIntrinsic::BackpressureSet))
     {
         args.intrinsics.extend([&Intrinsic::Component(
-            ComponentIntrinsic::GlobalBackpressureMap,
+            ComponentIntrinsic::GetOrCreateAsyncState,
         )]);
     }
 
