@@ -1396,10 +1396,12 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                         uwriteln!(
                             self.src,
-                            "if (typeof retCopy === 'object' && retCopy.tag === 'err') {{
-                            throw new {component_err}(retCopy.val);
-                        }}
-                        return retCopy.val;"
+                            "
+                            if (typeof retCopy === 'object' && retCopy.tag === 'err') {{
+                                throw new {component_err}(retCopy.val);
+                            }}
+                            return retCopy.val;
+                            "
                         );
                     }
 
