@@ -11,6 +11,7 @@ use wit_parser::{
     Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
 };
 
+use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
@@ -307,6 +308,10 @@ impl FunctionBindgen<'_> {
             self.src,
             "const {prefix}currentTaskID = {start_current_task_fn}({component_instance_idx}, {is_async});"
         );
+        // TODO: do more to run on_start and retrieve args?
+        // TODO: lower the values for the call
+        // TODO: flatten the func type?
+        // TODO: check that types match values
     }
 
     /// End an an existing async current task
@@ -1238,6 +1243,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         operands.join(", ")
                     )
                 };
+                // TODO: check results of the call against flat func type (sync)
+                // TODO: lift flattened values (sync)
+                // TODO: call task.return with the values (if sync)
 
                 if self.err == ErrHandling::ResultCatchHandler {
                     // result<_, string> allows JS error coercion only, while
@@ -1342,11 +1350,37 @@ impl Bindgen for FunctionBindgen<'_> {
                     prefix = self.tracing_prefix,
                 );
 
+                // Build the post return functionality
+                // to clean up tasks and possibly return values
+                let get_current_task_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
+                let gen_post_return_js = |(invocation_line, ret_stmt): (String, Option<String>)| {
+                    format!(
+                        "
+                        let task = {get_current_task_fn}().componentIdx;
+                        let cstate = {get_or_create_async_state_fn}(task.componentIdx);
+                        cstate.mayLeave = false;
+                        {invocation_line}
+                        cstate.mayLeave = true;
+                        {ret_stmt}
+                  ",
+                        ret_stmt = ret_stmt.unwrap_or_default()
+                    )
+                };
+
+                // Output code for combinations of results
                 match amt {
                     // Handle no result case
                     0 => {
                         if let Some(f) = &self.post_return {
-                            uwriteln!(self.src, "{f}();");
+                            uwriteln!(
+                                self.src,
+                                "{}",
+                                gen_post_return_js((format!("{f}();"), None))
+                            );
                         }
                     }
 
@@ -1356,7 +1390,11 @@ impl Bindgen for FunctionBindgen<'_> {
                         let op = &operands[0];
                         uwriteln!(self.src, "const retCopy = {op};");
                         if let Some(f) = &self.post_return {
-                            uwriteln!(self.src, "{f}(ret);");
+                            uwriteln!(
+                                self.src,
+                                "{}",
+                                gen_post_return_js((format!("{f}();"), None))
+                            );
                         }
                         uwriteln!(
                             self.src,
@@ -1388,8 +1426,14 @@ impl Bindgen for FunctionBindgen<'_> {
                         // Perform the post return (if present) w/ the result, and
                         // pass a copy fo the result to the actual caller
                         if let Some(f) = &self.post_return {
-                            uwriteln!(self.src, "{f}(ret);");
-                            uwriteln!(self.src, "return retCopy;");
+                            uwriteln!(
+                                self.src,
+                                "{}",
+                                gen_post_return_js((
+                                    format!("{f}();"),
+                                    Some("return retCopy;".into())
+                                ))
+                            );
                         }
                     }
                 }
