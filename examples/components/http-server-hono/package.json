@@ -19,12 +19,12 @@
     "@bytecodealliance/componentize-js": "^0.18.2",
     "@bytecodealliance/jco": "^1.11.2",
     "@rollup/plugin-node-resolve": "^16.0.1",
-    "@rollup/plugin-typescript": "^12.1.2",
-    "rollup": "^4.40.2",
+    "@rollup/plugin-typescript": "^12.1.4",
+    "rollup": "^4.45.0",
     "terminate": "^2.8.0",
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "hono": "^4.7.9"
+    "hono": "^4.8.5"
   }
 }
