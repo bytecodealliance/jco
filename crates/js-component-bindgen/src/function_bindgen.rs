@@ -1869,15 +1869,28 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_current_task_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let component_idx = self.canon_opts.instance.as_u32();
-                let callback_fn_name = self
-                    .callback_fn_name
-                    .expect("async function missing callback");
+
                 let i32_typecheck = self.intrinsic(Intrinsic::TypeCheckValidI32);
                 let to_int32_fn =
                     self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
                 let unpack_callback_result_fn = self.intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::UnpackCallbackResult,
                 ));
+                let callback_phrase = match self.callback_fn_name {
+                    Some(fn_name) => {
+                        format!(
+                            "
+                            currentRes = {fn_name}(
+                                {to_int32_fn}(eventCode),
+                                {to_int32_fn}(index),
+                                {to_int32_fn}(result),
+                            );
+                        "
+                        )
+                    }
+                    None => "currentRes = undefined;".into(),
+                };
+
                 uwriteln!(
                     self.src,
                     "
@@ -1927,7 +1940,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         // TODO: this should be async/scheduled?
                         {debug_log_fn}('FINISHED??', {{ eventCode, index, result }});
-                        currentRes = {callback_fn_name}({to_int32_fn}(eventCode), {to_int32_fn}(index), {to_int32_fn}(result));
+                        {callback_phrase}
                     }}
                     ",
                     first_op = &operands[0],
