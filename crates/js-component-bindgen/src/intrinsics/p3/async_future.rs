@@ -235,7 +235,7 @@ impl AsyncFutureIntrinsic {
                 let (class_name, future_var_name, js_future_var_type) = match self {
                     Self::FutureReadableEndClass => (self.name(), "promise", "Promise"),
                     Self::FutureWritableEndClass => (self.name(), "resolve", "Function"),
-                    _ => unreachable!(),
+                    _ => unreachable!("impossible future readable end class intrinsic"),
                 };
                 let future_end_class = Self::FutureEndClass.name();
                 output.push_str(&format!("

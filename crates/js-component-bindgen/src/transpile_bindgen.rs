@@ -570,8 +570,12 @@ impl<'a> Instantiator<'a, '_> {
                 .find(|(_, (impt_name, _))| impt_name == name)
             else {
                 match item {
-                    WorldItem::Interface { .. } => unreachable!(),
-                    WorldItem::Function(_) => unreachable!(),
+                    WorldItem::Interface { .. } => {
+                        unreachable!("unexpected interface in import types during initialization")
+                    }
+                    WorldItem::Function(_) => {
+                        unreachable!("unexpected function in import types during initialization")
+                    }
                     WorldItem::Type(ty) => {
                         assert!(!matches!(
                             self.resolve.types[*ty].kind,
@@ -584,7 +588,7 @@ impl<'a> Instantiator<'a, '_> {
             match item {
                 WorldItem::Interface { id, stability: _ } => {
                     let TypeDef::ComponentInstance(instance) = import else {
-                        unreachable!()
+                        unreachable!("unexpectedly non-component instance import in interface")
                     };
                     let import_ty = &self.types[*instance];
                     let iface = &self.resolve.interfaces[*id];
@@ -596,7 +600,7 @@ impl<'a> Instantiator<'a, '_> {
                                 self.imports_resource_types.insert(ty, resource_idx);
                             }
                             Some(TypeDef::Interface(_)) | None => {}
-                            Some(_) => unreachable!(),
+                            Some(_) => unreachable!("unexpected type in interface"),
                         }
                     }
                 }
@@ -608,7 +612,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.imports_resource_types.insert(ty, resource_idx);
                     }
                     TypeDef::Interface(_) => {}
-                    _ => unreachable!(),
+                    _ => unreachable!("unexpected type in import world item"),
                 },
             }
         }
@@ -627,7 +631,7 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Interface { id, stability: _ } => {
                     let iface = &self.resolve.interfaces[*id];
                     let Export::Instance { exports, .. } = &export else {
-                        unreachable!()
+                        unreachable!("unexpectedly non export instance item")
                     };
                     for (ty_name, ty) in &iface.types {
                         match self.component.export_items
@@ -639,12 +643,15 @@ impl<'a> Instantiator<'a, '_> {
                                 self.exports_resource_types.insert(ty, resource_idx);
                             }
                             Export::Type(_) => {}
-                            _ => unreachable!(),
+                            _ => unreachable!(
+                                "unexpected type in component export items on iface [{iface_name}]",
+                                iface_name = iface.name.as_deref().unwrap_or("<unknown>"),
+                            ),
                         }
                     }
                 }
                 WorldItem::Function(_) => {}
-                WorldItem::Type(_) => unreachable!(),
+                WorldItem::Type(_) => unreachable!("unexpected exported world item type"),
             }
         }
     }
@@ -2157,7 +2164,7 @@ impl<'a> Instantiator<'a, '_> {
                     );
                     bundle
                 }
-                WorldItem::Type(_) => unreachable!(),
+                WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
 
         let is_async = is_async_fn(func, import_name, &self.async_imports);
@@ -2371,7 +2378,7 @@ impl<'a> Instantiator<'a, '_> {
                         ..
                     } = &data
                     else {
-                        unreachable!();
+                        unreachable!("unexpected non-host resource table");
                     };
                     resource_tables.push(*tid);
                 }
@@ -2414,7 +2421,7 @@ impl<'a> Instantiator<'a, '_> {
                         trampoline.as_u32()
                     );
                 }
-                None | Some(BindingsMode::Js) => unreachable!(),
+                None | Some(BindingsMode::Js) => unreachable!("invalid bindings mode"),
             };
         }
 
@@ -2840,7 +2847,7 @@ impl<'a> Instantiator<'a, '_> {
                 unreachable!("resource types do not need to be connected")
             }
             (TypeDefKind::Unknown, _) => unreachable!("unknown types cannot be connected"),
-            (_, _) => unreachable!(),
+            (tk1, tk2) => unreachable!("invalid typedef kind combination [{tk1:?}] [{tk2:?}]",),
         }
     }
 
@@ -3136,7 +3143,9 @@ impl<'a> Instantiator<'a, '_> {
                 } => {
                     let func = match item {
                         WorldItem::Function(f) => f,
-                        WorldItem::Interface { .. } | WorldItem::Type(_) => unreachable!(),
+                        WorldItem::Interface { .. } | WorldItem::Type(_) => {
+                            unreachable!("unexpectedly non-function lifted function export")
+                        }
                     };
                     self.create_resource_fn_map(
                         func,
@@ -3190,14 +3199,16 @@ impl<'a> Instantiator<'a, '_> {
                 Export::Instance { exports, .. } => {
                     let id = match item {
                         WorldItem::Interface { id, stability: _ } => *id,
-                        WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
+                        WorldItem::Function(_) | WorldItem::Type(_) => {
+                            unreachable!("unexpectedly non-interface export instance")
+                        }
                     };
                     for (func_name, export_idx) in exports.raw_iter() {
                         let export = &self.component.export_items[*export_idx];
                         let (def, options, func_ty) = match export {
                             Export::LiftedFunction { func, options, ty } => (func, options, ty),
                             Export::Type(_) => continue, // ignored
-                            _ => unreachable!(),
+                            _ => unreachable!("unexpected non-lifted function export"),
                         };
 
                         let func = &self.resolve.interfaces[id].functions[func_name];

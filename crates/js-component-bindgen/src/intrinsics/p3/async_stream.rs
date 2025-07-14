@@ -251,7 +251,7 @@ impl AsyncStreamIntrinsic {
                 let (class_name, stream_var_name, js_stream_class_name) = match self {
                     Self::StreamReadableEndClass => (self.name(), "readable", "ReadableStream"),
                     Self::StreamWritableEndClass => (self.name(), "writable", "WritableStream"),
-                    _ => unreachable!(),
+                    _ => unreachable!("impossible stream readable end class intrinsic"),
                 };
                 let stream_end_class = Self::StreamEndClass.name();
 
@@ -272,7 +272,7 @@ impl AsyncStreamIntrinsic {
                          }
                     "
                     .to_string(),
-                    _ => unreachable!(),
+                    _ => unreachable!("impossible stream readable end class intrinsic"),
                 };
 
                 output.push_str(&format!("
