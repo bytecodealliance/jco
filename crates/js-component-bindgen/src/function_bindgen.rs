@@ -1352,21 +1352,19 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Build the post return functionality
                 // to clean up tasks and possibly return values
-                let get_current_task_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
-                let gen_post_return_js = |(invocation_line, ret_stmt): (String, Option<String>)| {
+                let gen_post_return_js = |(invocation_stmt, ret_stmt): (String, Option<String>)| {
                     format!(
                         "
-                        let task = {get_current_task_fn}().componentIdx;
-                        let cstate = {get_or_create_async_state_fn}(task.componentIdx);
+                        let cstate = {get_or_create_async_state_fn}({component_idx});
                         cstate.mayLeave = false;
-                        {invocation_line}
+                        {invocation_stmt}
                         cstate.mayLeave = true;
                         {ret_stmt}
                   ",
+                        component_idx = self.canon_opts.instance.as_u32(),
                         ret_stmt = ret_stmt.unwrap_or_default()
                     )
                 };
