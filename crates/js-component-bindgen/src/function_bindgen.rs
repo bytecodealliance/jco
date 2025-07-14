@@ -299,7 +299,9 @@ impl FunctionBindgen<'_> {
         let prefix = match instr {
             Instruction::CallWasm { .. } => "_wasm_call_",
             Instruction::CallInterface { .. } => "_interface_call_",
-            _ => unreachable!(),
+            _ => unreachable!(
+                "unrecognized instruction triggering start of current task: [{instr:?}]"
+            ),
         };
         let start_current_task_fn =
             self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
@@ -1173,7 +1175,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{prefix} [Instruction::CallWasm] ({async_}, @ enter)');",
+                    "{debug_log_fn}('{prefix} [Instruction::CallWasm] (async? {async_}, @ enter)');",
                     prefix = self.tracing_prefix,
                     async_ = self.is_async,
                 );
@@ -1219,7 +1221,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] ({async_}, @ enter)');",
+                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] (async? {async_}, @ enter)');",
                     prefix = self.tracing_prefix,
                     async_ = async_.then_some("async").unwrap_or("sync"),
                 );
@@ -1416,7 +1418,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             .then_some("const retCopy =")
                             .unwrap_or("return");
                         let ret_val = match amt {
-                            0 => unreachable!(),
+                            0 => unreachable!(
+                                "unexpectedly zero return values for synchronous return"
+                            ),
                             1 => format!("{}", operands[0]),
                             _ => format!("[{}]", operands.join(", ")),
                         };
@@ -1859,18 +1863,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     "non-async functions should not be performing async returns",
                 );
 
-                // TODO: deal with the actual list of params
+                // TODO: deal with the actual list of params coming back, to generate lift/lowers
                 // async task return should always be a pointer to some memory that we'll have to lower from?
-
-                let [WasmType::I32] = params else {
-                    // 0 or more than 1 return parameters are not allowed
-                    unreachable!(
-                        "async returns *must* return a single value (the callback code), returned {}",
-                        params.len()
-                    );
-                };
-
-                // TODO: look up the callback function for this function
 
                 let get_current_task_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
