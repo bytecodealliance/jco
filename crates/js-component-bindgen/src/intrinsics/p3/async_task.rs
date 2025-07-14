@@ -434,17 +434,19 @@ impl AsyncTaskIntrinsic {
                         const tasks = {global_task_map}.get(componentIdx);
 
                         const nextId = ++NEXT_TASK_ID;
-                        const newTask = {{ id: nextId, componentIdx, task: new {task_class}({{ isAsync }}) }};
+                        const newTask = new {task_class}({{ id: nextId, componentIdx, isAsync }});
+                        const newTaskMeta = {{ id: nextId, componentIdx, task: newTask }};
 
                         {task_id_global} = nextId;
                         {component_idx_global} = componentIdx;
 
                         if (!tasks) {{
-                            {global_task_map}.set(componentIdx, [newTask]);
+                            {global_task_map}.set(componentIdx, [newTaskMeta]);
                             return nextId;
+                        }} else {{
+                            tasks.push(newTaskMeta);
                         }}
 
-                        tasks.push(newTask);
                         return nextId;
                     }}
                 ",
@@ -534,6 +536,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         #id;
+                        #componentIdx;
                         #state;
                         #isAsync;
                         #onResolve = () => {{}};
@@ -542,22 +545,25 @@ impl AsyncTaskIntrinsic {
                         requested = false;
                         alwaysTaskReturn = false;
 
-                        componentIdx;
                         returnCalls =  0;
                         storage = [0, 0];
                         borrowedHandles = {{}};
 
                         constructor(opts) {{
-                           if (!opts?.id) {{ throw new Error('missing task ID'); }}
-                           this.#id = id;
+                           if (opts?.id === undefined) {{ throw new TypeError('missing task ID during task creation'); }}
+                           this.#id = opts.id;
+                           if (opts?.componentIdx === undefined) {{ throw new TypeError('missing component id during task creation'); }}
+                           this.#componentIdx = opts.componentIdx;
+                           this.#state = {task_class}.State.INITIAL;
                            this.#isAsync = opts?.isAsync ?? false;
                         }}
 
                         taskState() {{ return this.#state.slice(); }}
                         id() {{ return this.#id; }}
+                        componentIdx() {{ return this.#componentIdx; }}
 
                         mayEnter(task) {{
-                            const cstate = {get_or_create_async_state_fn}(this.componentIdx);
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (!cstate.backpressure) {{
                                 {debug_log_fn}('[{task_class}#mayEnter()] disallowed due to backpressure', {{ taskID: this.#id }});
                                 return false;
@@ -580,7 +586,7 @@ impl AsyncTaskIntrinsic {
                             // TODO: assert scheduler locked
                             // TODO: trap if on the stack
 
-                            const cstate = {get_or_create_async_state_fn}(this.componentIdx);
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
                             let mayNotEnter = !this.mayEnter(this);
                             const componentHasPendingTasks = cstate.pendingTasks > 0;
@@ -629,7 +635,7 @@ impl AsyncTaskIntrinsic {
                                 }};
                             }}
 
-                            const state = {get_or_create_async_state_fn}(this.componentIdx);
+                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
                             const waitableSet = state.waitableSets.get(waitableSetRep);
                             if (!waitableSet) {{ throw new Error('missing/invalid waitable set'); }}
 
@@ -678,7 +684,7 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('async waitOn called on non-async task');
                             }}
 
-                            const state = {get_or_create_async_state_fn}(this.componentIdx);
+                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (isAsync) {{
                                 if (state.callingSyncImport()) {{
                                     throw new Error('cannot call async waitOn while calling a sync import');
@@ -793,8 +799,8 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('task exited without clearing borrowed handles');
                             }}
 
-                            const state = {get_or_create_async_state_fn}(this.componentIdx);
-                            if (!state) {{ throw new Error('missing async state for component [' + this.componentIdx + ']'); }}
+                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
+                            if (!state) {{ throw new Error('missing async state for component [' + this.#componentIdx + ']'); }}
                             if (!this.#isAsync && !state.inSyncExportCall) {{
                                 throw new Error('sync task must be run from components known to be in a sync export call');
                             }}
