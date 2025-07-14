@@ -533,6 +533,7 @@ impl AsyncTaskIntrinsic {
                             RESOLVED: 'resolved',
                         }}
 
+                        #id;
                         #state;
                         #isAsync;
                         #onResolve = () => {{}};
@@ -547,14 +548,73 @@ impl AsyncTaskIntrinsic {
                         borrowedHandles = {{}};
 
                         constructor(opts) {{
-                           if (opts?.isAsync) {{ this.#isAsync = true; }}
+                           if (!opts?.id) {{ throw new Error('missing task ID'); }}
+                           this.#id = id;
+                           this.#isAsync = opts?.isAsync ?? false;
                         }}
 
                         taskState() {{ return this.#state.slice(); }}
+                        id() {{ return this.#id; }}
+
+                        mayEnter(task) {{
+                            const cstate = {get_or_create_async_state_fn}(this.componentIdx);
+                            if (!cstate.backpressure) {{
+                                {debug_log_fn}('[{task_class}#mayEnter()] disallowed due to backpressure', {{ taskID: this.#id }});
+                                return false;
+                            }}
+                            if (!cstate.callingSyncImport()) {{
+                                {debug_log_fn}('[{task_class}#mayEnter()] disallowed due to sync import call', {{ taskID: this.#id }});
+                                return false;
+                            }}
+                            const callingSyncExportWithSyncPending = cstate.callingSyncExport && !task.isAsync;
+                            if (!callingSyncExportWithSyncPending) {{
+                                {debug_log_fn}('[{task_class}#mayEnter()] disallowed due to sync export w/ sync pending', {{ taskID: this.#id }});
+                                return false;
+                            }}
+                            return true;
+                        }}
+
+                        async enter() {{
+                            {debug_log_fn}('[{task_class}#enter()] args', {{ taskID: this.#id }});
+
+                            // TODO: assert scheduler locked
+                            // TODO: trap if on the stack
+
+                            const cstate = {get_or_create_async_state_fn}(this.componentIdx);
+
+                            let mayNotEnter = !this.mayEnter(this);
+                            const componentHasPendingTasks = cstate.pendingTasks > 0;
+                            if (mayNotEnter || componentHasPendingTasks) {{
+                                // TODO: this promise needs to be controllable? Not just pre-determined
+                                cstate.pendingTasks.set(this.#id, new {awaitable_class}(new Promise()));
+
+                                const blockResult = await this.onBlock(awaitable);
+                                if (blockResult) {{
+                                    // TODO: find this pending task in the component
+                                    const pendingTask = cstate.pendingTasks.get(this.#id);
+                                    if (!pendingTask) {{
+                                        throw new Error('pending task [' + this.#id + '] not found for component instance');
+                                    }}
+                                    cstate.pendingTasks.remove(this.#id);
+                                    this.onResolve(null);
+                                    return false;
+                                }}
+
+                                mayNotEnter = !this.mayEnter(this);
+                                if (!mayNotEnter || !cstate.startPendingTask) {{
+                                    throw new Error('invalid component entrance/pending task resolution');
+                                }}
+                                cstate.startPendingTask = false;
+                            }}
+
+                            if (!this.isAsync) {{ cstate.callingSyncExport = true; }}
+
+                            return true;
+                        }}
 
                         async waitForEvent(opts) {{
                             const {{ waitableSetRep, isAsync }} = opts;
-                            {debug_log_fn}('[{task_class}#waitForEvent()] args', {{ waitableSetRep, isAsync }});
+                            {debug_log_fn}('[{task_class}#waitForEvent()] args', {{ taskID: this.#id, waitableSetRep, isAsync }});
 
                             if (this.#isAsync !== isAsync) {{
                                 throw new Error('async waitForEvent called on non-async task');
@@ -601,7 +661,7 @@ impl AsyncTaskIntrinsic {
 
                         async pollForEvent(opts) {{
                             const {{ waitableSetRep, isAsync }} = opts;
-                            {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ waitableSetRep, isAsync }});
+                            {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ taskID: this.#id, waitableSetRep, isAsync }});
 
                             if (this.#isAsync !== isAsync) {{
                                 throw new Error('async pollForEvent called on non-async task');
@@ -612,7 +672,7 @@ impl AsyncTaskIntrinsic {
 
                         async waitOn(opts) {{
                             const {{ awaitable, isAsync, isCancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ awaitable, isAsync, isCancellable }});
+                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ taskID: this.#id, awaitable, isAsync, isCancellable }});
 
                             if (this.#isAsync !== isAsync) {{
                                 throw new Error('async waitOn called on non-async task');
@@ -620,10 +680,10 @@ impl AsyncTaskIntrinsic {
 
                             const state = {get_or_create_async_state_fn}(this.componentIdx);
                             if (isAsync) {{
-                                if (state.callingSyncImport) {{
+                                if (state.callingSyncImport()) {{
                                     throw new Error('cannot call async waitOn while calling a sync import');
                                 }}
-                                state.callingSyncImport = true;
+                                state.callingSyncImport(true);
                             }} else {{
                                 this.startPendingTask();
                             }}
@@ -662,9 +722,18 @@ impl AsyncTaskIntrinsic {
                             return cancelled;
                         }}
 
+                        async onBlock(awaitable) {{
+                            {debug_log_fn}('[{task_class}#waitForEvent()] args', {{ taskID: this.#id, awaitable }});
+                            if (!(awaitable instanceof {awaitable_class})) {{
+                                throw new Error('invalid awaitable during onBlock');
+                            }}
+                            // TODO
+                            throw new Error('not implemented');
+                        }}
+
                         async yield(opts) {{
                             const {{ isAsync }} = opts;
-                            {debug_log_fn}('[{task_class}#yield()] args', {{ isAsync }});
+                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, isAsync }});
 
                             if (this.#isAsync !== isAsync) {{
                                 throw new Error('async yield called on non-async task');

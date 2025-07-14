@@ -5,20 +5,6 @@ use crate::{intrinsics::Intrinsic, source::Source};
 /// This enum contains intrinsics that manage per-component state
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ComponentIntrinsic {
-    /// Global that stores backpressure by component instance
-    ///
-    /// A component instance *not* having a value in this map indicates that
-    /// `backpressure.set` has not been called.
-    ///
-    /// A `true`/`false` in the value corresponding to a component instance indicates that
-    /// backpressure.set has been called at least once, with the last call containing the
-    /// given value.
-    ///
-    /// ```ts
-    /// type GlobalBackpressureMap = Map<number, bool>;
-    /// ```
-    GlobalBackpressureMap,
-
     /// Global that stores async state by component instance
     ///
     /// ```ts
@@ -64,7 +50,6 @@ impl ComponentIntrinsic {
             Self::GlobalAsyncStateMap => "ASYNC_STATE",
             Self::GetOrCreateAsyncState => "getOrCreateAsyncState",
             Self::BackpressureSet => "backpressureSet",
-            Self::GlobalBackpressureMap => "BACKPRESSURE",
             Self::ComponentAsyncStateClass => "ComponentAsyncState",
         }
     }
@@ -72,11 +57,6 @@ impl ComponentIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source) {
         match self {
-            Self::GlobalBackpressureMap => {
-                let var_name = Self::GlobalBackpressureMap.name();
-                output.push_str(&format!("const {var_name} = new Map();\n"));
-            }
-
             Self::GlobalAsyncStateMap => {
                 let var_name = Self::GlobalAsyncStateMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
@@ -85,12 +65,13 @@ impl ComponentIntrinsic {
             Self::BackpressureSet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let backpressure_set_fn = Self::BackpressureSet.name();
-                let bp_map = Self::GlobalBackpressureMap.name();
+                let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {backpressure_set_fn}(componentInstanceID, value) {{
                         {debug_log_fn}('[{backpressure_set_fn}()] args', {{ componentInstanceID, value }});
                         if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
-                        {bp_map}.set(componentInstanceID, value !== 0);
+                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        state.backpressure = value !== 0;
                     }}
                 "));
             }
