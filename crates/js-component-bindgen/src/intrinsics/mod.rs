@@ -317,9 +317,10 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     if args.intrinsics.contains(&Intrinsic::Component(
         ComponentIntrinsic::GetOrCreateAsyncState,
     )) {
-        args.intrinsics.extend([&Intrinsic::Component(
-            ComponentIntrinsic::ComponentAsyncStateClass,
-        )]);
+        args.intrinsics.extend([
+            &Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
+            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+        ]);
     }
 
     if args
