@@ -3,7 +3,6 @@
  */
 
 import {
-  IncomingRequest,
   ResponseOutparam,
   OutgoingBody,
   OutgoingResponse,
@@ -23,7 +22,7 @@ export const incomingHandler = {
    * which defines how to hadle incoming web requests, turning this component into one that can
    * serve web requests.
    */
-  handle(incomingRequest, responseOutparam) {
+  handle(_incomingRequest, responseOutparam) {
     // Start building an outgoing response
     const outgoingResponse = new OutgoingResponse(new Fields());
 
@@ -45,7 +44,7 @@ export const incomingHandler = {
     // Finish the response body
     OutgoingBody.finish(outgoingBody, undefined);
     // Set the created response to an "OK" Result<T> value
-    ResponseOutparam.set(outgoingResponse, { tag: 'ok', val: outgoingResponse });
+    ResponseOutparam.set(responseOutparam, { tag: 'ok', val: outgoingResponse });
   }
 
 };
