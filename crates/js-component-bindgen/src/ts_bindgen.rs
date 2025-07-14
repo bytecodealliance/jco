@@ -200,7 +200,7 @@ pub fn ts_bindgen(
                         TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
-                        TypeDefKind::Unknown => unreachable!(),
+                        TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
                         TypeDefKind::Resource => gen.type_resource(*tid, ty),
                         TypeDefKind::Handle(_) => todo!(),
                     }
@@ -234,7 +234,7 @@ pub fn ts_bindgen(
             WorldItem::Function(f) => {
                 let export_name = match name {
                     WorldKey::Name(export_name) => export_name,
-                    WorldKey::Interface(_) => unreachable!(),
+                    WorldKey::Interface(_) => unreachable!("unexpected interface export during export processing"),
                 };
                 if !feature_gate_allowed(resolve, package, &f.stability, &f.name)
                     .context("failed to check feature gate for export")?
@@ -716,7 +716,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
                 TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                 TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
-                TypeDefKind::Unknown => unreachable!(),
+                TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
                 TypeDefKind::Resource => self.type_resource(*id, ty),
                 TypeDefKind::Handle(_) => todo!(),
             }
@@ -783,7 +783,7 @@ impl<'a> TsInterface<'a> {
                         self.print_optional_ty(maybe_ty.as_ref());
                         self.src.push_str(">");
                     }
-                    TypeDefKind::Unknown => unreachable!(),
+                    TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
                     TypeDefKind::Resource => todo!(),
                     TypeDefKind::Handle(h) => {
                         let ty = match h {
