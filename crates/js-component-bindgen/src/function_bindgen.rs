@@ -1855,8 +1855,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 assert!(
-                    self.is_async && self.post_return.is_none(),
-                    "async fns cannot have post_return specified"
+                    self.is_async && self.post_return.is_some(),
+                    "async fns cannot have post_return specified ({name})"
                 );
                 assert!(
                     self.is_async,
@@ -1876,6 +1876,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let unpack_callback_result_fn = self.intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::UnpackCallbackResult,
                 ));
+
+                let fn_name = self.callback_fn_name.as_deref().unwrap_or("<unknown>");
                 let callback_phrase = match self.callback_fn_name {
                     Some(fn_name) => {
                         format!(
@@ -1930,20 +1932,26 @@ impl Bindgen for FunctionBindgen<'_> {
                                 {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] polling for event', {{ waitableSetIdx }});
                                 taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
                                 break;
+                            case undefined:
+                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] no return value', {{ waitableSetIdx }});
+                                taskRes = undefined;
                             default:
                                 throw new Error('invalid async return value [' + retCopy + ']');
                         }}
 
-                        eventCode = taskRes[0];
-                        index = taskRes[1];
-                        result = taskRes[2];
+                        if (taskRes) {{
+                            eventCode = taskRes[0];
+                            index = taskRes[1];
+                            result = taskRes[2];
+                            {debug_log_fn}('performing callback', {{ fn_name: '{fn_name}', eventCode, index, result }});
+                            {callback_phrase}
+                        }} else {{
+                            currentRes = undefined;
+                        }}
 
-                        // TODO: this should be async/scheduled?
-                        {debug_log_fn}('FINISHED??', {{ eventCode, index, result }});
-                        {callback_phrase}
                     }}
                     ",
-                    first_op = &operands[0],
+                    first_op = operands.first().map(|s| s.as_str()).unwrap_or("undefined"),
                     prefix = self.tracing_prefix,
                 );
 
