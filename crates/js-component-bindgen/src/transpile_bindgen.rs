@@ -8,10 +8,11 @@ use base64::engine::general_purpose;
 use base64::Engine as _;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{
-    CanonicalOptions, Component, ComponentTranslation, ComponentTypes, CoreDef, CoreExport, Export,
-    ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule, InterfaceType, LoweredIndex,
-    ResourceIndex, RuntimeComponentInstanceIndex, RuntimeImportIndex, RuntimeInstanceIndex,
-    StaticModuleIndex, Trampoline, TrampolineIndex, TypeDef, TypeFuncIndex, TypeResourceTableIndex,
+    CanonicalOptions, CanonicalOptionsDataModel, Component, ComponentTranslation, ComponentTypes,
+    CoreDef, CoreExport, Export, ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule,
+    InterfaceType, LinearMemoryOptions, LoweredIndex, ResourceIndex, RuntimeComponentInstanceIndex,
+    RuntimeImportIndex, RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
+    TypeDef, TypeFuncIndex, TypeResourceTableIndex,
 };
 use wasmtime_environ::component::{
     ExportIndex, ExtractCallback, NameMap, NameMapNoIntern, Transcode,
@@ -1089,11 +1090,14 @@ impl<'a> Instantiator<'a, '_> {
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     async_,
                     ..
-                } = options;
+                } = options
+                else {
+                    unreachable!("invalid canonical options, expected linear memory data model");
+                };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
                 let realloc_idx = realloc
@@ -1126,11 +1130,14 @@ impl<'a> Instantiator<'a, '_> {
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     async_,
                     ..
-                } = options;
+                } = options
+                else {
+                    unreachable!("invalid canonical options, expected linear memory data model");
+                };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory
                     .expect("missing memory idx for stream.write")
@@ -1180,7 +1187,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamCloseReadable { ty } => {
+            Trampoline::StreamDropReadable { ty } => {
                 let stream_drop_readable_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropReadable,
                 ));
@@ -1191,7 +1198,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamCloseWritable { ty } => {
+            Trampoline::StreamDropWritable { ty } => {
                 let stream_drop_writable_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropWritable,
                 ));
@@ -1220,12 +1227,16 @@ impl<'a> Instantiator<'a, '_> {
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     callback,
                     post_return,
                     async_,
-                } = options;
+                    ..
+                } = options
+                else {
+                    unreachable!("invalid canonical options, expected linear memory data model");
+                };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for future.read").as_u32();
                 let realloc_idx = realloc
@@ -1267,11 +1278,14 @@ impl<'a> Instantiator<'a, '_> {
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     async_,
                     ..
-                } = options;
+                } = options
+                else {
+                    unreachable!("invalid canonical options, expected linear memory data model");
+                };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory
                     .expect("missing memory idx for future.write")
@@ -1321,7 +1335,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureCloseReadable { ty } => {
+            Trampoline::FutureDropReadable { ty } => {
                 let future_drop_readable_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureDropReadable,
                 ));
@@ -1332,7 +1346,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureCloseWritable { ty } => {
+            Trampoline::FutureDropWritable { ty } => {
                 let future_drop_writable_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureDropWritable,
                 ));
@@ -1351,8 +1365,16 @@ impl<'a> Instantiator<'a, '_> {
                 let local_err_tbl_idx = ty.as_u32();
                 let component_idx = options.instance.as_u32();
 
-                let memory_idx = options
-                    .memory
+                let &CanonicalOptions {
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
+                    ..
+                } = options
+                else {
+                    unreachable!("invalid canonical options, expected linear memory data model");
+                };
+
+                let memory_idx = memory
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
 
@@ -1393,12 +1415,20 @@ impl<'a> Instantiator<'a, '_> {
                 let debug_message_fn = self
                     .gen
                     .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::DebugMessage));
-                let realloc_fn_idx = options
-                    .realloc
+
+                let &CanonicalOptions {
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
+                    ..
+                } = options
+                else {
+                    unreachable!("invalid canonical options, expected linear memory data model")
+                };
+
+                let realloc_fn_idx = realloc
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
-                let memory_idx = options
-                    .memory
+                let memory_idx = memory
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
 
@@ -1775,12 +1805,17 @@ impl<'a> Instantiator<'a, '_> {
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
-                    callback,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
+
                     post_return,
                     async_,
-                } = options;
+                    callback,
+                    ..
+                } = options
+                else {
+                    unreachable!("invalid canonical options, expected linear memory data model");
+                };
 
                 // Validate canonopts
                 // TODO: these should be traps at runtime rather than failures at transpilation time
@@ -2324,14 +2359,21 @@ impl<'a> Instantiator<'a, '_> {
         // This is only necessary if an import binding mode is specified and not JS (the default),
         // (e.g. Optimized, Direct, Hybrid).
         if !matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
-            let memory = options
-                .memory
-                .map(|idx| format!(" memory: memory{},", idx.as_u32()))
-                .unwrap_or("".into());
-            let realloc = options
-                .realloc
-                .map(|idx| format!(" realloc: realloc{},", idx.as_u32()))
-                .unwrap_or("".into());
+            let (memory, realloc) =
+                if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                    memory,
+                    realloc,
+                }) = options.data_model
+                {
+                    (
+                        memory.map(|idx| format!(" memory: memory{},", idx.as_u32())),
+                        realloc.map(|idx| format!(" realloc: realloc{},", idx.as_u32())),
+                    )
+                } else {
+                    (None, None)
+                };
+            let memory = memory.unwrap_or_default();
+            let realloc = realloc.unwrap_or_default();
             let post_return = options
                 .post_return
                 .map(|idx| format!(" postReturn: postReturn{},", idx.as_u32()))
@@ -2866,8 +2908,20 @@ impl<'a> Instantiator<'a, '_> {
             callback_fn_name,
         } = args;
 
-        let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
-        let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
+        let (memory, realloc) =
+            if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                memory,
+                realloc,
+            }) = opts.data_model
+            {
+                (
+                    memory.map(|idx| format!("memory{}", idx.as_u32())),
+                    realloc.map(|idx| format!("realloc{}", idx.as_u32())),
+                )
+            } else {
+                (None, None)
+            };
+
         let post_return = opts
             .post_return
             .map(|idx| format!("postReturn{}", idx.as_u32()));
@@ -3556,16 +3610,19 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 /// Perform basic canonical option validation
 fn is_valid_canonopt(
     CanonicalOptions {
-        memory,
-        realloc,
+        data_model,
         callback,
         post_return,
         async_,
         ..
     }: &CanonicalOptions,
 ) -> Result<()> {
-    if realloc.is_some() && memory.is_none() {
-        bail!("memory must be present if realloc is");
+    if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }) =
+        data_model
+    {
+        if realloc.is_some() && memory.is_none() {
+            bail!("memory must be present if realloc is");
+        }
     }
     if *async_ && post_return.is_some() {
         bail!("async and post return must not be specified together");
