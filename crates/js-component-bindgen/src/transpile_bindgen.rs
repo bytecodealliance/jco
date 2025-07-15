@@ -2203,6 +2203,12 @@ impl<'a> Instantiator<'a, '_> {
             };
 
         let is_async = is_async_fn(func, import_name, &self.async_imports);
+        if options.async_ {
+            assert!(
+                options.post_return.is_none(),
+                "async function {func_name} (import {import_name}) can't have post return",
+            );
+        }
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
@@ -3343,6 +3349,12 @@ impl<'a> Instantiator<'a, '_> {
     ) {
         // Determine whether the function should be async
         let is_async = is_async_fn(func, export_name, &self.async_exports);
+        if options.async_ {
+            assert!(
+                options.post_return.is_none(),
+                "async function {local_name} (export {export_name}) can't have post return"
+            );
+        }
 
         let maybe_async = if is_async { "async " } else { "" };
 
