@@ -1367,7 +1367,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         {ret_stmt}
                   ",
                         component_idx = self.canon_opts.instance.as_u32(),
-                        ret_stmt = ret_stmt.unwrap_or_default()
+                        ret_stmt = ret_stmt.unwrap_or_default(),
                     )
                 };
 
@@ -1855,12 +1855,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 assert!(
-                    self.is_async && self.post_return.is_some(),
-                    "async fns cannot have post_return specified ({name})"
+                    self.is_async,
+                    "non-async functions should not be performing async returns (func {name})",
                 );
                 assert!(
-                    self.is_async,
-                    "non-async functions should not be performing async returns",
+                    self.post_return.is_none(),
+                    "async fns cannot have post_return specified (func {name})"
                 );
 
                 // TODO: deal with the actual list of params coming back, to generate lift/lowers
@@ -1901,8 +1901,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     if (retCopy < 0 || retCopy > 3) {{
                         throw new Error('invalid async return value, outside callback code range');
                     }}
-
-                    // TODO: current task is already gone at this point!
 
                     const taskMeta = {get_current_task_fn}({component_idx});
                     if (!taskMeta) {{ throw new Error('missing/invalid current task metadata'); }}

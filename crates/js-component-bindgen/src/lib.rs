@@ -66,7 +66,7 @@ pub fn generate_types(
     resolve: Resolve,
     world_id: WorldId,
     opts: TranspileOpts,
-) -> Result<Vec<(String, Vec<u8>)>, anyhow::Error> {
+) -> Result<Vec<(String, Vec<u8>)>> {
     let mut files = files::Files::default();
 
     ts_bindgen(name, &resolve, world_id, &opts, &mut files)
@@ -82,7 +82,7 @@ pub fn generate_types(
 /// Generate the JS transpilation bindgen for a given Wasm component binary
 /// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
-pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
+pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
     use wasmtime_environ::component::{Component, Translator};
 
     let name = opts.name.clone();
@@ -132,11 +132,12 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
             | WasmFeatures::CM_ERROR_CONTEXT
             | WasmFeatures::MULTI_MEMORY,
     );
+
     let mut types = ComponentTypesBuilder::new(&validator);
 
     let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)
         .translate(component)
-        .context("failed to parse the input component")?;
+        .context("failed to translate component")?;
 
     let modules: PrimaryMap<StaticModuleIndex, core::Translation<'_>> = modules
         .into_iter()
