@@ -125,12 +125,16 @@ jobs:
           mkdir .weval-bin
           mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
 
-      - name: Cache npm install
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
-          path: |
-            node_modules
+      # see: https://github.com/npm/cli/issues/4828
+      - name: Remove package-lock
+        run: |
+          rm -rf package-lock.json
+      - name: Remove package-lock
+        if: ${{ matrix.node == '18.x' && matrix.os == 'ubuntu-22.04' }}
+        run: |
+          npm install oxc-parser --ignore-engines
+          npm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
+
       - name: Install NPM packages
         run: |
           npm install
