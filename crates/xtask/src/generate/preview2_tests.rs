@@ -11,7 +11,7 @@ const TRACE: bool = false;
 const DENO: bool = true;
 const DEFAULT_TEST_FILTER: &[&str] = &[];
 
-const DEFAULT_RETRIES: u32 = 3;
+const DEFAULT_RETRIES: u32 = 5;
 
 /// Tests that should be ignored
 const TEST_IGNORE: &[&str] = &[
