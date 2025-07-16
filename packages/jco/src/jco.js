@@ -68,6 +68,23 @@ program
         'use a debug build of StarlingMonkey'
     )
     .requiredOption('-o, --out <out>', 'output component file')
+    .option(
+        '--debug-bindings',
+        'Output debug bindings and metadata during componentization (by default to stderr)'
+    )
+    .option(
+        '--debug-bindings-dir <dir>',
+        'Directory to which to output generated bindings and metadata'
+    )
+    .option(
+        '--debug-binary',
+        'Output binary (without component metadata) created during componentization (by default to tmp dir)'
+    )
+    .option(
+        '--debug-binary-path <path>',
+        'Path to which to write the generated debug binary'
+    )
+    .option('--debug-enable-wizer-logging', 'Enable wizer call debugging')
     .action(asyncAction(componentize));
 
 program
