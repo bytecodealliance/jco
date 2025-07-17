@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.12.0-rc.0] - 2025-07-17
+
+### 🐛 Bug Fixes
+
+* *(jco)* run linter on jco package source code (#758) by @andreiltd in #758
+
+### 🚜 Refactor
+
+* refactor: pass more debug options to componentize by @vados-cosmonic in #607
+
+### ⚙️ Miscellaneous Tasks
+
+* chore(deps): update componentize-js to v0.18.3 by @vados-cosmonic in #620
+
+
 ## [1.11.3] - 2025-06-30
 
 ### 🐛 Bug Fixes
