@@ -4,7 +4,8 @@ import c from 'chalk-template';
 import { program, Option } from 'commander';
 
 import { opt } from './cmd/opt.js';
-import { transpile, types, guestTypes } from './cmd/transpile.js';
+import { transpile } from './cmd/transpile.js';
+import { types, guestTypes } from './cmd/types.js';
 import { run as runCmd, serve as serveCmd } from './cmd/run.js';
 import {
     parse,
