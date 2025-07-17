@@ -22,9 +22,20 @@ const config = {
             ],
         ],
         'scope-enum': [
-            1,
+            2,
             'always',
-            ['jco', 'bindgen', 'p2-shim', 'p3-shim', 'deps', 'ci', 'transpile'],
+            [
+                // General
+                'deps',
+                'ci',
+                'ops',
+                // Projects
+                'jco',
+                'bindgen',
+                'p2-shim',
+                'p3-shim',
+                'transpile',
+            ],
         ],
         'scope-case': [2, 'always', 'lower-case'],
         'body-max-line-length': [1, 'always', 100],
