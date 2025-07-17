@@ -421,16 +421,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
-          export OPT_START="--unreleased";
-          export OPT_TAG="";
+          export OPT_START=--unreleased;
+          export OPT_TAG=;
           if [ "tag" == "${{ github.ref_type }}" ]; then
-            export OPT_START="--latest";
-            export OPT_TAG="--tag=${{ needs.meta.outputs.next-release-tag }}";
+            export OPT_START=--latest;
+            export OPT_TAG=--tag=${{ needs.meta.outputs.next-release-tag }};
           fi
 
-          export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$'";
+          export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
           if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
-            export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?'";
+            export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
           fi
 
           git cliff \
