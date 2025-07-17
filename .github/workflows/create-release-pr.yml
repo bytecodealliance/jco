@@ -181,7 +181,7 @@ jobs:
             $OPT_START \
             $OPT_TAG \
             $OPT_TAG_PATTERN \
-            > CHANGELOG.current;
+            --prepend=CHANGELOG.md
 
       # Create release PR
       - name: Create release prep PR
