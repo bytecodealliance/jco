@@ -335,6 +335,9 @@ jobs:
     needs:
       - meta
       - test-npm-release
+    permissions:
+      id-token: write
+      attestations: write
     steps:
       # NOTE: We need to checkout to pull npmrc
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
