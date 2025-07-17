@@ -165,9 +165,9 @@ jobs:
         run: |
           export OPT_TAG="--tag=${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }}";
 
-          export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$'";
+          export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$'";
           if [ "true" == "${{ steps.project-meta.outputs.is-prerelease }}" ]; then
-            export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?'";
+            export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?'";
           fi
 
           git cliff \
