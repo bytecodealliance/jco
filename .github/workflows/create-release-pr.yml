@@ -163,17 +163,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
-          export START_ARG="--unreleased";
+          export OPT_TAG="--tag=${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }}";
+
+          export OPT_START="--unreleased";
           if [ "true" == "${{ steps.project-meta.outputs.is-prerelease }}" ]; then
-            export START_ARG="--latest";
+            export OPT_START="--latest";
+          fi
+
+          export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$'";
+          if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
+            export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?'";
           fi
 
           git cliff \
             --repository=${{ github.workspace }}/.git \
             --config=./cliff.toml \
-            $START_ARG \
-            --tag=${{ steps.project-meta.outputs.project }}-v${{ steps.project-meta.outputs.next-version }} \
-            --prepend=CHANGELOG.md
+            $OPT_START \
+            $OPT_TAG \
+            $OPT_TAG_PATTERN \
+            > CHANGELOG.current;
 
       # Create release PR
       - name: Create release prep PR

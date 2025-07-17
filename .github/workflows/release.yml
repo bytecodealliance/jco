@@ -418,15 +418,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
+          export OPT_START="--unreleased";
+          export OPT_TAG="";
           if [ "tag" == "${{ github.ref_type }}" ]; then
-            git cliff --repository=${{ github.workspace }}/.git --latest > CHANGELOG.current;
-          else
-            git cliff \
-              --repository=${{ github.workspace }}/.git \
-              --latest \
-              --tag=${{ needs.meta.outputs.next-release-tag }} \
-              > CHANGELOG.current;
+            export OPT_START="--latest";
+            export OPT_TAG="--tag=${{ needs.meta.outputs.next-release-tag }}";
           fi
+
+          export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$'";
+          if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
+            export OPT_TAG_PATTERN="--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?'";
+          fi
+
+          git cliff \
+            --repository=${{ github.workspace }}/.git \
+            --config=./cliff.toml \
+            $OPT_START \
+            $OPT_TAG \
+            $OPT_TAG_PATTERN \
+            > CHANGELOG.current;
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
