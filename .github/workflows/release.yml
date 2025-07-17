@@ -449,7 +449,7 @@ jobs:
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           token: ${{ secrets.RELEASE_PAT || github.token }}
-          prerelease: ${{ github.ref_type != 'tag' }}
+          prerelease: ${{ github.ref_type != 'tag' || needs.meta.outputs.is-prerelease == 'true' }}
           draft: ${{ github.ref_type != 'tag' }}
           tag_name: ${{ needs.meta.outputs.next-release-tag }}
           generate_release_notes: false
