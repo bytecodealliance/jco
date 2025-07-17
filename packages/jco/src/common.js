@@ -1,12 +1,29 @@
-import { normalize, resolve, sep } from 'node:path';
+import { normalize, resolve, sep, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readFile, writeFile, rm, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, rm, mkdtemp, mkdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { argv0 } from 'node:process';
-import c from 'chalk-template';
 import { platform } from 'node:process';
 
+import c from 'chalk-template';
+
 export const isWindows = platform === 'win32';
+
+export const ASYNC_WASI_IMPORTS = [
+    'wasi:io/poll#poll',
+    'wasi:io/poll#[method]pollable.block',
+    'wasi:io/streams#[method]input-stream.blocking-read',
+    'wasi:io/streams#[method]input-stream.blocking-skip',
+    'wasi:io/streams#[method]output-stream.blocking-flush',
+    'wasi:io/streams#[method]output-stream.blocking-write-and-flush',
+    'wasi:io/streams#[method]output-stream.blocking-write-zeroes-and-flush',
+    'wasi:io/streams#[method]output-stream.blocking-splice',
+];
+
+export const ASYNC_WASI_EXPORTS = [
+    'wasi:cli/run#run',
+    'wasi:http/incoming-handler#handle',
+];
 
 let _showSpinner = false;
 export function setShowSpinner(val) {
@@ -118,4 +135,25 @@ export async function spawnIOTmp(cmd, input, args) {
     } finally {
         await rm(tmpDir, { recursive: true });
     }
+}
+
+export async function writeFiles(files, summaryTitle) {
+    await Promise.all(
+        Object.entries(files).map(async ([name, file]) => {
+            await mkdir(dirname(name), { recursive: true });
+            await writeFile(name, file);
+        })
+    );
+    if (!summaryTitle) {
+        return;
+    }
+    console.log(c`
+  {bold ${summaryTitle}:}
+
+${table(
+    Object.entries(files).map(([name, source]) => [
+        c` - {italic ${name}}  `,
+        c`{black.italic ${sizeStr(source.length)}}`,
+    ])
+)}`);
 }
