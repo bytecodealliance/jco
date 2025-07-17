@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.12.0-rc.1] - 2025-07-17
+
+### 🐛 Bug Fixes
+
+* *(jco)* run linter on jco package source code (#758) by @andreiltd in #758
+
+
+### 🚜 Refactor
+
+* *(jco)* move type generation functions to separate file (#839) by @vados-cosmonic in #839
+
+
+
+
 ## [1.12.0-rc.0] - 2025-07-17
 
 ### 🐛 Bug Fixes
