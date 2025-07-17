@@ -424,7 +424,7 @@ jobs:
           export OPT_START=--unreleased;
           export OPT_TAG=;
           if [ "tag" == "${{ github.ref_type }}" ]; then
-            export OPT_START=--latest;
+            export OPT_START=--current;
             export OPT_TAG=--tag=${{ needs.meta.outputs.next-release-tag }};
           fi
 
