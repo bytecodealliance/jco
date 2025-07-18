@@ -47,7 +47,8 @@
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
     "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
-    "prepack": "npm run setup:vendor"
+    "prepack": "npm run setup:vendor",
+    "tsc": "tsc --build"
   },
   "dependencies": {
     "@bytecodealliance/preview2-shim": "^0.17.2",

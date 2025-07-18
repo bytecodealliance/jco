@@ -1,0 +1,14 @@
+{
+    "extends": "@tsconfig/node22",
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist",
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "emitDeclarationOnly": true,
+        "composite": true,
+        "allowJs": true
+    },
+    "include": ["src/**/*"]
+}
