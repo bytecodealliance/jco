@@ -24,7 +24,7 @@ suite('CLI', () => {
     var outDir;
     var outFile;
 
-    beforeAll(async function() {
+    beforeAll(async function () {
         tmpDir = await getTmpDir();
         outDir = resolve(tmpDir, 'out-component-dir');
         outFile = resolve(tmpDir, 'out-component-file');
@@ -40,13 +40,13 @@ suite('CLI', () => {
         );
     });
 
-    afterAll(async function() {
+    afterAll(async function () {
         try {
             await rm(tmpDir, { recursive: true });
         } catch {}
     });
 
-    afterEach(async function() {
+    afterEach(async function () {
         try {
             await rm(outDir, { recursive: true });
             await rm(outFile);

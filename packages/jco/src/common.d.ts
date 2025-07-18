@@ -9,9 +9,16 @@ export function table(data: any, align?: any[]): string;
  * The new directory is created using `fsPromises.mkdtemp()`.
  */
 export function getTmpDir(): Promise<string>;
-export function spawnIOTmp(cmd: any, input: any, args: any): Promise<Buffer<ArrayBufferLike>>;
+export function spawnIOTmp(
+    cmd: any,
+    input: any,
+    args: any
+): Promise<Buffer<ArrayBufferLike>>;
 export function writeFiles(files: any, summaryTitle: any): Promise<void>;
 export const isWindows: boolean;
 export { readFileCli as readFile };
-declare function readFileCli(file: any, encoding: any): Promise<Buffer<ArrayBufferLike>>;
+declare function readFileCli(
+    file: any,
+    encoding: any
+): Promise<Buffer<ArrayBufferLike>>;
 //# sourceMappingURL=common.d.ts.map

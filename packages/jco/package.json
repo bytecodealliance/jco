@@ -1,96 +1,96 @@
 {
-  "name": "@bytecodealliance/jco",
-  "version": "1.12.0",
-  "description": "JavaScript tooling for working with WebAssembly Components",
-  "homepage": "https://github.com/bytecodealliance/jco#readme",
-  "author": "Guy Bedford",
-  "contributors": [
-    {
-      "name": "Guy Bedford"
+    "name": "@bytecodealliance/jco",
+    "version": "1.12.0",
+    "description": "JavaScript tooling for working with WebAssembly Components",
+    "homepage": "https://github.com/bytecodealliance/jco#readme",
+    "author": "Guy Bedford",
+    "contributors": [
+        {
+            "name": "Guy Bedford"
+        },
+        {
+            "name": "Victor Adossi",
+            "email": "vadossi@cosmonic.com"
+        }
+    ],
+    "type": "module",
+    "license": "(Apache-2.0 WITH LLVM-exception)",
+    "bugs": {
+        "url": "https://github.com/bytecodealliance/jco/issues"
     },
-    {
-      "name": "Victor Adossi",
-      "email": "vadossi@cosmonic.com"
-    }
-  ],
-  "type": "module",
-  "license": "(Apache-2.0 WITH LLVM-exception)",
-  "bugs": {
-    "url": "https://github.com/bytecodealliance/jco/issues"
-  },
-  "keywords": [
-    "Wasm",
-    "WebAssembly",
-    "Component"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/bytecodealliance/jco.git"
-  },
-  "imports": {
-    "#ora": {
-      "browser": "./src/ora-shim.js",
-      "default": "ora"
-    }
-  },
-  "exports": {
-    ".": {
-      "browser": "./src/browser.js",
-      "default": "./src/api.js"
+    "keywords": [
+        "Wasm",
+        "WebAssembly",
+        "Component"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bytecodealliance/jco.git"
     },
-    "./component": {
-      "types": "./obj/js-component-bindgen-component.d.ts",
-      "default": "./src/browser.js"
+    "imports": {
+        "#ora": {
+            "browser": "./src/ora-shim.js",
+            "default": "ora"
+        }
+    },
+    "exports": {
+        ".": {
+            "browser": "./src/browser.js",
+            "default": "./src/api.js"
+        },
+        "./component": {
+            "types": "./obj/js-component-bindgen-component.d.ts",
+            "default": "./src/browser.js"
+        }
+    },
+    "bin": {
+        "jco": "src/jco.js"
+    },
+    "files": [
+        "lib",
+        "src",
+        "obj/*.core*.wasm",
+        "obj/*.js",
+        "obj/*.ts",
+        "obj/interfaces"
+    ],
+    "scripts": {
+        "build": "cargo xtask build debug",
+        "build:release": "cargo xtask build release",
+        "build:types:preview2-shim": "npm run build:types:preview2-shim --include-workspace-root",
+        "fmt": "prettier . --write",
+        "lint": "eslint -c ../../eslint.config.mjs --ext .js src test",
+        "lint:fix": "npm run lint -- --fix",
+        "test": "vitest run -c test/vitest.ts",
+        "test:lts": "vitest run -c test/vitest.lts.ts",
+        "prepack": "cargo xtask build release"
+    },
+    "dependencies": {
+        "@bytecodealliance/componentize-js": "^0.18.3",
+        "@bytecodealliance/preview2-shim": "^0.17.2",
+        "binaryen": "^123.0.0",
+        "chalk-template": "^1",
+        "commander": "^12",
+        "mkdirp": "^3",
+        "ora": "^8",
+        "terser": "^5"
+    },
+    "devDependencies": {
+        "@commitlint/config-conventional": "^19.8.1",
+        "@types/node": "^22.15.17",
+        "@typescript-eslint/eslint-plugin": "^8.2.0",
+        "@typescript-eslint/parser": "^8.2.0",
+        "commitlint": "^19.8.1",
+        "conventional-changelog-conventionalcommits": "^8.0.0",
+        "eslint": "^9.9.0",
+        "eslint-config-prettier": "^10.1.1",
+        "eslint-plugin-prettier": "^5.2.3",
+        "mime": "^4.0.4",
+        "prettier": "^3.5.3",
+        "puppeteer": "^24.0.1",
+        "semver": "^7.7.1",
+        "smol-toml": "^1.3.1",
+        "typescript": "^5.8.3",
+        "vitest": "^3.0.7"
     }
-  },
-  "bin": {
-    "jco": "src/jco.js"
-  },
-  "files": [
-    "lib",
-    "src",
-    "obj/*.core*.wasm",
-    "obj/*.js",
-    "obj/*.ts",
-    "obj/interfaces"
-  ],
-  "scripts": {
-    "build": "cargo xtask build debug",
-    "build:release": "cargo xtask build release",
-    "build:types:preview2-shim": "npm run build:types:preview2-shim --include-workspace-root",
-    "fmt": "prettier . --write",
-    "lint": "eslint -c ../../eslint.config.mjs --ext .js src test",
-    "lint:fix": "npm run lint -- --fix",
-    "test": "vitest run -c test/vitest.ts",
-    "test:lts": "vitest run -c test/vitest.lts.ts",
-    "prepack": "cargo xtask build release"
-  },
-  "dependencies": {
-    "@bytecodealliance/componentize-js": "^0.18.3",
-    "@bytecodealliance/preview2-shim": "^0.17.2",
-    "binaryen": "^123.0.0",
-    "chalk-template": "^1",
-    "commander": "^12",
-    "mkdirp": "^3",
-    "ora": "^8",
-    "terser": "^5"
-  },
-  "devDependencies": {
-    "@commitlint/config-conventional": "^19.8.1",
-    "@types/node": "^22.15.17",
-    "@typescript-eslint/eslint-plugin": "^8.2.0",
-    "@typescript-eslint/parser": "^8.2.0",
-    "commitlint": "^19.8.1",
-    "conventional-changelog-conventionalcommits": "^8.0.0",
-    "eslint": "^9.9.0",
-    "eslint-config-prettier": "^10.1.1",
-    "eslint-plugin-prettier": "^5.2.3",
-    "mime": "^4.0.4",
-    "prettier": "^3.5.3",
-    "puppeteer": "^24.0.1",
-    "semver": "^7.7.1",
-    "smol-toml": "^1.3.1",
-    "typescript": "^5.8.3",
-    "vitest": "^3.0.7"
-  }
 }

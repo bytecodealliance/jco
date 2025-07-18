@@ -1,7 +1,7 @@
 {
-  "dir.virt": {
-    "args": ["/foo"],
-    "stderr": "",
-    "stdout": "Listing directory: /foo\n - .\n - ..\n - foo\n"
-  }
+    "dir.virt": {
+        "args": ["/foo"],
+        "stderr": "",
+        "stdout": "Listing directory: /foo\n - .\n - ..\n - foo\n"
+    }
 }

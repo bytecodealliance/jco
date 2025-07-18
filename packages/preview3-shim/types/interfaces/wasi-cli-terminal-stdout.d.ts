@@ -4,4 +4,5 @@
  * allowing further interaction with it.
  */
 export function getTerminalStdout(): TerminalOutput | undefined;
-export type TerminalOutput = import('./wasi-cli-terminal-output.js').TerminalOutput;
+export type TerminalOutput =
+    import('./wasi-cli-terminal-output.js').TerminalOutput;

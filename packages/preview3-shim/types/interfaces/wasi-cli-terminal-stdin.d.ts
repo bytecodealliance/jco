@@ -4,4 +4,5 @@
  * allowing further interaction with it.
  */
 export function getTerminalStdin(): TerminalInput | undefined;
-export type TerminalInput = import('./wasi-cli-terminal-input.js').TerminalInput;
+export type TerminalInput =
+    import('./wasi-cli-terminal-input.js').TerminalInput;
