@@ -1,63 +1,11 @@
-import { Command } from 'commander';
-
-type TypeGenerationOptions = {
-    name?: string;
-    worldName?: string;
-    instantiation?: 'async' | 'sync';
-    tlaCompat?: boolean;
-    asyncMode?: string;
-    asyncImports?: string[];
-    asyncExports?: string[];
-    outDir?: string;
-    features?: string[] | 'all';
-    allFeatures?: boolean;
-    asyncWasiImports?: boolean;
-    asyncWasiExports?: boolean;
-    guest?: boolean;
-};
-
-export function types(
-    witPath: string,
-    opts?: TypeGenerationOptions
-): Promise<void>;
-
-export function guestTypes(
-    witPath: string,
-    opts: TypeGenerationOptions
-): Promise<void>;
-
-/** Bytes that belong in one or more files */
-type FileBytes = {
-    [filename: string]: Uint8Array;
-};
-
-/**
- * @param {string} witPath
- * @param {{
- *   name?: string,
- *   worldName?: string,
- *   instantiation?: 'async' | 'sync',
- *   tlaCompat?: bool,
- *   asyncMode?: string,
- *   asyncImports?: string[],
- *   asyncExports?: string[],
- *   outDir?: string,
- *   features?: string[] | 'all',
- *   guest?: bool,
- * }} opts
- * @returns {Promise<{ [filename: string]: Uint8Array }>}
- */
-export function typesComponent(
-    witPath: string,
-    opts: TypeGenerationOptions
-): Promise<FileBytes>;
-
-type TranspilationOptions = {
+import { Buffer } from 'node:buffer';
+import type { FileHandle } from 'node:fs/promises';
+export interface TranspilationOptions {
     name: string;
     instantiation?: 'async' | 'sync';
     importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized';
     map?: Record<string, string>;
-    asyncMode?: string;
+    asyncMode?: "sync" | "jspi";
     asyncImports?: string[];
     asyncExports?: string[];
     asyncWasiImports?: string[];
@@ -66,7 +14,7 @@ type TranspilationOptions = {
     tracing?: boolean;
     nodejsCompat?: boolean;
     tlaCompat?: boolean;
-    base64Cutoff?: boolean;
+    base64Cutoff?: number;
     js?: boolean;
     minify?: boolean;
     optimize?: boolean;
@@ -75,23 +23,63 @@ type TranspilationOptions = {
     multiMemory?: boolean;
     experimentalIdlImports?: boolean;
     optArgs?: string[];
-};
-
-export function transpile(
-    componentPath: string,
-    opts?: TranspilationOptions,
-    program?: Command
-): Promise<void>;
-
-type TranspilationResult = {
-    files: FileBytes;
+    wasiShim?: boolean;
+    typescript?: boolean;
+    stub?: boolean;
+}
+export interface TranspilationResult {
+    files: import('./common.js').FileBytes;
     imports: string[];
     exports: [string, 'function' | 'instance'][];
-};
+}
+/**
+ * @typedef {{
+ *   name: string,
+ *   instantiation?: 'async' | 'sync',
+ *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
+ *   map?: Record<string, string>,
+ *   asyncMode?: string,
+ *   asyncImports?: string[],
+ *   asyncExports?: string[],
+ *   asyncWasiImports?: string[],
+ *   asyncWasiExports?: string[],
+ *   validLiftingOptimization?: bool,
+ *   tracing?: bool,
+ *   nodejsCompat?: bool,
+ *   tlaCompat?: bool,
+ *   base64Cutoff?: bool,
+ *   js?: bool,
+ *   minify?: bool,
+ *   optimize?: bool,
+ *   namespacedExports?: bool,
+ *   outDir?: string,
+ *   multiMemory?: bool,
+ *   experimentalIdlImports?: bool,
+ *   optArgs?: string[],
+ * }} TranspilationOptions
 
-export function runTranspileComponent(
-    component: Uint8Array,
-    opts?: TranspilationOptions,
-): Promise<TranspilationResult>;
-
-//# sourceMappingURL=transpile.d.ts.map
+ /** @typedef {{
+ *  files: {
+ *    [filename: string]: Uint8Array;
+ *  };
+ *  imports: string[];
+ *  exports: [string, 'function' | 'instance'][];
+ * }} TranspilationResult
+ */
+/**
+ * Transpile a provided WebAssembly component to an ES module
+ * that can be run in JS environments
+ *
+ * @param {Buffer | string | URL | FileHandle} componentPath
+ * @param {TranspilationOptions} [opts]
+ * @returns {Promise<TranspilationResult>}
+ */
+export declare function transpile(componentPath: Buffer | string | URL | FileHandle, opts: TranspilationOptions): Promise<TranspilationResult>;
+/**
+ * Perform transpilation, using the transpiled js-component-bindgen Rust crate.
+ *
+ * @param {Uint8Array} component
+ * @param {TranspilationOptions} [opts]
+ * @returns {Promise<TranspilationResult}>}
+ */
+export declare function runTranspileComponent(component: Uint8Array, opts: TranspilationOptions): Promise<TranspilationResult>;
