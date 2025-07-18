@@ -1,13 +1,14 @@
 {
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "src/cmd/**", "src/*.d.ts"],
-  "compilerOptions": {
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "allowJs": true,
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "declarationMap": true,
-    "skipLibCheck": true,
-  }
+    "extends": "@tsconfig/node22",
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist",
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "emitDeclarationOnly": true,
+        "composite": true,
+        "allowJs": true
+    },
+    "include": ["src/**/*"]
 }
