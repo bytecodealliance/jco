@@ -4,7 +4,8 @@ import c from 'chalk-template';
 import { program, Option } from 'commander';
 
 import { opt } from './cmd/opt.js';
-import { transpile, types, guestTypes } from './cmd/transpile.js';
+import { transpile } from './cmd/transpile.js';
+import { types, guestTypes } from './cmd/types.js';
 import { run as runCmd, serve as serveCmd } from './cmd/run.js';
 import {
     parse,
@@ -23,7 +24,7 @@ program
         c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`
     )
     .usage('<command> [options]')
-    .version('1.11.3');
+    .version('1.12.0');
 
 function myParseInt(value) {
     return parseInt(value, 10);
@@ -68,6 +69,23 @@ program
         'use a debug build of StarlingMonkey'
     )
     .requiredOption('-o, --out <out>', 'output component file')
+    .option(
+        '--debug-bindings',
+        'Output debug bindings and metadata during componentization (by default to stderr)'
+    )
+    .option(
+        '--debug-bindings-dir <dir>',
+        'Directory to which to output generated bindings and metadata'
+    )
+    .option(
+        '--debug-binary',
+        'Output binary (without component metadata) created during componentization (by default to tmp dir)'
+    )
+    .option(
+        '--debug-binary-path <path>',
+        'Path to which to write the generated debug binary'
+    )
+    .option('--debug-enable-wizer-logging', 'Enable wizer call debugging')
     .action(asyncAction(componentize));
 
 program

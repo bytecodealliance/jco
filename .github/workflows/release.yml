@@ -335,6 +335,9 @@ jobs:
     needs:
       - meta
       - test-npm-release
+    permissions:
+      id-token: write
+      attestations: write
     steps:
       # NOTE: We need to checkout to pull npmrc
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -402,7 +405,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: taiki-e/install-action@d028bcc176afad59ee1e0b7dbba9789b8a1421f8 # v2.56.9
+      - uses: taiki-e/install-action@4fd6bded9bf87df7896958594ca6d67b38b5350e # v2.56.15
         with:
           fallback: none
           tool: git-cliff
@@ -418,15 +421,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
+          export OPT_START=--unreleased;
+          export OPT_TAG=;
           if [ "tag" == "${{ github.ref_type }}" ]; then
-            git cliff --repository=${{ github.workspace }}/.git --latest > CHANGELOG.current;
-          else
-            git cliff \
-              --repository=${{ github.workspace }}/.git \
-              --latest \
-              --tag=${{ needs.meta.outputs.next-release-tag }} \
-              > CHANGELOG.current;
+            export OPT_START=--current;
+            export OPT_TAG=--tag=${{ needs.meta.outputs.next-release-tag }};
           fi
+
+          export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
+          if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
+            export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
+          fi
+
+          git cliff \
+            --repository=${{ github.workspace }}/.git \
+            --config=./cliff.toml \
+            $OPT_START \
+            $OPT_TAG \
+            $OPT_TAG_PATTERN \
+            > CHANGELOG.current;
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -436,7 +449,7 @@ jobs:
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           token: ${{ secrets.RELEASE_PAT || github.token }}
-          prerelease: ${{ github.ref_type != 'tag' }}
+          prerelease: ${{ github.ref_type != 'tag' || needs.meta.outputs.is-prerelease == 'true' }}
           draft: ${{ github.ref_type != 'tag' }}
           tag_name: ${{ needs.meta.outputs.next-release-tag }}
           generate_release_notes: false

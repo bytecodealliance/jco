@@ -86,6 +86,27 @@ For a deeper guide on the intricacies of Jco, read the [Jco Book][jco-book].
 
 [jco-book]: https://bytecodealliance.github.io/jco/
 
+## Installation quirks
+
+### Node 18.x
+
+If installing on Node 18.x with a version of `@bytecodealliance/componentize-js` 0.18.3 or above, you may need to install `oxc-parser` manually.
+
+For example, on linux this would mean the following:
+
+```console
+npm install oxc-parser --ignore-engines
+npm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
+```
+
+It may be necessary to replace `@oxc-parser/binding-linux-x64-gnu` with whatever platform is appropriate.
+
+> [!NOTE]
+> Similar installation issues may occur if using an `npm` version older than 11.3.0, 
+> due to [`npm` bugs related to optional dependencies][npm-opt-deps-issues]
+
+[npm-opt-deps-issues]: https://github.com/npm/cli/issues/4828
+
 ## License
 
 This project is licensed under the Apache 2.0 license with the LLVM exception.

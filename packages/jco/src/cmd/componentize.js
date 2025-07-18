@@ -28,7 +28,20 @@ export async function componentize(jsSource, opts) {
             enableFeatures: opts.enable,
             preview2Adapter: opts.preview2Adapter,
             debugBuild: opts.debugStarlingmonkeyBuild,
+            debug: {
+                bindings: opts.debugBindings,
+                bindingsDir: opts.debugBindingsDir,
+                binary: opts.debugBinary,
+                binaryPath: opts.debugBinaryPath,
+                enableWizerLogging: opts.debugEnableWizerLogging,
+            },
         });
+        if (result.debug) {
+            console.error(
+                c`{cyan DEBUG} Debug output\n${JSON.stringify(debug, null, 2)}\n`
+            );
+        }
+
         component = result.component;
     } catch (err) {
         // Detect package resolution issues that usually mean a misconfigured "witPath"

@@ -20,7 +20,7 @@ jobs:
         with:
           mdbook-version: '0.4.43'
 
-      - uses: taiki-e/install-action@d028bcc176afad59ee1e0b7dbba9789b8a1421f8 # v2.56.9
+      - uses: taiki-e/install-action@4fd6bded9bf87df7896958594ca6d67b38b5350e # v2.56.15
         with:
           tool: >-
             mdbook-alerts@0.7.0,
