@@ -11,6 +11,7 @@
 # Typescript
 /src/**/*.d.ts
 /src/**/*.d.ts.map
+*.tsbuildinfo
 
 # Docs
 /docs/book
