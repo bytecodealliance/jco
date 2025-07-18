@@ -850,7 +850,7 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!("
                     function {unpack_callback_result_fn}(result) {{
                         {debug_log_fn}('[{unpack_callback_result_fn}()] args', {{ result }});
-                        if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value, not a valid i32'); }}
+                        if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value [' + result + '], not a valid i32'); }}
                         const eventCode = result & 0xF;
                         if (eventCode < 0 || eventCode > 3) {{
                             throw new Error('invalid async return value [' + eventCode + '], outside callback code range');

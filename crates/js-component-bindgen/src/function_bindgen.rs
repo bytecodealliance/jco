@@ -1866,6 +1866,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 // TODO: deal with the actual list of params coming back, to generate lift/lowers
                 // async task return should always be a pointer to some memory that we'll have to lower from?
 
+                // TODO: double check async returns with no args/returns
+
                 let get_current_task_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let component_idx = self.canon_opts.instance.as_u32();
@@ -1878,28 +1880,16 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
 
                 let fn_name = self.callback_fn_name.as_deref().unwrap_or("<unknown>");
-                let callback_phrase = match self.callback_fn_name {
-                    Some(fn_name) => {
-                        format!(
-                            "
-                            currentRes = {fn_name}(
-                                {to_int32_fn}(eventCode),
-                                {to_int32_fn}(index),
-                                {to_int32_fn}(result),
-                            );
-                        "
-                        )
-                    }
-                    None => "currentRes = undefined;".into(),
-                };
 
                 uwriteln!(
                     self.src,
                     "
                     const retCopy = {first_op};
-                    if (!({i32_typecheck}(retCopy))) {{ throw new Error('invalid async return value, not a number'); }}
-                    if (retCopy < 0 || retCopy > 3) {{
-                        throw new Error('invalid async return value, outside callback code range');
+                    if (retCopy !== undefined) {{
+                        if (!({i32_typecheck}(retCopy))) {{ throw new Error('invalid async return value [' + retCopy + '], not a number'); }}
+                        if (retCopy < 0 || retCopy > 3) {{
+                            throw new Error('invalid async return value, outside callback code range');
+                        }}
                     }}
 
                     const taskMeta = {get_current_task_fn}({component_idx});
@@ -1910,47 +1900,55 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     let currentRes = retCopy;
 
-                    while (true) {{
-                        let [code, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
-                        switch (retCopy) {{
-                            case 0: // EXIT
-                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] exit', {{ fn: '{name}' }});
-                                task.exit();
-                                // TODO: extract values for the return of the actual function?
-                                return;
-                            case 1: // YIELD
-                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] yield', {{ fn: '{name}' }});
-                                taskRes = await task.yield({{ isAsync: true }});
-                                break;
-                            case 2: // WAIT for a given waitable set
-                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] waiting for event', {{ waitableSetIdx }});
-                                taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
-                                break;
-                            case 3: // POLL
-                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] polling for event', {{ waitableSetIdx }});
-                                taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
-                                break;
-                            case undefined:
-                                {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] no return value', {{ waitableSetIdx }});
-                                taskRes = undefined;
-                            default:
-                                throw new Error('invalid async return value [' + retCopy + ']');
-                        }}
-
-                        if (taskRes) {{
+                    if (currentRes !== undefined) {{
+                        while (true) {{
+                            let [code, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
+                            switch (retCopy) {{
+                                case 0: // EXIT
+                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] exit', {{ fn: '{name}' }});
+                                    task.exit();
+                                    // TODO: extract values for the return of the actual function?
+                                    return;
+                                case 1: // YIELD
+                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] yield', {{ fn: '{name}' }});
+                                    taskRes = await task.yield({{ isAsync: true }});
+                                    break;
+                                case 2: // WAIT for a given waitable set
+                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] waiting for event', {{ waitableSetIdx }});
+                                    taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
+                                    break;
+                                case 3: // POLL
+                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] polling for event', {{ waitableSetIdx }});
+                                    taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
+                                    break;
+                                default:
+                                    throw new Error('invalid async return value [' + retCopy + ']');
+                            }}
+    
                             eventCode = taskRes[0];
                             index = taskRes[1];
                             result = taskRes[2];
                             {debug_log_fn}('performing callback', {{ fn_name: '{fn_name}', eventCode, index, result }});
                             {callback_phrase}
-                        }} else {{
-                            currentRes = undefined;
                         }}
-
                     }}
                     ",
                     first_op = operands.first().map(|s| s.as_str()).unwrap_or("undefined"),
                     prefix = self.tracing_prefix,
+                    callback_phrase = match self.callback_fn_name {
+                        Some(fn_name) => {
+                            format!(
+                                "
+                            currentRes = {fn_name}(
+                                {to_int32_fn}(eventCode),
+                                {to_int32_fn}(index),
+                                {to_int32_fn}(result),
+                            );
+                        "
+                            )
+                        }
+                        None => "currentRes = undefined;".into(),
+                    },
                 );
 
                 // Inject machinery for ending an async 'current' task
