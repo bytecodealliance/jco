@@ -1393,7 +1393,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 "{}",
-                                gen_post_return_js((format!("{f}();"), None))
+                                gen_post_return_js((format!("{f}(ret);"), None))
                             );
                         }
                         uwriteln!(
@@ -1434,7 +1434,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.src,
                                 "{}",
                                 gen_post_return_js((
-                                    format!("{f}();"),
+                                    format!("{f}(ret);"),
                                     Some("return retCopy;".into())
                                 ))
                             );
