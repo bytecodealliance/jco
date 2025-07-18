@@ -12,6 +12,8 @@ export function getTmpDir(): Promise<string>;
 export function spawnIOTmp(cmd: any, input: any, args: any): Promise<Buffer<ArrayBufferLike>>;
 export function writeFiles(files: any, summaryTitle: any): Promise<void>;
 export const isWindows: boolean;
+export const ASYNC_WASI_IMPORTS: string[];
+export const ASYNC_WASI_EXPORTS: string[];
 export { readFileCli as readFile };
 declare function readFileCli(file: any, encoding: any): Promise<Buffer<ArrayBufferLike>>;
 //# sourceMappingURL=common.d.ts.map
