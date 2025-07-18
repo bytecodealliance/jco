@@ -63,7 +63,8 @@
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
     "test:lts": "vitest run -c test/vitest.lts.ts",
-    "prepack": "cargo xtask build release"
+    "prepack": "cargo xtask build release",
+    "tsc": "tsc --build"
   },
   "dependencies": {
     "@bytecodealliance/componentize-js": "^0.18.3",

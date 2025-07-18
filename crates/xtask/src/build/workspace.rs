@@ -15,6 +15,6 @@ pub(crate) fn run(release: bool) -> anyhow::Result<()> {
     }
 
     // Build Jco TS code
-    cmd!(sh, "npx -w @bytecodealliance/jco tsc -p tsconfig.json").read()?;
+    cmd!(sh, "npm run tsc").read()?;
     Ok(())
 }
