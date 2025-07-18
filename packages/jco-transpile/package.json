@@ -35,10 +35,9 @@
     "vendor",
     "src"
   ],
-  "types": "./types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
+      "types": "./dist/index.d.ts",
       "default": "./src/index.js"
     }
   },
@@ -47,7 +46,7 @@
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
     "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
-    "prepack": "npm run setup:vendor",
+    "prepack": "npm run setup:vendor ; npm run tsc",
     "tsc": "tsc --build"
   },
   "dependencies": {
