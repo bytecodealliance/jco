@@ -29,6 +29,7 @@ const config = {
                 'deps',
                 'ci',
                 'ops',
+                'docs',
                 // Projects
                 'jco',
                 'bindgen',
