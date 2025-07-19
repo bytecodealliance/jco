@@ -40,6 +40,12 @@ jco is effectively a monorepo consisting of the following projects:
 * `packages/preview2-shim`: The WASI Preview2 host implementations for Node.js & browsers. Published as https://www.npmjs.com/package/@bytecodealliance/preview2-shim.
 * `packages/preview3-shim`: The WASI Preview3 host implementations for Node.js
 
+### Files that should be checked in
+
+The repository is for project related code only -- avoid checking in files related to specific platforms or IDEs. One off configuration and/or secrets should of course not be checked in either.
+
+If there is information/configuration that is important for users or developers to see, include them in documentation and/or examples with appropriate context/explanation.
+
 ## Building
 
 To build jco, run:
