@@ -79,7 +79,6 @@
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^19.8.1",
-    "@tsconfig/node22": "^22.0.2",
     "@types/node": "^22.15.17",
     "@typescript-eslint/eslint-plugin": "^8.2.0",
     "@typescript-eslint/parser": "^8.2.0",
