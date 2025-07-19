@@ -15,6 +15,6 @@ pub(crate) fn run(release: bool) -> anyhow::Result<()> {
     }
 
     // Compiles code in all packages where applicable
-    cmd!(sh, "npm run tsc").read()?;
+    cmd!(sh, "npm run build:ts").read()?;
     Ok(())
 }
