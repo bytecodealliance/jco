@@ -58,7 +58,6 @@
     "build": "cargo xtask build debug",
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "npm run build:types:preview2-shim --include-workspace-root",
-    "build:ts": "tsc --build",
     "fmt": "prettier . --write",
     "lint": "eslint -c ../../eslint.config.mjs --ext .js src test",
     "lint:fix": "npm run lint -- --fix",
