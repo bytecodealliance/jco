@@ -273,6 +273,50 @@ npm run build
 the filename to <code>npm run test</code>:</p>
 <pre><code class="language-console">npm run test runtime.js
 </code></pre>
+<h2 id="commits"><a class="header" href="#commits">Commits</a></h2>
+<p>Jco and related subprojects use <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>.
+Using Conventional Commits helps the project maintain consistency in commit messages, and powers release
+automation.</p>
+<p>CI enforces that commits are structured in a conventional commit style (see <a href="https://github.com/bytecodealliance/jco/blob/main/commitlint.config.mjs"><code>commitlint.config.mjs</code></a>.
+Special care must also be taken to ensure PR titles are formatted in a way that matches conventional commits as well,
+when performing squash merges.</p>
+<p>The following types are valid:</p>
+<ul>
+<li><code>build</code></li>
+<li><code>chore</code></li>
+<li><code>ci</code></li>
+<li><code>debug</code></li>
+<li><code>docs</code></li>
+<li><code>feat</code></li>
+<li><code>fix</code></li>
+<li><code>perf</code></li>
+<li><code>refactor</code></li>
+<li><code>release</code></li>
+<li><code>revert</code></li>
+<li><code>style</code></li>
+<li><code>test</code></li>
+</ul>
+<p>The following project scopes are valid:</p>
+<ul>
+<li><code>jco</code></li>
+<li><code>p2-shim</code></li>
+<li><code>p3-shim</code></li>
+<li><code>bindgen</code></li>
+<li><code>transpile</code></li>
+</ul>
+<p>For changes made to projects in the repository to be included in releases, the appropriate project scope must be applied.</p>
+<p>Since changes that should be made to the repo may not always have a project-specific scope, the
+following scopes can be used as well:</p>
+<ul>
+<li><code>deps</code></li>
+<li><code>ci</code></li>
+<li><code>ops</code></li>
+</ul>
+<p>Here are a few example commit messages:</p>
+<pre><code>chore(jco): update componentize-js dependency to X.X.X
+</code></pre>
+<pre><code>feat(ci): add commitlint to actions workflows
+</code></pre>
 
                     </main>
 
