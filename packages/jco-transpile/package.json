@@ -55,7 +55,6 @@
     "terser": "^5"
   },
   "devDependencies": {
-    "@tsconfig/node22": "^22.0.2",
     "typescript": "^5.8.3"
   }
 }
