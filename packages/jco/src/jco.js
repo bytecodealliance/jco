@@ -24,6 +24,7 @@ program
         c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`
     )
     .usage('<command> [options]')
+    .enablePositionalOptions()
     .version('1.12.0');
 
 function myParseInt(value) {
@@ -101,7 +102,10 @@ program
         '-m, --minify',
         'minify the JS output (--optimize / opt cmd still required)'
     )
-    .option('-O, --optimize', `optimize the component first (use -- and arguments to wasm-opt)`)
+    .option(
+        '-O, --optimize',
+        `optimize the component first (use -- and arguments to wasm-opt)`
+    )
     .option('--no-typescript', 'do not output TypeScript .d.ts types')
     .option(
         '--valid-lifting-optimization',
@@ -174,6 +178,7 @@ program
         'disable namespaced exports for typescript compatibility'
     )
     .option('--multi-memory', 'optimized output for Wasm multi-memory')
+    .allowExcessArguments(true)
     .action(asyncAction(transpile));
 
 program
@@ -339,6 +344,7 @@ program
     )
     .option('--asyncify', 'runs Asyncify pass in wasm-opt')
     .option('-q, --quiet')
+    .allowExcessArguments(true)
     .action(asyncAction(opt));
 
 program
