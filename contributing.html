@@ -252,6 +252,9 @@ rustup target add wasm32-wasi
 <li><code>packages/preview2-shim</code>: The WASI Preview2 host implementations for Node.js &amp; browsers. Published as https://www.npmjs.com/package/@bytecodealliance/preview2-shim.</li>
 <li><code>packages/preview3-shim</code>: The WASI Preview3 host implementations for Node.js</li>
 </ul>
+<h3 id="files-that-should-be-checked-in"><a class="header" href="#files-that-should-be-checked-in">Files that should be checked in</a></h3>
+<p>The repository is for project related code only -- avoid checking in files related to specific platforms or IDEs. One off configuration and/or secrets should of course not be checked in either.</p>
+<p>If there is information/configuration that is important for users or developers to see, include them in documentation and/or examples with appropriate context/explanation.</p>
 <h2 id="building"><a class="header" href="#building">Building</a></h2>
 <p>To build jco, run:</p>
 <pre><code>npm install
