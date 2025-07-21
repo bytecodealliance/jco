@@ -101,7 +101,7 @@ program
         '-m, --minify',
         'minify the JS output (--optimize / opt cmd still required)'
     )
-    .option('-O, --optimize', 'optimize the component first')
+    .option('-O, --optimize', `optimize the component first (use -- and arguments to wasm-opt)`)
     .option('--no-typescript', 'do not output TypeScript .d.ts types')
     .option(
         '--valid-lifting-optimization',
@@ -174,10 +174,6 @@ program
         'disable namespaced exports for typescript compatibility'
     )
     .option('--multi-memory', 'optimized output for Wasm multi-memory')
-    .option(
-        '--',
-        'for --optimize, custom wasm-opt arguments (defaults to best size optimization)'
-    )
     .action(asyncAction(transpile));
 
 program
