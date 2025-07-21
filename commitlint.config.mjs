@@ -27,6 +27,7 @@ const config = {
             [
                 // General
                 'deps',
+                'examples',
                 'ci',
                 'ops',
                 'docs',
