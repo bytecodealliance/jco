@@ -331,7 +331,7 @@ program
     .description(
         'optimizes a Wasm component, including running wasm-opt Binaryen optimizations'
     )
-    .usage('<component-file> -o <output-file>')
+    .usage('<component-file> -o <output-file> -- [wasm-opt arguments]')
     .argument('<component-file>', 'Wasm component binary filepath')
     .requiredOption(
         '-o, --output <output-file>',
@@ -339,10 +339,6 @@ program
     )
     .option('--asyncify', 'runs Asyncify pass in wasm-opt')
     .option('-q, --quiet')
-    .option(
-        '--',
-        'custom wasm-opt arguments (defaults to best size optimization)'
-    )
     .action(asyncAction(opt));
 
 program
