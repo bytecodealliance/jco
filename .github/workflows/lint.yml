@@ -14,7 +14,7 @@ permissions:
   contents: none
 
 jobs:
-  conventional-commits:
+  cc-commits:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
