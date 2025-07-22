@@ -1,13 +1,16 @@
 {
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "src/cmd/**", "src/*.d.ts"],
-  "compilerOptions": {
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "allowJs": true,
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "declarationMap": true,
-    "skipLibCheck": true,
-  }
+    "compilerOptions": {
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "strict": true,
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "emitDeclarationOnly": true,
+        "composite": true,
+        "allowJs": true,
+        "rootDir": "src",
+        "outDir": "dist",
+    },
+    "include": ["src/**/*"]
 }

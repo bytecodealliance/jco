@@ -35,6 +35,7 @@
   },
   "exports": {
     ".": {
+      "types": "./dist/api.d.ts",
       "browser": "./src/browser.js",
       "default": "./src/api.js"
     },
@@ -49,6 +50,7 @@
   "files": [
     "lib",
     "src",
+    "dist",
     "obj/*.core*.wasm",
     "obj/*.js",
     "obj/*.ts",
