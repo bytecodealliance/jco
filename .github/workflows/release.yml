@@ -68,7 +68,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: taiki-e/cache-cargo-install-action@1bb5728d7988b14bfdd9690a8e5399fc8a3f75ab # v2.2.0
+      - uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
         with:
           tool: cargo-get
 
