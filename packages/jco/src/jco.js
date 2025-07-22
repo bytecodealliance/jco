@@ -24,6 +24,7 @@ program
         c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`
     )
     .usage('<command> [options]')
+    .enablePositionalOptions()
     .version('1.12.0');
 
 function myParseInt(value) {
@@ -101,7 +102,10 @@ program
         '-m, --minify',
         'minify the JS output (--optimize / opt cmd still required)'
     )
-    .option('-O, --optimize', 'optimize the component first')
+    .option(
+        '-O, --optimize',
+        `optimize the component first (use -- and arguments to wasm-opt)`
+    )
     .option('--no-typescript', 'do not output TypeScript .d.ts types')
     .option(
         '--valid-lifting-optimization',
@@ -174,10 +178,7 @@ program
         'disable namespaced exports for typescript compatibility'
     )
     .option('--multi-memory', 'optimized output for Wasm multi-memory')
-    .option(
-        '--',
-        'for --optimize, custom wasm-opt arguments (defaults to best size optimization)'
-    )
+    .allowExcessArguments(true)
     .action(asyncAction(transpile));
 
 program
@@ -335,7 +336,7 @@ program
     .description(
         'optimizes a Wasm component, including running wasm-opt Binaryen optimizations'
     )
-    .usage('<component-file> -o <output-file>')
+    .usage('<component-file> -o <output-file> -- [wasm-opt arguments]')
     .argument('<component-file>', 'Wasm component binary filepath')
     .requiredOption(
         '-o, --output <output-file>',
@@ -343,10 +344,7 @@ program
     )
     .option('--asyncify', 'runs Asyncify pass in wasm-opt')
     .option('-q, --quiet')
-    .option(
-        '--',
-        'custom wasm-opt arguments (defaults to best size optimization)'
-    )
+    .allowExcessArguments(true)
     .action(asyncAction(opt));
 
 program
