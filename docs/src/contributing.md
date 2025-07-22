@@ -40,6 +40,12 @@ jco is effectively a monorepo consisting of the following projects:
 * `packages/preview2-shim`: The WASI Preview2 host implementations for Node.js & browsers. Published as https://www.npmjs.com/package/@bytecodealliance/preview2-shim.
 * `packages/preview3-shim`: The WASI Preview3 host implementations for Node.js
 
+### Files that should be checked in
+
+The repository is for project related code only -- avoid checking in files related to specific platforms or IDEs. One off configuration and/or secrets should of course not be checked in either.
+
+If there is information/configuration that is important for users or developers to see, include them in documentation and/or examples with appropriate context/explanation.
+
 ## Building
 
 To build jco, run:
@@ -70,4 +76,54 @@ the filename to `npm run test`:
 
 ```console
 npm run test runtime.js
+```
+
+## Commits
+
+Jco and related subprojects use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). 
+Using Conventional Commits helps the project maintain consistency in commit messages, and powers release
+automation.
+
+CI enforces that commits are structured in a conventional commit style (see [`commitlint.config.mjs`](https://github.com/bytecodealliance/jco/blob/main/commitlint.config.mjs).
+Special care must also be taken to ensure PR titles are formatted in a way that matches conventional commits as well,
+when performing squash merges.
+
+The following types are valid:
+- `build`
+- `chore`
+- `ci`
+- `debug`
+- `docs`
+- `feat`
+- `fix`
+- `perf`
+- `refactor`
+- `release`
+- `revert`
+- `style`
+- `test`
+
+The following project scopes are valid:
+- `jco`
+- `p2-shim`
+- `p3-shim`
+- `bindgen`
+- `transpile`
+
+For changes made to projects in the repository to be included in releases, the appropriate project scope must be applied.
+
+Since changes that should be made to the repo may not always have a project-specific scope, the
+following scopes can be used as well:
+- `deps`
+- `ci`
+- `ops`
+
+Here are a few example commit messages:
+
+```
+chore(jco): update componentize-js dependency to X.X.X
+```
+
+```
+feat(ci): add commitlint to actions workflows
 ```
