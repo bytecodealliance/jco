@@ -16,7 +16,7 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.18.3",
+    "@bytecodealliance/componentize-js": "^0.18.4",
     "@bytecodealliance/jco": "^1.11.2",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.4",

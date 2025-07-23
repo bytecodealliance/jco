@@ -11,6 +11,6 @@
   },
   "devDependencies": {
     "@bytecodealliance/jco": "1.12.0",
-    "@bytecodealliance/componentize-js": "^0.18.3"
+    "@bytecodealliance/componentize-js": "^0.18.4"
   }
 }
