@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.13.0] - 2025-07-23
+
+### 🚀 Features
+
+* *(jco)* update componentize-js to v0.18.4 (#881) by @vados-cosmonic in #881
+
+
+### 🐛 Bug Fixes
+
+* *(jco)* optional arguments for jco and opt (#875) by @vados-cosmonic in #875
+
+* *(jco)* opt subcommand usage of '--' (#874) by @vados-cosmonic in #874
+
+* *(jco)* remove double dash option (#871) by @vados-cosmonic in #871
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update generated types (#864) by @vados-cosmonic in #864
+
+
+
+
 ## [1.13.0-rc.0] - 2025-07-23
 
 ### 🚀 Features
