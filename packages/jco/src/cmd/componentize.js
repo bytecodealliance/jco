@@ -8,7 +8,7 @@ export async function componentize(jsSource, opts) {
         'import("@bytecodealliance/componentize-js")'
     );
     if (opts.disable?.includes('all')) {
-        opts.disable = ['stdio', 'random', 'clocks', 'http'];
+        opts.disable = ['stdio', 'random', 'clocks', 'http', 'fetch-event'];
     }
     const source = await readFile(jsSource, 'utf8');
 
