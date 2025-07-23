@@ -58,7 +58,7 @@ program
         new Option(
             '-d, --disable <feature...>',
             'disable WASI features'
-        ).choices(['clocks', 'http', 'random', 'stdio', 'all'])
+        ).choices(['clocks', 'http', 'random', 'stdio', 'fetch-event', 'all'])
     )
     // .addOption(new Option('-e, --enable <feature...>', 'enable WASI features').choices(['http']))
     .option(
