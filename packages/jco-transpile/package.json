@@ -33,25 +33,29 @@
   "files": [
     "types",
     "vendor",
-    "src"
+    "src",
+    "dist"
   ],
-  "types": "./types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
+      "types": "./dist/index.d.ts",
       "default": "./src/index.js"
     }
   },
   "scripts": {
     "lint": "eslint -c ../../eslint.config.mjs ./src/**/*.js ./test/**/*.js",
     "lint:fix": "npm run lint -- --fix",
+    "build:ts": "tsc --build",
     "test": "vitest run -c test/vitest.ts",
     "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
-    "prepack": "npm run setup:vendor"
+    "prepack": "npm run setup:vendor ; npm run build:ts"
   },
   "dependencies": {
     "@bytecodealliance/preview2-shim": "^0.17.2",
     "chalk-template": "^1",
     "terser": "^5"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
   }
 }
