@@ -3,6 +3,7 @@
   "workspaces": [
     "packages/jco",
     "packages/jco-transpile",
+    "packages/jco-std",
     "packages/preview2-shim",
     "packages/preview3-shim",
     "examples/components/add",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@actions/github": "^6.0.1",
-    "git-cliff": "^2.10.0"
+    "git-cliff": "^2.10.0",
+    "typescript-eslint": "^8.43.0"
   }
 }

@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "outDir": "dist",
+        "lib": [ "es2024" ],
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "allowJs": true,
+        "declaration": true,
+        "declarationMap": true,
+        "skipLibCheck": true,
+        "paths": {
+            "wasi:http/types@0.2.3": ["./src/wasi/0.2.3/generated/types/interfaces/wasi-http-types.d.ts"],
+            "wasi:cli/environment@0.2.3": ["./src/wasi/0.2.3/generated/types/interfaces/wasi-cli-environment.d.ts"],
+            "wasi:http/types@0.2.6": ["./src/wasi/0.2.6/generated/types/interfaces/wasi-http-types.d.ts"],
+            "wasi:cli/environment@0.2.6": ["./src/wasi/0.2.6/generated/types/interfaces/wasi-cli-environment.d.ts"],
+            "wasi:config/store@0.2.0-rc.1": ["./src/wasi/0.2.6/generated/types/interfaces/wasi-config-store.d.ts"]
+        }
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "test", "src/cmd/**", "src/*.d.ts", "src/**/*.d.ts"]
+}
