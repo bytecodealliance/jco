@@ -1,0 +1,68 @@
+{
+  "name": "@bytecodealliance/jco-std",
+  "version": "0.0.1",
+  "description": "Library of shared functionality for use with the JS WebAssembly components",
+  "contributors": [
+    {
+      "name": "Victor Adossi",
+      "email": "vadossi@cosmonic.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytecodealliance/jco.git"
+  },
+  "license": "(Apache-2.0 WITH LLVM-exception)",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/jco/issues"
+  },
+  "homepage": "https://github.com/bytecodealliance/jco#readme",
+  "keywords": [
+    "Wasm",
+    "WebAssembly",
+    "Component"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "types": "./dist/index.d.ts",
+  "main": "src/index.ts",
+  "exports": {
+    "./wasi/0.2.6/http/adapters/hono": {
+      "types": "./dist/wasi/0.2.6/http/adapters/hono.d.ts",
+      "browser": "./dist/wasi/0.2.6/http/adapters/hono.js",
+      "default": "./dist/wasi/0.2.6/http/adapters/hono.js"
+    },
+    "./wasi/0.2.3/http/adapters/hono": {
+      "types": "./dist/wasi/0.2.3/http/adapters/hono.d.ts",
+      "browser": "./dist/wasi/0.2.3/http/adapters/hono.js",
+      "default": "./dist/wasi/0.2.3/http/adapters/hono.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "lint": "eslint -c ./eslint.config.mjs",
+    "lint:fix": "npm run lint -- --fix",
+    "build:bindings:wasi:http:0.2.6": "WIT_PATH=wit/http-v0m2p6 OUTPUT_DIR_PATH=src/wasi/0.2.6/generated/types node scripts/generate-wasi-bindings.mjs",
+    "build:bindings:wasi:http:0.2.3": "WIT_PATH=wit/http-v0m2p3 OUTPUT_DIR_PATH=src/wasi/0.2.3/generated/types node scripts/generate-wasi-bindings.mjs",
+    "build:bindings": "npm run build:bindings:wasi:http:0.2.3 && npm run build:bindings:wasi:http:0.2.6",
+    "build:ts": "tsc",
+    "build": "npm run build:bindings && npm run build:ts",
+    "test": "vitest run -c test/vitest.ts",
+    "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
+    "prepack": "npm run setup:vendor"
+  },
+  "devDependencies": {
+    "@bytecodealliance/jco": "^1.15.3",
+    "@bytecodealliance/preview2-shim": "^0.17.5",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@types/which": "^3.0.4",
+    "hono": "^4.9.10",
+    "rolldown": "^1.0.0-beta.46",
+    "which": "^5.0.0"
+  }
+}

@@ -38,6 +38,7 @@ const config = {
                 'p2-shim',
                 'p3-shim',
                 'transpile',
+                'std',
             ],
         ],
         'scope-case': [2, 'always', 'lower-case'],

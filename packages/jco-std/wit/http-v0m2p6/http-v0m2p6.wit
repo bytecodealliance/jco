@@ -1,0 +1,15 @@
+package bytecodealliance:jco-std;
+
+/// World that corresponds `wasi:http@0.2.6`
+world http-v0m2p6 {
+    import wasi:config/store@0.2.0-rc.1;
+
+    import wasi:cli/environment@0.2.6;
+
+    // NOTE: wasi logging shouldn't be used yet due to lack of support in hosts
+    // like wasmtime -- the 't be used yet due to lack of support in hosts
+    // like wasmtime.
+    // import wasi:logging/logging@0.1.0-draft;
+
+    import wasi:http/incoming-handler@0.2.6;
+}
