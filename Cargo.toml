@@ -37,13 +37,16 @@ wasmparser = { version = "0.235.0", default-features = false }
 wasmprinter = { version = "0.235.0", default-features = false }
 wat = { version = "1.235.0", default-features = false }
 webidl2wit = { version = "0.1.0", default-features = false }
-wit-bindgen = { version = "0.43.0", default-features = false }
-wit-bindgen-core = { version = "0.43.0", default-features = false }
+#wit-bindgen = { version = "0.43.0", default-features = false }
+#wit-bindgen-core = { version = "0.43.0", default-features = false }
 wit-component = { version = "0.235.0", features = ["dummy-module"] }
 wit-parser = { version = "0.235.0", default-features = false }
 xshell = { version = "0.2.6", default-features = false }
 
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
+
+wit-bindgen-core = { path = "../wit-bindgen/crates/core", default-features = false}
+wit-bindgen = { path = "../wit-bindgen/crates/guest-rust", default-features = false}
 
 wasmtime-environ = { git = "https://github.com/bytecodealliance/wasmtime", rev = "2b8322817e5853a941b10b4b9e3e931ab02f1f1b", features = [
   "component-model",

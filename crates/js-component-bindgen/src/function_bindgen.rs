@@ -1304,6 +1304,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
 
+                // TODO: if it was an async call, we may not be able to clear the borrows yet.
+                // save them to the task/ensure they are added to the task's list of borrows?
+
                 // After a high level call, we need to deactivate the component resource borrows.
                 if self.clear_resource_borrows {
                     let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
@@ -1831,8 +1834,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
             }
 
-            // Async task returns do *not* correspond to an task.return, but rather
-            // to a return from an async function (e.g. pre-callback)
+            // Instruction::AsyncTaskReturn does *not* correspond to an canonical `task.return`,
+            // but rather to a "return"/exit from an async function (e.g. pre-callback)
             //
             // At this point, `ret` has already been declared as the original return value
             // of the function that was called.
@@ -1881,6 +1884,18 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 let fn_name = self.callback_fn_name.as_deref().unwrap_or("<unknown>");
 
+                // TODO: it is possible that the return we got back is NOT from an async import call
+                //
+                // i.e. a pointer to results *not* a status code.
+                //
+                // In that case, we need to just do a normal lift/lower of the results that were returned
+                // rather than launching into the logic for managing task execution. (?)
+
+                // TODO: how can we ensure the data for the params is NOT cleaned up? It's already written to memory
+                // Do we need to copy the memory OUT of the callee and store it in the Task?
+                //
+                // TODO: DETECT the low 4 bits of the result to figure out whether to save or not
+
                 uwriteln!(
                     self.src,
                     "
@@ -1924,7 +1939,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 default:
                                     throw new Error('invalid async return value [' + retCopy + ']');
                             }}
-    
+
                             eventCode = taskRes[0];
                             index = taskRes[1];
                             result = taskRes[2];
