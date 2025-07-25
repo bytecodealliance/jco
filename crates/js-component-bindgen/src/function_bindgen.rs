@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::mem;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
-use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
+use wasmtime_environ::component::{CanonicalOptions, ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
@@ -11,8 +11,10 @@ use wit_parser::{
     Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
 };
 
+use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
+use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::Intrinsic;
@@ -135,7 +137,10 @@ pub struct FunctionBindgen<'a> {
     pub post_return: Option<&'a String>,
 
     /// Prefix to use when printing tracing information
-    pub tracing_prefix: Option<&'a String>,
+    pub tracing_prefix: &'a String,
+
+    /// Whether tracing is enabled
+    pub tracing_enabled: bool,
 
     /// Method if string encoding
     pub encoding: StringEncoding,
@@ -151,6 +156,15 @@ pub struct FunctionBindgen<'a> {
 
     /// Whether the function is async
     pub is_async: bool,
+
+    /// Canon opts
+    pub canon_opts: &'a CanonicalOptions,
+
+    /// Interface name
+    pub iface_name: Option<&'a str>,
+
+    /// Callback function name (only present for async functions)
+    pub callback_fn_name: Option<&'a str>,
 }
 
 impl FunctionBindgen<'_> {
@@ -201,7 +215,17 @@ impl FunctionBindgen<'_> {
         );
     }
 
-    fn bind_results(&mut self, amt: usize, results: &mut Vec<String>) {
+    /// Write result assignment lines to output
+    ///
+    /// In general this either means writing preambles, for example that look like the following:
+    /// ```js
+    /// const ret =
+    /// ```
+    ///
+    /// ```
+    /// var [ ret0, ret1, ret2 ] =
+    /// ```
+    fn write_result_assignment(&mut self, amt: usize, results: &mut Vec<String>) {
         match amt {
             0 => {}
             1 => {
@@ -269,6 +293,36 @@ impl FunctionBindgen<'_> {
             }
         }
     }
+
+    /// Start the async current task
+    fn start_current_task(&mut self, instr: &Instruction, is_async: bool) {
+        let prefix = match instr {
+            Instruction::CallWasm { .. } => "_wasm_call_",
+            Instruction::CallInterface { .. } => "_interface_call_",
+            _ => unreachable!(
+                "unrecognized instruction triggering start of current task: [{instr:?}]"
+            ),
+        };
+        let start_current_task_fn =
+            self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
+        let component_instance_idx = self.canon_opts.instance.as_u32();
+        uwriteln!(
+            self.src,
+            "const {prefix}currentTaskID = {start_current_task_fn}({component_instance_idx}, {is_async});"
+        );
+        // TODO: do more to run on_start and retrieve args?
+        // TODO: lower the values for the call
+        // TODO: flatten the func type?
+        // TODO: check that types match values
+    }
+
+    /// End an an existing async current task
+    fn end_async_current_task(&mut self) {
+        let end_current_task_fn =
+            self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
+        let component_instance_idx = self.canon_opts.instance.as_u32();
+        uwriteln!(self.src, "{end_current_task_fn}({component_instance_idx});");
+    }
 }
 
 impl Bindgen for FunctionBindgen<'_> {
@@ -306,7 +360,9 @@ impl Bindgen for FunctionBindgen<'_> {
     ) {
         match inst {
             Instruction::GetArg { nth } => results.push(self.params[*nth].clone()),
+
             Instruction::I32Const { val } => results.push(val.to_string()),
+
             Instruction::ConstZero { tys } => {
                 for t in tys.iter() {
                     match t {
@@ -319,67 +375,88 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 }
             }
+
             Instruction::U8FromI32 => self.clamp_guest(results, operands, u8::MIN, u8::MAX),
+
             Instruction::S8FromI32 => self.clamp_guest(results, operands, i8::MIN, i8::MAX),
+
             Instruction::U16FromI32 => self.clamp_guest(results, operands, u16::MIN, u16::MAX),
+
             Instruction::S16FromI32 => self.clamp_guest(results, operands, i16::MIN, i16::MAX),
+
             Instruction::U32FromI32 => results.push(format!("{} >>> 0", operands[0])),
+
             Instruction::U64FromI64 => results.push(format!("BigInt.asUintN(64, {})", operands[0])),
+
             Instruction::S32FromI32 | Instruction::S64FromI64 => {
                 results.push(operands.pop().unwrap())
             }
+
             Instruction::I32FromU8 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint8));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromS8 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt8));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromU16 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint16));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromS16 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt16));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromU32 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint32));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I32FromS32 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I64FromU64 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToBigUint64));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::I64FromS64 => {
                 let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToBigInt64));
                 results.push(format!("{conv}({op})", op = operands[0]))
             }
+
             Instruction::F32FromCoreF32 | Instruction::F64FromCoreF64 => {
                 results.push(operands.pop().unwrap())
             }
+
             Instruction::CoreF32FromF32 | Instruction::CoreF64FromF64 => {
                 results.push(format!("+{}", operands[0]))
             }
+
             Instruction::CharFromI32 => {
                 let validate =
                     self.intrinsic(Intrinsic::String(StringIntrinsic::ValidateGuestChar));
                 results.push(format!("{}({})", validate, operands[0]));
             }
+
             Instruction::I32FromChar => {
                 let validate = self.intrinsic(Intrinsic::String(StringIntrinsic::ValidateHostChar));
                 results.push(format!("{}({})", validate, operands[0]));
             }
+
             Instruction::Bitcasts { casts } => {
                 for (cast, op) in casts.iter().zip(operands) {
                     results.push(self.bitcast(cast, op));
                 }
             }
+
             Instruction::BoolFromI32 => {
                 let tmp = self.tmp();
                 uwrite!(self.src, "var bool{} = {};\n", tmp, operands[0]);
@@ -392,9 +469,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     ));
                 }
             }
+
             Instruction::I32FromBool => {
                 results.push(format!("{} ? 1 : 0", operands[0]));
             }
+
             Instruction::RecordLower { record, .. } => {
                 // use destructuring field access to get each
                 // field individually.
@@ -412,6 +491,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 uwrite!(self.src, "{} }} = {};\n", expr, operands[0]);
             }
+
             Instruction::RecordLift { record, .. } => {
                 // records are represented as plain objects, so we
                 // make a new object and set all the fields with an object
@@ -423,6 +503,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 result.push('}');
                 results.push(result);
             }
+
             Instruction::TupleLower { tuple, .. } => {
                 // Tuples are represented as an array, sowe can use
                 // destructuring assignment to lower the tuple into its
@@ -439,11 +520,13 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 uwrite!(self.src, "{}] = {};\n", expr, operands[0]);
             }
+
             Instruction::TupleLift { .. } => {
                 // Tuples are represented as an array, so we just shove all
                 // the operands into an array.
                 results.push(format!("[{}]", operands.join(", ")));
             }
+
             Instruction::FlagsLower { flags, .. } => {
                 let op0 = &operands[0];
 
@@ -489,6 +572,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 // case, since that's interpreted as everything false, and we
                 // already defaulted everyting to 0.
             }
+
             Instruction::FlagsLift { flags, .. } => {
                 let tmp = self.tmp();
                 results.push(format!("flags{tmp}"));
@@ -519,7 +603,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 uwriteln!(self.src, "}};");
             }
+
             Instruction::VariantPayloadName => results.push("e".to_string()),
+
             Instruction::VariantLower {
                 variant,
                 results: result_types,
@@ -567,6 +653,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
                 uwriteln!(self.src, "}}");
             }
+
             Instruction::VariantLift { variant, name, .. } => {
                 let blocks = self
                     .blocks
@@ -618,6 +705,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "}}");
                 results.push(format!("variant{tmp}"));
             }
+
             Instruction::OptionLower {
                 payload,
                 results: result_types,
@@ -670,6 +758,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
             }
+
             Instruction::OptionLift { payload, .. } => {
                 let (some, some_results) = self.blocks.pop().unwrap();
                 let (none, none_results) = self.blocks.pop().unwrap();
@@ -730,6 +819,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 results.push(format!("variant{tmp}"));
             }
+
             Instruction::ResultLower {
                 results: result_types,
                 ..
@@ -770,6 +860,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     }}",
                 );
             }
+
             Instruction::ResultLift { result, .. } => {
                 let (err, err_results) = self.blocks.pop().unwrap();
                 let (ok, ok_results) = self.blocks.pop().unwrap();
@@ -837,6 +928,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
                 results.push(format!("variant{tmp}"));
             }
+
             Instruction::EnumLower { name, enum_, .. } => {
                 let tmp = self.tmp();
 
@@ -878,6 +970,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 results.push(format!("enum{tmp}"));
             }
+
             Instruction::EnumLift { name, enum_, .. } => {
                 let tmp = self.tmp();
 
@@ -910,6 +1003,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 results.push(format!("enum{tmp}"));
             }
+
             Instruction::ListCanonLower { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
@@ -947,6 +1041,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(format!("ptr{tmp}"));
                 results.push(format!("len{tmp}"));
             }
+
             Instruction::ListCanonLift { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
@@ -961,6 +1056,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         );
                 results.push(format!("result{tmp}"));
             }
+
             Instruction::StringLower { .. } => {
                 // Only Utf8 and Utf16 supported for now
                 assert!(matches!(
@@ -992,6 +1088,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(format!("ptr{tmp}"));
                 results.push(format!("len{tmp}"));
             }
+
             Instruction::StringLift => {
                 // Only Utf8 and Utf16 supported for now
                 assert!(matches!(
@@ -1015,6 +1112,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         );
                 results.push(format!("result{tmp}"));
             }
+
             Instruction::ListLower { element, .. } => {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 assert!(body_results.is_empty());
@@ -1048,6 +1146,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(result);
                 results.push(len);
             }
+
             Instruction::ListLift { element, .. } => {
                 let (body, body_results) = self.blocks.pop().unwrap();
                 let tmp = self.tmp();
@@ -1067,20 +1166,39 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "{result}.push({});", body_results[0]);
                 uwrite!(self.src, "}}\n");
             }
+
             Instruction::IterElem { .. } => results.push("e".to_string()),
+
             Instruction::IterBasePointer => results.push("base".to_string()),
+
             Instruction::CallWasm { sig, .. } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{prefix} [Instruction::CallWasm] (async? {async_}, @ enter)');",
+                    prefix = self.tracing_prefix,
+                    async_ = self.is_async,
+                );
+
+                // Inject machinery for starting an async 'current' task
+                self.start_current_task(&inst, self.is_async);
+
+                // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
-                self.bind_results(sig_results_length, results);
+                self.write_result_assignment(sig_results_length, results);
+
+                // Output the function call
                 let maybe_async_await = if self.is_async { "await " } else { "" };
                 uwriteln!(
                     self.src,
-                    "{maybe_async_await}{}({});",
-                    self.callee,
-                    operands.join(", ")
+                    "{maybe_async_await}{callee}({args});",
+                    callee = self.callee,
+                    args = operands.join(", ")
                 );
 
-                if let Some(prefix) = self.tracing_prefix {
+                // Print post-return if tracing is enabled
+                if self.tracing_enabled {
+                    let prefix = self.tracing_prefix;
                     let to_result_string =
                         self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToResultString));
                     uwriteln!(
@@ -1093,8 +1211,24 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                     );
                 }
+
+                // Inject machinery for ending an async 'current' task
+                self.end_async_current_task();
             }
-            Instruction::CallInterface { func, .. } => {
+
+            // Call to an interface, usually but not always an externally imported interface
+            Instruction::CallInterface { func, async_ } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] (async? {async_}, @ enter)');",
+                    prefix = self.tracing_prefix,
+                    async_ = async_.then_some("async").unwrap_or("sync"),
+                );
+
+                // Inject machinery for starting an async 'current' task
+                self.start_current_task(&inst, *async_);
+
                 let results_length = if func.result.is_none() { 0 } else { 1 };
                 let maybe_async_await = if self.is_async { "await " } else { "" };
                 let call = if self.callee_resource_dynamic {
@@ -1111,6 +1245,10 @@ impl Bindgen for FunctionBindgen<'_> {
                         operands.join(", ")
                     )
                 };
+                // TODO: check results of the call against flat func type (sync)
+                // TODO: lift flattened values (sync)
+                // TODO: call task.return with the values (if sync)
+
                 if self.err == ErrHandling::ResultCatchHandler {
                     // result<_, string> allows JS error coercion only, while
                     // any other result type will trap for arbitrary JS errors.
@@ -1137,11 +1275,22 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                     results.push("ret".to_string());
                 } else {
-                    self.bind_results(results_length, results);
+                    self.write_result_assignment(results_length, results);
                     uwriteln!(self.src, "{call};");
                 }
 
-                if let Some(prefix) = self.tracing_prefix {
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] ({async_}, @ post-call)');",
+                    prefix = self.tracing_prefix,
+                    async_ = async_.then_some("async").unwrap_or("sync"),
+                );
+
+                // TODO: do async stuff with the results of the call, as they will indicate
+                // TODO: pass along the fact that the task is async to end_async_current_task()
+
+                if self.tracing_enabled {
+                    let prefix = self.tracing_prefix;
                     let to_result_string =
                         self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToResultString));
                     uwriteln!(
@@ -1154,6 +1303,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                     );
                 }
+
+                // TODO: if it was an async call, we may not be able to clear the borrows yet.
+                // save them to the task/ensure they are added to the task's list of borrows?
 
                 // After a high level call, we need to deactivate the component resource borrows.
                 if self.clear_resource_borrows {
@@ -1188,64 +1340,148 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.clear_resource_borrows = false;
                 }
             }
-            Instruction::Return { amt, .. } => {
-                if *amt == 0 {
-                    if let Some(f) = &self.post_return {
-                        uwriteln!(self.src, "{f}();");
+
+            Instruction::Return { func, amt } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{prefix} [Instruction::Return]', {{
+                         funcName: '{func_name}',
+                         paramCount: {amt},
+                         postReturn: {post_return_present}
+                      }});",
+                    func_name = func.name,
+                    post_return_present = self.post_return.is_some(),
+                    prefix = self.tracing_prefix,
+                );
+
+                // Build the post return functionality
+                // to clean up tasks and possibly return values
+                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
+                let gen_post_return_js = |(invocation_stmt, ret_stmt): (String, Option<String>)| {
+                    format!(
+                        "
+                        let cstate = {get_or_create_async_state_fn}({component_idx});
+                        cstate.mayLeave = false;
+                        {invocation_stmt}
+                        cstate.mayLeave = true;
+                        {ret_stmt}
+                  ",
+                        component_idx = self.canon_opts.instance.as_u32(),
+                        ret_stmt = ret_stmt.unwrap_or_default(),
+                    )
+                };
+
+                // Output code for combinations of results
+                match amt {
+                    // Handle no result case
+                    0 => {
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(
+                                self.src,
+                                "{}",
+                                gen_post_return_js((format!("{f}();"), None))
+                            );
+                        }
                     }
-                } else if *amt == 1 && self.err == ErrHandling::ThrowResultErr {
-                    let component_err = self.intrinsic(Intrinsic::ComponentError);
-                    let op = &operands[0];
-                    uwriteln!(self.src, "const retVal = {op};");
-                    if let Some(f) = &self.post_return {
-                        uwriteln!(self.src, "{f}(ret);");
-                    }
-                    uwriteln!(
-                        self.src,
-                        "if (typeof retVal === 'object' && retVal.tag === 'err') {{
-                            throw new {component_err}(retVal.val);
-                        }}
-                        return retVal.val;"
-                    );
-                } else {
-                    let ret_assign = if self.post_return.is_some() {
-                        "const retVal ="
-                    } else {
-                        "return"
-                    };
-                    if *amt == 1 {
-                        uwriteln!(self.src, "{ret_assign} {};", operands[0]);
-                    } else {
-                        uwriteln!(self.src, "{ret_assign} [{}];", operands.join(", "));
-                    }
-                    if let Some(f) = &self.post_return {
+
+                    // Handle single result<t> case
+                    1 if self.err == ErrHandling::ThrowResultErr => {
+                        let component_err = self.intrinsic(Intrinsic::ComponentError);
+                        let op = &operands[0];
+                        uwriteln!(self.src, "const retCopy = {op};");
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(
+                                self.src,
+                                "{}",
+                                gen_post_return_js((format!("{f}(ret);"), None))
+                            );
+                        }
                         uwriteln!(
                             self.src,
-                            "{f}(ret);
-                            return retVal;"
+                            "
+                            if (typeof retCopy === 'object' && retCopy.tag === 'err') {{
+                                throw new {component_err}(retCopy.val);
+                            }}
+                            return retCopy.val;
+                            "
                         );
+                    }
+
+                    // Handle all other cases (including single parameter non-result<t>)
+                    amt => {
+                        // Inject machinery for ending an 'current' task
+                        self.end_async_current_task();
+
+                        let ret_assign = self
+                            .post_return
+                            .is_some()
+                            .then_some("const retCopy =")
+                            .unwrap_or("return");
+                        let ret_val = match amt {
+                            0 => unreachable!(
+                                "unexpectedly zero return values for synchronous return"
+                            ),
+                            1 => format!("{}", operands[0]),
+                            _ => format!("[{}]", operands.join(", ")),
+                        };
+                        // Write out the assignment for the given return value
+                        uwriteln!(self.src, "{ret_assign} {ret_val};");
+
+                        // Perform the post return (if present) w/ the result, and
+                        // pass a copy fo the result to the actual caller
+                        if let Some(f) = &self.post_return {
+                            uwriteln!(
+                                self.src,
+                                "{}",
+                                gen_post_return_js((
+                                    format!("{f}(ret);"),
+                                    Some("return retCopy;".into())
+                                ))
+                            );
+                        }
                     }
                 }
             }
+
             Instruction::I32Load { offset } => self.load("getInt32", *offset, operands, results),
+
             Instruction::I64Load { offset } => self.load("getBigInt64", *offset, operands, results),
+
             Instruction::F32Load { offset } => self.load("getFloat32", *offset, operands, results),
+
             Instruction::F64Load { offset } => self.load("getFloat64", *offset, operands, results),
+
             Instruction::I32Load8U { offset } => self.load("getUint8", *offset, operands, results),
+
             Instruction::I32Load8S { offset } => self.load("getInt8", *offset, operands, results),
+
             Instruction::I32Load16U { offset } => {
                 self.load("getUint16", *offset, operands, results)
             }
+
             Instruction::I32Load16S { offset } => self.load("getInt16", *offset, operands, results),
+
             Instruction::I32Store { offset } => self.store("setInt32", *offset, operands),
+
             Instruction::I64Store { offset } => self.store("setBigInt64", *offset, operands),
+
             Instruction::F32Store { offset } => self.store("setFloat32", *offset, operands),
+
             Instruction::F64Store { offset } => self.store("setFloat64", *offset, operands),
+
             Instruction::I32Store8 { offset } => self.store("setInt8", *offset, operands),
+
             Instruction::I32Store16 { offset } => self.store("setInt16", *offset, operands),
+
             Instruction::LengthStore { offset } => self.store("setInt32", *offset, operands),
+
             Instruction::LengthLoad { offset } => self.load("getInt32", *offset, operands, results),
+
             Instruction::PointerStore { offset } => self.store("setInt32", *offset, operands),
+
             Instruction::PointerLoad { offset } => {
                 self.load("getInt32", *offset, operands, results)
             }
@@ -1564,14 +1800,174 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::FutureLower { .. }
-            | Instruction::FutureLift { .. }
-            | Instruction::StreamLower { .. }
-            | Instruction::StreamLift { .. }
-            | Instruction::AsyncTaskReturn { .. }
-            | Instruction::ErrorContextLift { .. }
-            | Instruction::ErrorContextLower { .. } => {
-                uwrite!(self.src, "throw new Error('async is not yet implemented');");
+            Instruction::ErrorContextLift { .. } => {
+                uwrite!(self.src, "throw new Error('[Instruction::ErrorContextLift] async is not yet implemented');");
+            }
+            Instruction::ErrorContextLower { .. } => {
+                uwrite!(self.src, "throw new Error('[Instruction::ErrorContextLower] async is not yet implemented');");
+            }
+
+            Instruction::FutureLower { .. } => {
+                uwrite!(
+                    self.src,
+                    "throw new Error('[Instruction::FutureLower] async is not yet implemented');"
+                );
+            }
+            Instruction::FutureLift { .. } => {
+                uwrite!(
+                    self.src,
+                    "throw new Error('[Instruction::FutureLift] async is not yet implemented');"
+                );
+            }
+
+            Instruction::StreamLower { .. } => {
+                uwrite!(
+                    self.src,
+                    "throw new Error('[Instruction::StreamLower] async is not yet implemented');"
+                );
+            }
+
+            Instruction::StreamLift { .. } => {
+                uwrite!(
+                    self.src,
+                    "throw new Error('[Instruction::StreamLift] async is not yet implemented');"
+                );
+            }
+
+            // Instruction::AsyncTaskReturn does *not* correspond to an canonical `task.return`,
+            // but rather to a "return"/exit from an async function (e.g. pre-callback)
+            //
+            // At this point, `ret` has already been declared as the original return value
+            // of the function that was called.
+            //
+            // For an async function 'some-func', this instruction is triggered w/ the following `name`s:
+            // - '[task-return]some-func'
+            //
+            Instruction::AsyncTaskReturn { name, params } => {
+                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                uwriteln!(
+                    self.src,
+                    "{debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn]', {{
+                         funcName: '{name}',
+                         paramCount: {param_count},
+                         postReturn: {post_return_present}
+                      }});",
+                    param_count = params.len(),
+                    post_return_present = self.post_return.is_some(),
+                    prefix = self.tracing_prefix,
+                );
+
+                assert!(
+                    self.is_async,
+                    "non-async functions should not be performing async returns (func {name})",
+                );
+                assert!(
+                    self.post_return.is_none(),
+                    "async fns cannot have post_return specified (func {name})"
+                );
+
+                // TODO: deal with the actual list of params coming back, to generate lift/lowers
+                // async task return should always be a pointer to some memory that we'll have to lower from?
+
+                // TODO: double check async returns with no args/returns
+
+                let get_current_task_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let component_idx = self.canon_opts.instance.as_u32();
+
+                let i32_typecheck = self.intrinsic(Intrinsic::TypeCheckValidI32);
+                let to_int32_fn =
+                    self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
+                let unpack_callback_result_fn = self.intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::UnpackCallbackResult,
+                ));
+
+                let fn_name = self.callback_fn_name.as_deref().unwrap_or("<unknown>");
+
+                // TODO: it is possible that the return we got back is NOT from an async import call
+                //
+                // i.e. a pointer to results *not* a status code.
+                //
+                // In that case, we need to just do a normal lift/lower of the results that were returned
+                // rather than launching into the logic for managing task execution. (?)
+
+                // TODO: how can we ensure the data for the params is NOT cleaned up? It's already written to memory
+                // Do we need to copy the memory OUT of the callee and store it in the Task?
+                //
+                // TODO: DETECT the low 4 bits of the result to figure out whether to save or not
+
+                uwriteln!(
+                    self.src,
+                    "
+                    const retCopy = {first_op};
+                    if (retCopy !== undefined) {{
+                        if (!({i32_typecheck}(retCopy))) {{ throw new Error('invalid async return value [' + retCopy + '], not a number'); }}
+                        if (retCopy < 0 || retCopy > 3) {{
+                            throw new Error('invalid async return value, outside callback code range');
+                        }}
+                    }}
+
+                    const taskMeta = {get_current_task_fn}({component_idx});
+                    if (!taskMeta) {{ throw new Error('missing/invalid current task metadata'); }}
+
+                    const task = taskMeta.task;
+                    if (!task) {{ throw new Error('missing/invalid current task in metadata'); }}
+
+                    let currentRes = retCopy;
+
+                    if (currentRes !== undefined) {{
+                        while (true) {{
+                            let [code, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
+                            switch (retCopy) {{
+                                case 0: // EXIT
+                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] exit', {{ fn: '{name}' }});
+                                    task.exit();
+                                    // TODO: extract values for the return of the actual function?
+                                    return;
+                                case 1: // YIELD
+                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] yield', {{ fn: '{name}' }});
+                                    taskRes = await task.yield({{ isAsync: true }});
+                                    break;
+                                case 2: // WAIT for a given waitable set
+                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] waiting for event', {{ waitableSetIdx }});
+                                    taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
+                                    break;
+                                case 3: // POLL
+                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] polling for event', {{ waitableSetIdx }});
+                                    taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
+                                    break;
+                                default:
+                                    throw new Error('invalid async return value [' + retCopy + ']');
+                            }}
+
+                            eventCode = taskRes[0];
+                            index = taskRes[1];
+                            result = taskRes[2];
+                            {debug_log_fn}('performing callback', {{ fn_name: '{fn_name}', eventCode, index, result }});
+                            {callback_phrase}
+                        }}
+                    }}
+                    ",
+                    first_op = operands.first().map(|s| s.as_str()).unwrap_or("undefined"),
+                    prefix = self.tracing_prefix,
+                    callback_phrase = match self.callback_fn_name {
+                        Some(fn_name) => {
+                            format!(
+                                "
+                            currentRes = {fn_name}(
+                                {to_int32_fn}(eventCode),
+                                {to_int32_fn}(index),
+                                {to_int32_fn}(result),
+                            );
+                        "
+                            )
+                        }
+                        None => "currentRes = undefined;".into(),
+                    },
+                );
+
+                // Inject machinery for ending an async 'current' task
+                self.end_async_current_task();
             }
 
             Instruction::GuestDeallocate { .. }

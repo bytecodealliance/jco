@@ -235,7 +235,7 @@ impl AsyncFutureIntrinsic {
                 let (class_name, future_var_name, js_future_var_type) = match self {
                     Self::FutureReadableEndClass => (self.name(), "promise", "Promise"),
                     Self::FutureWritableEndClass => (self.name(), "resolve", "Function"),
-                    _ => unreachable!(),
+                    _ => unreachable!("impossible future readable end class intrinsic"),
                 };
                 let future_end_class = Self::FutureEndClass.name();
                 output.push_str(&format!("
@@ -284,7 +284,7 @@ impl AsyncFutureIntrinsic {
                     function {future_new_fn}(componentInstanceID, elementTypeRep) {{
                         {debug_log_fn}('[{future_new_fn}()] args', {{ componentInstanceID, elementTypeRep }});
 
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
