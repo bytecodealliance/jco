@@ -1,39 +1,37 @@
 import { version } from 'node:process';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
 
 import { fileURLToPath } from 'url';
 
 import { suite, test, assert, expect } from 'vitest';
 
-import { setupAsyncTest } from './helpers.js';
+import { setupAsyncTest } from '../helpers.js';
 import { AsyncFunction } from '../common.js';
 
-const P3_COMPONENT_FIXTURES_DIR = fileURLToPath(
-    new URL('fixtures/components/p3', import.meta.url)
+const COMPONENT_FIXTURES_DIR = fileURLToPath(
+    new URL('../fixtures/components', import.meta.url)
 );
+
+const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
 
 suite('Async', () => {
     test('Transpile simple error-context', async (t) => {
-        // Skip if we're running in an environment without JSPI
-        let nodeMajorVersion = parseInt(version.replace('v', '').split('.')[0]);
-        if (nodeMajorVersion < 23) {
-            t.skip();
-        }
+        const componentPath = join(
+            COMPONENT_FIXTURES_DIR,
+            'async-error-context.component.wasm'
+        );
 
         const { esModule, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
                 name: 'async-error-context',
-                path: resolve(
-                    'test/fixtures/components/async-error-context.component.wasm'
-                ),
+                path: componentPath,
                 skipInstantiation: true,
             },
             jco: {
                 transpile: {
                     extraArgs: {
                         asyncExports: ['local:local/run#run'],
-                        minify: false,
                     },
                 },
             },
@@ -54,12 +52,7 @@ suite('Async', () => {
             'local:local/run should be async'
         );
 
-        // TODO: more of error-context must be implemented for this to run -- particularly:
-        // - context get/set
-        // - waitable-join
-        // - waitable-set-new
-        // - waitable-set-drop (?)
-        // await runFn();
+        await runFn();
 
         await cleanup();
     });
