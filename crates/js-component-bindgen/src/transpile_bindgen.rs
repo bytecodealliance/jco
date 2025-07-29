@@ -2217,7 +2217,7 @@ impl<'a> Instantiator<'a, '_> {
             };
 
         // WASI P3 async lifted functions should not have post returns
-        let is_guest_async_lifted = is_guest_async_lifted_fn(func);
+        let is_guest_async_lifted = is_guest_async_lifted_fn(func, options);
         if options.async_ {
             assert!(
                 options.post_return.is_none(),
@@ -3516,7 +3516,7 @@ impl<'a> Instantiator<'a, '_> {
             remote_resource_map: export_remote_resource_map,
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
-            is_guest_async_lifted: is_guest_async_lifted_fn(func),
+            is_guest_async_lifted: is_guest_async_lifted_fn(func, &options),
             callback_fn_name,
         });
 

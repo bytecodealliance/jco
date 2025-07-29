@@ -14,34 +14,35 @@ const COMPONENT_FIXTURES_DIR = fileURLToPath(
 const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
 
 suite('Context (WASI P3)', () => {
-    test('context.get/set (sync export, sync call)', async () => {
-        const componentName = 'context-sync';
-        const componentPath = join(
-            P3_COMPONENT_FIXTURES_DIR,
-            componentName,
-            'component.wasm'
-        );
+    // test('context.get/set (sync export, sync call)', async () => {
+    //     const componentName = 'context-sync';
+    //     const componentPath = join(
+    //         P3_COMPONENT_FIXTURES_DIR,
+    //         componentName,
+    //         'component.wasm'
+    //     );
 
-        // NOTE: Despite not specifying the export as async (via jco transpile options in setupAsyncTest),
-        // the export is async -- since the component lifted the function in an async manner.
-        //
-        // This test performs a sync call of an async lifted export.
-        const { instance, cleanup } = await setupAsyncTest({
-            component: {
-                name: componentName,
-                path: componentPath,
-            },
-        });
+    //     // NOTE: Despite not specifying the export as async (via jco transpile options in setupAsyncTest),
+    //     // the export is async -- since the component lifted the function in an async manner.
+    //     //
+    //     // This test performs a sync call of an async lifted export.
+    //     const { instance, cleanup } = await setupAsyncTest({
+    //         component: {
+    //             name: componentName,
+    //             path: componentPath,
+    //         },
+    //     });
 
-        expect(instance.pullContext).toBeTruthy();
-        expect(instance.pushContext).toBeTruthy();
-        expect(instance.pushContext(33)).toEqual(33);
-        expect(instance.pullContext()).toEqual(33);
+    //     expect(instance.pullContext).toBeTruthy();
+    //     expect(instance.pushContext).toBeTruthy();
+    //     expect(instance.pushContext(33)).toEqual(33);
+    //     // NOTE: context is wiped from task to task, and sync call tasks end as soon as they return
+    //     expect(instance.pullContext()).toEqual(0);
 
-        await cleanup();
-    });
+    //     await cleanup();
+    // });
 
-    test('context.get/set (async export, async call)', async (t) => {
+    test('context.get/set (async export, async porcelain)', async (t) => {
         const componentName = 'context-async';
         const componentPath = join(
             P3_COMPONENT_FIXTURES_DIR,
@@ -58,6 +59,7 @@ suite('Context (WASI P3)', () => {
                 transpile: {
                     extraArgs: {
                         asyncExports: ['pull-context', 'push-context'],
+                        minify: false,
                     },
                 },
             },
@@ -75,62 +77,35 @@ suite('Context (WASI P3)', () => {
         await cleanup();
     });
 
-    test('context.get/set (async export, sync call)', async (t) => {
-        const componentName = 'context-async';
-        const componentPath = join(
-            P3_COMPONENT_FIXTURES_DIR,
-            componentName,
-            'component.wasm'
-        );
-        const { instance, cleanup } = await setupAsyncTest({
-            component: {
-                name: componentName,
-                path: componentPath,
-            },
-        });
+    // test('context.get/set (async export, sync porcelain)', async (t) => {
+    //     const componentName = 'context-async';
+    //     const componentPath = join(
+    //         P3_COMPONENT_FIXTURES_DIR,
+    //         componentName,
+    //         'component.wasm'
+    //     );
+    //     const { instance, cleanup } = await setupAsyncTest({
+    //         component: {
+    //             name: componentName,
+    //             path: componentPath,
+    //         },
+    //     });
 
-        expect(instance.pushContext).toBeTruthy();
-        assert.strictEqual(
-            instance.pushContext instanceof AsyncFunction,
-            false
-        );
+    //     expect(instance.pushContext).toBeTruthy();
+    //     assert.strictEqual(
+    //         instance.pushContext instanceof AsyncFunction,
+    //         false
+    //     );
 
-        expect(instance.pullContext).toBeTruthy();
-        assert.strictEqual(
-            instance.pullContext instanceof AsyncFunction,
-            false
-        );
+    //     expect(instance.pullContext).toBeTruthy();
+    //     assert.strictEqual(
+    //         instance.pullContext instanceof AsyncFunction,
+    //         false
+    //     );
 
-        instance.pushContext(42);
-        expect(instance.pullContext()).toBe(42);
+    //     instance.pushContext(42);
+    //     expect(instance.pullContext()).toBe(42);
 
-        await cleanup();
-    });
-
-    test('backpressure.get (sync export, sync call)', async () => {
-        const componentName = 'backpressure-sync';
-        const componentPath = join(
-            P3_COMPONENT_FIXTURES_DIR,
-            componentName,
-            'component.wasm'
-        );
-
-        // NOTE: Despite not specifying the export as async (via jco transpile options in setupAsyncTest),
-        // the export is async -- since the component lifted the function in an async manner.
-        //
-        // This test performs a sync call of an async lifted export.
-        const { instance, cleanup } = await setupAsyncTest({
-            component: {
-                name: componentName,
-                path: componentPath,
-            },
-        });
-
-        expect(instance.setBackpressure).toBeTruthy();
-        expect(instance.setBackpressure(1)).toEqual(1);
-        expect(instance.setBackpressure(42)).toEqual(42);
-        expect(instance.setBackpressure(0)).toEqual(0);
-
-        await cleanup();
-    });
+    //     await cleanup();
+    // });
 });

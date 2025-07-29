@@ -1392,6 +1392,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 match amt {
                     // Handle no result case
                     0 => {
+                        assert!(
+                            !self.is_guest_async_lifted,
+                            "async lifted guest functions must return a single i32"
+                        );
                         if let Some(f) = &self.post_return {
                             uwriteln!(
                                 self.src,
@@ -1403,6 +1407,10 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     // Handle single result<t> case
                     1 if self.err == ErrHandling::ThrowResultErr => {
+                        assert!(
+                            !self.is_guest_async_lifted,
+                            "async lifted guest functions must return a single i32"
+                        );
                         let component_err = self.intrinsic(Intrinsic::ComponentError);
                         let op = &operands[0];
                         uwriteln!(self.src, "const retCopy = {op};");
@@ -1426,11 +1434,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     // Handle all other cases (including single parameter non-result<t>)
                     amt => {
-                        let ret_assign = self
-                            .post_return
-                            .is_some()
-                            .then_some("const retCopy =")
-                            .unwrap_or("return");
                         let ret_val = match amt {
                             0 => unreachable!(
                                 "unexpectedly zero return values for synchronous return"
@@ -1438,20 +1441,48 @@ impl Bindgen for FunctionBindgen<'_> {
                             1 => format!("{}", operands[0]),
                             _ => format!("[{}]", operands.join(", ")),
                         };
-                        // Write out the assignment for the given return value
-                        uwriteln!(self.src, "{ret_assign} {ret_val};");
 
-                        // Perform the post return (if present) w/ the result, and
-                        // pass a copy fo the result to the actual caller
-                        if let Some(f) = &self.post_return {
-                            uwriteln!(
-                                self.src,
-                                "{}",
-                                gen_post_return_js((
-                                    format!("{f}(ret);"),
-                                    Some("return retCopy;".into())
-                                ))
-                            );
+                        match (self.post_return, self.is_guest_async_lifted) {
+                            (Some(_), true) => unreachable!(
+                                "async lifted guest functions cannot have post returns"
+                            ),
+                            (Some(post_return_fn), _) => {
+                                // In the case there is a post return function, we'll want to copy the value
+                                // then perform the post return before leaving
+
+                                // Write out the assignment for the given return value
+                                uwriteln!(self.src, "const retCopy = {ret_val};");
+
+                                // Perform the post return (if present) w/ the result, and
+                                // pass a copy fo the result to the actual caller
+                                uwriteln!(
+                                    self.src,
+                                    "{}",
+                                    gen_post_return_js((
+                                        format!("{post_return_fn}(ret);"),
+                                        Some("return retCopy;".into())
+                                    ))
+                                );
+                            }
+                            // Sync functions without post returns can simply return the lifted value
+                            (None, _is_guest_async_lifted @ false) => {
+                                uwriteln!(
+                                    self.src,
+                                    "console.log('RET VAL', {{ retVal: {ret_val}, async: {}, fn: '{}' }}); return {ret_val};",
+                                    self.canon_opts.async_,
+                                    func.name,
+                                )
+                            }
+                            // Async functions never have post returns, but they must interpret async behavior
+                            (None, _is_guest_async_lifted @ true) => {
+                                uwriteln!(
+                                    self.src,
+                                    r#"
+                                      console.log("Result for async lifted fn", {ret_val});
+                                      throw new Error("not yet implemented!");
+                                      "#,
+                                );
+                            }
                         }
                     }
                 }

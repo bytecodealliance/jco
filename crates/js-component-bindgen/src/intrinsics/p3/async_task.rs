@@ -266,6 +266,7 @@ impl AsyncTaskIntrinsic {
                         const taskMeta = {current_task_get_fn}({current_component_idx_global}, {current_async_task_id_global});
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
                         const task = taskMeta.task;
+                        if (!task) {{ throw new Error('invalid/missing current task in metadata while setting context'); }}
                         if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
                         task.storage[slot] = value;
                     }}
@@ -287,7 +288,7 @@ impl AsyncTaskIntrinsic {
                         const taskMeta = {current_task_get_fn}({current_component_idx_global}, {current_async_task_id_global});
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
                         const task = taskMeta.task;
-                        if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
+                        if (!task) {{ throw new Error('invalid/missing current task in metadata while getting context'); }}
                         if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
                         return task.storage[slot];
                     }}

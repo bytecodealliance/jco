@@ -3,7 +3,9 @@ use std::collections::HashSet;
 
 use anyhow::{bail, ensure, Context, Result};
 use ts_bindgen::ts_bindgen;
-use wasmtime_environ::component::{ComponentTypesBuilder, Export, StaticModuleIndex};
+use wasmtime_environ::component::{
+    CanonicalOptions, ComponentTypesBuilder, Export, StaticModuleIndex,
+};
 use wasmtime_environ::wasmparser::WasmFeatures;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
 use wit_bindgen_core::wit_parser::{Function, FunctionKind};
@@ -250,7 +252,10 @@ pub fn get_thrown_type(
 /// These functions must be called from transpiled javsacript much differently
 /// than they would otherwise be, i.e. in accordance to the Component Model
 /// async feature.
-pub(crate) fn is_guest_async_lifted_fn(func: &Function) -> bool {
+pub(crate) fn is_guest_async_lifted_fn(func: &Function, canon_opts: &CanonicalOptions) -> bool {
+    if canon_opts.async_ {
+        return true;
+    }
     matches!(
         func.kind,
         FunctionKind::AsyncMethod(_)
