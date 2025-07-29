@@ -46,7 +46,10 @@ use crate::intrinsics::{
     render_intrinsics, AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs,
 };
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
-use crate::{core, get_thrown_type, is_async_fn, source, uwrite, uwriteln};
+use crate::{
+    core, get_thrown_type, is_guest_async_lifted_fn, requires_async_porcelain, source, uwrite,
+    uwriteln,
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct TranspileOpts {
@@ -151,17 +154,28 @@ struct JsBindgen<'a> {
 }
 
 /// Arguments provided to `JSBindgen::bindgen`, normally called to perform bindgen on a given function
-struct JsBindgenArgs<'a> {
+struct JsFunctionBindgenArgs<'a> {
+    /// Number of params that the function expects
     nparams: usize,
+    /// Internal convention for function calls (ex. whether the first argument is known to be 'this')
     call_type: CallType,
+    /// Interface name (if inside an interface)
     iface_name: Option<&'a str>,
+    /// Callee of the function
     callee: &'a str,
+    /// Canon opts provided for the functions
     opts: &'a CanonicalOptions,
+    /// Parsed function metadata
     func: &'a Function,
     resource_map: &'a ResourceMap,
     remote_resource_map: &'a RemoteResourceMap,
+    /// ABI variant of the function
     abi: AbiVariant,
-    is_async: bool,
+    /// Whether the function in question is a host async function (i.e. JSPI)
+    requires_async_porcelain: bool,
+    /// Whether the function in question is a guest async function (i.e. WASI P3)
+    is_guest_async_lifted: bool,
+    /// Name of the callback function that should be used in async contexts (i.e. WASI P3)
     callback_fn_name: Option<String>,
 }
 
@@ -2202,13 +2216,18 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
 
-        let is_async = is_async_fn(func, import_name, &self.async_imports);
+        // WASI P3 async lifted functions should not have post returns
+        let is_guest_async_lifted = is_guest_async_lifted_fn(func);
         if options.async_ {
             assert!(
                 options.post_return.is_none(),
                 "async function {func_name} (import {import_name}) can't have post return",
             );
         }
+
+        // Host lifted async (i.e. JSPI)
+        let requires_async_porcelain =
+            requires_async_porcelain(func, import_name, &self.async_imports);
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
@@ -2321,7 +2340,7 @@ impl<'a> Instantiator<'a, '_> {
             .len();
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                if is_async {
+                if requires_async_porcelain {
                     uwrite!(
                         self.src.js,
                         "\nconst trampoline{} = new WebAssembly.Suspending(async function",
@@ -2330,7 +2349,7 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
                 }
-                self.bindgen(JsBindgenArgs {
+                self.bindgen(JsFunctionBindgenArgs {
                     nparams,
                     call_type,
                     iface_name: if import_name.is_empty() {
@@ -2344,12 +2363,13 @@ impl<'a> Instantiator<'a, '_> {
                     resource_map: &import_resource_map,
                     remote_resource_map: &import_remote_resource_map,
                     abi: AbiVariant::GuestImport,
-                    is_async,
+                    requires_async_porcelain,
+                    is_guest_async_lifted,
                     callback_fn_name: None,
                 });
 
                 uwriteln!(self.src.js, "");
-                if is_async {
+                if requires_async_porcelain {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");
@@ -2899,8 +2919,8 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn bindgen(&mut self, args: JsBindgenArgs) {
-        let JsBindgenArgs {
+    fn bindgen(&mut self, args: JsFunctionBindgenArgs) {
+        let JsFunctionBindgenArgs {
             nparams,
             call_type,
             iface_name,
@@ -2910,7 +2930,8 @@ impl<'a> Instantiator<'a, '_> {
             resource_map,
             remote_resource_map,
             abi,
-            is_async,
+            requires_async_porcelain,
+            is_guest_async_lifted,
             callback_fn_name,
         } = args;
 
@@ -3028,7 +3049,8 @@ impl<'a> Instantiator<'a, '_> {
             },
             src: source::Source::default(),
             resolve: self.resolve,
-            is_async,
+            requires_async_porcelain,
+            is_guest_async_lifted,
             canon_opts: opts,
             iface_name,
             callback_fn_name: callback_fn_name.as_deref(),
@@ -3041,7 +3063,7 @@ impl<'a> Instantiator<'a, '_> {
             abi,
             match abi {
                 AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
-                AbiVariant::GuestExport => if is_async {
+                AbiVariant::GuestExport => if is_guest_async_lifted {
                     LiftLower::LiftArgsLowerResults
                 } else {
                     LiftLower::LowerArgsLiftResults
@@ -3052,7 +3074,7 @@ impl<'a> Instantiator<'a, '_> {
             },
             func,
             &mut f,
-            is_async,
+            is_guest_async_lifted,
         );
 
         // Once visiting has completed, write the contents the `FunctionBindgen` generated to output
@@ -3347,8 +3369,10 @@ impl<'a> Instantiator<'a, '_> {
         export_resource_map: &ResourceMap,
         export_remote_resource_map: &RemoteResourceMap,
     ) {
-        // Determine whether the function should be async
-        let is_async = is_async_fn(func, export_name, &self.async_exports);
+        // Determine whether the function should be generated as async
+        let requires_async_porcelain =
+            requires_async_porcelain(func, export_name, &self.async_exports);
+        // If the function is *also* async lifted, it
         if options.async_ {
             assert!(
                 options.post_return.is_none(),
@@ -3356,7 +3380,11 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        let maybe_async = if is_async { "async " } else { "" };
+        let maybe_async = if requires_async_porcelain {
+            "async "
+        } else {
+            ""
+        };
 
         // Start building early variable declarations
         let core_export_fn = self.core_def(def);
@@ -3371,7 +3399,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let {local_name};");
                 self.gen
                     .all_core_exported_funcs
-                    .push((core_export_fn.clone(), is_async));
+                    .push((core_export_fn.clone(), requires_async_porcelain));
                 local_name
             }
         };
@@ -3470,7 +3498,7 @@ impl<'a> Instantiator<'a, '_> {
         };
 
         // Perform bindgen
-        self.bindgen(JsBindgenArgs {
+        self.bindgen(JsFunctionBindgenArgs {
             nparams: func.params.len(),
             call_type: match func.kind {
                 FunctionKind::Method(_) => CallType::FirstArgIsThis,
@@ -3487,7 +3515,8 @@ impl<'a> Instantiator<'a, '_> {
             resource_map: export_resource_map,
             remote_resource_map: export_remote_resource_map,
             abi: AbiVariant::GuestExport,
-            is_async,
+            requires_async_porcelain,
+            is_guest_async_lifted: is_guest_async_lifted_fn(func),
             callback_fn_name,
         });
 

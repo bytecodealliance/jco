@@ -242,7 +242,43 @@ pub fn get_thrown_type(
     }
 }
 
-pub(crate) fn is_async_fn(func: &Function, id: &str, async_funcs: &HashSet<String>) -> bool {
+/// Check whether a given function is a async lifted by by a guest
+///
+/// Functions that are designated as guest async lifted represent use of
+/// the WASI p3 async feature.
+///
+/// These functions must be called from transpiled javsacript much differently
+/// than they would otherwise be, i.e. in accordance to the Component Model
+/// async feature.
+pub(crate) fn is_guest_async_lifted_fn(func: &Function) -> bool {
+    matches!(
+        func.kind,
+        FunctionKind::AsyncMethod(_)
+            | FunctionKind::AsyncStatic(_)
+            | FunctionKind::AsyncFreestanding
+    )
+}
+
+/// Check whether a function has been marked or async binding generation
+///
+/// When dealing with imports, functions that are designated to require async porcelain
+/// are usually asynchronous host functions -- they will have code generated
+/// that enables use of techniques like JSPI for exposing asynchronous host/platform
+/// imports to WebAssembly guests.
+///
+/// When dealing with an export, functions that require async porcelain simply provide
+/// an interface in the transpiled codebase that produces a `Promise`, i.e. one that can
+/// be called in an *already* asynchronous context (JS `async` function) or resolved with a`.then()`.
+///
+/// Exports do not indicate a use of JSPI, as JSPI is only for bridging asynchronous *host* behavior
+/// to synchronous WebAssembly modules
+///
+/// This function is *not* for detecting WASI P3 asynchronous behavior -- see [`is_guest_async_lifted_fn`].
+pub(crate) fn requires_async_porcelain(
+    func: &Function,
+    id: &str,
+    async_funcs: &HashSet<String>,
+) -> bool {
     let name = func.name.as_str();
 
     if async_funcs.contains(name) {
@@ -262,12 +298,5 @@ pub(crate) fn is_async_fn(func: &Function, id: &str, async_funcs: &HashSet<Strin
             return true;
         }
     }
-
-    // Fallback to taking value straight from wit
-    matches!(
-        func.kind,
-        FunctionKind::AsyncMethod(_)
-            | FunctionKind::AsyncStatic(_)
-            | FunctionKind::AsyncFreestanding
-    )
+    return false;
 }

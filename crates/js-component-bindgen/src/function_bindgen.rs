@@ -154,8 +154,14 @@ pub struct FunctionBindgen<'a> {
     /// The [`wit_bindgen::Resolve`] containing extracted WIT information
     pub resolve: &'a Resolve,
 
-    /// Whether the function is async
-    pub is_async: bool,
+    /// Whether the function requires async porcelain
+    ///
+    /// In the case of an import this likely implies the use of JSPI
+    /// and in the case of an export this is simply code generation metadata.
+    pub requires_async_porcelain: bool,
+
+    /// Whether the function is guest async lifted (i.e. WASI P3)
+    pub is_guest_async_lifted: bool,
 
     /// Canon opts
     pub canon_opts: &'a CanonicalOptions,
@@ -1177,18 +1183,22 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::CallWasm] (async? {async_}, @ enter)');",
                     prefix = self.tracing_prefix,
-                    async_ = self.is_async,
+                    async_ = self.is_guest_async_lifted,
                 );
 
                 // Inject machinery for starting an async 'current' task
-                self.start_current_task(&inst, self.is_async);
+                self.start_current_task(&inst, self.is_guest_async_lifted);
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
                 self.write_result_assignment(sig_results_length, results);
 
                 // Output the function call
-                let maybe_async_await = if self.is_async { "await " } else { "" };
+                let maybe_async_await = if self.requires_async_porcelain {
+                    "await "
+                } else {
+                    ""
+                };
                 uwriteln!(
                     self.src,
                     "{maybe_async_await}{callee}({args});",
@@ -1230,7 +1240,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 self.start_current_task(&inst, *async_);
 
                 let results_length = if func.result.is_none() { 0 } else { 1 };
-                let maybe_async_await = if self.is_async { "await " } else { "" };
+                let maybe_async_await = if self.requires_async_porcelain {
+                    "await "
+                } else {
+                    ""
+                };
                 let call = if self.callee_resource_dynamic {
                     format!(
                         "{maybe_async_await}{}.{}({})",
@@ -1858,7 +1872,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 assert!(
-                    self.is_async,
+                    self.is_guest_async_lifted,
                     "non-async functions should not be performing async returns (func {name})",
                 );
                 assert!(

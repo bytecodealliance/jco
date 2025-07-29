@@ -15,7 +15,9 @@ use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
 use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
-use crate::{dealias, feature_gate_allowed, get_thrown_type, is_async_fn, uwrite, uwriteln};
+use crate::{
+    dealias, feature_gate_allowed, get_thrown_type, requires_async_porcelain, uwrite, uwriteln,
+};
 
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the
@@ -234,7 +236,9 @@ pub fn ts_bindgen(
             WorldItem::Function(f) => {
                 let export_name = match name {
                     WorldKey::Name(export_name) => export_name,
-                    WorldKey::Interface(_) => unreachable!("unexpected interface export during export processing"),
+                    WorldKey::Interface(_) => {
+                        unreachable!("unexpected interface export during export processing")
+                    }
                 };
                 if !feature_gate_allowed(resolve, package, &f.stability, &f.name)
                     .context("failed to check feature gate for export")?
@@ -531,8 +535,9 @@ impl TsBindgen {
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
-            let is_async = is_async_fn(func, id_name, &self.async_exports);
-            gen.ts_func(func, false, declaration, is_async);
+            let requires_async_porcelain =
+                requires_async_porcelain(func, id_name, &self.async_exports);
+            gen.ts_func(func, false, declaration, requires_async_porcelain);
         }
 
         let (src, references) = gen.finish();
@@ -609,8 +614,8 @@ impl TsBindgen {
                 {
                     continue;
                 }
-                let is_async = is_async_fn(func, &id_name, async_funcs);
-                gen.ts_func(func, false, true, is_async);
+                let requires_async_porcelain = requires_async_porcelain(func, &id_name, async_funcs);
+                gen.ts_func(func, false, true, requires_async_porcelain);
             }
 
             gen.types(id);
