@@ -1791,7 +1791,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::DropHandle { ty } => {
                 let _ = ty;
-                todo!()
+                todo!("[Instruction::DropHandle] not yet implemented")
             }
 
             Instruction::Flush { amt } => {

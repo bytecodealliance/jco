@@ -202,7 +202,7 @@ pub fn ts_bindgen(
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
                         TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
                         TypeDefKind::Resource => gen.type_resource(*tid, ty),
-                        TypeDefKind::Handle(_) => todo!(),
+                        TypeDefKind::Handle(_) => todo!("type generation for handle"),
                     }
                     let (src, references) = gen.finish();
                     bindgen.src.push_str(&src);
@@ -718,7 +718,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
                 TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
                 TypeDefKind::Resource => self.type_resource(*id, ty),
-                TypeDefKind::Handle(_) => todo!(),
+                TypeDefKind::Handle(_) => todo!("types for handle"),
             }
         }
     }
@@ -784,7 +784,7 @@ impl<'a> TsInterface<'a> {
                         self.src.push_str(">");
                     }
                     TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
-                    TypeDefKind::Resource => todo!(),
+                    TypeDefKind::Resource => todo!("[print_ty()] resource"),
                     TypeDefKind::Handle(h) => {
                         let ty = match h {
                             Handle::Own(r) => r,
