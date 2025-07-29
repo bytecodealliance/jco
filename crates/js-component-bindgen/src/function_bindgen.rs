@@ -300,7 +300,7 @@ impl FunctionBindgen<'_> {
         }
     }
 
-    /// Start the async current task
+    /// Start the current task
     fn start_current_task(&mut self, instr: &Instruction, is_async: bool) {
         let prefix = match instr {
             Instruction::CallWasm { .. } => "_wasm_call_",
@@ -322,8 +322,8 @@ impl FunctionBindgen<'_> {
         // TODO: check that types match values
     }
 
-    /// End an an existing async current task
-    fn end_async_current_task(&mut self) {
+    /// End an an existing current task
+    fn end_current_task(&mut self) {
         let end_current_task_fn =
             self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
         let component_instance_idx = self.canon_opts.instance.as_u32();
@@ -1222,8 +1222,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
 
-                // Inject machinery for ending an async 'current' task
-                self.end_async_current_task();
+                // Inject machinery for ending the current task
+                self.end_current_task();
             }
 
             // Call to an interface, usually but not always an externally imported interface
@@ -1301,7 +1301,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 // TODO: do async stuff with the results of the call, as they will indicate
-                // TODO: pass along the fact that the task is async to end_async_current_task()
+                // TODO: pass along the fact that the task is async to end_current_task()
 
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
@@ -1426,9 +1426,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     // Handle all other cases (including single parameter non-result<t>)
                     amt => {
-                        // Inject machinery for ending an 'current' task
-                        self.end_async_current_task();
-
                         let ret_assign = self
                             .post_return
                             .is_some()
@@ -1981,7 +1978,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 // Inject machinery for ending an async 'current' task
-                self.end_async_current_task();
+                self.end_current_task();
             }
 
             Instruction::GuestDeallocate { .. }

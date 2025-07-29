@@ -494,7 +494,9 @@ impl AsyncTaskIntrinsic {
                         if (!tasks || !Array.isArray(tasks)) {{
                             throw new Error('missing/invalid tasks for component instance while ending task');
                         }}
-                        if (tasks.length == 0) {{ throw new Error('no current task(s) for component instance'); }}
+                        if (tasks.length == 0) {{
+                            throw new Error('no current task(s) for component instance while ending task');
+                        }}
 
                         if (taskId) {{
                             const last = tasks[tasks.length - 1];
