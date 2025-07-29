@@ -10,7 +10,7 @@ const COMPONENT_FIXTURES_DIR = fileURLToPath(
     new URL('../fixtures/components', import.meta.url)
 );
 
-suite('Transpiles (WASI P3)', () => {
+suite('Transpile (WASI P3)', () => {
     test('async-error-context', async (t) => {
         const componentPath = join(
             COMPONENT_FIXTURES_DIR,
