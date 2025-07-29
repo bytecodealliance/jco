@@ -78,6 +78,7 @@ impl ComponentIntrinsic {
 
             Self::ComponentAsyncStateClass => {
                 let rep_table_class = Intrinsic::RepTableClass.name();
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!(
                     "
                     class {class_name} {{
@@ -87,6 +88,8 @@ impl ComponentIntrinsic {
                         mayLeave = false;
                         waitableSets = new {rep_table_class}();
                         waitables = new {rep_table_class}();
+
+                        #parkedTasks = new Map();
 
                         callingSyncImport(val) {{
                             if (val === undefined) {{ return this.#callingAsyncImport; }}
@@ -107,6 +110,38 @@ impl ComponentIntrinsic {
                         async waitForSyncImportCallEnd() {{
                             await this.#syncImportWait.promise;
                         }}
+
+                        parkTaskOnAwaitable(args) {{
+                            if (!args.awaitable) {{ throw new TypeError('missing awaitable when trying to park'); }}
+                            if (!args.task) {{ throw new TypeError('missing task when trying to park'); }}
+                            const {{ awaitable, task }} = args;
+
+                            let taskList = this.#parkedTasks.get(awaitable.id());
+                            if (!taskList) {{
+                                taskList = [];
+                                this.#parkedTasks.set(awaitable.id(), taskList);
+                            }}
+
+                            tasksList.push(task);
+                        }}
+
+                        wakeNextTaskForAwaitable(awaitable) {{
+                            const awaitableID = awaitable.id();
+                            const parkedTasks = this.#parkedTasks.get(awaitableID);
+                            if (!parkedTasks) {{
+                              {debug_log_fn}('[{class_name}] no tasks waiting for awaitable', {{ awaitableID: awaitable.id() }});
+                              return;
+                            }}
+
+                            let task = taskList.unshift(); // todo(perf)
+                            if (!task) {{ return; }}
+
+                            if (!task.resume) {{
+                                throw new Error('task ready due to awaitable is missing resume', {{ taskID: task.id(), awaitableID }});
+                            }}
+                            task.resume();
+                        }}
+
                     }}
                     ",
                     class_name = self.name(),

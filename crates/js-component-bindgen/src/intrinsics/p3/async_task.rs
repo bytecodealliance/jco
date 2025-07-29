@@ -538,6 +538,11 @@ impl AsyncTaskIntrinsic {
                             RESOLVED: 'resolved',
                         }}
 
+                        static OnBlockResult = {{
+                            CANCELLED: 'on-block.cancelled',
+                            RESUMED: 'on-block.resumed',
+                        }}
+
                         #id;
                         #componentIdx;
                         #state;
@@ -551,6 +556,9 @@ impl AsyncTaskIntrinsic {
                         returnCalls =  0;
                         storage = [0, 0];
                         borrowedHandles = {{}};
+
+                        awaitableResume = null;
+                        awaitableCancel = null;
 
                         constructor(opts) {{
                            if (opts?.id === undefined) {{ throw new TypeError('missing task ID during task creation'); }}
@@ -732,12 +740,54 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         async onBlock(awaitable) {{
-                            {debug_log_fn}('[{task_class}#waitForEvent()] args', {{ taskID: this.#id, awaitable }});
+                            {debug_log_fn}('[{task_class}#onBlock()] args', {{ taskID: this.#id, awaitable }});
                             if (!(awaitable instanceof {awaitable_class})) {{
                                 throw new Error('invalid awaitable during onBlock');
                             }}
-                            // TODO
-                            throw new Error('AsyncTask#onBlock() not yet implemented');
+
+                            // Build a promise that this task can await on which resolves when it is awoken
+                            const {{ promise, resolve, reject }} = Promise.withResolvers();
+                            this.awaitableResume = () => {{
+                                {debug_log_fn}('[{task_class}] resuming after onBlock', {{ taskID: this.#id }});
+                                resolve();
+                            }};
+                            this.awaitableCancel = (err) => {{
+                                {debug_log_fn}('[{task_class}] rejecting after onBlock', {{ taskID: this.#id, err}});
+                                resolve();
+                            }};
+
+                            // Park this task/execution to be handled later
+                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
+                            state.parkTaskOnAwaitable({{ awaitable, task: this }});
+
+                            try {{
+                                await promise;
+                                return {task_class}.OnBlockResult.RESUMED;
+                            }} catch (err) {{
+                                // rejection means task cancellation
+                                return {task_class}.OnBlockResult.CANCELLED;
+                            }}
+                        }}
+
+                        // NOTE: this should likely be moved to a SubTask class
+                        async asyncOnBlock(awaitable) {{
+                            {debug_log_fn}('[{task_class}#asyncOnBlock()] args', {{ taskID: this.#id, awaitable }});
+                            if (!(awaitable instanceof {awaitable_class})) {{
+                                throw new Error('invalid awaitable during onBlock');
+                            }}
+                            // TODO: watch for waitable AND cancellation
+                            // TODO: if it WAS cancelled:
+                            // - return true
+                            // - only once per subtask
+                            // - do not wait on the scheduler
+                            // - control flow should go to the subtask (only once)
+                            // - Once subtask blocks/resolves, reqlinquishControl() will tehn resolve request_cancel_end (without scheduler lock release)
+                            // - control flow goes back to request_cancel
+                            //
+                            // Subtask cancellation should work similarly to an async import call -- runs sync up until
+                            // the subtask blocks or resolves
+                            //
+                            throw new Error('AsyncTask#asyncOnBlock() not yet implemented');
                         }}
 
                         async yield(opts) {{

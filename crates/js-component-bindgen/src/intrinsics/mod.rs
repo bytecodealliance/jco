@@ -381,6 +381,8 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                             this.#id = ++{class_name}._ID;
                         }}
 
+                        id() {{ return this.#id; }}
+
                         then() {{ return this.#promise.then(...arguments); }}
                     }}
                 ",
