@@ -90,6 +90,8 @@ suite('Async', () => {
             jco: {
                 transpile: {
                     extraArgs: {
+                        // NOTE: the "asyncImports" here means that we use JSPI, NOT that
+                        // we're async-lowering an async import.
                         asyncImports: [
                             'something:test/test-interface#call-async',
                         ],
