@@ -1,4 +1,3 @@
-import { version } from 'node:process';
 import { join } from 'node:path';
 
 import { fileURLToPath } from 'url';
@@ -14,49 +13,7 @@ const COMPONENT_FIXTURES_DIR = fileURLToPath(
 
 const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
 
-suite('Guest Async (WASI P3)', () => {
-    test('Transpile simple error-context', async (t) => {
-        const componentPath = join(
-            COMPONENT_FIXTURES_DIR,
-            'async-error-context.component.wasm'
-        );
-
-        const { esModule, cleanup } = await setupAsyncTest({
-            asyncMode: 'jspi',
-            component: {
-                name: 'async-error-context',
-                path: componentPath,
-                skipInstantiation: true,
-            },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        asyncExports: ['local:local/run#run'],
-                    },
-                },
-            },
-        });
-
-        const { WASIShim } = await import(
-            '@bytecodealliance/preview2-shim/instantiation'
-        );
-        const instance = await esModule.instantiate(
-            undefined,
-            new WASIShim().getImportObject()
-        );
-
-        const runFn = instance['local:local/run'].asyncRun;
-        assert.strictEqual(
-            runFn instanceof AsyncFunction,
-            true,
-            'local:local/run should be async'
-        );
-
-        await runFn();
-
-        await cleanup();
-    });
-
+suite('Context (WASI P3)', () => {
     test('context.get/set (sync export, sync call)', async () => {
         const componentName = 'context-sync';
         const componentPath = join(
@@ -85,22 +42,12 @@ suite('Guest Async (WASI P3)', () => {
     });
 
     test('context.get/set (async export, async call)', async (t) => {
-        // Skip if we're running in an environment without JSPI
-        let nodeMajorVersion = parseInt(version.replace('v', '').split('.')[0]);
-        if (nodeMajorVersion < 23) {
-            t.skip();
-        }
-
         const componentName = 'context-async';
         const componentPath = join(
             P3_COMPONENT_FIXTURES_DIR,
             componentName,
             'component.wasm'
         );
-        // NOTE: Despite not specifying the export as async (via jco transpile options in setupAsyncTest),
-        // the export is async -- since the component lifted the function in an async manner.
-        //
-        // This test performs a sync call of an async lifted export.
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
@@ -111,7 +58,6 @@ suite('Guest Async (WASI P3)', () => {
                 transpile: {
                     extraArgs: {
                         asyncExports: ['pull-context', 'push-context'],
-                        minify: false,
                     },
                 },
             },
@@ -123,7 +69,40 @@ suite('Guest Async (WASI P3)', () => {
         expect(instance.pullContext).toBeTruthy();
         assert.strictEqual(instance.pullContext instanceof AsyncFunction, true);
 
-        // TODO(async): async invoke test, yield must resolve in pullContext execution
+        await instance.pushContext(42);
+        expect(await instance.pullContext()).toBe(42);
+
+        await cleanup();
+    });
+
+    test('context.get/set (async export, sync call)', async (t) => {
+        const componentName = 'context-async';
+        const componentPath = join(
+            P3_COMPONENT_FIXTURES_DIR,
+            componentName,
+            'component.wasm'
+        );
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                name: componentName,
+                path: componentPath,
+            },
+        });
+
+        expect(instance.pushContext).toBeTruthy();
+        assert.strictEqual(
+            instance.pushContext instanceof AsyncFunction,
+            false
+        );
+
+        expect(instance.pullContext).toBeTruthy();
+        assert.strictEqual(
+            instance.pullContext instanceof AsyncFunction,
+            false
+        );
+
+        instance.pushContext(42);
+        expect(instance.pullContext()).toBe(42);
 
         await cleanup();
     });
