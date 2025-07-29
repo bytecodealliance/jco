@@ -122,7 +122,7 @@ impl ComponentIntrinsic {
                                 this.#parkedTasks.set(awaitable.id(), taskList);
                             }}
 
-                            tasksList.push(task);
+                            taskList.push(task);
                         }}
 
                         wakeNextTaskForAwaitable(awaitable) {{

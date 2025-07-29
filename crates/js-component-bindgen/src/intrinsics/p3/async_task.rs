@@ -602,7 +602,8 @@ impl AsyncTaskIntrinsic {
                             let mayNotEnter = !this.mayEnter(this);
                             const componentHasPendingTasks = cstate.pendingTasks > 0;
                             if (mayNotEnter || componentHasPendingTasks) {{
-                                // TODO: this promise needs to be controllable? Not just pre-determined
+
+                                throw new Error('in enter()'); // TODO: remove
                                 cstate.pendingTasks.set(this.#id, new {awaitable_class}(new Promise()));
 
                                 const blockResult = await this.onBlock(awaitable);
@@ -656,6 +657,7 @@ impl AsyncTaskIntrinsic {
                             while (event == null) {{
                                 const awaitable = new {awaitable_class}(waitableSet.getPendingEvent());
 
+                                throw new Error('in waitforevent??'); // TODO: remove
                                 const waited = await this.waitOn({{ awaitable, isAsync, isCancellable: true }});
                                 if (waited) {{
                                     if (this.#state !== {task_class}.State.INITIAL) {{
@@ -807,6 +809,7 @@ impl AsyncTaskIntrinsic {
                                 }};
                             }}
 
+                            throw new Error('BEFORE YIELD'); // TODO: remove
                             const waitResult = await this.waitOn({{
                                 awaitable: new {awaitable_class}(new Promise(resolve => setTimeout(resolve, 0))),
                                 isAsync,
