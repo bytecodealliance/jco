@@ -1,10 +1,10 @@
 import { join } from 'node:path';
 
 import { fileURLToPath } from 'url';
-
 import { suite, test, assert } from 'vitest';
 
 import { setupAsyncTest } from '../helpers.js';
+import { AsyncFunction } from '../common.js';
 
 const COMPONENT_FIXTURES_DIR = fileURLToPath(
     new URL('../fixtures/components', import.meta.url)
