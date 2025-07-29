@@ -70,7 +70,7 @@ impl ComponentIntrinsic {
                     function {backpressure_set_fn}(componentInstanceID, value) {{
                         {debug_log_fn}('[{backpressure_set_fn}()] args', {{ componentInstanceID, value }});
                         if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
-                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
                         state.backpressure = value !== 0;
                     }}
                 "));

@@ -1898,7 +1898,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 uwriteln!(
                     self.src,
-                    "
+                    r#"
                     const retCopy = {first_op};
                     if (retCopy !== undefined) {{
                         if (!({i32_typecheck}(retCopy))) {{ throw new Error('invalid async return value [' + retCopy + '], not a number'); }}
@@ -1943,11 +1943,11 @@ impl Bindgen for FunctionBindgen<'_> {
                             eventCode = taskRes[0];
                             index = taskRes[1];
                             result = taskRes[2];
-                            {debug_log_fn}('performing callback', {{ fn_name: '{fn_name}', eventCode, index, result }});
+                            {debug_log_fn}('performing callback', {{ fn_name: "{fn_name}", eventCode, index, result }});
                             {callback_phrase}
                         }}
                     }}
-                    ",
+                    "#,
                     first_op = operands.first().map(|s| s.as_str()).unwrap_or("undefined"),
                     prefix = self.tracing_prefix,
                     callback_phrase = match self.callback_fn_name {
