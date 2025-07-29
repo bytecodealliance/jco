@@ -734,7 +734,7 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('invalid awaitable during onBlock');
                             }}
                             // TODO
-                            throw new Error('not implemented');
+                            throw new Error('AsyncTask#onBlock() not yet implemented');
                         }}
 
                         async yield(opts) {{
