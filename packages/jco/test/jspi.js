@@ -13,7 +13,7 @@ const P3_COMPONENT_FIXTURES_DIR = fileURLToPath(
     new URL('fixtures/components/p3', import.meta.url)
 );
 
-suite('Async', () => {
+suite('Host Import Async (JSPI)', () => {
     test('Transpile async', async () => {
         const tmpDir = await getTmpDir();
         const outDir = resolve(tmpDir, 'out-component-dir');

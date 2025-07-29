@@ -14,7 +14,7 @@ const COMPONENT_FIXTURES_DIR = fileURLToPath(
 
 const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
 
-suite('Async', () => {
+suite('Guest Async (WASI P3)', () => {
     test('Transpile simple error-context', async (t) => {
         const componentPath = join(
             COMPONENT_FIXTURES_DIR,
