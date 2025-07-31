@@ -251,7 +251,7 @@ impl AsyncStreamIntrinsic {
                 let (class_name, stream_var_name, js_stream_class_name) = match self {
                     Self::StreamReadableEndClass => (self.name(), "readable", "ReadableStream"),
                     Self::StreamWritableEndClass => (self.name(), "writable", "WritableStream"),
-                    _ => unreachable!(),
+                    _ => unreachable!("impossible stream readable end class intrinsic"),
                 };
                 let stream_end_class = Self::StreamEndClass.name();
 
@@ -260,7 +260,7 @@ impl AsyncStreamIntrinsic {
                          copy() {
                              if (this.#done) { throw new Error('stream has completed'); }
                              if (!this.#writable) { throw new Error('missing/invalid writable'); }
-                             throw new Error('not implemented');
+                             throw new Error('{class_name}#copy() not implemented');
                          }
                     "
                     .to_string(),
@@ -268,11 +268,11 @@ impl AsyncStreamIntrinsic {
                          copy() {
                              if (this.#done) { throw new Error('stream has completed'); }
                              if (!this.#readable) { throw new Error('missing/invalid readable'); }
-                             throw new Error('not implemented');
+                             throw new Error('{class_name}#copy() not implemented');
                          }
                     "
                     .to_string(),
-                    _ => unreachable!(),
+                    _ => unreachable!("impossible stream readable end class intrinsic"),
                 };
 
                 output.push_str(&format!("
@@ -346,7 +346,7 @@ impl AsyncStreamIntrinsic {
                     function {stream_new_fn}(componentInstanceID, elementTypeRep) {{
                         {debug_log_fn}('[{stream_new_fn}()] args', {{ componentInstanceID, elementTypeRep }});
 
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
@@ -450,7 +450,7 @@ impl AsyncStreamIntrinsic {
                             if (buf.length > 2**28) {{ throw new Error('buffer uses reserved space'); }}
 
                             let packedResult = result | (buffer.progress << 4);
-                            return [eventCode, i, packedResult); // TODO: event code??
+                            return [eventCode, i, packedResult]; // TODO: event code??
                         }}
 
                         streamEnd.copy({{
@@ -461,9 +461,9 @@ impl AsyncStreamIntrinsic {
 
                         // If sync, wait forever but allow task to do other things
                         if (!isAsync && !streamEnd.hasPendingEvent()) {{
-                          const task = {current_task_get_fn}();
+                          const task = {current_task_get_fn}(componentInstanceID);
                           if (!task) {{ throw new Error('invalid/missing async task'); }}
-                          await task.waitOn({{ promise: streamEnd.waitable, isAsync }});
+                          await task.blockOn({{ promise: streamEnd.waitable, isAsync }});
                         }}
 
                         if (streamEnd.hasPendingEvent()) {{
@@ -473,7 +473,7 @@ impl AsyncStreamIntrinsic {
                           return [ {async_blocked_const} ]
                         }}
 
-                        throw new Error('not implemented');
+                        throw new Error('{stream_fn}() not implemented');
                     }}
                 "));
             }
@@ -526,7 +526,7 @@ impl AsyncStreamIntrinsic {
                           // TODO: cancel the shared thing (waitable?)
                           if (!streamEnd.hasPendingEvent()) {{
                             if (!isAsync) {{
-                              await task.waitOn({{ promise: streamEnd.waitable, isAsync: false }});
+                              await task.blockOn({{ promise: streamEnd.waitable, isAsync: false }});
                             }} else {{
                               return {async_blocked_const};
                             }}
@@ -568,7 +568,15 @@ impl AsyncStreamIntrinsic {
                             streamEndIdx,
                         }});
 
-                        const task = {current_task_get_fn}();
+                        const stream = {global_stream_map}.get(streamIdx);
+                        if (!stream) {{ throw new Error('missing stream idx from drop stream'); }}
+
+                        const componentInstanceID = stream.componentInstanceID;
+                        if (componentInstanceID === undefined) {{
+                            throw new Error('missing/invalid component instance ID on stream');
+                        }}
+
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const state = {get_or_create_async_state_fn}(task.componentIdx);
@@ -581,7 +589,6 @@ impl AsyncStreamIntrinsic {
                           throw new Error('invalid stream end class, expected [{stream_end_class}]');
                         }}
 
-                        const stream = {global_stream_map}.get(streamIdx);
                         if (streamEnd.elementTypeRep() !== stream.elementTypeRep()) {{
                           throw new Error('stream type [' + stream.elementTypeRep() + '], does not match stream end type [' + streamEnd.elementTypeRep() + ']');
                         }}

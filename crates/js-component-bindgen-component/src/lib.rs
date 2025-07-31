@@ -140,7 +140,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
                         .map_err(|e| format!("{e:?}"))?
                 }
             }
-            Wit::Binary(_) => todo!(),
+            Wit::Binary(_) => todo!("reading WIT from binary not yet implemented"),
         };
 
         let world_string = opts.world.map(|world| world.to_string());
