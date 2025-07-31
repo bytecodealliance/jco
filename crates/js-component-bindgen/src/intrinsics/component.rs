@@ -147,7 +147,7 @@ impl ComponentIntrinsic {
                             // Take a ticket for the next valid usage
                             const ticket = ++this.#lock.ticket;
 
-                            {debug_log_fn}('[{class_name}#exclusiveLock()] locking' {{
+                            {debug_log_fn}('[{class_name}#exclusiveLock()] locking', {{
                                 currentTicket: ticket - 1,
                                 ticket
                             }});
@@ -169,7 +169,7 @@ impl ComponentIntrinsic {
                         }}
 
                         exclusiveRelease() {{
-                            {debug_log_fn}('[{class_name}#exclusiveLock()] locking' {{
+                            {debug_log_fn}('[{class_name}#exclusiveRelease()] releasing', {{
                                 currentTicket: this.#lock.ticket,
                                 nextTicket: this.#lock.nextTicket,
                             }});
