@@ -802,8 +802,6 @@ impl AsyncTaskIntrinsic {
                             // TODO: Awaitables need to *always* trigger the parking mechanism when they're done...?
                             // TODO: Component async state should remember which awaitables are done and work to clear tasks waiting
 
-                            console.log('BEFORE YIELD', {{ isCancellable }}); // TODO: remove
-                            throw new Error('BEFORE YIELD');
                             const blockResult = await this.blockOn({{
                                 awaitable: new {awaitable_class}(new Promise(resolve => setTimeout(resolve, 0))),
                                 isCancellable,
