@@ -84,7 +84,7 @@ impl ComponentIntrinsic {
                     class {class_name} {{
                         #callingAsyncImport = false;
                         #syncImportWait = Promise.withResolvers();
-                        #locked = false;
+                        #lock = null;
 
                         mayLeave = false;
                         waitableSets = new {rep_table_class}();
@@ -143,9 +143,42 @@ impl ComponentIntrinsic {
                             task.resume();
                         }}
 
-                        exclusiveLock() {{ this.#locked = true; }}
-                        exclusiveRelease() {{ this.#locked = false; }}
-                        isExclusivelyLocked() {{ return this.#locked; }}
+                        exclusiveLock() {{  // TODO: use atomics
+                            // Take a ticket for the next valid usage
+                            const ticket = ++this.#lock.ticket;
+
+                            {debug_log_fn}('[{class_name}#exclusiveLock()] locking' {{
+                                currentTicket: ticket - 1,
+                                ticket
+                            }});
+
+                            // If there is an active promise, then wait for it
+                            while (this.#lock.promise) {{
+                                const finishedTicket = await this.#lock.promise;
+                                if (finishedTicket === ticket - 1) {{ break; }}
+                            }}
+
+                            const {{ promise, resolve }} = Promise.withResolvers();
+                            this.#lock = {{
+                                ticket,
+                                promise,
+                                resolve,
+                            }};
+
+                            return this.#lock.promise;
+                        }}
+
+                        exclusiveRelease() {{
+                            {debug_log_fn}('[{class_name}#exclusiveLock()] locking' {{
+                                currentTicket: this.#lock.ticket,
+                                nextTicket: this.#lock.nextTicket,
+                            }});
+
+                            this.#lock = null;
+                            this.#lock.resolve(this.#lock.ticket);
+                        }}
+
+                        isExclusivelyLocked() {{ return this.#lock !== null; }}
 
                     }}
                     ",

@@ -705,56 +705,35 @@ impl AsyncTaskIntrinsic {
                             if (cancelled && !isCancellable) {{
                                 const secondCancel = await this.onBlock({{ awaitable }});
                                 if (secondCancel !== {task_class}.BlockResult.NOT_CANCELLED) {{
-                                    throw new Error('uncancellable task was canceled despite second block call');
+                                    throw new Error('uncancellable task was canceled despite second onBlock()');
                                 }}
                             }}
 
                             if (forCallback) {{
-                                // TODO
-                            }}
-
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
-                            if (isAsync) {{
-                                if (state.callingSyncImport()) {{
-                                    throw new Error('cannot call async blockOn while calling a sync import');
-                                }}
-                                state.callingSyncImport(true);
-                            }} else {{
-                                this.startPendingTask();
-                            }}
-
-                            if (!(awaitable instanceof {awaitable_class})) {{
-                                throw new Error('invalid awaitable');
-                            }}
-
-                            let cancelled;
-                            if (awaitable.resolved && {global_async_determinism} === 'random') {{
-                                cancelled = false;
-                            }} else {{
-                                cancelled = await this.onBlock(awaitable);
-                                if (cancelled && !cancellable) {{
-                                    if (this.#state !== {task_class}.State.INITIAL) {{
-                                        throw new Error('uncancellable tasks can only be cancelled from intiial state');
-                                    }}
-                                    this.#state = {task_class}.State.PENDING_CANCEL;
-                                    cancelled = await this.onBlock(awaitable);
-                                    if (cancelled) {{
-                                        throw new Error('uncancellable tasked cancelled during pending cancellation');
+                                const acquired = new {awaitable_class}(cstate.exclusiveLock());
+                                const cancelled = this.onBlock(acquired);
+                                if (cancelled === {task_class}.BlockResult.CANCELLED) {{
+                                    const secondCancel = await this.onBlock(acquired);
+                                    if (secondCancel !== {task_class}.BlockResult.NOT_CANCELLED) {{
+                                        throw new Error('uncancellable callback task was canceled despite second onBlock()');
                                     }}
                                 }}
                             }}
 
-                            if (isAsync) {{
-                                if (!state) {{ throw new Error('unexpectedly missing async state'); }}
-                                while (state.callingSyncImport()) {{
-                                    await state.waitForSyncImportCallEnd();
+                            if (cancelled) {{
+                                if (this.#state !== Task.State.INITIAL) {{
+                                    throw new Error('cancelled task is not at initial state');
                                 }}
-                            }} else {{
-                                state.callingSyncImport(false);
-                                state.notifyAllwaitingTasks();
+                                if (cancellable) {{
+                                    this.#state = {task_class}.State.CANCELLED;
+                                    return {task_class}.BlockResult.CANCELLED;
+                                }} else {{
+                                    this.#state = {task_class}.State.CANCEL_PENDING;
+                                    return {task_class}.BlockResult.NOT_CANCELLED;
+                                }}
                             }}
 
-                            return cancelled;
+                            return {task_class}.BlockResult.NOT_CANCELLED;
                         }}
 
                         async onBlock(awaitable) {{
