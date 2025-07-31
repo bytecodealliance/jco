@@ -60,6 +60,9 @@ pub enum Intrinsic {
     /// Global setting for determinism (used in async)
     GlobalAsyncDeterminism,
 
+    /// Randomly produce a boolean true/false
+    CoinFlip,
+
     // Basic type helpers
     ConstantI32Max,
     ConstantI32Min,
@@ -172,6 +175,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     // Intrinsics that should just always be present
     args.intrinsics.insert(Intrinsic::DebugLog);
     args.intrinsics.insert(Intrinsic::GlobalAsyncDeterminism);
+    args.intrinsics.insert(Intrinsic::CoinFlip);
     args.intrinsics.insert(Intrinsic::ConstantI32Min);
     args.intrinsics.insert(Intrinsic::ConstantI32Max);
     args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
@@ -359,6 +363,13 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                     "const {var_name} = '{determinism}';\n",
                     var_name = current_intrinsic.name(),
                     determinism = args.determinism,
+                ));
+            }
+
+            Intrinsic::CoinFlip => {
+                output.push_str(&format!(
+                    "const {var_name} = () => {{ return Math.random() > 0.5; }};\n",
+                    var_name = current_intrinsic.name(),
                 ));
             }
 
@@ -867,6 +878,7 @@ impl Intrinsic {
             // Async
             Intrinsic::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",
             Intrinsic::AwaitableClass => "Awaitable",
+            Intrinsic::CoinFlip => "_coinFlip",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",

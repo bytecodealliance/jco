@@ -1968,7 +1968,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     return;
                                 case 1: // YIELD
                                     {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] yield', {{ fn: '{name}' }});
-                                    taskRes = await task.yield({{ isAsync: true }});
+                                    taskRes = await task.yield({{ isCancellable: true, forCallback: true }});
                                     break;
                                 case 2: // WAIT for a given waitable set
                                     {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] waiting for event', {{ waitableSetIdx }});

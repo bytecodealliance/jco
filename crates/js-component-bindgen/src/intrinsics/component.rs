@@ -84,6 +84,7 @@ impl ComponentIntrinsic {
                     class {class_name} {{
                         #callingAsyncImport = false;
                         #syncImportWait = Promise.withResolvers();
+                        #locked = false;
 
                         mayLeave = false;
                         waitableSets = new {rep_table_class}();
@@ -141,6 +142,10 @@ impl ComponentIntrinsic {
                             }}
                             task.resume();
                         }}
+
+                        exclusiveLock() {{ this.#locked = true; }}
+                        exclusiveRelease() {{ this.#locked = false; }}
+                        isExclusivelyLocked() {{ return this.#locked; }}
 
                     }}
                     ",

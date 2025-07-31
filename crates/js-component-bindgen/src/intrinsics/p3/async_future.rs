@@ -398,7 +398,7 @@ impl AsyncFutureIntrinsic {
                         }});
 
                         if (!isAsync && !e.hasPendingEvent()) {{
-                          await task.waitOn({{ promise: e.waitForPendingEvent(), isAsync: false }});
+                          await task.blockOn({{ promise: e.waitForPendingEvent(), isAsync: false }});
                         }}
 
                         if (futureEnd.hasPendingEvent()) {{
@@ -458,7 +458,7 @@ impl AsyncFutureIntrinsic {
                           // TODO: cancel the shared thing (waitable?)
                           if (!futureEnd.hasPendingEvent()) {{
                             if (!isAsync) {{
-                              await task.waitOn({{ promise: futureEnd.waitable, isAsync: false }});
+                              await task.blockOn({{ promise: futureEnd.waitable, isAsync: false }});
                             }} else {{
                               return {async_blocked_const};
                             }}

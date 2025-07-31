@@ -463,7 +463,7 @@ impl AsyncStreamIntrinsic {
                         if (!isAsync && !streamEnd.hasPendingEvent()) {{
                           const task = {current_task_get_fn}(componentInstanceID);
                           if (!task) {{ throw new Error('invalid/missing async task'); }}
-                          await task.waitOn({{ promise: streamEnd.waitable, isAsync }});
+                          await task.blockOn({{ promise: streamEnd.waitable, isAsync }});
                         }}
 
                         if (streamEnd.hasPendingEvent()) {{
@@ -526,7 +526,7 @@ impl AsyncStreamIntrinsic {
                           // TODO: cancel the shared thing (waitable?)
                           if (!streamEnd.hasPendingEvent()) {{
                             if (!isAsync) {{
-                              await task.waitOn({{ promise: streamEnd.waitable, isAsync: false }});
+                              await task.blockOn({{ promise: streamEnd.waitable, isAsync: false }});
                             }} else {{
                               return {async_blocked_const};
                             }}

@@ -527,6 +527,7 @@ impl AsyncTaskIntrinsic {
 
                 let awaitable_class = Intrinsic::AwaitableClass.name();
                 let global_async_determinism = Intrinsic::GlobalAsyncDeterminism.name();
+                let coin_flip_fn = Intrinsic::CoinFlip.name();
 
                 // TODO: remove the public mutable members that are eagerly exposed for early impl
                 output.push_str(&format!("
@@ -538,9 +539,9 @@ impl AsyncTaskIntrinsic {
                             RESOLVED: 'resolved',
                         }}
 
-                        static OnBlockResult = {{
-                            CANCELLED: 'on-block.cancelled',
-                            RESUMED: 'on-block.resumed',
+                        static BlockResult = {{
+                            CANCELLED: 'block.cancelled',
+                            NOT_CANCELLED: 'block.not-cancelled',
                         }}
 
                         #id;
@@ -658,7 +659,7 @@ impl AsyncTaskIntrinsic {
                                 const awaitable = new {awaitable_class}(waitableSet.getPendingEvent());
 
                                 throw new Error('in waitforevent??'); // TODO: remove
-                                const waited = await this.waitOn({{ awaitable, isAsync, isCancellable: true }});
+                                const waited = await this.blockOn({{ awaitable, isAsync, isCancellable: true }});
                                 if (waited) {{
                                     if (this.#state !== {task_class}.State.INITIAL) {{
                                         throw new Error('task should be in initial state found [' + this.#state + ']');
@@ -689,18 +690,33 @@ impl AsyncTaskIntrinsic {
                             throw new Error('{task_class}#pollForEvent() not implemented');
                         }}
 
-                        async waitOn(opts) {{
-                            const {{ awaitable, isAsync, isCancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#waitOn()] args', {{ taskID: this.#id, awaitable, isAsync, isCancellable }});
+                        async blockOn(opts) {{
+                            const {{ awaitable, isCancellable, forCallback }} = opts;
+                            {debug_log_fn}('[{task_class}#blockOn()] args', {{ taskID: this.#id, awaitable, isCancellable, forCallback }});
 
-                            if (this.#isAsync !== isAsync) {{
-                                throw new Error('async waitOn called on non-async task');
+                            if (awaitable.finished() && !{global_async_determinism} && {coin_flip_fn}()) {{
+                                return {task_class}.BlockResult.NOT_CANCELLED;
+                            }}
+
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            if (forCallback) {{ cstate.exclusiveRelease(); }}
+
+                            const cancelled = await this.onBlock({{ awaitable }});
+                            if (cancelled && !isCancellable) {{
+                                const secondCancel = await this.onBlock({{ awaitable }});
+                                if (secondCancel !== {task_class}.BlockResult.NOT_CANCELLED) {{
+                                    throw new Error('uncancellable task was canceled despite second block call');
+                                }}
+                            }}
+
+                            if (forCallback) {{
+                                // TODO
                             }}
 
                             const state = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (isAsync) {{
                                 if (state.callingSyncImport()) {{
-                                    throw new Error('cannot call async waitOn while calling a sync import');
+                                    throw new Error('cannot call async blockOn while calling a sync import');
                                 }}
                                 state.callingSyncImport(true);
                             }} else {{
@@ -764,10 +780,10 @@ impl AsyncTaskIntrinsic {
 
                             try {{
                                 await promise;
-                                return {task_class}.OnBlockResult.RESUMED;
+                                return {task_class}.BlockResult.NOT_CANCELLED;
                             }} catch (err) {{
                                 // rejection means task cancellation
-                                return {task_class}.OnBlockResult.CANCELLED;
+                                return {task_class}.BlockResult.CANCELLED;
                             }}
                         }}
 
@@ -793,45 +809,42 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         async yield(opts) {{
-                            const {{ isAsync }} = opts;
-                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, isAsync }});
+                            const {{ isCancellable, forCallback }} = opts;
+                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, isCancellable, forCallback }});
 
-                            if (this.#isAsync !== isAsync) {{
-                                throw new Error('async yield called on non-async task');
-                            }}
-
-                            if (this.status === {task_class}.State.CANCEL_PENDING) {{
+                            if (isCancellable && this.status === {task_class}.State.CANCEL_PENDING) {{
                                 this.#state = {task_class}.State.CANCELLED;
                                 return {{
                                     code: {event_code_enum}.TASK_CANCELLED,
-                                    something: 0,
-                                    something: 0,
+                                    payload: [0, 0],
                                 }};
                             }}
 
-                            throw new Error('BEFORE YIELD'); // TODO: remove
-                            const waitResult = await this.waitOn({{
+                            // TODO: Awaitables need to *always* trigger the parking mechanism when they're done...?
+                            // TODO: Component async state should remember which awaitables are done and work to clear tasks waiting
+
+                            console.log('BEFORE YIELD', {{ isCancellable }}); // TODO: remove
+                            throw new Error('BEFORE YIELD');
+                            const blockResult = await this.blockOn({{
                                 awaitable: new {awaitable_class}(new Promise(resolve => setTimeout(resolve, 0))),
-                                isAsync,
-                                isCancellable: true
+                                isCancellable,
+                                forCallback,
                             }});
 
-                            if (waitResult) {{
+                            if (blockResult === {task_class}.BlockResult.CANCELLED) {{
                                 if (this.#state !== {task_class}.State.INITIAL) {{
                                     throw new Error('task should be in initial state found [' + this.#state + ']');
                                 }}
                                 this.#state = {task_class}.State.CANCELLED;
                                 return {{
                                     code: {event_code_enum}.TASK_CANCELLED,
-                                    something: 0,
-                                    something: 0,
+                                    payload: [0, 0],
                                 }};
                             }}
 
                             return {{
                                 code: {event_code_enum}.NONE,
-                                something: 0,
-                                something: 0,
+                                payload: [0, 0],
                             }};
                         }}
 
