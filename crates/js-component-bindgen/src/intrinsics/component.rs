@@ -143,7 +143,7 @@ impl ComponentIntrinsic {
                             task.resume();
                         }}
 
-                        exclusiveLock() {{  // TODO: use atomics
+                        async exclusiveLock() {{  // TODO: use atomics
                             // Take a ticket for the next valid usage
                             const ticket = ++this.#lock.ticket;
 
