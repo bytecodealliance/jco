@@ -8,10 +8,11 @@ use base64::engine::general_purpose;
 use base64::Engine as _;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{
-    CanonicalOptions, Component, ComponentTranslation, ComponentTypes, CoreDef, CoreExport, Export,
-    ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule, InterfaceType, LoweredIndex,
-    ResourceIndex, RuntimeComponentInstanceIndex, RuntimeImportIndex, RuntimeInstanceIndex,
-    StaticModuleIndex, Trampoline, TrampolineIndex, TypeDef, TypeFuncIndex, TypeResourceTableIndex,
+    CanonicalOptions, CanonicalOptionsDataModel, Component, ComponentTranslation, ComponentTypes,
+    CoreDef, CoreExport, Export, ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule,
+    InterfaceType, LinearMemoryOptions, LoweredIndex, ResourceIndex, RuntimeComponentInstanceIndex,
+    RuntimeImportIndex, RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
+    TypeDef, TypeFuncIndex, TypeResourceTableIndex,
 };
 use wasmtime_environ::component::{
     ExportIndex, ExtractCallback, NameMap, NameMapNoIntern, Transcode,
@@ -644,6 +645,13 @@ impl<'a> Instantiator<'a, '_> {
             else {
                 continue;
             };
+
+            let options = self
+                .component
+                .options
+                .get(*options)
+                .expect("failed to find canon options");
+
             let i = self.lowering_options.push((options, i, *lower_ty));
             assert_eq!(i, *index);
         }
@@ -982,11 +990,22 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::WaitableSetWait {
-                instance,
-                async_,
-                memory,
-            } => {
+            Trampoline::WaitableSetWait { options } => {
+                let CanonicalOptions {
+                    instance,
+                    async_,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
+                    ..
+                } = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options")
+                else {
+                    panic!("unexpected/missing memory data model during waitable-set.wait");
+                };
+
                 let waitable_set_wait_fn = self
                     .gen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
@@ -994,15 +1013,26 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "const trampoline{i} = {waitable_set_wait_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
                     instance_idx = instance.as_u32(),
-                    memory_idx = memory.as_u32(),
+                    memory_idx = memory.expect("missing memory idx for waitable-set.wait").as_u32(),
                 );
             }
 
-            Trampoline::WaitableSetPoll {
-                instance,
-                async_,
-                memory,
-            } => {
+            Trampoline::WaitableSetPoll { options } => {
+                let CanonicalOptions {
+                    instance,
+                    async_,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
+                    ..
+                } = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options")
+                else {
+                    panic!("unexpected memory data model during waitable-set.poll");
+                };
+
                 let waitable_set_poll_fn = self
                     .gen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
@@ -1010,7 +1040,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "const trampoline{i} = {waitable_set_poll_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
                     instance_idx = instance.as_u32(),
-                    memory_idx = memory.as_u32(),
+                    memory_idx = memory.expect("missing memory idx for waitable-set.poll").as_u32(),
                 );
             }
 
@@ -1061,17 +1091,26 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamRead { ty, options } => {
+                let options = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options");
+
                 is_valid_canonopt(options).expect("invalid canonopts");
 
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
                     async_,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     ..
-                } = options;
+                } = options
+                else {
+                    panic!("missing/invalid data model for options during stream.read")
+                };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
                 let realloc_idx = realloc
@@ -1098,17 +1137,26 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamWrite { ty, options } => {
+                let options = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options");
+
                 is_valid_canonopt(options).expect("invalid canonopts");
 
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
                     async_,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     ..
-                } = options;
+                } = options
+                else {
+                    panic!("unexpected memory data model during stream.write");
+                };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory
                     .expect("missing memory idx for stream.write")
@@ -1158,7 +1206,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamCloseReadable { ty } => {
+            Trampoline::StreamDropReadable { ty } => {
                 let stream_drop_readable_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropReadable,
                 ));
@@ -1169,7 +1217,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamCloseWritable { ty } => {
+            Trampoline::StreamDropWritable { ty } => {
                 let stream_drop_writable_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropWritable,
                 ));
@@ -1194,16 +1242,27 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureRead { ty, options } => {
+                let options = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options");
+
                 let future_idx = ty.as_u32();
+
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
                     callback,
                     post_return,
                     async_,
-                } = options;
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
+                    ..
+                } = options
+                else {
+                    panic!("unexpected memory data model during future.read");
+                };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for future.read").as_u32();
                 let realloc_idx = realloc
@@ -1239,17 +1298,26 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureWrite { ty, options } => {
+                let options = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options");
+
                 is_valid_canonopt(options).expect("invalid canonopts");
 
                 let future_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
                     string_encoding,
-                    memory,
-                    realloc,
                     async_,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     ..
-                } = options;
+                } = options
+                else {
+                    panic!("unexpected memory data model during future.write");
+                };
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory
                     .expect("missing memory idx for future.write")
@@ -1299,7 +1367,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureCloseReadable { ty } => {
+            Trampoline::FutureDropReadable { ty } => {
                 let future_drop_readable_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureDropReadable,
                 ));
@@ -1310,7 +1378,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureCloseWritable { ty } => {
+            Trampoline::FutureDropWritable { ty } => {
                 let future_drop_writable_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureDropWritable,
                 ));
@@ -1324,18 +1392,32 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::FutureTransfer => todo!("Trampoline::FutureTransfer"),
 
             Trampoline::ErrorContextNew { ty, options } => {
-                self.ensure_error_context_local_table(options.instance, *ty);
+                let CanonicalOptions {
+                    instance,
+                    string_encoding,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
+                    ..
+                } = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options")
+                else {
+                    panic!("unexpected memory data model during error-context.new");
+                };
+
+                self.ensure_error_context_local_table(*instance, *ty);
 
                 let local_err_tbl_idx = ty.as_u32();
-                let component_idx = options.instance.as_u32();
+                let component_idx = instance.as_u32();
 
-                let memory_idx = options
-                    .memory
+                let memory_idx = memory
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
 
                 // Generate a string decoding function to match this trampoline that does appropriate encoding
-                let decoder = match options.string_encoding {
+                let decoder = match string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => self
                         .gen
                         .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Decoder)),
@@ -1368,20 +1450,36 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ErrorContextDebugMessage { ty, options } => {
+                let CanonicalOptions {
+                    instance,
+                    async_,
+                    callback,
+                    post_return,
+                    string_encoding,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
+                    ..
+                } = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options")
+                else {
+                    panic!("unexpected memory data model");
+                };
+
                 let debug_message_fn = self
                     .gen
                     .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::DebugMessage));
-                let realloc_fn_idx = options
-                    .realloc
+                let realloc_fn_idx = realloc
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
-                let memory_idx = options
-                    .memory
+                let memory_idx = memory
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
 
                 // Generate a string encoding function to match this trampoline that does appropriate encoding
-                match options.string_encoding {
+                match string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => {
                         let encode_fn = self
                             .gen
@@ -1423,18 +1521,15 @@ impl<'a> Instantiator<'a, '_> {
 
                 let options_obj = format!(
                     "{{callback:{callback}, postReturn: {post_return}, async: {async_}}}",
-                    callback = options
-                        .callback
+                    callback = callback
                         .map(|v| v.as_u32().to_string())
                         .unwrap_or_else(|| "null".into()),
-                    post_return = options
-                        .post_return
+                    post_return = post_return
                         .map(|v| v.as_u32().to_string())
                         .unwrap_or_else(|| "null".into()),
-                    async_ = options.async_,
                 );
 
-                let component_idx = options.instance.as_u32();
+                let component_idx = instance.as_u32();
                 let local_err_tbl_idx = ty.as_u32();
                 uwriteln!(
                     self.src.js,
@@ -1752,13 +1847,21 @@ impl<'a> Instantiator<'a, '_> {
 
                 let CanonicalOptions {
                     instance,
+                    async_,
+                    data_model:
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
                     string_encoding,
-                    memory,
-                    realloc,
                     callback,
                     post_return,
-                    async_,
-                } = options;
+                    ..
+                } = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options")
+                else {
+                    panic!("unexpected memory data model");
+                };
 
                 // Validate canonopts
                 // TODO: these should be traps at runtime rather than failures at transpilation time
@@ -2308,12 +2411,15 @@ impl<'a> Instantiator<'a, '_> {
         // This is only necessary if an import binding mode is specified and not JS (the default),
         // (e.g. Optimized, Direct, Hybrid).
         if !matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
-            let memory = options
-                .memory
+            let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }) =
+                options.data_model
+            else {
+                panic!("missing/invalid data model");
+            };
+            let memory = memory
                 .map(|idx| format!(" memory: memory{},", idx.as_u32()))
                 .unwrap_or("".into());
-            let realloc = options
-                .realloc
+            let realloc = realloc
                 .map(|idx| format!(" realloc: realloc{},", idx.as_u32()))
                 .unwrap_or("".into());
             let post_return = options
@@ -2849,8 +2955,14 @@ impl<'a> Instantiator<'a, '_> {
         abi: AbiVariant,
         is_async: bool,
     ) {
-        let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
-        let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
+        let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }) =
+            opts.data_model
+        else {
+            panic!("unexpected data model, only linear memories supported");
+        };
+
+        let memory = memory.map(|idx| format!("memory{}", idx.as_u32()));
+        let realloc = realloc.map(|idx| format!("realloc{}", idx.as_u32()));
         let post_return = opts
             .post_return
             .map(|idx| format!("postReturn{}", idx.as_u32()));
@@ -3137,6 +3249,13 @@ impl<'a> Instantiator<'a, '_> {
                         self.gen.local_names.create_once(export_name)
                     }
                     .to_string();
+
+                    let options = self
+                        .component
+                        .options
+                        .get(*options)
+                        .expect("failed to find options");
+
                     self.export_bindgen(
                         &local_name,
                         def,
@@ -3201,6 +3320,12 @@ impl<'a> Instantiator<'a, '_> {
                             self.gen.local_names.create_once(func_name)
                         }
                         .to_string();
+
+                        let options = self
+                            .component
+                            .options
+                            .get(*options)
+                            .expect("failed to find options");
 
                         self.export_bindgen(
                             &local_name,
@@ -3536,16 +3661,23 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 }
 
 /// Perform basic canonical option validation
-fn is_valid_canonopt(
-    CanonicalOptions {
-        memory,
-        realloc,
+///
+/// This validation expects only canon opts with linear memories
+fn is_valid_canonopt(opts: &CanonicalOptions) -> Result<()> {
+    let CanonicalOptions {
+        data_model:
+            CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                memory, realloc, ..
+            }),
+
         callback,
         post_return,
         async_,
         ..
-    }: &CanonicalOptions,
-) -> Result<()> {
+    } = opts
+    else {
+        bail!("invalid data model for canonical options");
+    };
     if realloc.is_some() && memory.is_none() {
         bail!("memory must be present if realloc is");
     }
