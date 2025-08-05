@@ -66,7 +66,7 @@ then executed by the browser with an async function.
          },
        });
      } catch (e) {
-       err(`ERROR while instantiating [${testModule}]:\n\n${e}\n${e.stack}`);
+       err({ msg: `ERROR while instantiating [${testModule}]:\n\n${e}\n${e.stack}` });
        return;
      }
 
@@ -88,12 +88,12 @@ then executed by the browser with an async function.
      const responseText = await fn();
 
      if (count <= 20) {
-       err(`ERROR setTimeout did not run unimpeded, only completed [${count}] 50ms increments (expected ~20)`);
+       err({ err: `ERROR setTimeout did not run unimpeded, only completed [${count}] 50ms increments (expected ~20)` });
      }
 
      ok({ responseText });
    } catch (e) {
-     err(`ERROR while running [${testModule}]:\n\n${e}\n${e.stack}`);
+     err({ err: `ERROR while running [${testModule}]:\n\n${e}\n${e.stack}` });
    }
  }
 

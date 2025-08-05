@@ -16,17 +16,15 @@ import { basename } from 'node:path';
 // within the generated directory.
 export async function loadWasm(path: string) {
     const name = basename(path).replace(/\.core\d*\.wasm$/, '');
-    return await WebAssembly.compile(
-        await readFile(new URL(`./${name}/${path}`, import.meta.url))
-    );
+    const buf = await readFile(new URL(`./${name}/${path}`, import.meta.url));
+    return await WebAssembly.compile(buf.buffer as ArrayBuffer);
 }
 
 // Just like `loadWasm`, but not async :-).
 export function loadWasmSync(path: string) {
     const name = basename(path).replace(/\.core\d*\.wasm$/, '');
-    return new WebAssembly.Module(
-        readFileSync(new URL(`./${name}/${path}`, import.meta.url))
-    );
+    const buf = readFileSync(new URL(`./${name}/${path}`, import.meta.url));
+    return new WebAssembly.Module(buf.buffer as ArrayBuffer);
 }
 
 // Export a WASI interface directly for instance imports
