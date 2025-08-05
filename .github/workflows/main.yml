@@ -64,6 +64,7 @@ jobs:
         node:
           - 18.x
           - 20.x
+          - 22.x
           - latest
         include:
           - os: windows-latest
@@ -158,7 +159,7 @@ jobs:
             packages/jco/obj
 
       - name: Test LTS Node.js
-        if: matrix.node == '18.x' || matrix.node == '20.x'
+        if: matrix.node == '18.x' || matrix.node == '20.x' || matrix.ndoe == '22.x'
         working-directory: packages/jco
         run: |
           npm run test:lts -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
