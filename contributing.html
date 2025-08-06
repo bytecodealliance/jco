@@ -274,7 +274,12 @@ npm run build
 <h3 id="running-specific-tests"><a class="header" href="#running-specific-tests">Running specific tests</a></h3>
 <p>JS tests are powered by [<code>vitest</code>][vitest], and a specific test suite can be run by passing
 the filename to <code>npm run test</code>:</p>
-<pre><code class="language-console">npm run test runtime.js
+<pre><code class="language-console">cd packages/jco
+npm run test runtime.js
+</code></pre>
+<p>For example, to run multiple tests in a given folder:</p>
+<pre><code class="language-console">cd packages/jco
+npm run test test/p3/*.js
 </code></pre>
 <h2 id="commits"><a class="header" href="#commits">Commits</a></h2>
 <p>Jco and related subprojects use <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>.
