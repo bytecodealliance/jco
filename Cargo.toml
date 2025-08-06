@@ -35,22 +35,18 @@ structopt = { version = "0.3.26", default-features = false }
 webidl2wit = { version = "0.1.0", default-features = false }
 xshell = { version = "0.2.6", default-features = false }
 
-wasm-encoder = { version = "0.230.0", default-features = false }
-wasm-metadata = { version = "0.230.0", default-features = false }
-wasmparser = { version = "0.230.0", default-features = false }
-wasmprinter = { version = "0.230.0", default-features = false }
-wat = { version = "1.230.0", default-features = false }
-wit-bindgen = { version = "0.42.1", default-features = false }
-wit-bindgen-core = { version = "0.42.1", default-features = false }
-wit-component = { version = "0.230.0", features = ["dummy-module"] }
-wit-parser = { version = "0.230.0", default-features = false }
+wasm-encoder = { version = "0.235.0", default-features = false }
+wasm-metadata = { version = "0.235.0", default-features = false }
+wasmparser = { version = "0.235.0", default-features = false }
+wasmprinter = { version = "0.235.0", default-features = false }
+wat = { version = "1.235.0", default-features = false }
+wit-bindgen = { version = "0.43.0", default-features = false }
+wit-bindgen-core = { version = "0.43.0", default-features = false }
+wit-component = { version = "0.235.0", features = ["dummy-module"] }
+wit-parser = { version = "0.235.0", default-features = false }
 
-# We cannot use the published version of wasmtime-environ because it does not have support for some intrinsics:
-#
-# compare:
-# https://github.com/bytecodealliance/wasmtime/blob/be0ba4b83e60c17d49b3c7149334fbf587487cbc/crates/environ/src/component/translate.rs#L820
-# https://github.com/bytecodealliance/wasip3-prototyping/blob/10355ff43c0df49c6c4bc64ad00512fb6ae71698/crates/environ/src/component/translate.rs#L660
-wasmtime-environ = { git = "https://github.com/bytecodealliance/wasip3-prototyping", rev = "10355ff43c0df49c6c4bc64ad00512fb6ae71698", features = [
+# TODO: move to upstream wasmtime
+wasmtime-environ = { git = "https://github.com/bytecodealliance/wasip3-prototyping", rev = "d025f02671800328ec170d0f948eaabb604e94af", features = [
   "component-model",
   "compile",
 ] }
