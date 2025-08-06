@@ -77,7 +77,7 @@
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^19.8.1",
-    "@types/node": "^24.0.15",
+    "@types/node": "^24.2.0",
     "@typescript-eslint/eslint-plugin": "^8.37.0",
     "@typescript-eslint/parser": "^8.37.0",
     "commitlint": "^19.8.1",
@@ -90,7 +90,7 @@
     "puppeteer": "^24.14.0",
     "semver": "^7.7.1",
     "smol-toml": "^1.4.1",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }
 }
