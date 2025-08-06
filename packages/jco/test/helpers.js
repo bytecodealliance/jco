@@ -113,7 +113,7 @@ export async function getTmpDir() {
  * @param {object} args.jco - JCO-related confguration for running the async test
  * @param {string} [args.jcoBinPath] - path to the jco binary (or a JS script)
  * @param {object} [args.transpile] - configuration related to transpilation
- * @param {string[]} [args.transpile.extraArgs] - arguments to pass along to jco transpilation
+ * @param {object} [args.transpile.extraArgs] - arguments to pass along to jco transpilation
  * @param {object} args.component - configuration for an existing component that should be transpiled
  * @param {string} args.component.name - name of the component
  * @param {string} args.component.path - path to the WebAssembly binary for the existing component

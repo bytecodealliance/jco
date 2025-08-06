@@ -248,7 +248,9 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatBool(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatBool()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length != 1) {{ 
+                            throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
+                        }}
                         if (vals[0] !== 0 && vals[0] !== 1) {{ throw new Error('invalid value for core value representing bool'); }}
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
                         return 1;
@@ -261,7 +263,9 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatS8(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatS8()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length != 1) {{ 
+                            throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
+                        }}
                         if (vals[0] > 127 || vals[0] < -128) {{ throw new Error('invalid value for core value representing s8'); }}
                         new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
                         return 8;
@@ -274,7 +278,9 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatU8(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatU8()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length != 1) {{ 
+                            throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
+                        }}
                         if (vals[0] > 255 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u8'); }}
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
                         return 8;
@@ -287,7 +293,9 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatS16(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatS16()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length != 1) {{ 
+                            throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
+                        }}
                         if (vals[0] > 32_767 || vals[0] < -32_768) {{ throw new Error('invalid value for core value representing s16'); }}
                         new DataView(memory.buffer).setInt16(storagePtr, vals[0], true);
                         return 16;
@@ -300,7 +308,9 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatU16(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatU16()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length != 1) {{ 
+                            throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
+                        }}
                         if (vals[0] > 65_535 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u16'); }}
                         new DataView(memory.buffer).setUint16(storagePtr, vals[0], true);
                         return 16;
@@ -313,7 +323,9 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatS32(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatS32()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length != 1) {{ 
+                            throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
+                        }}
                         if (vals[0] > 2_147_483_647 || vals[0] < -2_147_483_648) {{ throw new Error('invalid value for core value representing s32'); }}
                         new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
                         return 32;
@@ -326,7 +338,9 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatU32(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatU32()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length != 1) {{ 
+                            throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
+                        }}
                         if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
                         return 32;

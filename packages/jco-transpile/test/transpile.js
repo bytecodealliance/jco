@@ -7,7 +7,8 @@ import { transpile, runTranspileComponent } from '../src/transpile.js';
 import { readComponentBytes } from './helpers.js';
 
 // - (2025/02/04) incrased due to incoming implementations of async and new flush impl
-const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 28_500;
+// - (2025/02/04) incrased due to stabilization changes for async tasks
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 40_000;
 
 suite('Transpile', () => {
     let flavorfulWasmBytes;

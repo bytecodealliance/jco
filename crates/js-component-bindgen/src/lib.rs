@@ -1,4 +1,17 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+use std::collections::HashSet;
+
+use anyhow::{bail, ensure, Context, Result};
+use ts_bindgen::ts_bindgen;
+use wasmtime_environ::component::{
+    CanonicalOptions, ComponentTypesBuilder, Export, StaticModuleIndex,
+};
+use wasmtime_environ::wasmparser::WasmFeatures;
+use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
+use wit_bindgen_core::wit_parser::{Function, FunctionKind};
+use wit_component::DecodedWasm;
+use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
+
 mod core;
 mod files;
 mod transpile_bindgen;
@@ -9,19 +22,9 @@ pub mod function_bindgen;
 pub mod intrinsics;
 pub mod names;
 pub mod source;
-pub use transpile_bindgen::{AsyncMode, BindingsMode, InstantiationMode, TranspileOpts};
 
-use anyhow::Result;
 use transpile_bindgen::transpile_bindgen;
-
-use anyhow::{bail, ensure, Context};
-use wasmtime_environ::component::{ComponentTypesBuilder, Export, StaticModuleIndex};
-use wasmtime_environ::wasmparser::WasmFeatures;
-use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
-use wit_component::DecodedWasm;
-
-use ts_bindgen::ts_bindgen;
-use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
+pub use transpile_bindgen::{AsyncMode, BindingsMode, InstantiationMode, TranspileOpts};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
 ///
@@ -65,7 +68,7 @@ pub fn generate_types(
     resolve: Resolve,
     world_id: WorldId,
     opts: TranspileOpts,
-) -> Result<Vec<(String, Vec<u8>)>, anyhow::Error> {
+) -> Result<Vec<(String, Vec<u8>)>> {
     let mut files = files::Files::default();
 
     ts_bindgen(name, &resolve, world_id, &opts, &mut files)
@@ -81,7 +84,7 @@ pub fn generate_types(
 /// Generate the JS transpilation bindgen for a given Wasm component binary
 /// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
-pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, anyhow::Error> {
+pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
     use wasmtime_environ::component::{Component, Translator};
 
     let name = opts.name.clone();
@@ -131,11 +134,12 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled, an
             | WasmFeatures::CM_ERROR_CONTEXT
             | WasmFeatures::MULTI_MEMORY,
     );
+
     let mut types = ComponentTypesBuilder::new(&validator);
 
     let (component, modules) = Translator::new(&tunables, &mut validator, &mut types, &scope)
         .translate(component)
-        .context("failed to parse the input component")?;
+        .context("failed to translate component")?;
 
     let modules: PrimaryMap<StaticModuleIndex, core::Translation<'_>> = modules
         .into_iter()
@@ -238,4 +242,66 @@ pub fn get_thrown_type(
         },
         _ => None,
     }
+}
+
+/// Check whether a given function is a async lifted by by a guest
+///
+/// Functions that are designated as guest async lifted represent use of
+/// the WASI p3 async feature.
+///
+/// These functions must be called from transpiled javsacript much differently
+/// than they would otherwise be, i.e. in accordance to the Component Model
+/// async feature.
+pub(crate) fn is_guest_async_lifted_fn(func: &Function, canon_opts: &CanonicalOptions) -> bool {
+    if canon_opts.async_ {
+        return true;
+    }
+    matches!(
+        func.kind,
+        FunctionKind::AsyncMethod(_)
+            | FunctionKind::AsyncStatic(_)
+            | FunctionKind::AsyncFreestanding
+    )
+}
+
+/// Check whether a function has been marked or async binding generation
+///
+/// When dealing with imports, functions that are designated to require async porcelain
+/// are usually asynchronous host functions -- they will have code generated
+/// that enables use of techniques like JSPI for exposing asynchronous host/platform
+/// imports to WebAssembly guests.
+///
+/// When dealing with an export, functions that require async porcelain simply provide
+/// an interface in the transpiled codebase that produces a `Promise`, i.e. one that can
+/// be called in an *already* asynchronous context (JS `async` function) or resolved with a`.then()`.
+///
+/// Exports do not indicate a use of JSPI, as JSPI is only for bridging asynchronous *host* behavior
+/// to synchronous WebAssembly modules
+///
+/// This function is *not* for detecting WASI P3 asynchronous behavior -- see [`is_guest_async_lifted_fn`].
+pub(crate) fn requires_async_porcelain(
+    func: &Function,
+    id: &str,
+    async_funcs: &HashSet<String>,
+) -> bool {
+    let name = func.name.as_str();
+
+    if async_funcs.contains(name) {
+        return true;
+    }
+
+    let qualified_name = format!("{id}#{name}");
+    if async_funcs.contains(&qualified_name) {
+        return true;
+    }
+
+    if let Some(pos) = id.find('@') {
+        let namespace = &id[..pos];
+        let namespaced_name = format!("{namespace}#{name}");
+
+        if async_funcs.contains(&namespaced_name) {
+            return true;
+        }
+    }
+    false
 }

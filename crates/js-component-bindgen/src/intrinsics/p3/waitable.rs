@@ -2,7 +2,7 @@
 
 use super::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
-use crate::intrinsics::{DeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
 /// This enum contains intrinsics that enable waitable sets
@@ -153,7 +153,7 @@ impl WaitableIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
-                let maybe_shuffle = if args.determinism == DeterminismProfile::Random {
+                let maybe_shuffle = if args.determinism == AsyncDeterminismProfile::Random {
                     "this.shuffleWaitables();"
                 } else {
                     ""
@@ -196,7 +196,7 @@ impl WaitableIntrinsic {
 
                             const event = await Promise.race(waitables.map((w) => w.promise));
 
-                            throw new Error('not implemented');
+                            throw new Error('{waitable_set_class}#poll() not implemented');
                         }}
                     }}
                 "));
@@ -243,11 +243,11 @@ impl WaitableIntrinsic {
 
                             const event = await Promise.race(waitables.map((w) => w.promise));
 
-                            throw new Error('not implemented');
+                            throw new Error('{waitable_class}#poll() not implemented');
                         }}
 
                         async join() {{
-                            throw new Error('not implemented');
+                            throw new Error('{waitable_class}#join() not implemented');
                         }}
                     }}
                 "));
@@ -279,7 +279,7 @@ impl WaitableIntrinsic {
                 output.push_str(&format!("
                     async function {waitable_set_wait_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
                         {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw Error('invalid/missing async task'); }}
                         if (task.componentIdx !== componentInstanceID) {{
                             throw Error(['task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
@@ -299,7 +299,7 @@ impl WaitableIntrinsic {
                 output.push_str(&format!("
                     function {waitable_set_poll_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
                         {debug_log_fn}('[{waitable_set_poll_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw Error('invalid/missing async task'); }}
                         if (task.componentIdx !== componentInstanceID) {{
                             throw Error(['task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
@@ -322,7 +322,7 @@ impl WaitableIntrinsic {
                 output.push_str(&format!("
                     function {waitable_set_drop_fn}(componentInstanceID, waitableSetRep) {{
                         {debug_log_fn}('[{waitable_set_drop_fn}()] args', {{ componentInstanceID, waitableSetRep }});
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
                         if (task.componentIdx !== componentInstanceID) {{
                             throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
@@ -366,9 +366,9 @@ impl WaitableIntrinsic {
                 output.push_str(&format!("
                     function {waitable_join_fn}(componentInstanceID, waitableSetRep, waitableRep) {{
                         {debug_log_fn}('[{waitable_join_fn}()] args', {{ componentInstanceID, waitableSetRep, waitableRep }});
-                        const task = {current_task_get_fn}();
+                        const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
-                        throw new Error('not implemented!');
+                        throw new Error('{waitable_join_fn}() not implemented!');
                     }}
                 "));
             }
