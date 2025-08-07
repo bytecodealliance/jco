@@ -47,6 +47,8 @@ struct TsBindgen {
     /// definitions. This is used to generate `/// <reference path="..." />`
     /// directives at the top of the file.
     references: BTreeSet<String>,
+    
+    has_world_resources: bool,
 }
 
 /// Used to generate a `*.d.ts` file for each imported and exported interface for
@@ -91,6 +93,7 @@ pub fn ts_bindgen(
         async_imports,
         async_exports,
         references: Default::default(),
+        has_world_resources: false,
     };
 
     let world = &resolve.worlds[id];
@@ -203,7 +206,10 @@ pub fn ts_bindgen(
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
                         TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
-                        TypeDefKind::Resource => gen.type_resource(*tid, ty),
+                        TypeDefKind::Resource => {
+                            bindgen.has_world_resources = true;
+                            gen.type_resource(*tid, ty)
+                        }
                         TypeDefKind::Handle(_) => todo!("type generation for handle"),
                     }
                     let (src, references) = gen.finish();
@@ -392,12 +398,21 @@ pub fn ts_bindgen(
         uwriteln!(bindgen.src, "}}");
     }
 
+    let mut final_src = String::new();
+    if bindgen.has_world_resources && !bindgen.is_guest {
+        final_src.push_str("// Resources implement the Disposable interface for automatic cleanup\n");
+        final_src.push_str("interface Disposable {\n");
+        final_src.push_str("  [Symbol.dispose](): void;\n");
+        final_src.push_str("}\n\n");
+    }
+    final_src.push_str(&bindgen.src);
+
     let filename = format!("{name}.d.ts");
     files.push(
         &filename,
         generate_references(&bindgen.references).as_bytes(),
     );
-    files.push(&filename, bindgen.src.as_bytes());
+    files.push(&filename, final_src.as_bytes());
     Ok(())
 }
 
@@ -663,10 +678,21 @@ impl<'a> TsInterface<'a> {
     }
 
     fn finish(mut self) -> (Source, BTreeSet<String>) {
+        if !self.resources.is_empty() && !self.is_guest {
+            let mut new_src = Source::default();
+            uwriteln!(new_src, "// Resources implement the Disposable interface for automatic cleanup");
+            uwriteln!(new_src, "interface Disposable {{");
+            uwriteln!(new_src, "  [Symbol.dispose](): void;");
+            uwriteln!(new_src, "}}");
+            uwriteln!(new_src, "");
+            new_src.push_str(&self.src);
+            self.src = new_src;
+        }
+        
         for (resource, source) in self.resources {
             uwriteln!(
                 self.src,
-                "\nexport class {} {{",
+                "\nexport class {} implements Disposable {{",
                 resource.to_upper_camel_case()
             );
             if !source.has_constructor {
