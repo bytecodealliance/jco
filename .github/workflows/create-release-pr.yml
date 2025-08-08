@@ -43,16 +43,20 @@ jobs:
 
       # Install Rust deps
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-      - uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
+      - name: install just
+        uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
         with:
           tool: just
-      - uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
+      - name: install git-cliff
+        uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
         with:
           tool: git-cliff
-      - uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
+      - name: install cargo-get
+        uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
         with:
           tool: cargo-get
-      - uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
+      - name: install cargo-edit
+        uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
         with:
           tool: cargo-edit
 
@@ -159,7 +163,6 @@ jobs:
       # NOTE: we use the 'latest' tag here, because starting from an rc/alpha/beta release
       # the rc/alpha/beta release tags are ignored and the "latest" tag is the previous stable version
       - name: Generate changelog
-        working-directory: ${{ steps.project-meta.outputs.project-dir }}
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
@@ -172,11 +175,11 @@ jobs:
 
           git cliff \
             --repository=${{ github.workspace }}/.git \
-            --config=./cliff.toml \
+            --config=${{ steps.project-meta.outputs.project-dir }}/cliff.toml \
             --unreleased \
             $OPT_TAG \
             $OPT_TAG_PATTERN \
-            --prepend=CHANGELOG.md
+            --prepend=${{ needs.meta.outputs.project-dir }}/CHANGELOG.md
 
       # Create release PR
       - name: Create release prep PR
