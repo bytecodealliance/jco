@@ -31,7 +31,7 @@ async function main() {
     if (!ghRepo) {
         throw new Error('GITHUB_REPO not set');
     }
-    if (ghRepo.contains('/')) {
+    if (ghRepo.includes('/')) {
         ghRepo = ghRepo.split('/')[1];
     }
     console.error(`using GH repo [${ghRepo}]`);
