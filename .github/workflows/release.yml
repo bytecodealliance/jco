@@ -434,12 +434,13 @@ jobs:
             export OPT_TAG=--tag=${{ needs.meta.outputs.next-release-tag }};
           fi
 
-          export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
+          export TAG_PATTERN='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
           if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
-            export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
+            export TAG_PATTERN='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
+            export OPT_TAG_PATTERN=--tag-pattern=$TAG_PATTERN;
           fi
 
-          echo -e "tag-pattern=$OPT_TAG_PATTERN" >> $GITHUB_OUTPUT;
+          echo -e "tag-pattern=$TAG_PATTERN" >> $GITHUB_OUTPUT;
 
           git cliff \
             --repository=${{ github.workspace }}/.git \
