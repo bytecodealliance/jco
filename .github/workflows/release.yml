@@ -294,6 +294,10 @@ jobs:
         with:
           path: artifacts
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ">=22"
+
       - name: Test built jco NPM package
         if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
