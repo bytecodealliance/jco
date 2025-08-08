@@ -55,8 +55,8 @@ jobs:
   meta:
     runs-on: ubuntu-24.04
     outputs:
-      version: ${{ steps.project-meta.outputs.version }}
-      project: ${{ steps.project-meta.outputs.project }}
+      version: ${{ steps.meta.outputs.version }}
+      project: ${{ steps.meta.outputs.project }}
       project-dir: ${{ steps.project-meta.outputs.project-dir }}
       is-js-project: ${{ steps.project-meta.outputs.is-js-project }}
       is-rust-project: ${{ steps.project-meta.outputs.is-rust-project }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Collect metadata
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        id: project-meta
+        id: meta
         with:
           script: |
             if (context.payload.inputs?.project && context.payload.inputs?.version) {
@@ -114,8 +114,8 @@ jobs:
       - name: Gather project metadata
         id: project-meta
         env:
-          NEXT_VERSION: ${{ steps.project-meta.outputs.version }}
-          PROJECT: ${{ steps.project-meta.outputs.project }}
+          NEXT_VERSION: ${{ steps.meta.outputs.version }}
+          PROJECT: ${{ steps.meta.outputs.project }}
         shell: bash
         run: |
           if [[ $NEXT_VERSION == v* ]]; then
@@ -153,7 +153,7 @@ jobs:
               export ARTIFACT_NAME="bytecodealliance-preview3-shim-$NEXT_VERSION.tgz";
               ;;
             js-component-bindgen)
-              export PROJECT_DIR="$PWD/crates/${{ steps.project-meta.outputs.project }}";
+              export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
               export CURRENT_VERSION=$(cargo get package.version --terminator Nul --entry=$PROJECT_DIR);
               export IS_RUST_PROJECT=true;
               export ARTIFACTS_GLOB="target/package/js-component-bindgen-*.crate";
@@ -177,7 +177,7 @@ jobs:
           echo -e "prerelease-tag=$PRERELEASE_TAG" >> $GITHUB_OUTPUT;
 
   pack-crate-release:
-    if: ${{ needs.project-meta.outputs.is-rust-project == 'true' }}
+    if: ${{ needs.meta.outputs.is-rust-project == 'true' }}
     runs-on: ubuntu-24.04
     needs:
       - meta
@@ -195,28 +195,28 @@ jobs:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
       - name: Release crate (dry run)
-        working-directory: ${{ needs.project-meta.outputs.project-dir }}
+        working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
           cargo publish --locked --dry-run
 
       - name: Create release package
-        working-directory: ${{ needs.project-meta.outputs.project-dir }}
+        working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
           cargo package
 
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-path: ${{ needs.project-meta.outputs.artifacts-glob }}
+          subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           if-no-files-found: error
-          name: ${{ needs.project-meta.outputs.project }}
+          name: ${{ needs.meta.outputs.project }}
           path: |
-            ${{ needs.project-meta.outputs.artifacts-glob }}
+            ${{ needs.meta.outputs.artifacts-glob }}
 
   pack-npm-release:
-    if: ${{ needs.project-meta.outputs.is-js-project == 'true' }}
+    if: ${{ needs.meta.outputs.is-js-project == 'true' }}
     runs-on: ubuntu-24.04
     needs:
       - meta
@@ -249,16 +249,16 @@ jobs:
           npm install
 
       - name: Create release package
-        working-directory: ${{ needs.project-meta.outputs.project-dir }}
+        working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
           npm pack
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           if-no-files-found: error
-          name: ${{ needs.project-meta.outputs.project }}
+          name: ${{ needs.meta.outputs.project }}
           path: |
-            ${{ needs.project-meta.outputs.artifacts-glob }}
+            ${{ needs.meta.outputs.artifacts-glob }}
 
   test-crate-release:
     runs-on: ubuntu-24.04
@@ -271,13 +271,13 @@ jobs:
           path: artifacts
 
       - name: Test built crates.io crate
-        if: ${{ needs.project-meta.outputs.project == 'js-component-bindgen' }}
+        if: ${{ needs.meta.outputs.project == 'js-component-bindgen' }}
         shell: bash
         run: |
-          mkdir -p /tmp/${{ needs.project-meta.outputs.project }}
-          cp -r artifacts/${{ needs.project-meta.outputs.project }}/* /tmp/${{ needs.project-meta.outputs.project }}/
-          cd /tmp/${{ needs.project-meta.outputs.project }}
-          tar --strip-components=1 -xvf ${{ needs.project-meta.outputs.artifact-name }}
+          mkdir -p /tmp/${{ needs.meta.outputs.project }}
+          cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
+          cd /tmp/${{ needs.meta.outputs.project }}
+          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
           rm Cargo.toml.orig
 
           cargo build
@@ -295,10 +295,10 @@ jobs:
           path: artifacts
 
       - name: Test built jco NPM package
-        if: ${{ needs.project-meta.outputs.project == 'jco' }}
+        if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
         run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.project-meta.outputs.project }}/${{ needs.project-meta.outputs.artifact-name }}
+          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
           cp -r examples/components/http-hello-world /tmp/test
           cd /tmp/test
           npm install --save $PACKAGE_DIR
@@ -314,7 +314,7 @@ jobs:
         with:
           path: artifacts
 
-      - name: Publish ${{ needs.project-meta.outputs.project }} to crates.io
+      - name: Publish ${{ needs.meta.outputs.project }} to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_KEY }}
         run: |
@@ -323,10 +323,10 @@ jobs:
             export OPT_DRY_RUN="";
           fi
 
-          mkdir -p /tmp/${{ needs.project-meta.outputs.project }}
-          cp -r artifacts/${{ needs.project-meta.outputs.project }}/* /tmp/${{ needs.project-meta.outputs.project }}/
-          cd /tmp/${{ needs.project-meta.outputs.project }}
-          tar --strip-components=1 -xvf ${{ needs.project-meta.outputs.artifact-name }}
+          mkdir -p /tmp/${{ needs.meta.outputs.project }}
+          cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
+          cd /tmp/${{ needs.meta.outputs.project }}
+          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
           rm Cargo.toml.orig
 
           cargo publish $OPT_DRY_RUN
@@ -364,12 +364,12 @@ jobs:
         run: |
           npm install
 
-      - name: Publish ${{ needs.project-meta.outputs.project }} to NPM
+      - name: Publish ${{ needs.meta.outputs.project }} to NPM
         env:
           NPM_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
         shell: bash
         run: |
-          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.project-meta.outputs.project }}/${{ needs.project-meta.outputs.artifact-name }}
+          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
 
           export OPT_DRY_RUN="--dry-run"
           if [ "tag" == "${{ github.ref_type }}" ]; then
@@ -377,13 +377,13 @@ jobs:
           fi
 
           export OPT_RELEASE_TAG=""
-          if [ "true" == "${{ needs.project-meta.outputs.is-prerelease }}" ]; then
-            export OPT_RELEASE_TAG="--tag ${{ needs.project-meta.outputs.prerelease-tag }}";
+          if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
+            export OPT_RELEASE_TAG="--tag ${{ needs.meta.outputs.prerelease-tag }}";
           fi
 
           npm publish \
             --verbose \
-            -w @bytecodealliance/${{ needs.project-meta.outputs.project }} \
+            -w @bytecodealliance/${{ needs.meta.outputs.project }} \
             --access=public \
             --provenance \
             $OPT_DRY_RUN \
@@ -427,23 +427,23 @@ jobs:
           export OPT_TAG=;
           if [ "tag" == "${{ github.ref_type }}" ]; then
             export OPT_START=--current;
-            export OPT_TAG=--tag=${{ needs.project-meta.outputs.next-release-tag }};
+            export OPT_TAG=--tag=${{ needs.meta.outputs.next-release-tag }};
           fi
 
-          export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
-          if [ "true" == "${{ needs.project-meta.outputs.is-prerelease }}" ]; then
-            export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.project-meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
+          export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
+          if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
+            export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
           fi
 
           echo -e "tag-pattern=$OPT_TAG_PATTERN" >> $GITHUB_OUTPUT;
 
           git cliff \
             --repository=${{ github.workspace }}/.git \
-            --config=${{ needs.project-meta.outputs.project-dir }}/cliff.toml \
+            --config=${{ needs.meta.outputs.project-dir }}/cliff.toml \
             $OPT_START \
             $OPT_TAG \
             $OPT_TAG_PATTERN \
-            > ${{ needs.project-meta.outputs.project-dir }}/CHANGELOG.current;
+            > ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current;
 
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
@@ -453,11 +453,11 @@ jobs:
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           token: ${{ secrets.RELEASE_PAT || github.token }}
-          prerelease: ${{ github.ref_type != 'tag' || needs.project-meta.outputs.is-prerelease == 'true' }}
+          prerelease: ${{ github.ref_type != 'tag' || needs.meta.outputs.is-prerelease == 'true' }}
           draft: ${{ github.ref_type != 'tag' }}
-          tag_name: ${{ needs.project-meta.outputs.next-release-tag }}
+          tag_name: ${{ needs.meta.outputs.next-release-tag }}
           generate_release_notes: false
-          body_path: ${{ needs.project-meta.outputs.project-dir }}/CHANGELOG.current
+          body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current
           files: |
             ./artifacts/*/*
 
@@ -477,13 +477,13 @@ jobs:
         continue-on-error: true
         if: ${{ github.repository_owner == 'bytecodealliance' && github.ref_type == 'tag' }}
         env:
-          IS_PRE_RELEASE: ${{ needs.project-meta.outputs.is-prerelease }}
+          IS_PRE_RELEASE: ${{ needs.meta.outputs.is-prerelease }}
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
           GITHUB_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO: ${{ github.repository }}
-          GIT_CLIFF_CONFIG_PATH: ${{ needs.project-meta.outputs.project-dir }}/cliff.toml
+          GIT_CLIFF_CONFIG_PATH: ${{ needs.meta.outputs.project-dir }}/cliff.toml
           GIT_CLIFF_REPOSITORY: ${{ github.workspace }}/.git
-          GIT_CLIFF_RELEASE_TAG: ${{ needs.project-meta.outputs.next-release-tag }}
+          GIT_CLIFF_RELEASE_TAG: ${{ needs.meta.outputs.next-release-tag }}
           GIT_CLIFF_TAG_PATTERN: ${{ steps.changelog-regen.outputs.tag-pattern }}
         run: |
           node scripts/post-release-issue-update.mjs
