@@ -68,7 +68,8 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
+      - name: install cargo-get
+        uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
         with:
           tool: cargo-get
 
@@ -405,7 +406,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: taiki-e/install-action@007e46d398bf948566b47c3fc5528dd5748303b1 # v2.58.2
+      - name: install git-cliff
+        uses: taiki-e/install-action@007e46d398bf948566b47c3fc5528dd5748303b1 # v2.58.2
         with:
           fallback: none
           tool: git-cliff
@@ -416,7 +418,6 @@ jobs:
       # tag and likely the one corresponding to this release, so we use the latest
       #
       - name: Re-generate current changelog
-        working-directory: ${{ needs.meta.outputs.project-dir }}
         id: changelog-regen
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
@@ -438,11 +439,11 @@ jobs:
 
           git cliff \
             --repository=${{ github.workspace }}/.git \
-            --config=./cliff.toml \
+            --config=${{ needs.meta.outputs.project-dir }}/cliff.toml \
             $OPT_START \
             $OPT_TAG \
             $OPT_TAG_PATTERN \
-            > CHANGELOG.current;
+            > ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current;
 
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
