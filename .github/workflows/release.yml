@@ -302,9 +302,7 @@ jobs:
         if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
         run: |
-          tree ${{ github.workspace }}/artifacts
-          tree ${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
           cp -r examples/components/http-hello-world /tmp/test
           cd /tmp/test
           npm install --save $PACKAGE_DIR
