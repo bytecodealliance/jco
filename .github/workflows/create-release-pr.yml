@@ -179,7 +179,7 @@ jobs:
             --unreleased \
             $OPT_TAG \
             $OPT_TAG_PATTERN \
-            --prepend=${{ needs.meta.outputs.project-dir }}/CHANGELOG.md
+            --prepend=${{ steps.project-meta.outputs.project-dir }}/CHANGELOG.md
 
       # Create release PR
       - name: Create release prep PR
