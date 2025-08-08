@@ -373,7 +373,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
         shell: bash
         run: |
-          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
 
           export OPT_DRY_RUN="--dry-run"
           if [ "tag" == "${{ github.ref_type }}" ]; then
