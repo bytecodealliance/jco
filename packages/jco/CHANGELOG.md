@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.13.1] - 2025-08-08
+
+### 🚀 Features
+
+* *(jco)* begin stabilizing p3 async task implementation (#817) by @vados-cosmonic in #817
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update upstream wasmtime dependencies (#897) by @vados-cosmonic in #897
+
+
+
+
+## [1.13.1-rc.5] - 2025-08-08
+
+
+
+## [1.13.1-rc.4] - 2025-08-08
+
+
+
+## [1.13.1-rc.3] - 2025-08-08
+
+
+
+## [1.13.1-rc.2] - 2025-08-08
+
+
+
+## [1.13.1-rc.1] - 2025-08-08
+
+
+
+## [1.13.1-rc.0] - 2025-08-08
+
+### 🚀 Features
+
+* *(jco)* begin stabilizing p3 async task implementation (#817) by @vados-cosmonic in #817
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update upstream wasmtime dependencies (#897) by @vados-cosmonic in #897
+
+
+
+
 ## [1.13.0] - 2025-07-23
 
 ### 🚀 Features

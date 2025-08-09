@@ -68,7 +68,8 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
+      - name: install cargo-get
+        uses: taiki-e/cache-cargo-install-action@b33c63d3b3c85540f4eba8a4f71a5cc0ce030855 # v2.3.0
         with:
           tool: cargo-get
 
@@ -78,7 +79,7 @@ jobs:
 
       - name: Cache npm install
         id: cache-node-modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
           path: |
@@ -238,7 +239,7 @@ jobs:
 
       - name: Cache npm install
         id: cache-node-modules
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
           path: |
@@ -265,7 +266,7 @@ jobs:
       - meta
       - pack-crate-release
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           path: artifacts
 
@@ -289,15 +290,19 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           path: artifacts
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ">=22"
 
       - name: Test built jco NPM package
         if: ${{ needs.meta.outputs.project == 'jco' }}
         shell: bash
         run: |
-          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
           cp -r examples/components/http-hello-world /tmp/test
           cd /tmp/test
           npm install --save $PACKAGE_DIR
@@ -309,7 +314,7 @@ jobs:
       - meta
       - test-crate-release
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           path: artifacts
 
@@ -346,14 +351,14 @@ jobs:
         with:
           node-version: ">=22"
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           path: artifacts
 
       # NOTE: We install node modules because the pre-pack for various projects may require
       # the cargo xtask build in release mode (even though we're using),
       - name: Cache npm install
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
           path: |
@@ -368,7 +373,7 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
         shell: bash
         run: |
-          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.project }}/${{ needs.meta.outputs.artifact-name }}
+          export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
 
           export OPT_DRY_RUN="--dry-run"
           if [ "tag" == "${{ github.ref_type }}" ]; then
@@ -405,7 +410,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: taiki-e/install-action@306f65503be93cd2b3e3cfb4a9813e992e854dfa # v2.57.8
+      - name: install git-cliff
+        uses: taiki-e/install-action@d411fc90b6227faf782d40f921b31b725fe5cb1d # v2.58.3
         with:
           fallback: none
           tool: git-cliff
@@ -416,7 +422,7 @@ jobs:
       # tag and likely the one corresponding to this release, so we use the latest
       #
       - name: Re-generate current changelog
-        working-directory: ${{ needs.meta.outputs.project-dir }}
+        id: changelog-regen
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
@@ -428,20 +434,23 @@ jobs:
             export OPT_TAG=--tag=${{ needs.meta.outputs.next-release-tag }};
           fi
 
-          export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
+          export TAG_PATTERN='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+$';
           if [ "true" == "${{ needs.meta.outputs.is-prerelease }}" ]; then
-            export OPT_TAG_PATTERN=--tag-pattern='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
+            export TAG_PATTERN='^${{ needs.meta.outputs.project }}-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?';
+            export OPT_TAG_PATTERN=--tag-pattern=$TAG_PATTERN;
           fi
+
+          echo -e "tag-pattern=$TAG_PATTERN" >> $GITHUB_OUTPUT;
 
           git cliff \
             --repository=${{ github.workspace }}/.git \
-            --config=./cliff.toml \
+            --config=${{ needs.meta.outputs.project-dir }}/cliff.toml \
             $OPT_START \
             $OPT_TAG \
             $OPT_TAG_PATTERN \
-            > CHANGELOG.current;
+            > ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current;
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           path: artifacts
 
@@ -456,3 +465,30 @@ jobs:
           body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current
           files: |
             ./artifacts/*/*
+
+      - name: Cache npm install
+        continue-on-error: true
+        id: cache-node-modules
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/**/package.json') }}
+          path: |
+            node_modules
+      - name: Install debug NPM packages
+        run: |
+          npm install -D
+
+      - name: Update related PRs with release note
+        continue-on-error: true
+        if: ${{ github.repository_owner == 'bytecodealliance' && github.ref_type == 'tag' }}
+        env:
+          IS_PRE_RELEASE: ${{ needs.meta.outputs.is-prerelease }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO: ${{ github.repository }}
+          GIT_CLIFF_CONFIG_PATH: ${{ needs.meta.outputs.project-dir }}/cliff.toml
+          GIT_CLIFF_REPOSITORY: ${{ github.workspace }}/.git
+          GIT_CLIFF_RELEASE_TAG: ${{ needs.meta.outputs.next-release-tag }}
+          GIT_CLIFF_TAG_PATTERN: ${{ steps.changelog-regen.outputs.tag-pattern }}
+        run: |
+          node scripts/post-release-issue-update.mjs

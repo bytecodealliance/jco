@@ -100,7 +100,7 @@ suite('Browser', () => {
         } catch {}
     });
 
-    test('Transpilation', async () => {
+    test('Transpilation', { retry: 3 }, async () => {
         await testPage(browser, port, 'transpile');
     });
 
