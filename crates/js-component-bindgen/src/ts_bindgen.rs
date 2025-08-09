@@ -47,6 +47,8 @@ struct TsBindgen {
     /// definitions. This is used to generate `/// <reference path="..." />`
     /// directives at the top of the file.
     references: BTreeSet<String>,
+
+    has_world_resources: bool,
 }
 
 /// Used to generate a `*.d.ts` file for each imported and exported interface for
@@ -91,6 +93,7 @@ pub fn ts_bindgen(
         async_imports,
         async_exports,
         references: Default::default(),
+        has_world_resources: false,
     };
 
     let world = &resolve.worlds[id];
@@ -203,7 +206,10 @@ pub fn ts_bindgen(
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
                         TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
-                        TypeDefKind::Resource => gen.type_resource(*tid, ty),
+                        TypeDefKind::Resource => {
+                            bindgen.has_world_resources = true;
+                            gen.type_resource(*tid, ty)
+                        }
                         TypeDefKind::Handle(_) => todo!("type generation for handle"),
                     }
                     let (src, references) = gen.finish();
@@ -663,10 +669,11 @@ impl<'a> TsInterface<'a> {
     }
 
     fn finish(mut self) -> (Source, BTreeSet<String>) {
+
         for (resource, source) in self.resources {
             uwriteln!(
                 self.src,
-                "\nexport class {} {{",
+                "\nexport class {} implements Disposable {{",
                 resource.to_upper_camel_case()
             );
             if !source.has_constructor {
@@ -676,6 +683,7 @@ impl<'a> TsInterface<'a> {
                 uwriteln!(self.src, "private constructor();");
             }
             self.src.push_str(&source.src);
+            uwriteln!(self.src, "  [Symbol.dispose](): void;");
             uwriteln!(self.src, "}}")
         }
         if self.src.is_empty() {
