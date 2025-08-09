@@ -398,14 +398,12 @@ pub fn ts_bindgen(
         uwriteln!(bindgen.src, "}}");
     }
 
-    let final_src = bindgen.src;
-
     let filename = format!("{name}.d.ts");
     files.push(
         &filename,
         generate_references(&bindgen.references).as_bytes(),
     );
-    files.push(&filename, final_src.as_bytes());
+    files.push(&filename, bindgen.src.as_bytes());
     Ok(())
 }
 
