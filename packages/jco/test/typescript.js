@@ -109,50 +109,40 @@ suite(`TypeScript`, async () => {
 
         const { files } = await transpile(component, { name: 'disposable' });
 
-        const mainDtsSource = new TextDecoder().decode(files['disposable.d.ts']);
-        
+        const mainDtsSource = new TextDecoder().decode(
+            files['disposable.d.ts']
+        );
+
         assert.ok(
             mainDtsSource.includes(
-                `// Resources implement the Disposable interface for automatic cleanup`
+                `export class Database implements Disposable {`
             ),
-            'Main file should contain Disposable interface comment'
-        );
-        assert.ok(
-            mainDtsSource.includes(
-                `interface Disposable {\n  [Symbol.dispose](): void;\n}`
-            ),
-            'Main file should contain Disposable interface definition'
-        );
-        
-        assert.ok(
-            mainDtsSource.includes(`export class Database implements Disposable {`),
             'Database resource should implement Disposable interface'
+        );
+        assert.ok(
+            mainDtsSource.includes(`[Symbol.dispose](): void;`),
+            'Database resource should have Symbol.dispose method'
         );
 
         const interfaceDtsSource = new TextDecoder().decode(
             files['interfaces/test-disposable-resources-resources.d.ts']
         );
-        
+
         assert.ok(
             interfaceDtsSource.includes(
-                `// Resources implement the Disposable interface for automatic cleanup`
+                `export class FileHandle implements Disposable {`
             ),
-            'Interface file should contain Disposable interface comment'
-        );
-        assert.ok(
-            interfaceDtsSource.includes(
-                `interface Disposable {\n    [Symbol.dispose](): void;\n}`
-            ),
-            'Interface file should contain Disposable interface definition'
-        );
-        
-        assert.ok(
-            interfaceDtsSource.includes(`export class FileHandle implements Disposable {`),
             'FileHandle resource should implement Disposable interface'
         );
         assert.ok(
-            interfaceDtsSource.includes(`export class Connection implements Disposable {`),
+            interfaceDtsSource.includes(
+                `export class Connection implements Disposable {`
+            ),
             'Connection resource should implement Disposable interface'
+        );
+        assert.ok(
+            interfaceDtsSource.includes(`[Symbol.dispose](): void;`),
+            'Resources should have Symbol.dispose method'
         );
     });
 });

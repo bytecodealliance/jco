@@ -47,7 +47,7 @@ struct TsBindgen {
     /// definitions. This is used to generate `/// <reference path="..." />`
     /// directives at the top of the file.
     references: BTreeSet<String>,
-    
+
     has_world_resources: bool,
 }
 
@@ -398,14 +398,7 @@ pub fn ts_bindgen(
         uwriteln!(bindgen.src, "}}");
     }
 
-    let mut final_src = String::new();
-    if bindgen.has_world_resources && !bindgen.is_guest {
-        final_src.push_str("// Resources implement the Disposable interface for automatic cleanup\n");
-        final_src.push_str("interface Disposable {\n");
-        final_src.push_str("  [Symbol.dispose](): void;\n");
-        final_src.push_str("}\n\n");
-    }
-    final_src.push_str(&bindgen.src);
+    let final_src = bindgen.src;
 
     let filename = format!("{name}.d.ts");
     files.push(
@@ -678,17 +671,7 @@ impl<'a> TsInterface<'a> {
     }
 
     fn finish(mut self) -> (Source, BTreeSet<String>) {
-        if !self.resources.is_empty() && !self.is_guest {
-            let mut new_src = Source::default();
-            uwriteln!(new_src, "// Resources implement the Disposable interface for automatic cleanup");
-            uwriteln!(new_src, "interface Disposable {{");
-            uwriteln!(new_src, "  [Symbol.dispose](): void;");
-            uwriteln!(new_src, "}}");
-            uwriteln!(new_src, "");
-            new_src.push_str(&self.src);
-            self.src = new_src;
-        }
-        
+
         for (resource, source) in self.resources {
             uwriteln!(
                 self.src,
@@ -702,6 +685,7 @@ impl<'a> TsInterface<'a> {
                 uwriteln!(self.src, "private constructor();");
             }
             self.src.push_str(&source.src);
+            uwriteln!(self.src, "  [Symbol.dispose](): void;");
             uwriteln!(self.src, "}}")
         }
         if self.src.is_empty() {
