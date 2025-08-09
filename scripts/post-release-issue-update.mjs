@@ -84,10 +84,10 @@ async function main() {
         tagPattern: gcTagPattern,
     };
     if (isPreRelease) {
+        gitCliffOpts.unreleased = true;
+    } else {
         gitCliffOpts.current = true;
         gitCliffOpts.tag = gcReleaseTag;
-    } else {
-        gitCliffOpts.unreleased = true;
     }
 
     // Run git-cliff, outputting JSON for the release information
