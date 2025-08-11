@@ -332,6 +332,9 @@ impl AsyncStreamIntrinsic {
             // (this will enable using p3-shim explicitly or any other implementation)
             //
             // TODO: Streams need a class
+            //
+            // NOTE: this intrinsic is also called from Instruction::StreamLift, in which case there
+            // is not an active task, but the componentIdx will be supplied proactively.
             Self::StreamNew => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_new_fn = Self::StreamNew.name();
@@ -343,14 +346,18 @@ impl AsyncStreamIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
-                    function {stream_new_fn}(componentInstanceID, elementTypeRep) {{
-                        {debug_log_fn}('[{stream_new_fn}()] args', {{ componentInstanceID, elementTypeRep }});
+                    function {stream_new_fn}(args) {{
+                        let {{ streamTypeRep, componentIdx }} = args;
+                        {debug_log_fn}('[{stream_new_fn}()] args', {{ streamTypeRep, componentIdx }});
 
-                        const task = {current_task_get_fn}(componentInstanceID);
-                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        if (!componentIdx) {{
+                            const task = {current_task_get_fn}();
+                            if (!task) {{ throw new Error('invalid/missing async task during stream.new'); }}
+                            componentIdx = task.componentIdx;
+                        }}
 
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave during stream.new'); }}
 
                         let stream = new TransformStream();
                         let writableIdx = {global_stream_map}.insert(new {stream_writable_end_class}({{
