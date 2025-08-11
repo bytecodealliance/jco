@@ -666,7 +666,7 @@ impl<'a> TsInterface<'a> {
         for (resource, source) in self.resources {
             uwriteln!(
                 self.src,
-                "\nexport class {} {{",
+                "\nexport class {} implements Partial<Disposable> {{",
                 resource.to_upper_camel_case()
             );
             if !source.has_constructor {
@@ -676,6 +676,7 @@ impl<'a> TsInterface<'a> {
                 uwriteln!(self.src, "private constructor();");
             }
             self.src.push_str(&source.src);
+            uwriteln!(self.src, "  [Symbol.dispose]?: () => void;");
             uwriteln!(self.src, "}}")
         }
         if self.src.is_empty() {
