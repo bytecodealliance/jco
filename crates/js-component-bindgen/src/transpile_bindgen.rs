@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
 
-use anyhow::{bail, Result};
 use base64::engine::general_purpose;
 use base64::Engine as _;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
@@ -23,8 +22,8 @@ use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
 use wit_parser::abi::AbiVariant;
 use wit_parser::{
-    Function, FunctionKind, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId, WorldId,
-    WorldItem, WorldKey,
+    Function, FunctionKind, Handle, Resolve, Result_, SizeAlign, Type, TypeDefKind, TypeId,
+    WorldId, WorldItem, WorldKey,
 };
 
 use crate::esm_bindgen::EsmBindgen;
@@ -113,10 +112,16 @@ pub enum InstantiationMode {
 enum CallType {
     /// Standard calls - inner function is called directly with parameters
     Standard,
+    /// Standard calls that are async (p3)
+    AsyncStandard,
     /// Exported resource method calls - this is passed as the first argument
     FirstArgIsThis,
+    /// Exported resource method calls that are async (p3)
+    AsyncFirstArgIsThis,
     /// Imported resource method calls - callee is a member of the parameter
     CalleeResourceDispatch,
+    /// Imported resource method calls that are async (p3)
+    AsyncCalleeResourceDispatch,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -1103,13 +1108,15 @@ impl<'a> Instantiator<'a, '_> {
             // TODO: build a lookup of types that could be used in streams for a given component?
             // Need to have a way to look up/serialize the type indices per component into
             // a lookup of lifting functions? Or just use the cabiLower?
+            //
+            // TODO: Do we need the component idx
             Trampoline::StreamNew { ty } => {
                 let stream_new_fn = self
                     .gen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_new_fn}.bind(null, {});\n",
+                    "const trampoline{i} = {stream_new_fn}.bind(null, {{ streamTypeRep: {} }});\n",
                     ty.as_u32(),
                 );
             }
@@ -1120,8 +1127,6 @@ impl<'a> Instantiator<'a, '_> {
                     .options
                     .get(*options)
                     .expect("failed to find options");
-
-                is_valid_canonopt(options).expect("invalid canonopts");
 
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
@@ -1138,8 +1143,8 @@ impl<'a> Instantiator<'a, '_> {
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
                 let realloc_idx = realloc
-                    .expect("missing realloc idx for stream.read")
-                    .as_u32();
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let stream_read_fn = self
@@ -1167,8 +1172,6 @@ impl<'a> Instantiator<'a, '_> {
                     .get(*options)
                     .expect("failed to find options");
 
-                is_valid_canonopt(options).expect("invalid canonopts");
-
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
@@ -1186,8 +1189,8 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("missing memory idx for stream.write")
                     .as_u32();
                 let realloc_idx = realloc
-                    .expect("missing realloc idx for stream.write")
-                    .as_u32();
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let stream_write_fn = self
@@ -1290,8 +1293,8 @@ impl<'a> Instantiator<'a, '_> {
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for future.read").as_u32();
                 let realloc_idx = realloc
-                    .expect("missing realloc idx for future.read")
-                    .as_u32();
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 assert!(
@@ -1328,8 +1331,6 @@ impl<'a> Instantiator<'a, '_> {
                     .get(*options)
                     .expect("failed to find options");
 
-                is_valid_canonopt(options).expect("invalid canonopts");
-
                 let future_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
@@ -1347,8 +1348,8 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("missing memory idx for future.write")
                     .as_u32();
                 let realloc_idx = realloc
-                    .expect("missing realloc idx for future.write")
-                    .as_u32();
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let future_write_fn = self
@@ -2275,6 +2276,7 @@ impl<'a> Instantiator<'a, '_> {
     fn lower_import(&mut self, index: LoweredIndex, import: RuntimeImportIndex) {
         let (options, trampoline, func_ty) = self.lowering_options[index];
 
+        // Get the world key for the CM import
         let (import_index, path) = &self.component.imports[import];
         let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
@@ -2299,8 +2301,8 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
 
-        // WASI P3 async lifted functions should not have post returns
         let is_guest_async_lifted = is_guest_async_lifted_fn(func, options);
+
         if options.async_ {
             assert!(
                 options.post_return.is_none(),
@@ -2315,7 +2317,7 @@ impl<'a> Instantiator<'a, '_> {
             &self.async_imports,
         );
 
-        // nested interfaces only currently possible through mapping
+        // Nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
             &self.gen.opts.map,
             if iface_name.is_some() {
@@ -2326,25 +2328,22 @@ impl<'a> Instantiator<'a, '_> {
                         let stripped = import_name.strip_prefix("[method]").unwrap();
                         &stripped[0..stripped.find(".").unwrap()]
                     }
+                    FunctionKind::AsyncMethod(_) => {
+                        let stripped = import_name.strip_prefix("[async method]").unwrap();
+                        &stripped[0..stripped.find(".").unwrap()]
+                    }
                     FunctionKind::Static(_) => {
                         let stripped = import_name.strip_prefix("[static]").unwrap();
+                        &stripped[0..stripped.find(".").unwrap()]
+                    }
+                    FunctionKind::AsyncStatic(_) => {
+                        let stripped = import_name.strip_prefix("[async static]").unwrap();
                         &stripped[0..stripped.find(".").unwrap()]
                     }
                     FunctionKind::Constructor(_) => {
                         import_name.strip_prefix("[constructor]").unwrap()
                     }
-                    FunctionKind::Freestanding => import_name,
-                    FunctionKind::AsyncFreestanding => {
-                        todo!("[lower_import()] FunctionKind::AsyncFreeStanding (import specifier)")
-                    }
-                    FunctionKind::AsyncMethod(id) => {
-                        let _ = id;
-                        todo!("[lower_import()] FunctionKind::AsyncMethod (import specifier)")
-                    }
-                    FunctionKind::AsyncStatic(id) => {
-                        let _ = id;
-                        todo!("[lower_import()] FunctionKind::AsyncStatic (import specifier)")
-                    }
+                    FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => import_name,
                 }
             },
         );
@@ -2364,10 +2363,10 @@ impl<'a> Instantiator<'a, '_> {
                     .local_names
                     .get_or_create(
                         format!(
-                            "import:{}-{}-{}",
-                            import_specifier,
-                            maybe_iface_member.as_deref().unwrap_or(""),
-                            &func.name
+                            "import:{import}-{maybe_iface_member}-{func_name}",
+                            import = import_specifier,
+                            maybe_iface_member = maybe_iface_member.as_deref().unwrap_or(""),
+                            func_name = &func.name
                         ),
                         &func.name,
                     )
@@ -2375,10 +2374,34 @@ impl<'a> Instantiator<'a, '_> {
                     .to_string(),
                 CallType::Standard,
             ),
+
+            FunctionKind::AsyncFreestanding => (
+                self.gen
+                    .local_names
+                    .get_or_create(
+                        format!(
+                            "import:async-{import}-{maybe_iface_member}-{func_name}",
+                            import = import_specifier,
+                            maybe_iface_member = maybe_iface_member.as_deref().unwrap_or(""),
+                            func_name = &func.name
+                        ),
+                        &func.name,
+                    )
+                    .0
+                    .to_string(),
+                CallType::AsyncStandard,
+            ),
+
             FunctionKind::Method(_) => (
                 func.item_name().to_lower_camel_case(),
                 CallType::CalleeResourceDispatch,
             ),
+
+            FunctionKind::AsyncMethod(_) => (
+                func.item_name().to_lower_camel_case(),
+                CallType::AsyncCalleeResourceDispatch,
+            ),
+
             FunctionKind::Static(resource_id) => (
                 format!(
                     "{}.{}",
@@ -2393,6 +2416,20 @@ impl<'a> Instantiator<'a, '_> {
                 CallType::Standard,
             ),
 
+            FunctionKind::AsyncStatic(resource_id) => (
+                format!(
+                    "{}.{}",
+                    Instantiator::resource_name(
+                        self.resolve,
+                        &mut self.gen.local_names,
+                        resource_id,
+                        &self.imports_resource_types
+                    ),
+                    func.item_name().to_lower_camel_case()
+                ),
+                CallType::AsyncStandard,
+            ),
+
             FunctionKind::Constructor(resource_id) => (
                 format!(
                     "new {}",
@@ -2405,18 +2442,6 @@ impl<'a> Instantiator<'a, '_> {
                 ),
                 CallType::Standard,
             ),
-
-            FunctionKind::AsyncFreestanding => {
-                todo!("[lower_import()] FunctionKind::AsyncFreeStanding")
-            }
-            FunctionKind::AsyncMethod(id) => {
-                let _ = id;
-                todo!("[lower_import()] FunctionKind::AsyncMethod");
-            }
-            FunctionKind::AsyncStatic(id) => {
-                let _ = id;
-                todo!("[lower_import()] FunctionKind::AsyncStatic");
-            }
         };
 
         let nparams = self
@@ -2424,17 +2449,26 @@ impl<'a> Instantiator<'a, '_> {
             .wasm_signature(AbiVariant::GuestImport, func)
             .params
             .len();
+
+        // Generate the JS trampoline function
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                if requires_async_porcelain {
+                // Write out function declaration start
+                if requires_async_porcelain | is_guest_async_lifted {
+                    // If an import is either an async host import (i.e. JSPI powered)
+                    // or a guest async lifted import from another component,
+                    // use WebAssembly.Suspending to allow suspending this component
                     uwrite!(
                         self.src.js,
                         "\nconst trampoline{} = new WebAssembly.Suspending(async function",
                         trampoline.as_u32()
                     );
                 } else {
+                    // If the import is not async in any way, use a regular trampoline
                     uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
                 }
+
+                // Write out the function (brace + body + brace)
                 self.bindgen(JsFunctionBindgenArgs {
                     nparams,
                     call_type,
@@ -2452,14 +2486,16 @@ impl<'a> Instantiator<'a, '_> {
                     requires_async_porcelain,
                     is_guest_async_lifted,
                 });
-
                 uwriteln!(self.src.js, "");
+
+                // Write new function ending
                 if requires_async_porcelain {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");
                 }
             }
+
             Some(BindingsMode::Optimized) | Some(BindingsMode::DirectOptimized) => {
                 uwriteln!(self.src.js, "let trampoline{};", trampoline.as_u32());
             }
@@ -2499,27 +2535,23 @@ impl<'a> Instantiator<'a, '_> {
             };
 
             let callee_name = match func.kind {
-                FunctionKind::Static(_) | FunctionKind::Freestanding => callee_name.to_string(),
-                FunctionKind::Method(resource_id) => format!(
-                    "{}.prototype.{callee_name}",
-                    Instantiator::resource_name(
-                        self.resolve,
-                        &mut self.gen.local_names,
-                        resource_id,
-                        &self.imports_resource_types
-                    )
-                ),
                 FunctionKind::Constructor(_) => callee_name[4..].to_string(),
-                FunctionKind::AsyncFreestanding => {
-                    todo!("[lower_import()] FunctionKind::AsyncFreeStanding (callee name gen)")
-                }
-                FunctionKind::AsyncMethod(id) => {
-                    let _ = id;
-                    todo!("[lower_import()] FunctionKind::AsyncMethod (callee name gen)")
-                }
-                FunctionKind::AsyncStatic(id) => {
-                    let _ = id;
-                    todo!("[lower_import()] FunctionKind::AsyncFreeStanding (callee name gen)")
+
+                FunctionKind::Static(_)
+                | FunctionKind::AsyncStatic(_)
+                | FunctionKind::Freestanding
+                | FunctionKind::AsyncFreestanding => callee_name.to_string(),
+
+                FunctionKind::Method(resource_id) | FunctionKind::AsyncMethod(resource_id) => {
+                    format!(
+                        "{}.prototype.{callee_name}",
+                        Instantiator::resource_name(
+                            self.resolve,
+                            &mut self.gen.local_names,
+                            resource_id,
+                            &self.imports_resource_types
+                        )
+                    )
                 }
             };
 
@@ -2579,11 +2611,16 @@ impl<'a> Instantiator<'a, '_> {
             };
         }
 
-        // Generate import name
+        // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
-            FunctionKind::Freestanding => (func_name.to_lower_camel_case(), callee_name),
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                (func_name.to_lower_camel_case(), callee_name)
+            }
+
             FunctionKind::Method(tid)
+            | FunctionKind::AsyncMethod(tid)
             | FunctionKind::Static(tid)
+            | FunctionKind::AsyncStatic(tid)
             | FunctionKind::Constructor(tid) => {
                 let ty = &self.resolve.types[tid];
                 (
@@ -2596,17 +2633,6 @@ impl<'a> Instantiator<'a, '_> {
                     )
                     .to_string(),
                 )
-            }
-            FunctionKind::AsyncFreestanding => {
-                todo!("[lower_import()] FunctionKind::AsyncFreeStanding (import name gen)")
-            }
-            FunctionKind::AsyncMethod(id) => {
-                let _ = id;
-                todo!("[lower_import()] FunctionKind::AsyncMethod (import name gen)")
-            }
-            FunctionKind::AsyncStatic(id) => {
-                let _ = id;
-                todo!("[lower_import()] FunctionKind::AsyncStatic (import name gen)")
             }
         };
 
@@ -2986,21 +3012,89 @@ impl<'a> Instantiator<'a, '_> {
                     None => {
                         self.connect_remote_resources(iface_ty, remote_resource_map);
                     }
-                    // For
+                    // For custom types we can connect the inner type
                     Some(Type::Id(t)) => {
                         self.connect_resource_types(*t, iface_ty, resource_map, remote_resource_map)
                     }
+                    // For basic types that are connected (non inner types) we can do a generic connect
                     Some(_) => {
-                        unreachable!("unexpected interface type [{iface_ty:?}]")
+                        self.connect_remote_resources(iface_ty, remote_resource_map);
                     }
                 }
             }
 
-            // These types should never need to be connected
-            (TypeDefKind::Resource, _) => {
-                unreachable!("resource types do not need to be connected")
+            // Connect the types in an ok/error variant of a Result to the future that they're being sent in
+            (
+                TypeDefKind::Result(Result_ { ok, err }),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => {
+                if let Some(Type::Id(ok_t)) = ok {
+                    self.connect_resource_types(*ok_t, tk2, resource_map, remote_resource_map)
+                }
+                if let Some(Type::Id(err_t)) = err {
+                    self.connect_resource_types(*err_t, tk2, resource_map, remote_resource_map)
+                }
             }
-            (TypeDefKind::Unknown, _) => unreachable!("unknown types cannot be connected"),
+
+            // Connect the types in an option to the future that they're being sent in
+            (
+                TypeDefKind::Option(ty),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => {
+                if let Type::Id(some_t) = ty {
+                    self.connect_resource_types(*some_t, tk2, resource_map, remote_resource_map)
+                }
+            }
+
+            // Connect resources to the future/stream that they're being sent in
+            (
+                TypeDefKind::Handle(Handle::Own(t1) | Handle::Borrow(t1)),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => self.connect_resource_types(*t1, tk2, resource_map, remote_resource_map),
+
+            (TypeDefKind::Resource, InterfaceType::Future(_) | InterfaceType::Stream(_)) => {}
+
+            // Connect the inner types of variants to the future they're being sent in
+            (
+                TypeDefKind::Variant(variant),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => {
+                for f1 in variant.cases.iter() {
+                    if let Some(Type::Id(id)) = &f1.ty {
+                        self.connect_resource_types(*id, tk2, resource_map, remote_resource_map);
+                    }
+                }
+            }
+
+            // Connect the inner types of variants to the future they're being sent in
+            (
+                TypeDefKind::Record(record),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => {
+                for f1 in record.fields.iter() {
+                    if let Type::Id(id) = f1.ty {
+                        self.connect_resource_types(id, tk2, resource_map, remote_resource_map);
+                    }
+                }
+            }
+
+            // Simliar to the non-stream/future case, we don't have to do anything for
+            // flags and plain enums as they are read directly
+            (
+                TypeDefKind::Enum(_) | TypeDefKind::Flags(_),
+                InterfaceType::Future(_) | InterfaceType::Stream(_),
+            ) => {}
+
+            (TypeDefKind::Resource, tk2) => {
+                unreachable!(
+                    "resource types do not need to be connected (in this case, to [{tk2:?}])"
+                )
+            }
+
+            (TypeDefKind::Unknown, tk2) => {
+                unreachable!("unknown types cannot be connected (in this case to [{tk2:?}])")
+            }
+
             (tk1, tk2) => unreachable!("invalid typedef kind combination [{tk1:?}] [{tk2:?}]",),
         }
     }
@@ -3051,7 +3145,12 @@ impl<'a> Instantiator<'a, '_> {
         let mut params = Vec::new();
         let mut first = true;
         for i in 0..nparams {
-            if i == 0 && matches!(call_type, CallType::FirstArgIsThis) {
+            if i == 0
+                && matches!(
+                    call_type,
+                    CallType::FirstArgIsThis | CallType::AsyncFirstArgIsThis
+                )
+            {
                 params.push("this".into());
                 continue;
             }
@@ -3105,11 +3204,12 @@ impl<'a> Instantiator<'a, '_> {
             sizes: &self.sizes,
             err: if get_thrown_type(self.resolve, func.result).is_some() {
                 match abi {
-                    AbiVariant::GuestExport => ErrHandling::ThrowResultErr,
-                    AbiVariant::GuestImport => ErrHandling::ResultCatchHandler,
-                    AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (ERR) not yet implemented"),
-                    AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (ERR) not yet implemented"),
-                    AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (ERR) not yet implemented"),
+                    AbiVariant::GuestExport
+                    | AbiVariant::GuestExportAsync
+                    | AbiVariant::GuestExportAsyncStackful => ErrHandling::ThrowResultErr,
+                    AbiVariant::GuestImport | AbiVariant::GuestImportAsync => {
+                        ErrHandling::ResultCatchHandler
+                    }
                 }
             } else {
                 ErrHandling::None
@@ -3146,15 +3246,18 @@ impl<'a> Instantiator<'a, '_> {
             self.resolve,
             abi,
             match abi {
-                AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
-                AbiVariant::GuestExport => if is_guest_async_lifted {
+                AbiVariant::GuestImport | AbiVariant::GuestImportAsync => {
                     LiftLower::LiftArgsLowerResults
-                } else {
-                    LiftLower::LowerArgsLiftResults
-                },
-                AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (LIFT_LOWER) not yet implemented"),
-                AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (LIFT_LOWER) not yet implemented"),
-                AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (LIFT_LOWER) not yet implemented"),
+                }
+                AbiVariant::GuestExport
+                | AbiVariant::GuestExportAsync
+                | AbiVariant::GuestExportAsyncStackful => {
+                    if is_guest_async_lifted {
+                        LiftLower::LiftArgsLowerResults
+                    } else {
+                        LiftLower::LowerArgsLiftResults
+                    }
+                }
             },
             func,
             &mut f,
@@ -3583,7 +3686,13 @@ impl<'a> Instantiator<'a, '_> {
             nparams: func.params.len(),
             call_type: match func.kind {
                 FunctionKind::Method(_) => CallType::FirstArgIsThis,
-                _ => CallType::Standard,
+                FunctionKind::AsyncMethod(_) => CallType::AsyncFirstArgIsThis,
+                FunctionKind::Freestanding
+                | FunctionKind::Static(_)
+                | FunctionKind::Constructor(_) => CallType::Standard,
+                FunctionKind::AsyncFreestanding | FunctionKind::AsyncStatic(_) => {
+                    CallType::AsyncStandard
+                }
             },
             iface_name: if export_name.is_empty() {
                 None
@@ -3726,30 +3835,4 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
         wasmtime_environ::component::StringEncoding::Utf16 => "'utf16'",
         wasmtime_environ::component::StringEncoding::CompactUtf16 => "'compact-utf16'",
     }
-}
-
-/// Perform basic canonical option validation
-fn is_valid_canonopt(
-    CanonicalOptions {
-        data_model,
-        callback,
-        post_return,
-        async_,
-        ..
-    }: &CanonicalOptions,
-) -> Result<()> {
-    if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }) =
-        data_model
-    {
-        if realloc.is_some() && memory.is_none() {
-            bail!("memory must be present if realloc is");
-        }
-    }
-    if *async_ && post_return.is_some() {
-        bail!("async and post return must not be specified together");
-    }
-    if *async_ && callback.is_none() {
-        bail!("callback must be specified for async");
-    }
-    Ok(())
 }
