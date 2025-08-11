@@ -20,11 +20,11 @@
     "@bytecodealliance/jco": "^1.11.2",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.4",
-    "rollup": "^4.45.1",
+    "rollup": "^4.46.2",
     "terminate": "^2.8.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
-    "hono": "^4.8.5"
+    "hono": "^4.9.0"
   }
 }

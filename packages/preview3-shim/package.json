@@ -32,11 +32,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
-    "eslint": "^9.31.0",
+    "eslint": "^9.33.0",
     "globals": "^16.3.0",
     "vitest": "^3.2.4",
     "prettier": "^3.6.2",
-    "typescript-eslint": "^8.37.0"
+    "typescript-eslint": "^8.39.0"
   },
   "repository": {
     "type": "git",
