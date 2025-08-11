@@ -89,4 +89,60 @@ suite(`TypeScript`, async () => {
             )
         );
     });
+
+    test(`Resource Disposable interface generation`, async () => {
+        const witSource = await readFile(
+            fileURLToPath(
+                new URL(
+                    `./fixtures/wits/disposable-resources/disposable-resources.wit`,
+                    import.meta.url
+                )
+            ),
+            'utf8'
+        );
+        const component = await componentNew(
+            await componentEmbed({
+                witSource,
+                dummy: true,
+            })
+        );
+
+        const { files } = await transpile(component, { name: 'disposable' });
+
+        const mainDtsSource = new TextDecoder().decode(
+            files['disposable.d.ts']
+        );
+
+        assert.ok(
+            mainDtsSource.includes(
+                `export class Database implements Partial<Disposable> {`
+            ),
+            'Database resource should implement partial Disposable interface'
+        );
+        assert.ok(
+            mainDtsSource.includes(`[Symbol.dispose]?: () => void;`),
+            'Database resource should have Symbol.dispose method'
+        );
+
+        const interfaceDtsSource = new TextDecoder().decode(
+            files['interfaces/test-disposable-resources-resources.d.ts']
+        );
+
+        assert.ok(
+            interfaceDtsSource.includes(
+                `export class FileHandle implements Partial<Disposable> {`
+            ),
+            'FileHandle resource should implement partial Disposable interface'
+        );
+        assert.ok(
+            interfaceDtsSource.includes(
+                `export class Connection implements Partial<Disposable> {`
+            ),
+            'Connection resource should implement Disposable interface'
+        );
+        assert.ok(
+            interfaceDtsSource.includes(`[Symbol.dispose]?: () => void;`),
+            'Resources should have Symbol.dispose method'
+        );
+    });
 });

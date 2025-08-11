@@ -1,0 +1,31 @@
+package test:disposable-resources;
+
+interface resources {
+  /// A simple resource for testing Disposable interface generation
+  resource file-handle {
+    constructor(path: string);
+    read: func() -> list<u8>;
+    write: func(data: list<u8>);
+  }
+
+  /// Another resource to test multiple resources
+  resource connection {
+    constructor(url: string);
+    send: func(data: string) -> result<string, string>;
+  }
+
+  open-file: func(path: string) -> file-handle;
+  create-connection: func(url: string) -> connection;
+}
+
+world disposable-world {
+  import resources;
+
+  /// Also test a world-level resource
+  resource database {
+    constructor(connection-string: string);
+    query: func(sql: string) -> list<string>;
+  }
+
+  export run: func() -> string;
+}
