@@ -1,16 +1,9 @@
 import { join } from 'node:path';
 
-import { fileURLToPath } from 'url';
-
 import { suite, test, expect } from 'vitest';
 
 import { setupAsyncTest } from '../helpers.js';
-
-const COMPONENT_FIXTURES_DIR = fileURLToPath(
-    new URL('../fixtures/components', import.meta.url)
-);
-
-const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
+import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 
 suite('Backpressure (WASI P3)', () => {
     test('backpressure.get (sync export, sync call)', async () => {

@@ -893,7 +893,7 @@ impl Intrinsic {
 
             // Debugging
             Intrinsic::DebugLog => "_debugLog",
-            Intrinsic::PromiseWithResolversPolyfill => unreachable!(),
+            Intrinsic::PromiseWithResolversPolyfill => unreachable!("always global"),
 
             // Types
             Intrinsic::ConstantI32Min => "I32_MIN",

@@ -11,7 +11,7 @@ use wit_bindgen_core::wit_parser::{
 };
 
 use crate::files::Files;
-use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
+use crate::function_bindgen::{as_nullable, js_array_ty, maybe_null};
 use crate::names::{is_valid_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
@@ -875,7 +875,7 @@ impl<'a> TsInterface<'a> {
                         self.src.push_str(">");
                     }
                     TypeDefKind::Variant(_) => panic!("[print_ty()] anonymous variant"),
-                    TypeDefKind::List(v) => self.print_list(v),
+                    TypeDefKind::List(v) => self.print_list_ty(v),
                     // TODO: improve fixed size list
                     TypeDefKind::FixedSizeList(v, len) => self.print_fixed_size_list(v, len),
                     TypeDefKind::Future(maybe_ty) => {
@@ -913,8 +913,9 @@ impl<'a> TsInterface<'a> {
         }
     }
 
-    fn print_list(&mut self, ty: &Type) {
-        match array_ty(self.resolve, ty) {
+    /// Print the list type
+    fn print_list_ty(&mut self, ty: &Type) {
+        match js_array_ty(self.resolve, ty) {
             Some("Uint8Array") => self.src.push_str("Uint8Array"),
             Some(ty) => self.src.push_str(ty),
             None => {
@@ -1293,11 +1294,11 @@ impl<'a> TsInterface<'a> {
         }
     }
 
-    fn type_list(&mut self, _id: TypeId, name: &str, ty: &Type, docs: &Docs) {
+    fn type_list(&mut self, _id: TypeId, name: &str, element_ty: &Type, docs: &Docs) {
         self.docs(docs);
         self.src
             .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
-        self.print_list(ty);
+        self.print_list_ty(element_ty);
         self.src.push_str(";\n");
     }
 

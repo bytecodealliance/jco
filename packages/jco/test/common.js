@@ -1,6 +1,7 @@
 import { env } from 'node:process';
 import { readdir } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { fileURLToPath, URL } from 'node:url';
 
 /**
  * Retrieve a list of all component fixtures
@@ -44,3 +45,11 @@ export const NODE_MODULES_TSC_BIN_PATH = fileURLToPath(
 export const JCO_JS_PATH = fileURLToPath(
     new URL('../src/jco.js', import.meta.url)
 );
+
+/** Path to fixture components */
+export const COMPONENT_FIXTURES_DIR = fileURLToPath(
+    new URL('./fixtures/components', import.meta.url)
+);
+
+/** Path to p3 related fixture components */
+export const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
