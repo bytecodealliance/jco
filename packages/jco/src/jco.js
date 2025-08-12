@@ -69,6 +69,7 @@ program
         '--debug-starlingmonkey-build',
         'use a debug build of StarlingMonkey'
     )
+    .option('--engine <path>', 'use a specific StarlingMonkey build')
     .requiredOption('-o, --out <out>', 'output component file')
     .option(
         '--debug-bindings',

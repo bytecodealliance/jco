@@ -28,6 +28,7 @@ export async function componentize(jsSource, opts) {
             enableFeatures: opts.enable,
             preview2Adapter: opts.preview2Adapter,
             debugBuild: opts.debugStarlingmonkeyBuild,
+            engine: opts.engine,
             debug: {
                 bindings: opts.debugBindings,
                 bindingsDir: opts.debugBindingsDir,
