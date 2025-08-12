@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.13.2] - 2025-08-12
+
+### 🐛 Bug Fixes
+
+* *(jco)* const reassignment of variable in component async state (#929) by @vados-cosmonic in #929
+
+
+### 🧪 Testing
+
+* *(jco)* allow retries on browser test (#919) by @vados-cosmonic in #919
+
+
+
+## New Contributors
+* @iamrajiv made their first contribution in [#901](https://github.com/bytecodealliance/jco/pull/901)
+
+
 ## [1.13.1] - 2025-08-08
 
 ### 🚀 Features
