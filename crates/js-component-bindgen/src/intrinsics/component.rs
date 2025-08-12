@@ -160,8 +160,8 @@ impl ComponentIntrinsic {
                             }});
 
                             // If there is an active promise, then wait for it
+                            let finishedTicket;
                             while (this.#lock.promise) {{
-                                const finishedTicket = await this.#lock.promise;
                                 finishedTicket = await this.#lock.promise;
                                 if (finishedTicket === ticket - 1n) {{ break; }}
                             }}
