@@ -176,14 +176,49 @@ export const error = { Error: IoError };
 
 export const streams = { InputStream, OutputStream };
 
-class Pollable {}
+// Import our creative polling implementation
+import { createPollable, pollList as pollListImpl, pollOne as pollOneImpl } from './poll-manager.js';
 
-function pollList(_list) {
-    // TODO
+class Pollable {
+    constructor(resource) {
+        // Create internal pollable handle
+        this._handle = createPollable(resource);
+        this.ready = this._handle.ready;
+        this.blockUntilReady = this._handle.blockUntilReady;
+    }
+    
+    [Symbol.dispose]() {
+        if (this._handle && this._handle[Symbol.dispose]) {
+            this._handle[Symbol.dispose]();
+        }
+    }
 }
 
-function pollOne(_poll) {
-    // TODO
+async function pollList(list) {
+    // Convert to our poll manager format and poll
+    const pollables = list.map(item => {
+        if (item instanceof Pollable) {
+            return item._handle;
+        }
+        return createPollable(item);
+    });
+    
+    const ready = await pollListImpl(pollables);
+    
+    // Return indices of ready pollables
+    return list.map((item, index) => 
+        ready.includes(pollables[index]) ? index : null
+    ).filter(i => i !== null);
+}
+
+async function pollOne(poll) {
+    // Poll a single resource
+    if (poll instanceof Pollable) {
+        return pollOneImpl(poll._handle);
+    }
+    
+    const pollable = createPollable(poll);
+    return pollOneImpl(pollable);
 }
 
 export const poll = {

@@ -1,5 +1,6 @@
 import { _setCwd as fsSetCwd } from './filesystem.js';
 import { streams } from './io.js';
+import { stdinProvider } from './stdin-provider.js';
 const { InputStream, OutputStream } = streams;
 
 const symbolDispose = Symbol.dispose ?? Symbol.for('dispose');
@@ -67,14 +68,52 @@ export function _setStdout(handler) {
 }
 
 const stdinStream = new InputStream({
-    blockingRead(_len) {
-        // TODO
+    blockingRead(len) {
+        // Use our composite stdin provider
+        return stdinProvider.blockingRead(len);
+    },
+    read(len) {
+        // Non-blocking read
+        const data = stdinProvider.read(len);
+        return data ? [data] : [];
     },
     subscribe() {
-        // TODO
+        // Return a pollable for stdin readiness
+        let unsubscribe = null;
+        const pollable = {
+            ready: () => new Promise((resolve) => {
+                // Check if data is already available
+                if (stdinProvider.buffer.length > 0) {
+                    resolve(true);
+                    return;
+                }
+                
+                // Subscribe to be notified when data arrives
+                unsubscribe = stdinProvider.subscribe(() => {
+                    resolve(true);
+                    if (unsubscribe) {
+                        unsubscribe();
+                        unsubscribe = null;
+                    }
+                });
+            }),
+            blockUntilReady: async () => {
+                await pollable.ready();
+            },
+            [symbolDispose]() {
+                if (unsubscribe) {
+                    unsubscribe();
+                    unsubscribe = null;
+                }
+            }
+        };
+        return pollable;
     },
     [symbolDispose]() {
-        // TODO
+        // Cleanup stdin provider if needed
+        if (stdinProvider.dispose) {
+            stdinProvider.dispose();
+        }
     },
 });
 let textDecoder = new TextDecoder();
