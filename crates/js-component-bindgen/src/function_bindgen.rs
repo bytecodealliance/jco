@@ -1346,6 +1346,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                     self.clear_resource_borrows = false;
                 }
+
+                // For non-async p2 tasks, the current task should end as we will never call task.return
+                if !async_ {
+                    self.end_current_task();
+                }
             }
 
             Instruction::Return { func, amt } => {
