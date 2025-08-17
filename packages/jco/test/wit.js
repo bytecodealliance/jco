@@ -1,3 +1,4 @@
+/* global Buffer */
 import { readFile, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 
@@ -408,5 +409,28 @@ suite('WIT', () => {
             );
             assert.ok(errMsg.includes('Keep in mind the following rules'));
         }
+    });
+
+    // see: https://github.com/bytecodealliance/jco/issues/622
+    test('async-exports', async () => {
+        const witPath = join(witFixturesPath, 'async-exports/component.wit');
+        const files = await types(witPath, {
+            worldName: 'component',
+            asyncMode: 'jspi',
+            asyncExports: ['example:node-fetch/simple-request#get-json'],
+            allFeatures: true,
+        });
+        assert.strictEqual(Object.keys(files).length, 2);
+        assert.deepEqual(Object.keys(files), [
+            'component.d.ts',
+            'interfaces/example-node-fetch-simple-request.d.ts',
+        ]);
+        assert.ok(
+            Buffer.from(
+                files['interfaces/example-node-fetch-simple-request.d.ts']
+            ).includes(
+                'export function getJson(url: string): Promise<Response>'
+            )
+        );
     });
 });

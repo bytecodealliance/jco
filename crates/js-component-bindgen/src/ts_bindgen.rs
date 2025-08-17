@@ -17,6 +17,7 @@ use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
 use crate::{
     dealias, feature_gate_allowed, get_thrown_type, requires_async_porcelain, uwrite, uwriteln,
+    FunctionIdentifier,
 };
 
 struct TsBindgen {
@@ -535,8 +536,11 @@ impl TsBindgen {
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
-            let requires_async_porcelain =
-                requires_async_porcelain(func, id_name, &self.async_exports);
+            let requires_async_porcelain = requires_async_porcelain(
+                FunctionIdentifier::Fn(func),
+                id_name,
+                &self.async_exports,
+            );
             gen.ts_func(func, false, declaration, requires_async_porcelain);
         }
 
@@ -579,10 +583,12 @@ impl TsBindgen {
         &mut self,
         name: &str,
         resolve: &Resolve,
-        id: InterfaceId,
+        interface_id: InterfaceId,
         files: &mut Files,
     ) -> String {
-        let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
+        let id_name = resolve
+            .id_of(interface_id)
+            .unwrap_or_else(|| name.to_string());
         let goal_name = interface_goal_name(&id_name);
         let goal_name_kebab = goal_name.to_kebab_case();
         let file_stem = format!("interfaces/{goal_name_kebab}");
@@ -593,18 +599,29 @@ impl TsBindgen {
             let mut gen = TsInterface::new(resolve, false, self.is_guest);
             gen.begin(&id_name); // Write module declaration
 
+            // Determine whether this interface is exported by the world
+            let mut is_world_export = false;
+            for (_world_id, world) in resolve.worlds.iter() {
+                for (world_key, _world_item) in world.exports.iter() {
+                    if matches!(world_key, WorldKey::Interface(iid) if *iid == interface_id) {
+                        is_world_export = true;
+                        break;
+                    }
+                }
+            }
+
             // Generate function definitions
-            let is_world_export = false; // TODO
             let async_funcs = if is_world_export {
                 &self.async_exports
             } else {
                 &self.async_imports
             };
 
-            let iface = &resolve.interfaces[id];
+            let iface = &resolve.interfaces[interface_id];
+            let package_id = iface.package.expect("missing package on interface");
             let package = resolve
                 .packages
-                .get(iface.package.expect("missing package on interface"))
+                .get(package_id)
                 .expect("unexpectedly missing package");
 
             for (_, func) in iface.functions.iter() {
@@ -614,12 +631,25 @@ impl TsBindgen {
                 {
                     continue;
                 }
-                let requires_async_porcelain =
-                    requires_async_porcelain(func, &id_name, async_funcs);
+
+                let func_name = func.name.clone();
+                let canonicalized_fn_name = match resolve.canonicalized_id_of(interface_id) {
+                    Some(canon_iface_name) => format!("{canon_iface_name}#{func_name}"),
+                    // NOTE: we can't get canonicalized interface names for anonymous interfaces
+                    // so we use the function name bare
+                    None => func_name,
+                };
+
+                let requires_async_porcelain = requires_async_porcelain(
+                    FunctionIdentifier::CanonFnName(&canonicalized_fn_name),
+                    &id_name,
+                    async_funcs,
+                );
+
                 gen.ts_func(func, false, true, requires_async_porcelain);
             }
 
-            gen.types(id);
+            gen.types(interface_id);
             gen.post_types();
 
             let (src, references) = gen.finish();
@@ -865,7 +895,13 @@ impl<'a> TsInterface<'a> {
         }
     }
 
-    fn ts_func(&mut self, func: &Function, default: bool, declaration: bool, is_async: bool) {
+    fn ts_func(
+        &mut self,
+        func: &Function,
+        default: bool,
+        declaration: bool,
+        requires_async_porcelain: bool,
+    ) {
         let iface = self.iface_for(func);
         iface.docs(&func.docs);
 
@@ -946,7 +982,7 @@ impl<'a> TsInterface<'a> {
         }
         iface.src.push_str(": ");
 
-        if is_async {
+        if requires_async_porcelain {
             iface.src.push_str("Promise<");
         }
 
@@ -959,7 +995,7 @@ impl<'a> TsInterface<'a> {
             }
         }
 
-        if is_async {
+        if requires_async_porcelain {
             // closes `Promise<>`
             iface.src.push_str(">");
         }

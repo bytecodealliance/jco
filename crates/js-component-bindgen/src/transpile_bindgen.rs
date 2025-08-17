@@ -48,7 +48,7 @@ use crate::intrinsics::{
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::{
     core, get_thrown_type, is_guest_async_lifted_fn, requires_async_porcelain, source, uwrite,
-    uwriteln,
+    uwriteln, FunctionIdentifier,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -2287,8 +2287,11 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         // Host lifted async (i.e. JSPI)
-        let requires_async_porcelain =
-            requires_async_porcelain(func, import_name, &self.async_imports);
+        let requires_async_porcelain = requires_async_porcelain(
+            FunctionIdentifier::Fn(func),
+            import_name,
+            &self.async_imports,
+        );
 
         // nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
@@ -3442,8 +3445,11 @@ impl<'a> Instantiator<'a, '_> {
         export_remote_resource_map: &RemoteResourceMap,
     ) {
         // Determine whether the function should be generated as async
-        let requires_async_porcelain =
-            requires_async_porcelain(func, export_name, &self.async_exports);
+        let requires_async_porcelain = requires_async_porcelain(
+            FunctionIdentifier::Fn(func),
+            export_name,
+            &self.async_exports,
+        );
         // If the function is *also* async lifted, it
         if options.async_ {
             assert!(
