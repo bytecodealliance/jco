@@ -265,6 +265,12 @@ pub(crate) fn is_guest_async_lifted_fn(func: &Function, canon_opts: &CanonicalOp
     )
 }
 
+/// Identifier for a function used
+enum FunctionIdentifier<'a> {
+    Fn(&'a Function),
+    CanonFnName(&'a str),
+}
+
 /// Check whether a function has been marked or async binding generation
 ///
 /// When dealing with imports, functions that are designated to require async porcelain
@@ -281,11 +287,14 @@ pub(crate) fn is_guest_async_lifted_fn(func: &Function, canon_opts: &CanonicalOp
 ///
 /// This function is *not* for detecting WASI P3 asynchronous behavior -- see [`is_guest_async_lifted_fn`].
 pub(crate) fn requires_async_porcelain(
-    func: &Function,
+    func: FunctionIdentifier<'_>,
     id: &str,
     async_funcs: &HashSet<String>,
 ) -> bool {
-    let name = func.name.as_str();
+    let name = match func {
+        FunctionIdentifier::Fn(func) => func.name.as_str(),
+        FunctionIdentifier::CanonFnName(name) => name,
+    };
 
     if async_funcs.contains(name) {
         return true;
