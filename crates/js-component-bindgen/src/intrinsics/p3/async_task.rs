@@ -503,6 +503,8 @@ impl AsyncTaskIntrinsic {
                     "
                     function {fn_name}(componentIdx, taskId) {{
                         {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                        componentIdx ??= {component_idx_global};
+                        taskId ??= {task_id_global};
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while ending current task');
                         }}
