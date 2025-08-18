@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.13.3] - 2025-08-18
+
+### 🐛 Bug Fixes
+
+* *(jco)* fix memory leak for async tasks on non-async fns by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+* *(jco)* use stack for global component index & task ID by @vados-cosmonic in #938
+
+
+
+
 ## [1.13.2] - 2025-08-12
 
 ### 🐛 Bug Fixes
