@@ -269,6 +269,18 @@ npm run build
 <li><code>test/browser.html</code>: Bare-minimum browser validation test.</li>
 <li><code>cargo test</code>: Wasmtime preview2 conformance tests (not currently passing).</li>
 </ul>
+<div class="mdbook-alerts mdbook-alerts-warn">
+<p class="mdbook-alerts-title">
+  <span class="mdbook-alerts-icon"></span>
+  warn
+</p>
+<p>Generally, when running <code>jco</code> tests, you will want to build the project <em>first</em> during a test run,
+to ensure the latest version of Rust code (i.e. <code>js-component-bindgen</code> is in use):</p>
+<pre><code>cd packages/jco
+npm run build &amp;&amp; npm run test api.js
+</code></pre>
+<p>The command above runs a single test file -- the name of the file is relative to <code>packages/jco/test</code>.</p>
+</div>
 <h3 id="running-tests-without-bundling"><a class="header" href="#running-tests-without-bundling">Running tests without bundling</a></h3>
 <p>Tests can be run without bundling via <code>npm run build:dev &amp;&amp; npm run test:dev</code>.</p>
 <h3 id="running-specific-tests"><a class="header" href="#running-specific-tests">Running specific tests</a></h3>
