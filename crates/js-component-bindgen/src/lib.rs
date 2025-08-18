@@ -132,6 +132,7 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
             | WasmFeatures::CM_ASYNC
             | WasmFeatures::CM_ASYNC_BUILTINS
             | WasmFeatures::CM_ERROR_CONTEXT
+            | WasmFeatures::MEMORY64
             | WasmFeatures::MULTI_MEMORY,
     );
 
