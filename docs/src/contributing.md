@@ -65,6 +65,17 @@ There are three test suites in jco:
 * `test/browser.html`: Bare-minimum browser validation test.
 * `cargo test`: Wasmtime preview2 conformance tests (not currently passing).
 
+> [!WARN]
+> Generally, when running `jco` tests, you will want to build the project *first* during a test run,
+> to ensure the latest version of Rust code (i.e. `js-component-bindgen` is in use):
+>
+> ```
+> cd packages/jco
+> npm run build && npm run test api.js
+> ```
+>
+> The command above runs a single test file -- the name of the file is relative to `packages/jco/test`.
+
 ### Running tests without bundling
 
 Tests can be run without bundling via `npm run build:dev && npm run test:dev`.
@@ -88,7 +99,7 @@ npm run test test/p3/*.js
 
 ## Commits
 
-Jco and related subprojects use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). 
+Jco and related subprojects use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 Using Conventional Commits helps the project maintain consistency in commit messages, and powers release
 automation.
 
