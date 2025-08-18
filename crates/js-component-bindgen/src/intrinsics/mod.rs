@@ -183,10 +183,10 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     args.intrinsics.insert(Intrinsic::ConstantI32Max);
     args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
     args.intrinsics.insert(Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::GlobalAsyncCurrentTaskId,
+        AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds,
     ));
     args.intrinsics.insert(Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdx,
+        AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs,
     ));
     args.intrinsics.insert(Intrinsic::AsyncTask(
         AsyncTaskIntrinsic::UnpackCallbackResult,
