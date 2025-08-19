@@ -80,14 +80,14 @@ export async function exec(cmd, ...args) {
         cp.on('error', reject);
         cp.on('exit', (code) => {
             if (code !== 0) {
-                const output = (stderr || stdout).toString();
-                reject(
-                    new Error(
-                        `error while executing [${processCmd} ${cmdArgs.join(
-                            ' '
-                        )}]:\n${output}`
-                    )
-                );
+                const msg = [
+                    `error code [${code}] while executing [${processCmd} ${cmdArgs.join(' ')}]:`,
+                    'STDOUT:',
+                    stdout.toString(),
+                    'STDERR:',
+                    stderr.toString(),
+                ].join('\n');
+                reject(new Error(msg));
                 return;
             }
             resolve();
