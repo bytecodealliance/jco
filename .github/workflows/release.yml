@@ -463,6 +463,7 @@ jobs:
           tag_name: ${{ needs.meta.outputs.next-release-tag }}
           generate_release_notes: false
           body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current
+          make_latest: ${{ github.ref_type == 'tag' && needs.meta.outputs.is-prerelease == 'false' }}
           files: |
             ./artifacts/*/*
 
