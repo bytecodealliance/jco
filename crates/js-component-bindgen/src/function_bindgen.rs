@@ -1505,14 +1505,16 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::I32Store16 { offset } => self.store("setInt16", *offset, operands),
 
-            Instruction::LengthStore { offset } => self.store("setInt32", *offset, operands),
+            Instruction::LengthStore { offset } => self.store("setUint32", *offset, operands),
 
-            Instruction::LengthLoad { offset } => self.load("getInt32", *offset, operands, results),
+            Instruction::LengthLoad { offset } => {
+                self.load("getUint32", *offset, operands, results)
+            }
 
-            Instruction::PointerStore { offset } => self.store("setInt32", *offset, operands),
+            Instruction::PointerStore { offset } => self.store("setUint32", *offset, operands),
 
             Instruction::PointerLoad { offset } => {
-                self.load("getInt32", *offset, operands, results)
+                self.load("getUint32", *offset, operands, results)
             }
 
             Instruction::Malloc { size, align, .. } => {
