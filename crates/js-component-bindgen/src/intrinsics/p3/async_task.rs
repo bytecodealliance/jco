@@ -160,7 +160,7 @@ pub enum AsyncTaskIntrinsic {
     /// they have no access to the current component instance index (e.g. `context.get`).
     ///
     /// ```ts
-    /// type GlobalAsyncCurrentTaskId = number[];
+    /// type GlobalAsyncCurrentTaskIds = number[];
     /// ```
     GlobalAsyncCurrentTaskIds,
 
@@ -170,7 +170,7 @@ pub enum AsyncTaskIntrinsic {
     /// (reset to `null` in JS) when a task ends.
     ///
     /// ```ts
-    /// type GlobalAsyncCurrentTaskId = number | null;
+    /// type GlobalAsyncCurrentTaskIds = number[];
     /// ```
     GlobalAsyncCurrentComponentIdxs,
 
@@ -240,11 +240,11 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::GlobalAsyncCurrentTaskIds => {
-                output.push_str(&format!("let {var_name} = [];\n", var_name = self.name(),));
+                output.push_str(&format!("const {var_name} = [];\n", var_name = self.name(),));
             }
 
             Self::GlobalAsyncCurrentComponentIdxs => {
-                output.push_str(&format!("let {var_name} = [];\n", var_name = self.name(),));
+                output.push_str(&format!("const {var_name} = [];\n", var_name = self.name(),));
             }
 
             Self::AsyncBlockedConstant => {
