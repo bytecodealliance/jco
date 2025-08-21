@@ -275,7 +275,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/${{ needs.meta.outputs.project }}
-          cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
+          cp -r artifacts/* /tmp/${{ needs.meta.outputs.project }}/
           cd /tmp/${{ needs.meta.outputs.project }}
           tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
           rm Cargo.toml.orig
@@ -328,7 +328,7 @@ jobs:
           fi
 
           mkdir -p /tmp/${{ needs.meta.outputs.project }}
-          cp -r artifacts/${{ needs.meta.outputs.project }}/* /tmp/${{ needs.meta.outputs.project }}/
+          cp -r artifacts/* /tmp/${{ needs.meta.outputs.project }}/
           cd /tmp/${{ needs.meta.outputs.project }}
           tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
           rm Cargo.toml.orig
@@ -465,7 +465,7 @@ jobs:
           body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current
           make_latest: ${{ github.ref_type == 'tag' && needs.meta.outputs.is-prerelease == 'false' }}
           files: |
-            ./artifacts/*/*
+            ./artifacts/*
 
       - name: Cache npm install
         continue-on-error: true
