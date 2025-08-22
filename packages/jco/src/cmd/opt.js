@@ -136,7 +136,8 @@ export async function optimizeComponent(componentBytes, opts) {
                             metadata.range[0],
                             metadata.range[1]
                         ),
-                        args
+                        args,
+                        opts
                     );
 
                     // compute the size change, including the change to
@@ -280,13 +281,13 @@ export async function optimizeComponent(componentBytes, opts) {
  * @param {Array<string>} args
  * @returns {Promise<Uint8Array>}
  */
-async function wasmOpt(source, args) {
-    const wasmOptPath = fileURLToPath(
-        import.meta.resolve('binaryen/bin/wasm-opt')
-    );
+async function wasmOpt(source, args, transpileOpts) {
+    const wasmOptBin =
+        transpileOpts?.wasmOptBin ??
+        fileURLToPath(import.meta.resolve('binaryen/bin/wasm-opt'));
 
     try {
-        return await spawnIOTmp(wasmOptPath, source, [...args, '-o']);
+        return await spawnIOTmp(wasmOptBin, source, [...args, '-o']);
     } catch (e) {
         if (e.toString().includes('BasicBlock requested')) {
             return wasmOpt(source, args);

@@ -234,6 +234,7 @@ program
         []
     )
     .option('--all-features', 'enable all features')
+    .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: '')")
     .action(asyncAction(types));
 
 program
@@ -345,6 +346,7 @@ program
     )
     .option('--asyncify', 'runs Asyncify pass in wasm-opt')
     .option('-q, --quiet')
+    .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: '')")
     .allowExcessArguments(true)
     .action(asyncAction(opt));
 
