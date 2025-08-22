@@ -1,0 +1,13 @@
+package test:component;
+
+interface resources {
+    resource example {
+        constructor();
+        hello: func(a: string) -> string;
+    }
+}
+
+world imported {
+    import resources;
+    export wasi:cli/run@0.2.4;
+}
