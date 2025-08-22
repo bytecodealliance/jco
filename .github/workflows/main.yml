@@ -398,6 +398,8 @@ jobs:
             workspace: examples/components/host-logging
           - name: ts-resource-import
             workspace: examples/components/ts-resource-import
+          - name: ts-resource-export
+            workspace: examples/components/ts-resource-export
           - name: typegen-async-export
             workspace: examples/components/typegen-async-export
     steps:

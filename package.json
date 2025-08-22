@@ -16,6 +16,7 @@
     "examples/components/string-reverse-upper",
     "examples/components/webidl-book-library",
     "examples/components/ts-resource-import",
+    "examples/components/ts-resource-export",
     "examples/components/typegen-async-export"
   ],
   "scripts": {

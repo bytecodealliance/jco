@@ -1,22 +1,22 @@
 {
-    "name": "typegen-async-export",
-    "version": "0.1.0",
-    "type": "module",
-    "scripts": {
-        "gen:types": "jco guest-types -o generated/types --async-mode=jspi --async-exports=jco-examples:typegen-async-export/example#slow-double wit",
-        "build:ts": "rollup -c rollup.config.mjs",
-        "build:component": "jco componentize -w wit -o dist/component.wasm dist/component.js",
-        "build": "npm run gen:types && npm run build:ts && npm run build:component",
-        "run:wasmtime": "wasmtime run -Scli,http --invoke 'slow-double(1024)' dist/component.wasm",
-        "all": "npm run build && npm run run:wasmtime"
-    },
-    "dependencies": {
-        "@bytecodealliance/jco": "file:../../home/mrman/code/work/cosmonic/forks/jco/packages/jco"
-    },
-    "devDependencies": {
-        "@rollup/plugin-node-resolve": "^16.0.1",
-        "@rollup/plugin-typescript": "^12.1.4",
-        "rollup": "^4.48.0",
-        "tslib": "^2.8.1"
-    }
+  "name": "typegen-async-export",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "gen:types": "jco guest-types -o generated/types --async-mode=jspi --async-exports=jco-examples:typegen-async-export/example#slow-double wit",
+    "build:ts": "rollup -c rollup.config.mjs",
+    "build:component": "jco componentize -w wit -o dist/component.wasm dist/component.js",
+    "build": "npm run gen:types && npm run build:ts && npm run build:component",
+    "run:wasmtime": "wasmtime run -Scli,http --invoke 'slow-double(1024)' dist/component.wasm",
+    "all": "npm run build && npm run run:wasmtime"
+  },
+  "dependencies": {
+    "@bytecodealliance/jco": "file:../../home/mrman/code/work/cosmonic/forks/jco/packages/jco"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-typescript": "^12.1.4",
+    "rollup": "^4.48.0",
+    "tslib": "^2.8.1"
+  }
 }

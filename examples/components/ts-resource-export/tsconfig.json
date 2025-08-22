@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "noEmitOnError": true,
+    "lib": [
+      "esnext"
+    ],
+    "target": "es2024",
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
+  }
+}
