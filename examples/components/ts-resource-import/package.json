@@ -1,0 +1,29 @@
+{
+  "name": "ts-resource-import",
+  "version": "0.1.0",
+  "main": "src/component.js",
+  "type": "module",
+  "scripts": {
+    "gen:types": "jco guest-types -o generated/types/guest/import wit/ --world-name imported",
+    "build:ts": "rollup -c component.rollup.mjs",
+    "build:component": "jco componentize -w wit/ --world-name imported dist/component.js -o dist/component.wasm",
+    "build": "npm run gen:types && npm run build:ts && npm run build:component",
+    "transpile": "jco transpile dist/component.wasm -o dist/transpiled --instantiation=async",
+    "run:embedding": "node dist/transpiled/embedding.js",
+    "build:embedding": "rollup -c embedding.rollup.mjs",
+    "embedding": "npm run build:embedding && npm run run:embedding",
+    "all": "npm run build && npm run transpile && npm run build:embedding && npm run run:embedding"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "^0.18.4",
+    "@bytecodealliance/jco": "file:../../../packages/jco",
+    "@bytecodealliance/preview2-shim": "file:../../../packages/preview2-shim",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-typescript": "^12.1.4",
+    "rollup": "^4.47.1",
+    "typescript": "^5.9.2"
+  }
+}
