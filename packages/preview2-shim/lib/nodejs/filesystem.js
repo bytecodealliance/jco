@@ -42,7 +42,7 @@ const isMac = platform === 'darwin';
 const nsMagnitude = 1_000_000_000_000n;
 function nsToDateTime(ns) {
     const seconds = ns / nsMagnitude;
-    const nanoseconds = Number(ns % seconds);
+    const nanoseconds = Number(ns % nsMagnitude);
     return { seconds, nanoseconds };
 }
 
