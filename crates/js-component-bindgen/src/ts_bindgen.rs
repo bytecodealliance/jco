@@ -50,6 +50,25 @@ struct TsBindgen {
     references: BTreeSet<String>,
 }
 
+/// Information related to a generated type (import, function, etc)
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct GeneratedTypeMeta {
+    /// Whether this type was generated as an export (or when `false`, an import)
+    is_export: bool,
+}
+
+#[allow(unused)]
+impl GeneratedTypeMeta {
+    #[must_use]
+    fn is_import(&self) -> bool {
+        !self.is_export
+    }
+    #[must_use]
+    fn is_export(&self) -> bool {
+        self.is_export
+    }
+}
+
 /// Used to generate a `*.d.ts` file for each imported and exported interface for
 /// a component.
 ///
@@ -65,7 +84,7 @@ struct TsInterface<'a> {
     needs_ty_result: bool,
     needs_module_end: bool,
     local_names: LocalNames,
-    resources: BTreeMap<String, TsInterface<'a>>,
+    resources: BTreeMap<String, (GeneratedTypeMeta, TsInterface<'a>)>,
     references: BTreeSet<String>,
 }
 
@@ -204,7 +223,9 @@ pub fn ts_bindgen(
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
                         TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
-                        TypeDefKind::Resource => gen.type_resource(*tid, ty),
+                        TypeDefKind::Resource => {
+                            gen.type_resource(*tid, ty, GeneratedTypeMeta { is_export: false })
+                        }
                         TypeDefKind::Handle(_) => todo!("type generation for handle"),
                     }
                     let (src, references) = gen.finish();
@@ -423,7 +444,13 @@ impl TsBindgen {
             // Generate a type-only export (`export type *` instead of `export *`).
             // so that users can use the interface types, even though there is no runtime code.
             let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
-            let import_path = self.generate_interface(&id_name, resolve, id, files);
+            let import_path = self.generate_interface(
+                &id_name,
+                resolve,
+                id,
+                files,
+                GeneratedTypeMeta { is_export: false },
+            );
             uwriteln!(
                 self.src,
                 "export type * as {} from '{import_path}'; // import {}",
@@ -468,7 +495,13 @@ impl TsBindgen {
             // so that users can use the interface types, even though there is no runtime code.
             for (_, &id) in ifaces {
                 let id_name = resolve.id_of(id).unwrap();
-                let import_path = self.generate_interface(&id_name, resolve, id, files);
+                let import_path = self.generate_interface(
+                    &id_name,
+                    resolve,
+                    id,
+                    files,
+                    GeneratedTypeMeta { is_export: false },
+                );
                 uwriteln!(
                     self.src,
                     "export type * as {} from '{import_path}'; // import {}",
@@ -488,7 +521,13 @@ impl TsBindgen {
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         let mut gen = TsInterface::new(resolve, false, self.is_guest);
-        gen.ts_func(func, true, false, false);
+        gen.ts_func(
+            func,
+            true,
+            false,
+            false,
+            &GeneratedTypeMeta { is_export: false },
+        );
         let (src, references) = gen.finish();
         self.import_object.push_str(&src);
         self.references.extend(references);
@@ -516,7 +555,13 @@ impl TsBindgen {
             // tracking in https://github.com/microsoft/TypeScript/issues/40594
         } else {
             let id_name = resolve.id_of(id).unwrap_or_else(|| export_name.to_string());
-            let file_name = self.generate_interface(export_name, resolve, id, files);
+            let file_name = self.generate_interface(
+                export_name,
+                resolve,
+                id,
+                files,
+                GeneratedTypeMeta { is_export: true },
+            );
             uwriteln!(
                 self.export_object,
                 "export * as {export_name} from '{file_name}'; // export {id_name}"
@@ -541,7 +586,13 @@ impl TsBindgen {
                 id_name,
                 &self.async_exports,
             );
-            gen.ts_func(func, false, declaration, requires_async_porcelain);
+            gen.ts_func(
+                func,
+                false,
+                declaration,
+                requires_async_porcelain,
+                &GeneratedTypeMeta { is_export: true },
+            );
         }
 
         let (src, references) = gen.finish();
@@ -560,7 +611,13 @@ impl TsBindgen {
     ) -> String {
         let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
         let goal_name = interface_goal_name(&id_name);
-        let file_name = self.generate_interface(name, resolve, id, files);
+        let file_name = self.generate_interface(
+            name,
+            resolve,
+            id,
+            files,
+            GeneratedTypeMeta { is_export: false },
+        );
 
         let (local_name, local_exists) = self.local_names.get_or_create(&file_name, &goal_name);
         let local_name = local_name.to_upper_camel_case();
@@ -585,6 +642,7 @@ impl TsBindgen {
         resolve: &Resolve,
         interface_id: InterfaceId,
         files: &mut Files,
+        type_meta: GeneratedTypeMeta,
     ) -> String {
         let id_name = resolve
             .id_of(interface_id)
@@ -599,19 +657,8 @@ impl TsBindgen {
             let mut gen = TsInterface::new(resolve, false, self.is_guest);
             gen.begin(&id_name); // Write module declaration
 
-            // Determine whether this interface is exported by the world
-            let mut is_world_export = false;
-            for (_world_id, world) in resolve.worlds.iter() {
-                for (world_key, _world_item) in world.exports.iter() {
-                    if matches!(world_key, WorldKey::Interface(iid) if *iid == interface_id) {
-                        is_world_export = true;
-                        break;
-                    }
-                }
-            }
-
             // Generate function definitions
-            let async_funcs = if is_world_export {
+            let async_funcs = if resolve.exports_interface(interface_id) {
                 &self.async_exports
             } else {
                 &self.async_imports
@@ -646,7 +693,7 @@ impl TsBindgen {
                     async_funcs,
                 );
 
-                gen.ts_func(func, false, true, requires_async_porcelain);
+                gen.ts_func(func, false, true, requires_async_porcelain, &type_meta);
             }
 
             gen.types(interface_id);
@@ -693,11 +740,21 @@ impl<'a> TsInterface<'a> {
     }
 
     fn finish(mut self) -> (Source, BTreeSet<String>) {
-        for (resource, source) in self.resources {
+        for (resource, (meta, source)) in self.resources {
+            let (impl_phrase, extra_members) = if self.is_guest && meta.is_import() {
+                eprintln!("\n\nis_guest? {}", self.is_guest);
+                eprintln!("is_root? {}", self.is_root);
+                // Resources types imported in the guest  will have generated [Symbol.dispose]()
+                // for resource cleanup, but this is not the case for any other scenario.
+                (" implements Disposable", vec!["[Symbol.dispose](): void;"])
+            } else {
+                ("", vec![])
+            };
+
             uwriteln!(
                 self.src,
-                "\nexport class {} implements Partial<Disposable> {{",
-                resource.to_upper_camel_case()
+                "\nexport class {class_name}{impl_phrase} {{",
+                class_name = resource.to_upper_camel_case(),
             );
             if !source.has_constructor {
                 uwriteln!(self.src, "/**");
@@ -706,7 +763,9 @@ impl<'a> TsInterface<'a> {
                 uwriteln!(self.src, "private constructor();");
             }
             self.src.push_str(&source.src);
-            uwriteln!(self.src, "  [Symbol.dispose]?: () => void;");
+            for extra_member in extra_members {
+                uwriteln!(self.src, "{}", extra_member);
+            }
             uwriteln!(self.src, "}}")
         }
         if self.src.is_empty() {
@@ -736,6 +795,7 @@ impl<'a> TsInterface<'a> {
 
     fn types(&mut self, iface_id: InterfaceId) {
         let iface = &self.resolve.interfaces[iface_id];
+
         for (name, id) in iface.types.iter() {
             let ty = &self.resolve.types[*id];
             match &ty.kind {
@@ -754,7 +814,13 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                 TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
                 TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
-                TypeDefKind::Resource => self.type_resource(*id, ty),
+                TypeDefKind::Resource => self.type_resource(
+                    *id,
+                    ty,
+                    GeneratedTypeMeta {
+                        is_export: self.resolve.exports_interface(iface_id),
+                    },
+                ),
                 TypeDefKind::Handle(_) => todo!("types for handle"),
             }
         }
@@ -878,7 +944,11 @@ impl<'a> TsInterface<'a> {
         self.src.push_str("]");
     }
 
-    fn iface_for<'i>(&'i mut self, func: &Function) -> &'i mut TsInterface<'a> {
+    fn iface_for<'i>(
+        &'i mut self,
+        func: &Function,
+        meta: &GeneratedTypeMeta,
+    ) -> &'i mut TsInterface<'a> {
         if let FunctionKind::Method(idx)
         | FunctionKind::AsyncMethod(idx)
         | FunctionKind::Static(idx)
@@ -887,9 +957,16 @@ impl<'a> TsInterface<'a> {
         {
             let ty = &self.resolve.types[idx];
             let resource = ty.name.clone().unwrap();
-            self.resources
+            &mut self
+                .resources
                 .entry(resource)
-                .or_insert_with(|| TsInterface::new(self.resolve, false, self.is_guest))
+                .or_insert_with(|| {
+                    (
+                        meta.clone(),
+                        TsInterface::new(self.resolve, false, self.is_guest),
+                    )
+                })
+                .1
         } else {
             self
         }
@@ -901,8 +978,9 @@ impl<'a> TsInterface<'a> {
         default: bool,
         declaration: bool,
         requires_async_porcelain: bool,
+        meta: &GeneratedTypeMeta,
     ) {
-        let iface = self.iface_for(func);
+        let iface = self.iface_for(func, meta);
         iface.docs(&func.docs);
 
         let out_name = if default {
@@ -1006,9 +1084,9 @@ impl<'a> TsInterface<'a> {
 
     fn post_types(&mut self) {
         let needs_ty_option =
-            self.needs_ty_option || self.resources.iter().any(|(_, r)| r.needs_ty_option);
+            self.needs_ty_option || self.resources.iter().any(|(_, r)| r.1.needs_ty_option);
         let needs_ty_result =
-            self.needs_ty_result || self.resources.iter().any(|(_, r)| r.needs_ty_result);
+            self.needs_ty_result || self.resources.iter().any(|(_, r)| r.1.needs_ty_result);
         if needs_ty_option {
             self.src
                 .push_str("export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };\n");
@@ -1231,11 +1309,11 @@ impl<'a> TsInterface<'a> {
         self.src.push_str(";\n");
     }
 
-    fn type_resource(&mut self, _id: TypeId, ty: &TypeDef) {
+    fn type_resource(&mut self, _id: TypeId, ty: &TypeDef, meta: GeneratedTypeMeta) {
         let resource = ty.name.clone().unwrap();
         self.resources
             .entry(resource)
-            .or_insert_with(|| TsInterface::new(self.resolve, false, self.is_guest));
+            .or_insert_with(|| (meta, TsInterface::new(self.resolve, false, self.is_guest)));
     }
 }
 
@@ -1255,4 +1333,22 @@ fn generate_references(references: &BTreeSet<String>) -> String {
         uwriteln!(out, "/// <reference path=\"{}\" />", reference);
     }
     out
+}
+
+trait ResolveExt {
+    /// Check whether a certain interface is exported
+    fn exports_interface(&self, iface_id: InterfaceId) -> bool;
+}
+
+impl ResolveExt for Resolve {
+    fn exports_interface(&self, iface_id: InterfaceId) -> bool {
+        for (_world_id, world) in self.worlds.iter() {
+            for (world_key, _world_item) in world.exports.iter() {
+                if matches!(world_key, WorldKey::Interface(iid) if *iid == iface_id) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }

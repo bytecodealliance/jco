@@ -1,8 +1,10 @@
+/* global TextDecoder */
 import { readFile } from 'node:fs/promises';
 
-import { fileURLToPath } from 'url';
+import { fileURLToPath, URL } from 'node:url';
 
 import { transpile, componentNew, componentEmbed } from '../src/api.js';
+import { typesComponent } from '../src/cmd/types.js';
 
 import { suite, test, beforeAll, assert } from 'vitest';
 
@@ -90,7 +92,11 @@ suite(`TypeScript`, async () => {
         );
     });
 
-    test(`Resource Disposable interface generation`, async () => {
+    // NOTE: somewhat confusingly, host generation of resources should *not*
+    // generation Disposable, because the embedder may or may not choose to make
+    // the implemented resource import disposable or not.
+    //
+    test(`(host-types, import) Disposable interface generation`, async () => {
         const witSource = await readFile(
             fileURLToPath(
                 new URL(
@@ -112,37 +118,60 @@ suite(`TypeScript`, async () => {
         const mainDtsSource = new TextDecoder().decode(
             files['disposable.d.ts']
         );
-
-        assert.ok(
-            mainDtsSource.includes(
-                `export class Database implements Partial<Disposable> {`
-            ),
-            'Database resource should implement partial Disposable interface'
-        );
-        assert.ok(
-            mainDtsSource.includes(`[Symbol.dispose]?: () => void;`),
-            'Database resource should have Symbol.dispose method'
+        assert(
+            [
+                `export class Database implements Disposable {`,
+                `[Symbol.dispose](): void;`,
+            ].every((s) => !mainDtsSource.includes(s)),
+            'Database resource should not implement Disposable interface'
         );
 
         const interfaceDtsSource = new TextDecoder().decode(
             files['interfaces/test-disposable-resources-resources.d.ts']
         );
+        assert(
+            [
+                `export class FileHandle implements Disposable {`,
+                `export class Connection implements Disposable {`,
+                `[Symbol.dispose](): void;`,
+            ].every((s) => !interfaceDtsSource.includes(s)),
+            'FileHandle/Connection resources should not implement Disposable interface'
+        );
+    });
 
-        assert.ok(
-            interfaceDtsSource.includes(
-                `export class FileHandle implements Partial<Disposable> {`
-            ),
-            'FileHandle resource should implement partial Disposable interface'
+    // NOTE: When generating guest types, the generated import shims provided *will*
+    // have automatically generated disposal code, and thus we should have Disposable implementations
+    test(`(guest-types, import) Disposable interface generation`, async () => {
+        const witPath = fileURLToPath(
+            new URL(
+                `./fixtures/wits/disposable-resources/disposable-resources.wit`,
+                import.meta.url
+            )
         );
-        assert.ok(
-            interfaceDtsSource.includes(
-                `export class Connection implements Partial<Disposable> {`
-            ),
-            'Connection resource should implement Disposable interface'
+
+        const files = await typesComponent(witPath, { guest: true });
+
+        const mainDtsSource = new TextDecoder().decode(
+            files['disposable.d.ts']
         );
-        assert.ok(
-            interfaceDtsSource.includes(`[Symbol.dispose]?: () => void;`),
-            'Resources should have Symbol.dispose method'
+        assert.isFalse(
+            [
+                `export class Database implements Disposable {`,
+                `[Symbol.dispose](): void;`,
+            ].every((s) => mainDtsSource.includes(s)),
+            'Database resource should implement Disposable interface'
+        );
+
+        const interfaceDtsSource = new TextDecoder().decode(
+            files['interfaces/test-disposable-resources-resources.d.ts']
+        );
+        assert(
+            [
+                `export class FileHandle implements Disposable {`,
+                `export class Connection implements Disposable {`,
+                `[Symbol.dispose](): void;`,
+            ].every((s) => interfaceDtsSource.includes(s)),
+            'FileHandle/Connection resources should implement Disposable interface'
         );
     });
 });
