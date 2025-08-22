@@ -1,11 +1,11 @@
 {
-  "name": "ts-resource-import",
+  "name": "ts-resource-export",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "gen:types": "jco guest-types -o generated/types/guest/import wit/ --world-name imported",
+    "gen:types": "jco guest-types -o generated/types/guest/export wit/ --world-name exported",
     "build:ts": "rollup -c component.rollup.mjs",
-    "build:component": "jco componentize -w wit/ --world-name imported dist/component.js -o dist/component.wasm",
+    "build:component": "jco componentize -w wit/ --world-name exported dist/component.js -o dist/component.wasm",
     "build": "npm run gen:types && npm run build:ts && npm run build:component",
     "transpile": "jco transpile dist/component.wasm -o dist/transpiled --instantiation=async",
     "run:embedding": "node dist/transpiled/embedding.js",

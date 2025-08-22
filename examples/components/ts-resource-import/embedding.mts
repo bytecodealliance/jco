@@ -57,9 +57,6 @@ async function main() {
         return await WebAssembly.compile(buf.buffer as ArrayBuffer);
     };
     const component = await instantiate(loader, imports);
-
-    // Run the component (output will be printed to the console)
-    component.run.run();
 }
 
 await main();

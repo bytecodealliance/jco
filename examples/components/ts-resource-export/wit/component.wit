@@ -1,0 +1,19 @@
+package test:component;
+
+interface resources {
+    resource example {
+        constructor();
+        hello: func(a: string) -> string;
+    }
+
+    resource example-no-dispose {
+        constructor();
+        hello: func(a: string) -> string;
+    }
+}
+
+world exported {
+   import wasi:cli/stderr@0.2.7;
+
+   export resources;
+}

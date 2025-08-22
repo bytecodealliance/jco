@@ -1,4 +1,4 @@
-# Typescript Resource Import Example
+# Typescript Resource Export Example
 
 This project showcases a few things:
 
