@@ -11,6 +11,7 @@ const { metadataShow, print } = tools;
  *  asyncify?: boolean,
  *  optArgs?: string[],
  *  noVerify?: boolean
+ *  wasmOptBin?: string
  * }} OptimizeOptions
  */
 
@@ -65,7 +66,8 @@ export async function runOptimizeComponent(componentBytes, opts) {
                         metadata.range[0],
                         metadata.range[1]
                     ),
-                    args
+                    args,
+                    opts
                 );
 
                 // compute the size change, including the change to
@@ -188,15 +190,16 @@ export async function runOptimizeComponent(componentBytes, opts) {
  *
  * @param {Uint8Array} source
  * @param {Array<string>} args
+ * @param {TranspileOpt} transpileOpts
  * @returns {Promise<Uint8Array>}
  */
-async function runWasmOptCLI(source, args) {
-    const wasmOptPath = fileURLToPath(
-        import.meta.resolve('binaryen/bin/wasm-opt')
-    );
+async function runWasmOptCLI(source, args, transpileOpts) {
+    const wasmOptBin =
+        transpileOpts?.wasmOptBin ??
+        fileURLToPath(import.meta.resolve('binaryen/bin/wasm-opt'));
 
     try {
-        return await runWASMTransformProgram(wasmOptPath, source, [
+        return await runWASMTransformProgram(wasmOptBin, source, [
             ...args,
             '-o',
         ]);
