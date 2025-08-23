@@ -14,7 +14,8 @@
     "examples/components/node-fetch",
     "examples/components/string-reverse",
     "examples/components/string-reverse-upper",
-    "examples/components/webidl-book-library"
+    "examples/components/webidl-book-library",
+    "examples/components/ts-resource-import"
   ],
   "scripts": {
     "build": "cargo xtask build debug",
