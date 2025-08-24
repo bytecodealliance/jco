@@ -1,4 +1,3 @@
-import { platform } from 'node:process';
 import { stat } from 'node:fs/promises';
 import { extname, basename, resolve } from 'node:path';
 
@@ -9,12 +8,12 @@ import {
     generateTypes,
 } from '../../obj/js-component-bindgen-component.js';
 import {
+    isWindows,
     writeFiles,
     ASYNC_WASI_IMPORTS,
     ASYNC_WASI_EXPORTS,
+    DEFAULT_ASYNC_MODE,
 } from '../common.js';
-
-const isWindows = platform === 'win32';
 
 export async function types(witPath, opts) {
     const files = await typesComponent(witPath, opts);
@@ -47,6 +46,8 @@ export async function guestTypes(witPath, opts) {
  *   features?: string[] | 'all',
  *   asyncWasiImports?: string[],
  *   asyncWasiExports?: string[],
+ *   asyncExports?: string[],
+ *   asyncImports?: string[],
  *   guest?: bool,
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
@@ -67,6 +68,7 @@ export async function typesComponent(witPath, opts) {
         outDir += '/';
     }
 
+    // Bulid list of enabled features
     let features = null;
     if (opts.allFeatures) {
         features = { tag: 'all' };
@@ -76,24 +78,36 @@ export async function typesComponent(witPath, opts) {
         features = { tag: 'list', val: opts.features };
     }
 
+    // Build list of async imports/exports
+    let asyncImports = new Set([...(opts.asyncImports ?? [])]);
     if (opts.asyncWasiImports) {
-        opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
+        ASYNC_WASI_IMPORTS.forEach((v) => asyncImports.add(v));
     }
+    let asyncExports = new Set([...(opts.asyncExports ?? [])]);
     if (opts.asyncWasiExports) {
-        opts.asyncExports = ASYNC_WASI_EXPORTS.concat(opts.asyncExports || []);
+        ASYNC_WASI_EXPORTS.forEach((v) => asyncExports.add(v));
     }
 
-    const asyncMode =
-        !opts.asyncMode || opts.asyncMode === 'sync'
-            ? null
-            : {
-                  tag: opts.asyncMode,
-                  val: {
-                      imports: opts.asyncImports || [],
-                      exports: opts.asyncExports || [],
-                  },
-              };
+    // For simple type generation, we choose the "async mode" for the user
+    // even though it is not relevant here (JSPI may not be used, as types may
+    // be used to generate a guest that is never transpiled).
+    let asyncMode = opts.asyncMode ?? DEFAULT_ASYNC_MODE;
+    let asyncModeObj;
+    if (asyncMode === 'jspi' || asyncExports.size > 0) {
+        asyncModeObj = {
+            tag: 'jspi',
+            val: {
+                imports: [...asyncImports],
+                exports: [...asyncExports],
+            },
+        };
+    } else if (asyncMode === 'sync') {
+        asyncModeObj = null;
+    } else {
+        throw new Error(`invalid/unrecognized async mode [${asyncMode}]`);
+    }
 
+    // Run the type generation
     let types;
     const absWitPath = resolve(witPath);
     try {
@@ -104,7 +118,7 @@ export async function typesComponent(witPath, opts) {
             world: opts.worldName,
             features,
             guest: opts.guest ?? false,
-            asyncMode,
+            asyncMode: asyncModeObj,
         }).map(([name, file]) => [`${outDir}${name}`, file]);
     } catch (err) {
         if (err.toString().includes('does not match previous package name')) {

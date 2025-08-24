@@ -101,6 +101,7 @@ pub fn ts_bindgen(
             (imports.into_iter().collect(), exports.into_iter().collect())
         }
     };
+
     let mut bindgen = TsBindgen {
         src: Source::default(),
         interface_names: LocalNames::default(),
@@ -310,7 +311,7 @@ pub fn ts_bindgen(
     //
     // With the current representation of a "world" this is an import object
     // per-imported-interface where the type of that field is defined by the
-    // interface itbindgen.
+    // interface bindgen.
     if opts.instantiation.is_some() {
         uwriteln!(bindgen.src, "export interface ImportObject {{");
         bindgen.src.push_str(&bindgen.import_object);
@@ -680,8 +681,11 @@ impl TsBindgen {
                 }
 
                 let func_name = func.name.clone();
+
                 let canonicalized_fn_name = match resolve.canonicalized_id_of(interface_id) {
-                    Some(canon_iface_name) => format!("{canon_iface_name}#{func_name}"),
+                    Some(canon_iface_name) => {
+                        format!("{}#{func_name}", canon_iface_name.trim_start_matches("$"))
+                    }
                     // NOTE: we can't get canonicalized interface names for anonymous interfaces
                     // so we use the function name bare
                     None => func_name,

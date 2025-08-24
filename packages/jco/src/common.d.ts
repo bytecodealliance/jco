@@ -14,6 +14,7 @@ export function writeFiles(files: any, summaryTitle: any): Promise<void>;
 export const isWindows: boolean;
 export const ASYNC_WASI_IMPORTS: string[];
 export const ASYNC_WASI_EXPORTS: string[];
+export const DEFAULT_ASYNC_MODE: "sync";
 export { readFileCli as readFile };
 declare function readFileCli(file: any, encoding: any): Promise<Buffer<ArrayBufferLike>>;
 //# sourceMappingURL=common.d.ts.map
