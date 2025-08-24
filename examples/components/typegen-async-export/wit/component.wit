@@ -1,0 +1,9 @@
+package jco-examples:typegen-async-export;
+
+interface example {
+  slow-double: func(arg: u32) -> u32;
+}
+
+world component {
+  export example;
+}
