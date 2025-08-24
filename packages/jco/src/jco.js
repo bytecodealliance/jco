@@ -224,7 +224,7 @@ program
     )
     .option(
         '--async-exports <exports...>',
-        'EXPERIMENTAL: async component exports (examples: "wasi:cli/run@#run", "handle")'
+        'EXPERIMENTAL: async component exports (examples: "ns:pkg/iface#func", "wasi:cli/run@0.2.3#run", "handle")'
     )
     .option('-q, --quiet', 'disable output summary')
     .option(
@@ -234,7 +234,9 @@ program
         []
     )
     .option('--all-features', 'enable all features')
-    .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: '')")
+    .option(
+        "--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: 'binaryen/bin/wasm-opt')"
+    )
     .action(asyncAction(types));
 
 program
@@ -253,6 +255,18 @@ program
         []
     )
     .option('--all-features', 'enable all features')
+    .option(
+        '--async-exports <exports...>',
+        'EXPERIMENTAL: generate async exports (examples: "ns:pkg/iface#func", "wasi:cli/run@0.2.3#run", "handle")'
+    )
+    .addOption(
+        new Option(
+            '--async-mode [mode]',
+            'EXPERIMENTAL: use async imports and exports'
+        )
+            .choices(['sync', 'jspi'])
+            .preset('sync')
+    )
     .action(asyncAction(guestTypes));
 
 program
@@ -346,7 +360,9 @@ program
     )
     .option('--asyncify', 'runs Asyncify pass in wasm-opt')
     .option('-q, --quiet')
-    .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: '')")
+    .option(
+        "--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: 'binaryen/bin/wasm-opt')"
+    )
     .allowExcessArguments(true)
     .action(asyncAction(opt));
 

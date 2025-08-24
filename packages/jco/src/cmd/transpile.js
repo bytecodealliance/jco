@@ -1,6 +1,5 @@
 /* global Buffer */
 
-import { platform } from 'node:process';
 import { extname, basename, resolve } from 'node:path';
 
 import c from 'chalk-template';
@@ -18,13 +17,14 @@ import {
     writeFiles,
     ASYNC_WASI_IMPORTS,
     ASYNC_WASI_EXPORTS,
+    DEFAULT_ASYNC_MODE,
 } from '../common.js';
 import { $init as wasmToolsInit, tools } from '../../obj/wasm-tools.js';
 const { componentEmbed, componentNew } = tools;
 
 import ora from '#ora';
 
-const isWindows = platform === 'win32';
+import { isWindows } from '../common.js';
 
 // These re-exports exist to avoid breaking backwards compatibility
 export { types, guestTypes, typesComponent } from './types.js';
@@ -169,22 +169,36 @@ export async function transpileComponent(component, opts = {}) {
         instantiation = { tag: 'async' };
     }
 
-    const asyncMode =
-        !opts.asyncMode || opts.asyncMode === 'sync'
-            ? null
-            : {
-                  tag: opts.asyncMode,
-                  val: {
-                      imports: opts.asyncImports || [],
-                      exports: opts.asyncExports || [],
-                  },
-              };
+    // Get the configured async mode then transform it into what the types component expects
+    // Build list of async imports/exports
+    let asyncImports = new Set([...(opts.asyncImports ?? [])]);
+    let asyncExports = new Set([...(opts.asyncExports ?? [])]);
+    let asyncMode = opts.asyncMode ?? DEFAULT_ASYNC_MODE;
+    if (asyncMode === 'sync' && asyncExports.size > 0) {
+        throw new Error(
+            'async exports cannot be specified in sync mode (consider removing --async-mode=jspi)'
+        );
+    }
+    let asyncModeObj;
+    if (asyncMode === 'sync') {
+        asyncModeObj = null;
+    } else if (asyncMode === 'jspi') {
+        asyncModeObj = {
+            tag: 'jspi',
+            val: {
+                imports: [...asyncImports],
+                exports: [...asyncExports],
+            },
+        };
+    } else {
+        throw new Error(`invalid/unrecognized async mode [${asyncMode}]`);
+    }
 
     let { files, imports, exports } = generate(component, {
         name: opts.name ?? 'component',
         map: Object.entries(opts.map ?? {}),
         instantiation,
-        asyncMode,
+        asyncMode: asyncModeObj,
         importBindings: opts.importBindings
             ? { tag: opts.importBindings }
             : null,

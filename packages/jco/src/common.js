@@ -25,6 +25,8 @@ export const ASYNC_WASI_EXPORTS = [
     'wasi:http/incoming-handler#handle',
 ];
 
+export const DEFAULT_ASYNC_MODE = 'sync';
+
 let _showSpinner = false;
 export function setShowSpinner(val) {
     _showSpinner = val;
