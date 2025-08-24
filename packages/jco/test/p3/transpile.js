@@ -26,6 +26,7 @@ suite('Transpile (WASI P3)', () => {
             jco: {
                 transpile: {
                     extraArgs: {
+                        asyncMode: 'jspi',
                         asyncExports: ['local:local/run#run'],
                     },
                 },
