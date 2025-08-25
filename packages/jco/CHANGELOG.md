@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.14.0] - 2025-08-25
+
+### 🚀 Features
+
+* *(jco)* support async export generation for guest-types by @vados-cosmonic
+
+* *(jco)* allow configurable wasm-opt bin path by @vados-cosmonic in #957
+
+* *(jco)* enable memory64 by @vados-cosmonic in #941
+
+
+### 🐛 Bug Fixes
+
+* *(jco)* asyncMode usage in transpile test by @vados-cosmonic in #959
+
+* *(jco)* use unsigned int for pointer load sizing by @vados-cosmonic in #949
+
+* *(jco)* async export type generation by @vados-cosmonic in #946
+
+* *(jco)* improve exec failure message during tests by @vados-cosmonic in #943
+
+
+### 🧪 Testing
+
+* *(jco)* add memory usage test by @vados-cosmonic in #950
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update preview2-shim to v0.17.3 by @vados-cosmonic in #968
+
+
+
+## New Contributors
+* @lrowe made their first contribution in [#956](https://github.com/bytecodealliance/jco/pull/956)
+
+
 ## [1.13.3] - 2025-08-18
 
 ### 🐛 Bug Fixes
