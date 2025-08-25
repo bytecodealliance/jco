@@ -1,6 +1,6 @@
 {
   "name": "@bytecodealliance/jco",
-  "version": "1.13.3",
+  "version": "1.14.0",
   "description": "JavaScript tooling for working with WebAssembly Components",
   "homepage": "https://github.com/bytecodealliance/jco#readme",
   "author": "Guy Bedford",
