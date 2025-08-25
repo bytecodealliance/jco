@@ -1,3 +1,4 @@
+import { URL } from 'node:url';
 import { env } from 'node:process';
 import { resolve } from 'node:path';
 import { access } from 'node:fs/promises';
@@ -115,7 +116,9 @@ async function main() {
     // Go through commits and parse out stuff
     for (const commit of release.commits) {
         // Find the first PR number link
-        const prNumber = commit.links
+        //
+        // TODO: use octokit.rest.repos.listPullRequestsAssociatedWithCommit() ?
+        let prNumber = commit.links
             .map((l) => {
                 const match = l.text.match(/^\(#([\d]+)\)$/);
                 if (!match) {
@@ -125,65 +128,229 @@ async function main() {
             })
             .find((v) => v);
         if (!prNumber) {
+            console.error(
+                `failed to parse PR number from commit message [${commit.message}]`
+            );
             continue;
         }
-        console.error(`processing PR [${prNumber}]`);
+        console.error(
+            `processing PR [${prNumber}] (commit title: "${commit.title}")`
+        );
 
-        // Search for existing release comment
-        let existingComment;
-        for await (const { data: comments } of octokit.paginate.iterator(
-            octokit.rest.issues.listComments,
-            {
-                owner: ghOwner,
-                repo: ghRepo,
-                issue_number: prNumber,
-                per_page: 100,
-            }
-        )) {
-            existingComment = comments.find((c) => {
-                const commentBody = c.body_html ?? c.body ?? c.body_text;
-                return commentBody.includes(COMMENT_INDICATOR);
-            });
-            if (existingComment) {
-                break;
-            }
+        await processPullRequestOrIssue({
+            octokit,
+            ghOwner,
+            ghRepo,
+            releaseURL,
+            issueOrPRNumber: prNumber,
+            isIssue: false,
+            processPRBody: true,
+        });
+    }
+}
+
+/*
+ * Create or update a release notification comment on a given issue or PR
+ *
+ * @param {CreateOrUpdateCommentArgs} args
+ * @returns {Promise<{void}>}
+ *
+ * @typedef {{
+ *   octokit: import('@actions/github').Octokit,
+ *   issueOrPRNumber: number,
+ *   ghOwner: string,
+ *   ghRepo: string,
+ *   releaseURL: string,
+ *   isIssue: boolean,
+ * }} CreateOrUpdateCommentArgs
+ *
+ */
+async function createOrUpdateComment(args) {
+    const { octokit, ghOwner, ghRepo, releaseURL, issueOrPRNumber, isIssue } =
+        args;
+
+    // Gather list of comments for this issue/PR
+    let allComments = [];
+    for await (const { data: comments } of octokit.paginate.iterator(
+        octokit.rest.issues.listComments,
+        {
+            owner: ghOwner,
+            repo: ghRepo,
+            issue_number: issueOrPRNumber,
+            per_page: 100,
         }
+    )) {
+        allComments.push(...comments);
+    }
 
-        // Make or update the comment
-        const commentText = `
-:tada: The code in this PR was made available in the following release:
+    const existingComment = allComments.find((c) => {
+        const commentBody = c.body_html ?? c.body ?? c.body_text;
+        return commentBody.includes(COMMENT_INDICATOR);
+    });
+
+    // Make or update the comment
+    const issuePhrase = isIssue
+        ? 'Code that fixes this issue is'
+        : 'The code in this PR was made available';
+    const commentText = `
+:tada: ${issuePhrase} in the following release:
 <a href="${releaseURL}">${releaseURL}</a>
 
 ${COMMENT_INDICATOR}
 `;
-        if (existingComment) {
-            // If the comment exists, update it (ex. in the case of post-RC release)
-            console.error(
-                `comment on PR [${prNumber}] already exists, updating...`
-            );
-            await octokit.rest.issues.updateComment({
-                owner: ghOwner,
-                repo: ghRepo,
-                comment_id: existingComment.id,
-                body: commentText,
-            });
-            continue;
-        } else {
-            console.error(
-                `no existing comment on PR [${prNumber}], creating...`
-            );
-            // If the comment doesn't already exist, create it
-            await octokit.rest.issues.createComment({
-                owner: ghOwner,
-                repo: ghRepo,
-                issue_number: prNumber,
-                body: commentText,
+    if (existingComment) {
+        // If the comment exists, update it (ex. in the case of post-RC release)
+        console.error(
+            `comment on issue/PR [${issueOrPRNumber}] already exists, updating...`
+        );
+        await octokit.rest.issues.updateComment({
+            owner: ghOwner,
+            repo: ghRepo,
+            comment_id: existingComment.id,
+            body: commentText,
+        });
+        return;
+    } else {
+        console.error(
+            `no existing comment on PR [${issueOrPRNumber}], creating...`
+        );
+        // If the comment doesn't already exist, create it
+        await octokit.rest.issues.createComment({
+            owner: ghOwner,
+            repo: ghRepo,
+            issue_number: issueOrPRNumber,
+            body: commentText,
+        });
+    }
+
+    console.error(
+        `Successfully created/updated comment on PR [${issueOrPRNumber}]`
+    );
+    return;
+}
+
+/**
+ * Process a pull request or issue, possibly recurring into related issues.
+ *
+ * @param {ProcessPullRequestOrIssueArgs} args
+ * @returns {Promise<{void}>}
+ *
+ * @typedef {{
+ *   octokit: import('@actions/github').Octokit,
+ *   issueOrPRNumber: number,
+ *   ghOwner: string,
+ *   ghRepo: string,
+ *   releaseURL: string,
+ *   processPRBody: boolean,
+ *   isIssue: boolean,
+ * }} ProcessPullRequestOrIssueArgs
+ */
+async function processPullRequestOrIssue(args) {
+    const { octokit, ghOwner, ghRepo, processPRBody, isIssue, releaseURL } =
+        args;
+    let issueOrPRNumber = args.issueOrPRNumber;
+
+    // If we don't need to recur into the first commit, we can perform a simple
+    // create or update of the release indicator with the current list of comments.
+    if (!processPRBody) {
+        await createOrUpdateComment({
+            ...args,
+            isIssue,
+        });
+        return;
+    }
+
+    if (processPRBody && isIssue) {
+        throw new Error('Issues are not expected to have processable body');
+    }
+
+    const { data: pr } = await octokit.rest.pulls.get({
+        owner: ghOwner,
+        repo: ghRepo,
+        pull_number: issueOrPRNumber,
+    });
+    const prBody = pr.body;
+
+    console.error(`beginning comment processing for PR [${issueOrPRNumber}]`, {
+        prBody,
+    });
+
+    const updatedIssues = [];
+
+    // Process issue resolution/closure notices done with the shorthand
+    for (const match of prBody.matchAll(
+        /(fix|fixes|fixed|resolve|resolves|resolved|close|closes|closed)\s+#([\d]+)/gi
+    )) {
+        console.error('found issue closer numeric issue shorthand match');
+        const parsedIssueNumber = parseInt(match[2]);
+        if (Number.isSafeInteger(parsedIssueNumber)) {
+            updatedIssues.push(parsedIssueNumber);
+            await processPullRequestOrIssue({
+                octokit,
+                ghOwner,
+                ghRepo,
+                issueOrPRNumber: parsedIssueNumber,
+                releaseURL,
+                processPRBody: false,
+                isIssue: true,
             });
         }
-        console.error(
-            `Successfully created/updated comment on PR [${prNumber}]`
-        );
     }
+
+    // Process issue resolution/closure that is done with full URLs
+    for (const match of prBody.matchAll(
+        /(fix|fixes|fixed|resolve|resolves|resolved|close|closes|closed)\s+([^\s]+)/gi
+    )) {
+        console.error('found issue closer text match');
+        // Attempt to parse out an issue number
+        let parsedIssueNumber;
+        const needle = match[2];
+        if (URL.canParse(needle)) {
+            console.error('found issue closer URL match');
+            const url = URL.parse(needle);
+            if (
+                url.hostname == 'github.com' &&
+                url.pathname.startsWith(`/${ghOwner}/${ghRepo}/issues/`)
+            ) {
+                parsedIssueNumber = parseInt(url.pathname.split('/')[3]);
+            }
+        } else if (needle.startsWith(`${ghOwner}/${ghRepo}#`)) {
+            console.error('found issue closer repository shorthand match');
+            const numbersAfter = needle
+                .slice(`${ghOwner}/${ghRepo}#`.length)
+                .split(' ')[0];
+            parsedIssueNumber = parseInt(numbersAfter);
+        }
+
+        // Process the parsed issue number were were able to find
+        if (parsedIssueNumber) {
+            updatedIssues.push(parsedIssueNumber);
+            await processPullRequestOrIssue({
+                octokit,
+                ghOwner,
+                ghRepo,
+                issueOrPRNumber: parsedIssueNumber,
+                releaseURL,
+                processPRBody: false,
+                isIssue: true,
+            });
+        }
+    }
+
+    // If we were able to update an issue, then we can exit early
+    if (updatedIssues.length > 0) {
+        return;
+    }
+
+    // If we were unable to parse out an issue number, leave a comment on the PR itself
+    console.error(
+        `failed to find any issues resolved in body of PR [${issueOrPRNumber}], leaving comment on PR...`
+    );
+
+    await createOrUpdateComment({
+        ...args,
+        isIssue: false,
+    });
 }
 
 await main();
