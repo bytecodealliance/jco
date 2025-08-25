@@ -1,3 +1,4 @@
+import { URL } from 'node:url';
 import { env } from 'node:process';
 import { resolve } from 'node:path';
 import { access } from 'node:fs/promises';
@@ -126,60 +127,173 @@ async function main() {
             .find((v) => v);
         console.error(`processing PR [${prNumber}]`);
 
-        // Search for existing release comment
-        let existingComment;
-        for await (const { data: comments } of octokit.paginate.iterator(
-            octokit.rest.issues.listComments,
-            {
-                owner: ghOwner,
-                repo: ghRepo,
-                issue_number: prNumber,
-                per_page: 100,
-            }
-        )) {
-            existingComment = comments.find((c) => {
-                const commentBody = c.body_html ?? c.body ?? c.body_text;
-                return commentBody.includes(COMMENT_INDICATOR);
-            });
-            if (existingComment) {
-                break;
-            }
-        }
+        await processPullRequestOrIssue({
+            octokit,
+            ghOwner,
+            ghRepo,
+            releaseURL,
+            issueOrPRNumber: prNumber,
+            processFirstCommit: true,
+        });
+    }
+}
 
-        // Make or update the comment
-        const commentText = `
+/*
+ * Create or update a release notification comment on a given issue or PR
+ *
+ * @param {CreateOrUpdateCommentArgs} args
+ * @returns {Promise<{void}>}
+ *
+ * @typedef {{
+ *   octokit: import('@actions/github').Octokit,
+ *   issueOrPRNumber: number,
+ *   ghOwner: string,
+ *   ghRepo: string,
+ *   releaseURL: string,
+ * }} CreateOrUpdateCommentArgs
+ *
+ */
+async function createOrUpdateComment(args) {
+    const { octokit, ghOwner, ghRepo, releaseURL } = args;
+    // Attempt to find the comment indicator if it already existsAttempt to find the comment indicator
+    const existingComment = allComments.find((c) => {
+        const commentBody = c.body_html ?? c.body ?? c.body_text;
+        return commentBody.includes(COMMENT_INDICATOR);
+    });
+
+    // Make or update the comment
+    const commentText = `
 :tada: The code in this PR was made available in the following release:
 <a href="${releaseURL}">${releaseURL}</a>
 
 ${COMMENT_INDICATOR}
 `;
-        if (existingComment) {
-            // If the comment exists, update it (ex. in the case of post-RC release)
-            console.error(
-                `comment on PR [${prNumber}] already exists, updating...`
-            );
-            await octokit.rest.issues.updateComment({
-                owner: ghOwner,
-                repo: ghRepo,
-                comment_id: existingComment.id,
-                body: commentText,
-            });
-            continue;
-        } else {
-            console.error(
-                `no existing comment on PR [${prNumber}], creating...`
-            );
-            // If the comment doesn't already exist, create it
-            await octokit.rest.issues.createComment({
-                owner: ghOwner,
-                repo: ghRepo,
-                issue_number: prNumber,
-                body: commentText,
+    if (existingComment) {
+        // If the comment exists, update it (ex. in the case of post-RC release)
+        console.error(
+            `comment on issue/PR [${issueOrPRNumber}] already exists, updating...`
+        );
+        await octokit.rest.issues.updateComment({
+            owner: ghOwner,
+            repo: ghRepo,
+            comment_id: existingComment.id,
+            body: commentText,
+        });
+        return;
+    } else {
+        console.error(
+            `no existing comment on PR [${issueOrPRNumber}], creating...`
+        );
+        // If the comment doesn't already exist, create it
+        await octokit.rest.issues.createComment({
+            owner: ghOwner,
+            repo: ghRepo,
+            issue_number: issueOrPRNumber,
+            body: commentText,
+        });
+    }
+    console.error(
+        `Successfully created/updated comment on PR [${issueOrPRNumber}]`
+    );
+    return;
+}
+
+/**
+ * Process a pull request or issue, possibly recurring into related issues.
+ *
+ * @param {ProcessPullRequestOrIssueArgs} args
+ * @returns {Promise<{void}>}
+ *
+ * @typedef {{
+ *   octokit: import('@actions/github').Octokit,
+ *   issueOrPRNumber: number,
+ *   ghOwner: string,
+ *   ghRepo: string,
+ *   releaseURL: string,
+ *   processFirstCommit: boolean,
+ * }} ProcessPullRequestOrIssueArgs
+ */
+async function processPullRequestOrIssue(args) {
+    const { octokit, ghOwner, ghRepo, releaseURL, processFirstCommit } = args;
+    let issueOrPRNumber = args.issueOrPRNumber;
+
+    // Gather list of comments for this issue/PR
+    let allComments;
+    for await (const { data: comments } of octokit.paginate.iterator(
+        octokit.rest.issues.listComments,
+        {
+            owner: ghOwner,
+            repo: ghRepo,
+            issue_number: issueOrPRNumber,
+            per_page: 100,
+        }
+    )) {
+        allComments.push(...comments);
+    }
+
+    // If we don't need to recur into the first commit, we can perform a simple
+    // create or update of the release indicator with the current list of comments.
+    if (!processFirstCommit || allComments.length === 0) {
+        await createOrUpdateComment(args);
+        return;
+    }
+
+    const firstCommentText = allComments[0].body_text;
+
+    // Process issue resolution/closure notices done with the shorthand
+    for (const match of firstCommentText.matchAll(
+        /(fix|fixes|fixed|resolve|resolves|resolved|close|closes|closed)\s#([\d]+)/gi
+    )) {
+        const parsedIssueNumber = parseInt(match[2]);
+        if (Number.isSafeInteger(parsedIssueNumber)) {
+            await processPullRequestOrIssue({
+                octokit,
+                ghOwner,
+                ghRepo,
+                issueOrPRNumber: parsedIssueNumber,
+                processFirstCommit: false,
             });
         }
-        console.error(
-            `Successfully created/updated comment on PR [${prNumber}]`
-        );
+    }
+
+    // Process issue resolution/closure that is done with full URLs
+    for (const match of firstCommentText.matchAll(
+        /(fix|fixes|fixed|resolve|resolves|resolved|close|closes|closed)\s([^\s]+)/gi
+    )) {
+        // Attempt to parse out an issue number
+        let parsedIssueNumber;
+        const needle = match[2];
+        if (URL.canParse(needle)) {
+            const url = URL.parse(needle);
+            if (
+                url.hostname == 'github.com' &&
+                url.pathname.startsWith(`/${ghOwner}/${ghRepo}/issues/`)
+            ) {
+                parsedIssueNumber = parseInt(url.pathname.split('/')[3]);
+            }
+        } else if (needle.startsWith(`${ghOwner}/${ghRepo}#`)) {
+            const numbersAfter = needle
+                .slice(`${ghOwner}/${ghRepo}#`.length)
+                .split(' ')[0];
+            parsedIssueNumber = parseInt(numbersAfter);
+        }
+
+        // If we were unable to parse out an issue number, then exit early
+        if (!parsedIssueNumber) {
+            console.error(
+                `failed to find type of issue resolution from [${match.input}]`
+            );
+            return;
+        }
+
+        // Process the parsed issue number were were able to find
+        await processPullRequestOrIssue({
+            octokit,
+            ghOwner,
+            ghRepo,
+            issueOrPRNumber: parsedIssueNumber,
+            processFirstCommit: false,
+        });
     }
 }
 
