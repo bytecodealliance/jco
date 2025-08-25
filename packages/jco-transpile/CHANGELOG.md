@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.4] - 2025-08-25
+
+### ⚙️ Miscellaneous Tasks
+
+* *(transpile)* update preview2-shim to v0.17.3 by @vados-cosmonic in #967
+
+
+
+## New Contributors
+* @lrowe made their first contribution in [#956](https://github.com/bytecodealliance/jco/pull/956)
+* @iamrajiv made their first contribution in [#901](https://github.com/bytecodealliance/jco/pull/901)
+* @elmerbulthuis made their first contribution in [#859](https://github.com/bytecodealliance/jco/pull/859)
+
+
 ## [0.0.3] - 2025-07-03
 
 ### 🐛 Bug Fixes
