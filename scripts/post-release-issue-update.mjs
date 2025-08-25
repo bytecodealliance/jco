@@ -124,6 +124,9 @@ async function main() {
                 return parseInt(match[1]);
             })
             .find((v) => v);
+        if (!prNumber) {
+            continue;
+        }
         console.error(`processing PR [${prNumber}]`);
 
         // Search for existing release comment
