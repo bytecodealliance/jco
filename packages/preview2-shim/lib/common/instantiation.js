@@ -1,7 +1,7 @@
 import * as wasi from '@bytecodealliance/preview2-shim';
 
 /**
- * A class that holds WASI shims and can be used to configure
+ * (EXPERIMENTAL) A class that holds WASI shims and can be used to configure
  * an instantiation of a WebAssembly component transpiled with jco
  * (i.e. via `jco transpile`).
  *
@@ -64,6 +64,8 @@ export class WASIShim {
     #clocks;
     /** Object that confirms to the shim interface for `wasi:sockets` */
     #sockets;
+    /** Object that confirms to the shim interface for `wasi:http` */
+    #http;
 
     constructor(shims) {
         this.#cli = shims?.cli ?? wasi.cli;
@@ -72,6 +74,7 @@ export class WASIShim {
         this.#random = shims?.random ?? wasi.random;
         this.#clocks = shims?.clocks ?? wasi.clocks;
         this.#sockets = shims?.sockets ?? wasi.sockets;
+        this.#http = shims?.http ?? wasi.http;
     }
 
     /**
@@ -116,6 +119,9 @@ export class WASIShim {
             'wasi:clocks/monotonic-clock': this.#clocks.monotonicClock,
             'wasi:clocks/timezone': this.#clocks.timezone,
             'wasi:clocks/wall-clock': this.#clocks.wallClock,
+
+            'wasi:http/types': this.#http.types,
+            'wasi:http/outgoing-handler': this.#http.outgoingHandler,
         };
     }
 }
