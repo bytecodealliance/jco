@@ -28,7 +28,7 @@
     "lib"
   ],
   "dependencies": {
-    "@bytecodealliance/preview2-shim": "^0.17.2"
+    "@bytecodealliance/preview2-shim": "^0.17.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
