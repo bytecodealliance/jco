@@ -67,7 +67,7 @@
   },
   "dependencies": {
     "@bytecodealliance/componentize-js": "^0.18.4",
-    "@bytecodealliance/preview2-shim": "^0.17.2",
+    "@bytecodealliance/preview2-shim": "^0.17.3",
     "binaryen": "^123.0.0",
     "chalk-template": "^1",
     "commander": "^14",
