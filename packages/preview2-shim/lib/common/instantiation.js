@@ -82,46 +82,53 @@ export class WASIShim {
      * functions like `instantiate` that are exposed from a transpiled
      * WebAssembly component.
      *
-     * @returns {object}
+     * @param {GetImportObjectArgs} [opts] - options for import object generation
+     * @returns {WASIImportObject}
+     *
+     * @typedef {{
+     *   asVersion?: number,
+     * }} GetImportObjectArgs
      */
-    getImportObject() {
-        return {
-            'wasi:cli/environment': this.#cli.environment,
-            'wasi:cli/exit': this.#cli.exit,
-            'wasi:cli/stderr': this.#cli.stderr,
-            'wasi:cli/stdin': this.#cli.stdin,
-            'wasi:cli/stdout': this.#cli.stdout,
-            'wasi:cli/terminal-input': this.#cli.terminalInput,
-            'wasi:cli/terminal-output': this.#cli.terminalOutput,
-            'wasi:cli/terminal-stderr': this.#cli.terminalStderr,
-            'wasi:cli/terminal-stdin': this.#cli.terminalStdin,
-            'wasi:cli/terminal-stdout': this.#cli.terminalStdout,
+    getImportObject(opts) {
+        const versionSuffix = opts?.asVersion ? `@${opts.asVersion}` : '';
 
-            'wasi:sockets/instance-network': this.#sockets.instanceNetwork,
-            'wasi:sockets/ip-name-lookup': this.#sockets.ipNameLookup,
-            'wasi:sockets/network': this.#sockets.network,
-            'wasi:sockets/tcp': this.#sockets.tcp,
-            'wasi:sockets/tcp-create-socket': this.#sockets.tcpCreateSocket,
-            'wasi:sockets/udp': this.#sockets.udp,
-            'wasi:sockets/udp-create-socket': this.#sockets.udpCreateSocket,
+        const obj = {};
+        obj[`wasi:cli/environment${versionSuffix}`] = this.#cli.environment;
+        obj[`wasi:cli/exit${versionSuffix}`] = this.#cli.exit;
+        obj[`wasi:cli/stderr${versionSuffix}`] = this.#cli.stderr;
+        obj[`wasi:cli/stdin${versionSuffix}`] = this.#cli.stdin;
+        obj[`wasi:cli/stdout${versionSuffix}`] = this.#cli.stdout;
+        obj[`wasi:cli/terminal-input${versionSuffix}`] = this.#cli.terminalInput;
+        obj[`wasi:cli/terminal-output${versionSuffix}`] = this.#cli.terminalOutput;
+        obj[`wasi:cli/terminal-stderr${versionSuffix}`] = this.#cli.terminalStderr;
+        obj[`wasi:cli/terminal-stdin${versionSuffix}`] = this.#cli.terminalStdin;
+        obj[`wasi:cli/terminal-stdout${versionSuffix}`] = this.#cli.terminalStdout;
 
-            'wasi:filesystem/preopens': this.#filesystem.preopens,
-            'wasi:filesystem/types': this.#filesystem.types,
+        obj[`wasi:sockets/instance-network${versionSuffix}`] = this.#sockets.instanceNetwork;
+        obj[`wasi:sockets/ip-name-lookup${versionSuffix}`] = this.#sockets.ipNameLookup;
+        obj[`wasi:sockets/network${versionSuffix}`] = this.#sockets.network;
+        obj[`wasi:sockets/tcp${versionSuffix}`] = this.#sockets.tcp;
+        obj[`wasi:sockets/tcp-create-socket${versionSuffix}`] = this.#sockets.tcpCreateSocket;
+        obj[`wasi:sockets/udp${versionSuffix}`] = this.#sockets.udp;
+        obj[`wasi:sockets/udp-create-socket${versionSuffix}`] = this.#sockets.udpCreateSocket;
 
-            'wasi:io/error': this.#io.error,
-            'wasi:io/poll': this.#io.poll,
-            'wasi:io/streams': this.#io.streams,
+        obj[`wasi:filesystem/preopens${versionSuffix}`] = this.#filesystem.preopen;
+        obj[`wasi:filesystem/types${versionSuffix}`] = this.#filesystem.type;
 
-            'wasi:random/random': this.#random.random,
-            'wasi:random/insecure': this.#random.insecure,
-            'wasi:random/insecure-seed': this.#random.insecureSeed,
+        obj[`wasi:io/error${versionSuffix}`] = this.#io.error;
+        obj[`wasi:io/poll${versionSuffix}`] = this.#io.poll;
+        obj[`wasi:io/streams${versionSuffix}`] = this.#io.streams;
 
-            'wasi:clocks/monotonic-clock': this.#clocks.monotonicClock,
-            'wasi:clocks/timezone': this.#clocks.timezone,
-            'wasi:clocks/wall-clock': this.#clocks.wallClock,
+        obj[`wasi:random/random${versionSuffix}`] = this.#random.random;
+        obj[`wasi:random/insecure${versionSuffix}`] = this.#random.insecure;
+        obj[`wasi:random/insecure-seed${versionSuffix}`] = this.#random.insecureSeed;
 
-            'wasi:http/types': this.#http.types,
-            'wasi:http/outgoing-handler': this.#http.outgoingHandler,
-        };
+        obj[`wasi:clocks/monotonic-clock${versionSuffix}`] = this.#clocks.monotonicClock;
+        obj[`wasi:clocks/wall-clock${versionSuffix}`] = this.#clocks.wallClock;
+
+        obj[`wasi:http/types${versionSuffix}`] = this.#http.types;
+        obj[`wasi:http/outgoing-handler${versionSuffix}`] = this.#http.outgoingHandler;
+
+        return obj;
     }
 }
