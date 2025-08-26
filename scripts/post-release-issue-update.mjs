@@ -114,25 +114,36 @@ async function main() {
     const releaseURL = `https://github.com/bytecodealliance/jco/releases/tag/${release.version}`;
 
     // Go through commits and parse out stuff
+    const processedPRs = new Set();
     for (const commit of release.commits) {
         // Find the first PR number link
-        //
-        // TODO: use octokit.rest.repos.listPullRequestsAssociatedWithCommit() ?
-        let prNumber = commit.links
-            .map((l) => {
-                const match = l.text.match(/^\(#([\d]+)\)$/);
-                if (!match) {
-                    return null;
-                }
-                return parseInt(match[1]);
-            })
-            .find((v) => v);
+        const { data: prs } =
+            await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: ghOwner,
+                repo: ghRepo,
+                commit_sha: commit.id,
+            });
+
+        // We expect *one* PR to show up for one commit
+        if (prs.length > 1) {
+            console.error(
+                `Unexpectedly found more than one PR associated with commit [${commit.sha}]`
+            );
+            continue;
+        }
+
+        let prNumber = prs[0].number;
         if (!prNumber) {
             console.error(
                 `failed to parse PR number from commit message [${commit.message}]`
             );
             continue;
         }
+        if (processedPRs.has(prNumber)) {
+            console.error(`skipping already processed PR [${prNumber}]`);
+            continue;
+        }
+
         console.error(
             `processing PR [${prNumber}] (commit title: "${commit.title}")`
         );
@@ -146,6 +157,7 @@ async function main() {
             isIssue: false,
             processPRBody: true,
         });
+        processedPRs.add(prNumber);
     }
 }
 
