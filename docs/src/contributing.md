@@ -65,7 +65,7 @@ There are three test suites in jco:
 * `test/browser.html`: Bare-minimum browser validation test.
 * `cargo test`: Wasmtime preview2 conformance tests (not currently passing).
 
-> [!WARN]
+> [!WARNING]
 > Generally, when running `jco` tests, you will want to build the project *first* during a test run,
 > to ensure the latest version of Rust code (i.e. `js-component-bindgen` is in use):
 >
@@ -96,6 +96,8 @@ For example, to run multiple tests in a given folder:
 cd packages/jco
 npm run test test/p3/*.js
 ```
+
+[vitest]: https://vitest.dev
 
 ## Commits
 
@@ -146,3 +148,6 @@ chore(jco): update componentize-js dependency to X.X.X
 ```
 feat(ci): add commitlint to actions workflows
 ```
+
+[!NOTE]: #
+[!WARNING]: #

@@ -220,7 +220,7 @@ function addOverflow(lhs, rhs) {
 While JS automatically converts numbers, we must be careful to not attempt passing a number
 that would *not* fit in a `u32` (unsigned 32 bit integer) via WebAssembly.
 
-> [NOTE]
+> [!NOTE]
 > How JS treats large numbers is not in focus here, but it is worth noting that
 > `Number.MAX_VALUE + Number.MAX_VALUE === Infinity`.
 
@@ -409,3 +409,6 @@ class Blob {
     static merge(lhs: Uint8Array, rhs: Uint8Array): Blob;
 }
 ```
+
+[!NOTE]: #
+[!WARNING]: #
