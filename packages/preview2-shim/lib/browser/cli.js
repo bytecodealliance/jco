@@ -1,34 +1,10 @@
-import { _setCwd as fsSetCwd } from './filesystem.js';
 import { streams } from './io.js';
 const { InputStream, OutputStream } = streams;
 
+export { _setEnv, _setArgs, environment } from './environment.js';
+export { _setCwd } from './config.js';
+
 const symbolDispose = Symbol.dispose ?? Symbol.for('dispose');
-
-let _env = [],
-    _args = [],
-    _cwd = '/';
-export function _setEnv(envObj) {
-    _env = Object.entries(envObj);
-}
-export function _setArgs(args) {
-    _args = args;
-}
-
-export function _setCwd(cwd) {
-    fsSetCwd((_cwd = cwd));
-}
-
-export const environment = {
-    getEnvironment() {
-        return _env;
-    },
-    getArguments() {
-        return _args;
-    },
-    initialCwd() {
-        return _cwd;
-    },
-};
 
 class ComponentExit extends Error {
     constructor(code) {
