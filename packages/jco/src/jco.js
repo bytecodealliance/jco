@@ -41,6 +41,16 @@ function collectOptions(value, previous) {
     return previous.concat([value]);
 }
 
+/** Choices for features (enabling/disabling) */
+const FEATURE_CHOICES = [
+    'clocks',
+    'http',
+    'random',
+    'stdio',
+    'fetch-event',
+    'all',
+];
+
 program
     .command('componentize')
     .description('Create a component from a JavaScript module')
@@ -58,9 +68,17 @@ program
         new Option(
             '-d, --disable <feature...>',
             'disable WASI features'
-        ).choices(['clocks', 'http', 'random', 'stdio', 'fetch-event', 'all'])
+        ).choices(FEATURE_CHOICES)
     )
-    // .addOption(new Option('-e, --enable <feature...>', 'enable WASI features').choices(['http']))
+    .addOption(
+        new Option('--enable <feature...>', 'enable WASI features').choices(
+            FEATURE_CHOICES
+        )
+    )
+    .option(
+        '--debug',
+        'configure jco for debug (e.g. disable all features except stdio, etc)'
+    )
     .option(
         '--preview2-adapter <adapter>',
         'provide a custom preview2 adapter path'

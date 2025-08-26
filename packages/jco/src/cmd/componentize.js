@@ -3,13 +3,19 @@ import { resolve, basename } from 'node:path';
 
 import c from 'chalk-template';
 
+/** All features that can be enabled/disabled */
+const ALL_FEATURES = ['clocks', 'http', 'random', 'stdio', 'fetch-event'];
+
+/** Features that should be used for --debug mode */
+const DEBUG_FEATURES = ['stdio'];
+
 export async function componentize(jsSource, opts) {
     const { componentize: componentizeFn } = await eval(
         'import("@bytecodealliance/componentize-js")'
     );
-    if (opts.disable?.includes('all')) {
-        opts.disable = ['stdio', 'random', 'clocks', 'http', 'fetch-event'];
-    }
+
+    const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
+
     const source = await readFile(jsSource, 'utf8');
 
     const witPath = resolve(opts.wit);
@@ -24,8 +30,8 @@ export async function componentize(jsSource, opts) {
             sourceName,
             witPath,
             worldName: opts.worldName,
-            disableFeatures: opts.disable,
-            enableFeatures: opts.enable,
+            disableFeatures,
+            enableFeatures,
             preview2Adapter: opts.preview2Adapter,
             debugBuild: opts.debugStarlingmonkeyBuild,
             engine: opts.engine,
@@ -80,4 +86,38 @@ async function printWITPathHint(witPath) {
     output += c`{yellow.bold warning} When using a world with dependencies, you must pass the enclosing WIT folder, not a single file.\n`;
     output += c`{yellow.bold warning} (e.g. 'wit/', rather than 'wit/component.wit').\n`;
     return output;
+}
+
+/**
+ * Build set of disabled features
+ *
+ * At present, `componentize-js` does not use enabled features but exclusively
+ * takes into account disabled features.
+ *
+ * @param {{ debug: boolean, disable: string[], enable: string[] }} opts
+ * @returns {{ disableFeatures: string[], enableFeatures: string[] }}
+ */
+function calculateFeatureSet(opts) {
+    const disableFeatures = new Set(opts?.debug ? DEBUG_FEATURES : []);
+    const disable = opts?.disable ?? [];
+    const enable = opts?.enable ?? [];
+
+    // Process disabled features
+    if (disable.includes('all')) {
+        ALL_FEATURES.forEach((v) => disableFeatures.add(v));
+    } else {
+        disable.forEach((v) => disableFeatures.add(v));
+    }
+
+    // Process enabled features
+    if (enable.includes('all')) {
+        ALL_FEATURES.forEach((v) => disableFeatures.delete(v));
+    } else {
+        enable.forEach((v) => disableFeatures.delete(v));
+    }
+
+    return {
+        disableFeatures: [...disableFeatures],
+        enableFeatures: ALL_FEATURES.filter((v) => !disableFeatures.has(v)),
+    };
 }
