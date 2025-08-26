@@ -1488,6 +1488,27 @@ await main();
 </code></pre>
 <p>Using <code>WASIShim</code>, you can generate your own custom implementations of WASI, making use of
 the published shims where necessary.</p>
+<h2 id="versioned-imports-with-wasishim"><a class="header" href="#versioned-imports-with-wasishim">Versioned imports with <code>WASIShim</code></a></h2>
+<p>You can also use verisons with the import objects produced by <code>WASIShim</code>:</p>
+<pre><code class="language-typescript">import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import type {
+    VersionedWASIImportObject,
+    WASIImportObject,
+} from '@bytecodealliance/preview2-shim/instantiation';
+
+const shim = new WASIShim();
+
+const unversioned: WASIImportObject = shim.getImportObject();
+// console.log('unversioned', unversioned);
+unversioned satisfies WASIImportObject;
+unversioned satisfies VersionedWASIImportObject&lt;''&gt;;
+
+const versioned: VersionedWASIImportObject&lt;'0.2.3'&gt; = shim.getImportObject({
+    asVersion: '0.2.3',
+});
+//console.log('versioned', versioned);
+versioned satisfies VersionedWASIImportObject&lt;'0.2.3'&gt;;
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><style>
 .mdbook-alerts {
   padding: 8px 16px;
