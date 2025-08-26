@@ -1,13 +1,10 @@
 import { streams } from './io.js';
-import { environment } from './cli.js';
+import { environment } from './environment.js';
+
+import { _setCwd } from './config.js';
+export { _setCwd } from './config.js';
 
 const { InputStream, OutputStream } = streams;
-
-let _cwd = '/';
-
-export function _setCwd(cwd) {
-    _cwd = cwd;
-}
 
 export function _setFileData(fileData) {
     _fileData = fileData;
