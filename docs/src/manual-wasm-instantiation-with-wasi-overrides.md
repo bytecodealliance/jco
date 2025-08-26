@@ -125,4 +125,29 @@ await main();
 Using `WASIShim`, you can generate your own custom implementations of WASI, making use of
 the published shims where necessary.
 
+## Versioned imports with `WASIShim`
+
+You can also use verisons with the import objects produced by `WASIShim`:
+
+```typescript
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import type {
+    VersionedWASIImportObject,
+    WASIImportObject,
+} from '@bytecodealliance/preview2-shim/instantiation';
+
+const shim = new WASIShim();
+
+const unversioned: WASIImportObject = shim.getImportObject();
+// console.log('unversioned', unversioned);
+unversioned satisfies WASIImportObject;
+unversioned satisfies VersionedWASIImportObject<''>;
+
+const versioned: VersionedWASIImportObject<'0.2.3'> = shim.getImportObject({
+    asVersion: '0.2.3',
+});
+//console.log('versioned', versioned);
+versioned satisfies VersionedWASIImportObject<'0.2.3'>;
+```
+
 [!NOTE]: #
