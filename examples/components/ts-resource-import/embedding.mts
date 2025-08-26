@@ -7,7 +7,6 @@
  */
 /* global WebAssembly */
 
-import { basename } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import * as wasiShim from '@bytecodealliance/preview2-shim/instantiation';
@@ -57,7 +56,7 @@ async function main() {
         const buf = await readFile(`./dist/transpiled/${path}`);
         return await WebAssembly.compile(buf.buffer as ArrayBuffer);
     };
-    const component = await instantiate(loader, imports as any);
+    const component = await instantiate(loader, imports);
 
     // Run the component (output will be printed to the console)
     component.run.run();
