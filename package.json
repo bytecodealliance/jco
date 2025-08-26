@@ -19,6 +19,7 @@
     "examples/components/typegen-async-export"
   ],
   "scripts": {
+    "build:book": "mdbook build docs",
     "build": "cargo xtask build debug",
     "build:release": "cargo xtask build release",
     "build:types:preview2-shim": "cargo xtask generate wasi-types preview2",
