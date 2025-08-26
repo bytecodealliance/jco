@@ -24,28 +24,41 @@
         <link rel="stylesheet" href="fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="highlight.css">
-        <link rel="stylesheet" href="tomorrow-night.css">
-        <link rel="stylesheet" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
-        <!-- Provide site root to javascript -->
+        <!-- Provide site root and default themes to javascript -->
         <script>
-            var path_to_root = "";
-            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
     </head>
     <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
     <div id="body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
-                var theme = localStorage.getItem('mdbook-theme');
-                var sidebar = localStorage.getItem('mdbook-sidebar');
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
 
                 if (theme.startsWith('"') && theme.endsWith('"')) {
                     localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
@@ -59,7 +72,8 @@
 
         <!-- Set the theme before any content is loaded, prevents flash -->
         <script>
-            var theme;
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
@@ -72,17 +86,20 @@
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var sidebar = null;
-            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -109,13 +126,14 @@
                             <i class="fa fa-paint-brush"></i>
                         </button>
                         <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
                             <i class="fa fa-search"></i>
                         </button>
                     </div>
@@ -129,13 +147,21 @@
                         <a href="https://github.com/bytecodealliance/jco" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
+                        <a href="https://github.com/bytecodealliance/jco/tree/main/docs/src/manual-wasm-instantiation-with-wasi-overrides.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
 
                     </div>
                 </div>
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -250,53 +276,92 @@ or changed at instantiation time.</p>
 </div>
 <p>Sometimes you may want to use <em>your own</em> implementation of WASI interfaces (whether partial or complete),
 known/resolved only at instantiation time.</p>
-<h2 id="using-custom-wasi-overrides-during-instantiation"><a class="header" href="#using-custom-wasi-overrides-during-instantiation">Using custom WASI overrides during instantiation</a></h2>
-<p>To use custom instantiations, we start with the ability to use the <em>default</em> instantiations:</p>
+<h2 id="manual-instantiation-of-a-transpiled-component-with-no-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-no-overrides">Manual instantiation of a transpiled component with no overrides</a></h2>
+<p>To use custom instantiations, in NodeJS we must build with the <code>async</code> instantiation mode:</p>
+<pre><code class="language-console">jco transpile \
+    component.wasm \
+    --instantiation async \
+    --output dist/transpiled
+</code></pre>
+<p>We can instantiate the WebAssembly component for use with <em>no</em> custom overrides
+(i.e. the default WASI implementations provided by <code>preview2-shim</code>):</p>
 <pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 async function main() {
     const wasmESModule = await import("path/to/transpiled/component.js");
-    const component = wasmESModule.instantiate(null, new WASIShim().getImportObject());
+    const loader = async (path) =&gt; {
+      const buf = await readFile(`./dist/transpiled/${path}`);
+      return await WebAssembly.compile(buf.buffer);
+    };
+    const component = wasmESModule.instantiate(loader, new WASIShim().getImportObject());
+    // TODO: add code that utilizes the component's exports
 }
 
 await main();
 </code></pre>
+<div class="mdbook-alerts mdbook-alerts-note">
+<p class="mdbook-alerts-title">
+  <span class="mdbook-alerts-icon"></span>
+  note
+</p>
+<p>When dealing with browser environments, the <code>loader</code> function is not necessary, and <code>null</code>/<code>undefined</code> can be used.</p>
+</div>
 <p>This is identical to mapping all imports to those provided by <a href="https://www.npmjs.com/package/@bytecodealliance/preview2-shim"><code>@bytecodealliance/preview2-shim</code></a>.</p>
-<p>Sometimes, when using a transpiled module produced by <code>jco</code>, it's necessary to override
-some of the WASI imports at <em>instantiation</em> time rather than when transpiling the module to begin with.</p>
-<pre><code class="language-js">import { random } from "@bytecodealliance/preview2-shim";
+<h2 id="manual-instantiation-of-a-transpiled-component-with-custom-overrides"><a class="header" href="#manual-instantiation-of-a-transpiled-component-with-custom-overrides">Manual instantiation of a transpiled component with custom overrides</a></h2>
+<p>To use custom component overrides in addition to the WASI imports provided by <code>preview2-shim</code>,
+as before build the component with the <code>async</code> instantiation mode:</p>
+<pre><code class="language-console">jco transpile \
+    component.wasm \
+    --instsantiation async \
+    --output dist/transpiled \
+    --map wasi:cli/*@0.2.0=@bytecodealliance/preview2-shim/cli#*
+</code></pre>
+<p>Then write an ES Module like the following:</p>
+<pre><code class="language-js">import { readFile } from "node:fs/promises";
+
+import { random } from "@bytecodealliance/preview2-shim";
 import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
 
 async function main() {
-    /// Load the ES module generated by `jco transpile`
-    const wasmESModule = await import("path/to/transpiled/component.js");
+  /// Load the ES module generated by `jco transpile`
+  const wasmESModule = await import("./dist/transpiled/component.js");
 
-    // Build a customized WASI shim by mizing custom implementations
-    // and the provided implementation
-    const customShim = new WASIShim({
-        random: {
-            // For these two interfaces we re-use the default provided shim
-            random: random.random,
-            insecure-seed: random.insecureSeed,
-            // For insecure, we can supply our own custom implementation
-            // (in this case, one that is *VERY* insecure)
-            insecure: {
-                getInsecureRandomBytes: (len) =&gt; {
-                    return new Uint8Array(len).fill(0);
-                }
-                getInsecureRandomU64: () =&gt; 42n,
-            }
-        }
-    });
+  // Build a customized WASI shim by mizing custom implementations
+  // and the provided implementation
+  const customShim = new WASIShim({
+    random: {
+      // For these two interfaces we re-use the default provided shim
+      random: random.random,
+      "insecure-seed": random.insecureSeed,
+      // For insecure, we can supply our own custom implementation
+      // (in this case, one that is *VERY* insecure)
+      insecure: {
+        getInsecureRandomBytes: (len) =&gt; {
+          return new Uint8Array(Number(len)).fill(0);
+        },
+        getInsecureRandomU64: () =&gt; 42n,
+      },
+    },
+  });
 
-    // Instantiate the Wasm component's ES module
-    const component = wasmESModule.instantiate(null, customShim);
+  const loader = async (path) =&gt; {
+    const buf = await readFile(`./dist/transpiled/${path}`);
+    return await WebAssembly.compile(buf.buffer);
+  };
+
+  // Instantiate the Wasm component's ES module
+  const component = await wasmESModule.instantiate(
+    loader,
+    customShim.getImportObject(),
+  );
+
+  // TODO: add code to utilize the component exports
 }
 
 await main();
 </code></pre>
-<p>Using <code>WASIShim</code>, you can generate your own custom implementations of WASI, making use of the published shims where
-necessary.</p>
+<p>Using <code>WASIShim</code>, you can generate your own custom implementations of WASI, making use of
+the published shims where necessary.</p>
 
                     </main>
 
@@ -306,7 +371,7 @@ necessary.</p>
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="#.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="contributing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -320,7 +385,7 @@ necessary.</p>
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="#.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="contributing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -344,6 +409,7 @@ necessary.</p>
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>
