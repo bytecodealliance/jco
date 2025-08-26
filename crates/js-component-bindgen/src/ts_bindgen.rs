@@ -746,8 +746,6 @@ impl<'a> TsInterface<'a> {
     fn finish(mut self) -> (Source, BTreeSet<String>) {
         for (resource, (meta, source)) in self.resources {
             let (impl_phrase, extra_members) = if self.is_guest && meta.is_import() {
-                eprintln!("\n\nis_guest? {}", self.is_guest);
-                eprintln!("is_root? {}", self.is_root);
                 // Resources types imported in the guest  will have generated [Symbol.dispose]()
                 // for resource cleanup, but this is not the case for any other scenario.
                 (" implements Disposable", vec!["[Symbol.dispose](): void;"])
