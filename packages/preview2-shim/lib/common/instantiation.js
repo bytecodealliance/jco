@@ -112,8 +112,8 @@ export class WASIShim {
         obj[`wasi:sockets/udp${versionSuffix}`] = this.#sockets.udp;
         obj[`wasi:sockets/udp-create-socket${versionSuffix}`] = this.#sockets.udpCreateSocket;
 
-        obj[`wasi:filesystem/preopens${versionSuffix}`] = this.#filesystem.preopen;
-        obj[`wasi:filesystem/types${versionSuffix}`] = this.#filesystem.type;
+        obj[`wasi:filesystem/preopens${versionSuffix}`] = this.#filesystem.preopens;
+        obj[`wasi:filesystem/types${versionSuffix}`] = this.#filesystem.types;
 
         obj[`wasi:io/error${versionSuffix}`] = this.#io.error;
         obj[`wasi:io/poll${versionSuffix}`] = this.#io.poll;
