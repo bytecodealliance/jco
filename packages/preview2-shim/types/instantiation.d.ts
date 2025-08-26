@@ -8,7 +8,7 @@
  * While the feature can be disabled when building with `jco componentize` or `componentize-js`,
  * by default it is enabled, and as such included here (practically, the implementations can be no-ops).
  */
-type WASIImportObject = {
+type _WASIImportObject = {
     'wasi:cli/environment': typeof import('./interfaces/wasi-cli-environment.d.ts');
     'wasi:cli/exit': typeof import('./interfaces/wasi-cli-exit.d.ts');
     'wasi:cli/stderr': typeof import('./interfaces/wasi-cli-stderr.d.ts');
@@ -40,12 +40,29 @@ type WASIImportObject = {
     'wasi:random/insecure-seed': typeof import('./interfaces/wasi-random-insecure-seed.d.ts');
 
     'wasi:clocks/monotonic-clock': typeof import('./interfaces/wasi-clocks-monotonic-clock.d.ts');
-    'wasi:clocks/timezone': typeof import('./interfaces/wasi-clocks-timezone.d.ts');
     'wasi:clocks/wall-clock': typeof import('./interfaces/wasi-clocks-wall-clock.d.ts');
 
     'wasi:http/types': typeof import('./interfaces/wasi-http-types.d.ts');
     'wasi:http/outgoing-handler': typeof import('./interfaces/wasi-http-outgoing-handler.d.ts');
 };
+
+type WASIImportObject = VersionedWASIImportObject<''>;
+
+type VersionedWASIImportObject<V extends string> = {
+    [K in keyof _WASIImportObject as AppendVersion<K, V>]: _WASIImportObject[K];
+};
+
+/** Used to append versions to generated WASI import objects */
+type AppendVersion<
+    Key extends string | number | symbol,
+    Version extends string,
+> = Version extends `${infer V}`
+    ? Key extends `${infer K}`
+        ? Key extends ''
+            ? `${K}`
+            : `${K}@${V}`
+        : never
+    : never;
 
 /**
  * (EXPERIMENTAL) A class that holds WASI shims and can be used to configure
@@ -106,7 +123,14 @@ export class WASIShim {
      * functions like `instantiate` that are exposed from a transpiled
      * WebAssembly component.
      *
+     * @param {options} [opt]
      * @returns {object}
      */
-    getImportObject(): WASIImportObject;
+    getImportObject<V extends string = ''>(
+        opts?: GetImportObjectArgs
+    ): VersionedWASIImportObject<V>;
+}
+
+interface GetImportObjectArgs {
+    asVersion?: string;
 }

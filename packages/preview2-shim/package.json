@@ -23,6 +23,7 @@
     }
   },
   "scripts": {
+    "types:check": "tsc --noEmit",
     "lint": "eslint -c ../../eslint.config.mjs ./lib/**/*.js",
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts"
