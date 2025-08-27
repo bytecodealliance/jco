@@ -11,10 +11,19 @@ export function table(data: any, align?: any[]): string;
 export function getTmpDir(): Promise<string>;
 export function spawnIOTmp(cmd: any, input: any, args: any): Promise<Buffer<ArrayBufferLike>>;
 export function writeFiles(files: any, summaryTitle: any): Promise<void>;
+/**
+ * Resolve the deafult WIT path, given a possibly
+ *
+ * @param {string | undefined} [witPath]
+ * @returns {string}
+ */
+export function resolveDefaultWITPath(witPath?: string | undefined): string;
 export const isWindows: boolean;
 export const ASYNC_WASI_IMPORTS: string[];
 export const ASYNC_WASI_EXPORTS: string[];
 export const DEFAULT_ASYNC_MODE: "sync";
+/** Path of WIT files by default when one is not specified */
+export const DEFAULT_WIT_PATH: "./wit";
 export { readFileCli as readFile };
 declare function readFileCli(file: any, encoding: any): Promise<Buffer<ArrayBufferLike>>;
 //# sourceMappingURL=common.d.ts.map
