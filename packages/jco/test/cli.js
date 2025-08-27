@@ -703,6 +703,27 @@ suite('CLI', () => {
         assert.strictEqual(m.hello(), 'world');
         // assert.strictEqual(m.consumeBar(m.createBar()), 'bar1');
     });
+
+    // https://github.com/bytecodealliance/jco/issues/106
+    test('transpile WASI mapping', async () => {
+        const { stderr } = await exec(
+            jcoPath,
+            'transpile',
+            // NOTE: any component that uses WASI will do
+            'test/fixtures/components/resource_borrow_simple.component.wasm',
+            '--name',
+            'transpile-wasi-mapping',
+            '--instantiation',
+            '--map',
+            'wasi:filesystem/types=custom-wasi:filesystem/types',
+            '-o',
+            outDir
+        );
+        assert.strictEqual(stderr, '');
+        const outputJSPath = `${outDir}/transpile-wasi-mapping.js`;
+        const source = await readFile(outputJSPath, 'utf8');
+        assert.ok(source.includes("imports['custom-wasi:filesystem/types']"));
+    });
 });
 
 // Cache of componentize byte outputs
