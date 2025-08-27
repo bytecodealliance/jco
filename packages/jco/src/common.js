@@ -1,6 +1,13 @@
 import { normalize, resolve, sep, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readFile, writeFile, rm, mkdtemp, mkdir } from 'node:fs/promises';
+import {
+    readFile,
+    writeFile,
+    rm,
+    mkdtemp,
+    mkdir,
+    stat,
+} from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { argv0 } from 'node:process';
 import { platform } from 'node:process';
@@ -26,6 +33,9 @@ export const ASYNC_WASI_EXPORTS = [
 ];
 
 export const DEFAULT_ASYNC_MODE = 'sync';
+
+/** Path of WIT files by default when one is not specified */
+export const DEFAULT_WIT_PATH = './wit';
 
 let _showSpinner = false;
 export function setShowSpinner(val) {
@@ -158,4 +168,31 @@ ${table(
         c`{black.italic ${sizeStr(source.length)}}`,
     ])
 )}`);
+}
+
+/**
+ * Resolve the deafult WIT path, given a possibly
+ *
+ * @param {string | undefined} [witPath]
+ * @returns {string}
+ */
+export async function resolveDefaultWITPath(witPath) {
+    if (witPath) {
+        return witPath;
+    }
+
+    // Use a default/standard current-folder WIT directory (wit) if we can find it
+    const witDirExists = await stat(DEFAULT_WIT_PATH)
+        .then((p) => p.isDirectory())
+        .catch(() => false);
+    if (!witDirExists) {
+        throw new Error(
+            'Failed to determine WIT directory, please specify WIT directory argument'
+        );
+    }
+    witPath = resolve(DEFAULT_WIT_PATH);
+    console.error(
+        `no WIT directory specified, using detected WIT directory @ [${DEFAULT_WIT_PATH}]`
+    );
+    return witPath;
 }

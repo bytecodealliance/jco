@@ -186,10 +186,10 @@ program
     .command('types')
     .description('Generate types for the given WIT')
     .usage('<wit-path> -o <out-dir>')
-    .argument('<wit-path>', 'path to a WIT file or directory')
+    .argument('[<wit-path>]', 'path to a WIT file or directory')
     .option('--name <name>', 'custom output name')
     .option('-n, --world-name <world>', 'WIT world to generate types for')
-    .requiredOption('-o, --out-dir <out-dir>', 'output directory')
+    .option('-o, --out-dir <out-dir>', 'output directory')
     .option(
         '--tla-compat',
         'generates types for the TLA compat output with an async $init promise export'
@@ -243,10 +243,10 @@ program
     .command('guest-types')
     .description('(experimental) Generate guest types for the given WIT')
     .usage('<wit-path> -o <out-dir>')
-    .argument('<wit-path>', 'path to a WIT file or directory')
+    .argument('[<wit-path>]', 'path to a WIT file or directory')
     .option('--name <name>', 'custom output name')
     .option('-n, --world-name <world>', 'WIT world to generate types for')
-    .requiredOption('-o, --out-dir <out-dir>', 'output directory')
+    .option('-o, --out-dir <out-dir>', 'output directory')
     .option('-q, --quiet', 'disable output summary')
     .option(
         '--feature <feature>',
