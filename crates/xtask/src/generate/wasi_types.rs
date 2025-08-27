@@ -46,7 +46,7 @@ fn process_wasi_types(wasi: WasiTypes<'_>) -> Result<()> {
             .find(|(name, _)| format!("{}:{}/{world_name}", name.namespace, name.name) == *world)
             .ok_or_else(|| anyhow!("package not found for {}", world))?;
 
-        let world = resolve.select_world(*package, Some(world_name))?;
+        let world = resolve.select_world(&[*package], Some(world_name))?;
 
         let opts = js_component_bindgen::TranspileOpts {
             name: "component".to_string(),

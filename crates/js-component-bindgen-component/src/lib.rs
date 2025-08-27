@@ -145,7 +145,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
 
         let world_string = opts.world.map(|world| world.to_string());
         let world = resolve
-            .select_world(ids, world_string.as_deref())
+            .select_world(&[ids], world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let opts = js_component_bindgen::TranspileOpts {

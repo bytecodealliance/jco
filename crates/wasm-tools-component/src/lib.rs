@@ -110,7 +110,7 @@ impl Guest for WasmToolsJs {
         let world_string = embed_opts.world.as_ref().map(|world| world.to_string());
 
         let world = resolve
-            .select_world(ids, world_string.as_deref())
+            .select_world(&[ids], world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
         let string_encoding = match &embed_opts.string_encoding {
