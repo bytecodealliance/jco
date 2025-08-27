@@ -1,4 +1,4 @@
-import { stat } from 'node:fs/promises';
+import { stat, mkdir } from 'node:fs/promises';
 import { extname, basename, resolve } from 'node:path';
 
 import c from 'chalk-template';
@@ -13,14 +13,44 @@ import {
     ASYNC_WASI_IMPORTS,
     ASYNC_WASI_EXPORTS,
     DEFAULT_ASYNC_MODE,
+    resolveDefaultWITPath,
 } from '../common.js';
 
+/** Default relative path for guest type declaration generation */
+const DEFAULT_GUEST_TYPES_OUTPUT_DIR_PATH = './types/generated/wit/guest';
+
+/** Default relative path for host type declaration generation */
+const DEFAULT_HOST_TYPES_OUTPUT_DIR_PATH = './types/generated/wit/host';
+
 export async function types(witPath, opts) {
+    witPath = await resolveDefaultWITPath(witPath);
+
+    // Use the default output directory if one was not provided
+    if (!opts.outDir) {
+        await mkdir(DEFAULT_HOST_TYPES_OUTPUT_DIR_PATH, { recursive: true });
+        opts.outDir = resolve(DEFAULT_HOST_TYPES_OUTPUT_DIR_PATH);
+        console.error(
+            `no output directory specified for host type declarations, using [${DEFAULT_HOST_TYPES_OUTPUT_DIR_PATH}]`
+        );
+    }
+
     const files = await typesComponent(witPath, opts);
+
     await writeFiles(files, opts.quiet ? false : 'Generated Type Files');
 }
 
 export async function guestTypes(witPath, opts) {
+    witPath = await resolveDefaultWITPath(witPath);
+
+    // Use the default output directory if one was not provided
+    if (!opts.outDir) {
+        await mkdir(DEFAULT_GUEST_TYPES_OUTPUT_DIR_PATH, { recursive: true });
+        opts.outDir = resolve(DEFAULT_GUEST_TYPES_OUTPUT_DIR_PATH);
+        console.error(
+            `no output directory specified for guest type declarations, using [${DEFAULT_GUEST_TYPES_OUTPUT_DIR_PATH}]`
+        );
+    }
+
     const files = await typesComponent(witPath, { ...opts, guest: true });
     await writeFiles(
         files,
