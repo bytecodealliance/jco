@@ -54,8 +54,8 @@ export async function serve(componentPath, args, opts) {
     const server = new HTTPServer(mod.incomingHandler);
     let port = ${port};
     ${
-        tryFindPort
-            ? `
+    tryFindPort
+        ? `
     while (true) {
       try {
         server.listen(port, ${JSON.stringify(host)});
@@ -67,8 +67,8 @@ export async function serve(componentPath, args, opts) {
       port++;
     }
     `
-            : `server.listen(port, ${JSON.stringify(host)})`
-    }
+        : `server.listen(port, ${JSON.stringify(host)})`
+}
     console.error(\`Server listening @ ${host}:${port}...\`);
   `
     );

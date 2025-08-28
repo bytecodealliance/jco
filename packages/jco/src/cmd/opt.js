@@ -38,29 +38,29 @@ export async function opt(componentPath, opts, program) {
 {bold Optimized WebAssembly Component Internal Core Modules:}
 
 ${table(
-    [
-        ...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
-            totalBeforeBytes += beforeBytes;
-            totalAfterBytes += afterBytes;
-            return [
-                ` - Core Module ${i + 1}:  `,
-                sizeStr(beforeBytes),
-                ' -> ',
-                c`{cyan ${sizeStr(afterBytes)}} `,
-                `(${fixedDigitDisplay((afterBytes / beforeBytes) * 100, 2)}%)`,
-            ];
-        }),
-        ['', '', '', '', ''],
         [
-            ` = Total:  `,
-            `${sizeStr(totalBeforeBytes)}`,
-            ` => `,
-            c`{cyan ${sizeStr(totalAfterBytes)}} `,
-            `(${fixedDigitDisplay((totalAfterBytes / totalBeforeBytes) * 100, 2)}%)`,
+            ...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
+                totalBeforeBytes += beforeBytes;
+                totalAfterBytes += afterBytes;
+                return [
+                    ` - Core Module ${i + 1}:  `,
+                    sizeStr(beforeBytes),
+                    ' -> ',
+                    c`{cyan ${sizeStr(afterBytes)}} `,
+                    `(${fixedDigitDisplay((afterBytes / beforeBytes) * 100, 2)}%)`,
+                ];
+            }),
+            ['', '', '', '', ''],
+            [
+                ` = Total:  `,
+                `${sizeStr(totalBeforeBytes)}`,
+                ` => `,
+                c`{cyan ${sizeStr(totalAfterBytes)}} `,
+                `(${fixedDigitDisplay((totalAfterBytes / totalBeforeBytes) * 100, 2)}%)`,
+            ],
         ],
-    ],
-    [, , , , 'right']
-)}`);
+        [, , , , 'right']
+    )}`);
     }
 }
 
@@ -117,11 +117,11 @@ export async function optimizeComponent(componentBytes, opts) {
         const args = opts?.optArgs
             ? [...opts.optArgs]
             : [
-                  '-Oz',
-                  '--low-memory-unused',
-                  '--enable-bulk-memory',
-                  '--strip-debug',
-              ];
+                '-Oz',
+                '--low-memory-unused',
+                '--enable-bulk-memory',
+                '--strip-debug',
+            ];
         if (opts?.asyncify) {
             args.push('--asyncify');
         }
