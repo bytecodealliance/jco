@@ -178,12 +178,12 @@ export async function runTranspileComponent(component, opts = {}) {
         !opts.asyncMode || opts.asyncMode === 'sync'
             ? null
             : {
-                  tag: opts.asyncMode,
-                  val: {
-                      imports: opts.asyncImports || [],
-                      exports: opts.asyncExports || [],
-                  },
-              };
+                tag: opts.asyncMode,
+                val: {
+                    imports: opts.asyncImports || [],
+                    exports: opts.asyncExports || [],
+                },
+            };
 
     let { files, imports, exports } = generate(component, {
         name: opts.name ?? 'component',
@@ -334,16 +334,16 @@ async function generateJS(args) {
         .map(
             (asm, nth) => `function asm${nth}(imports) {
   ${
-      // strip and replace the asm instantiation wrapper
-      asm
-          .replace(/import \* as [^ ]+ from '[^']*';/g, '')
-          .replace('function asmFunc(imports) {', '')
-          .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
-          .replace(/var retasmFunc = [\s\S]*$/, '')
-          .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
-          .replace('memory.grow = __wasm_memory_grow;', '')
-          .trim()
-  }`
+    // strip and replace the asm instantiation wrapper
+    asm
+        .replace(/import \* as [^ ]+ from '[^']*';/g, '')
+        .replace('function asmFunc(imports) {', '')
+        .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
+        .replace(/var retasmFunc = [\s\S]*$/, '')
+        .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
+        .replace('memory.grow = __wasm_memory_grow;', '')
+        .trim()
+}`
         )
         .join(',\n');
 
@@ -384,14 +384,14 @@ ${
     // Exporting `$init` must come first to not break the transpiling tests.
     opts.tlaCompat ? '  $init,\n' : ''
 }${exports
-                .map(([name]) => {
-                    if (name === asmMangle(name)) {
-                        return `  ${name},`;
-                    } else {
-                        return `  ${asmMangle(name)} as '${name}',`;
-                    }
-                })
-                .join('\n')}
+    .map(([name]) => {
+        if (name === asmMangle(name)) {
+            return `  ${name},`;
+        } else {
+            return `  ${asmMangle(name)} as '${name}',`;
+        }
+    })
+    .join('\n')}
 }`;
         }
 
@@ -400,35 +400,35 @@ ${
             .map(([name]) => `_${asmMangle(name)}`)
             .join(', ')};
 ${exports
-    .map(([name, ty]) => {
-        if (ty === 'function') {
-            return `\nfunction ${asmMangle(name)} () {
+        .map(([name, ty]) => {
+            if (ty === 'function') {
+                return `\nfunction ${asmMangle(name)} () {
   return _${asmMangle(name)}.apply(this, arguments);
 }`;
-        } else {
-            return `\nlet ${asmMangle(name)};`;
-        }
-    })
-    .join('\n')}`;
+            } else {
+                return `\nlet ${asmMangle(name)};`;
+            }
+        })
+        .join('\n')}`;
 
         autoInstantiate = `${async_}function $init() {
   ( {
 ${exports
-    .map(([name, ty]) => {
-        if (ty === 'function') {
-            return `    '${name}': _${asmMangle(name)},`;
-        } else if (asmMangle(name) === name) {
-            return `    ${name},`;
-        } else {
-            return `    '${name}': ${asmMangle(name)},`;
-        }
-    })
-    .join('\n')}
+        .map(([name, ty]) => {
+            if (ty === 'function') {
+                return `    '${name}': _${asmMangle(name)},`;
+            } else if (asmMangle(name) === name) {
+                return `    ${name},`;
+            } else {
+                return `    '${name}': ${asmMangle(name)},`;
+            }
+        })
+        .join('\n')}
   } = ${await_}instantiate(
     {
 ${imports
-    .map((import_file, nth) => `      '${import_file}': import${nth},`)
-    .join('\n')}
+        .map((import_file, nth) => `      '${import_file}': import${nth},`)
+        .join('\n')}
     }
   ) )
 }
@@ -467,6 +467,41 @@ function asmMangle(name) {
 
     // Names must start with a character, $ or _
     switch (name[0]) {
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9': {
+        name = '$' + name;
+        i = 2;
+        // fallthrough
+    }
+    case '$':
+    case '_': {
+        mightBeKeyword = false;
+        break;
+    }
+    default: {
+        let chNum = name.charCodeAt(0);
+        if (
+            !(chNum >= 97 && chNum <= 122) &&
+                !(chNum >= 65 && chNum <= 90)
+        ) {
+            name = '$' + name.substr(1);
+            mightBeKeyword = false;
+        }
+    }
+    }
+
+    // Names must contain only characters, digits, $ or _
+    let len = name.length;
+    for (; i < len; ++i) {
+        switch (name[i]) {
         case '0':
         case '1':
         case '2':
@@ -476,194 +511,159 @@ function asmMangle(name) {
         case '6':
         case '7':
         case '8':
-        case '9': {
-            name = '$' + name;
-            i = 2;
-            // fallthrough
-        }
+        case '9':
         case '$':
         case '_': {
             mightBeKeyword = false;
             break;
         }
         default: {
-            let chNum = name.charCodeAt(0);
+            let chNum = name.charCodeAt(i);
             if (
                 !(chNum >= 97 && chNum <= 122) &&
-                !(chNum >= 65 && chNum <= 90)
+                    !(chNum >= 65 && chNum <= 90)
             ) {
-                name = '$' + name.substr(1);
+                name = name.substr(0, i) + '_' + name.substr(i + 1);
                 mightBeKeyword = false;
             }
         }
-    }
-
-    // Names must contain only characters, digits, $ or _
-    let len = name.length;
-    for (; i < len; ++i) {
-        switch (name[i]) {
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-            case '8':
-            case '9':
-            case '$':
-            case '_': {
-                mightBeKeyword = false;
-                break;
-            }
-            default: {
-                let chNum = name.charCodeAt(i);
-                if (
-                    !(chNum >= 97 && chNum <= 122) &&
-                    !(chNum >= 65 && chNum <= 90)
-                ) {
-                    name = name.substr(0, i) + '_' + name.substr(i + 1);
-                    mightBeKeyword = false;
-                }
-            }
         }
     }
 
     // Names must not collide with keywords
     if (mightBeKeyword && len >= 2 && len <= 10) {
         switch (name[0]) {
-            case 'a': {
-                if (name == 'arguments') {
-                    return name + '_';
-                }
-                break;
+        case 'a': {
+            if (name == 'arguments') {
+                return name + '_';
             }
-            case 'b': {
-                if (name == 'break') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 'b': {
+            if (name == 'break') {
+                return name + '_';
             }
-            case 'c': {
-                if (
-                    name == 'case' ||
+            break;
+        }
+        case 'c': {
+            if (
+                name == 'case' ||
                     name == 'continue' ||
                     name == 'catch' ||
                     name == 'const' ||
                     name == 'class'
-                ) {
-                    return name + '_';
-                }
-                break;
+            ) {
+                return name + '_';
             }
-            case 'd': {
-                if (name == 'do' || name == 'default' || name == 'debugger') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 'd': {
+            if (name == 'do' || name == 'default' || name == 'debugger') {
+                return name + '_';
             }
-            case 'e': {
-                if (
-                    name == 'else' ||
+            break;
+        }
+        case 'e': {
+            if (
+                name == 'else' ||
                     name == 'enum' ||
                     name == 'eval' || // to be sure
                     name == 'export' ||
                     name == 'extends'
-                ) {
-                    return name + '_';
-                }
-                break;
+            ) {
+                return name + '_';
             }
-            case 'f': {
-                if (
-                    name == 'for' ||
+            break;
+        }
+        case 'f': {
+            if (
+                name == 'for' ||
                     name == 'false' ||
                     name == 'finally' ||
                     name == 'function'
-                ) {
-                    return name + '_';
-                }
-                break;
+            ) {
+                return name + '_';
             }
-            case 'i': {
-                if (
-                    name == 'if' ||
+            break;
+        }
+        case 'i': {
+            if (
+                name == 'if' ||
                     name == 'in' ||
                     name == 'import' ||
                     name == 'interface' ||
                     name == 'implements' ||
                     name == 'instanceof'
-                ) {
-                    return name + '_';
-                }
-                break;
+            ) {
+                return name + '_';
             }
-            case 'l': {
-                if (name == 'let') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 'l': {
+            if (name == 'let') {
+                return name + '_';
             }
-            case 'n': {
-                if (name == 'new' || name == 'null') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 'n': {
+            if (name == 'new' || name == 'null') {
+                return name + '_';
             }
-            case 'p': {
-                if (
-                    name == 'public' ||
+            break;
+        }
+        case 'p': {
+            if (
+                name == 'public' ||
                     name == 'package' ||
                     name == 'private' ||
                     name == 'protected'
-                ) {
-                    return name + '_';
-                }
-                break;
+            ) {
+                return name + '_';
             }
-            case 'r': {
-                if (name == 'return') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 'r': {
+            if (name == 'return') {
+                return name + '_';
             }
-            case 's': {
-                if (name == 'super' || name == 'static' || name == 'switch') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 's': {
+            if (name == 'super' || name == 'static' || name == 'switch') {
+                return name + '_';
             }
-            case 't': {
-                if (
-                    name == 'try' ||
+            break;
+        }
+        case 't': {
+            if (
+                name == 'try' ||
                     name == 'this' ||
                     name == 'true' ||
                     name == 'throw' ||
                     name == 'typeof'
-                ) {
-                    return name + '_';
-                }
-                break;
+            ) {
+                return name + '_';
             }
-            case 'v': {
-                if (name == 'var' || name == 'void') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 'v': {
+            if (name == 'var' || name == 'void') {
+                return name + '_';
             }
-            case 'w': {
-                if (name == 'with' || name == 'while') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 'w': {
+            if (name == 'with' || name == 'while') {
+                return name + '_';
             }
-            case 'y': {
-                if (name == 'yield') {
-                    return name + '_';
-                }
-                break;
+            break;
+        }
+        case 'y': {
+            if (name == 'yield') {
+                return name + '_';
             }
+            break;
+        }
         }
     }
     return name;
