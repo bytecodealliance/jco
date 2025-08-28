@@ -483,17 +483,17 @@ function validateUrlPart(value, part) {
 
     try {
         switch (part) {
-            case UrlPart.PATH_WITH_QUERY:
-                new URL(value, 'http://example');
-                break;
-            case UrlPart.SCHEME:
-                new URL(`${value}://example`);
-                break;
-            case UrlPart.AUTHORITY:
-                new URL(`http://${value}`);
-                break;
-            default:
-                throw new Error(`Unknown URL part: ${part}`);
+        case UrlPart.PATH_WITH_QUERY:
+            new URL(value, 'http://example');
+            break;
+        case UrlPart.SCHEME:
+            new URL(`${value}://example`);
+            break;
+        case UrlPart.AUTHORITY:
+            new URL(`http://${value}`);
+            break;
+        default:
+            throw new Error(`Unknown URL part: ${part}`);
         }
     } catch {
         throw new HttpError('invalid-syntax', `Invalid ${part}: ${value}`);

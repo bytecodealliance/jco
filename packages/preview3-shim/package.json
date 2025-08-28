@@ -17,7 +17,7 @@
   },
   "scripts": {
     "compile:check": "tsc --noEmit types/index.d.ts",
-      "fmt": "npm run lint:fix",
+    "fmt": "npm run lint:fix",
     "lint": "eslint -c ../../eslint.config.mjs --ext .js lib test",
     "lint:fix": "eslint -c ../../eslint.config.mjs --ext .js lib test --fix",
     "test": "vitest --run",
@@ -35,7 +35,6 @@
     "eslint": "^9.33.0",
     "globals": "^16.3.0",
     "vitest": "^3.2.4",
-    "prettier": "^3.6.2",
     "typescript-eslint": "^8.39.1"
   },
   "repository": {
