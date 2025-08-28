@@ -47,11 +47,11 @@ export async function runOptimizeComponent(componentBytes, opts) {
     const args = opts?.optArgs
         ? [...opts.optArgs]
         : [
-              '-Oz',
-              '--low-memory-unused',
-              '--enable-bulk-memory',
-              '--strip-debug',
-          ];
+            '-Oz',
+            '--low-memory-unused',
+            '--enable-bulk-memory',
+            '--strip-debug',
+        ];
     if (opts?.asyncify) {
         args.push('--asyncify');
     }

@@ -93,12 +93,12 @@ export async function runTypesComponent(witPath, opts) {
         !opts.asyncMode || opts.asyncMode === 'sync'
             ? null
             : {
-                  tag: opts.asyncMode,
-                  val: {
-                      imports: opts.asyncImports || [],
-                      exports: opts.asyncExports || [],
-                  },
-              };
+                tag: opts.asyncMode,
+                val: {
+                    imports: opts.asyncImports || [],
+                    exports: opts.asyncExports || [],
+                },
+            };
 
     const absWitPath = resolve(witPath);
     const types = generateTypes(name, {
