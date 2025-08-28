@@ -5,6 +5,10 @@ export const WIT_FIXTURE_DIR = fileURLToPath(
     new URL('../../jco/test/fixtures/wits', import.meta.url)
 );
 
+export const LOCAL_WIT_FIXTURE_DIR = fileURLToPath(
+    new URL('./fixtures/wit', import.meta.url)
+);
+
 const COMPONENT_BYTES_CACHE = {};
 export async function readComponentBytes(componentPath) {
     let componentBytes;

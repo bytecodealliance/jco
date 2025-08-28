@@ -1,0 +1,15 @@
+package fixtures:js-reserved-word;
+
+interface example {
+	create: func(key: string);
+  // 'delete' is a JS reserved word (i.e. an invalid identifier)
+	delete: func(key: string);
+}
+
+world imports {
+    import example;
+}
+
+world exports {
+    export example;
+}
