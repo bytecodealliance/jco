@@ -29,25 +29,25 @@ export class HttpError extends Error {
         let tag, val;
 
         switch (e.code) {
-            case 'ECONNRESET':
-                tag = 'HTTP-protocol-error';
-                break;
+        case 'ECONNRESET':
+            tag = 'HTTP-protocol-error';
+            break;
 
-            case 'ENOTFOUND':
-                tag = 'DNS-error';
-                val = {
-                    rcode: e.code,
-                    infoCode: e.errno < 0 ? -e.errno : e.errno,
-                };
-                break;
+        case 'ENOTFOUND':
+            tag = 'DNS-error';
+            val = {
+                rcode: e.code,
+                infoCode: e.errno < 0 ? -e.errno : e.errno,
+            };
+            break;
 
-            case 'ECONNREFUSED':
-                tag = 'connection-refused';
-                break;
+        case 'ECONNREFUSED':
+            tag = 'connection-refused';
+            break;
 
-            default:
-                tag = 'internal-error';
-                val = e.toString();
+        default:
+            tag = 'internal-error';
+            val = e.toString();
         }
 
         const httpErr = new HttpError(tag, e.message, val, { cause: e });

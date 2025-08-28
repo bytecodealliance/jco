@@ -564,7 +564,6 @@ class Descriptor {
         const fullPath = this.#getFullPath(path, pf.symlinkFollow);
         const target = stripTrailingSlash(fullPath);
 
-        // prettier-ignore
         const makeFsFlags = () => {
             let fsFlags = 0;
             if (of.create)                 {fsFlags |= fs.constants.O_CREAT;}
@@ -872,17 +871,17 @@ class Descriptor {
 
     #getNewTimestamp(newTimestamp, oldTimestamp) {
         switch (newTimestamp.tag) {
-            case 'now':
-                return Math.floor(Date.now() / 1e3);
-            case 'no-change':
-                return timestampToSec(oldTimestamp);
-            case 'timestamp':
-                return timestampToSec(newTimestamp.val);
-            default:
-                throw new FSError(
-                    'invalid',
-                    `Unknown new-timestamp tag: ${newTimestamp.tag}`
-                );
+        case 'now':
+            return Math.floor(Date.now() / 1e3);
+        case 'no-change':
+            return timestampToSec(oldTimestamp);
+        case 'timestamp':
+            return timestampToSec(newTimestamp.val);
+        default:
+            throw new FSError(
+                'invalid',
+                `Unknown new-timestamp tag: ${newTimestamp.tag}`
+            );
         }
     }
 
