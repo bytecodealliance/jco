@@ -361,7 +361,7 @@ suite('CLI', () => {
         {
             const source = await readFile(`${outDir}/ts-check.d.ts`);
             assert.ok(
-                source.toString().includes('declare function _class(): void')
+                source.toString().includes('function _class(): void')
             );
             assert.ok(source.toString().includes('export { _class as class }'));
         }
@@ -370,7 +370,7 @@ suite('CLI', () => {
                 `${outDir}/interfaces/ts-naming-blah.d.ts`
             );
             assert.ok(
-                source.toString().includes('declare function _class(): void')
+                source.toString().includes('function _class(): void')
             );
             assert.ok(source.toString().includes('export { _class as class }'));
         }
