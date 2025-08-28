@@ -52,8 +52,8 @@ const DEBUG =
     env.PREVIEW2_SHIM_DEBUG === '0'
         ? false
         : env.PREVIEW2_SHIM_DEBUG === '1'
-          ? true
-          : DEBUG_DEFAULT;
+            ? true
+            : DEBUG_DEFAULT;
 
 /**
  * @type {(call: number, id: number | null, payload: any) -> any}
@@ -219,23 +219,23 @@ class InputStream {
         stream.#streamType = streamType;
         let disposeFn;
         switch (streamType) {
-            case FILE:
-                disposeFn = fileInputStreamDispose;
-                break;
-            case SOCKET_TCP:
-                disposeFn = socketTcpInputStreamDispose;
-                break;
-            case STDIN:
-                disposeFn = stdinInputStreamDispose;
-                break;
-            case HTTP:
-                disposeFn = httpInputStreamDispose;
-                break;
-            default:
-                throw new Error(
-                    'wasi-io trap: Dispose function not created for stream type ' +
+        case FILE:
+            disposeFn = fileInputStreamDispose;
+            break;
+        case SOCKET_TCP:
+            disposeFn = socketTcpInputStreamDispose;
+            break;
+        case STDIN:
+            disposeFn = stdinInputStreamDispose;
+            break;
+        case HTTP:
+            disposeFn = httpInputStreamDispose;
+            break;
+        default:
+            throw new Error(
+                'wasi-io trap: Dispose function not created for stream type ' +
                         reverseMap[streamType]
-                );
+            );
         }
         stream.#finalizer = registerDispose(stream, null, id, disposeFn);
         return stream;
@@ -361,25 +361,25 @@ class OutputStream {
         stream.#streamType = streamType;
         let disposeFn;
         switch (streamType) {
-            case STDOUT:
-                disposeFn = stdoutOutputStreamDispose;
-                break;
-            case STDERR:
-                disposeFn = stderrOutputStreamDispose;
-                break;
-            case SOCKET_TCP:
-                disposeFn = socketTcpOutputStreamDispose;
-                break;
-            case FILE:
-                disposeFn = fileOutputStreamDispose;
-                break;
-            case HTTP:
-                return stream;
-            default:
-                throw new Error(
-                    'wasi-io trap: Dispose function not created for stream type ' +
+        case STDOUT:
+            disposeFn = stdoutOutputStreamDispose;
+            break;
+        case STDERR:
+            disposeFn = stderrOutputStreamDispose;
+            break;
+        case SOCKET_TCP:
+            disposeFn = socketTcpOutputStreamDispose;
+            break;
+        case FILE:
+            disposeFn = fileOutputStreamDispose;
+            break;
+        case HTTP:
+            return stream;
+        default:
+            throw new Error(
+                'wasi-io trap: Dispose function not created for stream type ' +
                         reverseMap[streamType]
-                );
+            );
         }
         stream.#finalizer = registerDispose(stream, null, id, disposeFn);
         return stream;
