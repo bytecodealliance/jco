@@ -43,6 +43,7 @@
     }
   },
   "scripts": {
+    "fmt": "npm run lint:fix",
     "lint": "eslint -c ../../eslint.config.mjs ./src/**/*.js ./test/**/*.js",
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
