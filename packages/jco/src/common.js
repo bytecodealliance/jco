@@ -163,11 +163,11 @@ export async function writeFiles(files, summaryTitle) {
   {bold ${summaryTitle}:}
 
 ${table(
-    Object.entries(files).map(([name, source]) => [
-        c` - {italic ${name}}  `,
-        c`{black.italic ${sizeStr(source.length)}}`,
-    ])
-)}`);
+        Object.entries(files).map(([name, source]) => [
+            c` - {italic ${name}}  `,
+            c`{black.italic ${sizeStr(source.length)}}`,
+        ])
+    )}`);
 }
 
 /**
