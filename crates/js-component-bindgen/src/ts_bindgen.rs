@@ -12,7 +12,7 @@ use wit_bindgen_core::wit_parser::{
 
 use crate::files::Files;
 use crate::function_bindgen::{array_ty, as_nullable, maybe_null};
-use crate::names::{is_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
+use crate::names::{is_valid_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
 use crate::source::Source;
 use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
 use crate::{
@@ -991,7 +991,7 @@ impl<'a> TsInterface<'a> {
             func.item_name().to_lower_camel_case()
         };
 
-        let escaped_name = if is_js_identifier(&out_name) {
+        let escaped_name = if is_valid_js_identifier(&out_name) {
             out_name.to_string()
         } else {
             format!("'{out_name}'")
@@ -1000,16 +1000,14 @@ impl<'a> TsInterface<'a> {
         if declaration {
             match func.kind {
                 FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
-                    if is_js_identifier(&out_name) {
+                    if is_valid_js_identifier(&out_name) {
                         iface.src.push_str(&format!("export function {out_name}"));
                     } else {
                         let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
                         iface
                             .src
                             .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
-                        iface
-                            .src
-                            .push_str(&format!("declare function {local_name}"));
+                        iface.src.push_str(&format!("function {local_name}"));
                     }
                 }
                 FunctionKind::Constructor(_) => {

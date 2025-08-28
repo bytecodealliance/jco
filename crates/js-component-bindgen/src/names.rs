@@ -77,16 +77,16 @@ impl<'a> LocalNames {
 
 // Convert an arbitrary string to a similar close js identifier
 pub fn to_js_identifier(goal_name: &str) -> String {
-    if is_js_identifier(goal_name) {
+    if is_valid_js_identifier(goal_name) {
         goal_name.to_string()
     } else {
         let goal = goal_name.to_lower_camel_case();
         let mut identifier = String::new();
         for char in goal.chars() {
             let valid_char = if identifier.is_empty() {
-                is_js_identifier_start(char)
+                is_valid_js_identifier_start(char)
             } else {
-                is_js_identifier_char(char)
+                is_valid_js_identifier_char(char)
             };
             if valid_char {
                 identifier.push(char);
@@ -97,9 +97,9 @@ pub fn to_js_identifier(goal_name: &str) -> String {
                 });
             }
         }
-        if !is_js_identifier(&identifier) {
+        if !is_valid_js_identifier(&identifier) {
             identifier = format!("_{identifier}");
-            if !is_js_identifier(&identifier) {
+            if !is_valid_js_identifier(&identifier) {
                 panic!("Unable to generate valid identifier {identifier} for '{goal_name}'");
             }
         }
@@ -107,17 +107,17 @@ pub fn to_js_identifier(goal_name: &str) -> String {
     }
 }
 
-pub fn is_js_identifier(s: &str) -> bool {
+pub fn is_valid_js_identifier(s: &str) -> bool {
     let mut chars = s.chars();
     if let Some(char) = chars.next() {
-        if !is_js_identifier_start(char) {
+        if !is_valid_js_identifier_start(char) {
             return false;
         }
     } else {
         return false;
     }
     for char in chars {
-        if !is_js_identifier_char(char) {
+        if !is_valid_js_identifier_char(char) {
             return false;
         }
     }
@@ -130,7 +130,7 @@ pub fn is_js_reserved_word(s: &str) -> bool {
 
 // https://tc39.es/ecma262/#prod-IdentifierStartChar
 // Unicode ID_Start | "$" | "_"
-fn is_js_identifier_start(code: char) -> bool {
+fn is_valid_js_identifier_start(code: char) -> bool {
     match code {
         'A'..='Z' | 'a'..='z' | '$' | '_' => true,
         // leaving out non-ascii for now...
@@ -140,7 +140,7 @@ fn is_js_identifier_start(code: char) -> bool {
 
 // https://tc39.es/ecma262/#prod-IdentifierPartChar
 // Unicode ID_Continue | "$" | U+200C | U+200D
-fn is_js_identifier_char(code: char) -> bool {
+fn is_valid_js_identifier_char(code: char) -> bool {
     match code {
         '0'..='9' | 'A'..='Z' | 'a'..='z' | '$' | '_' => true,
         // leaving out non-ascii for now...
@@ -149,7 +149,7 @@ fn is_js_identifier_char(code: char) -> bool {
 }
 
 pub fn maybe_quote_id(name: &str) -> String {
-    if is_js_identifier(name) {
+    if is_valid_js_identifier(name) {
         name.to_string()
     } else {
         format!("'{name}'")
@@ -159,7 +159,7 @@ pub fn maybe_quote_id(name: &str) -> String {
 pub fn maybe_quote_member(name: &str) -> String {
     if name == "*" {
         "".to_string()
-    } else if is_js_identifier(name) {
+    } else if is_valid_js_identifier(name) {
         format!(".{name}")
     } else {
         format!("['{name}']")
