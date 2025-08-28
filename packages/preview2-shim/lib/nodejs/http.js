@@ -673,12 +673,12 @@ function schemeString(scheme) {
         return 'https:';
     }
     switch (scheme.tag) {
-        case 'HTTP':
-            return 'http:';
-        case 'HTTPS':
-            return 'https:';
-        case 'other':
-            return scheme.val.toLowerCase() + ':';
+    case 'HTTP':
+        return 'http:';
+    case 'HTTPS':
+        return 'https:';
+    case 'other':
+        return scheme.val.toLowerCase() + ':';
     }
 }
 

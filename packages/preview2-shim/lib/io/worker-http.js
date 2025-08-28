@@ -112,30 +112,30 @@ export async function createHttpRequest(
         // Make a request
         let req;
         switch (scheme) {
-            case 'http:':
-                req = httpRequest({
-                    agent: httpAgent,
-                    method,
-                    host: authority.split(':')[0],
-                    port: authority.split(':')[1],
-                    path: pathWithQuery,
-                    timeout:
+        case 'http:':
+            req = httpRequest({
+                agent: httpAgent,
+                method,
+                host: authority.split(':')[0],
+                port: authority.split(':')[1],
+                path: pathWithQuery,
+                timeout:
                         connectTimeout && Number(connectTimeout / 1_000_000n),
-                });
-                break;
-            case 'https:':
-                req = httpsRequest({
-                    agent: httpsAgent,
-                    method,
-                    host: authority.split(':')[0],
-                    port: authority.split(':')[1],
-                    path: pathWithQuery,
-                    timeout:
+            });
+            break;
+        case 'https:':
+            req = httpsRequest({
+                agent: httpsAgent,
+                method,
+                host: authority.split(':')[0],
+                port: authority.split(':')[1],
+                path: pathWithQuery,
+                timeout:
                         connectTimeout && Number(connectTimeout / 1_000_000n),
-                });
-                break;
-            default:
-                throw { tag: 'HTTP-protocol-error' };
+            });
+            break;
+        default:
+            throw { tag: 'HTTP-protocol-error' };
         }
         for (const [key, value] of headers) {
             req.appendHeader(key, value);
@@ -177,20 +177,20 @@ export async function createHttpRequest(
         }
         const err = getFirstError(e);
         switch (err.code) {
-            case 'ECONNRESET':
-                throw { tag: 'HTTP-protocol-error' };
-            case 'ENOTFOUND':
-                throw {
-                    tag: 'DNS-error',
-                    val: {
-                        rcode: err.code,
-                        infoCode: err.errno < 0 ? -err.errno : err.errno,
-                    },
-                };
-            case 'ECONNREFUSED':
-                throw {
-                    tag: 'connection-refused',
-                };
+        case 'ECONNRESET':
+            throw { tag: 'HTTP-protocol-error' };
+        case 'ENOTFOUND':
+            throw {
+                tag: 'DNS-error',
+                val: {
+                    rcode: err.code,
+                    infoCode: err.errno < 0 ? -err.errno : err.errno,
+                },
+            };
+        case 'ECONNREFUSED':
+            throw {
+                tag: 'connection-refused',
+            };
         }
         throw {
             tag: 'internal-error',

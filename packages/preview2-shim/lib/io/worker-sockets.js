@@ -103,21 +103,21 @@ export function socketResolveAddress(name) {
         },
         (err) => {
             switch (err.code) {
-                // TODO: verify these more carefully
-                case NODATA:
-                case BADFAMILY:
-                case NONAME:
-                case NOTFOUND:
-                    throw 'name-unresolvable';
-                case TIMEOUT:
-                case REFUSED:
-                case CONNREFUSED:
-                case SERVFAIL:
-                case NOMEM:
-                case CANCELLED:
-                    throw 'temporary-resolver-failure';
-                default:
-                    throw 'permanent-resolver-failure';
+            // TODO: verify these more carefully
+            case NODATA:
+            case BADFAMILY:
+            case NONAME:
+            case NOTFOUND:
+                throw 'name-unresolvable';
+            case TIMEOUT:
+            case REFUSED:
+            case CONNREFUSED:
+            case SERVFAIL:
+            case NOMEM:
+            case CANCELLED:
+                throw 'temporary-resolver-failure';
+            default:
+                throw 'permanent-resolver-failure';
             }
         }
     );
@@ -125,82 +125,82 @@ export function socketResolveAddress(name) {
 
 export function convertSocketError(err) {
     switch (err?.code) {
-        case 'EBADF':
-        case 'ENOTCONN':
-        case 'ERR_SOCKET_DGRAM_NOT_CONNECTED':
-            return 'invalid-state';
-        case 'EACCES':
-        case 'EPERM':
-            return 'access-denied';
-        case 'ENOTSUP':
-            return 'not-supported';
-        case 'EINVAL':
-            return 'invalid-argument';
-        case 'ENOMEM':
-        case 'ENOBUFS':
-            return 'out-of-memory';
-        case 'EALREADY':
-            return 'concurrency-conflict';
-        case 'EWOULDBLOCK':
-            return 'would-block';
+    case 'EBADF':
+    case 'ENOTCONN':
+    case 'ERR_SOCKET_DGRAM_NOT_CONNECTED':
+        return 'invalid-state';
+    case 'EACCES':
+    case 'EPERM':
+        return 'access-denied';
+    case 'ENOTSUP':
+        return 'not-supported';
+    case 'EINVAL':
+        return 'invalid-argument';
+    case 'ENOMEM':
+    case 'ENOBUFS':
+        return 'out-of-memory';
+    case 'EALREADY':
+        return 'concurrency-conflict';
+    case 'EWOULDBLOCK':
+        return 'would-block';
         // TODO: return "new-socket-limit";
-        case 'EADDRNOTAVAIL':
-            return 'address-not-bindable';
-        case 'EADDRINUSE':
-            return 'address-in-use';
+    case 'EADDRNOTAVAIL':
+        return 'address-not-bindable';
+    case 'EADDRINUSE':
+        return 'address-in-use';
         // TODO: return "remote-unreachable";
-        case 'ECONNREFUSED':
-            return 'connection-refused';
-        case 'ECONNRESET':
-            return 'connection-reset';
-        case 'ECONNABORTED':
-            return 'connection-aborted';
-        default:
-            return 'unknown';
+    case 'ECONNREFUSED':
+        return 'connection-refused';
+    case 'ECONNRESET':
+        return 'connection-reset';
+    case 'ECONNABORTED':
+        return 'connection-aborted';
+    default:
+        return 'unknown';
     }
 }
 
 export function convertSocketErrorCode(code) {
     switch (code) {
-        case 4053: // windows
-        case 4083:
-        case ENOTCONN:
-        case EBADF:
-            return 'invalid-state';
-        case EACCES:
-        case EPERM:
-            return 'access-denied';
-        case ENOTSUP:
-            return 'not-supported';
-        case EINVAL:
-            return 'invalid-argument';
-        case ENOMEM:
-        case ENOBUFS:
-            return 'out-of-memory';
-        case EALREADY:
-            return 'concurrency-conflict';
-        case EWOULDBLOCK:
-            return 'would-block';
+    case 4053: // windows
+    case 4083:
+    case ENOTCONN:
+    case EBADF:
+        return 'invalid-state';
+    case EACCES:
+    case EPERM:
+        return 'access-denied';
+    case ENOTSUP:
+        return 'not-supported';
+    case EINVAL:
+        return 'invalid-argument';
+    case ENOMEM:
+    case ENOBUFS:
+        return 'out-of-memory';
+    case EALREADY:
+        return 'concurrency-conflict';
+    case EWOULDBLOCK:
+        return 'would-block';
         // TODO: return "new-socket-limit";
-        case 4090: // windows
-        case EADDRNOTAVAIL:
-            return 'address-not-bindable';
-        case 4091: // windows
-        case EADDRINUSE:
-            return 'address-in-use';
+    case 4090: // windows
+    case EADDRNOTAVAIL:
+        return 'address-not-bindable';
+    case 4091: // windows
+    case EADDRINUSE:
+        return 'address-in-use';
         // TODO: return "remote-unreachable";
-        case ECONNREFUSED:
-            return 'connection-refused';
-        case ECONNRESET:
-            return 'connection-reset';
-        case ECONNABORTED:
-            return 'connection-aborted';
+    case ECONNREFUSED:
+        return 'connection-refused';
+    case ECONNRESET:
+        return 'connection-reset';
+    case ECONNABORTED:
+        return 'connection-aborted';
         // TODO: return "datagram-too-large";
         // TODO: return "name-unresolvable";
         // TODO: return "temporary-resolver-failure";
-        default:
-            // process._rawDebug('unknown error code', code);
-            return 'unknown';
+    default:
+        // process._rawDebug('unknown error code', code);
+        return 'unknown';
     }
 }
 
