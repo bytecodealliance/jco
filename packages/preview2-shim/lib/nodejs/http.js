@@ -9,6 +9,7 @@ import {
     HTTP_SERVER_SET_OUTGOING_RESPONSE,
     HTTP_SERVER_START,
     HTTP_SERVER_STOP,
+    HTTP_SERVER_GET_ADDRESS,
     OUTPUT_STREAM_CREATE,
     OUTPUT_STREAM_DISPOSE,
 } from '../io/calls.js';
@@ -775,6 +776,9 @@ export class HTTPServer {
         // set a dummy interval, to keep the process alive since the server is off-thread
         this.#liveEventLoopInterval = setInterval(() => {}, 10_000);
         ioCall(HTTP_SERVER_START, this.#id, { port, host });
+    }
+    address() {
+        return ioCall(HTTP_SERVER_GET_ADDRESS, this.#id);
     }
     stop() {
         if (this.#stopped) {

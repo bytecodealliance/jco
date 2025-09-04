@@ -500,6 +500,23 @@ suite("Node.js Preview2", () => {
   });
 });
 
+suite("HTTPServer", () => {
+    test(
+        "HTTPServer: can retrieve randomized server address",
+        testWithGCWrap(async () => {
+            const { HTTPServer } = await import("@bytecodealliance/preview2-shim/http");
+            const server = new HTTPServer({
+                handle() {
+                    throw new Error("never called");
+                }
+            });
+            server.listen(0);
+            const address = server.address();
+            assert(Number.isSafeInteger(address?.port) && address?.port != 0, "a random port was assigned and retrieved");
+        }),
+    );
+});
+
 suite("Instantiation", () => {
   test("WASIShim export (random)", async () => {
     const { random } = await import("@bytecodealliance/preview2-shim");

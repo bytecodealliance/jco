@@ -62,6 +62,7 @@ export const HTTP_SERVER_STOP = ++call_id << CALL_SHIFT;
 export const HTTP_SERVER_INCOMING_HANDLER = ++call_id << CALL_SHIFT;
 export const HTTP_SERVER_SET_OUTGOING_RESPONSE = ++call_id << CALL_SHIFT;
 export const HTTP_SERVER_CLEAR_OUTGOING_RESPONSE = ++call_id << CALL_SHIFT;
+export const HTTP_SERVER_GET_ADDRESS = ++call_id << CALL_SHIFT;
 export const HTTP_OUTGOING_BODY_DISPOSE = ++call_id << CALL_SHIFT;
 
 // Clocks
