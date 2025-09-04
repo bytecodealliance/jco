@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.17.4] - 2025-09-04
+
+### 🚀 Features
+
+* *(p2-shim)* add support for retrieving HTTP server address by @vados-cosmonic in #1001
+
+* *(p2-shim)* accomodate versioned WASI import objects by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+* *(p2-shim)* circular dependency warning by @vados-cosmonic in #978
+
+* *(p2-shim)* typo in filesystems imports in WASIShim object by @vados-cosmonic in #981
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(p2-shim)* eslint fix by @vados-cosmonic
+
+
+
+
 ## [0.17.3] - 2025-08-25
 
 ### 🚀 Features
