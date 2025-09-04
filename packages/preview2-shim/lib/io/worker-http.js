@@ -27,6 +27,10 @@ export function clearOutgoingResponse(id) {
     responses.delete(id);
 }
 
+export async function getHttpServerAddress(id) {
+    return servers.get(id).address();
+}
+
 export async function setOutgoingResponse(
     id,
     { statusCode, headers, streamId }

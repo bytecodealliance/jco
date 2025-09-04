@@ -8,6 +8,7 @@ import {
     setOutgoingResponse,
     startHttpServer,
     stopHttpServer,
+    getHttpServerAddress,
 } from './worker-http.js';
 import { Readable } from 'node:stream';
 import { read } from 'node:fs';
@@ -29,6 +30,7 @@ import {
     HTTP_SERVER_SET_OUTGOING_RESPONSE,
     HTTP_SERVER_START,
     HTTP_SERVER_STOP,
+    HTTP_SERVER_GET_ADDRESS,
     INPUT_STREAM_BLOCKING_READ,
     INPUT_STREAM_BLOCKING_SKIP,
     INPUT_STREAM_CREATE,
@@ -417,6 +419,8 @@ function handle(call, id, payload) {
         return setOutgoingResponse(id, payload);
     case HTTP_SERVER_CLEAR_OUTGOING_RESPONSE:
         return clearOutgoingResponse(id);
+    case HTTP_SERVER_GET_ADDRESS:
+        return getHttpServerAddress(id);
 
         // Sockets name resolution
     case SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST:
