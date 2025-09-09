@@ -8,8 +8,7 @@ import {
 } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
-
-import c from 'chalk-template';
+import * as nodeUtils from 'node:utils';
 
 /** Detect a windows environment */
 export const isWindows = platform === 'win32';
@@ -19,6 +18,14 @@ const DEFAULT_SIGNIFICANT_DIGITS = 4;
 
 /** Nubmer of bytes in a kilobyte */
 const BYTES_MAGNITUDE = 1024;
+
+/** Partial polyfill for 'node:utils' `styleText()` */
+export function styleText(styles, text) {
+    if (nodeUtils.styleText) {
+        return nodeUtils.styleText(styles, text);
+    }
+    return text;
+}
 
 /**
  * Convert a given number into the string that would appropriately represent it,
@@ -120,7 +127,7 @@ export async function readFile(file, encoding) {
     try {
         return await fsReadFile(file, encoding);
     } catch {
-        throw c`Unable to read file {bold ${file}}`;
+        throw `Unable to read file ${styleText('bold', file)}`;
     }
 }
 

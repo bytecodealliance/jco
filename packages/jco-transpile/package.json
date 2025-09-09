@@ -52,7 +52,6 @@
   },
   "dependencies": {
     "@bytecodealliance/preview2-shim": "^0.17.3",
-    "chalk-template": "^1",
     "terser": "^5"
   }
 }
