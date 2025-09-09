@@ -2,7 +2,6 @@
 
 import { extname, basename, resolve } from 'node:path';
 
-import c from 'chalk-template';
 import { minify } from 'terser';
 import { fileURLToPath } from 'url';
 
@@ -15,6 +14,7 @@ import {
     setShowSpinner,
     getShowSpinner,
     writeFiles,
+    styleText,
     ASYNC_WASI_IMPORTS,
     ASYNC_WASI_EXPORTS,
     DEFAULT_ASYNC_MODE,
@@ -291,7 +291,7 @@ export async function transpileComponent(component, opts = {}) {
         // Configure the spinner.
         let completed = 0;
         const spinnerText = () =>
-            c`{cyan ${completed} / ${wasmFiles.length}} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
+            `${styleText("cyan", `${completed} / ${wasmFiles.length}`)} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
         if (showSpinner) {
             spinner = ora({
                 color: 'cyan',

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import c from 'chalk-template';
 import { program, Option } from 'commander';
 
 import { opt } from './cmd/opt.js';
@@ -17,11 +16,12 @@ import {
     componentWit,
 } from './cmd/wasm-tools.js';
 import { componentize } from './cmd/componentize.js';
+import { styleText } from './common.js';
 
 program
     .name('jco')
     .description(
-        c`{bold jco - WebAssembly JS Component Tools}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`
+        `${styleText('bold', "jco - WebAssembly JS Component Tools")}\n      JS Component Transpilation Bindgen & Wasm Tools for JS`
     )
     .usage('<command> [options]')
     .enablePositionalOptions()
@@ -486,7 +486,7 @@ function asyncAction(cmd) {
             } catch (e) {
                 process.stdout.write(`(jco ${cmd.name}) `);
                 if (typeof e === 'string') {
-                    console.error(c`{red.bold Error}: ${e}\n`);
+                    console.error(`${styleText(['red', 'bold'], "Error")}: ${e}\n`);
                 } else {
                     console.error(e);
                 }

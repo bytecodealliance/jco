@@ -1,7 +1,6 @@
 import { stat, readFile, writeFile } from 'node:fs/promises';
 import { resolve, basename } from 'node:path';
-
-import c from 'chalk-template';
+import { styleText } from '../common.js';
 
 /** All features that can be enabled/disabled */
 const ALL_FEATURES = ['clocks', 'http', 'random', 'stdio', 'fetch-event'];
@@ -45,7 +44,7 @@ export async function componentize(jsSource, opts) {
         });
         if (result.debug) {
             console.error(
-                c`{cyan DEBUG} Debug output\n${JSON.stringify(debug, null, 2)}\n`
+                `${styleText('cyan', 'DEBUG')} Debug output\n${JSON.stringify(debug, null, 2)}\n`
             );
         }
 
@@ -66,7 +65,7 @@ export async function componentize(jsSource, opts) {
 
     await writeFile(opts.out, component);
 
-    console.log(c`{green OK} Successfully written {bold ${opts.out}}.`);
+    console.log(`${styleText('green', 'OK')} Successfully written ${styleText('bold', opts.out)}.`);
 }
 
 /**
@@ -76,15 +75,16 @@ export async function componentize(jsSource, opts) {
  * @returns {string} user-visible, highlighted output that can be printed
  */
 async function printWITPathHint(witPath) {
+    const warningPrefix = styleText(['yellow', 'bold'], 'warning');
     const pathMeta = await stat(witPath);
     let output = '\n';
     if (!pathMeta.isFile() && !pathMeta.isDirectory()) {
-        output += c`{yellow.bold warning} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
+        output += `${warningPrefix} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
         return output;
     }
-    output += c`{yellow.bold warning} Your WIT path option [${witPath}] may be incorrect\n`;
-    output += c`{yellow.bold warning} When using a world with dependencies, you must pass the enclosing WIT folder, not a single file.\n`;
-    output += c`{yellow.bold warning} (e.g. 'wit/', rather than 'wit/component.wit').\n`;
+    output += `${warningPrefix} Your WIT path option [${witPath}] may be incorrect\n`;
+    output += `${warningPrefix} When using a world with dependencies, you must pass the enclosing WIT folder, not a single file.\n`;
+    output += `${warningPrefix} (e.g. 'wit/', rather than 'wit/component.wit').\n`;
     return output;
 }
 
