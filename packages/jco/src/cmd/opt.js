@@ -1,8 +1,8 @@
+import { writeFile } from 'node:fs/promises';
+
 import { $init, tools } from '../../obj/wasm-tools.js';
 const { metadataShow, print } = tools;
-import { writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
-import c from 'chalk-template';
 import {
     readFile,
     sizeStr,
@@ -13,6 +13,8 @@ import {
     getShowSpinner,
 } from '../common.js';
 import ora from '#ora';
+
+import { styleText } from '../common.js';
 
 export async function opt(componentPath, opts, program) {
     await $init;
@@ -34,33 +36,35 @@ export async function opt(componentPath, opts, program) {
         totalAfterBytes = 0;
 
     if (!opts.quiet) {
-        console.log(c`
-{bold Optimized WebAssembly Component Internal Core Modules:}
-
-${table(
-        [
-            ...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
-                totalBeforeBytes += beforeBytes;
-                totalAfterBytes += afterBytes;
-                return [
-                    ` - Core Module ${i + 1}:  `,
-                    sizeStr(beforeBytes),
-                    ' -> ',
-                    c`{cyan ${sizeStr(afterBytes)}} `,
-                    `(${fixedDigitDisplay((afterBytes / beforeBytes) * 100, 2)}%)`,
-                ];
-            }),
-            ['', '', '', '', ''],
+        const tableContent =  table(
             [
-                ` = Total:  `,
-                `${sizeStr(totalBeforeBytes)}`,
-                ` => `,
-                c`{cyan ${sizeStr(totalAfterBytes)}} `,
-                `(${fixedDigitDisplay((totalAfterBytes / totalBeforeBytes) * 100, 2)}%)`,
+                ...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
+                    totalBeforeBytes += beforeBytes;
+                    totalAfterBytes += afterBytes;
+                    return [
+                        ` - Core Module ${i + 1}:  `,
+                        sizeStr(beforeBytes),
+                        ' -> ',
+                        `${styleText('cyan', sizeStr(afterBytes))} `,
+                        `(${fixedDigitDisplay((afterBytes / beforeBytes) * 100, 2)}%)`,
+                    ];
+                }),
+                ['', '', '', '', ''],
+                [
+                    ` = Total:  `,
+                    `${sizeStr(totalBeforeBytes)}`,
+                    ` => `,
+                    `${styleText('cyan', sizeStr(totalAfterBytes))} `,
+                    `(${fixedDigitDisplay((totalAfterBytes / totalBeforeBytes) * 100, 2)}%)`,
+                ],
             ],
-        ],
-        [, , , , 'right']
-    )}`);
+            [, , , , 'right']
+        );
+
+        console.log(`
+${styleText('bold', "Optimized WebAssembly Component Internal Core Modules:")}
+
+${tableContent}`);
     }
 }
 
@@ -104,7 +108,7 @@ export async function optimizeComponent(componentBytes, opts) {
         // log number of core Wasm modules to be run with wasm-opt
         let completed = 0;
         const spinnerText = () =>
-            c`{cyan ${completed} / ${coreModules.length}} Running Binaryen on WebAssembly Component Internal Core Modules \n`;
+            `${styleText('cyan', `${completed} / ${coreModules.length}`)} Running Binaryen on WebAssembly Component Internal Core Modules \n`;
         if (showSpinner) {
             spinner = ora({
                 color: 'cyan',

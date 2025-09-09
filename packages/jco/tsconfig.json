@@ -1,13 +1,14 @@
 {
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "src/cmd/**", "src/*.d.ts"],
+  "exclude": ["node_modules", "test", "src/cmd/**", "src/*.d.ts", "src/**/*.d.ts"],
   "compilerOptions": {
+    "outDir": "types",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowJs": true,
     "declaration": true,
     "emitDeclarationOnly": true,
     "declarationMap": true,
-    "skipLibCheck": true,
+    "skipLibCheck": true
   }
 }

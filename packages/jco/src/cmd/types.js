@@ -1,19 +1,19 @@
 import { stat, mkdir } from 'node:fs/promises';
 import { extname, basename, resolve } from 'node:path';
 
-import c from 'chalk-template';
-
 import {
     $init,
     generateTypes,
 } from '../../obj/js-component-bindgen-component.js';
+
 import {
     isWindows,
     writeFiles,
+    resolveDefaultWITPath,
+    styleText,
     ASYNC_WASI_IMPORTS,
     ASYNC_WASI_EXPORTS,
     DEFAULT_ASYNC_MODE,
-    resolveDefaultWITPath,
 } from '../common.js';
 
 /** Default relative path for guest type declaration generation */
@@ -170,17 +170,18 @@ export async function typesComponent(witPath, opts) {
  * @param {(string, any) => void} consoleFn
  */
 async function printWITLayoutHint(witPath) {
+    const warningPrefix = styleText(['yellow', 'bold'], 'warning');
     const pathMeta = await stat(witPath);
     let output = '\n';
     if (!pathMeta.isFile() && !pathMeta.isDirectory()) {
-        output += c`{yellow.bold warning} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
+        output += `${warningPrefix} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
         return output;
     }
     const ftype = pathMeta.isDirectory() ? 'directory' : 'file';
-    output += c`{yellow.bold warning} Your WIT ${ftype} [${witPath}] may be laid out incorrectly\n`;
-    output += c`{yellow.bold warning} Keep in mind the following rules:\n`;
-    output += c`{yellow.bold warning}     - Top level WIT files are in the same package (i.e. "ns:pkg" in "wit/*.wit")\n`;
-    output += c`{yellow.bold warning}     - All package dependencies should be in "wit/deps" (i.e. "some:dep" in "wit/deps/some-dep.wit"\n`;
+    output += `${warningPrefix} Your WIT ${ftype} [${witPath}] may be laid out incorrectly\n`;
+    output += `${warningPrefix} Keep in mind the following rules:\n`;
+    output += `${warningPrefix}     - Top level WIT files are in the same package (i.e. "ns:pkg" in "wit/*.wit")\n`;
+    output += `${warningPrefix}     - All package dependencies should be in "wit/deps" (i.e. "some:dep" in "wit/deps/some-dep.wit"\n`;
     return output;
 }
 

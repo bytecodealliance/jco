@@ -1,11 +1,11 @@
-import { getTmpDir } from '../common.js';
-import { transpile } from './transpile.js';
 import { rm, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { basename, resolve, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import c from 'chalk-template';
+
+import { getTmpDir, styleText } from '../common.js';
+import { transpile } from './transpile.js';
 
 const DEFAULT_SERVE_HOST = 'localhost';
 
@@ -117,7 +117,7 @@ async function runComponent(componentPath, args, opts, executor) {
                 '../../../'
             );
         } catch (err) {
-            let msg = c`{red.bold error} Failed to resolve {bold @bytecodealliance/preview2-shim}, ensure it is installed.`;
+            let msg = `${styleText(['red', 'bold'], 'error')} Failed to resolve ${styleText('bold', '@bytecodealliance/preview2-shim')}, ensure it is installed.`;
             msg += `\nERROR:\n${err.toString()}`;
             throw new Error(msg);
         }

@@ -23,18 +23,22 @@
     "WebAssembly",
     "Component"
   ],
+  "main": "src/jco.js",
+  "types": "types/jco.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bytecodealliance/jco.git"
   },
   "imports": {
     "#ora": {
+      "types": "./src/ora-shim.d.ts",
       "browser": "./src/ora-shim.js",
       "default": "ora"
     }
   },
   "exports": {
     ".": {
+      "types": "./types/api.d.ts",
       "browser": "./src/browser.js",
       "default": "./src/api.js"
     },
@@ -49,6 +53,7 @@
   "files": [
     "lib",
     "src",
+    "types",
     "obj/*.core*.wasm",
     "obj/*.js",
     "obj/*.ts",
@@ -69,7 +74,6 @@
     "@bytecodealliance/componentize-js": "^0.18.4",
     "@bytecodealliance/preview2-shim": "^0.17.3",
     "binaryen": "^123.0.0",
-    "chalk-template": "^1",
     "commander": "^14",
     "mkdirp": "^3",
     "ora": "^8",

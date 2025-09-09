@@ -1,5 +1,7 @@
+import { resolve, basename, extname } from 'node:path';
 import { writeFile } from 'node:fs/promises';
-import { readFile, isWindows } from '../common.js';
+
+import { readFile, isWindows, styleText } from '../common.js';
 import { $init, tools } from '../../obj/wasm-tools.js';
 const {
     print: printFn,
@@ -10,8 +12,6 @@ const {
     metadataAdd: metadataAddFn,
     metadataShow: metadataShowFn,
 } = tools;
-import { resolve, basename, extname } from 'node:path';
-import c from 'chalk-template';
 
 export async function parse(file, opts) {
     await $init;
@@ -142,19 +142,19 @@ export async function metadataShow(file, opts) {
             output += '  '.repeat(stack.length - 1);
             const indent = '  '.repeat(stack.length);
             if (metaType.tag === 'component') {
-                output += c`{bold [component${name ? ' ' + name : ''}]}\n`;
+                output += `${styleText('bold', `[component${name ? ' ' + name : ''}]`)}\n`;
                 if (metaType.val > 0) {
                     stack.push(metaType.val);
                 }
             } else {
-                output += c`{bold [module${name ? ' ' + name : ''}]}\n`;
+                output += `${styleText('bold', `[module${name ? ' ' + name : ''}]`)}\n`;
             }
             if (producers.length === 0) {
                 output += `${indent}(no metadata)\n`;
             }
             for (const [field, items] of producers) {
                 for (const [name, version] of items) {
-                    output += `${indent}${(field + ':').padEnd(13, ' ')} ${name}${version ? c`{cyan  ${version}}` : ''}\n`;
+                    output += `${indent}${(field + ':').padEnd(13, ' ')} ${name}${version ? `${styleText('cyan', version)}` : ''}\n`;
                 }
             }
             output += '\n';
