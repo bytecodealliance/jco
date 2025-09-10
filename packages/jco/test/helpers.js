@@ -22,7 +22,7 @@ import {
 } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 
 import mime from 'mime';
 import { parse } from 'smol-toml';
@@ -627,14 +627,14 @@ export async function getCurrentWitComponentVersion() {
     if (CURRENT_WIT_COMPONENT_VERSION) {
         return CURRENT_WIT_COMPONENT_VERSION;
     }
-    const cargoTomlPath = fileURLToPath(
-        new URL('../../../Cargo.toml', import.meta.url)
+    const cargoLockPath = fileURLToPath(
+        new URL('../../../Cargo.lock', import.meta.url)
     );
-    const cargoToml = parse(await readFile(cargoTomlPath, 'utf8'));
-    const version = cargoToml.workspace.dependencies['wit-component'].version;
+    const cargoLock = parse(await readFile(cargoLockPath, 'utf8'));
+    const version = cargoLock.package.find(p => p.name === 'wit-component')?.version;
     if (!version) {
         throw new Error(
-            `Failed to find/parse wit-version in [${cargoTomlPath}]`
+            `Failed to find/parse wit-version in [${cargoLockPath}]`
         );
     }
     CURRENT_WIT_COMPONENT_VERSION = version;
