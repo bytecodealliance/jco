@@ -676,8 +676,6 @@ impl AsyncTaskIntrinsic {
                                 this.#state = {task_class}.State.CANCEL_DELIVERED;
                                 return {{
                                     code: {event_code_enum}.TASK_CANCELLED,
-                                    something: 0,
-                                    something: 0,
                                 }};
                             }}
 
@@ -698,8 +696,6 @@ impl AsyncTaskIntrinsic {
                                     this.#state = {task_class}.State.CANCELLED;
                                     return {{
                                         code: {event_code_enum}.TASK_CANCELLED,
-                                        something: 0,
-                                        something: 0,
                                     }};
                                 }}
 
