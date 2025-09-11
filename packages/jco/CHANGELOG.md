@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.15.0] - 2025-09-11
+
+### 🚀 Features
+
+* *(jco)* add --debug, refactor feature enable/disable by @vados-cosmonic in #984
+
+* *(jco)* add wit & output path defaults for type generation by @vados-cosmonic in #986
+
+
+### 🐛 Bug Fixes
+
+* *(jco)* remove missing return keys from awaitable by @vados-cosmonic in #1014
+
+
+### 🚜 Refactor
+
+* *(jco)* remove chalk dependency by @vados-cosmonic in #1010
+
+
+### 🧪 Testing
+
+* *(jco)* remove declare use from tests by @vados-cosmonic in #994
+
+* *(jco)* add test for transpile mapping by @vados-cosmonic in #987
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* eslint fix by @vados-cosmonic
+
+* *(jco)* remove prettier in favor of eslint w/ fix by @vados-cosmonic
+
+* *(jco)* update componentize-js to v0.18.5 by @vados-cosmonic in #992
+
+* *(jco)* regenerate internal type declarations by @vados-cosmonic in #990
+
+* *(jco)* update deps (wit-bindgen 0.45.0, wasm-* 0.238.0) by @vados-cosmonic
+
+
+
+
 ## [1.14.0] - 2025-08-25
 
 ### 🚀 Features
