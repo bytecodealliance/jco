@@ -35,7 +35,7 @@ jobs:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
       - name: Cache npm install
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
@@ -103,7 +103,7 @@ jobs:
       # Use cached weval bin if present
       - name: Cache weval bin
         id: cache-weval-bin
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .weval-bin
           key: weval-bin-${{ steps.weval-meta.outputs.version }}-${{ matrix.os }}
@@ -142,7 +142,7 @@ jobs:
 
       - name: Cache puppeteer install
         id: cache-puppeteer
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pacakges/jco/package.json') }}
           path: |
@@ -197,7 +197,7 @@ jobs:
           deno-version: v1.x
 
       - name: Cache npm install
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
@@ -261,7 +261,7 @@ jobs:
           node-version: ${{ matrix.node }}
 
       - name: Cache npm install
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
@@ -304,7 +304,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Cache npm install
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
@@ -323,7 +323,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Cache npm install
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
@@ -437,7 +437,7 @@ jobs:
       - uses: bytecodealliance/actions/wasmtime/setup@3b93676295fd6f7eaa7af2c2785539e052fa8349 # v1.1.1
 
       - name: Cache npm install
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
