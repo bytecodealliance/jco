@@ -20,7 +20,6 @@ concurrency:
 
 jobs:
   build:
-    name: Jco Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -54,7 +53,9 @@ jobs:
             packages/jco/obj
 
   test-jco:
-    name: Jco Test Suite
+    runs-on: ${{ matrix.os }}
+    needs:
+      - build
     strategy:
       matrix:
         os:
@@ -82,9 +83,6 @@ jobs:
             node: latest
           - os: windows-latest
             node: 18.x
-    runs-on: ${{ matrix.os }}
-    needs:
-      - build
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -173,7 +171,6 @@ jobs:
           npm run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
   test-wasi-deno:
-    name: Jco Deno WASI Conformance Tests
     runs-on: "ubuntu-latest"
     needs:
       - build
@@ -221,7 +218,6 @@ jobs:
         run: cargo test deno_
 
   test-wasi-node:
-    name: Jco Node.js WASI Conformance Tests
     strategy:
       matrix:
         os:
@@ -293,7 +289,6 @@ jobs:
           cargo test node_
 
   test-shims:
-    name: Test ${{ matrix.workspace }} Shims
     runs-on: ubuntu-latest
     strategy:
       matrix:
