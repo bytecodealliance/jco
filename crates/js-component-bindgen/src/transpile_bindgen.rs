@@ -1100,16 +1100,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::Yield { async_ } => {
-                let yield_fn = self
-                    .gen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {yield_fn}.bind(null, {async_});\n",
-                );
-            }
-
             // TODO: build a lookup of types that could be used in streams for a given component?
             // Need to have a way to look up/serialize the type indices per component into
             // a lookup of lifting functions? Or just use the cabiLower?
@@ -2091,6 +2081,38 @@ impl<'a> Instantiator<'a, '_> {
                          {callback_fn_idx},
                          {lift_fns_js},
                      );",
+                );
+            }
+
+            Trampoline::BackpressureInc { instance } => {
+                let backpressure_inc_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureInc));
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {backpressure_inc_fn}.bind(null, {instance});\n",
+                    instance = instance.as_u32(),
+                );
+            }
+
+            Trampoline::BackpressureDec { instance } => {
+                let backpressure_dec_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureDec));
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {backpressure_dec_fn}.bind(null, {instance});\n",
+                    instance = instance.as_u32(),
+                );
+            }
+
+            Trampoline::ThreadYield { cancellable } => {
+                let yield_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {yield_fn}.bind(null, {cancellable});\n",
                 );
             }
         }

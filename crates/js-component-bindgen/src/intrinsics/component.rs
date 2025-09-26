@@ -29,6 +29,26 @@ pub enum ComponentIntrinsic {
     /// ```
     BackpressureSet,
 
+    /// Increment the backpressure for a given component instance
+    ///
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// function backpressureSet(componentIdx: number);
+    /// ```
+    BackpressureInc,
+
+    /// Decrement the backpressure for a given component instance
+    ///
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// function backpressureSet(componentIdx: number);
+    /// ```
+    BackpressureDec,
+
     /// A class that encapsulates component-level async state
     ComponentAsyncStateClass,
 }
@@ -50,6 +70,8 @@ impl ComponentIntrinsic {
             Self::GlobalAsyncStateMap => "ASYNC_STATE",
             Self::GetOrCreateAsyncState => "getOrCreateAsyncState",
             Self::BackpressureSet => "backpressureSet",
+            Self::BackpressureInc => "backpressureInc",
+            Self::BackpressureDec => "backpressureDec",
             Self::ComponentAsyncStateClass => "ComponentAsyncState",
         }
     }
@@ -74,6 +96,36 @@ impl ComponentIntrinsic {
                         state.backpressure = value !== 0;
                     }}
                 "));
+            }
+
+            Self::BackpressureInc => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let backpressure_inc_fn = Self::BackpressureInc.name();
+                let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
+                output.push_str(&format!(
+                    "
+                    function {backpressure_inc_fn}(componentInstanceID) {{
+                        {debug_log_fn}('[{backpressure_inc_fn}()] args', {{ componentInstanceID }});
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        state.backpressure += 1;
+                    }}
+                "
+                ));
+            }
+
+            Self::BackpressureDec => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let backpressure_dec_fn = Self::BackpressureDec.name();
+                let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
+                output.push_str(&format!(
+                    "
+                    function {backpressure_dec_fn}(componentInstanceID) {{
+                        {debug_log_fn}('[{backpressure_dec_fn}()] args', {{ componentInstanceID }});
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        state.backpressure = Math.max(0, state.backpressure - 1) ;
+                    }}
+                "
+                ));
             }
 
             Self::ComponentAsyncStateClass => {
