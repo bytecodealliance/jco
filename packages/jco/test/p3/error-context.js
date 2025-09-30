@@ -18,6 +18,7 @@ suite('Error Context (WASI P3)', () => {
         );
 
         const { esModule, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
             component: {
                 name: 'async-error-context',
                 path: componentPath,

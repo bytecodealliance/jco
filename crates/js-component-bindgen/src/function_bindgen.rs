@@ -163,7 +163,7 @@ pub struct FunctionBindgen<'a> {
     pub requires_async_porcelain: bool,
 
     /// Whether the function is guest async lifted (i.e. WASI P3)
-    pub is_guest_async_lifted: bool,
+    pub is_async: bool,
 
     /// Canon opts
     pub canon_opts: &'a CanonicalOptions,
@@ -200,7 +200,12 @@ impl FunctionBindgen<'_> {
         results: &mut Vec<String>,
     ) {
         let view = self.intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::DataView));
-        let memory = self.memory.as_ref().unwrap();
+        let Some(memory) = self.memory.as_ref() else {
+            panic!(
+                "unexpectedly missing memory during bindgen for interface [{:?}] (callee {})",
+                self.iface_name, self.callee,
+            );
+        };
         results.push(format!(
             "{view}({memory}).{method}({} + {offset}, true)",
             operands[0],
@@ -1193,11 +1198,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::CallWasm] (async? {async_}, @ enter)');",
                     prefix = self.tracing_prefix,
-                    async_ = self.is_guest_async_lifted,
+                    async_ = self.is_async,
                 );
 
                 // Inject machinery for starting an async 'current' task
-                self.start_current_task(inst, self.is_guest_async_lifted, self.callee);
+                self.start_current_task(inst, self.is_async, self.callee);
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
@@ -1402,10 +1407,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 match amt {
                     // Handle no result case
                     0 => {
-                        assert!(
-                            !self.is_guest_async_lifted,
-                            "async lifted guest functions must return a single i32"
-                        );
                         if let Some(f) = &self.post_return {
                             uwriteln!(
                                 self.src,
@@ -1417,10 +1418,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     // Handle single result<t> case
                     1 if self.err == ErrHandling::ThrowResultErr => {
-                        assert!(
-                            !self.is_guest_async_lifted,
-                            "async lifted guest functions must return a single i32"
-                        );
                         let component_err = self.intrinsic(Intrinsic::ComponentError);
                         let op = &operands[0];
                         uwriteln!(self.src, "const retCopy = {op};");
@@ -1452,13 +1449,14 @@ impl Bindgen for FunctionBindgen<'_> {
                             _ => format!("[{}]", operands.join(", ")),
                         };
 
-                        match (self.post_return, self.is_guest_async_lifted) {
-                            (Some(_), true) => unreachable!(
-                                "async lifted guest functions cannot have post returns"
-                            ),
+                        match (self.post_return, self.is_async) {
                             (Some(post_return_fn), _) => {
                                 // In the case there is a post return function, we'll want to copy the value
                                 // then perform the post return before leaving
+                                //
+                                // NOTE: the is_async indicator that a function is async here only tells us about
+                                // the lowering on this side (i.e. it is possible to lower a sync export which
+                                // validly has a post_return)
 
                                 // Write out the assignment for the given return value
                                 uwriteln!(self.src, "const retCopy = {ret_val};");
@@ -1479,8 +1477,12 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(self.src, "return {ret_val};",)
                             }
                             // Async functions never have post returns, but they must interpret async behavior
+                            //
+                            // TODO: implement and return a promise that tracks the result of the async fn
+                            // implementation below takes the returned value (which may be only an async turn indicator)
+                            //
                             (None, _is_guest_async_lifted @ true) => {
-                                uwriteln!(self.src, r#"throw new Error("not yet implemented!");"#,);
+                                uwriteln!(self.src, r#"throw new Error("async lowered return processing not yet implemented!");"#,);
                             }
                         }
                     }
@@ -1968,37 +1970,42 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::StreamLift { payload, ty } => {
                 let stream_ty = &crate::dealias(self.resolve, *ty);
+                let component_idx = self.canon_opts.instance.as_u32();
+                let stream_new_fn =
+                    self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
 
                 // TODO: save payload information in lifted stream
-                match payload {
+                let (payload_lift_fn, payload_lower_fn) = match payload {
+                    None => ("".into(), "".into()),
                     Some(payload_ty) => {
                         match payload_ty {
-                            // TODO: reuse existing lifts
-                            Type::Bool |
-                            Type::U8 |
-                            Type::U16 |
-                            Type::U32 |
-                            Type::U64 |
-                            Type::S8 |
-                            Type::S16 |
-                            Type::S32 |
-                            Type::S64 |
-                            Type::F32 |
-                            Type::F64 |
-                            Type::Char |
-                            Type::String |
-                            Type::ErrorContext => uwriteln!(
-                                self.src,
-                                "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }}",
-                            ),
-                            Type::Id(payload_ty_id) => {
-                                // TODO: deal with missing payload type, should it be possible here?
-                                if let Some(ResourceTable { data, .. }) = &self.resource_map.get(payload_ty_id) {
-                                uwriteln!(
-                                    self.src,
-                                    "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {})'); }}",
-                                    payload_ty_id.index(),
-                                    match data {
+                        // TODO: reuse existing lifts
+                        Type::Bool
+                        | Type::U8
+                        | Type::U16
+                        | Type::U32
+                        | Type::U64
+                        | Type::S8
+                        | Type::S16
+                        | Type::S32
+                        | Type::S64
+                        | Type::F32
+                        | Type::F64
+                        | Type::Char
+                        | Type::String
+                        | Type::ErrorContext => {
+                            (
+                                format!("const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }};"),
+                                format!("const payloadLowerFn = () => {{ throw new Error('lower for {payload_ty:?}'); }};")
+                            )
+                        }
+
+                        Type::Id(payload_ty_id) => {
+                            // TODO: deal with missing payload type, should it be possible here?
+                            if let Some(ResourceTable { data, .. }) =
+                                &self.resource_map.get(payload_ty_id)
+                            {
+                                let identifier = match data {
                                         ResourceData::Host {
                                             local_name,
                                             ..
@@ -2007,41 +2014,57 @@ impl Bindgen for FunctionBindgen<'_> {
                                             resource_name,
                                             ..
                                         } => resource_name,
-                                    }
-                                );
-                                } else {
-                                    // TODO: should it be possible for the type to be missing/not found here?
-                                    uwriteln!(
-                                        self.src,
-                                        "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }}",
-                                    );
-                                }
+                                    };
+
+
+                                (
+                                    format!(
+                                        "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {identifier})'); }};",
+                                        payload_ty_id.index(),
+                                    ),
+                                    format!(
+                                        "const payloadLowerFn = () => {{ throw new Error('lower for {} (identifier {identifier})'); }};",
+                                        payload_ty_id.index(),
+                                    )
+                                )
+
+                            } else {
+                                // TODO: should it be possible for the type to be missing/not found here?
+                                (
+                                    format!(
+                                        "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }};",
+                                    ),
+                                    format!(
+                                        "const payloadLowerFn = () => {{ throw new Error('lower for missing type with type idx {payload_ty:?}'); }};",
+                                    )
+                                )
+
                             }
-                        };
-
-                        // // TODO: save payload type size below and more information about the type w/ the stream?
-                        // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
-
-                        // NOTE: here, rather than create a new `Stream` "resource" using the saved
-                        // ResourceData, we use the stream.new intrinsic directly.
-                        //
-                        // TODO: differentiate "locally" created streams and streams that are lifted in?
-                        //
-                        let tmp = self.tmp();
-                        let result_var = format!("streamResult{tmp}");
-                        let component_idx = self.canon_opts.instance.as_u32();
-                        let stream_new_fn =
-                            self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
-                        uwriteln!(
-                            self.src,
-                            "const {result_var} = {stream_new_fn}({{ componentIdx: {component_idx}, streamTypeRep: {} }});",
-                            stream_ty.index(),
-                        );
-                        results.push(result_var.clone());
+                        }
                     }
+                    }
+                };
 
-                    None => unreachable!("stream with no payload unsupported"),
-                }
+                // // TODO: save payload type size below and more information about the type w/ the stream?
+                // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
+
+                // NOTE: here, rather than create a new `Stream` "resource" using the saved
+                // ResourceData, we use the stream.new intrinsic directly.
+                //
+                // TODO: differentiate "locally" created streams and streams that are lifted in?
+                //
+                let tmp = self.tmp();
+                let result_var = format!("streamResult{tmp}");
+                uwriteln!(
+                    self.src,
+                    "
+                    {payload_lift_fn}
+                    {payload_lower_fn}
+                     const {result_var} = {stream_new_fn}({{ componentIdx: {component_idx}, streamTypeRep: {}, payloadLiftFn, payloadLowerFn, isUnitStream: {} }});",
+                    stream_ty.index(),
+                    payload.is_none(),
+                );
+                results.push(result_var.clone());
             }
 
             // Instruction::AsyncTaskReturn does *not* correspond to an canonical `task.return`,
@@ -2068,12 +2091,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 assert!(
-                    self.is_guest_async_lifted,
+                    self.is_async,
                     "non-async functions should not be performing async returns (func {name})",
                 );
                 assert!(
                     self.post_return.is_none(),
-                    "async fns cannot have post_return specified (func {name})"
+                    "async fn cannot have post_return specified (func {name})"
                 );
 
                 let get_current_task_fn =

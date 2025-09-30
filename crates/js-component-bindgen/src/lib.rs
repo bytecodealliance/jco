@@ -246,15 +246,15 @@ pub fn get_thrown_type(
     }
 }
 
-/// Check whether a given function is a async lifted by by a guest
+/// Check whether a given function is an async fn
 ///
-/// Functions that are designated as guest async lifted represent use of
+/// Functions that are designated as guest async represent use of
 /// the WASI p3 async feature.
 ///
 /// These functions must be called from transpiled javsacript much differently
 /// than they would otherwise be, i.e. in accordance to the Component Model
 /// async feature.
-pub(crate) fn is_guest_async_lifted_fn(func: &Function, canon_opts: &CanonicalOptions) -> bool {
+pub(crate) fn is_async_fn(func: &Function, canon_opts: &CanonicalOptions) -> bool {
     if canon_opts.async_ {
         return true;
     }

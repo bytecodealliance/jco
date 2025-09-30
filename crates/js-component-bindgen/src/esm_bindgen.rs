@@ -8,7 +8,11 @@ use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::source::Source;
 use crate::{uwrite, uwriteln, TranspileOpts};
 
+/// JS local name
 type LocalName = String;
+
+/// Original Wasm function name
+type WasmFuncName = String;
 
 enum ImportBinding {
     Interface(BTreeMap<String, ImportBinding>),
@@ -19,7 +23,7 @@ enum ImportBinding {
 
 enum ExportBinding {
     Interface(BTreeMap<String, ExportBinding>),
-    Local(LocalName),
+    Local(LocalName, WasmFuncName),
 }
 
 #[derive(Default)]
@@ -80,35 +84,49 @@ impl EsmBindgen {
         }
     }
 
-    /// add an exported function binding, optionally on an interface id or kebab name
+    /// Add an exported function binding, optionally on an interface id or kebab name
     pub fn add_export_binding(
         &mut self,
         iface_id_or_kebab: Option<&str>,
         local_name: String,
         func_name: String,
+        func: &wit_parser::Function,
     ) {
         let mut iface = &mut self.exports;
-        if let Some(iface_id_or_kebab) = iface_id_or_kebab {
-            // convert kebab names to camel case, leave ids as-is
-            let iface_id_or_kebab = if iface_id_or_kebab.contains(':') {
-                iface_id_or_kebab.to_string()
-            } else {
-                iface_id_or_kebab.to_lower_camel_case()
-            };
-            if !iface.contains_key(&iface_id_or_kebab) {
-                iface.insert(
-                    iface_id_or_kebab.to_string(),
-                    ExportBinding::Interface(BTreeMap::new()),
-                );
-            }
-            iface = match iface.get_mut(&iface_id_or_kebab).unwrap() {
-                ExportBinding::Interface(iface) => iface,
-                ExportBinding::Local(_) => panic!(
-                    "Exported interface {iface_id_or_kebab} cannot be both a function and an interface"
-                ),
-            };
+        // If we weren't provided an interface ID, it's a local name
+        let Some(iface_id_or_kebab) = iface_id_or_kebab else {
+            iface.insert(
+                func_name,
+                ExportBinding::Local(local_name, func.name.to_string()),
+            );
+            return;
+        };
+
+        // convert kebab names to camel case, leave ids as-is
+        let iface_id_or_kebab = if iface_id_or_kebab.contains(':') {
+            iface_id_or_kebab.to_string()
+        } else {
+            iface_id_or_kebab.to_lower_camel_case()
+        };
+
+        if !iface.contains_key(&iface_id_or_kebab) {
+            iface.insert(
+                iface_id_or_kebab.to_string(),
+                ExportBinding::Interface(BTreeMap::new()),
+            );
         }
-        iface.insert(func_name, ExportBinding::Local(local_name));
+
+        iface = match iface.get_mut(&iface_id_or_kebab).unwrap() {
+            ExportBinding::Interface(iface) => iface,
+            ExportBinding::Local(_, _) => panic!(
+                "Exported interface {iface_id_or_kebab} cannot be both a function and an interface"
+            ),
+        };
+
+        iface.insert(
+            func_name,
+            ExportBinding::Local(local_name, func.name.to_string()),
+        );
     }
 
     /// once all exports have been created, aliases can be populated for interface
@@ -140,11 +158,15 @@ impl EsmBindgen {
         self.export_aliases
             .iter()
             .map(|(alias, name)| (alias.as_ref(), name.as_ref()))
-            .chain(
-                self.exports
-                    .keys()
-                    .map(|name| (name.as_ref(), name.as_ref())),
-            )
+            .chain(self.exports.iter().map(|(name, binding)| {
+                (
+                    name.as_ref(),
+                    match binding {
+                        ExportBinding::Interface(_) => name.as_ref(),
+                        ExportBinding::Local(_, wasm_func_name) => wasm_func_name.as_str(),
+                    },
+                )
+            }))
             .collect()
     }
 
@@ -172,7 +194,7 @@ impl EsmBindgen {
                 local_names.get_or_create(format!("export:{export_name}"), export_name);
             uwriteln!(output, "const {local_name} = {{");
             for (func_name, export) in iface {
-                let ExportBinding::Local(local_name) = export else {
+                let ExportBinding::Local(local_name, _) = export else {
                     panic!("Unsupported nested export interface");
                 };
                 uwriteln!(output, "{}: {local_name},", maybe_quote_id(func_name));
@@ -190,7 +212,7 @@ impl EsmBindgen {
                 first = false
             }
             let local_name = match &self.exports[export_name] {
-                ExportBinding::Local(local_name) => local_name,
+                ExportBinding::Local(local_name, _) => local_name,
                 ExportBinding::Interface(_) => local_names.get(format!("export:{export_name}")),
             };
             let alias_maybe_quoted = maybe_quote_id(alias);
@@ -210,7 +232,7 @@ impl EsmBindgen {
                 first = false
             }
             let local_name = match export {
-                ExportBinding::Local(local_name) => local_name,
+                ExportBinding::Local(local_name, _) => local_name,
                 ExportBinding::Interface(_) => local_names.get(format!("export:{export_name}")),
             };
             let export_name_maybe_quoted = maybe_quote_id(export_name);

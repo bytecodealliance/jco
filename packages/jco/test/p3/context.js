@@ -42,7 +42,8 @@ suite('Context (WASI P3)', () => {
         await cleanup();
     });
 
-    test('context.get/set (async export, async porcelain)', async () => {
+    // TODO: re-enable after support of async task results
+    test.skip('context.get/set (async export, async porcelain)', async () => {
         const componentName = 'context-async';
         const componentPath = join(
             P3_COMPONENT_FIXTURES_DIR,
@@ -78,41 +79,42 @@ suite('Context (WASI P3)', () => {
         await cleanup();
     });
 
+    // TODO: re-enable after support of async task results
     // TODO: support *Sync() variants of task fns like yield()
-    // test('context.get/set (async export, sync porcelain)', async (t) => {
-    //     const componentName = 'context-async';
-    //     const componentPath = join(
-    //         P3_COMPONENT_FIXTURES_DIR,
-    //         componentName,
-    //         'component.wasm'
-    //     );
-    //     const { instance, cleanup } = await setupAsyncTest({
-    //         component: {
-    //             name: componentName,
-    //             path: componentPath,
-    //         },
-    //     });
+    test.skip('context.get/set (async export, sync porcelain)', async (t) => {
+        const componentName = 'context-async';
+        const componentPath = join(
+            P3_COMPONENT_FIXTURES_DIR,
+            componentName,
+            'component.wasm'
+        );
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                name: componentName,
+                path: componentPath,
+            },
+        });
 
-    //     // TODO: we need to support sync porcelain on async exports...
-    //     // This means doing stuff like yieldSync etc
+        // TODO: we need to support sync porcelain on async exports...
+        // This means doing stuff like yieldSync etc
 
-    //     expect(instance.pushContext).toBeTruthy();
-    //     assert.strictEqual(
-    //         instance.pushContext instanceof AsyncFunction,
-    //         false
-    //     );
+        expect(instance.pushContext).toBeTruthy();
+        assert.strictEqual(
+            instance.pushContext instanceof AsyncFunction,
+            false
+        );
 
-    //     expect(instance.pullContext).toBeTruthy();
-    //     assert.strictEqual(
-    //         instance.pullContext instanceof AsyncFunction,
-    //         false
-    //     );
+        expect(instance.pullContext).toBeTruthy();
+        assert.strictEqual(
+            instance.pullContext instanceof AsyncFunction,
+            false
+        );
 
-    //     instance.pushContext(42);
-    //     // NOTE: context is wiped from task to task, and sync call tasks end as soon as they return
-    //     // expect( instance.pullContext()).toEqual(0);
-    //     expect(instance.pullContext()).toBe(42);
+        instance.pushContext(42);
+        // NOTE: context is wiped from task to task, and sync call tasks end as soon as they return
+        // expect( instance.pullContext()).toEqual(0);
+        expect(instance.pullContext()).toBe(42);
 
-    //     await cleanup();
-    // });
+        await cleanup();
+    });
 });

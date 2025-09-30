@@ -335,6 +335,8 @@ impl AsyncStreamIntrinsic {
             //
             // NOTE: this intrinsic is also called from Instruction::StreamLift, in which case there
             // is not an active task, but the componentIdx will be supplied proactively.
+            //
+            // NOTE: Unit streams are represented with a streamTypeRep of null
             Self::StreamNew => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_new_fn = Self::StreamNew.name();
@@ -347,8 +349,8 @@ impl AsyncStreamIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
                     function {stream_new_fn}(args) {{
-                        let {{ streamTypeRep, componentIdx }} = args;
-                        {debug_log_fn}('[{stream_new_fn}()] args', {{ streamTypeRep, componentIdx }});
+                        let {{ streamTypeRep, payloadLiftFn, isUnitStream, componentIdx }} = args;
+                        {debug_log_fn}('[{stream_new_fn}()] args', {{ streamTypeRep, payloadTypeRep, componentIdx }});
 
                         if (!componentIdx) {{
                             const task = {current_task_get_fn}();
@@ -362,11 +364,13 @@ impl AsyncStreamIntrinsic {
                         let stream = new TransformStream();
                         let writableIdx = {global_stream_map}.insert(new {stream_writable_end_class}({{
                             elementTypeRep,
+                            isUnitStream,
                             writable: stream.writable,
                             componentInstanceID,
                         }}));
                         let readableIdx = {global_stream_map}.insert(new {stream_readable_end_class}({{
                             elementTypeRep,
+                            isUnitStream,
                             readable: stream.readable,
                             componentInstanceID,
                         }}));
