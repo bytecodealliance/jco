@@ -40,9 +40,12 @@ wasmparser = { version = "0.239.0", default-features = false }
 wasmprinter = { version = "0.239.0", default-features = false }
 wasmtime-environ = { version = "37.0.1", features= [ "component-model", "compile" ] }
 wat = { version = "1.239.0", default-features = false }
-wit-bindgen = { version = "0.46.0", default-features = false }
-wit-bindgen-core = { version = "0.46.0", default-features = false }
+#wit-bindgen = { version = "0.46.0", default-features = false }
+#wit-bindgen-core = { version = "0.46.0", default-features = false }
 wit-component = { version = "0.239.0", features = ["dummy-module"] }
 wit-parser = { version = "0.239.0", default-features = false }
 
 js-component-bindgen = { path = "./crates/js-component-bindgen" }
+
+wit-bindgen = { path = "../wit-bindgen/crates/guest-rust" }
+wit-bindgen-core = { path = "../wit-bindgen/crates/core" }

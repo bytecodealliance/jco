@@ -46,8 +46,8 @@ use crate::intrinsics::{
 };
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
 use crate::{
-    core, get_thrown_type, is_guest_async_lifted_fn, requires_async_porcelain, source, uwrite,
-    uwriteln, FunctionIdentifier,
+    core, get_thrown_type, is_async_fn, requires_async_porcelain, source, uwrite, uwriteln,
+    FunctionIdentifier,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -179,7 +179,7 @@ struct JsFunctionBindgenArgs<'a> {
     /// Whether the function in question is a host async function (i.e. JSPI)
     requires_async_porcelain: bool,
     /// Whether the function in question is a guest async function (i.e. WASI P3)
-    is_guest_async_lifted: bool,
+    is_async: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -273,19 +273,19 @@ pub fn transpile_bindgen(
         .exports()
         .iter()
         .map(|(export_name, canon_export_name)| {
-            let export = if canon_export_name.contains(':') {
-                instantiator
-                    .component
-                    .exports
-                    .get(canon_export_name, &NameMapNoIntern)
-                    .unwrap()
-            } else {
-                instantiator
-                    .component
-                    .exports
-                    .get(&canon_export_name.to_kebab_case(), &NameMapNoIntern)
-                    .unwrap()
-            };
+            let expected_export_name =
+                if canon_export_name.contains(':') || canon_export_name.starts_with("[async]") {
+                    canon_export_name.to_string()
+                } else {
+                    canon_export_name.to_kebab_case()
+                };
+            let export = instantiator
+                .component
+                .exports
+                .get(&expected_export_name, &NameMapNoIntern)
+                .expect(&format!(
+                    "failed to find component export [{expected_export_name}] (original '{canon_export_name}')",
+                ));
             (
                 export_name.to_string(),
                 instantiator.component.export_items[*export].clone(),
@@ -2301,7 +2301,7 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
 
-        let is_guest_async_lifted = is_guest_async_lifted_fn(func, options);
+        let is_async = is_async_fn(func, options);
 
         if options.async_ {
             assert!(
@@ -2454,7 +2454,7 @@ impl<'a> Instantiator<'a, '_> {
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
                 // Write out function declaration start
-                if requires_async_porcelain | is_guest_async_lifted {
+                if requires_async_porcelain | is_async {
                     // If an import is either an async host import (i.e. JSPI powered)
                     // or a guest async lifted import from another component,
                     // use WebAssembly.Suspending to allow suspending this component
@@ -2484,7 +2484,7 @@ impl<'a> Instantiator<'a, '_> {
                     remote_resource_map: &import_remote_resource_map,
                     abi: AbiVariant::GuestImport,
                     requires_async_porcelain,
-                    is_guest_async_lifted,
+                    is_async,
                 });
                 uwriteln!(self.src.js, "");
 
@@ -3111,7 +3111,7 @@ impl<'a> Instantiator<'a, '_> {
             remote_resource_map,
             abi,
             requires_async_porcelain,
-            is_guest_async_lifted,
+            is_async,
         } = args;
 
         let (memory, realloc) =
@@ -3235,7 +3235,7 @@ impl<'a> Instantiator<'a, '_> {
             src: source::Source::default(),
             resolve: self.resolve,
             requires_async_porcelain,
-            is_guest_async_lifted,
+            is_async,
             canon_opts: opts,
             iface_name,
         };
@@ -3251,17 +3251,11 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 AbiVariant::GuestExport
                 | AbiVariant::GuestExportAsync
-                | AbiVariant::GuestExportAsyncStackful => {
-                    if is_guest_async_lifted {
-                        LiftLower::LiftArgsLowerResults
-                    } else {
-                        LiftLower::LowerArgsLiftResults
-                    }
-                }
+                | AbiVariant::GuestExportAsyncStackful => LiftLower::LowerArgsLiftResults,
             },
             func,
             &mut f,
-            is_guest_async_lifted,
+            is_async,
         );
 
         // Once visiting has completed, write the contents the `FunctionBindgen` generated to output
@@ -3453,23 +3447,25 @@ impl<'a> Instantiator<'a, '_> {
                         &export_resource_map,
                         &export_remote_resource_map,
                     );
-                    if let FunctionKind::Constructor(ty)
+
+                    // Determine the correct export func name
+                    let js_func_name = if let FunctionKind::Constructor(ty)
                     | FunctionKind::Method(ty)
                     | FunctionKind::Static(ty) = func.kind
                     {
-                        let ty = &self.resolve.types[ty];
-                        self.gen.esm_bindgen.add_export_binding(
-                            None,
-                            local_name,
-                            ty.name.as_ref().unwrap().to_upper_camel_case(),
-                        );
+                        self.resolve.types[ty]
+                            .name
+                            .as_ref()
+                            .unwrap()
+                            .to_upper_camel_case()
                     } else {
-                        self.gen.esm_bindgen.add_export_binding(
-                            None,
-                            local_name,
-                            export_name.to_lower_camel_case(),
-                        );
-                    }
+                        export_name.to_lower_camel_case()
+                    };
+
+                    // Add the export binding
+                    self.gen
+                        .esm_bindgen
+                        .add_export_binding(None, local_name, js_func_name, &func);
                 }
 
                 Export::Instance { exports, .. } => {
@@ -3527,24 +3523,27 @@ impl<'a> Instantiator<'a, '_> {
                             &export_remote_resource_map,
                         );
 
-                        if let FunctionKind::Constructor(ty)
+                        // Determine the export func name
+                        let export_func_name = if let FunctionKind::Constructor(ty)
                         | FunctionKind::Method(ty)
                         | FunctionKind::Static(ty) = func.kind
                         {
-                            let ty = &self.resolve.types[ty];
-                            let resource = ty.name.as_ref().unwrap();
-                            self.gen.esm_bindgen.add_export_binding(
-                                Some(export_name),
-                                local_name,
-                                resource.to_upper_camel_case(),
-                            );
+                            self.resolve.types[ty]
+                                .name
+                                .as_ref()
+                                .unwrap()
+                                .to_upper_camel_case()
                         } else {
-                            self.gen.esm_bindgen.add_export_binding(
-                                Some(export_name),
-                                local_name,
-                                func_name.to_lower_camel_case(),
-                            );
-                        }
+                            func_name.to_lower_camel_case()
+                        };
+
+                        // Add the export binding
+                        self.gen.esm_bindgen.add_export_binding(
+                            Some(export_name),
+                            local_name,
+                            export_func_name,
+                            &func,
+                        );
                     }
                 }
 
@@ -3706,7 +3705,7 @@ impl<'a> Instantiator<'a, '_> {
             remote_resource_map: export_remote_resource_map,
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
-            is_guest_async_lifted: is_guest_async_lifted_fn(func, options),
+            is_async: is_async_fn(func, options),
         });
 
         // End the function
