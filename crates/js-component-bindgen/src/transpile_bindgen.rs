@@ -283,9 +283,7 @@ pub fn transpile_bindgen(
                 .component
                 .exports
                 .get(&expected_export_name, &NameMapNoIntern)
-                .expect(&format!(
-                    "failed to find component export [{expected_export_name}] (original '{canon_export_name}')",
-                ));
+                .unwrap_or_else(|| panic!("failed to find component export [{expected_export_name}] (original '{canon_export_name}')"));
             (
                 export_name.to_string(),
                 instantiator.component.export_items[*export].clone(),
@@ -3465,7 +3463,7 @@ impl<'a> Instantiator<'a, '_> {
                     // Add the export binding
                     self.gen
                         .esm_bindgen
-                        .add_export_binding(None, local_name, js_func_name, &func);
+                        .add_export_binding(None, local_name, js_func_name, func);
                 }
 
                 Export::Instance { exports, .. } => {
@@ -3542,7 +3540,7 @@ impl<'a> Instantiator<'a, '_> {
                             Some(export_name),
                             local_name,
                             export_func_name,
-                            &func,
+                            func,
                         );
                     }
                 }

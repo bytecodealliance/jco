@@ -1482,7 +1482,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             // implementation below takes the returned value (which may be only an async turn indicator)
                             //
                             (None, _is_guest_async_lifted @ true) => {
-                                uwriteln!(self.src, r#"throw new Error("async lowered return processing not yet implemented!");"#,);
+                                uwriteln!(
+                                    self.src,
+                                    r#"throw new Error("async lowered return processing not yet implemented!");"#,
+                                );
                             }
                         }
                     }
