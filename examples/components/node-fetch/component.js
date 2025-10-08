@@ -10,14 +10,15 @@ const DEFAULT_URL = "https://jsonplaceholder.typicode.com/posts/1";
  */
 async function getJson(rawURL) {
   const url = new URL(rawURL ?? DEFAULT_URL);
-  const response = await fetch(url);
-  const responseJson = await response.json();
-  return {
-    url: rawURL,
-    // NOTE: We have to stringify the JSON response here because WIT does
-    // not support recursive types natively.
-    responseJson: JSON.stringify(responseJson),
-  };
+    let responseJson = {};
+    const response = await fetch(url);
+    responseJson = await response.json();
+    return {
+        url: rawURL,
+        // NOTE: We have to stringify the JSON response here because WIT does
+        // not support recursive types natively.
+        responseJson: JSON.stringify(responseJson),
+    };
 }
 
 /**
