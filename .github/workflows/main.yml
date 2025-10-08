@@ -312,7 +312,6 @@ jobs:
         run: npm run test --workspace packages/${{ matrix.workspace }}
 
   eslint:
-    name: ESLint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -331,7 +330,6 @@ jobs:
         run: npm run lint
 
   rustfmt:
-    name: Rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -344,7 +342,6 @@ jobs:
         run: cargo fmt -- --check
 
   clippy:
-    name: clippy
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -357,7 +354,6 @@ jobs:
       run: cargo clippy --workspace --all-features --all-targets --keep-going -- -D warnings
 
   examples:
-    name: Example ${{ matrix.project.name }}
     needs:
       - build
     runs-on: ubuntu-latest
