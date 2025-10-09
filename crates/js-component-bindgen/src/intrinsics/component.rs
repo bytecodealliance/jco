@@ -138,7 +138,7 @@ impl ComponentIntrinsic {
                         #syncImportWait = Promise.withResolvers();
                         #lock = null;
 
-                        mayLeave = false;
+                        mayLeave = true;
                         waitableSets = new {rep_table_class}();
                         waitables = new {rep_table_class}();
 

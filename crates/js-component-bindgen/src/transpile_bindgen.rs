@@ -37,6 +37,7 @@ use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
+use crate::intrinsics::p3::host::HostIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
@@ -409,7 +410,7 @@ impl JsBindgen<'_> {
             uwrite!(
                 output,
                 "\
-                        let gen = (function* init () {{
+                        let gen = (function* _initGenerator () {{
                             {}\
                             {};
                         }})();
@@ -465,7 +466,7 @@ impl JsBindgen<'_> {
                     {}
                     {}
                     {maybe_init_export}const $init = (() => {{
-                        let gen = (function* init () {{
+                        let gen = (function* _initGenerator () {{
                             {}\
                             {}\
                             {}\
@@ -945,24 +946,29 @@ impl<'a> Instantiator<'a, '_> {
     fn is_early_trampoline(trampoline: &Trampoline) -> bool {
         matches!(
             trampoline,
-            Trampoline::BackpressureSet { .. }
+            Trampoline::AsyncStartCall { .. }
+                | Trampoline::BackpressureSet { .. }
                 | Trampoline::ContextGet(_)
                 | Trampoline::ContextSet(_)
                 | Trampoline::ErrorContextDebugMessage { .. }
                 | Trampoline::ErrorContextDrop { .. }
                 | Trampoline::ErrorContextNew { .. }
+                | Trampoline::ErrorContextTransfer { .. }
+                | Trampoline::PrepareCall { .. }
                 | Trampoline::ResourceDrop(_)
                 | Trampoline::ResourceNew(_)
                 | Trampoline::ResourceRep(_)
                 | Trampoline::ResourceTransferBorrow
                 | Trampoline::ResourceTransferOwn
-                | Trampoline::SubtaskDrop { .. }
                 | Trampoline::StreamNew { .. }
+                | Trampoline::SubtaskCancel { .. }
+                | Trampoline::SubtaskDrop { .. }
+                | Trampoline::SyncStartCall { .. }
                 | Trampoline::TaskCancel { .. }
                 | Trampoline::TaskReturn { .. }
+                | Trampoline::WaitableJoin { .. }
                 | Trampoline::WaitableSetDrop { .. }
                 | Trampoline::WaitableSetNew { .. }
-                | Trampoline::WaitableJoin { .. },
         )
     }
 
@@ -1572,9 +1578,9 @@ impl<'a> Instantiator<'a, '_> {
                 let local_err_tbl_idx = ty.as_u32();
                 let component_idx = self.types[*ty].instance.as_u32();
                 uwriteln!(
-                            self.src.js,
-                            "const trampoline{i} = {drop_fn}.bind(null, {component_idx}, {local_err_tbl_idx});"
-                        );
+                    self.src.js,
+                    "const trampoline{i} = {drop_fn}.bind(null, {component_idx}, {local_err_tbl_idx});"
+                );
             }
 
             Trampoline::ErrorContextTransfer => {
@@ -1584,17 +1590,56 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "const trampoline{i} = {transfer_fn};");
             }
 
-            Trampoline::SyncStartCall { callback } => {
-                let _ = callback;
-                todo!("sync-start-call not implemented");
+            // This sets up a subtask (sets parent, etc)
+            Trampoline::PrepareCall { memory } => {
+                let prepare_call_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Host(HostIntrinsic::PrepareCall));
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {prepare_call_fn}.bind(null, {});",
+                    memory
+                        .map(|v| v.as_u32().to_string())
+                        .unwrap_or_else(|| "null".into()),
+                );
             }
 
+            Trampoline::SyncStartCall { callback } => {
+                let sync_start_call_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Host(HostIntrinsic::SyncStartCall));
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {sync_start_call_fn}.bind(null, {});",
+                    callback
+                        .map(|v| v.as_u32().to_string())
+                        .unwrap_or_else(|| "null".into()),
+                );
+            }
+
+            // This actually starts a subtask for a from-component async import call
             Trampoline::AsyncStartCall {
                 callback,
                 post_return,
             } => {
-                let _ = (callback, post_return);
-                todo!("async-start-call not implemented");
+                // TODO: Need to create a subtask here
+                // AsyncStartCall means an async call originating from a Component? (either to component or host?)
+                //
+                // Subtask needs to also somehow write itself in as the current subtask?
+                //
+                let async_start_call_fn = self
+                    .gen
+                    .intrinsic(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {async_start_call_fn}.bind(null, {}, {});",
+                    callback
+                        .map(|v| v.as_u32().to_string())
+                        .unwrap_or_else(|| "null".into()),
+                    post_return
+                        .map(|v| v.as_u32().to_string())
+                        .unwrap_or_else(|| "null".into()),
+                );
             }
 
             Trampoline::LowerImport {
@@ -1839,11 +1884,6 @@ impl<'a> Instantiator<'a, '_> {
                     }}
                     ",
                 );
-            }
-
-            Trampoline::PrepareCall { memory } => {
-                let _ = memory;
-                todo!("prepare-call not implemented")
             }
 
             Trampoline::ContextSet(slot) => {
@@ -2129,7 +2169,7 @@ impl<'a> Instantiator<'a, '_> {
                 let callback_idx = index.as_u32();
                 let core_def = self.core_def(def);
                 uwriteln!(self.src.js, "let callback_{callback_idx};",);
-                uwriteln!(self.src.js_init, "callback_{callback_idx} = {core_def}",);
+                uwriteln!(self.src.js_init, "callback_{callback_idx} = {core_def};");
             }
 
             GlobalInitializer::InstantiateModule(m) => match m {

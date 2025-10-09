@@ -32,6 +32,8 @@ async function ensureFile(filePath) {
  *
  * @param {object} args
  * @param {string} args.componentPath - path to the wasm binary that should be tested
+ * @param {object} args.transpile - options to control transpile
+ * @param {object} args.transpile.extraArgs - extra arguments that should be used during transpilation (ex. `{minify: false}`)
  * @returns {Promise<void>} A Promise that resolves when the test completes
  */
 export async function testComponent(args) {
@@ -46,6 +48,7 @@ export async function testComponent(args) {
         jco: {
             transpile: {
                 extraArgs: {
+                    ...(args.transpile?.extraArgs || {}),
                     asyncExports: ['local:local/run#run'],
                 },
             },
@@ -74,14 +77,14 @@ export async function testComponent(args) {
 
 /**
  * Compose two components that are a caller and callee in the style of tests in upstream wasmtime
- * by calling out to the `wac` binary
+ * by calling out to the `wasm-tools` binary
  *
  * @see https://github.com/bytecodealliance/wasmtime/blob/main/crates/misc/component-async-tests/tests/scenario/util.rs
  *
  * @param {object} args
  * @param {string} args.callerPath - path to the caller wasm binary
  * @param {string} args.calleePath - path to the callee wasm binary
- * @param {string} [args.wacBinPath] - path to wasm tools binary
+ * @param {string} [args.wasmToolsBinPath] - path to wasm tools binary
  * @param {string} [args.outputPath] - path the output component should be written to
  * @returns {Promise<string>} A Promise that resolves to the path to the composed component in a tempdir
  */
@@ -95,17 +98,20 @@ export async function composeCallerCallee(args) {
         outputComponentPath = resolve(tmpDir, 'composed.wasm');
     }
 
-    const wacBinPath = args.wacBinPath ?? await which('wac');
-    await ensureFile(wacBinPath);
+    const wasmToolsBinPath = args.wasmToolsBinPath ?? await which('wasm-tools');
+    await ensureFile(wasmToolsBinPath);
 
     const cmd = [
-        wacBinPath,
-        "plug",
+        wasmToolsBinPath,
+        "compose",
         callerPath,
-        "--plug",
+        "--definitions",
         calleePath,
-        "-o",
+        "--output",
         outputComponentPath,
+        // TODO: validation in wasm-tools compose should arguably have async turned on
+        // https://github.com/bytecodealliance/wasm-tools/pull/2354
+        "--skip-validation",
     ].join(" ");
     await exec(cmd);
 

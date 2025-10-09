@@ -248,7 +248,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatBool(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatBool()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ 
+                        if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] !== 0 && vals[0] !== 1) {{ throw new Error('invalid value for core value representing bool'); }}
@@ -263,7 +263,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatS8(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatS8()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ 
+                        if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 127 || vals[0] < -128) {{ throw new Error('invalid value for core value representing s8'); }}
@@ -278,7 +278,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatU8(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatU8()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ 
+                        if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 255 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u8'); }}
@@ -293,7 +293,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatS16(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatS16()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ 
+                        if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 32_767 || vals[0] < -32_768) {{ throw new Error('invalid value for core value representing s16'); }}
@@ -308,7 +308,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatU16(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatU16()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ 
+                        if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 65_535 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u16'); }}
@@ -323,7 +323,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatS32(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatS32()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ 
+                        if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 2_147_483_647 || vals[0] < -2_147_483_648) {{ throw new Error('invalid value for core value representing s32'); }}
@@ -338,7 +338,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatU32(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatU32()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ 
+                        if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
@@ -353,7 +353,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatS64(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatS64()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         if (vals[0] > 9_223_372_036_854_775_807n || vals[0] < -9_223_372_036_854_775_808n) {{ throw new Error('invalid value for core value representing s64'); }}
                         new DataView(memory.buffer).setBigInt64(storagePtr, vals[0], true);
                         return 64;
@@ -366,7 +366,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatU64(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatU64()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         if (vals[0] > 18_446_744_073_709_551_615n || vals[0] < 0n) {{ throw new Error('invalid value for core value representing u64'); }}
                         new DataView(memory.buffer).setBigUint64(storagePtr, vals[0], true);
                         return 64;
@@ -379,7 +379,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatFloat32(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatFloat32()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(memory.buffer).setFloat32(storagePtr, vals[0], true);
                         return 32;
                     }}
@@ -391,7 +391,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatFloat64(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatFloat64()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(memory.buffer).setFloat64(storagePtr, vals[0], true);
                         return 64;
                     }}
@@ -405,7 +405,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatCharUTF16(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatCharUTF16()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(memory.buffer).setFloat64(storagePtr, {i32_to_char_fn}(vals[0]), true);
                         return 4;
                     }}
@@ -419,7 +419,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatCharUTF8(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatStringUTF16()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(memory.buffer).setUint32(storagePtr, {i32_to_char_fn}(vals[0]), true);
                         return 4;
                     }}
@@ -536,7 +536,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function _liftFlatFlags(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatFlags()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        if (vals.length != 1) {{ throw new Error('unexpected number of core vals'); }}
+                        if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
                         return 4;
                     }}
@@ -577,18 +577,18 @@ impl LiftIntrinsic {
 
             Self::LiftFlatResult => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function _liftFlatResult(size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatResult()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         let [start, totalSize] = vals;
                         if (totalSize !== storageLen) {{
-                            throw new Error('storage length doesn't match variant size');
+                            throw new Error("storage length [" + storageLen + "] does not match variant size [" + totalSize + "]");
                         }}
                         const data = new Uint8Array(memory.buffer, start, totalSize);
                         new Uint8Array(memory.buffer, storagePtr, totalSize).set(data);
                         return data.byteLength;
                     }}
-                "));
+                "#));
             }
 
             Self::LiftFlatOwn => {

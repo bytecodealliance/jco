@@ -22,6 +22,7 @@ export default defineConfig({
             'test/fixtures/*',
             'test/common.js',
             'test/helpers.js',
+            'test/p3/ported/wasmtime/component-async/common.js',
         ],
         testTimeout: DEFAULT_TIMEOUT_MS,
         hookTimeout: DEFAULT_TIMEOUT_MS,
