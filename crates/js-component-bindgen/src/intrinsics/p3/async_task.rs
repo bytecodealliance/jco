@@ -1,7 +1,7 @@
 //! Intrinsics that represent helpers that implement async tasks
 
 use crate::{
-    intrinsics::{component::ComponentIntrinsic, Intrinsic},
+    intrinsics::{component::ComponentIntrinsic, p3::waitable::WaitableIntrinsic, Intrinsic},
     source::Source,
 };
 
@@ -539,6 +539,7 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let task_class = Self::AsyncTaskClass.name();
+                let subtask_class = Self::AsyncSubtaskClass.name();
 
                 let awaitable_class = Intrinsic::AwaitableClass.name();
                 let global_async_determinism = Intrinsic::GlobalAsyncDeterminism.name();
@@ -567,6 +568,7 @@ impl AsyncTaskIntrinsic {
                         #onResolve = null;
                         #returnedResults = null;
                         #entryFnName = null;
+                        #subtasks = [];
 
                         cancelled = false;
                         requested = false;
@@ -801,7 +803,6 @@ impl AsyncTaskIntrinsic {
                             }}
                         }}
 
-                        // NOTE: this should likely be moved to a SubTask class
                         async asyncOnBlock(awaitable) {{
                             {debug_log_fn}('[{task_class}#asyncOnBlock()] args', {{ taskID: this.#id, awaitable }});
                             if (!(awaitable instanceof {awaitable_class})) {{
@@ -876,6 +877,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         resolve(result) {{
+                            {debug_log_fn}('[{task_class}#resolve()] args', {{ result }});
                             if (this.#state === {task_class}.State.RESOLVED) {{
                                 throw new Error('task is already resolved');
                             }}
@@ -885,6 +887,8 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         exit() {{
+                            {debug_log_fn}('[{task_class}#exit()] args', {{ }});
+
                             // TODO: ensure there is only one task at a time (scheduler.lock() functionality)
                             if (this.#state !== {task_class}.State.RESOLVED) {{
                                 throw new Error('task exited without resolution');
@@ -903,10 +907,35 @@ impl AsyncTaskIntrinsic {
                             this.startPendingTask();
                         }}
 
-                        startPendingTask(opts) {{
-                            // TODO: implement
+                        startPendingTask(args) {{
+                            {debug_log_fn}('[{task_class}#startPendingTask()] args', args);
+                            throw new Error('{task_class}#startPendingTask() not implemented');
                         }}
 
+                        createSubtask(args) {{
+                            {debug_log_fn}('[{task_class}#createSubtask()] args', args);
+                            const newSubtask = new {subtask_class}({{
+                                componentIdx: this.componentIdx(),
+                                taskID: this.id(),
+                                memoryIdx: args?.memoryIdx,
+                            }});
+                            this.#subtasks.push(newSubtask);
+                            return newSubtask;
+                        }}
+
+                        currentSubtask() {{
+                            {debug_log_fn}('[{task_class}#currentSubtask()]');
+                            if (this.#subtasks.length === 0) {{ throw new Error('no current subtask'); }}
+                            return this.#subtasks.at(-1);
+                        }}
+
+                        endCurrentSubtask() {{
+                            {debug_log_fn}('[{task_class}#endCurrentSubtask()]');
+                            if (this.#subtasks.length === 0) {{ throw new Error('cannot end current subtask: no current subtask'); }}
+                            const subtask = this.#subtasks.pop();
+                            subtask.drop();
+                            return subtask;
+                        }}
                     }}
                 "));
             }
@@ -914,24 +943,135 @@ impl AsyncTaskIntrinsic {
             Self::AsyncSubtaskClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let subtask_class = Self::AsyncSubtaskClass.name();
-                // TODO: remove the public mutable members that are eagerly exposed for early impl
+                let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
                     class {subtask_class} {{
+                        static State = {{
+                            STARTING: 'starting',
+                            STARTED: 'started',
+                            RETURNED: 'returned',
+                            CANCELLED_BEFORE_STARTED: 'cancelled-before-started',
+                            CANCELLED_BEFORE_RETURNED: 'cancelled-before-returned',
+                        }};
+
+                        #state = {subtask_class}.State.STARTING;
+                        #componentIdx;
+                        #taskID;
+
+                        #dropped = false;
+                        #cancelRequested = false;
+
+                        #memoryIdx = null;
                         #lenders = null;
+
                         #waitable = null;
+                        #waitableRep = null;
+                        #waitableResolve = null;
+                        #waitableReject = null;
+
+                        constructor(args) {{
+                            if (!args.componentIdx) {{ throw new Error('missing componentIdx for subtask creation'); }}
+                            this.#componentIdx = args.componentIdx;
+
+                            if (!args.taskID) {{ throw new Error('missing taskID for subtask creation'); }}
+                            this.#taskID = args.taskID;
+
+                            if (args.memoryIdx) {{ this.#memoryIdx = args.memoryIdx; }}
+
+                            if (args.waitable) {{
+                                this.#waitable = args.waitable;
+                            }} else {{
+                                const {{ promise, resolve, reject }} = Promise.withResolvers();
+                                this.#waitableResolve = resolve;
+                                this.#waitableReject = reject;
+
+                                const state = {get_or_create_async_state_fn}(this.#componentIdx);
+                                if (!state) {{
+                                    throw new Error('invalid/missing async state for component instance [' + componentInstanceID + ']');
+                                }}
+
+                                this.#waitable = new {waitable_class}(promise);
+                                this.#waitableRep = state.waitables.insert(this.#waitable);
+                            }}
+
+                            this.#lenders = [];
+                        }}
+
+                        getStateNumber() {{
+                            switch (this.#state) {{
+                                case 'starting': return 0;
+                                case 'started': return 1;
+                                case 'returned': return 2;
+                                case 'cancelled-before-started': return 3;
+                                case 'cancelled-before-returned': return 4;
+                                default: throw new Error('unrecognized async subtask status [' + this.#state + ']');
+                            }}
+                        }}
+
+                        waitableRep() {{ return this.#waitableRep; }}
+
+                        resolved() {{
+                            if (this.#state === {subtask_class}.State.STARTING
+                                || this.#state === {subtask_class}.State.STARTED) {{
+                                return false;
+                            }}
+                            if (this.#state === {subtask_class}.State.RETURNED
+                                || this.#state === {subtask_class}.State.CANCELLED_BEFORE_STARTED
+                                || this.#state === {subtask_class}.State.CANCELLED_BEFORE_RETURNED) {{
+                                return true;
+                            }}
+                            throw new Error('unrecognized internal Subtask state [' + this.#state + ']');
+                        }}
+
+                        addLender(handle) {{
+                            {debug_log_fn}('[{subtask_class}#addLender()] args', {{ handle }});
+                            if (!Number.isNumber(handle)) {{ throw new Error('missing/invalid lender handle [' + handle + ']'); }}
+
+                            if (this.#lenders.length === 0 || this.#waitable.resolved()) {{
+                                throw new Error('subtask has no lendors or has already been resolved');
+                            }}
+
+                            handle.lends++;
+                            this.#lenders.push(handle);
+                        }}
+
+                        deliverResolve() {{
+                            {debug_log_fn}('[{subtask_class}#deliverResolve()] args', {{ }});
+                            if (this.resolveDelivered() || this.resolved()) {{
+                                throw new Error('subtask has already been resolved');
+                            }}
+
+                            for (const lender of this.#lenders) {{
+                                lender.lends--;
+                            }}
+
+                            self.lenders = null;
+                        }}
 
                         resolveDelivered() {{
                             {debug_log_fn}('[{subtask_class}#resolveDelivered()] args', {{ }});
-                            if (this.#lenders || self.resolved) {{
-                                throw new Error('subtask has no lendors or has already been resolved');
+                            if (this.#lenders === null && !this.resolved()) {{
+                                throw new Error('invalid subtask state, lenders missing and subtask has not been resolved');
                             }}
-                           return this.#lenders !== null;
+                            return this.#lenders.length === 0;
                         }}
 
                         drop() {{
                             {debug_log_fn}('[{subtask_class}#drop()] args', {{ }});
-                            this.resolveDelivered();
-                            if (#this.waitable) {{ this.#waitable.drop(); }}
+                            if (!this.resolveDelivered()) {{
+                                throw new Error('cannot drop subtask before resolve is delivered');
+                            }}
+                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
+                            this.#waitable.drop();
+                            this.#dropped = true;
+                        }}
+
+                        getWaitableHandleIdx() {{
+                            {debug_log_fn}('[{subtask_class}#getWaitableHandleIdx()] args', {{ }});
+                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
+                            return this.#waitableRep;
                         }}
                     }}
                 "));

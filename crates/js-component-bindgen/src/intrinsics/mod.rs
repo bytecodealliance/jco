@@ -32,6 +32,7 @@ use p3::async_future::AsyncFutureIntrinsic;
 use p3::async_stream::AsyncStreamIntrinsic;
 use p3::async_task::AsyncTaskIntrinsic;
 use p3::error_context::ErrCtxIntrinsic;
+use p3::host::HostIntrinsic;
 use p3::waitable::WaitableIntrinsic;
 
 /// List of all intrinsics that are used by these
@@ -53,6 +54,7 @@ pub enum Intrinsic {
     AsyncStream(AsyncStreamIntrinsic),
     AsyncFuture(AsyncFutureIntrinsic),
     Component(ComponentIntrinsic),
+    Host(HostIntrinsic),
 
     // Polyfills
     PromiseWithResolversPolyfill,
@@ -193,6 +195,12 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     ));
     args.intrinsics
         .insert(Intrinsic::PromiseWithResolversPolyfill);
+    args.intrinsics
+        .insert(Intrinsic::Host(HostIntrinsic::PrepareCall));
+    args.intrinsics
+        .insert(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
+    args.intrinsics
+        .insert(Intrinsic::Host(HostIntrinsic::SyncStartCall));
 
     // Handle intrinsic "dependence"
     if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
@@ -320,6 +328,8 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
             &Intrinsic::RepTableClass,
             &Intrinsic::AwaitableClass,
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
+            &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
         ]);
     }
 
@@ -362,6 +372,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             Intrinsic::AsyncStream(i) => i.render(&mut output),
             Intrinsic::AsyncFuture(i) => i.render(&mut output),
             Intrinsic::Component(i) => i.render(&mut output),
+            Intrinsic::Host(i) => i.render(&mut output),
 
             Intrinsic::GlobalAsyncDeterminism => {
                 output.push_str(&format!(
@@ -379,7 +390,8 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             }
 
             Intrinsic::AwaitableClass => {
-                output.push_str(&format!("
+                output.push_str(&format!(
+                    "
                     class {class_name} {{
                         static _ID = 0n;
 
@@ -388,7 +400,10 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         #resolved = false;
 
                         constructor(promise) {{
-                            if (!promise) {{ throw new TypeError('Awaitable must have an interior promise'); }}
+                            if (!promise) {{
+                                throw new TypeError('Awaitable must have an interior promise');
+                            }}
+
                             if (!('then' in promise) || typeof promise.then !== 'function') {{
                                 throw new Error('missing/invalid promise');
                             }}
@@ -404,7 +419,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         then() {{ return this.#promise.then(...arguments); }}
                     }}
                 ",
-                class_name = current_intrinsic.name(),
+                    class_name = current_intrinsic.name(),
                 ));
             }
 
@@ -759,39 +774,42 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                                 this.#data.push(null);
                                 return (this.#data.length >> 1) - 1;
                             }}
-                            this.#data[0] = this.#data[freeIdx];
-                            const newFreeIdx = freeIdx << 1;
-                            this.#data[newFreeIdx] = val;
-                            this.#data[newFreeIdx + 1] = null;
-                            return free;
+                            this.#data[0] = this.#data[freeIdx << 1];
+                            const placementIdx = freeIdx << 1;
+                            this.#data[placementIdx] = val;
+                            this.#data[placementIdx + 1] = null;
+                            return freeIdx;
                         }}
 
                         get(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ rep }});
-                            const baseIdx = idx << 1;
+                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep }});
+                            const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
                             return val;
                         }}
 
                         contains(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ rep }});
-                            const baseIdx = idx << 1;
+                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep }});
+                            const baseIdx = rep << 1;
                             return !!this.#data[baseIdx];
                         }}
 
                         remove(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ idx }});
+                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep }});
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
-                            const baseIdx = idx << 1;
+                            const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
                             if (val === 0) {{ throw new Error('invalid resource rep (cannot be 0)'); }}
+
                             this.#data[baseIdx] = this.#data[0];
-                            this.#data[0] = idx;
+                            this.#data[0] = rep;
+
                             return val;
                         }}
 
                         clear() {{
+                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep }});
                             this.#data = [0, null];
                         }}
                     }}
@@ -869,6 +887,7 @@ impl Intrinsic {
             Intrinsic::AsyncStream(i) => i.name(),
             Intrinsic::AsyncFuture(i) => i.name(),
             Intrinsic::Component(i) => i.name(),
+            Intrinsic::Host(i) => i.name(),
 
             Intrinsic::Base64Compile => "base64Compile",
             Intrinsic::ClampGuest => "clampGuest",

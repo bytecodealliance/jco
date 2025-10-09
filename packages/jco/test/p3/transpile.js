@@ -89,9 +89,9 @@ const P3_FIXTURE_COMPONENTS = [
 
     'clocks/p3_clocks_sleep.component.wasm',
 
-    'error-context/async_error_context.component.wasm',
-    'error-context/async_error_context_callee.component.wasm',
-    'error-context/async_error_context_caller.component.wasm',
+    'error-context/async-error-context.wasm',
+    'error-context/async-error-context-callee.wasm',
+    'error-context/async-error-context-caller.wasm',
 ];
 
 suite('Transpile (WASI P3)', () => {
