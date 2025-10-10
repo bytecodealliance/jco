@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.15.1] - 2025-10-10
+
+### 🧪 Testing
+
+* *(jco)* port more tests, use updated wit-bindgen-core by @vados-cosmonic
+
+* *(jco)* port p3-prototyping tests by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update componentize-js to v0.19.1 by @vados-cosmonic in #1044
+
+* *(jco)* update jco version in examples by @vados-cosmonic in #1045
+
+
+
+
 ## [1.15.0] - 2025-09-11
 
 ### 🚀 Features
