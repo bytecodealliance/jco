@@ -73,7 +73,7 @@ jobs:
         with:
           tool: cargo-get
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: ">=22"
 
@@ -233,7 +233,7 @@ jobs:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
 
       # NOTE: we must use a node version new-enough to have --experimental-wasm-jspi
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: ">=22"
 
@@ -294,7 +294,7 @@ jobs:
         with:
           path: artifacts
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: ">=22"
 
@@ -347,7 +347,7 @@ jobs:
       # NOTE: We need to checkout to pull npmrc
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: ">=22"
 
