@@ -281,7 +281,7 @@ async function processPullRequestOrIssue(args) {
         repo: ghRepo,
         pull_number: issueOrPRNumber,
     });
-    const prBody = pr.body;
+    const prBody = pr.body ?? "";
 
     console.error(`beginning comment processing for PR [${issueOrPRNumber}]`, {
         prBody,
