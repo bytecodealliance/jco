@@ -1,7 +1,7 @@
 import process from 'node:process';
 import { fork } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
-import { readFileSync, rmdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
@@ -18,7 +18,7 @@ process.on('exit', () => {
     for (const server of servers) {
         server.send(null);
     }
-    rmdirSync(testDir, { recursive: true });
+    rmSync(testDir, { recursive: true });
 });
 
 symlinkSync(

@@ -1,7 +1,7 @@
 import { _setArgs, _setEnv } from "@bytecodealliance/preview2-shim/cli";
 import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp } from 'node:fs/promises';
-import { rmdirSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import process from 'node:process';
 
 const isWindows = process.platform === 'win32';
@@ -32,6 +32,6 @@ _setPreopens({ '/': testDir });
 
 process.on('exit', () => {
   try {
-    rmdirSync(testDir, { recursive: true });
+    rmSync(testDir, { recursive: true });
   } catch { }
 });
