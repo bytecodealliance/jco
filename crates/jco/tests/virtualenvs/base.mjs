@@ -1,7 +1,7 @@
 import { _setEnv } from "@bytecodealliance/preview2-shim/cli";
 import { _setPreopens } from "@bytecodealliance/preview2-shim/filesystem";
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
-import { rmdirSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { platform } from 'node:process';
 import process from 'node:process';
@@ -35,5 +35,5 @@ if (platform === 'darwin') {
 _setEnv(env);
 
 process.on('exit', () => {
-  rmdirSync(testDir, { recursive: true });
+  rmSync(testDir, { recursive: true });
 });
