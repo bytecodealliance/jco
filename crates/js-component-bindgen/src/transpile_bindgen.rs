@@ -953,7 +953,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::ErrorContextDebugMessage { .. }
                 | Trampoline::ErrorContextDrop { .. }
                 | Trampoline::ErrorContextNew { .. }
-                | Trampoline::ErrorContextTransfer { .. }
+                | Trampoline::ErrorContextTransfer
                 | Trampoline::PrepareCall { .. }
                 | Trampoline::ResourceDrop(_)
                 | Trampoline::ResourceNew(_)
