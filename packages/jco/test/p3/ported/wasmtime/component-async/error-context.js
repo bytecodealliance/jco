@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
-import { suite, test, assert } from 'vitest';
+import { suite, test } from 'vitest';
 
 import { testComponent, composeCallerCallee } from "./common.js";
 
