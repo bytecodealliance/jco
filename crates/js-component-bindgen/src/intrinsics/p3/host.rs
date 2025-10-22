@@ -7,6 +7,7 @@ use crate::source::Source;
 
 /// This enum contains intrinsics that implement async calls
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[allow(clippy::enum_variant_names)]
 pub enum HostIntrinsic {
     /// Intrinsic used by the host to prepare trampoline calls
     ///
@@ -75,11 +76,7 @@ impl HostIntrinsic {
 
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        [
-            "syncStartCall",
-            "asyncStartCall",
-            "prepareCall",
-        ]
+        ["syncStartCall", "asyncStartCall", "prepareCall"]
     }
 
     /// Get the name for the intrinsic
