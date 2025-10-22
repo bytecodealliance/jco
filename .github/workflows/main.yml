@@ -89,6 +89,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - uses: taiki-e/cache-cargo-install-action@7447f04c51f2ba27ca35e7f1e28fab848c5b3ba7 # v2.3.1
+        with:
+          tool: wasm-tools
+
       # Determine weval version
       - name: Determine weval version
         id: weval-meta
