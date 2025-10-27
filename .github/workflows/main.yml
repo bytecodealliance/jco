@@ -60,7 +60,7 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04 # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
-          - windows-2022
+          - windows-latest
           - macos-latest
         node:
           - 18.x
@@ -68,7 +68,7 @@ jobs:
           - 22.x
           - latest
         include:
-          - os: windows-2022
+          - os: windows-latest
             weval-bin-path: .weval-bin/weval.exe
           - os: ubuntu-22.04
             weval-bin-path: .weval-bin/weval
@@ -79,9 +79,9 @@ jobs:
             node: 20.x
           - os: macos-latest
             node: 18.x
-          - os: windows-2022
+          - os: windows-latest
             node: latest
-          - os: windows-2022
+          - os: windows-latest
             node: 18.x
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -116,7 +116,7 @@ jobs:
           curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
           tar -xvJf weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux.tar.xz
           mv weval-${{ steps.weval-meta.outputs.version }}-x86_64-linux/weval .weval-bin
-      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'windows-2022' }}
+      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && matrix.os == 'windows-latest' }}
         run: |
           curl -LO https://github.com/bytecodealliance/weval/releases/download/${{ steps.weval-meta.outputs.version }}/weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows.zip
           unzip weval-${{ steps.weval-meta.outputs.version }}-x86_64-windows.zip
@@ -226,7 +226,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - windows-2022
+          - windows-latest
           - macos-latest
         node:
           - 18.x
@@ -237,9 +237,9 @@ jobs:
             node: 20.x
           - os: macos-latest
             node: 18.x
-          - os: windows-2022
+          - os: windows-latest
             node: 20.x
-          - os: windows-2022
+          - os: windows-latest
             node: 18.x
       fail-fast: false
     runs-on: ${{ matrix.os }}
