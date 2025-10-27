@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url';
 import { exec as syncExec } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
@@ -10,6 +11,10 @@ import { setupAsyncTest, getTmpDir } from '../../../../helpers.js';
 import { AsyncFunction } from '../../../../common.js';
 
 const exec = promisify(syncExec);
+
+export const COMPONENT_FIXTURES_DIR = fileURLToPath(
+    new URL('../../../../fixtures/components', import.meta.url)
+);
 
 /** Ensure that the given file path exists */
 async function ensureFile(filePath) {
