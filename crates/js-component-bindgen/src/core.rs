@@ -43,6 +43,7 @@ use wasm_encoder::{
     CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
     Module, TypeSection,
 };
+use wasmparser::types::TypeIdentifier as _;
 use wasmparser::{
     Export, ExternalKind, FunctionBody, Import, Parser, Payload, TypeRef, Validator, VisitOperator,
     VisitSimdOperator, WasmFeatures,
@@ -475,7 +476,41 @@ fn valtype(ty: wasmparser::ValType) -> wasm_encoder::ValType {
         wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
         wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
         wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-        wasmparser::ValType::Ref(_) => unimplemented!(),
+        wasmparser::ValType::Ref(t) => wasm_encoder::ValType::Ref(wasm_encoder::RefType {
+            nullable: t.is_nullable(),
+            heap_type: match t.heap_type() {
+                wasmparser::HeapType::Abstract { shared, ty } => wasm_encoder::HeapType::Abstract {
+                    shared,
+                    ty: match ty {
+                        wasmparser::AbstractHeapType::Func => wasm_encoder::AbstractHeapType::Func,
+                        wasmparser::AbstractHeapType::Extern => wasm_encoder::AbstractHeapType::Extern,
+                        wasmparser::AbstractHeapType::Any => wasm_encoder::AbstractHeapType::Any,
+                        wasmparser::AbstractHeapType::None => wasm_encoder::AbstractHeapType::None,
+                        wasmparser::AbstractHeapType::NoExtern => wasm_encoder::AbstractHeapType::NoExtern,
+                        wasmparser::AbstractHeapType::NoFunc => wasm_encoder::AbstractHeapType::NoFunc,
+                        wasmparser::AbstractHeapType::Eq => wasm_encoder::AbstractHeapType::Eq,
+                        wasmparser::AbstractHeapType::Struct => wasm_encoder::AbstractHeapType::Struct,
+                        wasmparser::AbstractHeapType::Array => wasm_encoder::AbstractHeapType::Array,
+                        wasmparser::AbstractHeapType::I31 => wasm_encoder::AbstractHeapType::I31,
+                        wasmparser::AbstractHeapType::Exn => wasm_encoder::AbstractHeapType::Exn,
+                        wasmparser::AbstractHeapType::NoExn => wasm_encoder::AbstractHeapType::NoExn,
+                        wasmparser::AbstractHeapType::Cont => wasm_encoder::AbstractHeapType::Cont,
+                        wasmparser::AbstractHeapType::NoCont => wasm_encoder::AbstractHeapType::NoCont,
+                    },
+                },
+                wasmparser::HeapType::Concrete(unpacked_idx) => match unpacked_idx {
+                    wasmparser::UnpackedIndex::Module(idx)
+                        | wasmparser::UnpackedIndex::RecGroup(idx) => {
+                            wasm_encoder::HeapType::Concrete(idx)
+                        }
+                    wasmparser::UnpackedIndex::Id(core_type_id) => {
+                        wasm_encoder::HeapType::Concrete(
+                            u32::try_from(core_type_id.index()).unwrap(),
+                        )
+                    }
+                },
+            },
+        }),
     }
 }
 
