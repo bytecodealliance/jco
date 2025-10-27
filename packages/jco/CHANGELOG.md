@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.15.2] - 2025-10-27
+
+### 🧪 Testing
+
+* *(jco)* add upstream error-context caller/callee tests by @vados-cosmonic
+
+* *(jco)* port single-component p3 error-context scenario by @vados-cosmonic
+
+* *(jco)* add machinery for running upstream tests by @vados-cosmonic
+
+* *(jco)* fix rmdirSync use with recursive by @vados-cosmonic in #1056
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update componentize-js to v0.19.3 by @vados-cosmonic in #1070
+
+* *(jco)* update upstream wasm deps to *.240.0 by @vados-cosmonic in #1065
+
+* *(jco)* update wit-bindgen to v0.47.0 by @vados-cosmonic
+
+* *(jco)* fix lint by @vados-cosmonic in #1061
+
+
+
+
 ## [1.15.1] - 2025-10-10
 
 ### 🧪 Testing
