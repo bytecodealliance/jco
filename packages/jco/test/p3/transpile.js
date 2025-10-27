@@ -52,8 +52,8 @@ const P3_FIXTURE_COMPONENTS = [
     'round-trip/async_round_trip_many_stackless.component.wasm',
     'round-trip/async_round_trip_stackless_sync_import.component.wasm',
 
-    'backpressure/async_backpressure_caller.component.wasm',
-    'backpressure/async_backpressure_callee.component.wasm',
+    'backpressure/async-backpressure-caller.wasm',
+    'backpressure/async-backpressure-callee.wasm',
 
     'http/p3_http_outbound_request_unknown_method.component.wasm',
     'http/p3_http_outbound_request_invalid_dnsname.component.wasm',
@@ -86,12 +86,14 @@ const P3_FIXTURE_COMPONENTS = [
     'poll/async_poll_synchronous.component.wasm',
 
     'random/p3_random_imports.component.wasm',
-
+    {
     'clocks/p3_clocks_sleep.component.wasm',
 
     'error-context/async-error-context.wasm',
     'error-context/async-error-context-callee.wasm',
     'error-context/async-error-context-caller.wasm',
+
+    
 ];
 
 suite('Transpile (WASI P3)', () => {
