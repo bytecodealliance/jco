@@ -36,6 +36,9 @@ const P3_FIXTURE_COMPONENTS = [
     'general/async-post-return-caller.wasm',
     'general/async-post-return-callee.wasm',
 
+    'general/async-sleep-post-return-caller.wasm',
+    'general/async-sleep-post-return-callee.wasm',
+
     'general/async_borrowing_caller.component.wasm',
     'general/async_borrowing_callee.component.wasm',
     'general/async_intertask_communication.component.wasm',
