@@ -2,7 +2,7 @@ import { join } from 'node:path';
 
 import { suite, test } from 'vitest';
 
-import { testComponent, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
+import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
 
 // These tests are ported from upstream wasmtime's component-async-tests
 //
@@ -15,7 +15,16 @@ suite('error-context scenario', () => {
             COMPONENT_FIXTURES_DIR,
             'p3/error-context/async-error-context.wasm'
         );
-        await testComponent({ componentPath });
+
+        let cleanup;
+        try {
+            const res = await buildAndTranspile({ componentPath });
+            const instance = res.instance;
+            cleanup = res.cleanup;
+            await instance['local:local/run'].asyncRun();
+        } finally {
+            if (cleanup) { await cleanup(); }
+        }
     });
 
     test('caller & callee', async () => {
@@ -31,6 +40,15 @@ suite('error-context scenario', () => {
             callerPath,
             calleePath,
         });
-        await testComponent({ componentPath });
+
+        let cleanup;
+        try {
+            const res = await buildAndTranspile({ componentPath });
+            cleanup = res.cleanup;
+            const instance = res.instance;
+            await instance['local:local/run'].asyncRun();
+        } finally {
+            if (cleanup) { await cleanup(); }
+        }
     });
 });

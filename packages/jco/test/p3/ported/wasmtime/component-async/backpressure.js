@@ -2,7 +2,7 @@ import { join } from 'node:path';
 
 import { suite, test } from 'vitest';
 
-import { testComponent, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
+import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
 
 // These tests are ported from upstream wasmtime's component-async-tests
 //
@@ -23,6 +23,15 @@ suite('backpressure scenario', () => {
             callerPath,
             calleePath,
         });
-        await testComponent({ componentPath });
+
+        let cleanup;
+        try {
+            const res = await buildAndTranspile({ componentPath });
+            const instance = res.instance;
+            cleanup = res.cleanup;
+            await instance['local:local/run'].asyncRun();
+        } finally {
+            if (cleanup) { await cleanup(); }
+        }
     });
 });

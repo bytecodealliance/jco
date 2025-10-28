@@ -47,8 +47,8 @@ use crate::intrinsics::{
 };
 use crate::names::{LocalNames, is_js_reserved_word, maybe_quote_id, maybe_quote_member};
 use crate::{
-    FunctionIdentifier, core, get_thrown_type, is_async_fn, requires_async_porcelain, source,
-    uwrite, uwriteln,
+    FunctionIdentifier, ManagesIntrinsics, core, get_thrown_type, is_async_fn,
+    requires_async_porcelain, source, uwrite, uwriteln,
 };
 
 /// Number of flat parameters allowed before spilling over to memory
@@ -162,6 +162,9 @@ struct JsBindgen<'a> {
 
     /// List of all core Wasm exported functions (and if is async) referenced in
     /// `src` so far.
+    ///
+    /// The second boolean is true when async procelain is required *or* if the
+    /// export itself is async.
     all_core_exported_funcs: Vec<(String, bool)>,
 }
 
@@ -187,6 +190,12 @@ struct JsFunctionBindgenArgs<'a> {
     requires_async_porcelain: bool,
     /// Whether the function in question is a guest async function (i.e. WASI P3)
     is_async: bool,
+}
+
+impl<'a> ManagesIntrinsics for JsBindgen<'a> {
+    fn add_intrinsic(&mut self, intrinsic: Intrinsic) {
+        self.intrinsic(intrinsic);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -397,6 +406,7 @@ impl JsBindgen<'_> {
             );
         }
 
+        // Render all imports
         let imports_object = if self.opts.instantiation.is_some() {
             Some("imports")
         } else {
@@ -405,6 +415,7 @@ impl JsBindgen<'_> {
         self.esm_bindgen
             .render_imports(&mut output, imports_object, &mut self.local_names);
 
+        // Create instantiation code
         if self.opts.instantiation.is_some() {
             uwrite!(&mut self.src.js, "{}", &core_exported_funcs as &str);
             self.esm_bindgen.render_exports(
@@ -568,6 +579,12 @@ struct Instantiator<'a, 'b> {
     async_exports: HashSet<String>,
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
+}
+
+impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
+    fn add_intrinsic(&mut self, intrinsic: Intrinsic) {
+        self.bindgen.intrinsic(intrinsic);
+    }
 }
 
 impl<'a> Instantiator<'a, '_> {
@@ -1613,11 +1630,11 @@ impl<'a> Instantiator<'a, '_> {
                     .intrinsic(Intrinsic::Host(HostIntrinsic::PrepareCall));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {prepare_call_fn}.bind(null, {});",
-                    memory
+                    "const trampoline{i} = {prepare_call_fn}.bind(null, {memory});",
+                    memory = memory
                         .map(|v| v.as_u32().to_string())
                         .unwrap_or_else(|| "null".into()),
-                );
+                )
             }
 
             Trampoline::SyncStartCall { callback } => {
@@ -1633,38 +1650,133 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            // This actually starts a subtask for a from-component async import call
+            // This actually starts a Task (whose parent is a subtask generated during PrepareCall)
+            // for a from-component async import call
             Trampoline::AsyncStartCall {
                 callback,
                 post_return,
             } => {
-                // TODO: Need to create a subtask here
-                // AsyncStartCall means an async call originating from a Component? (either to component or host?)
-                //
-                // Subtask needs to also somehow write itself in as the current subtask?
-                //
                 let async_start_call_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
+                let (callback_idx, callback_fn) = callback
+                    .map(|v| (v.as_u32().to_string(), format!("callback_{}", v.as_u32())))
+                    .unwrap_or_else(|| ("null".into(), "null".into()));
+                let (post_return_idx, post_return_fn) = post_return
+                    .map(|v| {
+                        (
+                            v.as_u32().to_string(),
+                            format!("post_return_{}", v.as_u32()),
+                        )
+                    })
+                    .unwrap_or_else(|| ("null".into(), "null".into()));
+
+                // TODO: need to find the callee[adapter0] for this
+                // it's known when we instantiateCore for a given component
+                //
+                // FOR EXAMPLE:
+                //
+                // ```js
+                // ({ exports: exports7 } = yield instantiateCore(yield module8, {
+                //   async: {
+                //     '[start-call]adapter0': trampoline45,
+                //   },
+                //   callback: {
+                //     f0: exports1['[callback][async-lift]local:local/sleep-post-return#[async]run'],
+                //   },
+                //   callee: {
+                //     adapter0: exports1['[async-lift]local:local/sleep-post-return#[async]run'],
+                //   },
+                //   flags: {
+                //     instance1: instanceFlags1,
+                //     instance4: instanceFlags4,
+                //   },
+                //   sync: {
+                //     '[prepare-call]adapter0': trampoline46,
+                //   },
+                // }));
+                // ```
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {async_start_call_fn}.bind(null, {}, {});",
-                    callback
-                        .map(|v| v.as_u32().to_string())
-                        .unwrap_or_else(|| "null".into()),
-                    post_return
-                        .map(|v| v.as_u32().to_string())
-                        .unwrap_or_else(|| "null".into()),
+                    "const trampoline{i} = {async_start_call_fn}.bind(
+                         null,
+                         {{
+                             postReturnIdx: {post_return_idx},
+                             getPostReturnFn: () => {post_return_fn},
+                             callbackIdx: {callback_idx},
+                             getCallbackFn: () => {callback_fn},
+                             getCallee: () => {callback_fn},
+                         }},
+                     );",
                 );
             }
 
+            // NOTE: lower import trampoline is called, and can generate a function,
+            // but that is *not currently used* by the generated code.
+            //
+            // The approach that probably works here is to WRAP the actual function (which is called `trampoline<lowered index>`)
+            // and do the relevant functionality that is inherent to canon_lower
             Trampoline::LowerImport {
                 index,
                 lower_ty,
                 options,
             } => {
-                let _ = (index, lower_ty, options);
-                // TODO: implement (can't build without, empty does work)
+                let canon_opts = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options");
+
+                let fn_idx = index.as_u32();
+
+                let lower_import_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::LowerImport));
+
+                let _ = (lower_ty, canon_opts);
+
+                // TODO: this trampoline (trampoline{i}) is is *already present*?
+                // current lower input globalizer code already handles it??
+                //
+                // Maybe we need a special function name for this? OR does the other trampoline
+                // get called all the time as well? It can't be, because it *creates* the function
+                // that gets called?
+                //
+                // Maybe that is actually the lower that gets called all the time and should create the
+                // subtask!
+
+                // TODO: the original trampoline (trampoline{i}) MAY point to a function that is
+                // lowered for use inside another component.
+                //
+                // In the post-return test we know that #17 is the async sleep millis and it IS
+                // fed into an instantiated component.
+                //
+                // ```
+                // const trampolineXX = WebAssembly.suspending(...)
+                // ```
+
+
+                // TODO: prepare call & start call are called BEFORE the wasm call that IS a subtask starts.
+                // this is our only way to distinguish between a regular host call and a host call from inside
+                // a component.
+                //
+                // This means one of them has to create the subtask that the rust side is going to be looking for.
+
+                // NOTE: this means that start_call is a guest->guest *only* thing previously prepared
+                // In our case the only valid thign is going to
+                //
+                // The functionidx is useless it seems, trampoline idx *does* match though
+
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline_lower_{i} = {lower_import_fn}.bind(
+                         null,
+                         {{
+                             functionIdx: {fn_idx},
+                         }},
+                     );",
+                );
             }
 
             Trampoline::AlwaysTrap => {
@@ -2218,6 +2330,7 @@ impl<'a> Instantiator<'a, '_> {
         let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
 
+        // Determine the name of the function
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
@@ -2236,6 +2349,7 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
+        // eprintln!("\nGENERATED FUNCTION NAME FOR IMPORT: {func_name} (import name? {import_name})");
 
         let is_async = is_async_fn(func, options);
 
@@ -2425,7 +2539,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "");
 
                 // Write new function ending
-                if requires_async_porcelain {
+                if requires_async_porcelain | is_async {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");
@@ -2556,9 +2670,22 @@ impl<'a> Instantiator<'a, '_> {
 
         // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
-            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
-                (func_name.to_lower_camel_case(), callee_name)
-            }
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => (
+                // TODO: if we want to avoid the naming of 'async<fn name>' (e.g. 'asyncSleepMillis'
+                // vs 'sleepMillis' which just *is* an imported async function)....
+                //
+                // We need to use the code below:
+                //
+                // func_name
+                //     .strip_prefix("[async]")
+                //     .unwrap_or(func_name)
+                //     .to_lower_camel_case(),
+                //
+                // This has the potential to break a lot of downstream consumers who are expecting to
+                // provide 'async<fn name>`, so it must be done before a breaking change.
+                func_name.to_lower_camel_case(),
+                callee_name,
+            ),
 
             FunctionKind::Method(tid)
             | FunctionKind::AsyncMethod(tid)
@@ -3137,6 +3264,20 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        // Every call to a component export should create a new Task
+        let is_guest_top_level_export = matches!(
+            func.kind,
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding
+        ) && matches!(
+            abi,
+            AbiVariant::GuestExport
+                | AbiVariant::GuestExportAsync
+                | AbiVariant::GuestExportAsyncStackful
+        );
+        if is_guest_top_level_export {
+            // TODO: create a new Task for this export call
+        }
+
         // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
@@ -3528,7 +3669,8 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        let maybe_async = if requires_async_porcelain {
+        let is_async = is_async_fn(func, options);
+        let maybe_async = if requires_async_porcelain || is_async {
             "async "
         } else {
             ""
@@ -3547,7 +3689,8 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let {local_name};");
                 self.bindgen
                     .all_core_exported_funcs
-                    .push((core_export_fn.clone(), requires_async_porcelain));
+                    // NOTE: we need
+                    .push((core_export_fn.clone(), requires_async_porcelain || is_async));
                 local_name
             }
         };
@@ -3653,7 +3796,7 @@ impl<'a> Instantiator<'a, '_> {
             remote_resource_map: export_remote_resource_map,
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
-            is_async: is_async_fn(func, options),
+            is_async,
         });
 
         // End the function
@@ -3798,8 +3941,8 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 ///
 /// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
 ///
-fn gen_flat_lift_fn_js_expr(
-    bindgen: &mut JsBindgen<'_>,
+pub fn gen_flat_lift_fn_js_expr(
+    intrinsic_mgr: &mut impl ManagesIntrinsics,
     component_types: &ComponentTypes,
     ty: &InterfaceType,
     canon_opts: &CanonicalOptions,
@@ -3807,35 +3950,78 @@ fn gen_flat_lift_fn_js_expr(
     //let ty_abi = component_types.canonical_abi(ty);
     let string_encoding = canon_opts.string_encoding;
     match ty {
-        InterfaceType::Bool => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool)),
-        InterfaceType::S8 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8)),
-        InterfaceType::U8 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8)),
-        InterfaceType::S16 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16)),
-        InterfaceType::U16 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16)),
-        InterfaceType::S32 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32)),
-        InterfaceType::U32 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32)),
-        InterfaceType::S64 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64)),
-        InterfaceType::U64 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64)),
+        InterfaceType::Bool => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatBool).name().into()
+        }
+        InterfaceType::S8 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatS8).name().into()
+        }
+        InterfaceType::U8 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatU8).name().into()
+        }
+        InterfaceType::S16 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatS16).name().into()
+        }
+        InterfaceType::U16 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatU16).name().into()
+        }
+        InterfaceType::S32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatS32).name().into()
+        }
+        InterfaceType::U32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatU32).name().into()
+        }
+        InterfaceType::S64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatS64).name().into()
+        }
+        InterfaceType::U64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatU64).name().into()
+        }
         InterfaceType::Float32 => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32)
+                .name()
+                .into()
         }
         InterfaceType::Float64 => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64)
+                .name()
+                .into()
         }
-        InterfaceType::Char => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar)),
+        InterfaceType::Char => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatChar).name().into()
+        }
         InterfaceType::String => match string_encoding {
             wasmtime_environ::component::StringEncoding::Utf8 => {
-                bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
+                intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8));
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8)
+                    .name()
+                    .into()
             }
             wasmtime_environ::component::StringEncoding::Utf16 => {
-                bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
+                intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16));
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16)
+                    .name()
+                    .into()
             }
             wasmtime_environ::component::StringEncoding::CompactUtf16 => {
                 todo!("latin1+utf8 not supported")
             }
         },
         InterfaceType::Record(ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
+            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord).name();
             let record_ty = &component_types[*ty_idx];
             let mut keys_and_lifts_expr = String::from("[");
             for f in &record_ty.fields {
@@ -3845,7 +4031,7 @@ fn gen_flat_lift_fn_js_expr(
                 keys_and_lifts_expr.push_str(&format!(
                     "['{}', {}, {}],",
                     f.name,
-                    gen_flat_lift_fn_js_expr(bindgen, component_types, &f.ty, canon_opts),
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, component_types, &f.ty, canon_opts),
                     component_types.canonical_abi(ty).size32,
                 ));
             }
@@ -3853,7 +4039,8 @@ fn gen_flat_lift_fn_js_expr(
             format!("{lift_fn}({keys_and_lifts_expr})")
         }
         InterfaceType::Variant(ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
+            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
             let mut cases_and_lifts_expr = String::from("[");
             for (name, maybe_ty) in &variant_ty.cases {
@@ -3863,7 +4050,7 @@ fn gen_flat_lift_fn_js_expr(
                     maybe_ty
                         .as_ref()
                         .map(|ty| gen_flat_lift_fn_js_expr(
-                            bindgen,
+                            intrinsic_mgr,
                             component_types,
                             ty,
                             canon_opts
@@ -3877,25 +4064,31 @@ fn gen_flat_lift_fn_js_expr(
                 ));
             }
             cases_and_lifts_expr.push(']');
-            format!("{lift_fn}({cases_and_lifts_expr})",)
+            format!("{lift_fn}({cases_and_lifts_expr})")
         }
         InterfaceType::List(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name().into()
         }
         InterfaceType::Tuple(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple).name().into()
         }
         InterfaceType::Flags(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags).name().into()
         }
         InterfaceType::Enum(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name().into()
         }
         InterfaceType::Option(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatOption).name().into()
         }
         InterfaceType::Result(ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
+            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatResult).name();
             let result_ty = &component_types[*ty_idx];
             let mut cases_and_lifts_expr = String::from("[");
             cases_and_lifts_expr.push_str(&format!(
@@ -3904,7 +4097,12 @@ fn gen_flat_lift_fn_js_expr(
                 result_ty
                     .ok
                     .as_ref()
-                    .map(|ty| gen_flat_lift_fn_js_expr(bindgen, component_types, ty, canon_opts))
+                    .map(|ty| gen_flat_lift_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        ty,
+                        canon_opts
+                    ))
                     .unwrap_or(String::from("null")),
                 result_ty
                     .ok
@@ -3919,7 +4117,12 @@ fn gen_flat_lift_fn_js_expr(
                 result_ty
                     .err
                     .as_ref()
-                    .map(|ty| gen_flat_lift_fn_js_expr(bindgen, component_types, ty, canon_opts))
+                    .map(|ty| gen_flat_lift_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        ty,
+                        canon_opts
+                    ))
                     .unwrap_or(String::from("null")),
                 result_ty
                     .err
@@ -3930,22 +4133,29 @@ fn gen_flat_lift_fn_js_expr(
             ));
 
             cases_and_lifts_expr.push(']');
-            format!("{lift_fn}({cases_and_lifts_expr})",)
+            format!("{lift_fn}({cases_and_lifts_expr})")
         }
         InterfaceType::Own(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name().into()
         }
         InterfaceType::Borrow(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name().into()
         }
         InterfaceType::Future(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture).name().into()
         }
         InterfaceType::Stream(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatStream).name().into()
         }
         InterfaceType::ErrorContext(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext)
+                .name()
+                .into()
         }
     }
 }

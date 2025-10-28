@@ -310,6 +310,16 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::TypeCheckValidI32,
+            &Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
+        ]);
+    }
+
+    if args
+        .intrinsics
         .contains(&Intrinsic::Component(ComponentIntrinsic::BackpressureSet))
     {
         args.intrinsics.extend([&Intrinsic::Component(
@@ -335,6 +345,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
             &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
         ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass)]);
     }
 
     if args.intrinsics.contains(&Intrinsic::Component(
@@ -699,12 +717,13 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 output.push_str(&format!(
                     "
                     const {name} = {{
-                        NONE: 'none',
-                        TASK_CANCELLED: 'task-cancelled',
-                        STREAM_READ: 'stream-read',
-                        STREAM_WRITE: 'stream-write',
-                        FUTURE_READ: 'future-read',
-                        FUTURE_WRITE: 'future-write',
+                        NONE: 0,
+                        SUBTASK: 1,
+                        STREAM_READ: 2,
+                        STREAM_WRITE: 3,
+                        FUTURE_READ: 4,
+                        FUTURE_WRITE: 5,
+                        TASK_CANCELLED: 6,
                     }};
                 "
                 ));
