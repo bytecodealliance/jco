@@ -9,8 +9,8 @@ import { transpile } from '../../src/api';
 import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 
 const P3_FIXTURE_COMPONENTS = [
-    'backpressure/async_backpressure_callee.component.wasm',
-    'backpressure/async_backpressure_caller.component.wasm',
+    'backpressure/async-backpressure-callee.wasm',
+    'backpressure/async-backpressure-caller.wasm',
 
     'sockets/tcp/p3_sockets_tcp_states.component.wasm',
     'sockets/tcp/p3_sockets_tcp_sample_application.component.wasm',
@@ -35,6 +35,9 @@ const P3_FIXTURE_COMPONENTS = [
 
     'general/async-post-return-caller.wasm',
     'general/async-post-return-callee.wasm',
+
+    'general/async-sleep-post-return-caller.wasm',
+    'general/async-sleep-post-return-callee.wasm',
 
     'general/async_borrowing_caller.component.wasm',
     'general/async_borrowing_callee.component.wasm',
@@ -87,14 +90,12 @@ const P3_FIXTURE_COMPONENTS = [
     'poll/async_poll_synchronous.component.wasm',
 
     'random/p3_random_imports.component.wasm',
-    {
+
     'clocks/p3_clocks_sleep.component.wasm',
 
     'error-context/async-error-context.wasm',
     'error-context/async-error-context-callee.wasm',
     'error-context/async-error-context-caller.wasm',
-
-    
 ];
 
 suite('Transpile (WASI P3)', () => {

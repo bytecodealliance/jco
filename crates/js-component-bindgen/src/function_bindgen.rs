@@ -8,7 +8,7 @@ use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
 use wit_parser::{
-    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDef, TypeDefKind, TypeId,
+    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
 };
 
 use crate::intrinsics::Intrinsic;
@@ -20,7 +20,7 @@ use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
-use crate::{get_thrown_type, source};
+use crate::{ManagesIntrinsics, get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
 /// Method of error handling
@@ -228,6 +228,7 @@ impl FunctionBindgen<'_> {
     /// Write result assignment lines to output
     ///
     /// In general this either means writing preambles, for example that look like the following:
+    ///
     /// ```js
     /// const ret =
     /// ```
@@ -235,14 +236,22 @@ impl FunctionBindgen<'_> {
     /// ```
     /// var [ ret0, ret1, ret2 ] =
     /// ```
-    fn write_result_assignment(&mut self, amt: usize, results: &mut Vec<String>) {
-        match amt {
-            0 => {}
-            1 => {
+    fn write_result_assignment(&mut self, amt: usize, results: &mut Vec<String>, is_async: bool) {
+        // For async functions there is always a result returned and it's a single integer
+        // which indicates async state. This is a sort of "meta" result -- i.e. it shouldn't be counted
+        // as a regular function result but *should* be made available to the JS internal code.
+        if is_async {
+            uwrite!(self.src, "const ret = ");
+            return;
+        }
+        match (is_async, amt) {
+            (true, _) => {}
+            (false, 0) => {}
+            (false, 1) => {
                 uwrite!(self.src, "const ret = ");
                 results.push("ret".to_string());
             }
-            n => {
+            (false, n) => {
                 uwrite!(self.src, "var [");
                 for i in 0..n {
                     if i > 0 {
@@ -305,7 +314,13 @@ impl FunctionBindgen<'_> {
     }
 
     /// Start the current task
-    fn start_current_task(&mut self, instr: &Instruction, is_async: bool, fn_name: &str) {
+    fn start_current_task(
+        &mut self,
+        instr: &Instruction,
+        is_async: bool,
+        fn_name: &str,
+        callback_fn_name: Option<String>,
+    ) {
         let prefix = match instr {
             Instruction::CallWasm { .. } => "_wasm_call_",
             Instruction::CallInterface { .. } => "_interface_call_",
@@ -316,9 +331,20 @@ impl FunctionBindgen<'_> {
         let start_current_task_fn =
             self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
         let component_instance_idx = self.canon_opts.instance.as_u32();
+
         uwriteln!(
             self.src,
-            "const {prefix}currentTaskID = {start_current_task_fn}({component_instance_idx}, {is_async}, '{fn_name}');"
+            "
+            const [_, {prefix}currentTaskID] = {start_current_task_fn}({{
+                componentIdx: {component_instance_idx},
+                isAsync: {is_async},
+                entryFnName: '{fn_name}',
+                getCallbackFn: () => {callback_fn_name},
+                callbackFnName: '{callback_fn_name}',
+            }});
+            ",
+            // NOTE: callback functions are missing on async imports that are host defined
+            callback_fn_name = callback_fn_name.unwrap_or_else(||"null".into()),
         );
     }
 
@@ -333,6 +359,13 @@ impl FunctionBindgen<'_> {
             self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
         let component_instance_idx = self.canon_opts.instance.as_u32();
         uwriteln!(self.src, "{end_current_task_fn}({component_instance_idx});",);
+    }
+}
+
+impl ManagesIntrinsics for FunctionBindgen<'_> {
+    /// Add an intrinsic, supplying it's name afterwards
+    fn add_intrinsic(&mut self, intrinsic: Intrinsic) {
+        self.intrinsic(intrinsic);
     }
 }
 
@@ -1197,7 +1230,13 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::IterBasePointer => results.push("base".to_string()),
 
             Instruction::CallWasm { name, sig } => {
+                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
+                let current_task_get_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::CallWasm] enter', {{
@@ -1212,13 +1251,39 @@ impl Bindgen for FunctionBindgen<'_> {
                     has_post_return = self.post_return.is_some(),
                 );
 
-                // Inject machinery for starting an async 'current' task
-                self.start_current_task(inst, self.is_async, self.callee);
+                let component_instance_idx = self.canon_opts.instance.as_u32();
+
+                // Inject machinery for starting a 'current' task
+                self.start_current_task(
+                    inst,
+                    self.is_async,
+                    self.callee,
+                    self.canon_opts
+                        .callback
+                        .as_ref()
+                        .map(|v| format!("callback_{}", v.as_u32())),
+                );
+
+                // NOTE: PrepareCall and AsyncStartCall *do* happen right before the guest->guest call
+                // The CallWasm actually returns BEFORE any of that runs.
+                //
+                // This means that AsyncStartCall *DOES* have to start it's own push loop for the subtask,
+                // and call the callee itself???
+
+                // TODO: we need to distinguish between a call from host and guest
+                // so we can know when to create subtasks and also when to DO subtask stuff?
+
+                // TODO: trap if this component is already on the call stack (re-entrancy)
+
+                // TODO(threads): start a thread
+                // TODO(threads): Task#enter needs to be called with the thread that is executing (inside thread_func)
+                // TODO(threads): thread_func will contain the actual call rather than attempting to execute immediately
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
-                self.write_result_assignment(sig_results_length, results);
+                self.write_result_assignment(sig_results_length, results, self.is_async);
 
+                // Write the rest of the result asignment -- calling the callee function
                 uwriteln!(
                     self.src,
                     "{maybe_async_await}{callee}({args});",
@@ -1247,9 +1312,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
 
-                // If we're not dealing with an async call, we can immediately end the task
-                // after the call has completed.
                 if !self.is_async {
+                    // If we're not dealing with an async call, we can immediately end the task
+                    // after the call has completed.
                     self.end_current_task();
                 }
             }
@@ -1264,11 +1329,19 @@ impl Bindgen for FunctionBindgen<'_> {
                     async_ = async_.then_some("async").unwrap_or("sync"),
                 );
 
-                // Inject machinery for starting an async 'current' task
-                self.start_current_task(inst, *async_, &func.name);
+                // Inject machinery for starting a 'current' task
+                self.start_current_task(
+                    inst,
+                    *async_,
+                    &func.name,
+                    self.canon_opts
+                        .callback
+                        .as_ref()
+                        .map(|v| format!("callback_{}", v.as_u32())),
+                );
 
                 let results_length = if func.result.is_none() { 0 } else { 1 };
-                let maybe_async_await = if self.requires_async_porcelain {
+                let maybe_async_await = if self.requires_async_porcelain | async_ {
                     "await "
                 } else {
                     ""
@@ -1315,7 +1388,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                     results.push("ret".to_string());
                 } else {
-                    self.write_result_assignment(results_length, results);
+                    self.write_result_assignment(results_length, results, self.is_async);
                     uwriteln!(self.src, "{call};");
                 }
 
@@ -1343,6 +1416,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // TODO: if it was an async call, we may not be able to clear the borrows yet.
                 // save them to the task/ensure they are added to the task's list of borrows?
+                //
+                // TODO: if there is a subtask, we must not clear borrows until subtask.deliverReturn
+                // is called.
 
                 // After a high level call, we need to deactivate the component resource borrows.
                 if self.clear_resource_borrows {
@@ -1421,14 +1497,41 @@ impl Bindgen for FunctionBindgen<'_> {
                     )
                 };
 
+                assert!(!self.is_async, "async functions should use AsyncTaskReturn");
+
+                // // TODO: this shouldn't be here, handle via AsyncTaskReturn
+                // // see: https://github.com/bytecodealliance/wit-bindgen/pull/1414
+                // if self.is_async {
+                //     // Forward to handling of async task return
+                //     let fn_name = format!("[task-return]{}", func.name);
+                //     let params = {
+                //         let mut container = Vec::new();
+                //         let mut flattened_types = FlatTypes::new(&mut container);
+                //         for (_name, ty) in func.params.iter() {
+                //             self.resolve.push_flat(ty, &mut flattened_types);
+                //         }
+                //         flattened_types.to_vec()
+                //     };
+                //     self.emit(
+                //         resolve,
+                //         &Instruction::AsyncTaskReturn {
+                //             name: &fn_name,
+                //             params: &params,
+                //         },
+                //         operands,
+                //         results,
+                //     );
+                //     return;
+                // }
+
                 // Depending how many values are on the stack after returning, we must execute differently.
                 //
                 // In particular, if this function is async (distinct from whether async porcelain was necessary or not),
                 // rather than simply executing the function we must return (or block for) the promise that was created
                 // for the task.
-                match (self.is_async, stack_value_count) {
+                match stack_value_count {
                     // (sync) Handle no result case
-                    (_is_async @ false, 0) => {
+                    0 => {
                         if let Some(f) = &self.post_return {
                             uwriteln!(
                                 self.src,
@@ -1439,7 +1542,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
 
                     // (sync) Handle single `result<t>` case
-                    (_is_async @ false, 1) if self.err == ErrHandling::ThrowResultErr => {
+                    1 if self.err == ErrHandling::ThrowResultErr => {
                         let component_err = self.intrinsic(Intrinsic::ComponentError);
                         let op = &operands[0];
                         uwriteln!(self.src, "const retCopy = {op};");
@@ -1462,7 +1565,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
 
                     // (sync) Handle all other cases (including single parameter non-result<t>)
-                    (_is_async @ false, stack_value_count) => {
+                    stack_value_count => {
                         let ret_val = match stack_value_count {
                             0 => unreachable!(
                                 "unexpectedly zero return values for synchronous return"
@@ -1490,81 +1593,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         } else {
                             uwriteln!(self.src, "return {ret_val};",)
                         }
-                    }
-
-                    // (async) some async functions will not put values on the stack
-                    (_is_async @ true, 0) => {}
-
-                    // (async) handle return of valid async call (single parameter)
-                    (_is_async @ true, 1) => {
-                        // Given that this function was async lifted, regardless of whether we are allowed to use async
-                        // porcelain or not, we must return a Promise that resolves to the result of this function
-                        //
-                        // If we are using async porcelain, then we can at the very least resolve the promise immediately
-                        // and do the waiting "on our side", but if async porcelain is not enabled, then we must return a
-                        // Promise and let the caller resolve it in their sync fasion however they can (i.e. hopefully off
-                        // the main thread, in a loop somewhere).
-                        //
-                        // It is up to sync callers to resolve the returned Promise to a value, for now,
-                        // we do not attempt to do any synchronous busy waiting until the
-                        //
-                        let component_instance_idx = self.canon_opts.instance.as_u32();
-                        let get_current_task_fn = self
-                            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                        let component_err = self.intrinsic(Intrinsic::ComponentError);
-
-                        // If the return value is a result, we attempt to extract the relevant value from inside
-                        // or throw an error, in keeping with transpile's value handling rules
-                        let mut return_res_js = "return taskRes;".into();
-                        if let Some(Type::Id(result_ty_id)) = func.result
-                            && let Some(TypeDef {
-                                kind: TypeDefKind::Result(_),
-                                ..
-                            }) = self.resolve.types.get(result_ty_id)
-                        {
-                            if self.requires_async_porcelain {
-                                // If we're using async porcelain, then we have already resolved the promise
-                                // to a value, and we can throw if it's an Result that contains an error
-                                return_res_js = format!("
-                                        if (taskRes.tag === 'err') {{ throw new {component_err}(taskRes.val); }}
-                                        return taskRes.val;
-                                    ");
-                            } else {
-                                // If we're not using async porcelain, then we're return a Promise,
-                                // but rather than returning the promise of a Result object, we should
-                                // return the value inside (or error)
-                                return_res_js = format!("
-                                        return taskRes.then((_taskRes) => {{
-                                            if (_taskRes.tag === 'err') {{ throw new {component_err}(_taskRes.val); }}
-                                            return _taskRes.val;
-                                        }});
-                                    ");
-                            }
-                        }
-
-                        uwriteln!(
-                            self.src,
-                            "
-                            const taskMeta = {get_current_task_fn}({component_instance_idx});
-                            if (!taskMeta) {{ throw new Error('failed to find current task metadata'); }}
-                            const task = taskMeta.task;
-                            if (!task) {{ throw new Error('missing/invalid task in current task metadata'); }}
-                            const taskRes = {maybe_async_await} task.completionPromise();
-                            {return_res_js}
-                            ",
-                            maybe_async_await = if self.requires_async_porcelain {
-                                "await "
-                            } else {
-                                ""
-                            }
-                        );
-                    }
-
-                    // (async) more than one value on the stack is not expected
-                    (_is_async @ true, _) => {
-                        unreachable!(
-                            "async functions must return no more than one single i32 result indicating async behavior"
-                        );
                     }
                 }
             }
@@ -2147,13 +2175,20 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             // Instruction::AsyncTaskReturn does *not* correspond to an canonical `task.return`,
-            // but rather to a "return"/exit from an async function (e.g. pre-callback)
+            // but rather to a "return"/exit from an a lifted async function (e.g. pre-callback)
             //
-            // At this point, `ret` has already been declared as the original return value
-            // of the function that was called.
+            // To control the *real* `task.return` intrinsic:
+            //   - `Intrinsic::TaskReturn`
+            //   - `AsyncTaskIntrinsic::TaskReturn`
+            //
+            // This is simply the end of the async function definition (e.g. `CallWasm`) that has been
+            // lifted, which contains information about the async state.
             //
             // For an async function 'some-func', this instruction is triggered w/ the following `name`s:
             // - '[task-return]some-func'
+            //
+            // At this point in code generation, the following things have already been set:
+            // - `ret`: the original function return value, via (i.e. via `CallWasm`/`CallInterface`)
             //
             Instruction::AsyncTaskReturn { name, params } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
@@ -2178,113 +2213,72 @@ impl Bindgen for FunctionBindgen<'_> {
                     "async fn cannot have post_return specified (func {name})"
                 );
 
-                let get_current_task_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let component_idx = self.canon_opts.instance.as_u32();
-
-                let i32_typecheck = self.intrinsic(Intrinsic::TypeCheckValidI32);
-                let to_int32_fn =
-                    self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
-                let unpack_callback_result_fn = self.intrinsic(Intrinsic::AsyncTask(
-                    AsyncTaskIntrinsic::UnpackCallbackResult,
+                // If we're dealing with an async call, then `ret` is actually the
+                // state of async behavior.
+                //
+                // The result *should* be a Promise that resolves to whatever the current task
+                // will eventually resolve to.
+                //
+                // NOTE: Regardless of whether async porcelain is required here, we want to return the result
+                // of the computation as a whole, not the current async state (which is what `ret` currently is).
+                //
+                // `ret` is only a Promise if we have async-lowered the function in question (e.g. via JSPI)
+                //
+                // ```ts
+                // type ret = number | Promise<number>;
+                let async_driver_loop_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
+                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
-                // NOTE: callback fns are sometimes missing (e.g. when processing a `[task-return]some-fn`)
-                let callback_fn_name = self
-                    .canon_opts
-                    .callback
-                    .map(|v| format!("callback_{}", v.as_u32()));
+                let current_task_get_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let component_instance_idx = self.canon_opts.instance.as_u32();
+                let is_async_js = self.requires_async_porcelain | self.is_async;
 
-                // Generate the fn signatures for task function calls,
-                // since we may be using async porcelain or not for this function
-                let (
-                    task_fn_call_prefix,
-                    task_yield_fn,
-                    task_wait_for_event_fn,
-                    task_poll_for_event_fn,
-                ) = if self.requires_async_porcelain {
-                    (
-                        "await ",
-                        "task.yield",
-                        "task.waitForEvent",
-                        "task.pollForEvent",
-                    )
-                } else {
-                    (
-                        "",
-                        "task.yieldSync",
-                        "task.waitForEventSync",
-                        "task.pollForEventSync",
-                    )
-                };
+                // Resolve the promise that *would* have been returned via `WebAssembly.promising`
+                if self.requires_async_porcelain {
+                    uwriteln!(self.src, "ret = await ret;");
+                }
 
+                // TODO: if we're returning from an async subtask, we need to call onProgress *before* callback
+                // TODO: when this is done, we need to call subtask.resolve ??
+
+                // TODO: If we're returning from a call that was initiated by another component,
+                // then there will be a current subtask... We need to detect that and
+                // use the callback that is from there instead/information from it?
+                //
+                // If we're returning from a subtask, then we need to resolve the subtask!
+
+                // Perform the reaction to async state
                 uwriteln!(
                     self.src,
                     r#"
-                    const retCopy = {first_op};
-                    if (retCopy !== undefined) {{
-                        if (!({i32_typecheck}(retCopy))) {{ throw new Error('invalid async return value [' + retCopy + '], not a number'); }}
-                        if (retCopy < 0 || retCopy > 3) {{
-                            throw new Error('invalid async return value, outside callback code range');
-                        }}
-                    }}
+                      const componentState = {get_or_create_async_state_fn}({component_instance_idx});
+                      if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
 
-                    const taskMeta = {get_current_task_fn}({component_idx});
-                    if (!taskMeta) {{ throw new Error('missing/invalid current task metadata'); }}
+                      const taskMeta = {current_task_get_fn}({component_instance_idx});
+                      if (!taskMeta) {{ throw new Error('failed to find current task metadata'); }}
 
-                    const task = taskMeta.task;
-                    if (!task) {{ throw new Error('missing/invalid current task in metadata'); }}
+                      const task = taskMeta.task;
+                      if (!task) {{ throw new Error('missing/invalid task in current task metadata'); }}
 
-                    let currentRes = retCopy;
-                    let taskRes, eventCode, index, result;
-                    if (currentRes !== undefined) {{
-                        while (true) {{
-                            let [code, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
-                            switch (code) {{
-                                case 0: // EXIT
-                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] exit', {{ fn: '{name}' }});
-                                    task.exit();
-                                    return;
-                                case 1: // YIELD
-                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] yield', {{ fn: '{name}' }});
-                                    taskRes = {task_fn_call_prefix}{task_yield_fn}({{ isCancellable: true, forCallback: true }});
-                                    break;
-                                case 2: // WAIT for a given waitable set
-                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] waiting for event', {{ waitableSetIdx }});
-                                    taskRes = {task_fn_call_prefix}{task_wait_for_event_fn}({{ isAsync: true, waitableSetIdx }});
-                                    break;
-                                case 3: // POLL
-                                    {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] polling for event', {{ waitableSetIdx }});
-                                    taskRes = {task_fn_call_prefix}{task_poll_for_event_fn}({{ isAsync: true, waitableSetIdx }});
-                                    break;
-                                default:
-                                    throw new Error('invalid async return value [' + retCopy + ']');
-                            }}
+                      new Promise((resolve, reject) => {{
+                          {async_driver_loop_fn}({{
+                              componentInstanceIdx: {component_instance_idx},
+                              componentState,
+                              task,
+                              fnName: '{name}',
+                              isAsync: {is_async_js},
+                              callbackResult: ret,
+                              resolve,
+                              reject
+                          }});
+                      }});
 
-                            {maybe_callback_call}
-                        }}
-                    }}
-                    "#,
-                    first_op = operands.first().map(|s| s.as_str()).unwrap_or("undefined"),
-                    prefix = self.tracing_prefix,
-                    maybe_callback_call = match callback_fn_name {
-                        Some(fn_name) => format!(r#"
-                            eventCode = taskRes[0];
-                            index = taskRes[1];
-                            result = taskRes[2];
-                            {debug_log_fn}('performing callback', {{ fn: "{fn_name}", eventCode, index, result }});
-                            currentRes = {fn_name}(
-                                {to_int32_fn}(eventCode),
-                                {to_int32_fn}(index),
-                                {to_int32_fn}(result),
-                            );
-                            "#),
-                        None => "if (taskRes !== 0) {{ throw new Error('function with no callback returned a non-zero result'); }}".into(),
-                    }
+                      return task.completionPromise();
+                      "#,
                 );
-
-                // Inject machinery for ending an async 'current' task
-                // which may return a result if necessary
-                self.end_current_task();
             }
 
             Instruction::GuestDeallocate { .. }
