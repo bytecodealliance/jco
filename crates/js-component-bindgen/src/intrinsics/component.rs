@@ -51,6 +51,18 @@ pub enum ComponentIntrinsic {
 
     /// A class that encapsulates component-level async state
     ComponentAsyncStateClass,
+
+    /// Intrinsic used when components lower imports to be used
+    /// from other components or the host.
+    ///
+    /// # Component Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// ```
+    ///
+    LowerImport,
 }
 
 impl ComponentIntrinsic {
@@ -73,6 +85,7 @@ impl ComponentIntrinsic {
             Self::BackpressureInc => "backpressureInc",
             Self::BackpressureDec => "backpressureDec",
             Self::ComponentAsyncStateClass => "ComponentAsyncState",
+            Self::LowerImport => "_intrinsic_component_lowerImport",
         }
     }
 
@@ -132,7 +145,7 @@ impl ComponentIntrinsic {
                 let rep_table_class = Intrinsic::RepTableClass.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!(
-                    "
+                    r#"
                     class {class_name} {{
                         #callingAsyncImport = false;
                         #syncImportWait = promiseWithResolvers();
@@ -141,8 +154,25 @@ impl ComponentIntrinsic {
                         mayLeave = true;
                         waitableSets = new {rep_table_class}();
                         waitables = new {rep_table_class}();
+                        subtasks = new {rep_table_class}();
 
                         #parkedTasks = new Map();
+
+                        #suspendedTasksByTaskID = new Map();
+                        #suspendedTaskIDs = [];
+                        #taskResumerInterval = null;
+
+                        #pendingTasks = [];
+
+                        constructor(args) {{
+                            this.#taskResumerInterval = setInterval(() => {{
+                                try {{
+                                    this.tick();
+                                }} catch (err) {{
+                                    {debug_log_fn}('[{class_name}#taskResumer()] tick failed', {{ err }});
+                                }}
+                            }}, 0);
+                        }};
 
                         callingSyncImport(val) {{
                             if (val === undefined) {{ return this.#callingAsyncImport; }}
@@ -242,8 +272,77 @@ impl ComponentIntrinsic {
 
                         isExclusivelyLocked() {{ return this.#lock !== null; }}
 
+                        #getSuspendedTaskMeta(taskID) {{
+                            return this.#suspendedTasksByTaskID.get(taskID);
+                        }}
+
+                        #removeSuspendedTaskMeta(taskID) {{
+                            {debug_log_fn}('[{class_name}#removeSuspendedTaskMeta()] removing suspended task', {{ taskID }});
+                            const idx = this.#suspendedTaskIDs.findIndex(t => t && t.taskID === taskID);
+                            const meta = this.#suspendedTasksByTaskID.get(taskID);
+                            this.#suspendedTaskIDs[idx] = null;
+                            this.#suspendedTasksByTaskID.delete(taskID);
+                            return meta;
+                        }}
+
+                        #addSuspendedTaskMeta(meta) {{
+                            if (!meta) {{ throw new Error('missing task meta'); }}
+                            const taskID = meta.taskID;
+                            this.#suspendedTasksByTaskID.set(taskID, meta);
+                            this.#suspendedTaskIDs.push(taskID);
+                            if (this.#suspendedTasksByTaskID.size < this.#suspendedTaskIDs.length - 10) {{
+                                this.#suspendedTaskIDs = this.#suspendedTaskIDs.filter(t => t !== null);
+                            }}
+                        }}
+
+                        suspendTask(args) {{
+                            // TODO(threads): readyFn is normally on the thread
+                            const {{ task, readyFn }} = args;
+                            const taskID = task.id();
+                            {debug_log_fn}('[{class_name}#suspendTask()]', {{ taskID }});
+
+                            if (this.#getSuspendedTaskMeta(taskID)) {{
+                                throw new Error('task [' + taskID + '] already suspended');
+                            }}
+
+                            const {{ promise, resolve }} = Promise.withResolvers();
+                            this.#addSuspendedTaskMeta({{
+                                task,
+                                taskID,
+                                readyFn,
+                                resume: () => {{
+                                    {debug_log_fn}('[{class_name}#suspendTask()] resuming suspended task', {{ taskID }});
+                                    // TODO(threads): it's thread cancellation we should be checking for below, not task
+                                    resolve(!task.isCancelled());
+                                }},
+                            }});
+
+                            return promise;
+                        }}
+
+                        resumeTaskByID(taskID) {{
+                            const meta = this.#removeSuspendedTaskMeta(taskID);
+                            if (!meta) {{ return; }}
+                            if (meta.taskID !== taskID) {{ throw new Error('task ID does not match'); }}
+                            meta.resume();
+                        }}
+
+                        tick() {{
+                            for (const taskID of this.#suspendedTaskIDs.filter(t => t !== null)) {{
+                                const meta = this.#suspendedTasksByTaskID.get(taskID);
+                                if (!meta || !meta.readyFn) {{
+                                    throw new Error('missing/invalid task despite ID [' + taskID + '] being present');
+                                }}
+                                if (!meta.readyFn()) {{ continue; }}
+                                this.resumeTaskByID(taskID);
+                            }}
+                        }}
+
+                        addPendingTask(task) {{
+                            this.#pendingTasks.push(task);
+                        }}
                     }}
-                    ",
+                    "#,
                     class_name = self.name(),
                 ));
             }
@@ -261,6 +360,22 @@ impl ComponentIntrinsic {
                         return {async_state_map}.get(componentIdx);
                     }}
                 "
+                ));
+            }
+
+            // NOTE: LowerImport is called but is *not used* as a function,
+            // instead having a chance to do some modification *before* the final
+            // creation of instantiated modules' exports
+            Self::LowerImport => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_import_fn = Self::LowerImport.name();
+                output.push_str(&format!(
+                    "
+                    function {lower_import_fn}(args) {{
+                        {debug_log_fn}('[{lower_import_fn}()] args', args);
+                        throw new Error('runtime LowerImport not implmented');
+                    }}
+                    "
                 ));
             }
         }

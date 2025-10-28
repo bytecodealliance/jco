@@ -1034,8 +1034,6 @@ dependencies = [
 [[package]]
 name = "wit-bindgen"
 version = "0.47.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a374235c3c0dff10537040b437073d09f1e38f13216b5f3cbc809c6226814e5c"
 dependencies = [
  "wit-bindgen-rust-macro",
 ]
@@ -1043,8 +1041,6 @@ dependencies = [
 [[package]]
 name = "wit-bindgen-core"
 version = "0.47.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdf62e62178415a705bda25dc01c54ed65c0f956e4efd00ca89447a9a84f4881"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
@@ -1054,8 +1050,6 @@ dependencies = [
 [[package]]
 name = "wit-bindgen-rust"
 version = "0.47.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6d585319871ca18805056f69ddec7541770fc855820f9944029cb2b75ea108f"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
@@ -1070,8 +1064,6 @@ dependencies = [
 [[package]]
 name = "wit-bindgen-rust-macro"
 version = "0.47.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bde589435d322e88b8f708f70e313f60dfb7975ac4e7c623fef6f1e5685d90e8"
 dependencies = [
  "anyhow",
  "prettyplease",

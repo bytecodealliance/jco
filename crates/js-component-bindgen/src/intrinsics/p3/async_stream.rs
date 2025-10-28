@@ -353,7 +353,7 @@ impl AsyncStreamIntrinsic {
                         {debug_log_fn}('[{stream_new_fn}()] args', {{ streamTypeRep, payloadTypeRep, componentIdx }});
 
                         if (!componentIdx) {{
-                            const task = {current_task_get_fn}();
+                            const task = {current_task_get_fn}(componentIdx);
                             if (!task) {{ throw new Error('invalid/missing async task during stream.new'); }}
                             componentIdx = task.componentIdx;
                         }}
