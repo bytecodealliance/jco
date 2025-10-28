@@ -1,7 +1,7 @@
 import { streams } from './io.js';
 import { environment } from './environment.js';
 
-import { _setCwd } from './config.js';
+import { _setCwd, _getCwd } from './config.js';
 export { _setCwd } from './config.js';
 
 const { InputStream, OutputStream } = streams;
@@ -30,7 +30,7 @@ function getChildEntry(parentEntry, subpath, openFlags) {
         _rootPreopen &&
         descriptorGetEntry(_rootPreopen[0]) === parentEntry
     ) {
-        subpath = _cwd;
+        subpath = _getCwd();
         if (subpath.startsWith('/') && subpath !== '/') {
             subpath = subpath.slice(1);
         }
