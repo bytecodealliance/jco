@@ -1,3 +1,4 @@
+import { env } from "node:process";
 import { pathToFileURL, URL, fileURLToPath } from "node:url";
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -164,6 +165,7 @@ export async function startTestServer(args) {
     // Launch a puppeteer instance
     const browser = await puppeteer.launch({
         args: [
+            ...(env.TEST_PUPPETEER_LAUNCH_ARGS ?? '').split(","),
             '--enable-experimental-webassembly-jspi',
             '--flag-switches-begin',
             '--enable-features=WebAssemblyExperimentalJSPI',
