@@ -8,12 +8,12 @@ const REPORTERS = process.env.GITHUB_ACTIONS
 
 export default defineConfig({
   test: {
-    retry: 3,
     reporters: REPORTERS,
     disableConsoleIntercept: true,
     printConsoleTrace: true,
     passWithNoTests: false,
     include: ["test/*.js"],
+    exclude: ["test/common.js"],
     setupFiles: ["test/meta-resolve-stub.ts"],
     testTimeout: DEFAULT_TIMEOUT_MS,
     hookTimeout: DEFAULT_TIMEOUT_MS,

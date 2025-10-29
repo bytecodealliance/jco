@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!--
+
+This page tests transpiled Jco components that rely on @bytecodealliance/preview2-shim
+
+Components are expected to export a 'test:browser/test.run' function like the below WIT:
+
+```
+package tests:p2-shim;
+
+interface test {
+  run: func() -> result<string, string>;
+}
+
+world component {
+  export test;
+}
+```
+
+NOTE: it is up to components to include whatever other requirements they need out of
+preview2-shim. If they need imports that are *not* p2-shim, then create a different fixture
+harness.
+
+The component must be transpiled with async enabled, and is loaded by this page,
+then executed by the browser with an async function.
+
+At the end of the test, the document body will be updated with the state of execution
+
+-->
+
+<!-- The script below loads the preview2-shim" -->
+<script type="importmap">
+{
+  "imports": {
+    "@bytecodealliance/preview2-shim/cli": "/preview2-shim/lib/browser/cli.js",
+    "@bytecodealliance/preview2-shim/clocks": "/preview2-shim/lib/browser/clocks.js",
+    "@bytecodealliance/preview2-shim/filesystem": "/preview2-shim/lib/browser/filesystem.js",
+    "@bytecodealliance/preview2-shim/http": "/preview2-shim/lib/browser/http.js",
+    "@bytecodealliance/preview2-shim/io": "/preview2-shim/lib/browser/io.js",
+    "@bytecodealliance/preview2-shim/random": "/preview2-shim/lib/browser/random.js",
+    "@bytecodealliance/preview2-shim/sockets": "/preview2-shim/lib/browser/sockets.js"
+  }
+}
+</script>
+
+<!-- The script below loads and instantiates the module -->
+<script type="module">
+ import "@bytecodealliance/preview2-shim/cli";
+ import "@bytecodealliance/preview2-shim/clocks";
+ import "@bytecodealliance/preview2-shim/filesystem";
+ import "@bytecodealliance/preview2-shim/http";
+ import "@bytecodealliance/preview2-shim/io";
+ import "@bytecodealliance/preview2-shim/random";
+ import "@bytecodealliance/preview2-shim/sockets";
+
+ function updateOutput(msg) {
+   const obj = typeof msg === "object" ? msg : {status: 'error', msg };
+   document.body.innerHTML = JSON.stringify(obj);
+ }
+
+ // Prefix used in URL hash to direct the backend test server to serve up
+ // a specific (transpiled) JS lib
+ const HASH_PREFIX_DYNAMIC_COMPONENT = 'transpiled:';
+
+ updateOutput({ status: 'pending' });
+
+ const testName = window.location.hash.slice(1);
+ updateOutput({ status: 'running' });
+
+ // If we received a test to run (i.e. '#transpiled:xxxx.js'), then we can attempt to load it
+ if (testName && testName.startsWith(HASH_PREFIX_DYNAMIC_COMPONENT)) {
+   // We expect to be called with a hash prefix noting the path to the component we should load
+   const moduleName = testName.slice(HASH_PREFIX_DYNAMIC_COMPONENT.length);
+   await runTranspiledModuleTest(moduleName);
+ } else {
+   updateOutput({ status: 'error', msg: `Unknown test case [${testName}], page hash should contain path to a test name` });
+ }
+
+ async function runTranspiledModuleTest(moduleName) {
+   // Determine the path to the module that should be loaded by this file.
+   //
+   // This path only works if the server serving this page recognizes the '/transpiled'
+   // prefix and uses it to serve local files.
+   const testModule = `/transpiled/${moduleName}`;
+
+   try {
+     // Load the test module that was defined in the URL hash during load of this page
+     const mod = await import(testModule);
+
+     // We expect the module to export a 'tests:p2-shim/test.run' function, w/ async compilation
+     const fn = mod['tests:p2-shim/test'].run;
+     if (!fn) {
+       const msg = `Expected module [${testModule}] to export an 'test:browser/test.run' function. It contains keys [${Object.keys(mod)}]`;
+       updateOutput({ status: 'error', msg });
+       return;
+     }
+
+     // Run the exported function (which will call the async host import above), get response text
+     // (Jco will encode results as the type if nothing is thrown)
+     const responseText = fn();
+
+     updateOutput({ status: 'success', msg: responseText });
+   } catch (e) {
+     updateOutput({ status: 'error', msg: `ERROR while running [${testModule}]:\n\n${e}\n${e.stack}` });
+   }
+ }
+
+</script>
