@@ -302,6 +302,12 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
+      - name: Install Rust
+        run: rustup update stable --no-self-update
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          shared-key: jco-${{ hashFiles('Cargo.lock') }}
+
       - name: Cache npm install
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
@@ -311,6 +317,20 @@ jobs:
 
       - name: Install NPM packages
         run: npm install
+
+      - name: Cache puppeteer install
+        id: cache-puppeteer
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pacakges/jco/package.json') }}
+          path: |
+            /home/runner/.cache/puppeteer
+      - name: Install puppeteer
+        run: |
+          npx puppeteer browsers install chrome
+
+      - name: Build jco
+        run: npm run build
 
       - name: Test Workspaces
         run: npm run test --workspace packages/${{ matrix.workspace }}
