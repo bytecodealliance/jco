@@ -325,6 +325,7 @@ jobs:
           key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pacakges/jco/package.json') }}
           path: |
             /home/runner/.cache/puppeteer
+
       - name: Install puppeteer
         run: |
           npx puppeteer browsers install chrome
@@ -333,6 +334,9 @@ jobs:
         run: npm run build
 
       - name: Test Workspaces
+        env:
+          TEST_PUPPETEER_LAUNCH_ARGS: |
+            --no-sandbox
         run: npm run test --workspace packages/${{ matrix.workspace }}
 
   eslint:
