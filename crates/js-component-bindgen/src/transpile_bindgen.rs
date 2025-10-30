@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
 
-use base64::engine::general_purpose;
 use base64::Engine as _;
+use base64::engine::general_purpose;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{
     CanonicalOptions, CanonicalOptionsDataModel, Component, ComponentTranslation, ComponentTypes,
@@ -43,13 +43,19 @@ use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::intrinsics::{
-    render_intrinsics, AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs,
+    AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs, render_intrinsics,
 };
-use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
+use crate::names::{LocalNames, is_js_reserved_word, maybe_quote_id, maybe_quote_member};
 use crate::{
-    core, get_thrown_type, is_async_fn, requires_async_porcelain, source, uwrite, uwriteln,
-    FunctionIdentifier,
+    FunctionIdentifier, core, get_thrown_type, is_async_fn, requires_async_porcelain, source,
+    uwrite, uwriteln,
 };
+
+/// Number of flat parameters allowed before spilling over to memory
+/// for an async function
+///
+/// See [`wit-bindgen-core`] and the Component Model spec
+const MAX_ASYNC_FLAT_PARAMS: usize = 4;
 
 #[derive(Debug, Default, Clone)]
 pub struct TranspileOpts {
@@ -222,7 +228,7 @@ pub fn transpile_bindgen(
     let mut instantiator = Instantiator {
         src: Source::default(),
         sizes: SizeAlign::default(),
-        gen: &mut bindgen,
+        bindgen: &mut bindgen,
         modules,
         instances: Default::default(),
         error_context_component_initialized: (0..component
@@ -261,15 +267,15 @@ pub fn transpile_bindgen(
     instantiator.resource_definitions(&mut intrinsic_definitions);
     instantiator.instance_flags();
 
-    instantiator.gen.src.js(&instantiator.src.js);
-    instantiator.gen.src.js_init(&instantiator.src.js_init);
+    instantiator.bindgen.src.js(&instantiator.src.js);
+    instantiator.bindgen.src.js_init(&instantiator.src.js_init);
 
     instantiator
-        .gen
+        .bindgen
         .finish_component(name, files, &opts, intrinsic_definitions);
 
     let exports = instantiator
-        .gen
+        .bindgen
         .esm_bindgen
         .exports()
         .iter()
@@ -530,7 +536,7 @@ impl JsBindgen<'_> {
 /// This is the main structure for parsing the output of Wasmtime.
 struct Instantiator<'a, 'b> {
     src: Source,
-    gen: &'a mut JsBindgen<'b>,
+    bindgen: &'a mut JsBindgen<'b>,
     modules: &'a PrimaryMap<StaticModuleIndex, core::Translation<'a>>,
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
     types: &'a ComponentTypes,
@@ -694,7 +700,7 @@ impl<'a> Instantiator<'a, '_> {
             assert_eq!(i, *index);
         }
 
-        if let Some(InstantiationMode::Async) = self.gen.opts.instantiation {
+        if let Some(InstantiationMode::Async) = self.bindgen.opts.instantiation {
             // To avoid uncaught promise rejection errors, we attach an intermediate
             // Promise.all with a rejection handler, if there are multiple promises.
             if self.modules.len() > 1 {
@@ -744,7 +750,7 @@ impl<'a> Instantiator<'a, '_> {
             self.trampoline(i, trampoline);
         }
 
-        if self.gen.opts.instantiation.is_some() {
+        if self.bindgen.opts.instantiation.is_some() {
             let js_init = mem::take(&mut self.src.js_init);
             self.src.js.push_str(&js_init);
         }
@@ -786,15 +792,15 @@ impl<'a> Instantiator<'a, '_> {
             if is_imported {
                 continue;
             }
-            if let Some(local_name) = self.gen.local_names.try_get(resource) {
+            if let Some(local_name) = self.bindgen.local_names.try_get(resource) {
                 self.ensure_local_resource_class(local_name.to_string());
             }
         }
 
         // Write out the defined resource table indices for the runtime
-        if self.gen.all_intrinsics.contains(&Intrinsic::Resource(
+        if self.bindgen.all_intrinsics.contains(&Intrinsic::Resource(
             ResourceIntrinsic::ResourceTransferBorrow,
-        )) || self.gen.all_intrinsics.contains(&Intrinsic::Resource(
+        )) || self.bindgen.all_intrinsics.contains(&Intrinsic::Resource(
             ResourceIntrinsic::ResourceTransferBorrowValidLifting,
         )) {
             let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
@@ -835,7 +841,7 @@ impl<'a> Instantiator<'a, '_> {
             return;
         }
         let err_ctx_local_tables = self
-            .gen
+            .bindgen
             .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentLocalTable));
         let c = component_idx.as_u32();
         if !self.error_context_component_initialized[component_idx] {
@@ -886,12 +892,12 @@ impl<'a> Instantiator<'a, '_> {
                 (true, "".into())
             };
 
-        let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+        let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
         let rsc_table_flag = self
-            .gen
+            .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
         let rsc_table_remove = self
-            .gen
+            .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
 
         let rtid = id.as_u32();
@@ -910,8 +916,9 @@ impl<'a> Instantiator<'a, '_> {
                 self.resources_initialized.insert(resource, true);
             }
         } else {
-            let finalization_registry_create =
-                self.gen.intrinsic(Intrinsic::FinalizationRegistryCreate);
+            let finalization_registry_create = self
+                .bindgen
+                .intrinsic(Intrinsic::FinalizationRegistryCreate);
             uwriteln!(
                 self.src.js,
                 "const handleTable{rtid} = [{rsc_table_flag}, 0];
@@ -934,7 +941,8 @@ impl<'a> Instantiator<'a, '_> {
                 &mut instance_flag_defs,
                 "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, {});",
                 wasmtime_environ::component::FLAG_MAY_LEAVE
-                | wasmtime_environ::component::FLAG_MAY_ENTER);
+                    | wasmtime_environ::component::FLAG_MAY_ENTER
+            );
         }
         self.src.js_init.prepend_str(&instance_flag_defs);
     }
@@ -977,7 +985,7 @@ impl<'a> Instantiator<'a, '_> {
         match trampoline {
             Trampoline::TaskCancel { instance } => {
                 let task_cancel_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskCancel));
                 uwriteln!(
                     self.src.js,
@@ -988,7 +996,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::SubtaskCancel { instance, async_ } => {
                 let task_cancel_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
                 uwriteln!(
                     self.src.js,
@@ -1000,7 +1008,7 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::SubtaskDrop { instance } => {
                 let component_idx = instance.as_u32();
                 let subtask_drop_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskDrop));
                 uwriteln!(
                     self.src.js,
@@ -1013,7 +1021,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::BackpressureSet { instance } => {
                 let backpressure_set_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureSet));
                 uwriteln!(
                     self.src.js,
@@ -1024,7 +1032,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::WaitableSetNew { instance } => {
                 let waitable_set_new_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew));
                 uwriteln!(
                     self.src.js,
@@ -1050,13 +1058,15 @@ impl<'a> Instantiator<'a, '_> {
                 };
 
                 let waitable_set_wait_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {waitable_set_wait_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
                     instance_idx = instance.as_u32(),
-                    memory_idx = memory.expect("missing memory idx for waitable-set.wait").as_u32(),
+                    memory_idx = memory
+                        .expect("missing memory idx for waitable-set.wait")
+                        .as_u32(),
                 );
             }
 
@@ -1077,19 +1087,21 @@ impl<'a> Instantiator<'a, '_> {
                 };
 
                 let waitable_set_poll_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {waitable_set_poll_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
                     instance_idx = instance.as_u32(),
-                    memory_idx = memory.expect("missing memory idx for waitable-set.poll").as_u32(),
+                    memory_idx = memory
+                        .expect("missing memory idx for waitable-set.poll")
+                        .as_u32(),
                 );
             }
 
             Trampoline::WaitableSetDrop { instance } => {
                 let waitable_set_drop_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop));
                 uwriteln!(
                     self.src.js,
@@ -1100,7 +1112,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::WaitableJoin { instance } => {
                 let waitable_join_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableJoin));
                 uwriteln!(
                     self.src.js,
@@ -1116,7 +1128,7 @@ impl<'a> Instantiator<'a, '_> {
             // TODO: Do we need the component idx
             Trampoline::StreamNew { ty } => {
                 let stream_new_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
                 uwriteln!(
                     self.src.js,
@@ -1152,7 +1164,7 @@ impl<'a> Instantiator<'a, '_> {
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let stream_read_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead));
                 uwriteln!(
                     self.src.js,
@@ -1198,7 +1210,7 @@ impl<'a> Instantiator<'a, '_> {
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let stream_write_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite));
                 uwriteln!(
                     self.src.js,
@@ -1216,7 +1228,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamCancelRead { ty, async_ } => {
-                let stream_cancel_read_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
+                let stream_cancel_read_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamCancelRead,
                 ));
                 uwriteln!(
@@ -1227,7 +1239,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamCancelWrite { ty, async_ } => {
-                let stream_cancel_write_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
+                let stream_cancel_write_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamCancelWrite,
                 ));
                 uwriteln!(
@@ -1238,7 +1250,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamDropReadable { ty } => {
-                let stream_drop_readable_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
+                let stream_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropReadable,
                 ));
                 uwriteln!(
@@ -1249,7 +1261,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamDropWritable { ty } => {
-                let stream_drop_writable_fn = self.gen.intrinsic(Intrinsic::AsyncStream(
+                let stream_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropWritable,
                 ));
                 uwriteln!(
@@ -1263,7 +1275,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::FutureNew { ty } => {
                 let future_new_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew));
                 uwriteln!(
                     self.src.js,
@@ -1311,7 +1323,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
 
                 let future_read_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead));
                 uwriteln!(
                     self.src.js,
@@ -1357,7 +1369,7 @@ impl<'a> Instantiator<'a, '_> {
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let future_write_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite));
                 uwriteln!(
                     self.src.js,
@@ -1375,7 +1387,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureCancelRead { ty, async_ } => {
-                let future_cancel_read_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
+                let future_cancel_read_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureCancelRead,
                 ));
                 uwriteln!(
@@ -1386,7 +1398,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureCancelWrite { ty, async_ } => {
-                let future_cancel_write_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
+                let future_cancel_write_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureCancelWrite,
                 ));
                 uwriteln!(
@@ -1397,7 +1409,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureDropReadable { ty } => {
-                let future_drop_readable_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
+                let future_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureDropReadable,
                 ));
                 uwriteln!(
@@ -1408,7 +1420,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureDropWritable { ty } => {
-                let future_drop_writable_fn = self.gen.intrinsic(Intrinsic::AsyncFuture(
+                let future_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureDropWritable,
                 ));
                 uwriteln!(
@@ -1448,10 +1460,10 @@ impl<'a> Instantiator<'a, '_> {
                 // Generate a string decoding function to match this trampoline that does appropriate encoding
                 let decoder = match string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => self
-                        .gen
+                        .bindgen
                         .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Decoder)),
                     wasmtime_environ::component::StringEncoding::Utf16 => self
-                        .gen
+                        .bindgen
                         .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder)),
                     enc => panic!(
                         "unsupported string encoding [{enc:?}] for error-context.debug-message"
@@ -1464,7 +1476,9 @@ impl<'a> Instantiator<'a, '_> {
                     }}"
                 );
 
-                let err_ctx_new_fn = self.gen.intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::New));
+                let err_ctx_new_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::New));
                 // Store the options associated with this new error context for later use in the global array
                 uwriteln!(
                     self.src.js,
@@ -1498,7 +1512,7 @@ impl<'a> Instantiator<'a, '_> {
                 };
 
                 let debug_message_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::DebugMessage));
 
                 let realloc_fn_idx = realloc
@@ -1512,7 +1526,7 @@ impl<'a> Instantiator<'a, '_> {
                 match string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => {
                         let encode_fn = self
-                            .gen
+                            .bindgen
                             .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
                         let encode_len_var =
                             Intrinsic::String(StringIntrinsic::Utf8EncodedLen).name();
@@ -1530,7 +1544,7 @@ impl<'a> Instantiator<'a, '_> {
                     }
                     wasmtime_environ::component::StringEncoding::Utf16 => {
                         let encode_fn = self
-                            .gen
+                            .bindgen
                             .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Encode));
                         uwriteln!(
                             self.src.js,
@@ -1574,7 +1588,9 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ErrorContextDrop { ty } => {
-                let drop_fn = self.gen.intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::Drop));
+                let drop_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::Drop));
                 let local_err_tbl_idx = ty.as_u32();
                 let component_idx = self.types[*ty].instance.as_u32();
                 uwriteln!(
@@ -1585,7 +1601,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ErrorContextTransfer => {
                 let transfer_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::Transfer));
                 uwriteln!(self.src.js, "const trampoline{i} = {transfer_fn};");
             }
@@ -1593,7 +1609,7 @@ impl<'a> Instantiator<'a, '_> {
             // This sets up a subtask (sets parent, etc)
             Trampoline::PrepareCall { memory } => {
                 let prepare_call_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Host(HostIntrinsic::PrepareCall));
                 uwriteln!(
                     self.src.js,
@@ -1606,7 +1622,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::SyncStartCall { callback } => {
                 let sync_start_call_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Host(HostIntrinsic::SyncStartCall));
                 uwriteln!(
                     self.src.js,
@@ -1628,7 +1644,7 @@ impl<'a> Instantiator<'a, '_> {
                 // Subtask needs to also somehow write itself in as the current subtask?
                 //
                 let async_start_call_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
                 uwriteln!(
                     self.src.js,
@@ -1731,7 +1747,7 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::ResourceNew(resource) => {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
-                let rsc_table_create_own = self.gen.intrinsic(Intrinsic::Resource(
+                let rsc_table_create_own = self.bindgen.intrinsic(Intrinsic::Resource(
                     ResourceIntrinsic::ResourceTableCreateOwn,
                 ));
                 uwriteln!(
@@ -1744,7 +1760,7 @@ impl<'a> Instantiator<'a, '_> {
                 self.ensure_resource_table(*resource);
                 let rid = resource.as_u32();
                 let rsc_flag = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
                 uwriteln!(
                     self.src.js,
@@ -1791,12 +1807,12 @@ impl<'a> Instantiator<'a, '_> {
                     // for imported resources when the resource is dropped.
                     // Otherwise if it is an instance without a captured class definition, then
                     // call the low-level bindgen destructor.
-                    let symbol_dispose = self.gen.intrinsic(Intrinsic::SymbolDispose);
-                    let symbol_cabi_dispose = self.gen.intrinsic(Intrinsic::SymbolCabiDispose);
+                    let symbol_dispose = self.bindgen.intrinsic(Intrinsic::SymbolDispose);
+                    let symbol_cabi_dispose = self.bindgen.intrinsic(Intrinsic::SymbolCabiDispose);
 
                     // previous imports walk should define all imported resources which are accessible
                     if let Some(imported_resource_local_name) =
-                        self.gen.local_names.try_get(resource_ty.ty)
+                        self.bindgen.local_names.try_get(resource_ty.ty)
                     {
                         format!(
                                             "
@@ -1818,7 +1834,7 @@ impl<'a> Instantiator<'a, '_> {
                 };
 
                 let rsc_table_remove = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
                 uwrite!(
                     self.src.js,
@@ -1834,15 +1850,15 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ResourceTransferOwn => {
                 let resource_transfer = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTransferOwn));
                 uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
             }
 
             Trampoline::ResourceTransferBorrow => {
                 let resource_transfer =
-                    self.gen
-                        .intrinsic(if self.gen.opts.valid_lifting_optimization {
+                    self.bindgen
+                        .intrinsic(if self.bindgen.opts.valid_lifting_optimization {
                             Intrinsic::Resource(
                                 ResourceIntrinsic::ResourceTransferBorrowValidLifting,
                             )
@@ -1853,7 +1869,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ResourceEnterCall => {
-                let scope_id = self.gen.intrinsic(Intrinsic::ScopeId);
+                let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}() {{
@@ -1864,11 +1880,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ResourceExitCall => {
-                let scope_id = self.gen.intrinsic(Intrinsic::ScopeId);
+                let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
                 let resource_borrows = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows));
-                let handle_tables = self.gen.intrinsic(Intrinsic::HandleTables);
+                let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
                 // To verify that borrows are dropped, it is enough to verify that the handle
                 // either no longer exists (part of free list) or belongs to another scope, since
                 // the enter call closed off the ability to create new handles in the parent scope
@@ -1888,7 +1904,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ContextSet(slot) => {
                 let context_set_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet));
                 uwriteln!(
                     self.src.js,
@@ -1898,7 +1914,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ContextGet(slot) => {
                 let context_get_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet));
                 uwriteln!(
                     self.src.js,
@@ -1907,20 +1923,20 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::TaskReturn { results, options } => {
+                let canon_opts = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options");
                 let CanonicalOptions {
                     instance,
                     async_,
                     data_model:
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }),
-                    string_encoding,
                     callback,
                     post_return,
                     ..
-                } = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options")
+                } = canon_opts
                 else {
                     unreachable!("unexpected memory data model during task.return");
                 };
@@ -1951,161 +1967,41 @@ impl<'a> Instantiator<'a, '_> {
                 // TODO: async callbacks always have a result, but that's not the *actual* return,
                 // it's the async one.
 
-                // Build up a list of all the lifting functions that will be needed for the types
-                // that are actually being task.return'd by this call
                 let result_types = &self.types[*results].types;
+
+                // Calculate the number of parameters required to represent the results,
+                // and whether they'll be stored in memory
+                let result_flat_param_total: usize = result_types
+                    .iter()
+                    .map(|t| {
+                        self.types
+                            .canonical_abi(t)
+                            .flat_count
+                            .map(usize::from)
+                            .unwrap_or(0)
+                    })
+                    .sum();
+                let use_direct_params = result_flat_param_total < MAX_ASYNC_FLAT_PARAMS;
+
+                // Build up a list of all the lifting functions that will be needed for the types
+                // that are actually being passed through task.return
                 let mut lift_fns: Vec<String> = Vec::with_capacity(result_types.len());
                 for result_ty in result_types {
-                    let result_ty_abi = self.types.canonical_abi(result_ty);
-                    lift_fns.push(match result_ty {
-                        InterfaceType::Bool => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool)),
-                        InterfaceType::S8 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8)),
-                        InterfaceType::U8 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8)),
-                        InterfaceType::S16 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16)),
-                        InterfaceType::U16 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16)),
-                        InterfaceType::S32 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32)),
-                        InterfaceType::U32 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32)),
-                        InterfaceType::S64 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64)),
-                        InterfaceType::U64 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64)),
-                        InterfaceType::Float32 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32)),
-                        InterfaceType::Float64 => self
-                            .gen
-                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64)),
-                        InterfaceType::Char => match string_encoding {
-                            wasmtime_environ::component::StringEncoding::Utf8 => self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatCharUtf8)),
-                            wasmtime_environ::component::StringEncoding::Utf16 => self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatCharUtf16)),
-                            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
-                                todo!("latin1+utf8 not supported")
-                            }
-                        },
-                        InterfaceType::String => match string_encoding {
-                            wasmtime_environ::component::StringEncoding::Utf8 => self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8)),
-                            wasmtime_environ::component::StringEncoding::Utf16 => self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16)),
-                            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
-                                todo!("latin1+utf8 not supported")
-                            }
-                        },
-                        InterfaceType::Record(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Variant(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::List(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Tuple(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Flags(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Enum(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Option(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Result(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Own(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Borrow(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::Future(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
-                            format!("{lift_fn}.bind(null, 4)")
-                        }
-                        InterfaceType::Stream(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
-                            format!("{lift_fn}.bind(null {})", result_ty_abi.size32)
-                        }
-                        InterfaceType::ErrorContext(_ty_idx) => {
-                            let lift_fn = self
-                                .gen
-                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
-                            format!("{lift_fn}.bind(null, {})", result_ty_abi.size32)
-                        }
-                    });
+                    lift_fns.push(gen_flat_lift_fn_js_expr(
+                        self.bindgen,
+                        self.types,
+                        result_ty,
+                        &canon_opts,
+                    ));
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
-
-                // TODO: get the current in-flight call/task (currently passing null!) -- we'll need it to know
-                // what component to return the results to. This might be stored in the trampoline data
-
-                // TODO: should be (task, result_ty, liftoptions, flat_args)
 
                 let memory_js = memory
                     .map(|idx| format!("memory{}", idx.as_u32()))
                     .unwrap_or_else(|| "null".into());
                 let component_idx = instance.as_u32();
                 let task_return_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
                 let callback_fn_idx = callback
                     .map(|v| v.as_u32().to_string())
@@ -2116,6 +2012,7 @@ impl<'a> Instantiator<'a, '_> {
                     "const trampoline{i} = {task_return_fn}.bind(
                          null,
                          {component_idx},
+                         {use_direct_params},
                          {memory_js},
                          {callback_fn_idx},
                          {lift_fns_js},
@@ -2125,7 +2022,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::BackpressureInc { instance } => {
                 let backpressure_inc_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureInc));
                 uwriteln!(
                     self.src.js,
@@ -2136,7 +2033,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::BackpressureDec { instance } => {
                 let backpressure_dec_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureDec));
                 uwriteln!(
                     self.src.js,
@@ -2147,7 +2044,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ThreadYield { cancellable } => {
                 let yield_fn = self
-                    .gen
+                    .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
                 uwriteln!(
                     self.src.js,
@@ -2240,10 +2137,10 @@ impl<'a> Instantiator<'a, '_> {
 
         let i = self.instances.push(idx);
         let iu32 = i.as_u32();
-        let instantiate = self.gen.intrinsic(Intrinsic::InstantiateCore);
+        let instantiate = self.bindgen.intrinsic(Intrinsic::InstantiateCore);
         uwriteln!(self.src.js, "let exports{iu32};");
 
-        match self.gen.opts.instantiation {
+        match self.bindgen.opts.instantiation {
             Some(InstantiationMode::Async) | None => {
                 uwriteln!(
                     self.src.js_init,
@@ -2357,7 +2254,7 @@ impl<'a> Instantiator<'a, '_> {
 
         // Nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
-            &self.gen.opts.map,
+            &self.bindgen.opts.map,
             if iface_name.is_some() {
                 import_name
             } else {
@@ -2397,7 +2294,7 @@ impl<'a> Instantiator<'a, '_> {
 
         let (callee_name, call_type) = match func.kind {
             FunctionKind::Freestanding => (
-                self.gen
+                self.bindgen
                     .local_names
                     .get_or_create(
                         format!(
@@ -2414,7 +2311,7 @@ impl<'a> Instantiator<'a, '_> {
             ),
 
             FunctionKind::AsyncFreestanding => (
-                self.gen
+                self.bindgen
                     .local_names
                     .get_or_create(
                         format!(
@@ -2445,7 +2342,7 @@ impl<'a> Instantiator<'a, '_> {
                     "{}.{}",
                     Instantiator::resource_name(
                         self.resolve,
-                        &mut self.gen.local_names,
+                        &mut self.bindgen.local_names,
                         resource_id,
                         &self.imports_resource_types
                     ),
@@ -2459,7 +2356,7 @@ impl<'a> Instantiator<'a, '_> {
                     "{}.{}",
                     Instantiator::resource_name(
                         self.resolve,
-                        &mut self.gen.local_names,
+                        &mut self.bindgen.local_names,
                         resource_id,
                         &self.imports_resource_types
                     ),
@@ -2473,7 +2370,7 @@ impl<'a> Instantiator<'a, '_> {
                     "new {}",
                     Instantiator::resource_name(
                         self.resolve,
-                        &mut self.gen.local_names,
+                        &mut self.bindgen.local_names,
                         resource_id,
                         &self.imports_resource_types
                     )
@@ -2489,7 +2386,7 @@ impl<'a> Instantiator<'a, '_> {
             .len();
 
         // Generate the JS trampoline function
-        match self.gen.opts.import_bindings {
+        match self.bindgen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
                 // Write out function declaration start
                 if requires_async_porcelain | is_async {
@@ -2543,7 +2440,10 @@ impl<'a> Instantiator<'a, '_> {
         //
         // This is only necessary if an import binding mode is specified and not JS (the default),
         // (e.g. Optimized, Direct, Hybrid).
-        if !matches!(self.gen.opts.import_bindings, None | Some(BindingsMode::Js)) {
+        if !matches!(
+            self.bindgen.opts.import_bindings,
+            None | Some(BindingsMode::Js)
+        ) {
             let (memory, realloc) =
                 if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
                     memory,
@@ -2585,7 +2485,7 @@ impl<'a> Instantiator<'a, '_> {
                         "{}.prototype.{callee_name}",
                         Instantiator::resource_name(
                             self.resolve,
-                            &mut self.gen.local_names,
+                            &mut self.bindgen.local_names,
                             resource_id,
                             &self.imports_resource_types
                         )
@@ -2622,21 +2522,25 @@ impl<'a> Instantiator<'a, '_> {
             };
 
             // Build trampolines for the import
-            match self.gen.opts.import_bindings {
+            match self.bindgen.opts.import_bindings {
                 Some(BindingsMode::Hybrid) => {
-                    let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
+                    let symbol_cabi_lower = self.bindgen.intrinsic(Intrinsic::SymbolCabiLower);
                     uwriteln!(self.src.js_init, "if ({callee_name}[{symbol_cabi_lower}]) {{
                         trampoline{} = {callee_name}[{symbol_cabi_lower}]({{{memory}{realloc}{post_return}{string_encoding}{resource_tables}}});
                     }}", trampoline.as_u32());
                 }
                 Some(BindingsMode::Optimized) => {
-                    let symbol_cabi_lower = self.gen.intrinsic(Intrinsic::SymbolCabiLower);
-                    if !self.gen.opts.valid_lifting_optimization {
+                    let symbol_cabi_lower = self.bindgen.intrinsic(Intrinsic::SymbolCabiLower);
+                    if !self.bindgen.opts.valid_lifting_optimization {
                         uwriteln!(self.src.js_init, "if (!{callee_name}[{symbol_cabi_lower}]) {{
                             throw new TypeError('import for \"{import_name}\" does not define a Symbol.for(\"cabiLower\") optimized binding');
                         }}");
                     }
-                    uwriteln!(self.src.js_init, "trampoline{} = {callee_name}[{symbol_cabi_lower}]({{{memory}{realloc}{post_return}{string_encoding}{resource_tables}}});", trampoline.as_u32());
+                    uwriteln!(
+                        self.src.js_init,
+                        "trampoline{} = {callee_name}[{symbol_cabi_lower}]({{{memory}{realloc}{post_return}{string_encoding}{resource_tables}}});",
+                        trampoline.as_u32()
+                    );
                 }
                 Some(BindingsMode::DirectOptimized) => {
                     uwriteln!(
@@ -2665,7 +2569,7 @@ impl<'a> Instantiator<'a, '_> {
                     ty.name.as_ref().unwrap().to_upper_camel_case(),
                     Instantiator::resource_name(
                         self.resolve,
-                        &mut self.gen.local_names,
+                        &mut self.bindgen.local_names,
                         tid,
                         &self.imports_resource_types,
                     )
@@ -2706,7 +2610,7 @@ impl<'a> Instantiator<'a, '_> {
         local_name: String,
     ) {
         if import_specifier.starts_with("webidl:") {
-            self.gen
+            self.bindgen
                 .intrinsic(Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy));
         }
 
@@ -2727,7 +2631,7 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         // Add the import binding that represents this import
-        self.gen
+        self.bindgen
             .esm_bindgen
             .add_import_binding(&import_path, local_name);
     }
@@ -2864,7 +2768,7 @@ impl<'a> Instantiator<'a, '_> {
                             (
                                 key.clone(),
                                 match key {
-                                    WorldKey::Name(ref name) => Some(name.as_str()),
+                                    WorldKey::Name(name) => Some(name.as_str()),
                                     WorldKey::Interface(_) => None,
                                 },
                             )
@@ -2876,7 +2780,7 @@ impl<'a> Instantiator<'a, '_> {
 
             let import_name = self.resolve.name_world_key(&world_key);
             let (local_name, _) = self
-                .gen
+                .bindgen
                 .local_names
                 .get_or_create(resource_idx, &resource_name);
 
@@ -2884,7 +2788,7 @@ impl<'a> Instantiator<'a, '_> {
 
             // Nested interfaces only currently possible through mapping
             let (import_specifier, maybe_iface_member) =
-                map_import(&self.gen.opts.map, &import_name);
+                map_import(&self.bindgen.opts.map, &import_name);
 
             // Ensure that the import exists
             self.ensure_import(
@@ -2897,7 +2801,7 @@ impl<'a> Instantiator<'a, '_> {
             local_name_str
         } else {
             let (local_name, _) = self
-                .gen
+                .bindgen
                 .local_names
                 .get_or_create(resource_idx, &resource_name);
             local_name.to_string()
@@ -3204,7 +3108,7 @@ impl<'a> Instantiator<'a, '_> {
         uwriteln!(self.src.js, ") {{");
 
         // If tracing is enabled, output a function entry tracing message
-        if self.gen.opts.tracing {
+        if self.bindgen.opts.tracing {
             let event_fields = func
                 .params
                 .iter()
@@ -3219,11 +3123,11 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         // If TLA compat was enabled, ensure that it was initialized
-        if self.gen.opts.tla_compat
+        if self.bindgen.opts.tla_compat
             && matches!(abi, AbiVariant::GuestExport)
-            && self.gen.opts.instantiation.is_none()
+            && self.bindgen.opts.instantiation.is_none()
         {
-            let throw_uninitialized = self.gen.intrinsic(Intrinsic::ThrowUninitialized);
+            let throw_uninitialized = self.bindgen.intrinsic(Intrinsic::ThrowUninitialized);
             uwrite!(
                 self.src.js,
                 "\
@@ -3237,8 +3141,8 @@ impl<'a> Instantiator<'a, '_> {
             resource_map,
             remote_resource_map,
             clear_resource_borrows: false,
-            intrinsics: &mut self.gen.all_intrinsics,
-            valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
+            intrinsics: &mut self.bindgen.all_intrinsics,
+            valid_lifting_optimization: self.bindgen.opts.valid_lifting_optimization,
             sizes: &self.sizes,
             err: if get_thrown_type(self.resolve, func.result).is_some() {
                 match abi {
@@ -3262,7 +3166,7 @@ impl<'a> Instantiator<'a, '_> {
             params,
             post_return: post_return.as_ref(),
             tracing_prefix: &tracing_prefix,
-            tracing_enabled: self.gen.opts.tracing,
+            tracing_enabled: self.bindgen.opts.tracing,
             encoding: match opts.string_encoding {
                 wasmtime_environ::component::StringEncoding::Utf8 => StringEncoding::UTF8,
                 wasmtime_environ::component::StringEncoding::Utf16 => StringEncoding::UTF16,
@@ -3461,12 +3365,12 @@ impl<'a> Instantiator<'a, '_> {
                     {
                         Instantiator::resource_name(
                             self.resolve,
-                            &mut self.gen.local_names,
+                            &mut self.bindgen.local_names,
                             resource_id,
                             &self.exports_resource_types,
                         )
                     } else {
-                        self.gen.local_names.create_once(export_name)
+                        self.bindgen.local_names.create_once(export_name)
                     }
                     .to_string();
 
@@ -3501,9 +3405,12 @@ impl<'a> Instantiator<'a, '_> {
                     };
 
                     // Add the export binding
-                    self.gen
-                        .esm_bindgen
-                        .add_export_binding(None, local_name, js_func_name, func);
+                    self.bindgen.esm_bindgen.add_export_binding(
+                        None,
+                        local_name,
+                        js_func_name,
+                        func,
+                    );
                 }
 
                 Export::Instance { exports, .. } => {
@@ -3536,12 +3443,12 @@ impl<'a> Instantiator<'a, '_> {
                         {
                             Instantiator::resource_name(
                                 self.resolve,
-                                &mut self.gen.local_names,
+                                &mut self.bindgen.local_names,
                                 resource_id,
                                 &self.exports_resource_types,
                             )
                         } else {
-                            self.gen.local_names.create_once(func_name)
+                            self.bindgen.local_names.create_once(func_name)
                         }
                         .to_string();
 
@@ -3576,7 +3483,7 @@ impl<'a> Instantiator<'a, '_> {
                         };
 
                         // Add the export binding
-                        self.gen.esm_bindgen.add_export_binding(
+                        self.bindgen.esm_bindgen.add_export_binding(
                             Some(export_name),
                             local_name,
                             export_func_name,
@@ -3592,7 +3499,7 @@ impl<'a> Instantiator<'a, '_> {
                 Export::ModuleStatic { .. } | Export::ModuleImport { .. } => unimplemented!(),
             }
         }
-        self.gen.esm_bindgen.populate_export_aliases();
+        self.bindgen.esm_bindgen.populate_export_aliases();
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3629,7 +3536,7 @@ impl<'a> Instantiator<'a, '_> {
         // Start building early variable declarations
         let core_export_fn = self.core_def(def);
         let callee = match self
-            .gen
+            .bindgen
             .local_names
             .get_or_create(&core_export_fn, &core_export_fn)
         {
@@ -3637,7 +3544,7 @@ impl<'a> Instantiator<'a, '_> {
             (local_name, false) => {
                 let local_name = local_name.to_string();
                 uwriteln!(self.src.js, "let {local_name};");
-                self.gen
+                self.bindgen
                     .all_core_exported_funcs
                     .push((core_export_fn.clone(), requires_async_porcelain));
                 local_name
@@ -3677,7 +3584,9 @@ impl<'a> Instantiator<'a, '_> {
             }
             FunctionKind::Constructor(_) => {
                 if self.defined_resource_classes.contains(local_name) {
-                    panic!("Internal error: Resource constructor must be defined before other methods and statics");
+                    panic!(
+                        "Internal error: Resource constructor must be defined before other methods and statics"
+                    );
                 }
                 uwrite!(
                     self.src.js,
@@ -3871,5 +3780,181 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
         wasmtime_environ::component::StringEncoding::Utf8 => "'utf8'",
         wasmtime_environ::component::StringEncoding::Utf16 => "'utf16'",
         wasmtime_environ::component::StringEncoding::CompactUtf16 => "'compact-utf16'",
+    }
+}
+
+/// Generate the javascript lifting function for a given type
+///
+/// This function will a function object that can be executed with the right
+/// context in order to perform the lift. For example, running this for bool
+/// will produce the following:
+///
+/// ```
+/// _liftFlatBool
+/// ```
+///
+/// This is becasue all it takes to lift a flat boolean is to run the _liftFlatBool function intrinsic.
+///
+/// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
+///
+fn gen_flat_lift_fn_js_expr(
+    bindgen: &mut JsBindgen<'_>,
+    component_types: &ComponentTypes,
+    ty: &InterfaceType,
+    canon_opts: &CanonicalOptions,
+) -> String {
+    //let ty_abi = component_types.canonical_abi(ty);
+    let string_encoding = canon_opts.string_encoding;
+    match ty {
+        InterfaceType::Bool => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool)),
+        InterfaceType::S8 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8)),
+        InterfaceType::U8 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8)),
+        InterfaceType::S16 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16)),
+        InterfaceType::U16 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16)),
+        InterfaceType::S32 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32)),
+        InterfaceType::U32 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32)),
+        InterfaceType::S64 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64)),
+        InterfaceType::U64 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64)),
+        InterfaceType::Float32 => {
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32))
+        }
+        InterfaceType::Float64 => {
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64))
+        }
+        InterfaceType::Char => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar)),
+        InterfaceType::String => match string_encoding {
+            wasmtime_environ::component::StringEncoding::Utf8 => {
+                bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
+            }
+            wasmtime_environ::component::StringEncoding::Utf16 => {
+                bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
+            }
+            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                todo!("latin1+utf8 not supported")
+            }
+        },
+        InterfaceType::Record(ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
+            let record_ty = &component_types[*ty_idx];
+            let mut keys_and_lifts_expr = String::from("[");
+            for f in &record_ty.fields {
+                // For each field we build a list of [name, liftFn, 32bit alignment]
+                // so that the record lifting function (which is a higher level function)
+                // can properly generate a function that lifts the fields.
+                keys_and_lifts_expr.push_str(&format!(
+                    "['{}', {}, {}],",
+                    f.name,
+                    gen_flat_lift_fn_js_expr(bindgen, component_types, &f.ty, canon_opts),
+                    component_types.canonical_abi(ty).size32,
+                ));
+            }
+            keys_and_lifts_expr.push_str("]");
+            format!("{lift_fn}({keys_and_lifts_expr})")
+        }
+        InterfaceType::Variant(ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
+            let variant_ty = &component_types[*ty_idx];
+            let mut cases_and_lifts_expr = String::from("[");
+            for (name, maybe_ty) in &variant_ty.cases {
+                cases_and_lifts_expr.push_str(&format!(
+                    "['{}', {}, {}],",
+                    name,
+                    maybe_ty
+                        .as_ref()
+                        .map(|ty| gen_flat_lift_fn_js_expr(
+                            bindgen,
+                            component_types,
+                            ty,
+                            canon_opts
+                        ))
+                        .unwrap_or(String::from("null")),
+                    maybe_ty
+                        .as_ref()
+                        .map(|ty| component_types.canonical_abi(ty).size32)
+                        .map(|n| n.to_string())
+                        .unwrap_or(String::from("null")),
+                ));
+            }
+            cases_and_lifts_expr.push_str("]");
+            format!("{lift_fn}({cases_and_lifts_expr})",)
+        }
+        InterfaceType::List(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
+            format!("{lift_fn}")
+        }
+        InterfaceType::Tuple(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
+            format!("{lift_fn}")
+        }
+        InterfaceType::Flags(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
+            format!("{lift_fn}")
+        }
+        InterfaceType::Enum(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
+            format!("{lift_fn}")
+        }
+        InterfaceType::Option(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
+            format!("{lift_fn}")
+        }
+        InterfaceType::Result(ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
+            let result_ty = &component_types[*ty_idx];
+            let mut cases_and_lifts_expr = String::from("[");
+            cases_and_lifts_expr.push_str(&format!(
+                "['{}', {}, {}],",
+                "ok",
+                result_ty
+                    .ok
+                    .as_ref()
+                    .map(|ty| gen_flat_lift_fn_js_expr(bindgen, component_types, ty, canon_opts))
+                    .unwrap_or(String::from("null")),
+                result_ty
+                    .ok
+                    .as_ref()
+                    .map(|ty| component_types.canonical_abi(ty).size32)
+                    .map(|n| n.to_string())
+                    .unwrap_or(String::from("null")),
+            ));
+            cases_and_lifts_expr.push_str(&format!(
+                "['{}', {}, {}],",
+                "error",
+                result_ty
+                    .err
+                    .as_ref()
+                    .map(|ty| gen_flat_lift_fn_js_expr(bindgen, component_types, ty, canon_opts))
+                    .unwrap_or(String::from("null")),
+                result_ty
+                    .err
+                    .as_ref()
+                    .map(|ty| component_types.canonical_abi(ty).size32)
+                    .map(|n| n.to_string())
+                    .unwrap_or(String::from("null")),
+            ));
+
+            cases_and_lifts_expr.push_str("]");
+            format!("{lift_fn}({cases_and_lifts_expr})",)
+        }
+        InterfaceType::Own(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+            format!("{lift_fn}")
+        }
+        InterfaceType::Borrow(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+            format!("{lift_fn}")
+        }
+        InterfaceType::Future(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
+            format!("{lift_fn}")
+        }
+        InterfaceType::Stream(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
+            format!("{lift_fn}")
+        }
+        InterfaceType::ErrorContext(_ty_idx) => {
+            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
+            format!("{lift_fn}")
+        }
     }
 }

@@ -8,9 +8,10 @@ use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
 use wit_parser::{
-    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId,
+    Alignment, ArchitectureSize, Handle, Resolve, SizeAlign, Type, TypeDef, TypeDefKind, TypeId,
 };
 
+use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
@@ -19,7 +20,6 @@ use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
-use crate::intrinsics::Intrinsic;
 use crate::{get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
@@ -1047,14 +1047,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 // TODO: this is the wrong endianness
                 if matches!(element, Type::U8) {
                     uwriteln!(
-                                self.src,
-                                "var src{tmp} = new Uint8Array(val{tmp}.buffer || val{tmp}, val{tmp}.byteOffset, len{tmp} * {size});",
-                            );
+                        self.src,
+                        "var src{tmp} = new Uint8Array(val{tmp}.buffer || val{tmp}, val{tmp}.byteOffset, len{tmp} * {size});",
+                    );
                 } else {
                     uwriteln!(
-                                self.src,
-                                "var src{tmp} = new Uint8Array(val{tmp}.buffer, val{tmp}.byteOffset, len{tmp} * {size});",
-                            );
+                        self.src,
+                        "var src{tmp} = new Uint8Array(val{tmp}.buffer, val{tmp}.byteOffset, len{tmp} * {size});",
+                    );
                 }
                 uwriteln!(
                     self.src,
@@ -1127,10 +1127,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
                 uwriteln!(
-                            self.src,
-                            "var result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
-                            if self.encoding == StringEncoding::UTF16 { "16" } else { "8" }
-                        );
+                    self.src,
+                    "var result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
+                    if self.encoding == StringEncoding::UTF16 {
+                        "16"
+                    } else {
+                        "8"
+                    }
+                );
                 results.push(format!("result{tmp}"));
             }
 
@@ -1192,13 +1196,20 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::IterBasePointer => results.push("base".to_string()),
 
-            Instruction::CallWasm { sig, .. } => {
+            Instruction::CallWasm { name, sig } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
-                    "{debug_log_fn}('{prefix} [Instruction::CallWasm] (async? {async_}, @ enter)');",
+                    "{debug_log_fn}('{prefix} [Instruction::CallWasm] enter', {{
+                         funcName: '{name}',
+                         paramCount: {param_count},
+                         async: {is_async},
+                         postReturn: {has_post_return},
+                      }});",
+                    param_count = sig.params.len(),
                     prefix = self.tracing_prefix,
-                    async_ = self.is_async,
+                    is_async = self.is_async,
+                    has_post_return = self.post_return.is_some(),
                 );
 
                 // Inject machinery for starting an async 'current' task
@@ -1208,17 +1219,29 @@ impl Bindgen for FunctionBindgen<'_> {
                 let sig_results_length = sig.results.len();
                 self.write_result_assignment(sig_results_length, results);
 
+                // NOTE: if we're calling an function that has been async lifted by the component,
+                // then the actual return of the function is not determined by the function returning,
+                // but by the calling of the task.return intrinsic during execution of the function in question
+                // (or on some future execution).
+                //
+                // Rather than returning the result of the function call, we can:
+                // 1. run the function
+                // 2. take it's result
+                // 2. return the relevant task's result instead
+                //
+                // If the current function does not use async porcelain (i.e. is not async lowered), then we must
+                // immediately await the response.
+
                 // Output the function call
-                let maybe_async_await = if self.requires_async_porcelain {
-                    "await "
-                } else {
-                    ""
-                };
                 uwriteln!(
                     self.src,
                     "{maybe_async_await}{callee}({args});",
                     callee = self.callee,
-                    args = operands.join(", ")
+                    args = operands.join(", "),
+                    maybe_async_await = self
+                        .requires_async_porcelain
+                        .then_some("await ")
+                        .unwrap_or_default(),
                 );
 
                 // Print post-return if tracing is enabled
@@ -1237,9 +1260,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
 
-                // Inject machinery for ending the current task,
-                // which may return a result if necessary
-                self.end_current_task();
+                // If we're not dealing with an async call, we can immediately end the task
+                // after the call has completed.
+                if !self.is_async {
+                    self.end_current_task();
+                }
             }
 
             // Call to an interface, usually but not always an externally imported interface
@@ -1261,6 +1286,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     ""
                 };
+
                 let call = if self.callee_resource_dynamic {
                     format!(
                         "{maybe_async_await}{}.{}({})",
@@ -1370,17 +1396,22 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::Return { func, amt } => {
+            Instruction::Return {
+                func,
+                amt: stack_value_count,
+            } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::Return]', {{
                          funcName: '{func_name}',
-                         paramCount: {amt},
+                         paramCount: {stack_value_count},
+                         async: {is_async},
                          postReturn: {post_return_present}
                       }});",
                     func_name = func.name,
                     post_return_present = self.post_return.is_some(),
+                    is_async = self.is_async,
                     prefix = self.tracing_prefix,
                 );
 
@@ -1403,10 +1434,14 @@ impl Bindgen for FunctionBindgen<'_> {
                     )
                 };
 
-                // Output code for combinations of results
-                match amt {
-                    // Handle no result case
-                    0 => {
+                // Depending how many values are on the stack after returning, we must execute differently.
+                //
+                // In particular, if this function is async (distinct from whether async porcelain was necessary or not),
+                // rather than simply executing the function we must return (or block for) the promise that was created
+                // for the task.
+                match (self.is_async, stack_value_count) {
+                    // (sync) Handle no result case
+                    (_is_async @ false, 0) => {
                         if let Some(f) = &self.post_return {
                             uwriteln!(
                                 self.src,
@@ -1416,8 +1451,8 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                     }
 
-                    // Handle single result<t> case
-                    1 if self.err == ErrHandling::ThrowResultErr => {
+                    // (sync) Handle single `result<t>` case
+                    (_is_async @ false, 1) if self.err == ErrHandling::ThrowResultErr => {
                         let component_err = self.intrinsic(Intrinsic::ComponentError);
                         let op = &operands[0];
                         uwriteln!(self.src, "const retCopy = {op};");
@@ -1439,8 +1474,8 @@ impl Bindgen for FunctionBindgen<'_> {
                         );
                     }
 
-                    // Handle all other cases (including single parameter non-result<t>)
-                    amt => {
+                    // (sync) Handle all other cases (including single parameter non-result<t>)
+                    (_is_async @ false, amt) => {
                         let ret_val = match amt {
                             0 => unreachable!(
                                 "unexpectedly zero return values for synchronous return"
@@ -1449,45 +1484,93 @@ impl Bindgen for FunctionBindgen<'_> {
                             _ => format!("[{}]", operands.join(", ")),
                         };
 
-                        match (self.post_return, self.is_async) {
-                            (Some(post_return_fn), _) => {
-                                // In the case there is a post return function, we'll want to copy the value
-                                // then perform the post return before leaving
-                                //
-                                // NOTE: the is_async indicator that a function is async here only tells us about
-                                // the lowering on this side (i.e. it is possible to lower a sync export which
-                                // validly has a post_return)
+                        // Handle the post return if necessary
+                        if let Some(post_return_fn) = self.post_return {
+                            // In the case there is a post return function, we'll want to copy the value
+                            // then perform the post return before leaving
 
-                                // Write out the assignment for the given return value
-                                uwriteln!(self.src, "const retCopy = {ret_val};");
+                            // Write out the assignment for the given return value
+                            uwriteln!(self.src, "const retCopy = {ret_val};");
 
-                                // Perform the post return (if present) w/ the result, and
-                                // pass a copy fo the result to the actual caller
-                                uwriteln!(
-                                    self.src,
-                                    "{}",
-                                    gen_post_return_js((
-                                        format!("{post_return_fn}(ret);"),
-                                        Some("return retCopy;".into())
-                                    ))
-                                );
-                            }
-                            // Sync functions without post returns can simply return the lifted value
-                            (None, _is_guest_async_lifted @ false) => {
-                                uwriteln!(self.src, "return {ret_val};",)
-                            }
-                            // Async functions never have post returns, but they must interpret async behavior
-                            //
-                            // TODO: implement and return a promise that tracks the result of the async fn
-                            // implementation below takes the returned value (which may be only an async turn indicator)
-                            //
-                            (None, _is_guest_async_lifted @ true) => {
-                                uwriteln!(
-                                    self.src,
-                                    r#"throw new Error("async lowered return processing not yet implemented!");"#,
-                                );
+                            // Generate the JS that should perform the post return w/ the result
+                            // and pass a copy fo the result to the actual caller
+                            let post_return_js = gen_post_return_js((
+                                format!("{post_return_fn}(ret);"),
+                                Some("return retCopy;".into()),
+                            ));
+
+                            uwriteln!(self.src, "{post_return_js}",);
+                        } else {
+                            uwriteln!(self.src, "return {ret_val};",)
+                        }
+                    }
+
+                    // (async) handle return of valid async call (single parameter)
+                    (_is_async @ true, 1) => {
+                        // Given that this function was async lifted, regardless of whether we are allowed to use async
+                        // porcelain or not, we must return a Promise that resolves to the result of this function
+                        //
+                        // If we are using async porcelain, then we can at the very least resolve the promise immediately
+                        // and do the waiting "on our side", but if async porcelain is not enabled, then we must return a
+                        // Promise and let the caller resolve it in their sync fasion however they can (i.e. hopefully off
+                        // the main thread, in a loop somewhere).
+                        //
+                        // It is up to sync callers to resolve the returned Promise to a value, for now,
+                        // we do not attempt to do any synchronous busy waiting until the
+                        //
+                        let component_instance_idx = self.canon_opts.instance.as_u32();
+                        let get_current_task_fn = self
+                            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                        let component_err = self.intrinsic(Intrinsic::ComponentError);
+
+                        // If the return value is a result, we attempt to extract the relevant value from inside
+                        // or throw an error, in keeping with transpile's value handling rules
+                        let mut return_res_js = "return taskRes;".into();
+                        if let Some(Type::Id(result_ty_id)) = func.result {
+                            if let Some(TypeDef {
+                                kind: TypeDefKind::Result(_),
+                                ..
+                            }) = self.resolve.types.get(result_ty_id)
+                            {
+                                if self.requires_async_porcelain {
+                                    // If we're using async porcelain, then we have already resolved the promise
+                                    // to a value, and we can throw if it's an Result that contains an error
+                                    return_res_js = format!("
+                                        if (taskRes.tag === 'err') {{ throw new {component_err}(taskRes.val); }}
+                                        return taskRes.val;
+                                    ");
+                                } else {
+                                    // If we're not using async porcelain, then we're return a Promise,
+                                    // but rather than returning the promise of a Result object, we should
+                                    // return the value inside (or error)
+                                    return_res_js = format!("
+                                        return taskRes.then((_taskRes) => {{
+                                            if (_taskRes.tag === 'err') {{ throw new {component_err}(_taskRes.val); }}
+                                            return _taskRes.val;
+                                        }});
+                                    ");
+                                }
                             }
                         }
+
+                        uwriteln!(
+                            self.src,
+                            "
+                            const taskMeta = {get_current_task_fn}({component_instance_idx});
+                            if (!taskMeta) {{ throw new Error('failed to find current task metadata'); }}
+                            const task = taskMeta.task;
+                            if (!task) {{ throw new Error('missing/invalid task in current task metadata'); }}
+                            const taskRes = {maybe_async_await} task.completionPromise();
+                            {return_res_js}
+                            ",
+                            maybe_async_await = self.requires_async_porcelain.then_some("await ").unwrap_or_default(),
+                        );
+                    }
+
+                    (_is_async @ true, _) => {
+                        unreachable!(
+                            "async functions must return a single i32 result indicating async behavior"
+                        );
                     }
                 }
             }
@@ -1574,7 +1657,10 @@ impl Bindgen for FunctionBindgen<'_> {
                         if !imported {
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
-                            uwriteln!(self.src, "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);");
+                            uwriteln!(
+                                self.src,
+                                "var {rsc} = new.target === {local_name} ? this : Object.create({local_name}.prototype);"
+                            );
                             if is_own {
                                 // Sending an own handle out to JS as a return value - set up finalizer and disposal.
                                 let empty_func = self
@@ -1597,13 +1683,16 @@ impl Bindgen for FunctionBindgen<'_> {
                                 } else {
                                     // Set up Symbol.dispose for borrows to allow its call, even though it does nothing.
                                     uwriteln!(
-                                                self.src,
-                                                "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: {empty_func} }});",
-                                            );
+                                        self.src,
+                                        "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: {empty_func} }});",
+                                    );
                                 }
                             } else {
                                 // Borrow handles of local resources have rep handles, which we carry through here.
-                                uwriteln!(self.src, "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});");
+                                uwriteln!(
+                                    self.src,
+                                    "Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});"
+                                );
                             }
                         } else {
                             let rep = format!("rep{}", self.tmp());
@@ -1654,7 +1743,10 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         if !imported {
                             if is_own {
-                                uwriteln!(self.src, "var {rsc} = repTable.get($resource_{prefix}rep${lower_camel}({handle})).rep;");
+                                uwriteln!(
+                                    self.src,
+                                    "var {rsc} = repTable.get($resource_{prefix}rep${lower_camel}({handle})).rep;"
+                                );
                                 uwrite!(
                                             self.src,
                                             "repTable.delete({handle});
@@ -1676,15 +1768,18 @@ impl Bindgen for FunctionBindgen<'_> {
                                     );
 
                             uwriteln!(
-                                        self.src,
-                                        "finalizationRegistry_import${prefix}{lower_camel}.register({rsc}, {handle}, {rsc});",
-                                    );
+                                self.src,
+                                "finalizationRegistry_import${prefix}{lower_camel}.register({rsc}, {handle}, {rsc});",
+                            );
 
                             if !is_own {
                                 let cur_resource_borrows = self.intrinsic(Intrinsic::Resource(
                                     ResourceIntrinsic::CurResourceBorrows,
                                 ));
-                                uwriteln!(self.src, "{cur_resource_borrows}.push({{ rsc: {rsc}, drop: $resource_import${prefix}drop${lower_camel} }});");
+                                uwriteln!(
+                                    self.src,
+                                    "{cur_resource_borrows}.push({{ rsc: {rsc}, drop: $resource_import${prefix}drop${lower_camel} }});"
+                                );
                                 self.clear_resource_borrows = true;
                             }
                         }
@@ -1885,39 +1980,35 @@ impl Bindgen for FunctionBindgen<'_> {
                     Some(payload_ty) => {
                         match payload_ty {
                             // TODO: reuse existing lifts
-                            Type::Bool |
-                            Type::U8 |
-                            Type::U16 |
-                            Type::U32 |
-                            Type::U64 |
-                            Type::S8 |
-                            Type::S16 |
-                            Type::S32 |
-                            Type::S64 |
-                            Type::F32 |
-                            Type::F64 |
-                            Type::Char |
-                            Type::String |
-                            Type::ErrorContext => uwriteln!(
+                            Type::Bool
+                            | Type::U8
+                            | Type::U16
+                            | Type::U32
+                            | Type::U64
+                            | Type::S8
+                            | Type::S16
+                            | Type::S32
+                            | Type::S64
+                            | Type::F32
+                            | Type::F64
+                            | Type::Char
+                            | Type::String
+                            | Type::ErrorContext => uwriteln!(
                                 self.src,
                                 "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }}",
                             ),
                             Type::Id(payload_ty_id) => {
                                 if self.resource_map.contains_key(payload_ty_id) {
-                                    let ResourceTable { data, .. } = &self.resource_map[payload_ty_id];
+                                    let ResourceTable { data, .. } =
+                                        &self.resource_map[payload_ty_id];
                                     uwriteln!(
                                         self.src,
                                         "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {})'); }}",
                                         payload_ty_id.index(),
                                         match data {
-                                            ResourceData::Host {
-                                                local_name,
-                                                ..
-                                            } => local_name,
-                                            ResourceData::Guest {
+                                            ResourceData::Host { local_name, .. } => local_name,
+                                            ResourceData::Guest { resource_name, .. } =>
                                                 resource_name,
-                                                ..
-                                            } => resource_name,
                                         }
                                     );
                                 } else {
@@ -1982,69 +2073,62 @@ impl Bindgen for FunctionBindgen<'_> {
                     None => ("".into(), "".into()),
                     Some(payload_ty) => {
                         match payload_ty {
-                        // TODO: reuse existing lifts
-                        Type::Bool
-                        | Type::U8
-                        | Type::U16
-                        | Type::U32
-                        | Type::U64
-                        | Type::S8
-                        | Type::S16
-                        | Type::S32
-                        | Type::S64
-                        | Type::F32
-                        | Type::F64
-                        | Type::Char
-                        | Type::String
-                        | Type::ErrorContext => {
-                            (
-                                format!("const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }};"),
-                                format!("const payloadLowerFn = () => {{ throw new Error('lower for {payload_ty:?}'); }};")
-                            )
-                        }
+                            // TODO: reuse existing lifts
+                            Type::Bool
+                            | Type::U8
+                            | Type::U16
+                            | Type::U32
+                            | Type::U64
+                            | Type::S8
+                            | Type::S16
+                            | Type::S32
+                            | Type::S64
+                            | Type::F32
+                            | Type::F64
+                            | Type::Char
+                            | Type::String
+                            | Type::ErrorContext => (
+                                format!(
+                                    "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }};"
+                                ),
+                                format!(
+                                    "const payloadLowerFn = () => {{ throw new Error('lower for {payload_ty:?}'); }};"
+                                ),
+                            ),
 
-                        Type::Id(payload_ty_id) => {
-                            // TODO: deal with missing payload type, should it be possible here?
-                            if let Some(ResourceTable { data, .. }) =
-                                &self.resource_map.get(payload_ty_id)
-                            {
-                                let identifier = match data {
-                                        ResourceData::Host {
-                                            local_name,
-                                            ..
-                                        } => local_name,
-                                        ResourceData::Guest {
-                                            resource_name,
-                                            ..
-                                        } => resource_name,
+                            Type::Id(payload_ty_id) => {
+                                // TODO: deal with missing payload type, should it be possible here?
+                                if let Some(ResourceTable { data, .. }) =
+                                    &self.resource_map.get(payload_ty_id)
+                                {
+                                    let identifier = match data {
+                                        ResourceData::Host { local_name, .. } => local_name,
+                                        ResourceData::Guest { resource_name, .. } => resource_name,
                                     };
 
-
-                                (
-                                    format!(
-                                        "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {identifier})'); }};",
-                                        payload_ty_id.index(),
-                                    ),
-                                    format!(
-                                        "const payloadLowerFn = () => {{ throw new Error('lower for {} (identifier {identifier})'); }};",
-                                        payload_ty_id.index(),
+                                    (
+                                        format!(
+                                            "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {identifier})'); }};",
+                                            payload_ty_id.index(),
+                                        ),
+                                        format!(
+                                            "const payloadLowerFn = () => {{ throw new Error('lower for {} (identifier {identifier})'); }};",
+                                            payload_ty_id.index(),
+                                        ),
                                     )
-                                )
-
-                            } else {
-                                // TODO: should it be possible for the type to be missing/not found here?
-                                (
-                                    format!(
-                                        "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }};",
-                                    ),
-                                    format!(
-                                        "const payloadLowerFn = () => {{ throw new Error('lower for missing type with type idx {payload_ty:?}'); }};",
+                                } else {
+                                    // TODO: should it be possible for the type to be missing/not found here?
+                                    (
+                                        format!(
+                                            "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }};",
+                                        ),
+                                        format!(
+                                            "const payloadLowerFn = () => {{ throw new Error('lower for missing type with type idx {payload_ty:?}'); }};",
+                                        ),
                                     )
-                                )
-
+                                }
                             }
                         }
-                    }
                     }
                 };
 
@@ -2167,16 +2251,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 case 0: // EXIT
                                     {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] exit', {{ fn: '{name}' }});
                                     task.exit();
-                                    const results = task.takeResults();
-                                    if (!results || !Array.isArray(results)) {{
-                                        throw new Error('missing/invalid results, non-array');
-                                    }}
-                                    switch (results.length) {{
-                                        case 0: return undefined;
-                                        case 1: return results[0];
-                                        default:
-                                            throw new Error('multi-return is not supported');
-                                    }}
+                                    return;
                                 case 1: // YIELD
                                     {debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn] yield', {{ fn: '{name}' }});
                                     taskRes = {task_fn_call_prefix}{task_yield_fn}({{ isCancellable: true, forCallback: true }});

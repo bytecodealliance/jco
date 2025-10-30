@@ -24,6 +24,9 @@ use resource::ResourceIntrinsic;
 pub(crate) mod lift;
 use lift::LiftIntrinsic;
 
+pub(crate) mod lower;
+use lower::LowerIntrinsic;
+
 pub(crate) mod component;
 use component::ComponentIntrinsic;
 
@@ -51,6 +54,7 @@ pub enum Intrinsic {
     AsyncTask(AsyncTaskIntrinsic),
     Waitable(WaitableIntrinsic),
     Lift(LiftIntrinsic),
+    Lower(LowerIntrinsic),
     AsyncStream(AsyncStreamIntrinsic),
     AsyncFuture(AsyncFutureIntrinsic),
     Component(ComponentIntrinsic),
@@ -344,6 +348,31 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatResult))
+        | args
+            .intrinsics
+            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
+        | args
+            .intrinsics
+            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant)]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU8),
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU16),
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU32),
+        ]);
+    }
+
+    if args
+        .intrinsics
         .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask))
         || args
             .intrinsics
@@ -369,6 +398,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             Intrinsic::AsyncTask(i) => i.render(&mut output),
             Intrinsic::Waitable(i) => i.render(&mut output, &args),
             Intrinsic::Lift(i) => i.render(&mut output),
+            Intrinsic::Lower(i) => i.render(&mut output),
             Intrinsic::AsyncStream(i) => i.render(&mut output),
             Intrinsic::AsyncFuture(i) => i.render(&mut output),
             Intrinsic::Component(i) => i.render(&mut output),
@@ -884,6 +914,7 @@ impl Intrinsic {
             Intrinsic::Waitable(i) => i.name(),
             Intrinsic::Resource(i) => i.name(),
             Intrinsic::Lift(i) => i.name(),
+            Intrinsic::Lower(i) => i.name(),
             Intrinsic::AsyncStream(i) => i.name(),
             Intrinsic::AsyncFuture(i) => i.name(),
             Intrinsic::Component(i) => i.name(),

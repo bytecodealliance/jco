@@ -1,7 +1,7 @@
 //! Intrinsics that represent helpers that implement async tasks
 
 use crate::{
-    intrinsics::{component::ComponentIntrinsic, p3::waitable::WaitableIntrinsic, Intrinsic},
+    intrinsics::{Intrinsic, component::ComponentIntrinsic, p3::waitable::WaitableIntrinsic},
     source::Source,
 };
 
@@ -303,43 +303,50 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = Self::GetCurrentTask.name();
 
                 output.push_str(&format!("
-                    function {task_return_fn}(componentIdx, memory, callbackFnIdx, liftFns, storagePtr, storageLen) {{
+                    function {task_return_fn}(componentIdx, useDirectParams, memory, callbackFnIdx, liftFns) {{
+                        const params = [...arguments].slice(5);
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
                             memory,
                             callbackFnIdx,
                             liftFns,
-                            storagePtr,
-                            storageLen,
+                            params,
                         }});
+
                         const taskMeta = {current_task_get_fn}(componentIdx);
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
+
                         const task = taskMeta.task;
                         if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
 
                         task.callbackFnIdx = callbackFnIdx;
 
-                        if (!memory && liftFns.length > 1) {{
-                            throw new Error('memory must be present if more than one lift is performed');
+                        if (!memory && liftFns.length > 4) {{
+                            throw new Error('memory must be present if more than max async flat lifts are performed');
                         }}
-                        if (memory && storageLen === undefined) {{
+
+                        let liftCtx = {{ memory, useDirectParams, params }};
+                        if (useDirectParams) {{
+                            liftCtx.memory = memory;
+                            liftCtx.params = params;
+                        }} else {{
+                            liftCtx.storagePtr = params[0];
+                            liftCtx.storageLen = params[1];
+                        }}
+
+                        if (memory && liftCtx.storageLen === undefined) {{
                             throw new Error('storageLen must be provided if a memory is present');
                         }}
 
-                        if (!memory && storageLen === undefined && liftFns.length === 1) {{
-                            {debug_log_fn}('[{task_return_fn}()] simple short-circuit return', {{ values: [storagePtr] }});
-                            task.resolve([storagePtr]);
-                            return;
-                        }}
-
-                        const originalPtr = storagePtr;
                         const results = [];
-                        {debug_log_fn}('[{task_return_fn}()] lifting results out of memory', {{ originalPtr, memory }});
+                        {debug_log_fn}('[{task_return_fn}()] lifting results out of memory', {{ liftCtx }});
                         for (const liftFn of liftFns) {{
-                            if (storageLen <= 0) {{ throw new Error('ran out of storage while writing'); }}
-                            const bytesWritten = liftFn(memory, vals, storagePtr, storageLen);
-                            storagePtr += bytesWritten;
-                            storageLen -= bytesWritten;
+                            if (liftCtx.storageLen !== undefined && liftCtx.storageLen <= 0) {{
+                                throw new Error('ran out of storage while writing');
+                            }}
+                            const [ val, newLiftCtx ] = liftFn(liftCtx);
+                            liftCtx = newLiftCtx;
+                            results.push(val);
                         }}
 
                         task.resolve(results);
@@ -566,9 +573,9 @@ impl AsyncTaskIntrinsic {
                         #state;
                         #isAsync;
                         #onResolve = null;
-                        #returnedResults = null;
                         #entryFnName = null;
                         #subtasks = [];
+                        #completionPromise = null;
 
                         cancelled = false;
                         requested = false;
@@ -581,6 +588,7 @@ impl AsyncTaskIntrinsic {
                         awaitableResume = null;
                         awaitableCancel = null;
 
+
                         constructor(opts) {{
                            if (opts?.id === undefined) {{ throw new TypeError('missing task ID during task creation'); }}
                            this.#id = opts.id;
@@ -592,8 +600,19 @@ impl AsyncTaskIntrinsic {
                            this.#isAsync = opts?.isAsync ?? false;
                            this.#entryFnName = opts.entryFnName;
 
+                           const {{
+                               promise: completionPromise,
+                               resolve: resolveCompletionPromise,
+                               reject: rejectCompletionPromise,
+                           }} = Promise.withResolvers();
+                           this.#completionPromise = completionPromise;
+
                            this.#onResolve = (results) => {{
-                              this.#returnedResults = results;
+                              if (results.length === 0) {{
+                                  rejectCompletionPromise(new Error('missing/invalid task result (task was likely cancelled)'));
+                              }} else {{
+                                  resolveCompletionPromise(results);
+                              }}
                            }}
                         }}
 
@@ -601,13 +620,8 @@ impl AsyncTaskIntrinsic {
                         id() {{ return this.#id; }}
                         componentIdx() {{ return this.#componentIdx; }}
                         isAsync() {{ return this.#isAsync; }}
-                        getEntryFnName() {{ return this.#entryFnName; }}
-
-                        takeResults() {{
-                            const results = this.#returnedResults;
-                            this.#returnedResults = null;
-                            return results;
-                        }}
+                        entryFnName() {{ return this.#entryFnName; }}
+                        completionPromise() {{ return this.#completionPromise; }}
 
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
@@ -638,7 +652,6 @@ impl AsyncTaskIntrinsic {
                             let mayNotEnter = !this.mayEnter(this);
                             const componentHasPendingTasks = cstate.pendingTasks > 0;
                             if (mayNotEnter || componentHasPendingTasks) {{
-
                                 throw new Error('in enter()'); // TODO: remove
                                 cstate.pendingTasks.set(this.#id, new {awaitable_class}(new Promise()));
 
@@ -650,7 +663,7 @@ impl AsyncTaskIntrinsic {
                                         throw new Error('pending task [' + this.#id + '] not found for component instance');
                                     }}
                                     cstate.pendingTasks.remove(this.#id);
-                                    this.#onResolve([]);
+                                    this.#onResolve(new Error('failed enter'));
                                     return false;
                                 }}
 
@@ -872,17 +885,17 @@ impl AsyncTaskIntrinsic {
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
 
-                            this.#onResolve([]);
+                            this.#onResolve(new Error('cancelled'));
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
-                        resolve(result) {{
-                            {debug_log_fn}('[{task_class}#resolve()] args', {{ result }});
+                        resolve(results) {{
+                            {debug_log_fn}('[{task_class}#resolve()] args', {{ results }});
                             if (this.#state === {task_class}.State.RESOLVED) {{
                                 throw new Error('task is already resolved');
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
-                            this.#onResolve(result);
+                            this.#onResolve(results.length === 1 ? results[0] : results);
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
