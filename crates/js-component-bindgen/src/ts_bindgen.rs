@@ -12,12 +12,12 @@ use wit_bindgen_core::wit_parser::{
 
 use crate::files::Files;
 use crate::function_bindgen::{as_nullable, js_array_ty, maybe_null};
-use crate::names::{is_valid_js_identifier, maybe_quote_id, LocalNames, RESERVED_KEYWORDS};
+use crate::names::{LocalNames, RESERVED_KEYWORDS, is_valid_js_identifier, maybe_quote_id};
 use crate::source::Source;
-use crate::transpile_bindgen::{parse_world_key, AsyncMode, InstantiationMode, TranspileOpts};
+use crate::transpile_bindgen::{AsyncMode, InstantiationMode, TranspileOpts, parse_world_key};
 use crate::{
-    dealias, feature_gate_allowed, get_thrown_type, requires_async_porcelain, uwrite, uwriteln,
-    FunctionIdentifier,
+    FunctionIdentifier, dealias, feature_gate_allowed, get_thrown_type, requires_async_porcelain,
+    uwrite, uwriteln,
 };
 
 struct TsBindgen {
@@ -140,7 +140,10 @@ pub fn ts_bindgen(
                     if !feature_gate_allowed(resolve, package, &f.stability, &f.name)
                         .context("failed to check feature gate for imported function")?
                     {
-                        debug!("skipping imported function [{}] feature gate due to feature gate visibility", f.name);
+                        debug!(
+                            "skipping imported function [{}] feature gate due to feature gate visibility",
+                            f.name
+                        );
                         continue;
                     }
 
@@ -159,7 +162,9 @@ pub fn ts_bindgen(
                     {
                         let import_specifier = resolve.id_of(*id).unwrap();
                         let (_, _, iface) = parse_world_key(&import_specifier).unwrap();
-                        debug!("skipping imported interface [{iface}] feature gate due to feature gate visibility");
+                        debug!(
+                            "skipping imported interface [{iface}] feature gate due to feature gate visibility"
+                        );
                         continue;
                     }
 
@@ -198,38 +203,48 @@ pub fn ts_bindgen(
                     if !feature_gate_allowed(resolve, package, &ty.stability, name)
                         .context("failed to check feature gate for imported type")?
                     {
-                        debug!("skipping imported type [{name}] feature gate due to feature gate visibility");
+                        debug!(
+                            "skipping imported type [{name}] feature gate due to feature gate visibility"
+                        );
                         continue;
                     }
 
-                    let mut gen = TsInterface::new(resolve, true, opts.guest);
-                    gen.docs(&ty.docs);
+                    let mut generator = TsInterface::new(resolve, true, opts.guest);
+                    generator.docs(&ty.docs);
                     match &ty.kind {
                         TypeDefKind::Record(record) => {
-                            gen.type_record(*tid, name, record, &ty.docs)
+                            generator.type_record(*tid, name, record, &ty.docs)
                         }
-                        TypeDefKind::Flags(flags) => gen.type_flags(*tid, name, flags, &ty.docs),
-                        TypeDefKind::Tuple(tuple) => gen.type_tuple(*tid, name, tuple, &ty.docs),
-                        TypeDefKind::Enum(enum_) => gen.type_enum(*tid, name, enum_, &ty.docs),
+                        TypeDefKind::Flags(flags) => {
+                            generator.type_flags(*tid, name, flags, &ty.docs)
+                        }
+                        TypeDefKind::Tuple(tuple) => {
+                            generator.type_tuple(*tid, name, tuple, &ty.docs)
+                        }
+                        TypeDefKind::Enum(enum_) => {
+                            generator.type_enum(*tid, name, enum_, &ty.docs)
+                        }
                         TypeDefKind::Variant(variant) => {
-                            gen.type_variant(*tid, name, variant, &ty.docs)
+                            generator.type_variant(*tid, name, variant, &ty.docs)
                         }
-                        TypeDefKind::Option(t) => gen.type_option(*tid, name, t, &ty.docs),
-                        TypeDefKind::Result(r) => gen.type_result(*tid, name, r, &ty.docs),
-                        TypeDefKind::List(t) => gen.type_list(*tid, name, t, &ty.docs),
+                        TypeDefKind::Option(t) => generator.type_option(*tid, name, t, &ty.docs),
+                        TypeDefKind::Result(r) => generator.type_result(*tid, name, r, &ty.docs),
+                        TypeDefKind::List(t) => generator.type_list(*tid, name, t, &ty.docs),
                         TypeDefKind::FixedSizeList(t, len) => {
-                            gen.type_fixed_size_list(*tid, name, t, len, &ty.docs)
+                            generator.type_fixed_size_list(*tid, name, t, len, &ty.docs)
                         }
-                        TypeDefKind::Type(t) => gen.type_alias(*tid, name, t, None, &ty.docs),
+                        TypeDefKind::Type(t) => generator.type_alias(*tid, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
                         TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
-                        TypeDefKind::Resource => {
-                            gen.type_resource(*tid, ty, GeneratedTypeMeta { is_export: false })
-                        }
+                        TypeDefKind::Resource => generator.type_resource(
+                            *tid,
+                            ty,
+                            GeneratedTypeMeta { is_export: false },
+                        ),
                         TypeDefKind::Handle(_) => todo!("type generation for handle"),
                     }
-                    let (src, references) = gen.finish();
+                    let (src, references) = generator.finish();
                     bindgen.src.push_str(&src);
                     bindgen.references.extend(references);
                 }
@@ -266,7 +281,9 @@ pub fn ts_bindgen(
                 if !feature_gate_allowed(resolve, package, &f.stability, &f.name)
                     .context("failed to check feature gate for export")?
                 {
-                    debug!("skipping exported interface [{export_name}] feature gate due to feature gate visibility");
+                    debug!(
+                        "skipping exported interface [{export_name}] feature gate due to feature gate visibility"
+                    );
                     continue;
                 }
                 funcs.push((export_name.to_lower_camel_case(), f));
@@ -285,7 +302,9 @@ pub fn ts_bindgen(
                 if !feature_gate_allowed(resolve, package, stability, iface_name)
                     .context("failed to check feature gate for export")?
                 {
-                    debug!("skipping exported interface [{export_name}] feature gate due to feature gate visibility");
+                    debug!(
+                        "skipping exported interface [{export_name}] feature gate due to feature gate visibility"
+                    );
                     continue;
                 }
 
@@ -471,11 +490,11 @@ impl TsBindgen {
     ) {
         if instantiation {
             if ifaces.len() == 1 {
-                let (iface_name, &id) = ifaces.first().unwrap();
+                let (iface_name, id) = ifaces.first().unwrap();
                 if iface_name == "*" {
                     uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
-                    let name = resolve.interfaces[id].name.as_ref().unwrap();
-                    let local_name = self.import_interface(name, resolve, id, files);
+                    let name = resolve.interfaces[**id].name.as_ref().unwrap();
+                    let local_name = self.import_interface(name, resolve, **id, files);
                     uwriteln!(self.import_object, "typeof {local_name},",);
                     return;
                 }
@@ -521,15 +540,15 @@ impl TsBindgen {
         _files: &mut Files,
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
-        let mut gen = TsInterface::new(resolve, false, self.is_guest);
-        gen.ts_func(
+        let mut generator = TsInterface::new(resolve, false, self.is_guest);
+        generator.ts_func(
             func,
             true,
             false,
             false,
             &GeneratedTypeMeta { is_export: false },
         );
-        let (src, references) = gen.finish();
+        let (src, references) = generator.finish();
         self.import_object.push_str(&src);
         self.references.extend(references);
         uwriteln!(self.import_object, "}},");
@@ -578,7 +597,7 @@ impl TsBindgen {
         _files: &mut Files,
         declaration: bool,
     ) {
-        let mut gen = TsInterface::new(resolve, false, self.is_guest);
+        let mut generator = TsInterface::new(resolve, false, self.is_guest);
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
@@ -587,7 +606,7 @@ impl TsBindgen {
                 id_name,
                 &self.async_exports,
             );
-            gen.ts_func(
+            generator.ts_func(
                 func,
                 false,
                 declaration,
@@ -596,7 +615,7 @@ impl TsBindgen {
             );
         }
 
-        let (src, references) = gen.finish();
+        let (src, references) = generator.finish();
         self.export_object.push_str(&src);
         self.references.extend(references);
     }
@@ -655,8 +674,8 @@ impl TsBindgen {
         let (_name, iface_exists) = self.interface_names.get_or_create(&file_name, &goal_name);
 
         if !iface_exists {
-            let mut gen = TsInterface::new(resolve, false, self.is_guest);
-            gen.begin(&id_name); // Write module declaration
+            let mut generator = TsInterface::new(resolve, false, self.is_guest);
+            generator.begin(&id_name); // Write module declaration
 
             // Generate function definitions
             let async_funcs = if resolve.exports_interface(interface_id) {
@@ -697,13 +716,13 @@ impl TsBindgen {
                     async_funcs,
                 );
 
-                gen.ts_func(func, false, true, requires_async_porcelain, &type_meta);
+                generator.ts_func(func, false, true, requires_async_porcelain, &type_meta);
             }
 
-            gen.types(interface_id);
-            gen.post_types();
+            generator.types(interface_id);
+            generator.post_types();
 
-            let (src, references) = gen.finish();
+            let (src, references) = generator.finish();
             files.push(&file_name, generate_references(&references).as_bytes());
             files.push(&file_name, src.as_bytes());
         }

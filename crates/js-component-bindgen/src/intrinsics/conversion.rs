@@ -10,10 +10,8 @@ pub enum ConversionIntrinsic {
     F32ToI32,
     F64ToI64,
 
-    /// Convert a i32 to a char with the i32 representing a UTF16 point
-    I32ToCharUtf16,
-    /// Convert a i32 to a char with the i32 representing a UTF8 point
-    I32ToCharUtf8,
+    /// Convert a i32 to a char
+    I32ToChar,
 
     /// Implementation of <https://tc39.es/ecma262/#sec-tobigint64>
     ToBigInt64,
@@ -49,6 +47,7 @@ impl ConversionIntrinsic {
         [
             "f32ToI32",
             "f64ToI64",
+            "i32ToChar",
             "i32ToF32",
             "i64ToF64",
             "toInt16",
@@ -69,8 +68,7 @@ impl ConversionIntrinsic {
     pub fn name(&self) -> &'static str {
         match self {
             Self::ToBigInt64 => "toInt64",
-            Self::I32ToCharUtf8 => "_i32ToCharUtf8",
-            Self::I32ToCharUtf16 => "_i32ToCharUtf16",
+            Self::I32ToChar => "i32ToChar",
             Self::ToBigUint64 => "toUint64",
             Self::ToInt16 => "toInt16",
             Self::ToInt32 => "toInt32",
@@ -189,26 +187,14 @@ impl ConversionIntrinsic {
                 const f64ToI64 = f => (i64ToF64F[0] = f, i64ToF64I[0]);
             "),
 
-            Self::I32ToCharUtf16 => {
+            Self::I32ToChar => {
                 output.push_str("
-                    function _i32ToCharUTF16 = (n) => {
+                    function _i32ToChar = (n) => {
                         if (!n || typeof n !== 'number') { throw new Error('invalid i32'); }
                         if (n < 0) { throw new Error('i32 must be greater than zero'); }
                         if (n >= 0x110000) { throw new Error('invalid i32, out of range'); }
                         if (0xD800 <= n && n <= 0xDFFF) { throw new Error('invalid i32 out of range'); }
                         return String.fromCharCode(n);
-                    }
-                ");
-            }
-
-            Self::I32ToCharUtf8 => {
-                output.push_str("
-                    function _i32ToCharUTF8 = (n) => {
-                        if (!n || typeof n !== 'number') { throw new Error('invalid i32'); }
-                        if (n < 0) { throw new Error('i32 must be greater than zero'); }
-                        if (n >= 0x110000) { throw new Error('invalid i32, out of range'); }
-                        if (0xD800 <= n && n <= 0xDFFF) { throw new Error('invalid i32 out of range'); }
-                        return new TextDecoder().decode(new Uint8Array([n]));
                     }
                 ");
             }

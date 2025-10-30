@@ -94,7 +94,7 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         optimize,
         build_type,
     } = args;
-    std::env::set_var("RUST_BACKTRACE", "1");
+    unsafe { std::env::set_var("RUST_BACKTRACE", "1"); }
     let component_path = PathBuf::from(&component_path)
         .canonicalize()
         .with_context(|| {

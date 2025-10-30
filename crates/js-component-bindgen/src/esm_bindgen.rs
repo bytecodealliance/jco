@@ -4,9 +4,9 @@ use std::fmt::Write;
 use heck::ToLowerCamelCase;
 
 use crate::intrinsics::webidl::WebIdlIntrinsic;
-use crate::names::{maybe_quote_id, maybe_quote_member, LocalNames};
+use crate::names::{LocalNames, maybe_quote_id, maybe_quote_member};
 use crate::source::Source;
-use crate::{uwrite, uwriteln, TranspileOpts};
+use crate::{TranspileOpts, uwrite, uwriteln};
 
 /// JS local name
 type LocalName = String;
@@ -70,7 +70,7 @@ impl EsmBindgen {
                 ImportBinding::Interface(_) => {
                     unreachable!("Multi-version interfaces must have the same shape")
                 }
-                ImportBinding::Local(ref mut binding_local_names) => {
+                ImportBinding::Local(binding_local_names) => {
                     if !binding_local_names.contains(&binding_name) {
                         binding_local_names.push(binding_name);
                     }
