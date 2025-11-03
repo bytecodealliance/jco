@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::fs;
 use std::path::PathBuf;
 
-use js_component_bindgen::{generate_types, source::wit_parser::Resolve, BindingsMode};
+use js_component_bindgen::{BindingsMode, generate_types, source::wit_parser::Resolve};
 
 use crate::WasiVersion;
 

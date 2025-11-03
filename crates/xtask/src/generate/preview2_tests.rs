@@ -2,9 +2,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::{fs, path::Path};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use wit_component::ComponentEncoder;
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 // for debugging
 const TRACE: bool = false;
@@ -137,13 +137,13 @@ pub fn run() -> Result<()> {
 
     // Tidy up the dir and recreate it.
     let jco_crate_dir = project_dir.join("crates/jco");
-    let _ = fs::remove_dir_all(jco_crate_dir.join("tests/gen"));
+    let _ = fs::remove_dir_all(jco_crate_dir.join("tests/generated"));
     let _ = fs::remove_dir_all(jco_crate_dir.join("tests/output"));
-    fs::create_dir_all(jco_crate_dir.join("tests/gen"))
-        .context("failed to recreate jco tests/gen dir")?;
+    fs::create_dir_all(jco_crate_dir.join("tests/generated"))
+        .context("failed to recreate jco tests/generated dir")?;
     fs::create_dir_all(jco_crate_dir.join("tests/output"))
         .context("failed to recreate jco tests/output dir")?;
-    fs::write(jco_crate_dir.join("tests/mod.rs"), "mod gen;\n")
+    fs::write(jco_crate_dir.join("tests/mod.rs"), "mod generated;\n")
         .context("failed to write generated test module")?;
 
     // Build a list of test names, one for every component
@@ -195,7 +195,7 @@ pub fn run() -> Result<()> {
             .with_context(|| format!("failed to read adapter @ [{}]", adapter_path.display()))?,
     );
 
-    let output_module_path = jco_crate_dir.join("tests/gen/mod.rs");
+    let output_module_path = jco_crate_dir.join("tests/generated/mod.rs");
     let jco_script_path = project_dir.join("packages/jco/src/jco.js");
 
     // Perform the tests
@@ -214,7 +214,7 @@ pub fn run() -> Result<()> {
             .with_context(|| format!("failed to read module @ [{}]", module_path.display()))?;
 
         let output_component_path =
-            jco_crate_dir.join(format!("tests/gen/{test_name}.component.wasm"));
+            jco_crate_dir.join(format!("tests/generated/{test_name}.component.wasm"));
 
         // Encode and write out the bytes
         handles.push(std::thread::spawn(move || {
@@ -259,7 +259,7 @@ pub fn run() -> Result<()> {
                 jco_script_path: jco_script_path.as_path(),
                 jco_crate_dir: jco_crate_dir.as_path(),
             })?;
-            let test_file_path = jco_crate_dir.join(format!("tests/gen/node_{test_name}.rs"));
+            let test_file_path = jco_crate_dir.join(format!("tests/generated/node_{test_name}.rs"));
             fs::write(&test_file_path, content)?;
 
             // If deno tests are enabled, also write a deno test file out
@@ -271,7 +271,8 @@ pub fn run() -> Result<()> {
                     jco_script_path: jco_script_path.as_path(),
                     jco_crate_dir: jco_crate_dir.as_path(),
                 })?;
-                let test_file_path = jco_crate_dir.join(format!("tests/gen/deno_{test_name}.rs"));
+                let test_file_path =
+                    jco_crate_dir.join(format!("tests/generated/deno_{test_name}.rs"));
                 fs::write(&test_file_path, content)?;
                 {
                     let mut all_names = all_names.lock().unwrap();
@@ -379,7 +380,7 @@ fn generate_test(args: GenerateTestArgs<'_>) -> Result<String> {
     };
 
     // Determine file paths for component, tests
-    let component_path = jco_crate_dir.join(format!("tests/gen/{test_name}.component.wasm"));
+    let component_path = jco_crate_dir.join(format!("tests/generated/{test_name}.component.wasm"));
 
     // Build primary invocation for test
     let cmd1 = {

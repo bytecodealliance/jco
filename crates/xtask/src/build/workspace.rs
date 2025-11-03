@@ -1,4 +1,4 @@
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 pub(crate) fn run(release: bool) -> anyhow::Result<()> {
     let sh = Shell::new()?;

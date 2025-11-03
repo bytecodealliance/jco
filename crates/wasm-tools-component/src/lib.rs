@@ -145,7 +145,9 @@ impl Guest for WasmToolsJs {
                         && field_name != "language"
                         && field_name != "processed-by"
                     {
-                        return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
+                        return Err(format!(
+                            "'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."
+                        ));
                     }
                     for (name, version) in items {
                         producers.add(field_name, name, version);
@@ -176,7 +178,9 @@ impl Guest for WasmToolsJs {
 
         for (field_name, items) in metadata {
             if field_name != "sdk" && field_name != "language" && field_name != "processed-by" {
-                return Err(format!("'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."));
+                return Err(format!(
+                    "'{field_name}' is not a valid field to embed in the metadata. Must be one of 'language', 'processed-by' or 'sdk'."
+                ));
             }
             for (name, version) in items {
                 producers.add(&field_name, &name, &version);

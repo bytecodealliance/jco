@@ -1,8 +1,8 @@
 //! Intrinsics that represent helpers that enable Lift integration
 
 use crate::intrinsics::Intrinsic;
-use crate::source::Source;
 use crate::intrinsics::string::StringIntrinsic;
+use crate::source::Source;
 
 use super::conversion::ConversionIntrinsic;
 
@@ -497,8 +497,7 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatChar => {
-                let i32_to_char_fn =
-                    Intrinsic::Conversion(ConversionIntrinsic::I32ToChar).name();
+                let i32_to_char_fn = Intrinsic::Conversion(ConversionIntrinsic::I32ToChar).name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
                     function _liftFlatChar(ctx) {{
@@ -724,7 +723,8 @@ impl LiftIntrinsic {
             Self::LiftFlatTuple => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_record = Self::LiftFlatRecord.name();
-                output.push_str(&format!("
+                output.push_str(&format!(
+                    "
                     function _liftFlatTuple(numberedLiftFns) {{
                         return function _liftFlatTupleInner(ctx) {{
                             {debug_log_fn}('[_liftFlatTuple()] args', {{ ctx }});
@@ -738,58 +738,67 @@ impl LiftIntrinsic {
                             return val;
                         }}
                     }}
-                "));
+                "
+                ));
             }
 
             Self::LiftFlatEnum => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_variant = Self::LiftFlatVariant.name();
-                output.push_str(&format!("
+                output.push_str(&format!(
+                    "
                     function _liftFlatEnum(casesAndLiftFns) {{
                         return function _liftFlatEnumInner(ctx) {{
                             {debug_log_fn}('[_liftFlatEnum()] args', {{ ctx }});
                             return {lift_variant}(casesAndLiftFns)(ctx);
                         }}
                     }}
-                "));
+                "
+                ));
             }
 
             Self::LiftFlatOption => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_variant = Self::LiftFlatVariant.name();
-                output.push_str(&format!("
+                output.push_str(&format!(
+                    "
                     function _liftFlatOption(casesAndLiftFns) {{
                         return function _liftFlatOptionInner(ctx) {{
                             {debug_log_fn}('[_liftFlatOption()] args', {{ ctx }});
                             return {lift_variant}(casesAndLiftFns)(ctx);
                         }}
                     }}
-                "));
+                "
+                ));
             }
 
             Self::LiftFlatResult => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_variant = Self::LiftFlatVariant.name();
-                output.push_str(&format!(r#"
+                output.push_str(&format!(
+                    r#"
                     function _liftFlatResult(casesAndLiftFns) {{
                         return function _liftFlatResultInner(ctx) {{
                             {debug_log_fn}('[_liftFlatResult()] args', {{ ctx }});
                             return {lift_variant}(casesAndLiftFns)(ctx);
                         }}
                     }}
-                "#));
+                "#
+                ));
             }
 
             Self::LiftFlatFlags => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
+                output.push_str(&format!(
+                    "
                     function _liftFlatFlags(cases) {{
                         return function _liftFlatFlagsInner(ctx) {{
                             {debug_log_fn}('[_liftFlatFlags()] args', {{ ctx }});
                             throw new Error('flat lift for flags not yet implemented!');
                         }}
                     }}
-                "));
+                "
+                ));
             }
 
             Self::LiftFlatOwn => {

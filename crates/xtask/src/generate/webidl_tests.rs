@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Result;
 
-use webidl2wit::{webidl_to_wit, ConversionOptions, HandleUnsupported};
+use webidl2wit::{ConversionOptions, HandleUnsupported, webidl_to_wit};
 
 const IDL_VERSION_MAJOR: u64 = 0;
 const IDL_VERSION_MINOR: u64 = 0;

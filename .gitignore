@@ -23,7 +23,7 @@ pnpm-lock.yaml
 # Test output
 crates/jco/tests/rundir
 crates/jco/tests/output
-crates/jco/tests/gen
+crates/jco/tests/generated
 test/fixtures/modules/hello_stdout.component.wasm
 
 # Jco
