@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.15.3] - 2025-11-03
+
+### 🚀 Features
+
+* *(jco)* js-component-bindgen -> v1.13.0 by @vados-cosmonic in #1090
+
+
+
+
 ## [1.15.2] - 2025-10-27
 
 ### 🧪 Testing
