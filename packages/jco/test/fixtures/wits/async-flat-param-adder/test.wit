@@ -1,0 +1,9 @@
+package test1:test2;
+
+interface test3 {
+    test4: async func(a: s32, b: s32) -> result<s32, string>;
+}
+
+world test4 {
+    export test3;
+}

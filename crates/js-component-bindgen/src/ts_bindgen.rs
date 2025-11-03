@@ -1080,7 +1080,17 @@ impl<'a> TsInterface<'a> {
         }
         iface.src.push_str(": ");
 
-        if requires_async_porcelain {
+        // Sync lowered async functions must return Promises,
+        // so we must do some extra check
+        let is_async_fn = matches!(
+            func.kind,
+            FunctionKind::AsyncFreestanding
+                | FunctionKind::AsyncMethod(_)
+                | FunctionKind::AsyncStatic(_)
+        );
+        let promise_wrap_result = requires_async_porcelain || is_async_fn;
+
+        if promise_wrap_result {
             iface.src.push_str("Promise<");
         }
 
@@ -1093,7 +1103,7 @@ impl<'a> TsInterface<'a> {
             }
         }
 
-        if requires_async_porcelain {
+        if promise_wrap_result {
             // closes `Promise<>`
             iface.src.push_str(">");
         }
