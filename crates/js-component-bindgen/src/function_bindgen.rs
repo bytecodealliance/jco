@@ -1462,8 +1462,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
 
                     // (sync) Handle all other cases (including single parameter non-result<t>)
-                    (_is_async @ false, amt) => {
-                        let ret_val = match amt {
+                    (_is_async @ false, stack_value_count) => {
+                        let ret_val = match stack_value_count {
                             0 => unreachable!(
                                 "unexpectedly zero return values for synchronous return"
                             ),
@@ -1491,6 +1491,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(self.src, "return {ret_val};",)
                         }
                     }
+
+                    // (async) some async functions will not put values on the stack
+                    (_is_async @ true, 0) => {}
 
                     // (async) handle return of valid async call (single parameter)
                     (_is_async @ true, 1) => {
@@ -1557,9 +1560,10 @@ impl Bindgen for FunctionBindgen<'_> {
                         );
                     }
 
+                    // (async) more than one value on the stack is not expected
                     (_is_async @ true, _) => {
                         unreachable!(
-                            "async functions must return a single i32 result indicating async behavior"
+                            "async functions must return no more than one single i32 result indicating async behavior"
                         );
                     }
                 }
