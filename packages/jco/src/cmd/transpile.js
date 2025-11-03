@@ -3,7 +3,7 @@
 import { extname, basename, resolve } from 'node:path';
 
 import { minify } from 'terser';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 
 import { optimizeComponent } from './opt.js';
 

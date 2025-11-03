@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 
 import { $init, tools } from '../../obj/wasm-tools.js';
 const { metadataShow, print } = tools;
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 import {
     readFile,
     sizeStr,

@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { mkdir, rm, symlink } from 'node:fs/promises';
 
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer';
 
 import { suite, test, beforeAll, afterAll, afterEach, assert } from 'vitest';

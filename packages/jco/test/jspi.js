@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { mkdir, readFile, rm, symlink } from 'node:fs/promises';
 
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
 
