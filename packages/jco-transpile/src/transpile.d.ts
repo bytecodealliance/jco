@@ -1,5 +1,3 @@
-import { Command } from 'commander';
-
 type TypeGenerationOptions = {
     name?: string;
     worldName?: string;
@@ -80,7 +78,6 @@ type TranspilationOptions = {
 export function transpile(
     componentPath: string,
     opts?: TranspilationOptions,
-    program?: Command
 ): Promise<TranspilationResult>;
 
 type TranspilationResult = {
