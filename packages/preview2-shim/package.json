@@ -1,6 +1,6 @@
 {
   "name": "@bytecodealliance/preview2-shim",
-  "version": "0.17.4",
+  "version": "0.17.5",
   "description": "WASI Preview2 shim for JS environments",
   "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
   "contributors": [
@@ -56,9 +56,9 @@
     "test": "vitest run -c test/vitest.ts"
   },
   "devDependencies": {
-      "@bytecodealliance/jco": "1.15.2",
-      "@bytecodealliance/componentize-js": "0.19.3",
-      "mime": "^4.0.7",
-      "puppeteer": "^24.16.2"
+    "@bytecodealliance/componentize-js": "0.19.3",
+    "@bytecodealliance/jco": "1.15.2",
+    "mime": "^4.0.7",
+    "puppeteer": "^24.16.2"
   }
 }

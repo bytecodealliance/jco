@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.17.5] - 2025-11-03
+
+### 🐛 Bug Fixes
+
+* *(p2-shim)* run build in CI to enable browser tests by @vados-cosmonic
+
+* *(p2-shim)* undeclared var assignment for _cwd by @vados-cosmonic
+
+
+### 🧪 Testing
+
+* *(p2-shim)* support puppeteer launch args by @vados-cosmonic in #1075
+
+* *(p2-shim)* add test machinery for browsers by @vados-cosmonic
+
+
+
+
 ## [0.17.4] - 2025-09-04
 
 ### 🚀 Features
