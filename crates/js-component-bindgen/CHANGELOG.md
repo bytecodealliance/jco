@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.13.0] - 2025-11-03
+
+### 🚀 Features
+
+* *(bindgen)* return promises for sync lowered async functions by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+* *(bindgen)* allow extended const wasm feature during parse by @vados-cosmonic in #1085
+
+* *(bindgen)* async task return value by @vados-cosmonic in #1084
+
+* *(bindgen)* assert for stack values during a return for async by @vados-cosmonic
+
+* *(bindgen)* fix async return param logic by @vados-cosmonic
+
+* *(bindgen)* declare within declare for reserved words by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(bindgen)* fix lint by @vados-cosmonic
+
+* *(bindgen)* fix lint by @vados-cosmonic
+
+* *(bindgen)* update upstream deps by @vados-cosmonic in #1028
+
+* *(bindgen)* remove leftover debug logs by @vados-cosmonic in #979
+
+
+
+
 ## [1.12.0] - 2025-08-25
 
 ### 🚀 Features
