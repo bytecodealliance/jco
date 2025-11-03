@@ -604,7 +604,7 @@ fn generate_command_invocation(args: GenerateCommandArgs<'_>) -> String {
         {cmd_name}.arg("--jco-import-bindings");
         {cmd_name}.arg("hybrid");
         {cmd_name}.arg(r#"{}"#);
-        {cmd_name}.args(&["hello", "this", "", "is an argument", "with 🚩 emoji"]);
+        {cmd_name}.args(["hello", "this", "", "is an argument", "with 🚩 emoji"]);
         {cmd_name}.stdin({stdin_setting});"##,
         component_path.display(),
     )

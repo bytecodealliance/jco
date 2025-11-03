@@ -1219,29 +1219,16 @@ impl Bindgen for FunctionBindgen<'_> {
                 let sig_results_length = sig.results.len();
                 self.write_result_assignment(sig_results_length, results);
 
-                // NOTE: if we're calling an function that has been async lifted by the component,
-                // then the actual return of the function is not determined by the function returning,
-                // but by the calling of the task.return intrinsic during execution of the function in question
-                // (or on some future execution).
-                //
-                // Rather than returning the result of the function call, we can:
-                // 1. run the function
-                // 2. take it's result
-                // 2. return the relevant task's result instead
-                //
-                // If the current function does not use async porcelain (i.e. is not async lowered), then we must
-                // immediately await the response.
-
-                // Output the function call
                 uwriteln!(
                     self.src,
                     "{maybe_async_await}{callee}({args});",
                     callee = self.callee,
                     args = operands.join(", "),
-                    maybe_async_await = self
-                        .requires_async_porcelain
-                        .then_some("await ")
-                        .unwrap_or_default(),
+                    maybe_async_await = if self.requires_async_porcelain {
+                        "await "
+                    } else {
+                        ""
+                    }
                 );
 
                 // Print post-return if tracing is enabled
@@ -1526,30 +1513,29 @@ impl Bindgen for FunctionBindgen<'_> {
                         // If the return value is a result, we attempt to extract the relevant value from inside
                         // or throw an error, in keeping with transpile's value handling rules
                         let mut return_res_js = "return taskRes;".into();
-                        if let Some(Type::Id(result_ty_id)) = func.result {
-                            if let Some(TypeDef {
+                        if let Some(Type::Id(result_ty_id)) = func.result
+                            && let Some(TypeDef {
                                 kind: TypeDefKind::Result(_),
                                 ..
                             }) = self.resolve.types.get(result_ty_id)
-                            {
-                                if self.requires_async_porcelain {
-                                    // If we're using async porcelain, then we have already resolved the promise
-                                    // to a value, and we can throw if it's an Result that contains an error
-                                    return_res_js = format!("
+                        {
+                            if self.requires_async_porcelain {
+                                // If we're using async porcelain, then we have already resolved the promise
+                                // to a value, and we can throw if it's an Result that contains an error
+                                return_res_js = format!("
                                         if (taskRes.tag === 'err') {{ throw new {component_err}(taskRes.val); }}
                                         return taskRes.val;
                                     ");
-                                } else {
-                                    // If we're not using async porcelain, then we're return a Promise,
-                                    // but rather than returning the promise of a Result object, we should
-                                    // return the value inside (or error)
-                                    return_res_js = format!("
+                            } else {
+                                // If we're not using async porcelain, then we're return a Promise,
+                                // but rather than returning the promise of a Result object, we should
+                                // return the value inside (or error)
+                                return_res_js = format!("
                                         return taskRes.then((_taskRes) => {{
                                             if (_taskRes.tag === 'err') {{ throw new {component_err}(_taskRes.val); }}
                                             return _taskRes.val;
                                         }});
                                     ");
-                                }
                             }
                         }
 
@@ -1563,7 +1549,11 @@ impl Bindgen for FunctionBindgen<'_> {
                             const taskRes = {maybe_async_await} task.completionPromise();
                             {return_res_js}
                             ",
-                            maybe_async_await = self.requires_async_porcelain.then_some("await ").unwrap_or_default(),
+                            maybe_async_await = if self.requires_async_porcelain {
+                                "await "
+                            } else {
+                                ""
+                            }
                         );
                     }
 
@@ -2097,7 +2087,6 @@ impl Bindgen for FunctionBindgen<'_> {
                             ),
 
                             Type::Id(payload_ty_id) => {
-                                // TODO: deal with missing payload type, should it be possible here?
                                 if let Some(ResourceTable { data, .. }) =
                                     &self.resource_map.get(payload_ty_id)
                                 {
@@ -2117,7 +2106,6 @@ impl Bindgen for FunctionBindgen<'_> {
                                         ),
                                     )
                                 } else {
-                                    // TODO: should it be possible for the type to be missing/not found here?
                                     (
                                         format!(
                                             "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }};",

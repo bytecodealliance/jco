@@ -1991,7 +1991,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.bindgen,
                         self.types,
                         result_ty,
-                        &canon_opts,
+                        canon_opts,
                     ));
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
@@ -2226,12 +2226,11 @@ impl<'a> Instantiator<'a, '_> {
                     assert_eq!(path.len(), 1);
                     let iface = &self.resolve.interfaces[*id];
                     let func = &iface.functions[&path[0]];
-                    let bundle = (
+                    (
                         func,
                         &path[0],
                         Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
-                    );
-                    bundle
+                    )
                 }
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
@@ -3848,7 +3847,7 @@ fn gen_flat_lift_fn_js_expr(
                     component_types.canonical_abi(ty).size32,
                 ));
             }
-            keys_and_lifts_expr.push_str("]");
+            keys_and_lifts_expr.push(']');
             format!("{lift_fn}({keys_and_lifts_expr})")
         }
         InterfaceType::Variant(ty_idx) => {
@@ -3875,28 +3874,23 @@ fn gen_flat_lift_fn_js_expr(
                         .unwrap_or(String::from("null")),
                 ));
             }
-            cases_and_lifts_expr.push_str("]");
+            cases_and_lifts_expr.push(']');
             format!("{lift_fn}({cases_and_lifts_expr})",)
         }
         InterfaceType::List(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList))
         }
         InterfaceType::Tuple(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple))
         }
         InterfaceType::Flags(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags))
         }
         InterfaceType::Enum(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum))
         }
         InterfaceType::Option(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
         }
         InterfaceType::Result(ty_idx) => {
             let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
@@ -3933,28 +3927,23 @@ fn gen_flat_lift_fn_js_expr(
                     .unwrap_or(String::from("null")),
             ));
 
-            cases_and_lifts_expr.push_str("]");
+            cases_and_lifts_expr.push(']');
             format!("{lift_fn}({cases_and_lifts_expr})",)
         }
         InterfaceType::Own(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn))
         }
         InterfaceType::Borrow(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn))
         }
         InterfaceType::Future(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture))
         }
         InterfaceType::Stream(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream))
         }
         InterfaceType::ErrorContext(_ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
-            format!("{lift_fn}")
+            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext))
         }
     }
 }
