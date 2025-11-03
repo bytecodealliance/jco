@@ -55,7 +55,7 @@ export function writeFiles(files: Record<string, string>, summaryTitle: boolean)
  */
 export function resolveDefaultWITPath(witPath?: string | undefined): Promise<string>;
 /**
- * Partial polyfill for 'node:utils' `styleText()`
+ * Partial polyfill for 'node:util' `styleText()`
  *
  * @param {string | string[]} styles - styles to apply to the given text
  * @param {string} text - text that should be styled

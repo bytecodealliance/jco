@@ -81,7 +81,7 @@ export function transpile(
     componentPath: string,
     opts?: TranspilationOptions,
     program?: Command
-): Promise<void>;
+): Promise<TranspilationResult>;
 
 type TranspilationResult = {
     files: FileBytes;
