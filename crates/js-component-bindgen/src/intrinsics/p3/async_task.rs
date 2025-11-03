@@ -608,11 +608,8 @@ impl AsyncTaskIntrinsic {
                            this.#completionPromise = completionPromise;
 
                            this.#onResolve = (results) => {{
-                              if (results.length === 0) {{
-                                  rejectCompletionPromise(new Error('missing/invalid task result (task was likely cancelled)'));
-                              }} else {{
-                                  resolveCompletionPromise(results);
-                              }}
+                               // TODO: handle external facing cancellation (should likely be a rejection)
+                               resolveCompletionPromise(results);
                            }}
                         }}
 
