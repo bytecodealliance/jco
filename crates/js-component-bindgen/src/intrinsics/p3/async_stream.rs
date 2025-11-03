@@ -1,7 +1,7 @@
 //! Intrinsics that represent helpers that enable Stream integration
 
 use crate::{
-    intrinsics::{component::ComponentIntrinsic, Intrinsic},
+    intrinsics::{Intrinsic, component::ComponentIntrinsic},
     source::Source,
 };
 

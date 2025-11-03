@@ -1,7 +1,7 @@
 //! Intrinsics that represent helpers that enable Stream integration
 
-use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::Intrinsic;
+use crate::intrinsics::component::ComponentIntrinsic;
 use crate::source::Source;
 
 use super::async_task::AsyncTaskIntrinsic;

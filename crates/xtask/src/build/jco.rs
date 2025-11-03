@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::{collections::HashMap, sync::LazyLock};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use js_component_bindgen::BindingsMode;
 use wit_component::ComponentEncoder;
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 static WORKSPACE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     // NOTE this goes to the xtask dir
@@ -94,7 +94,9 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         optimize,
         build_type,
     } = args;
-    unsafe { std::env::set_var("RUST_BACKTRACE", "1"); }
+    unsafe {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
     let component_path = PathBuf::from(&component_path)
         .canonicalize()
         .with_context(|| {

@@ -1,8 +1,8 @@
 //! Intrinsics that represent helpers that implement async calls
 
+use crate::intrinsics::Intrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
-use crate::intrinsics::Intrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement async calls
