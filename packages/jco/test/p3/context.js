@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 
 import { suite, test, assert, expect } from 'vitest';
 

@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { execArgv } from 'node:process';
 import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
     exec,

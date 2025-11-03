@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { resolve, extname, dirname } from 'node:path';
 
 import puppeteer from 'puppeteer';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import mime from 'mime';
 
 import {
