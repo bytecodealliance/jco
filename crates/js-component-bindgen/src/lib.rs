@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 use std::collections::HashSet;
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use ts_bindgen::ts_bindgen;
 use wasmtime_environ::component::{
     CanonicalOptions, ComponentTypesBuilder, Export, StaticModuleIndex,

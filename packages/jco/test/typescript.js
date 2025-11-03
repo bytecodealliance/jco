@@ -96,7 +96,7 @@ suite(`TypeScript`, async () => {
     // generation Disposable, because the embedder may or may not choose to make
     // the implemented resource import disposable or not.
     //
-    test(`(host-types, import) Disposable interface generation`, async () => {
+    test(`Disposable interface generation (host-types, import) `, async () => {
         const witSource = await readFile(
             fileURLToPath(
                 new URL(
@@ -141,7 +141,7 @@ suite(`TypeScript`, async () => {
 
     // NOTE: When generating guest types, the generated import shims provided *will*
     // have automatically generated disposal code, and thus we should have Disposable implementations
-    test(`(guest-types, import) Disposable interface generation`, async () => {
+    test(`Disposable interface generation (guest-types, import) `, async () => {
         const witPath = fileURLToPath(
             new URL(
                 `./fixtures/wits/disposable-resources/disposable-resources.wit`,
@@ -174,4 +174,24 @@ suite(`TypeScript`, async () => {
             'FileHandle/Connection resources should implement Disposable interface'
         );
     });
+
+    // Async-lifted functions that are sync lowered must return promises
+    // that callers can resolve however they choose to.
+    test(`sync lowered async fn returns Promse<T> (guest-types)`, async () => {
+        const witPath = fileURLToPath(
+            new URL(
+                `./fixtures/wits/async-flat-param-adder/test.wit`,
+                import.meta.url
+            )
+        );
+        const files = await typesComponent(witPath, { guest: true });
+        const interfaceDtsSource = new TextDecoder().decode(
+            files['interfaces/test1-test2-test3.d.ts']
+        );
+        assert(
+            interfaceDtsSource.includes("test4(a: number, b: number): Promise<number>"),
+            "test4 returns a Promise",
+        );
+    });
+
 });
