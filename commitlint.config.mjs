@@ -31,6 +31,7 @@ const config = {
                 'ci',
                 'ops',
                 'docs',
+                'tests',
                 // Projects
                 'jco',
                 'bindgen',
