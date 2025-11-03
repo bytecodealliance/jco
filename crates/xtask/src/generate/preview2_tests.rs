@@ -489,6 +489,7 @@ let mut _cmd2_child = cmd2.spawn().expect("failed to spawn test program");
     let status = match _cmd{piped_cmd_num}_child.wait() {{
         Ok(s) => s,
         Err(e) => {{
+            {piped_cleanup}
             anyhow::bail!("CHILD PROCESS ERROR: {{e:?}}\n");
         }}
     }};
