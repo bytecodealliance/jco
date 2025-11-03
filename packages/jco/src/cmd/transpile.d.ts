@@ -1,5 +1,9 @@
+import type { Command } from 'commander';
+
 export function types(witPath: any, opts: any): Promise<void>;
+
 export function guestTypes(witPath: any, opts: any): Promise<void>;
+
 /**
  * @param {string} witPath
  * @param {{
@@ -30,7 +34,45 @@ export function typesComponent(witPath: string, opts: {
 }): Promise<{
     [filename: string]: Uint8Array;
 }>;
-export function transpile(componentPath: any, opts: any, program: any): Promise<void>;
+
+
+export function transpile(
+    componentPath: string,
+    opts: TranspilationOptions,
+    program: Command,
+): Promise<TranspilationResult>;
+
+type TranspilationOptions = {
+    name: string;
+    instantiation?: 'async' | 'sync';
+    importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized';
+    map?: Record<string, string>;
+    asyncMode?: string;
+    asyncImports?: string[];
+    asyncExports?: string[];
+    asyncWasiImports?: string[];
+    asyncWasiExports?: string[];
+    validLiftingOptimization?: boolean;
+    tracing?: boolean;
+    nodejsCompat?: boolean;
+    tlaCompat?: boolean;
+    base64Cutoff?: boolean;
+    js?: boolean;
+    minify?: boolean;
+    optimize?: boolean;
+    namespacedExports?: boolean;
+    outDir?: string;
+    multiMemory?: boolean;
+    experimentalIdlImports?: boolean;
+    optArgs?: string[];
+};
+
+type TranspilationResult = {
+    files: FileBytes;
+    imports: string[];
+    exports: [string, 'function' | 'instance'][];
+};
+
 /**
  *
  * @param {Uint8Array} component

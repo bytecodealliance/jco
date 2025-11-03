@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import { extname, basename, resolve } from 'node:path';
 
 import { minify } from 'terser';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 
 import { runOptimizeComponent } from './opt.js';
 import { readFile, runWASMTransformProgram, isWindows } from './common.js';

@@ -240,7 +240,7 @@ export async function resolveDefaultWITPath(witPath) {
 }
 
 /**
- * Partial polyfill for 'node:utils' `styleText()`
+ * Partial polyfill for 'node:util' `styleText()`
  *
  * @param {string | string[]} styles - styles to apply to the given text
  * @param {string} text - text that should be styled

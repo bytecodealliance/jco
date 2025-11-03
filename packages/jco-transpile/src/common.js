@@ -8,7 +8,7 @@ import {
 } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
-import * as nodeUtils from 'node:utils';
+import * as nodeUtils from 'node:util';
 
 /** Detect a windows environment */
 export const isWindows = platform === 'win32';
@@ -19,7 +19,7 @@ const DEFAULT_SIGNIFICANT_DIGITS = 4;
 /** Nubmer of bytes in a kilobyte */
 const BYTES_MAGNITUDE = 1024;
 
-/** Partial polyfill for 'node:utils' `styleText()` */
+/** Partial polyfill for 'node:util' `styleText()` */
 export function styleText(styles, text) {
     if (nodeUtils.styleText) {
         return nodeUtils.styleText(styles, text);
