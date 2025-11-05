@@ -308,6 +308,16 @@ jobs:
           npm install --save $PACKAGE_DIR
           npm run all
 
+      - name: Test built jco-transpile NPM package
+        if: ${{ needs.meta.outputs.project == 'jco-transpile' }}
+        shell: bash
+        run: |
+          export PACKAGE_DIR=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
+          cp -r examples/transpile/adder /tmp/test
+          cd /tmp/test
+          npm install --save $PACKAGE_DIR
+          npm run all
+
   crate-publish:
     runs-on: ubuntu-24.04
     needs:

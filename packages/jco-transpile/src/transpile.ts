@@ -204,7 +204,7 @@ export async function transpile(componentPath: string, opts: TranspilationOption
         opts.asyncExports = ASYNC_WASI_EXPORTS.concat(opts.asyncExports || []);
     }
 
-    return await runTranspileComponent(component, opts);
+    return await transpileBytes(component, opts);
 }
 
 /**
@@ -214,7 +214,7 @@ export async function transpile(componentPath: string, opts: TranspilationOption
  * @param [opts] - transpilation options
  * @returns A `Promise` that resolves to the results of transpilation
  */
-export async function runTranspileComponent(
+export async function transpileBytes(
     component: Uint8Array,
     opts: TranspilationOptions = {},
 ): Promise<TranspilationResult> {
@@ -249,17 +249,15 @@ export async function runTranspileComponent(
         );
     }
 
-    let instantiation: WITInstantiationMode | undefined = undefined;
+    let instantiation: WITInstantiationMode = { tag: 'sync' };
 
     // Let's define `instantiation` from `--instantiation` if it's present.
     if (opts.instantiation) {
         instantiation = { tag: opts.instantiation };
-    }
+    } else if (opts.js) {
     // Otherwise, if `--js` is present, an `instantiate` function is required.
-    else if (opts.js) {
         instantiation = { tag: 'async' };
     }
-    if (instantiation === undefined) { throw new Error('instantiation was never set'); }
 
     // Determine the async mode that should be used
     // (i.e. determining whether JSPI should be used)

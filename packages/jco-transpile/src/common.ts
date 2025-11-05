@@ -1,10 +1,11 @@
-import { normalize, resolve, sep } from 'node:path';
+import { join, normalize, resolve, sep, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
     readFile as fsReadFile,
     writeFile,
     rm,
     mkdtemp,
+    mkdir,
 } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
@@ -200,7 +201,7 @@ export function styleText(...args: Parameters<typeof nodeUtils.styleText>) {
     return args[1];
 }
 
-interface AsyncOptionsLike { 
+interface AsyncOptionsLike {
     asyncMode?: AsyncMode;
     asyncImports?: string[];
     asyncExports?: string[];
@@ -218,4 +219,23 @@ export function extractWITAsyncModeFromOpts(opts: AsyncOptionsLike): WITAsyncMod
             exports: opts.asyncExports || [],
         },
     };
+}
+
+/** Options for `writeFiles()` utility function */
+interface WriteFileOpts {
+    /** Change (prepend) the base directory before writing each file */
+    baseDir?: string;
+}
+
+/** Utility function for easily writing output files packaged as `FileBytes` to a directory */
+export async function writeFiles(files: FileBytes, opts?: WriteFileOpts): Promise<void> {
+    await Promise.all(
+        Object.entries(files).map(async ([filePath, contents]) => {
+            if (opts?.baseDir) {
+                filePath = join(opts.baseDir, filePath);
+            }
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(filePath, contents);
+        })
+    );
 }

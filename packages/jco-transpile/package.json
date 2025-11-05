@@ -38,6 +38,10 @@
         ".": {
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
+        },
+        "./helpers": {
+            "types": "./dist/helpers.d.ts",
+            "default": "./dist/helpers.js"
         }
     },
     "scripts": {
