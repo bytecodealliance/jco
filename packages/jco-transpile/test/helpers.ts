@@ -17,10 +17,8 @@ const COMPONENT_BYTES_CACHE = {};
 /**
  * Read the bytes of a component from disk (or the cache, if available) */
 export async function readComponentBytes(componentPath: string): Promise<Buffer> {
-    let componentBytes: Buffer;
     if (!COMPONENT_BYTES_CACHE[componentPath]) {
         COMPONENT_BYTES_CACHE[componentPath] = await readFile(componentPath);
     }
-    componentBytes = COMPONENT_BYTES_CACHE[componentPath];
-    return componentBytes;
+    return COMPONENT_BYTES_CACHE[componentPath];
 }

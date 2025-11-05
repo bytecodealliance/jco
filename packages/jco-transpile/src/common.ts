@@ -86,7 +86,7 @@ export function fixedDigitDisplay(num: number, maxChars: number): string {
  * @param align - preferred alignment of cells
  * @returns Tabulated data
  */
-export function table(data: any[][], cellAlignment: string[] = []) {
+export function table(data: string[][], cellAlignment: string[] = []) {
     if (data.length === 0) {
         return '';
     }
@@ -147,7 +147,7 @@ export async function runWASMTransformProgram(cmd: string, input: Uint8Array, ar
     const tmpDir = await getTmpDir();
     try {
         const inFile = resolve(tmpDir, 'in.wasm');
-        let outFile = resolve(tmpDir, 'out.wasm');
+        const outFile = resolve(tmpDir, 'out.wasm');
 
         await writeFile(inFile, input);
 
@@ -171,7 +171,7 @@ export async function runWASMTransformProgram(cmd: string, input: Uint8Array, ar
         });
 
         await p;
-        var output = await fsReadFile(outFile);
+        const output = await fsReadFile(outFile);
         return output;
     } finally {
         await rm(tmpDir, { recursive: true });
@@ -195,8 +195,8 @@ export function byteLengthLEB128(val: number): number {
 
 /** Partial polyfill for 'node:util' `styleText()` */
 export function styleText(...args: Parameters<typeof nodeUtils.styleText>) {
-     if (nodeUtils.styleText) {
-         return nodeUtils.styleText(...args);
+    if (nodeUtils.styleText) {
+        return nodeUtils.styleText(...args);
     }
     return args[1];
 }
