@@ -381,6 +381,54 @@ jobs:
     - name: Run clippy
       run: cargo clippy --workspace --all-features --all-targets --keep-going -- -D warnings
 
+  test-jco-std:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace:
+          - jco-std
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+        with:
+          shared-key: jco-${{ hashFiles('Cargo.lock') }}
+
+      - name: Cache npm install
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          path: |
+            node_modules
+
+      - name: Cache wasmtime binary
+        id: custom-wasmtime-bin
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          key: wasmtime-custom-bin-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          path: |
+            $HOME/.cargo/bin/usr/wasmtime
+
+      # TODO: update when wasmtime is released
+      - name: Install wasmtime CLI
+        if: ${{ steps.custom-wasmtime-bin.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install \
+            --git https://github.com/bytecodealliance/wasmtime \
+            --rev 29f2a1ca66c849a2d2e533a2df87c221daa8e2de \
+            wasmtime-cli
+
+      - name: Install NPM packages
+        run: npm install
+
+      - name: Build jco
+        run: npm run build
+
+      - name: Test workspace
+        run: npm run test --workspace packages/${{ matrix.workspace }}
+
   examples:
     needs:
       - build
