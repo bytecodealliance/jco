@@ -28,9 +28,16 @@ use the `@bytecodealliance/jco-std/http/adapters/hono` export:
 ```ts
 import { Hono } from 'hono';
 
+import { fire } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono';
+
 const app = new Hono();
 app.get('/', () => "Hello World!");
 
+fire(app);
+
+// Although we've called `fire()` with wasi HTTP configured for use above,
+// we still need to actually export the `wasi:http/incoming-handler` interface object,
+// as componentize-js will be looking for the ES module export.
 export { incomingHandler } from '@bytecodealliance/jco-std/http/adapters/hono';
 ```
 
