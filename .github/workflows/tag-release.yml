@@ -18,6 +18,7 @@ on:
         options:
           - jco
           - jco-transpile
+          - jco-std
           - js-component-bindgen
           - preview2-shim
           - preview3-shim
