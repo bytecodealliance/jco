@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 import { suite, test, assert, beforeAll } from 'vitest';
 
-import { transpile, runTranspileComponent } from '../src/transpile.js';
+import { transpile, transpileBytes } from '../src/transpile.js';
 
 import { readComponentBytes } from './helpers.js';
 
@@ -38,7 +38,7 @@ suite('Transpile', () => {
 
     test('transpilation', async () => {
         const name = 'flavorful';
-        const { files, imports, exports } = await runTranspileComponent(
+        const { files, imports, exports } = await transpileBytes(
             flavorfulWasmBytes,
             {
                 name,
@@ -52,7 +52,7 @@ suite('Transpile', () => {
 
     test('transpile to JS', async () => {
         const name = 'flavorful';
-        const { files, imports, exports } = await runTranspileComponent(
+        const { files, imports, exports } = await transpileBytes(
             flavorfulWasmBytes,
             {
                 map: {
@@ -80,7 +80,7 @@ suite('Transpile', () => {
 
     test('map imports', async () => {
         const name = 'flavorful';
-        const { files, imports } = await runTranspileComponent(
+        const { files, imports } = await transpileBytes(
             flavorfulWasmBytes,
             {
                 name,
@@ -97,7 +97,7 @@ suite('Transpile', () => {
 
     test('transpile, optimize, minify', async () => {
         const name = 'flavorful';
-        const { files, imports, exports } = await runTranspileComponent(
+        const { files, imports, exports } = await transpileBytes(
             flavorfulWasmBytes,
             {
                 name,

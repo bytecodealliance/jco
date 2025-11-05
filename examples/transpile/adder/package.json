@@ -1,0 +1,12 @@
+{
+    "name": "adder-transpile",
+    "description": "Simple codebase that showcases transpiling and using an adder component",
+    "type": "module",
+    "scripts": {
+        "demo": "node demo.js",
+        "all": "npm run demo"
+    },
+    "dependencies": {
+        "@bytecodealliance/jco-transpile": "^0.0.5"
+    }
+}
