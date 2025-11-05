@@ -1,57 +1,64 @@
 {
-  "name": "@bytecodealliance/jco-transpile",
-  "version": "0.0.5",
-  "description": "WebAssembly Component transpilation functionality for Jco",
-  "contributors": [
-    {
-      "name": "Guy Bedford"
+    "name": "@bytecodealliance/jco-transpile",
+    "version": "0.0.5",
+    "description": "WebAssembly Component transpilation functionality for Jco",
+    "contributors": [
+        {
+            "name": "Guy Bedford"
+        },
+        {
+            "name": "Eduardo Rodrigues",
+            "email": "16357187+eduardomourar@users.noreply.github.com"
+        },
+        {
+            "name": "Victor Adossi",
+            "email": "vadossi@cosmonic.com"
+        }
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bytecodealliance/jco.git"
     },
-    {
-      "name": "Eduardo Rodrigues",
-      "email": "16357187+eduardomourar@users.noreply.github.com"
+    "license": "(Apache-2.0 WITH LLVM-exception)",
+    "bugs": {
+        "url": "https://github.com/bytecodealliance/jco/issues"
     },
-    {
-      "name": "Victor Adossi",
-      "email": "vadossi@cosmonic.com"
+    "homepage": "https://github.com/bytecodealliance/jco#readme",
+    "keywords": [
+        "Wasm",
+        "WebAssembly",
+        "Component"
+    ],
+    "type": "module",
+    "files": [
+        "types",
+        "vendor",
+        "src"
+    ],
+    "types": "./types/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.d.ts",
+            "default": "./src/index.js"
+        }
+    },
+    "scripts": {
+        "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
+        "fmt": "npm run lint:fix",
+        "lint": "eslint -c ../../eslint.config.mjs ./src/**/*.js ./test/**/*.js",
+        "lint:fix": "npm run lint -- --fix",
+        "build:ts": "tsc -p tsconfig.json",
+        "build": "npm run build:ts",
+        "test": "vitest run -c test/vitest.ts",
+        "prepack": "npm run setup:vendor && npm run build"
+    },
+    "dependencies": {
+        "@bytecodealliance/preview2-shim": "^0.17.5",
+        "terser": "^5"
+    },
+    "devDependencies": {
+        "@types/node": "^24.10.0",
+        "vite": "^7.1.5",
+        "vitest": "^4.0.7"
     }
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/bytecodealliance/jco.git"
-  },
-  "license": "(Apache-2.0 WITH LLVM-exception)",
-  "bugs": {
-    "url": "https://github.com/bytecodealliance/jco/issues"
-  },
-  "homepage": "https://github.com/bytecodealliance/jco#readme",
-  "keywords": [
-    "Wasm",
-    "WebAssembly",
-    "Component"
-  ],
-  "type": "module",
-  "files": [
-    "types",
-    "vendor",
-    "src"
-  ],
-  "types": "./types/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
-    }
-  },
-  "scripts": {
-    "fmt": "npm run lint:fix",
-    "lint": "eslint -c ../../eslint.config.mjs ./src/**/*.js ./test/**/*.js",
-    "lint:fix": "npm run lint -- --fix",
-    "test": "vitest run -c test/vitest.ts",
-    "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
-    "prepack": "npm run setup:vendor"
-  },
-  "dependencies": {
-    "@bytecodealliance/preview2-shim": "^0.17.3",
-    "terser": "^5"
-  }
 }

@@ -299,9 +299,3 @@ async function wasmOpt(source, args, transpileOpts) {
         throw e;
     }
 }
-
-// see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
-if (typeof __vite_ssr_import_meta__ !== 'undefined') {
-    __vite_ssr_import_meta__.resolve = (path) =>
-        'file://' + globalCreateRequire(import.meta.url).resolve(path);
-}

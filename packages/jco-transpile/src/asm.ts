@@ -1,252 +1,26 @@
-import { Buffer } from 'node:buffer';
-import { extname, basename, resolve } from 'node:path';
-
-import { minify } from 'terser';
 import { fileURLToPath } from 'node:url';
+import { Buffer } from 'node:buffer';
+import { basename } from 'node:path';
 
-import { runOptimizeComponent } from './opt.js';
-import { readFile, runWASMTransformProgram, isWindows } from './common.js';
-import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
+import type { Files, ExportType } from '../vendor/js-component-bindgen-component.js';
 
-import {
-    $init as $initBindgenComponent,
-    generate,
-} from '../vendor/js-component-bindgen-component.js';
+import { runWASMTransformProgram } from './common.js';
+import type { TranspilationOptions, WITInstantiationMode } from './transpile.js';
 
-import {
-    $init as $initWasmToolsComponent,
-    tools,
-} from '../vendor/wasm-tools.js';
-const { componentEmbed, componentNew } = tools;
 
-/**
- * @typedef {{
- *   name: string,
- *   instantiation?: 'async' | 'sync',
- *   importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized',
- *   map?: Record<string, string>,
- *   asyncMode?: string,
- *   asyncImports?: string[],
- *   asyncExports?: string[],
- *   asyncWasiImports?: string[],
- *   asyncWasiExports?: string[],
- *   validLiftingOptimization?: bool,
- *   tracing?: bool,
- *   nodejsCompat?: bool,
- *   tlaCompat?: bool,
- *   base64Cutoff?: bool,
- *   js?: bool,
- *   minify?: bool,
- *   optimize?: bool,
- *   namespacedExports?: bool,
- *   outDir?: string,
- *   multiMemory?: bool,
- *   experimentalIdlImports?: bool,
- *   optArgs?: string[],
- * }} TranspilationOptions
-
- /** @typedef {{
- *  files: {
- *    [filename: string]: Uint8Array;
- *  };
- *  imports: string[];
- *  exports: [string, 'function' | 'instance'][];
- * }} TranspilationResult
- */
-
-/**
- * Transpile a provided WebAssembly component to an ES module
- * that can be run in JS environments
- *
- * @param {Buffer | string | URL | FileHandle} componentPath
- * @param {TranspilationOptions} [opts]
- * @returns {Promise<TranspilationResult>}
- */
-export async function transpile(componentPath, opts) {
-    opts ??= {};
-    let component;
-    if (!opts?.stub) {
-        component = await readFile(componentPath);
-    } else {
-        try {
-            await $initWasmToolsComponent;
-            component = componentNew(
-                componentEmbed({
-                    dummy: true,
-                    witPath: (isWindows ? '//?/' : '') + resolve(componentPath),
-                }),
-                []
-            );
-        } catch (err) {
-            console.error('failed to run component new:', err);
-            throw err;
-        }
-    }
-
-    if (!opts?.name) {
-        opts.name = basename(
-            componentPath.slice(0, -extname(componentPath).length || Infinity)
-        );
-    }
-
-    if (opts?.map) {
-        opts.map = Object.fromEntries(
-            opts.map.map((mapping) => mapping.split('='))
-        );
-    }
-
-    if (opts?.asyncWasiImports) {
-        opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
-    }
-
-    if (opts?.asyncWasiExports) {
-        opts.asyncExports = ASYNC_WASI_EXPORTS.concat(opts.asyncExports || []);
-    }
-
-    return await runTranspileComponent(component, opts);
+/** Arguments to `generateASMJS()` */
+interface GenerateASMJSArgs {
+    opts: TranspilationOptions;
+    inputJS: Uint8Array;
+    instantiation: WITInstantiationMode,
+    files: Files,
+    imports: string[],
+    exports: Array<[string, ExportType]>,
 }
 
 /**
- * Convert a WebAssembly module to JS (via Binaryen)
- *
- * @param {Uint8Array} source
- * @returns {Promise<Uint8Array>}
- */
-async function wasm2Js(source) {
-    const wasm2jsPath = fileURLToPath(
-        import.meta.resolve('binaryen/bin/wasm2js')
-    );
-
-    try {
-        return await runWASMTransformProgram(wasm2jsPath, source, [
-            '-Oz',
-            '-o',
-        ]);
-    } catch (e) {
-        if (e.toString().includes('BasicBlock requested')) {
-            return wasm2Js(source);
-        }
-        throw e;
-    }
-}
-
-/**
- * Perform transpilation, using the transpiled js-component-bindgen Rust crate.
- *
- * @param {Uint8Array} component
- * @param {TranspilationOptions} [opts]
- * @returns {Promise<TranspilationResult}>}
- */
-export async function runTranspileComponent(component, opts = {}) {
-    await $initBindgenComponent;
-    if (opts.instantiation) {
-        opts.wasiShim = false;
-    }
-
-    if (opts.optimize) {
-        ({ component } = await runOptimizeComponent(component, opts));
-    }
-
-    if (opts.wasiShim !== false) {
-        opts.map = Object.assign(
-            {
-                'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
-                'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
-                'wasi:filesystem/*':
-                    '@bytecodealliance/preview2-shim/filesystem#*',
-                'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
-                'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
-                'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
-                'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
-            },
-            opts.map || {}
-        );
-    }
-
-    let instantiation = null;
-
-    // Let's define `instantiation` from `--instantiation` if it's present.
-    if (opts.instantiation) {
-        instantiation = { tag: opts.instantiation };
-    }
-    // Otherwise, if `--js` is present, an `instantiate` function is required.
-    else if (opts.js) {
-        instantiation = { tag: 'async' };
-    }
-
-    const asyncMode =
-        !opts.asyncMode || opts.asyncMode === 'sync'
-            ? null
-            : {
-                tag: opts.asyncMode,
-                val: {
-                    imports: opts.asyncImports || [],
-                    exports: opts.asyncExports || [],
-                },
-            };
-
-    let { files, imports, exports } = generate(component, {
-        name: opts.name ?? 'component',
-        map: Object.entries(opts.map ?? {}),
-        instantiation,
-        asyncMode,
-        importBindings: opts.importBindings
-            ? { tag: opts.importBindings }
-            : null,
-        validLiftingOptimization: opts.validLiftingOptimization ?? false,
-        tracing: opts.tracing ?? false,
-        noNodejsCompat: opts.nodejsCompat === false,
-        noTypescript: opts.typescript === false,
-        tlaCompat: opts.tlaCompat ?? false,
-        base64Cutoff: opts.js ? 0 : (opts.base64Cutoff ?? 5000),
-        noNamespacedExports: opts.namespacedExports === false,
-        multiMemory: opts.multiMemory === true,
-        idlImports: opts.experimentalIdlImports === true,
-    });
-
-    let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
-    if (!outDir.endsWith('/') && outDir !== '') {
-        outDir += '/';
-    }
-    files = files.map(([name, source]) => [`${outDir}${name}`, source]);
-
-    const jsFiles = files.find(([name]) => name.endsWith('.js'));
-
-    // Generate JS if specified
-    if (opts.js) {
-        jsFiles[1] = Buffer.from(
-            await generateJS({
-                opts,
-                inputJS: jsFiles[1],
-                files,
-                instantiation,
-                imports,
-                exports,
-            })
-        );
-    }
-
-    // Perform minification if configured
-    if (opts.minify) {
-        ({ code: jsFiles[1] } = await minify(
-            Buffer.from(jsFiles[1]).toString('utf8'),
-            {
-                module: true,
-                compress: {
-                    ecma: 9,
-                    unsafe: true,
-                },
-                mangle: {
-                    keep_classnames: true,
-                },
-            }
-        ));
-    }
-
-    return { files: Object.fromEntries(files), imports, exports };
-}
-
-/** Generate code for the `--js` option.
+ * Generate code for the `--js` option, which converts WebAssembly to ASM.js for
+ * running in the browser or any other JS runtime.
  *
  * `--js` can be called with or without `--instantiation`. The generated code
  * isn't exactly the same!
@@ -292,10 +66,10 @@ export async function runTranspileComponent(component, opts = {}) {
  * `instantiation` to know whether the generated code must be async or
  * non-async.
  *
- * @param {TranspileOptions}
- * @returns {Promise<string>} A Promise that resolves when javascript has been generated
+ * @param args - options for transpilation (from which options will be extracted)
+ * @returns A Promise that resolves when javascript has been generated
  */
-async function generateJS(args) {
+export async function generateASMJS(args: GenerateASMJSArgs): Promise<string> {
     const { opts, inputJS, instantiation, imports, exports } = args;
     let files = args.files;
 
@@ -322,11 +96,12 @@ async function generateJS(args) {
     // Filter out wasm files
     files = files.filter(([name]) => !name.endsWith('.wasm'));
 
-    // Compile all Wasm modules into ASM.js codes.
+    // Compile all Wasm modules into ASM.js code
     const asmFiles = await Promise.all(
         wasmFiles.map(async ([, source]) => {
-            const output = (await wasm2Js(source)).toString('utf8');
-            return output;
+            const bytes = await wasm2Js(source);
+            if (!bytes) { throw new Error("failed to convert wasm to asm.js"); }
+            return bytes.toString();
         })
     );
 
@@ -454,10 +229,15 @@ ${autoInstantiate}`;
     return outSource;
 }
 
-// emscripten asm mangles specifiers to be valid identifiers
-// for imports to match up we must do the same
-// See https://github.com/WebAssembly/binaryen/blob/main/src/asmjs/asmangle.cpp
-function asmMangle(name) {
+/**
+ * Perform mangling similar to emscripten
+ *
+ * NOTE: emscripten asm mangles specifiers to be valid identifiers
+ * for imports to match up we must do the same
+ *
+ * See https://github.com/WebAssembly/binaryen/blob/main/src/asmjs/asmangle.cpp
+*/
+function asmMangle(name: string) {
     if (name === '') {
         return '$';
     }
@@ -669,8 +449,31 @@ function asmMangle(name) {
     return name;
 }
 
-// see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
-if (typeof __vite_ssr_import_meta__ !== 'undefined') {
-    __vite_ssr_import_meta__.resolve = (path) =>
-        'file://' + globalCreateRequire(import.meta.url).resolve(path);
+/** Options for `wasm2JS()` */
+interface Wasm2JSOpts {
+    wasm2JsBinPath?: string
+}
+
+/**
+ * Convert a WebAssembly module to JS (via Binaryen)
+ *
+ * @param {Uint8Array} source
+ * @returns {Promise<Uint8Array>}
+ */
+async function wasm2Js(source: Uint8Array, opts?: Wasm2JSOpts) {
+    const wasm2JsBin =
+        opts?.wasm2JsBinPath ??
+        fileURLToPath(import.meta.resolve('binaryen/bin/wasm2js'));
+
+    try {
+        return await runWASMTransformProgram(wasm2JsBin, source, [
+            '-Oz',
+            '-o',
+        ]);
+    } catch (e) {
+        if ((typeof e === 'string' || e instanceof Error) && e.toString().includes('BasicBlock requested')) {
+            return wasm2Js(source, opts);
+        }
+        throw e;
+    }
 }

@@ -2,13 +2,13 @@ import { Buffer } from 'node:buffer';
 
 import { suite, test, assert } from 'vitest';
 
-import { WIT_FIXTURE_DIR, LOCAL_WIT_FIXTURE_DIR } from './helpers.js';
+import { JCO_WIT_FIXTURE_DIR, WIT_FIXTURE_DIR } from './helpers.js';
 
 import { generateGuestTypes, generateHostTypes } from '../src/typegen.js';
 
 suite('Type Generation', () => {
     test('type generation (host)', async () => {
-        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/flavorful`, {
+        const files = await generateHostTypes(`${JCO_WIT_FIXTURE_DIR}/flavorful`, {
             worldName: 'test:flavorful/flavorful',
         });
         assert.strictEqual(Object.keys(files).length, 2);
@@ -30,7 +30,7 @@ suite('Type Generation', () => {
     });
 
     test('type generation (guest)', async () => {
-        const files = await generateGuestTypes(`${WIT_FIXTURE_DIR}/flavorful`, {
+        const files = await generateGuestTypes(`${JCO_WIT_FIXTURE_DIR}/flavorful`, {
             worldName: 'test:flavorful/flavorful',
             guest: true,
         });
@@ -53,7 +53,7 @@ suite('Type Generation', () => {
 
     // https://github.com/bytecodealliance/jco/issues/624
     test('invalid js identifiers (guest import)', async () => {
-        const files = await generateGuestTypes(`${LOCAL_WIT_FIXTURE_DIR}/js-reserved-word.wit`, {
+        const files = await generateGuestTypes(`${WIT_FIXTURE_DIR}/js-reserved-word.wit`, {
             worldName: 'fixtures:js-reserved-word/imports',
         });
 
@@ -84,7 +84,7 @@ suite('Type Generation', () => {
 
     // https://github.com/bytecodealliance/jco/issues/624
     test('invalid js identifiers (host import)', async () => {
-        const files = await generateHostTypes(`${LOCAL_WIT_FIXTURE_DIR}/js-reserved-word.wit`, {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/js-reserved-word.wit`, {
             worldName: 'fixtures:js-reserved-word/imports',
         });
 
