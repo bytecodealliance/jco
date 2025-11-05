@@ -267,7 +267,7 @@ function asmMangle(name: string) {
         break;
     }
     default: {
-        let chNum = name.charCodeAt(0);
+        const chNum = name.charCodeAt(0);
         if (
             !(chNum >= 97 && chNum <= 122) &&
                 !(chNum >= 65 && chNum <= 90)
@@ -279,7 +279,7 @@ function asmMangle(name: string) {
     }
 
     // Names must contain only characters, digits, $ or _
-    let len = name.length;
+    const len = name.length;
     for (; i < len; ++i) {
         switch (name[i]) {
         case '0':
@@ -298,7 +298,7 @@ function asmMangle(name: string) {
             break;
         }
         default: {
-            let chNum = name.charCodeAt(i);
+            const chNum = name.charCodeAt(i);
             if (
                 !(chNum >= 97 && chNum <= 122) &&
                     !(chNum >= 65 && chNum <= 90)

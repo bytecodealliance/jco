@@ -293,7 +293,10 @@ export async function transpileBytes(
     };
 
     // Generate the component
-    let { files, imports, exports } = generate(component, generateOpts);
+    const generated = generate(component, generateOpts);
+    let files = generated.files;
+    const imports = generated.imports;
+    const exports = generated.exports;
 
     // Determine the output directory & paths
     let outDir = (opts.outDir ?? '').replace(/\\/g, '/');

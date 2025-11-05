@@ -46,7 +46,7 @@ export async function runOptimizeComponent(
 ): Promise<OptimizeResult> {
     await $init;
 
-    let componentMetadata = metadataShow(componentBytes);
+    const componentMetadata = metadataShow(componentBytes);
     componentMetadata.forEach((metadata, index) => {
         (metadata as EnhancedModuleMetadata).index = index;
         const size = metadata.range[1] - metadata.range[0];
@@ -144,7 +144,7 @@ export async function runOptimizeComponent(
         0
     );
 
-    let outComponentBytes = new Uint8Array(
+    const outComponentBytes = new Uint8Array(
         componentBytes.byteLength + sizeChange
     );
     let nextReadPos = 0,
