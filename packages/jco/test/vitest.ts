@@ -15,8 +15,8 @@ export default defineConfig({
         disableConsoleIntercept: true,
         printConsoleTrace: true,
         passWithNoTests: false,
+        setupFiles: ["test/meta-resolve-stub.ts"],
         include: ['test/**/*.js'],
-        setupFiles: ['test/meta-resolve-stub.ts'],
         exclude: [
             'test/output/*',
             'test/fixtures/*',
