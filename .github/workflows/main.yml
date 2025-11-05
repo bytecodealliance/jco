@@ -423,11 +423,14 @@ jobs:
       - name: Install NPM packages
         run: npm install
 
-      - name: Build jco
-        run: npm run build
+      - name: Build jco, jco-std
+        run: |
+          npm run build
+          npm --workspace packages/${{ matrix.workspace }} run build
 
-      - name: Test workspace
-        run: npm run test --workspace packages/${{ matrix.workspace }}
+      - name: Test jco-std workspace
+        run: |
+          npm run test --workspace packages/${{ matrix.workspace }}
 
   examples:
     needs:
