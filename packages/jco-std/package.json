@@ -58,7 +58,7 @@
   },
   "devDependencies": {
     "typescript-eslint": "^8.43.0",
-    "@bytecodealliance/jco": "^1.15.3",
+    "@bytecodealliance/jco-transpile": "^0.1.0",
     "@bytecodealliance/preview2-shim": "^0.17.5",
     "@types/which": "^3.0.4",
     "hono": "^4.9.10",
