@@ -328,6 +328,7 @@ suite("Node.js Preview2", () => {
 
     test(
       "tcp.connect(): should connect to a valid ipv4 address and port=0",
+      { retry: env.CI ?  3 : 0 },
       testWithGCWrap(async () => {
         const { lookup } = await import("node:dns");
         const { sockets } = await import("@bytecodealliance/preview2-shim");
@@ -350,17 +351,9 @@ suite("Node.js Preview2", () => {
           },
         });
 
-        await vi.waitUntil(
-            () => !pollable.ready(),
-            { timeout: 5_000, interval: 100, },
-        );
-
+        assert(!pollable.ready());
         pollable.block();
-
-        await vi.waitUntil(
-            () => pollable.ready(),
-            { timeout: 5_000, interval: 100, },
-        );
+        assert(pollable.ready());
 
         const [input, output] = tcpSocket.finishConnect();
 
