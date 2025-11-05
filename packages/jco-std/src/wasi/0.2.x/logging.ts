@@ -35,12 +35,12 @@
 //     log('critical', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
 // };
 
-
-type LogFn = (s: string) => void;
+//type LogFn = (s: string) => void;
 
 const DEFAULT_CONTEXT = 'jco-std/http/adapter/hono';
 
 const DEFAULT_LOG_FN_BUILDER = (context: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (level: string, msg: string, ...data: any[]) => {
         console.error(context, msg, { data });
     }
