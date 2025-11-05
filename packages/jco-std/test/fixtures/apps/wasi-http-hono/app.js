@@ -11,7 +11,7 @@ import { fire } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono';
 const app = new Hono();
 app.get("/", (c) => c.text("Hello World!"));
 
-fire(app, { useWasiHttp: true });
+fire(app);
 
 // Although we've called `fire()` with wasi HTTP configured for use above,
 // we still need to actually export the `wasi:http/incoming-handler` interface object,

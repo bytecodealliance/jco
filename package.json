@@ -32,7 +32,6 @@
   },
   "devDependencies": {
     "@actions/github": "^6.0.1",
-    "git-cliff": "^2.10.0",
-    "typescript-eslint": "^8.43.0"
+    "git-cliff": "^2.10.0"
   }
 }

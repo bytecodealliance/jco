@@ -238,10 +238,12 @@ export const incomingHandler = {
 /** Options for calling `fire()` */
 export interface FireOpts {
     /**
-     * Whether to use the `wasi:http/incoming-handler` adapter
-     * rather than the default WinterTC `fetch-event` integration.
+     * Whether to use the `fetch-event` integration
+     * rather than `wasi:http/incoming-handler`.
+     *
+     * At some point, `fetch-event` will be the default.
      */
-    useWasiHTTP?: boolean;
+    useFetchEvent?: boolean;
 
     // Configuration for how to generate the env passed to Hono
     wasiEnvGenerationStrategy?: WASIEnvGenerationStrategy;
@@ -282,17 +284,17 @@ export function buildFireFn(args: BuildFireFnArgs) {
 
     return function fire<
         Env extends HonoEnv = HonoEnv,
-    Schema extends HonoSchema = {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
-    BasePath extends string = '/',
-        >(
+        Schema extends HonoSchema = {},
+        BasePath extends string = '/',
+    >(
         app: Hono<Env, Schema, BasePath>,
         opts?: FireOpts,
     ) {
         const adapter = new WasiHttpAdapter({
             app,
-            type: opts?.useWasiHTTP
-                ? AppAdapterType.WasiHTTP
-                : AppAdapterType.FetchEvent,
+            type: opts?.useFetchEvent
+                ? AppAdapterType.FetchEvent
+                : AppAdapterType.WasiHTTP,
             wasiEnvGenerationStrategy: opts?.wasiEnvGenerationStrategy,
             wasiConfigStore,
             wasiEnvironment,

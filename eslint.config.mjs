@@ -1,10 +1,7 @@
 import { defineConfig, globalIgnores } from 'eslint/config';
-//import tseslint from 'typescript-eslint';
 
 const config = defineConfig(
     [
-        // TODO: re-enable once switched to typescript
-        //tseslint.configs.recommended,
         globalIgnores([
             'test/output/**/*.js',
         ]),
