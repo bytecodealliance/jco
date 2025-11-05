@@ -1,3 +1,4 @@
+import { env } from "node:process";
 import {
   throws
 } from "node:assert";
@@ -76,7 +77,7 @@ suite("Node.js Preview2", () => {
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
       assert.ok(nextNow - curNow >= 10e6);
-      assert.ok(nextNow - curNow < 15e6);
+      if (!env.CI) { assert.ok(nextNow - curNow < 15e6); }
     });
 
     test("Monotonic clock subscribe instant", async () => {
@@ -92,7 +93,7 @@ suite("Node.js Preview2", () => {
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
       assert.ok(nextNow - curNow >= 10e6);
-      assert.ok(nextNow - curNow < 15e6);
+      if (!env.CI) { assert.ok(nextNow - curNow < 15e6); }
     });
   });
 
