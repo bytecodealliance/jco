@@ -9,6 +9,7 @@ import {
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
 import * as nodeUtils from 'node:util';
+import { AsyncMode, WITAsyncMode } from './transpile.js';
 
 /** Detect a windows environment */
 export const isWindows = platform === 'win32';
@@ -19,21 +20,22 @@ const DEFAULT_SIGNIFICANT_DIGITS = 4;
 /** Nubmer of bytes in a kilobyte */
 const BYTES_MAGNITUDE = 1024;
 
-/** Partial polyfill for 'node:util' `styleText()` */
-export function styleText(styles, text) {
-    if (nodeUtils.styleText) {
-        return nodeUtils.styleText(styles, text);
-    }
-    return text;
+/** Bytes for files that have been produced, indexed by path */
+export type FileBytes = Record<string, Uint8Array>;
+
+/** Options for `sizeStr()` */
+interface SizeStrOptions {
+    significantDigits?: number;
 }
 
 /**
  * Convert a given number into the string that would appropriately represent it,
  * in either KiB or MiB.
  *
- * @param {number} num
+ * @param num - number to convert
+ * @param opts - Options for printing
  */
-export function sizeStr(num, opts) {
+export function sizeStr(num: number, opts: SizeStrOptions): string {
     const significantDigits =
         opts?.significantDigits ?? DEFAULT_SIGNIFICANT_DIGITS;
     num /= BYTES_MAGNITUDE;
@@ -56,11 +58,11 @@ export function sizeStr(num, opts) {
 /**
  * Display a given number with a fixed number of digits
  *
- * @param {number} num - number to display
- * @param {number} maxChars - character limit
- * @returns {string} The number, displayed
+ * @param num - number to display
+ * @param maxChars - character limit
+ * @returns The number, displayed
  */
-export function fixedDigitDisplay(num, maxChars) {
+export function fixedDigitDisplay(num: number, maxChars: number): string {
     const significantDigits = String(num).split('.')[0].length;
     let str;
     if (significantDigits >= maxChars - 1) {
@@ -79,11 +81,11 @@ export function fixedDigitDisplay(num, maxChars) {
 /**
  * Tabulate an array of data for display as a table
  *
- * @param {any[][]} data - row-major array of data
- * @param {string[]} align - preferred alignment of cells
- * @returns {string} Tabulated data
+ * @param data - row-major array of data
+ * @param align - preferred alignment of cells
+ * @returns Tabulated data
  */
-export function table(data, cellAlignment = []) {
+export function table(data: any[][], cellAlignment: string[] = []) {
     if (data.length === 0) {
         return '';
     }
@@ -111,21 +113,21 @@ export function table(data, cellAlignment = []) {
  *
  * The new directory is created using `fsPromises.mkdtemp()`.
  *
- * @return {Promise<string>} A Promise that resolves to the created temporary directory
+ * @returns A `Promise` that resolves to the created temporary directory
  */
-export async function getTmpDir() {
+export async function getTmpDir(): Promise<string> {
     return await mkdtemp(normalize(tmpdir() + sep));
 }
 
 /**
  * Read a file, throwing and error when a file coudl not be read
  *
- * @param {string} file - file to read
- * @param {string} encoding - encoding of the file
+ * @param file - path to a file to read
+ * @param encoding - file encoding
  */
-export async function readFile(file, encoding) {
+export async function readFile(file: string, encoding?: BufferEncoding): Promise<Uint8Array | string> {
     try {
-        return await fsReadFile(file, encoding);
+        return await fsReadFile(file, { encoding });
     } catch {
         throw `Unable to read file ${styleText('bold', file)}`;
     }
@@ -135,11 +137,12 @@ export async function readFile(file, encoding) {
  * Spawn an command that modified a WebAssembly component as a subprocess,
  * with a temporary (scratch) directory for performing work in.
  *
- * @param {string} cmd - the command to run
- * @param {string} input - wasm input to write to a temporary input file
- * @param {string[]} args
+ * @param cmd - the command to run
+ * @param input - wasm input to write to a temporary input file
+ * @param args
+ * @returns {Promise<Buffer>} A `Promise` that resolves to the wasm binary contents
  */
-export async function runWASMTransformProgram(cmd, input, args) {
+export async function runWASMTransformProgram(cmd: string, input: Uint8Array, args: string[]): Promise<Uint8Array | null> {
     const tmpDir = await getTmpDir();
     try {
         const inFile = resolve(tmpDir, 'in.wasm');
@@ -159,7 +162,7 @@ export async function runWASMTransformProgram(cmd, input, args) {
             });
             cp.on('exit', (code) => {
                 if (code === 0) {
-                    resolve();
+                    resolve(null);
                 } else {
                     reject(stderr);
                 }
@@ -177,14 +180,42 @@ export async function runWASMTransformProgram(cmd, input, args) {
 /**
  * Counts the byte length for the LEB128 encoding of a number.
  *
- * @param {number} val
- * @returns {number}
+ * @param val
+ * @returns
  */
-export function byteLengthLEB128(val) {
+export function byteLengthLEB128(val: number): number {
     let len = 0;
     do {
         val >>>= 7;
         len++;
     } while (val !== 0);
     return len;
+}
+
+/** Partial polyfill for 'node:util' `styleText()` */
+export function styleText(...args: Parameters<typeof nodeUtils.styleText>) {
+     if (nodeUtils.styleText) {
+         return nodeUtils.styleText(...args);
+    }
+    return args[1];
+}
+
+interface AsyncOptionsLike { 
+    asyncMode?: AsyncMode;
+    asyncImports?: string[];
+    asyncExports?: string[];
+}
+
+/** Extract a WIT enum for async mode from a given set of async options */
+export function extractWITAsyncModeFromOpts(opts: AsyncOptionsLike): WITAsyncMode {
+    if (opts.asyncMode === undefined || opts.asyncMode === 'sync') {
+        return { tag: 'sync' };
+    }
+    return {
+        tag: opts.asyncMode,
+        val: {
+            imports: opts.asyncImports || [],
+            exports: opts.asyncExports || [],
+        },
+    };
 }

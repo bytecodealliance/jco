@@ -3,40 +3,54 @@ import { fileURLToPath } from 'node:url';
 import { byteLengthLEB128, runWASMTransformProgram } from './common.js';
 
 import { $init, tools } from '../vendor/wasm-tools.js';
+import type { ModuleMetadata } from '../vendor/interfaces/local-wasm-tools-tools.js';
 const { metadataShow, print } = tools;
 
-/**
- * @typedef {{
- *  quiet: boolean,
- *  asyncify?: boolean,
- *  optArgs?: string[],
- *  noVerify?: boolean
- *  wasmOptBin?: string
- * }} OptimizeOptions
- */
+export interface OptimizeOptions {
+    quiet: boolean;
+    asyncify?: boolean;
+    optArgs?: string[];
+    noVerify?: boolean;
+    wasmOptBin?: string;
+};
 
-/**
- * @typedef {{
- *  component: Uint8Array,
- *  compressionInfo: { beforeBytes: number, afterBytes: number }[],
- * }} OptimizeResult
- */
+interface CompressionInfo {
+    beforeBytes: number;
+    afterBytes: number | undefined;
+}
+
+interface OptimizeResult {
+    component: Uint8Array;
+    compressionInfo: CompressionInfo[];
+}
+
+interface EnhancedModuleMetadata extends ModuleMetadata {
+    index?: number;
+    prevLEBLen?: number;
+    newLEBLen?: number;
+    optimized?: Uint8Array;
+    children?: EnhancedModuleMetadata[],
+    sizeChange?: number,
+};
 
 /**
  * Perform optimization for a given component
  *
- * @param {Uint8Array} componentBytes
- * @param {OptimizeOptions} [opts]
- * @returns {Promise<OptimizeResult>}
+ * @param componentBytes - WebAssembly component bytes
+ * @param [opts] - options for optimization
+ * @returns A `Promise` that resolves to the optimization results
  */
-export async function runOptimizeComponent(componentBytes, opts) {
+export async function runOptimizeComponent(
+    componentBytes: Uint8Array,
+    opts?: OptimizeOptions
+): Promise<OptimizeResult> {
     await $init;
 
     let componentMetadata = metadataShow(componentBytes);
     componentMetadata.forEach((metadata, index) => {
-        metadata.index = index;
+        (metadata as EnhancedModuleMetadata).index = index;
         const size = metadata.range[1] - metadata.range[0];
-        metadata.prevLEBLen = byteLengthLEB128(size);
+        (metadata as EnhancedModuleMetadata).prevLEBLen = byteLengthLEB128(size);
     });
 
     const coreModules = componentMetadata.filter(
@@ -61,7 +75,7 @@ export async function runOptimizeComponent(componentBytes, opts) {
         coreModules.map(async (metadata) => {
             if (metadata.metaType.tag === 'module') {
                 // store the wasm-opt processed module in the metadata
-                metadata.optimized = await runWasmOptCLI(
+                const optimized = await runWasmOptCLI(
                     componentBytes.subarray(
                         metadata.range[0],
                         metadata.range[1]
@@ -69,38 +83,48 @@ export async function runOptimizeComponent(componentBytes, opts) {
                     args,
                     opts
                 );
+                if (optimized === null) { throw new Error('failed to optimize binary with wasm-opt'); }
 
                 // compute the size change, including the change to
                 // the LEB128 encoding of the size change
                 const prevModuleSize = metadata.range[1] - metadata.range[0];
-                const newModuleSize = metadata.optimized.byteLength;
-                metadata.newLEBLen = byteLengthLEB128(newModuleSize);
-                metadata.sizeChange = newModuleSize - prevModuleSize;
+                const newModuleSize = optimized.byteLength;
+                (metadata as EnhancedModuleMetadata).newLEBLen = byteLengthLEB128(newModuleSize);
+                (metadata as EnhancedModuleMetadata).sizeChange = newModuleSize - prevModuleSize;
+                (metadata as EnhancedModuleMetadata).optimized = optimized;
             }
         })
     );
 
     // organize components in modules into tree parent and children
     const nodes = componentMetadata.slice(1);
-    const getChildren = (parentIndex) => {
+    const getChildren = (parentIndex: number) => {
         const children = [];
         for (let i = 0; i < nodes.length; i++) {
             const metadata = nodes[i];
             if (metadata.parentIndex === parentIndex) {
                 nodes.splice(i, 1); // remove from nodes
                 i--;
-                metadata.children = getChildren(metadata.index);
-                metadata.sizeChange = metadata.children.reduce(
-                    (total, { prevLEBLen, newLEBLen, sizeChange }) => {
+                const idx = (metadata as EnhancedModuleMetadata).index;
+
+                if (idx === undefined) { throw new Error('unexpectedly missing index on module metadata'); }
+                (metadata as EnhancedModuleMetadata).children = getChildren(idx);
+
+                (metadata as EnhancedModuleMetadata).sizeChange = ((metadata as EnhancedModuleMetadata).children ?? []).reduce(
+                    (total, childMetadata) => {
+                        const { prevLEBLen, newLEBLen, sizeChange } = childMetadata;
+                        if (newLEBLen === undefined) { throw new Error("unexpectedly undefined new LEB len"); }
+                        if (prevLEBLen === undefined) { throw new Error("unexpectedly undefined new LEB len"); }
                         return sizeChange
                             ? total + sizeChange + newLEBLen - prevLEBLen
                             : total;
                     },
-                    metadata.sizeChange || 0
+                    (metadata as EnhancedModuleMetadata).sizeChange || 0
                 );
                 const prevSize = metadata.range[1] - metadata.range[0];
-                metadata.newLEBLen = byteLengthLEB128(
-                    prevSize + metadata.sizeChange
+
+                (metadata as EnhancedModuleMetadata).newLEBLen = byteLengthLEB128(
+                    prevSize + ((metadata as EnhancedModuleMetadata).sizeChange ?? 0)
                 );
                 children.push(metadata);
             }
@@ -111,7 +135,10 @@ export async function runOptimizeComponent(componentBytes, opts) {
 
     // compute the total size change in the component binary
     const sizeChange = componentTree.reduce(
-        (total, { prevLEBLen, newLEBLen, sizeChange }) => {
+        (total, metadata) => {
+            const { prevLEBLen, newLEBLen, sizeChange } = metadata as EnhancedModuleMetadata;
+            if (newLEBLen === undefined) { throw new Error("unexpectedly undefined new LEB len"); }
+            if (prevLEBLen === undefined) { throw new Error("unexpectedly undefined new LEB len"); }
             return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
         },
         0
@@ -123,7 +150,11 @@ export async function runOptimizeComponent(componentBytes, opts) {
     let nextReadPos = 0,
         nextWritePos = 0;
 
-    const write = ({ prevLEBLen, range, optimized, children, sizeChange }) => {
+    const write = (metadata: EnhancedModuleMetadata) => {
+        const { prevLEBLen, range, optimized, children, sizeChange } = metadata as EnhancedModuleMetadata;
+        if (prevLEBLen === undefined) { throw new Error("unexpectedly undefined prev LEB len"); }
+        if (sizeChange === undefined) { throw new Error("unexpectedly undefined sizeChange"); }
+
         // write from the last read to the LEB byte start
         outComponentBytes.set(
             componentBytes.subarray(nextReadPos, range[0] - prevLEBLen),
@@ -144,7 +175,7 @@ export async function runOptimizeComponent(componentBytes, opts) {
             outComponentBytes.set(optimized, nextWritePos);
             nextReadPos = range[1];
             nextWritePos += optimized.byteLength;
-        } else if (children.length > 0) {
+        } else if (children && children.length > 0) {
             // write child components / modules
             nextReadPos = range[0];
             children.forEach(write);
@@ -160,7 +191,7 @@ export async function runOptimizeComponent(componentBytes, opts) {
     };
 
     // write each top-level component / module
-    componentTree.forEach(write);
+    componentTree.forEach(metadata => write(metadata as EnhancedModuleMetadata));
 
     // write remaining
     outComponentBytes.set(componentBytes.subarray(nextReadPos), nextWritePos);
@@ -171,31 +202,44 @@ export async function runOptimizeComponent(componentBytes, opts) {
             print(outComponentBytes);
         } catch (e) {
             throw new Error(
-                `Internal error performing optimization.\n${e.message}`
+                `Internal error performing optimization.\n${e instanceof Error ? e.message : ""}`
             );
         }
     }
 
     return {
         component: outComponentBytes,
-        compressionInfo: coreModules.map(({ range, optimized }) => ({
-            beforeBytes: range[1] - range[0],
-            afterBytes: optimized?.byteLength,
-        })),
+        compressionInfo: coreModules.map((metadata) => {
+            const optimized = (metadata as EnhancedModuleMetadata).optimized;
+            if (!optimized) { throw new Error('unexpectedly missing optimized chunk'); }
+            return {
+                beforeBytes: metadata.range[1] - metadata.range[0],
+                afterBytes: optimized.byteLength,
+            };
+        }),
     };
+}
+
+/** Options for `runWasmOptCLI()` */
+interface RunWasmOptCLIOptions {
+    wasmOptBin?: string;
 }
 
 /**
  * Run wasm-opt on a given component
  *
- * @param {Uint8Array} source
- * @param {Array<string>} args
- * @param {TranspileOpt} transpileOpts
+ * @param source - WebAssembly binary bytes
+ * @param args - arguments to use with wasm-opt
+ * @param opts - options for controlling wasm-opt run
  * @returns {Promise<Uint8Array>}
  */
-async function runWasmOptCLI(source, args, transpileOpts) {
+async function runWasmOptCLI(
+    source: Uint8Array,
+    args: string[] ,
+    opts?: RunWasmOptCLIOptions,
+): Promise<Uint8Array | null> {
     const wasmOptBin =
-        transpileOpts?.wasmOptBin ??
+        opts?.wasmOptBin ??
         fileURLToPath(import.meta.resolve('binaryen/bin/wasm-opt'));
 
     try {
@@ -204,15 +248,9 @@ async function runWasmOptCLI(source, args, transpileOpts) {
             '-o',
         ]);
     } catch (e) {
-        if (e.toString().includes('BasicBlock requested')) {
-            return wasmOpt(source, args);
+        if ((typeof e === 'string' || e instanceof Error) && e.toString().includes('BasicBlock requested')) {
+            return runWasmOptCLI(source, args, opts);
         }
         throw e;
     }
-}
-
-// see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
-if (typeof __vite_ssr_import_meta__ !== 'undefined') {
-    __vite_ssr_import_meta__.resolve = (path) =>
-        'file://' + globalCreateRequire(import.meta.url).resolve(path);
 }
