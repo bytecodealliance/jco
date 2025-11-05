@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.0-rc.0] - 2025-11-05
+
+### 🚀 Features
+
+* *(transpile)* add helpers, example project, release test by @vados-cosmonic
+
+* *(transpile)* convert to typescript by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+* *(transpile)* fix lint issues, add typescript-eslint by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(transpile)* prep for packaging by @vados-cosmonic
+
+
+
+
 ## [0.0.5] - 2025-11-05
 
 ### 🐛 Bug Fixes
