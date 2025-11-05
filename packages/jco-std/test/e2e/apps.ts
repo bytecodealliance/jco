@@ -5,20 +5,14 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { debuglog } from "node:util";
 
-import { suite, test, assert, vi } from "vitest";
+import { suite, test, assert } from "vitest";
 import { default as which } from "which";
 import { componentize } from "@bytecodealliance/componentize-js";
 
 import { rolldown } from "rolldown";
-import typescript from "@rollup/plugin-typescript";
 
-/**
- * Configuration that is exported by test files (fixtures/apps/<x>/app.js)
- * when configuration for the test should be modified in some way.
- */
-interface TestConfigExport {
-    witWorldName?: string;
-}
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 
 const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.url));
 
@@ -105,33 +99,21 @@ suite("hono apps", async () => {
                         '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono': join(JCO_STD_DIR, "dist/wasi/0.2.6/http/adapters/hono.js"),
                     },
                 },
-                plugins: [
-                    typescript({
-                        noEmitOnError: true,
-                        target: "esnext",
-                        module: "nodenext",
-                        moduleResolution: "nodenext",
-                        esModuleInterop: true,
-                        allowJs: false,
-                        noEmit: true,
-                        forceConsistentCasingInFileNames: true,
-                        strict: true,
-                        outDir: componentOutputDir,
-                    }),
-                ],
             });
             await bundle.write({
                 file: jsOutputPath,
                 format: 'esm',
             });
 
+            const componentJS = await readFile(jsOutputPath, 'utf8');
+
             // Build the component with componentize-js
             const opts = {
-                sourcePath: jsOutputPath,
                 witPath,
                 worldName: witWorldName,
             };
-            let { component } = await componentize(opts);
+
+            let { component } = await componentize(componentJS, opts);
 
             // Write out the component to a file
             const componentOutputPath = join(componentOutputDir, "component.wasm");
@@ -153,6 +135,18 @@ suite("hono apps", async () => {
             const { promise: startupWait, resolve: resolveStartupWait } = Promise.withResolvers();
             wasmtime.stderr.on('data', data => {
                 log(`[wasmtime] STDERR: ${data}`);
+                if (data.includes("a matching implementation was not found in the linker")) {
+                    console.error([
+                        "Do you have a version of wasmtime with the right interfaces?",
+                        "Consider installing the following version of wasmtime locally:",
+                        "    cargo install \\",
+                        "        --git https://github.com/bytecodealliance/wasmtime \\",
+                        "        --rev 29f2a1ca66c849a2d2e533a2df87c221daa8e2de \\",
+                        "        wasmtime-cli",
+                    ].join("\n"));
+                    assert.fail(`unexpected error while running wasmtime: ${data}]`);
+                }
+
                 if (data.includes("127.0.0.1")) {
                     resolveStartupWait(null);
                 }

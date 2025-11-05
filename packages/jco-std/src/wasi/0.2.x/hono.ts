@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import type { Hono, Schema as HonoSchema, Env as HonoEnv } from 'hono';
 import { FetchEventLike } from 'hono/types';
 
@@ -8,22 +10,20 @@ import { buildEnvHelperFromWASI, type WASICLIEnvironmentLike } from './cli/envir
 
 /** Strategy for interfacing with WASI environment */
 enum AppAdapterType {
-    // eslint-disable-next-line no-unused-vars
     WasiHTTP = 'wasi-http',
-    // eslint-disable-next-line no-unused-vars
     FetchEvent = 'fetch-event',
 }
 
 /** Configuration for generating ENV variables that will be used in the Hono app */
 export enum WASIEnvGenerationStrategy {
     /** Don't generate environment variables from WASI */
-    // eslint-disable-next-line no-unused-vars
+
     Never = 'never',
     /** Generate environment variables from WASI once at app startup */
-    // eslint-disable-next-line no-unused-vars
+
     OnceBeforeStartup = 'once-before-startup',
     /** Generate environment variables from WASI once at app startup */
-    // eslint-disable-next-line no-unused-vars
+
     OncePerRequest = 'on-request',
 }
 
@@ -201,7 +201,6 @@ class WasiHttpAdapter<
 }
 
 /** This global variable will be set to the application adapter when present */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let ADAPTER: WasiHttpAdapter<any, any, any>;
 
 /**
@@ -286,66 +285,65 @@ export function buildFireFn(args: BuildFireFnArgs) {
     Schema extends HonoSchema = {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
     BasePath extends string = '/',
         >(
-            app: Hono<Env, Schema, BasePath>,
-            opts?: FireOpts,
-        ) {
-            const adapter = new WasiHttpAdapter({
-                app,
-                type: opts?.useWasiHTTP
-                    ? AppAdapterType.WasiHTTP
-                    : AppAdapterType.FetchEvent,
-                wasiEnvGenerationStrategy: opts?.wasiEnvGenerationStrategy,
-                wasiConfigStore,
-                wasiEnvironment,
-                readWASIRequest,
-                writeWebResponse,
-            });
-            const adapterType = adapter.getAdapterType();
-            const adapterEnvGenerationStrategy = adapter.getEnvGenerationStrategy();
-            const adapterConfigHelperEnabled = adapter.wasiConfigHelperEnabled();
+        app: Hono<Env, Schema, BasePath>,
+        opts?: FireOpts,
+    ) {
+        const adapter = new WasiHttpAdapter({
+            app,
+            type: opts?.useWasiHTTP
+                ? AppAdapterType.WasiHTTP
+                : AppAdapterType.FetchEvent,
+            wasiEnvGenerationStrategy: opts?.wasiEnvGenerationStrategy,
+            wasiConfigStore,
+            wasiEnvironment,
+            readWASIRequest,
+            writeWebResponse,
+        });
+        const adapterType = adapter.getAdapterType();
+        const adapterEnvGenerationStrategy = adapter.getEnvGenerationStrategy();
+        const adapterConfigHelperEnabled = adapter.wasiConfigHelperEnabled();
 
-            // If we're not doing fetch-event (i.e. we're using `wasi:http/incoming-handler`),
-            // then we should set up the adapter, as we expect the user to have exported this
-            // file's `incomingHandler` export.
-            if (adapterType === AppAdapterType.WasiHTTP) {
-                ADAPTER = adapter;
-                return;
-            }
-
-            // If we're doing fetch-event, set up the application and exit early
-            let env: Record<string, string>;
-            if (
-                adapterEnvGenerationStrategy ===
-                    WASIEnvGenerationStrategy.OnceBeforeStartup
-            ) {
-                env = envHelper.getAllObject();
-            }
-
-            try {
-                // NOTE: addEventListener does not yet have typings for FetchEvent
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const addEventListener = ensureGlobalAddEventListener() as any;
-                addEventListener('fetch', (evt: FetchEventLike) => {
-                    if (
-                        adapterEnvGenerationStrategy ===
-                            WASIEnvGenerationStrategy.OncePerRequest
-                    ) {
-                        env = envHelper.getAllObject();
-                    }
-                    evt.respondWith(
-                        app.fetch(
-                            evt.request,
-                            env,
-                            buildExecContext({ adapterConfigHelperEnabled, wasiConfigStore })
-                        )
-                    );
-                });
-            } catch (err) {
-                console.error('failed to build fetch event listener', err);
-                throw err;
-            }
-
+        // If we're not doing fetch-event (i.e. we're using `wasi:http/incoming-handler`),
+        // then we should set up the adapter, as we expect the user to have exported this
+        // file's `incomingHandler` export.
+        if (adapterType === AppAdapterType.WasiHTTP) {
+            ADAPTER = adapter;
+            return;
         }
+
+        // If we're doing fetch-event, set up the application and exit early
+        let env: Record<string, string>;
+        if (
+            adapterEnvGenerationStrategy ===
+                    WASIEnvGenerationStrategy.OnceBeforeStartup
+        ) {
+            env = envHelper.getAllObject();
+        }
+
+        try {
+            // NOTE: addEventListener does not yet have typings for FetchEvent
+            const addEventListener = ensureGlobalAddEventListener() as any;
+            addEventListener('fetch', (evt: FetchEventLike) => {
+                if (
+                    adapterEnvGenerationStrategy ===
+                            WASIEnvGenerationStrategy.OncePerRequest
+                ) {
+                    env = envHelper.getAllObject();
+                }
+                evt.respondWith(
+                    app.fetch(
+                        evt.request,
+                        env,
+                        buildExecContext({ adapterConfigHelperEnabled, wasiConfigStore })
+                    )
+                );
+            });
+        } catch (err) {
+            console.error('failed to build fetch event listener', err);
+            throw err;
+        }
+
+    }
 }
 
 /** Arguments for `buildExecContext()` */

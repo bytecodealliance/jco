@@ -30,7 +30,7 @@ export async function writeWebResponse(resp: Response, outgoingWasiResp: Respons
             while (written < chunk.length) {
                 //let pollable = outputStream.subscribe();
 
-                let bytesAllowedRaw = outputStream.checkWrite();
+                const bytesAllowedRaw = outputStream.checkWrite();
                 if (!Number.isSafeInteger(bytesAllowedRaw)) {
                     throw new Error("unexpectedly unsafe integer bytes allowed");
                 }

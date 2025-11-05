@@ -59,7 +59,6 @@
   "devDependencies": {
     "@bytecodealliance/jco": "^1.15.3",
     "@bytecodealliance/preview2-shim": "^0.17.5",
-    "@rollup/plugin-typescript": "^12.3.0",
     "@types/which": "^3.0.4",
     "hono": "^4.9.10",
     "rolldown": "^1.0.0-beta.46",

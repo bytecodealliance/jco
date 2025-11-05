@@ -15,9 +15,9 @@ export function ensureGlobalReadableStream() {
 }
 
 /** Get the global `AddEventListener` */
-export function ensureGlobalAddEventListener(): any {
+export function ensureGlobalAddEventListener(): EventTarget['addEventListener'] {
     if (!('addEventListener' in globalThis)) {
         throw new TypeError('AddEventListener not provided by platform');
     }
-    return (globalThis as any).addEventListener;
+    return globalThis.addEventListener;
 }
