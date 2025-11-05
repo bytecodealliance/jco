@@ -11,9 +11,6 @@ import { componentize } from "@bytecodealliance/componentize-js";
 
 import { rolldown } from "rolldown";
 
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
-
 const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.url));
 
 const JCO_STD_DIR = fileURLToPath(new URL("../../", import.meta.url));
@@ -93,12 +90,6 @@ suite("hono apps", async () => {
                 external: [
                     /^wasi:.*/,
                 ],
-                resolve: {
-                    alias: {
-                        '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono': join(JCO_STD_DIR, "dist/wasi/0.2.3/http/adapters/hono.js"),
-                        '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono': join(JCO_STD_DIR, "dist/wasi/0.2.6/http/adapters/hono.js"),
-                    },
-                },
             });
             await bundle.write({
                 file: jsOutputPath,
