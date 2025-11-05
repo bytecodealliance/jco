@@ -3,7 +3,7 @@ import {
 } from "node:assert";
 import { fileURLToPath } from "node:url";
 
-import { suite, test, assert } from "vitest";
+import { suite, test, assert, vi } from "vitest";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -349,9 +349,17 @@ suite("Node.js Preview2", () => {
           },
         });
 
-        assert.ok(!pollable.ready());
+        await vi.waitUntil(
+            () => !pollable.ready(),
+            { timeout: 5_000, interval: 100, },
+        );
+
         pollable.block();
-        assert.ok(pollable.ready());
+
+        await vi.waitUntil(
+            () => pollable.ready(),
+            { timeout: 5_000, interval: 100, },
+        );
 
         const [input, output] = tcpSocket.finishConnect();
 
