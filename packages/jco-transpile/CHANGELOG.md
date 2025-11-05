@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.0.5] - 2025-11-05
+
+### 🐛 Bug Fixes
+
+* *(transpile)* remove unused program arg from transpile() by @vados-cosmonic in #1086
+
+* *(transpile)* type declarations by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+* *(transpile)* remove chalk dependency by @vados-cosmonic in #1011
+
+
+### 🧪 Testing
+
+* *(transpile)* add test for JS reserved word generation by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(transpile)* eslint fix by @vados-cosmonic
+
+
+
+
 ## [0.0.4] - 2025-08-25
 
 ### ⚙️ Miscellaneous Tasks
