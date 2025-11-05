@@ -19,4 +19,4 @@ app.get('/', (c, ctx) => {
     return c.text(ctx.config.get(key));
 });
 
-fire(app);
+fire(app, { useFetchEvent: true });

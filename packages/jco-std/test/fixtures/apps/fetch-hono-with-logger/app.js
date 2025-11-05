@@ -9,4 +9,5 @@ app.get('/', (c) => {
     logger.debug('entered handler');
     c.text('Hello World!');
 });
-fire(app);
+
+fire(app, { useFetchEvent: true });

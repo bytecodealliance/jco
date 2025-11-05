@@ -12,4 +12,4 @@ app.get('/', (c) => {
     });
 });
 
-fire(app);
+fire(app, { useFetchEvent: true });
