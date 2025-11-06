@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1] - 2025-11-06
+
+### 🚀 Features
+
+* *(transpile)* add transpileBytes to the public API by @vados-cosmonic in #1103
+
+
+
+
 ## [0.1.0] - 2025-11-05
 
 ### 🚀 Features
