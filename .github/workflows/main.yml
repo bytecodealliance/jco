@@ -421,11 +421,13 @@ jobs:
             wasmtime-cli
 
       - name: Install NPM packages
-        run: npm install
-
-      - name: Build jco, jco-std
+        working-directory: packages/${{ matrix.workspace }}
         run: |
-          npm run build
+          npm install
+
+      - name: Build jco-transpile, jco-std
+        run: |
+          npm run build -w packages/jco-transpile
           npm --workspace packages/${{ matrix.workspace }} run build
 
       - name: Test jco-std workspace
