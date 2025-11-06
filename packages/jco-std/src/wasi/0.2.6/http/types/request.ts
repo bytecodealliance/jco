@@ -4,14 +4,13 @@
  * @see: https://github.com/WebAssembly/wasi-http
  */
 
-import { IncomingRequest } from "wasi:http/types@0.2.6";
-// import { IncomingBody, IncomingRequest } from "wasi:http/types@0.2.6";
-// import { Pollable } from "wasi:io/poll@0.2.6";
-// import { InputStream } from "wasi:io/streams@0.2.6";
+import { IncomingBody, IncomingRequest } from "wasi:http/types@0.2.6";
+import { Pollable } from "wasi:io/poll@0.2.6";
+import { InputStream } from "wasi:io/streams@0.2.6";
 
-// import { ensureGlobalReadableStream, ensureGlobalRequest } from "../../../globals.js";
-import { wasiHTTPMethodToString } from "../../../0.2.x/http/index.js";
-// import { DEFAULT_INCOMING_BODY_READ_MAX_BYTES } from "../../../constants.js";
+import { ensureGlobalReadableStream, ensureGlobalRequest } from "../../../globals.js";
+import { wasiHTTPMethodToString, requestShouldHaveBody } from "../../../0.2.x/http/index.js";
+import { DEFAULT_INCOMING_BODY_READ_MAX_BYTES } from "../../../constants.js";
 
 /**
  * Create a web-platform `Request` from a `wasi:http/incoming-handler` `incoming-request`.
@@ -25,8 +24,6 @@ import { wasiHTTPMethodToString } from "../../../0.2.x/http/index.js";
  * @see https://github.com/WebAssembly/wasi-http
  */
 export async function readWASIRequest(wasiIncomingRequest: IncomingRequest): Promise<Request> {
-    // TODO: reuse bytes for subsequent web requests, doing pruning/growing where necessary
-    // TODO: trailer support
     if (!wasiIncomingRequest) {
         throw new TypeError('WASI incoming request not provided');
     }
@@ -53,62 +50,60 @@ export async function readWASIRequest(wasiIncomingRequest: IncomingRequest): Pro
             return [k, decoder.decode(valueBytes)];
         })
     );
-    // const Request = ensureGlobalRequest();
-    // const ReadableStream = ensureGlobalReadableStream();
+    const Request = ensureGlobalRequest();
+    const ReadableStream = ensureGlobalReadableStream();
 
-    // let incomingBody: IncomingBody;
-    // let incomingBodyStream: InputStream;
-    // let incomingBodyPollable: Pollable;
+    let incomingBody: IncomingBody;
+    let incomingBodyStream: InputStream;
+    let incomingBodyPollable: Pollable;
 
-    // const body = new ReadableStream({
-    //     async start(controller) {
-    //         if (!incomingBody) {
-    //             incomingBody = wasiIncomingRequest.consume();
-    //             incomingBodyStream = incomingBody.stream();
-    //             incomingBodyPollable = incomingBodyStream.subscribe();
-    //         }
-    //     },
+    let body: ReadableStream;
+    if (requestShouldHaveBody({ method })) {
+        body = new ReadableStream({
+            start(controller) {
+                if (!incomingBody) {
+                    incomingBody = wasiIncomingRequest.consume();
+                    incomingBodyStream = incomingBody.stream();
+                    incomingBodyPollable = incomingBodyStream.subscribe();
+                }
+            },
 
-    //     async pull(controller) {
-    //         // Read all information coming from the request
-    //         while (true) {
-    //             // Wait until the pollable is ready
-    //             if (!incomingBodyPollable.ready()) {
-    //                 incomingBodyPollable.block();
-    //             }
+            pull(controller) {
+                // Read all information coming from the request
+                while (true) {
+                    // Wait until the pollable is ready
+                    if (!incomingBodyPollable.ready()) {
+                        incomingBodyPollable.block();
+                    }
 
-    //             try {
-    //                 console.error("BEFORE READ!");
-    //                 const bytes = incomingBodyStream.read(
-    //                     DEFAULT_INCOMING_BODY_READ_MAX_BYTES
-    //                 );
-    //                 if (bytes.length === 0) {
-    //                     break;
-    //                 } else {
-    //                     controller.enqueue(bytes);
-    //                 }
-    //             } catch (err) {
-    //                 // If the channel is closed, we can break out
-    //                 if (err.payload.tag === 'closed') { break; }
-    //                 throw err;
-    //             }
-    //         }
+                    try {
+                        const bytes = incomingBodyStream.read(DEFAULT_INCOMING_BODY_READ_MAX_BYTES);
+                        if (bytes.length === 0) {
+                            break;
+                        }
+                        controller.enqueue(bytes);
+                    } catch (err) {
+                        if (err.payload.tag === 'closed') { break; }
+                        throw err;
+                    }
+                }
 
-    //         incomingBodyPollable[Symbol.dispose]();
-    //         incomingBodyStream[Symbol.dispose]();
-    //         incomingBody[Symbol.dispose]();
-    //         wasiIncomingRequest[Symbol.dispose]();
-    //         controller.close();
-    //     },
-    // });
+                // Once information has all been read we can clean up
+                incomingBodyPollable[Symbol.dispose]();
+                incomingBodyStream[Symbol.dispose]();
+                IncomingBody.finish(incomingBody);
+                wasiIncomingRequest[Symbol.dispose]();
+                controller.close();
+            },
+        });
 
-    // TODO: unfortunately, Request`s don't seem to work properly with StarlingMonkey.
-    // we may have to do some sort of polyfill.
+    }
+
     const url = `${scheme}://${authority}${pathWithQuery}`;
     const req = new Request(url, {
         method,
         headers,
-        // body, <--- using any kind of body will break
+        body,
     });
 
     return req;
