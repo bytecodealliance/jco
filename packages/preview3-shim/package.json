@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "WASI Preview3 shim for JS environments",
   "author": "Tomasz Andrzejak",
+  "contributors": [
+    {
+      "name": "Tomasz Andrzejak"
+    },
+    {
+      "name": "Victor Adossi",
+      "email": "vadossi@cosmonic.com"
+    }
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bytecodealliance/jco.git"

@@ -16,8 +16,6 @@ import {
     Request,
 } from '@bytecodealliance/preview3-shim/http';
 
-import { getRandomPort } from '../helpers';
-
 import { future } from '@bytecodealliance/preview3-shim/future';
 import { stream } from '@bytecodealliance/preview3-shim/stream';
 
