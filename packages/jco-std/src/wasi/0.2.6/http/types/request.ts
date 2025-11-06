@@ -1,16 +1,12 @@
 /**
- * This file implements helpers and relevant types for use with `wasi:http` 0.2.x APIs
+ * This file implements helpers and relevant types for use with `wasi:http@0.2.6`
  *
  * @see: https://github.com/WebAssembly/wasi-http
  */
 
-import { IncomingBody, IncomingRequest } from "wasi:http/types@0.2.6";
-import { Pollable } from "wasi:io/poll@0.2.6";
-import { InputStream } from "wasi:io/streams@0.2.6";
+import { type IncomingRequest, IncomingBody } from "wasi:http/types@0.2.6";
 
-import { ensureGlobalReadableStream, ensureGlobalRequest } from "../../../globals.js";
-import { wasiHTTPMethodToString, requestShouldHaveBody } from "../../../0.2.x/http/index.js";
-import { DEFAULT_INCOMING_BODY_READ_MAX_BYTES } from "../../../constants.js";
+import { genReadWASIRequestFn } from "../../../0.2.x/http/types/request.js";
 
 /**
  * Create a web-platform `Request` from a `wasi:http/incoming-handler` `incoming-request`.
@@ -24,87 +20,6 @@ import { DEFAULT_INCOMING_BODY_READ_MAX_BYTES } from "../../../constants.js";
  * @see https://github.com/WebAssembly/wasi-http
  */
 export async function readWASIRequest(wasiIncomingRequest: IncomingRequest): Promise<Request> {
-    if (!wasiIncomingRequest) {
-        throw new TypeError('WASI incoming request not provided');
-    }
-    const method = wasiHTTPMethodToString(wasiIncomingRequest.method());
-    const pathWithQuery = wasiIncomingRequest.pathWithQuery();
-
-    const schemeRaw = wasiIncomingRequest.scheme();
-    let scheme;
-    switch (schemeRaw.tag) {
-    case 'HTTP':
-        scheme = 'http'
-        break;
-    case 'HTTPS':
-        scheme = 'https'
-        break;
-    default:
-        throw new Error(`unexpected scheme [${schemeRaw.tag}]`);
-    }
-
-    const authority = wasiIncomingRequest.authority();
-    const decoder = new TextDecoder('utf-8');
-    const headers = Object.fromEntries(
-        wasiIncomingRequest.headers().entries().map(([k,valueBytes]) => {
-            return [k, decoder.decode(valueBytes)];
-        })
-    );
-    const Request = ensureGlobalRequest();
-    const ReadableStream = ensureGlobalReadableStream();
-
-    let incomingBody: IncomingBody;
-    let incomingBodyStream: InputStream;
-    let incomingBodyPollable: Pollable;
-
-    let body: ReadableStream;
-    if (requestShouldHaveBody({ method })) {
-        body = new ReadableStream({
-            start(controller) {
-                if (!incomingBody) {
-                    incomingBody = wasiIncomingRequest.consume();
-                    incomingBodyStream = incomingBody.stream();
-                    incomingBodyPollable = incomingBodyStream.subscribe();
-                }
-            },
-
-            pull(controller) {
-                // Read all information coming from the request
-                while (true) {
-                    // Wait until the pollable is ready
-                    if (!incomingBodyPollable.ready()) {
-                        incomingBodyPollable.block();
-                    }
-
-                    try {
-                        const bytes = incomingBodyStream.read(DEFAULT_INCOMING_BODY_READ_MAX_BYTES);
-                        if (bytes.length === 0) {
-                            break;
-                        }
-                        controller.enqueue(bytes);
-                    } catch (err) {
-                        if (err.payload.tag === 'closed') { break; }
-                        throw err;
-                    }
-                }
-
-                // Once information has all been read we can clean up
-                incomingBodyPollable[Symbol.dispose]();
-                incomingBodyStream[Symbol.dispose]();
-                IncomingBody.finish(incomingBody);
-                wasiIncomingRequest[Symbol.dispose]();
-                controller.close();
-            },
-        });
-
-    }
-
-    const url = `${scheme}://${authority}${pathWithQuery}`;
-    const req = new Request(url, {
-        method,
-        headers,
-        body,
-    });
-
-    return req;
+    const f = genReadWASIRequestFn(IncomingBody)
+    return await f(wasiIncomingRequest);
 }

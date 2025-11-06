@@ -133,6 +133,11 @@ suite("hono apps", async () => {
                     componentOutputPath,
                 ]
             );
+            process.on('exit', () => {
+                if (wasmtime && !wasmtime.killed) {
+                    wasmtime.kill();
+                }
+            })
 
             // Wait for wasmtime to start serving the component
             const { promise: startupWait, resolve: resolveStartupWait } = Promise.withResolvers();
