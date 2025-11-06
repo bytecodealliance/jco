@@ -42,7 +42,7 @@ const DEFAULT_CONTEXT = 'jco-std/http/adapter/hono';
 const DEFAULT_LOG_FN_BUILDER = (context: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (level: string, msg: string, ...data: any[]) => {
-        console.error(context, msg, { data });
+        console.error(`[${context}] [${level}] ${msg}`, { data });
     }
 }
 
@@ -81,5 +81,6 @@ export function buildLogger(args?: BuildLoggerArgs) {
     fn.error = (msg: string, ...rest: string[]) => {
         logFn('error', msg, ...rest);
     };
+
     return fn;
 }
