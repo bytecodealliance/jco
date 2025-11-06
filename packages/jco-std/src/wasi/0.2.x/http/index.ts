@@ -48,3 +48,15 @@ export function wasiHTTPMethodToString(wasiMethod: WASIHTTPMethodLike): HTTPMeth
         );
     }
 }
+
+/** Arguments to `requestShouldHaveBody()` */
+interface ReqeustShouldHaveBodyArgs {
+    method: string,
+}
+
+/** Helper for determining whether a request should have a body */
+export function requestShouldHaveBody(args: ReqeustShouldHaveBodyArgs): boolean {
+    const { method } = args;
+    if (method === "GET" || method === "HEAD") { return false; }
+    return true;
+}

@@ -8,5 +8,5 @@ export const config = {
 
 export async function test({ server }) {
     const req = await fetch(server.url);
-    assert.strictEqual('Hello World!', await req.text());
+    assert.strictEqual("Hello World!!!!", await req.text());
 }
