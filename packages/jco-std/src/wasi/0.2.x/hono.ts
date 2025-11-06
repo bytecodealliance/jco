@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 
 import type { Hono, Schema as HonoSchema, Env as HonoEnv } from 'hono';
 import { FetchEventLike } from 'hono/types';

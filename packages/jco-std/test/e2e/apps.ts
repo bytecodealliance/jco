@@ -15,8 +15,6 @@ const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.u
 
 const JCO_STD_DIR = fileURLToPath(new URL("../../", import.meta.url));
 
-const DEFAULT_TEST_WIT_WORLD = "hono-fetch-event";
-
 /** Get the binary path to wasmtime if it doesn't exist */
 async function getWasmtimeBin(env?: Record<string, string>): Promise<string> {
     try {
@@ -64,8 +62,6 @@ suite("hono apps", async () => {
         // If the folder doesn't have an app script, we can quit early
         if (!scriptExists) { continue; }
 
-        if (appDir.name !== 'wasi-http-hono') { continue; }
-
         const appFolderName = appDir.name;
 
         // Load the test script, and pull configuration out, if present
@@ -90,7 +86,7 @@ suite("hono apps", async () => {
         // Get wasmtime dir path, ensure it exists
         const wasmtimeBin = await getWasmtimeBin();
 
-        test(`[${appFolderName}]`, async () => {
+        test.concurrent(`[${appFolderName}]`, async () => {
             log(`testing app [${appFolderName}]`);
 
             // Bundle the application w/ deps via rolldown
@@ -119,7 +115,7 @@ suite("hono apps", async () => {
                 worldName: witWorldName,
             };
 
-            let { component } = await componentize(componentJS, opts);
+            const { component } = await componentize(componentJS, opts);
 
             // Write out the component to a file
             const componentOutputPath = join(componentOutputDir, "component.wasm");

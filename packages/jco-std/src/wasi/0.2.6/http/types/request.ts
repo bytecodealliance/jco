@@ -4,13 +4,14 @@
  * @see: https://github.com/WebAssembly/wasi-http
  */
 
-import { IncomingBody, IncomingRequest } from "wasi:http/types@0.2.6";
-import { Pollable } from "wasi:io/poll@0.2.6";
-import { InputStream } from "wasi:io/streams@0.2.6";
+import { IncomingRequest } from "wasi:http/types@0.2.6";
+// import { IncomingBody, IncomingRequest } from "wasi:http/types@0.2.6";
+// import { Pollable } from "wasi:io/poll@0.2.6";
+// import { InputStream } from "wasi:io/streams@0.2.6";
 
-import { ensureGlobalReadableStream, ensureGlobalRequest } from "../../../globals.js";
+// import { ensureGlobalReadableStream, ensureGlobalRequest } from "../../../globals.js";
 import { wasiHTTPMethodToString } from "../../../0.2.x/http/index.js";
-import { DEFAULT_INCOMING_BODY_READ_MAX_BYTES } from "../../../constants.js";
+// import { DEFAULT_INCOMING_BODY_READ_MAX_BYTES } from "../../../constants.js";
 
 /**
  * Create a web-platform `Request` from a `wasi:http/incoming-handler` `incoming-request`.
@@ -31,7 +32,20 @@ export async function readWASIRequest(wasiIncomingRequest: IncomingRequest): Pro
     }
     const method = wasiHTTPMethodToString(wasiIncomingRequest.method());
     const pathWithQuery = wasiIncomingRequest.pathWithQuery();
-    const scheme = wasiIncomingRequest.scheme();
+
+    const schemeRaw = wasiIncomingRequest.scheme();
+    let scheme;
+    switch (schemeRaw.tag) {
+    case 'HTTP':
+        scheme = 'http'
+        break;
+    case 'HTTPS':
+        scheme = 'https'
+        break;
+    default:
+        throw new Error(`unexpected scheme [${schemeRaw.tag}]`);
+    }
+
     const authority = wasiIncomingRequest.authority();
     const decoder = new TextDecoder('utf-8');
     const headers = Object.fromEntries(
@@ -39,53 +53,63 @@ export async function readWASIRequest(wasiIncomingRequest: IncomingRequest): Pro
             return [k, decoder.decode(valueBytes)];
         })
     );
-    const Request = ensureGlobalRequest();
-    const ReadableStream = ensureGlobalReadableStream();
+    // const Request = ensureGlobalRequest();
+    // const ReadableStream = ensureGlobalReadableStream();
 
-    let incomingBody: IncomingBody;
-    let incomingBodyStream: InputStream;
-    let incomingBodyPollable: Pollable;
-    const body = new ReadableStream({
-        async pull(controller) {
-            if (!incomingBody) {
-                incomingBody = wasiIncomingRequest.consume();
-                incomingBodyStream = incomingBody.stream();
-                incomingBodyPollable = incomingBodyStream.subscribe();
-            }
+    // let incomingBody: IncomingBody;
+    // let incomingBodyStream: InputStream;
+    // let incomingBodyPollable: Pollable;
 
-            // Read all information coming from the request
-            while (true) {
-                // Wait until the pollable is ready
-                if (!incomingBodyPollable.ready()) {
-                    incomingBodyPollable.block();
-                }
+    // const body = new ReadableStream({
+    //     async start(controller) {
+    //         if (!incomingBody) {
+    //             incomingBody = wasiIncomingRequest.consume();
+    //             incomingBodyStream = incomingBody.stream();
+    //             incomingBodyPollable = incomingBodyStream.subscribe();
+    //         }
+    //     },
 
-                try {
-                    const bytes = incomingBodyStream.read(
-                        DEFAULT_INCOMING_BODY_READ_MAX_BYTES
-                    );
-                    if (bytes.length === 0) {
-                        break;
-                    } else {
-                        controller.enqueue(bytes);
-                    }
-                } catch (err) {
-                    console.error('error while reading bytes', err);
-                    controller.close();
-                    break;
-                }
-            }
+    //     async pull(controller) {
+    //         // Read all information coming from the request
+    //         while (true) {
+    //             // Wait until the pollable is ready
+    //             if (!incomingBodyPollable.ready()) {
+    //                 incomingBodyPollable.block();
+    //             }
 
-            incomingBodyPollable[Symbol.dispose]();
-            incomingBodyStream[Symbol.dispose]();
-            incomingBody[Symbol.dispose]();
-            controller.close();
-        },
-    });
-    
-    return new Request(`${scheme}://${authority}/${pathWithQuery}`, {
+    //             try {
+    //                 console.error("BEFORE READ!");
+    //                 const bytes = incomingBodyStream.read(
+    //                     DEFAULT_INCOMING_BODY_READ_MAX_BYTES
+    //                 );
+    //                 if (bytes.length === 0) {
+    //                     break;
+    //                 } else {
+    //                     controller.enqueue(bytes);
+    //                 }
+    //             } catch (err) {
+    //                 // If the channel is closed, we can break out
+    //                 if (err.payload.tag === 'closed') { break; }
+    //                 throw err;
+    //             }
+    //         }
+
+    //         incomingBodyPollable[Symbol.dispose]();
+    //         incomingBodyStream[Symbol.dispose]();
+    //         incomingBody[Symbol.dispose]();
+    //         wasiIncomingRequest[Symbol.dispose]();
+    //         controller.close();
+    //     },
+    // });
+
+    // TODO: unfortunately, Request`s don't seem to work properly with StarlingMonkey.
+    // we may have to do some sort of polyfill.
+    const url = `${scheme}://${authority}${pathWithQuery}`;
+    const req = new Request(url, {
         method,
         headers,
-        body,
+        // body, <--- using any kind of body will break
     });
+
+    return req;
 }
