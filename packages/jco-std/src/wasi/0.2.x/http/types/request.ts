@@ -29,14 +29,14 @@ export function genReadWASIRequestFn(incomingBodyTy: typeof IncomingBody) {
         const schemeRaw = wasiIncomingRequest.scheme();
         let scheme;
         switch (schemeRaw.tag) {
-            case 'HTTP':
-                scheme = 'http'
-                break;
-            case 'HTTPS':
-                scheme = 'https'
-                break;
-            default:
-                throw new Error(`unexpected scheme [${schemeRaw.tag}]`);
+        case 'HTTP':
+            scheme = 'http'
+            break;
+        case 'HTTPS':
+            scheme = 'https'
+            break;
+        default:
+            throw new Error(`unexpected scheme [${schemeRaw.tag}]`);
         }
 
         const authority = wasiIncomingRequest.authority();
@@ -56,7 +56,7 @@ export function genReadWASIRequestFn(incomingBodyTy: typeof IncomingBody) {
         let body: ReadableStream;
         if (requestShouldHaveBody({ method })) {
             body = new ReadableStream({
-                start(controller) {
+                start() {
                     if (!incomingBody) {
                         incomingBody = wasiIncomingRequest.consume();
                         incomingBodyStream = incomingBody.stream();
