@@ -31,14 +31,16 @@ describe('HttpClient Integration', () => {
         server = http.createServer((req, res) => {
             if (req.url === '/error') {
                 res.statusCode = 500;
-                return res.end(JSON.stringify({ error: 'Server error' }));
+                res.end(JSON.stringify({ error: 'Server error' }));
+                return;
             }
 
             if (req.url === '/delayed-first-byte') {
-                return setTimeout(() => {
+                setTimeout(() => {
                     res.writeHead(200, { 'Content-Type': 'text/plain' });
                     res.end('ok');
                 }, 200);
+                return;
             }
 
             res.setHeader('Content-Type', 'application/json');
@@ -57,11 +59,13 @@ describe('HttpClient Integration', () => {
                 res.end(responseBody);
             });
         });
-
-        const host = '127.0.0.1';
-        const port = await getRandomPort();
-        authority = `${host}:${port}`;
-        server.listen(port);
+        
+        await new Promise((resolve) => {
+            server.listen(0, function() {
+                authority = `127.0.0.1:${this.address().port}`;
+                resolve(null);
+            });
+        });
     });
 
     afterAll(async () => {
