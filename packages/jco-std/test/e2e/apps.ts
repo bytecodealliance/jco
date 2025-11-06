@@ -15,16 +15,6 @@ const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.u
 
 const JCO_STD_DIR = fileURLToPath(new URL("../../", import.meta.url));
 
-/**
- * WIT worlds to use for individual test apps by name
- *
- * @see: ../fixtures/apps/<app name>/app.js
- * @see: ../fixtures/apps/wit
- */
-const TEST_WIT_WORLD_LOOKUP = {
-    'wasi-http-hono': 'hono-wasi-http',
-};
-
 const DEFAULT_TEST_WIT_WORLD = "hono-fetch-event";
 
 /** Get the binary path to wasmtime if it doesn't exist */
@@ -32,7 +22,7 @@ async function getWasmtimeBin(env?: Record<string, string>): Promise<string> {
     try {
         return env?.TEST_WASMTIME_BIN ?? await which('wasmtime');
     } catch (err) {
-        console.error("failed to find wasmtime binary, either set TEST_WASMTIME_BIN in env or ensure it is on your PATH");
+        console.error("missing wasmtime binary, set TEST_WASMTIME_BIN or ensure wasmtime is in your PATH");
         throw err;
     }
 }
@@ -46,6 +36,14 @@ export async function getTmpDir() {
     return await mkdtemp(normalize(tmpdir() + sep));
 }
 
+/**
+ * To enable debug logging:
+ *
+ * ```
+ * export NODE_DEBUG=test-e2e
+ * npm run build && npm run test
+ * ```
+ */
 const log = debuglog("test-e2e");
 
 suite("hono apps", async () => {
@@ -62,18 +60,29 @@ suite("hono apps", async () => {
         const fixtureDir = join(FIXTURE_APPS_DIR, appDir.name);
         const sourcePath = join(fixtureDir, "app.js");
         const scriptExists = await (stat(sourcePath).then(() => true).catch(() => false));
-        if (!scriptExists) {
-            continue;
-        }
 
-        const testComponentName = appDir.name;
-        const witWorldName = TEST_WIT_WORLD_LOOKUP[testComponentName] ?? DEFAULT_TEST_WIT_WORLD;
+        // If the folder doesn't have an app script, we can quit early
+        if (!scriptExists) { continue; }
+
+        if (appDir.name !== 'wasi-http-hono') { continue; }
+
+        const appFolderName = appDir.name;
+
+        // Load the test script, and pull configuration out, if present
+        const testScriptPath = join(fixtureDir, "test.js");
+        const testMod = await import(testScriptPath);
+        const wasmtimeExtraArgs = testMod.config?.wasmtime?.extraArgs ? testMod.config?.wasmtime?.extraArgs() : [];
+
+        const witWorldName = testMod.config?.wit?.world;
+        if (!witWorldName) {
+            throw new Error(`wit world missing fromtest script 'config' export [${testScriptPath}]`);
+        }
 
         // Get the WIT path & world for the given test
         const witPath = join(FIXTURE_APPS_DIR, "wit", witWorldName);
 
         // Create an output dir for building the component
-        const componentOutputDir = join(builtComponentDir, testComponentName);
+        const componentOutputDir = join(builtComponentDir, appFolderName);
         await mkdir(componentOutputDir, { recursive: true });
 
         const jsOutputPath = join(componentOutputDir, "component.js");
@@ -81,8 +90,8 @@ suite("hono apps", async () => {
         // Get wasmtime dir path, ensure it exists
         const wasmtimeBin = await getWasmtimeBin();
 
-        test.concurrent(`[${testComponentName}]`, async () => {
-            log(`testing app [${testComponentName}]`);
+        test(`[${appFolderName}]`, async () => {
+            log(`testing app [${appFolderName}]`);
 
             // Bundle the application w/ deps via rolldown
             const bundle = await rolldown({
@@ -90,6 +99,12 @@ suite("hono apps", async () => {
                 external: [
                     /^wasi:.*/,
                 ],
+                resolve: {
+                    alias: {
+                        '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono': join(JCO_STD_DIR, "dist/0.2.3/http/adapters/hono.js"),
+                        '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono.js"),
+                    }
+                }
             });
             await bundle.write({
                 file: jsOutputPath,
@@ -118,6 +133,7 @@ suite("hono apps", async () => {
                     "-S",
                     "config,cli",
                     "--addr", "127.0.0.1:0",
+                    ...wasmtimeExtraArgs,
                     componentOutputPath,
                 ]
             );
@@ -139,20 +155,30 @@ suite("hono apps", async () => {
                 }
 
                 if (data.includes("127.0.0.1")) {
-                    resolveStartupWait(null);
+                    resolveStartupWait(data);
                 }
             });
             wasmtime.stdout.on('data', data => {
                 log(`[wasmtime] STDOUT: ${data}`);
                 if (data.includes("127.0.0.1")) {
-                    resolveStartupWait(null);
+                    resolveStartupWait(data);
                 }
             });
-            await startupWait;
 
-            // TODO: Perform HTTP requests
+            // Wait for startup
+            const ipLine = await startupWait;
 
-            assert(true, "test works");
+            // Parse out wasmtime's randomly chosen port
+            const matches = /(127\.0\.0\.1):(\d+)/.exec(ipLine);
+            if (!matches) { throw new Error("failed to match IP address regex"); }
+            const host = matches[1];
+            const port = parseInt(matches[2]);
+            const url = `http://${host}:${port}`;
+
+            // Run the test that is co-located with the fixture app in question
+            await testMod.test({ server: { host, port, url } });
+
+            wasmtime.kill();
         });
     }
 
