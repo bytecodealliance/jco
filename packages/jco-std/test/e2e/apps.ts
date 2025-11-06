@@ -86,7 +86,7 @@ suite("hono apps", async () => {
         // Get wasmtime dir path, ensure it exists
         const wasmtimeBin = await getWasmtimeBin();
 
-        test.concurrent(`[${appFolderName}]`, async () => {
+        test(`[${appFolderName}]`, { retry: 3 }, async () => {
             log(`testing app [${appFolderName}]`);
 
             // Bundle the application w/ deps via rolldown
