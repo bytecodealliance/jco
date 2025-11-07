@@ -38,10 +38,6 @@
       "types": "./dist/wasi/0.2.3/http/adapters/hono.d.ts",
       "browser": "./dist/wasi/0.2.3/http/adapters/hono.js",
       "default": "./dist/wasi/0.2.3/http/adapters/hono.js"
-    },
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
     }
   },
   "scripts": {
@@ -53,8 +49,7 @@
     "build:ts": "tsc",
     "build": "npm run build:bindings && npm run build:ts",
     "test": "vitest run -c test/vitest.ts",
-    "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
-    "prepack": "npm run setup:vendor"
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "typescript-eslint": "^8.43.0",
