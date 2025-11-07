@@ -1268,7 +1268,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 self.start_current_task(inst, *async_, &func.name);
 
                 let results_length = if func.result.is_none() { 0 } else { 1 };
-                let maybe_async_await = if self.requires_async_porcelain {
+                let maybe_async_await = if self.requires_async_porcelain | async_ {
                     "await "
                 } else {
                     ""
