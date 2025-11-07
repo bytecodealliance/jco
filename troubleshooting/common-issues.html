@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Contributing to the Codebase - jco</title>
+        <title>Common issues - jco</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,13 +141,13 @@
                     <h1 class="menu-title">jco</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
                         <a href="https://github.com/bytecodealliance/jco" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/bytecodealliance/jco/tree/main/docs/src/contributing.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/bytecodealliance/jco/tree/main/docs/src/troubleshooting/common-issues.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -248,131 +248,17 @@
 }
 
 </style>
-<h1 id="contributing-to-the-codebase"><a class="header" href="#contributing-to-the-codebase">Contributing to the Codebase</a></h1>
-<p>Development is based on a standard NodeJS workflow, i.e.:</p>
-<pre><code class="language-console">npm install
-npm run build
-npm run test
-</code></pre>
-<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
-<p>Required prerequisites for building jco include:</p>
-<ul>
-<li><a href="https://www.rust-lang.org/tools/install">Latest stable Rust</a> with the <code>wasm32-wasi</code> target</li>
-<li>Node.js 18+ &amp; npm (https://nodejs.org/en)</li>
-</ul>
-<h3 id="rust-toolchain"><a class="header" href="#rust-toolchain">Rust Toolchain</a></h3>
-<p>The latest Rust stable toolchain can be installed using <a href="https://rustup.rs/">rustup</a>.</p>
-<p>Specifically:</p>
-<pre><code class="language-shell">rustup toolchain install stable
-rustup target add wasm32-wasi
-</code></pre>
-<p>In case you do not have <code>rustup</code> installed on your system, please follow the installation instructions on the <a href="https://www.rust-lang.org/tools/install">official Rust website</a> based on your operating system</p>
-<h2 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h2>
-<p>jco is effectively a monorepo consisting of the following projects:</p>
-<ul>
-<li><code>crates/js-component-bindgen</code>: Rust crate for creating JS component bindgen, published under https://crates.io/crates/js-component-bindgen.</li>
-<li><code>crates/js-component-bindgen-component</code>: Component wrapper crate for the component bindgen. This allows bindgen to be self-hosted in JS.</li>
-<li><code>crates/wasm-tools-component</code>: Component wrapper crate for wasm-tools, allowing jco to invoke various Wasm toolchain functionality and also make it available through the jco API.</li>
-<li><code>src/api.js</code>: The jco API which can be used as a library dependency on npm. Published as https://npmjs.org/package/@bytecodealliance/jco.</li>
-<li><code>src/jco.js</code>: The jco CLI. Published as https://npmjs.org/package/@bytecodealliance/jco.</li>
-<li><code>packages/preview2-shim</code>: The WASI Preview2 host implementations for Node.js &amp; browsers. Published as https://www.npmjs.com/package/@bytecodealliance/preview2-shim.</li>
-<li><code>packages/preview3-shim</code>: The WASI Preview3 host implementations for Node.js</li>
-</ul>
-<h3 id="files-that-should-be-checked-in"><a class="header" href="#files-that-should-be-checked-in">Files that should be checked in</a></h3>
-<p>The repository is for project related code only -- avoid checking in files related to specific platforms or IDEs. One off configuration and/or secrets should of course not be checked in either.</p>
-<p>If there is information/configuration that is important for users or developers to see, include them in documentation and/or examples with appropriate context/explanation.</p>
-<h2 id="building"><a class="header" href="#building">Building</a></h2>
-<p>To build jco, run:</p>
-<pre><code>npm install
-npm run build
-</code></pre>
-<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
-<p>There are three test suites in jco:</p>
-<ul>
-<li><code>npm run test</code>: Project-level transpilation, CLI &amp; API tests.</li>
-<li><code>npm run test --workspace packages/preview2-shim</code>: <code>preview2-shim</code> unit tests.</li>
-<li><code>npm run test --workspace packages/preview3-shim</code>: <code>preview3-shim</code> unit tests.</li>
-<li><code>test/browser.html</code>: Bare-minimum browser validation test.</li>
-<li><code>cargo test</code>: Wasmtime preview2 conformance tests (not currently passing).</li>
-</ul>
-<div class="mdbook-alerts mdbook-alerts-warning">
-<p class="mdbook-alerts-title">
-  <span class="mdbook-alerts-icon"></span>
-  warning
-</p>
-<p>Generally, when running <code>jco</code> tests, you will want to build the project <em>first</em> during a test run,
-to ensure the latest version of Rust code (i.e. <code>js-component-bindgen</code> is in use):</p>
-<pre><code>cd packages/jco
-npm run build &amp;&amp; npm run test api.js
-</code></pre>
-<p>The command above runs a single test file -- the name of the file is relative to <code>packages/jco/test</code>.</p>
-</div>
-<h3 id="running-tests-without-bundling"><a class="header" href="#running-tests-without-bundling">Running tests without bundling</a></h3>
-<p>Tests can be run without bundling via <code>npm run build:dev &amp;&amp; npm run test:dev</code>.</p>
-<h3 id="running-specific-tests"><a class="header" href="#running-specific-tests">Running specific tests</a></h3>
-<p>JS tests are powered by <a href="https://vitest.dev"><code>vitest</code></a>, and a specific test suite can be run by passing
-the filename to <code>npm run test</code>:</p>
-<pre><code class="language-console">cd packages/jco
-npm run test runtime.js
-</code></pre>
-<p>For example, to run multiple tests in a given folder:</p>
-<pre><code class="language-console">cd packages/jco
-npm run test test/p3/*.js
-</code></pre>
-<h2 id="commits"><a class="header" href="#commits">Commits</a></h2>
-<p>Jco and related subprojects use <a href="https://www.conventionalcommits.org/en/v1.0.0/">Conventional Commits</a>.
-Using Conventional Commits helps the project maintain consistency in commit messages, and powers release
-automation.</p>
-<p>CI enforces that commits are structured in a conventional commit style (see <a href="https://github.com/bytecodealliance/jco/blob/main/commitlint.config.mjs"><code>commitlint.config.mjs</code></a>.
-Special care must also be taken to ensure PR titles are formatted in a way that matches conventional commits as well,
-when performing squash merges.</p>
-<p>The following types are valid:</p>
-<ul>
-<li><code>build</code></li>
-<li><code>chore</code></li>
-<li><code>ci</code></li>
-<li><code>debug</code></li>
-<li><code>docs</code></li>
-<li><code>feat</code></li>
-<li><code>fix</code></li>
-<li><code>perf</code></li>
-<li><code>refactor</code></li>
-<li><code>release</code></li>
-<li><code>revert</code></li>
-<li><code>style</code></li>
-<li><code>test</code></li>
-</ul>
-<p>The following project scopes are valid:</p>
-<ul>
-<li><code>jco</code></li>
-<li><code>p2-shim</code></li>
-<li><code>p3-shim</code></li>
-<li><code>bindgen</code></li>
-<li><code>transpile</code></li>
-</ul>
-<p>For changes made to projects in the repository to be included in releases, the appropriate project scope must be applied.</p>
-<p>Since changes that should be made to the repo may not always have a project-specific scope, the
-following scopes can be used as well:</p>
-<ul>
-<li><code>deps</code></li>
-<li><code>ci</code></li>
-<li><code>ops</code></li>
-</ul>
-<p>Here are a few example commit messages:</p>
-<pre><code>chore(jco): update componentize-js dependency to X.X.X
-</code></pre>
-<pre><code>feat(ci): add commitlint to actions workflows
-</code></pre>
+<h1 id="common-issues"><a class="header" href="#common-issues">Common issues</a></h1>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="troubleshooting/common-issues.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../manual-wasm-instantiation-with-wasi-overrides.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="contributing-docs.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../contributing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -382,11 +268,11 @@ following scopes can be used as well:</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="troubleshooting/common-issues.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../manual-wasm-instantiation-with-wasi-overrides.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="contributing-docs.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../contributing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -401,13 +287,13 @@ following scopes can be used as well:</p>
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 
