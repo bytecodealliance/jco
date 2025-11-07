@@ -30,14 +30,14 @@
   "main": "src/index.ts",
   "exports": {
     "./wasi/0.2.6/http/adapters/hono": {
-      "types": "./dist/wasi/0.2.6/http/adapters/hono.d.ts",
-      "browser": "./dist/wasi/0.2.6/http/adapters/hono.js",
-      "default": "./dist/wasi/0.2.6/http/adapters/hono.js"
+      "types": "./dist/0.2.6/http/adapters/hono.d.ts",
+      "browser": "./dist/0.2.6/http/adapters/hono.js",
+      "default": "./dist/0.2.6/http/adapters/hono.js"
     },
     "./wasi/0.2.3/http/adapters/hono": {
-      "types": "./dist/wasi/0.2.3/http/adapters/hono.d.ts",
-      "browser": "./dist/wasi/0.2.3/http/adapters/hono.js",
-      "default": "./dist/wasi/0.2.3/http/adapters/hono.js"
+      "types": "./dist/0.2.3/http/adapters/hono.d.ts",
+      "browser": "./dist/0.2.3/http/adapters/hono.js",
+      "default": "./dist/0.2.3/http/adapters/hono.js"
     }
   },
   "scripts": {
@@ -54,11 +54,13 @@
   },
   "devDependencies": {
     "@bytecodealliance/jco-transpile": "^0.1.1",
+    "@bytecodealliance/componentize-js": "^0.19.3",
     "@bytecodealliance/preview2-shim": "^0.17.5",
     "@types/which": "^3.0.4",
     "hono": "^4.10.4",
     "rolldown": "^1.0.0-beta.46",
     "typescript-eslint": "^8.43.0",
+    "vitest": "^4.0.8",
     "which": "^5.0.0"
   }
 }
