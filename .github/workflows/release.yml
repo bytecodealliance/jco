@@ -347,9 +347,12 @@ jobs:
         with:
           path: artifacts
 
+      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
+        id: auth
+
       - name: Publish ${{ needs.meta.outputs.project }} to crates.io
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_KEY }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           export OPT_DRY_RUN="--dry-run"
           if [ "tag" == "${{ github.ref_type }}" ]; then
@@ -403,9 +406,10 @@ jobs:
           npm install
 
       - name: Publish ${{ needs.meta.outputs.project }} to NPM
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
         shell: bash
+        id_tokens:
+          NPM_ID_TOKEN:
+            aud: "npm:registry.npmjs.org"
         run: |
           export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
 
