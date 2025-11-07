@@ -407,9 +407,6 @@ jobs:
 
       - name: Publish ${{ needs.meta.outputs.project }} to NPM
         shell: bash
-        id_tokens:
-          NPM_ID_TOKEN:
-            aud: "npm:registry.npmjs.org"
         run: |
           export PACKAGE_FILE_PATH=${{ github.workspace }}/artifacts/${{ needs.meta.outputs.artifact-name }}
 
