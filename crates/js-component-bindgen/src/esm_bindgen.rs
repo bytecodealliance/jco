@@ -356,7 +356,7 @@ impl EsmBindgen {
                                 } else {
                                     uwrite!(output, "{external_name} as {iface_local_name}");
                                 }
-                                bound_external_names.push(external_name.to_string());
+                                bound_external_names.push((external_name.to_string(), iface_local_name.to_string()));
                             }
 
                             ImportBinding::Local(local_names) => {
@@ -374,7 +374,7 @@ impl EsmBindgen {
                                     } else {
                                         uwrite!(output, "{external_name} as {local_name}");
                                     }
-                                    bound_external_names.push(external_name.to_string());
+                                    bound_external_names.push((external_name.to_string(), local_name.to_string()));
                                 }
                             }
                         };
@@ -391,12 +391,12 @@ impl EsmBindgen {
                             "}} = {imports_object}{};",
                             maybe_quote_member(specifier)
                         );
-                        for local_name in bound_external_names {
+                        for (external_name, local_name) in bound_external_names {
                             uwriteln!(
                                 output,
                                 r#"
                                 if ({local_name} === undefined) {{
-                                    throw new Error("unexpectedly undefined instance import '{local_name}', was '{local_name}' available at instantiation?");
+                                    throw new Error("unexpectedly undefined instance import '{local_name}', was '{external_name}' available at instantiation?");
                                 }}
                                 "#,
                             );
@@ -459,7 +459,7 @@ impl EsmBindgen {
                     } else {
                         uwrite!(output, "{member_name}: {local_name}");
                     }
-                    generated_member_names.push(member_name);
+                    generated_member_names.push((member_name, local_name));
                 }
             }
             if !first {
@@ -469,12 +469,12 @@ impl EsmBindgen {
 
             // Ensure that the imports we destructured were defined
             // (if they were not, the user is likely missing an import @ instantiation time)
-            for member_name in generated_member_names {
+            for (member_name, local_name) in generated_member_names {
                 uwriteln!(
                     output,
                     r#"
-                    if ({member_name} === undefined) {{
-                        throw new Error("unexpectedly undefined local import '{member_name}', was '{member_name}' available at instantiation?");
+                    if ({local_name} === undefined) {{
+                        throw new Error("unexpectedly undefined local import '{local_name}', was '{member_name}' available at instantiation?");
                     }}
                     "#,
                 );
