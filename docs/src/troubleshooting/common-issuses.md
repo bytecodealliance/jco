@@ -55,5 +55,7 @@ There are a few ways to solve this issue, mostly ensuring that the given import 
 *before* NodeJS attempts to run the transpiled JS.
 
 1. (`jco transpile`) Add a `map` parameter when performing the `jco transpile`
-2. (`jco serve`) Provide the `--jco-import` option along with a script to set up the environment
-3. Use an external transpiler/bundler to resolve any `wasi:` or other `<namespace>:<package>/<interface>` imports
+   - e.g. `jco transpile --map=wasi:config/store=./path/to/your/module.mjs ...`
+2. (`jco serve`) Provide the `--jco-map` option along with a script to set up the environment
+   - e.g. `jco serve --jco-map=wasi:config/store=./path/to/your/module.mjs ...`
+3. Use an external transpiler/bundler to resolve any `wasi:` or other `<namespace>:<package>/<interface>` imports from the transpiled output JS
