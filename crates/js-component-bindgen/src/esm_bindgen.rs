@@ -332,6 +332,7 @@ impl EsmBindgen {
                     uwrite!(output, "{{");
 
                     let mut first = true;
+                    let mut generated_local_names = Vec::new();
                     // Generate individual imports for all the bindings that were provided,
                     // to generate the lhs of the destructured assignment
                     for (external_name, import) in bindings {
@@ -355,6 +356,7 @@ impl EsmBindgen {
                                 } else {
                                     uwrite!(output, "{external_name} as {iface_local_name}");
                                 }
+                                generated_local_names.push(iface_local_name.to_string());
                             }
 
                             ImportBinding::Local(local_names) => {
@@ -372,6 +374,7 @@ impl EsmBindgen {
                                     } else {
                                         uwrite!(output, "{external_name} as {local_name}");
                                     }
+                                    generated_local_names.push(local_name.to_string());
                                 }
                             }
                         };
@@ -388,6 +391,16 @@ impl EsmBindgen {
                             "}} = {imports_object}{};",
                             maybe_quote_member(specifier)
                         );
+                        for local_name in generated_local_names {
+                            uwriteln!(
+                                output,
+                                r#"
+                                if ({local_name} === undefined) {{
+                                    throw new Error("unexpectedly undefined instance import '{local_name}', was '{local_name}' available at instantiation?");
+                                }}
+                                "#,
+                            );
+                        }
                     } else if let Some(idl_binding) = idl_binding {
                         uwrite!(
                             output,
@@ -428,6 +441,8 @@ impl EsmBindgen {
         for (iface_local_name, iface_imports) in iface_imports {
             uwrite!(output, "const {{");
             let mut first = true;
+            let mut generated_local_names = Vec::new();
+
             for (member_name, binding) in iface_imports {
                 let ImportBinding::Local(binding_local_names) = binding else {
                     continue;
@@ -444,12 +459,26 @@ impl EsmBindgen {
                     } else {
                         uwrite!(output, "{member_name}: {local_name}");
                     }
+                    generated_local_names.push(local_name);
                 }
             }
             if !first {
                 output.push_str(" ");
             }
             uwriteln!(output, "}} = {iface_local_name};");
+
+            // Ensure that the imports we destructured were defined
+            // (if they were not, the user is likely missing an import @ instantiation time)
+            for local_name in generated_local_names {
+                uwriteln!(
+                    output,
+                    r#"
+                    if ({local_name} === undefined) {{
+                        throw new Error("unexpectedly undefined instance import '{local_name}', was '{local_name}' available at instantiation?");
+                    }}
+                    "#,
+                );
+            }
         }
     }
 }

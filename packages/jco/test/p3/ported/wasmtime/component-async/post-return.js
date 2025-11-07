@@ -50,20 +50,23 @@ suite('post-return async sleep scenario', () => {
             componentPath,
             instantiation: {
                 imports: {
-                    // WIT:
-                    // ```
-                    // sleep-millis: async func(time-in-millis: u64);
-                    // ```
-                    // see: wasmtime/crates/misc/component-async-tests/wit/test.wit
-                    sleepMillis: async (ms) => {
-                        await new Promise((resolve) => setTimeout(resolve, ms));
-                    },
+                    'local:local/sleep': {
+                        // WIT:
+                        // ```
+                        // sleep-millis: async func(time-in-millis: u64);
+                        // ```
+                        // see: wasmtime/crates/misc/component-async-tests/wit/test.wit
+
+                        // sleepMillis: async (ms) => {
+                        //     await new Promise((resolve) => setTimeout(resolve, ms));
+                        // },
+                        // asyncSleepMillis: async (ms) => {
+                        //     await new Promise((resolve) => setTimeout(resolve, ms));
+                        // },
+                    }
                 }
             },
             transpile: {
-                imports: {
-
-                },
                 extraArgs: {
                     minify: false,
                 }

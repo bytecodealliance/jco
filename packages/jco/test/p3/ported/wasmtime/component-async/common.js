@@ -37,6 +37,7 @@ async function ensureFile(filePath) {
  *
  * @param {object} args
  * @param {string} args.componentPath - path to the wasm binary that should be tested
+ * @param {object} args.noCleanup - avoid cleaning up the async test
  * @param {object} args.transpile - options to control transpile
  * @param {object} args.transpile.extraArgs - extra arguments that should be used during transpilation (ex. `{minify: false}`)
  * @returns {Promise<void>} A Promise that resolves when the test completes
@@ -71,16 +72,45 @@ export async function testComponent(args) {
         }
     );
 
-    const runFn = instance['local:local/run'].asyncRun;
-    assert.strictEqual(
-        runFn instanceof AsyncFunction,
-        true,
-        'local:local/run should be async'
-    );
+    let runFn;
+    let result;
+    if ('local:local/run' in instance) {
+        runFn = instance['local:local/run'].asyncRun;
+        assert.strictEqual(
+            runFn instanceof AsyncFunction,
+            true,
+            'local:local/run should be async'
+        );
+    } else if ('wasi:cli/run@0.2.6' in instance) {
+        runFn = instance['wasi:cli/run@0.2.6'].run;
+    }
 
-    await runFn();
+    if (runFn) {
+        if (runFn instanceof AsyncFunction) {
+            result = await runFn();
+        } else {
+            result = runFn();
+        }
+    }
+
+    // Ensure our test does *something* via a detected export or if testing
+    // will happen outside, due to noCleanup
+    if (!runFn && !args.noCleanup) {
+        throw new Error("no detected function was run, and cleanup is specified");
+    }
+
+    if (args.noCleanup) {
+        return {
+            result,
+            instance,
+            esModule,
+            cleanup,
+        };
+    }
 
     await cleanup();
+
+    return { result };
 }
 
 /**

@@ -9,8 +9,8 @@ import { transpile } from '../../src/api';
 import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 
 const P3_FIXTURE_COMPONENTS = [
-    'backpressure/async_backpressure_callee.component.wasm',
-    'backpressure/async_backpressure_caller.component.wasm',
+    'backpressure/async-backpressure-callee.wasm',
+    'backpressure/async-backpressure-caller.wasm',
 
     'sockets/tcp/p3_sockets_tcp_states.component.wasm',
     'sockets/tcp/p3_sockets_tcp_sample_application.component.wasm',

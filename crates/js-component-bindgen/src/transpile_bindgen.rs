@@ -2571,6 +2571,7 @@ impl<'a> Instantiator<'a, '_> {
                 //     .to_lower_camel_case(),
                 //
                 // This would break *a lot* of downstream though.
+
                 // func_name.to_lower_camel_case(),
 
                 func_name
