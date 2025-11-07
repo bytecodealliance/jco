@@ -26,8 +26,6 @@
   "files": [
     "dist"
   ],
-  "types": "./dist/index.d.ts",
-  "main": "src/index.ts",
   "exports": {
     "./wasi/0.2.6/http/adapters/hono": {
       "types": "./dist/0.2.6/http/adapters/hono.d.ts",

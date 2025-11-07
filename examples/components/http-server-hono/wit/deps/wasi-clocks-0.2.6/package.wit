@@ -1,7 +1,7 @@
-package wasi:clocks@0.2.3;
+package wasi:clocks@0.2.6;
 
 interface monotonic-clock {
-  use wasi:io/poll@0.2.3.{pollable};
+  use wasi:io/poll@0.2.6.{pollable};
 
   type instant = u64;
 
@@ -25,5 +25,19 @@ interface wall-clock {
   now: func() -> datetime;
 
   resolution: func() -> datetime;
+}
+
+interface timezone {
+  use wall-clock.{datetime};
+
+  record timezone-display {
+    utc-offset: s32,
+    name: string,
+    in-daylight-saving-time: bool,
+  }
+
+  display: func(when: datetime) -> timezone-display;
+
+  utc-offset: func(when: datetime) -> s32;
 }
 
