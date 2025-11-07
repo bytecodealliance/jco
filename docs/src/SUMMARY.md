@@ -7,6 +7,8 @@
     - [Optimized Host Bindings](./optimized-host-bindings.md)
     - [WIT Type representations](./wit-type-representations.md)
     - [Manual Wasm instantiation with WASI overrides](./manual-wasm-instantiation-with-wasi-overrides.md)
+- [Troubleshooting]()
+  - [Common issues](./troubleshooting/common-issues.md)
 - [Contributor Guide]()
     - [Contributing to the Codebase](./contributing.md)
     - [Contributing to Docs](./contributing-docs.md)
