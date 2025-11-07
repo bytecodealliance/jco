@@ -51,15 +51,15 @@ trim = true
 
 # regex for parsing and grouping commits
 commit_parsers = [
-  { message = '^feat\(transpile\)', group = '<!-- 0 -->🚀 Features' },
-  { message = '^fix\(transpile\)', group = '<!-- 1 -->🐛 Bug Fixes' },
-  { message = '^doc\(transpile\)', group = '<!-- 3 -->📚 Documentation' },
-  { message = '^perf\(transpile\)', group = '<!-- 4 -->⚡ Performance' },
-  { message = '^refactor\(transpile\)', group = '<!-- 2 -->🚜 Refactor' },
-  { message = '^style\(transpile\)', group = '<!-- 5 -->🎨 Styling' },
-  { message = '^test\(transpile\)', group = '<!-- 6 -->🧪 Testing' },
+  { message = '^feat\(std\)', group = '<!-- 0 -->🚀 Features' },
+  { message = '^fix\(std\)', group = '<!-- 1 -->🐛 Bug Fixes' },
+  { message = '^doc\(std\)', group = '<!-- 3 -->📚 Documentation' },
+  { message = '^perf\(std\)', group = '<!-- 4 -->⚡ Performance' },
+  { message = '^refactor\(std\)', group = '<!-- 2 -->🚜 Refactor' },
+  { message = '^style\(std\)', group = '<!-- 5 -->🎨 Styling' },
+  { message = '^test\(std\)', group = '<!-- 6 -->🧪 Testing' },
   { message = '^release', skip = true },
-  { message = '^chore\(transpile\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
+  { message = '^chore\(std\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
 ]
 
 # filter out the commits that are not matched by commit parsers
