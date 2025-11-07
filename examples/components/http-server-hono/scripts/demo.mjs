@@ -45,6 +45,7 @@ async function main() {
     // Wait for the server to start
     await new Promise((resolve) => {
         proc.stderr.on("data", (data) => {
+            console.error(`[jco serve] [stderr] ${data.toString()}`);
             if (data.includes("Server listening")) {
                 resolve();
             }
