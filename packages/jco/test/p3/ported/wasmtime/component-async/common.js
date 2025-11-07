@@ -65,7 +65,10 @@ export async function testComponent(args) {
     );
     const instance = await esModule.instantiate(
         undefined,
-        new WASIShim().getImportObject()
+        {
+            ...new WASIShim().getImportObject(),
+            ...(args.instantiation.imports ?? {}),
+        }
     );
 
     const runFn = instance['local:local/run'].asyncRun;

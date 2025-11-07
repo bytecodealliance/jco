@@ -162,6 +162,9 @@ struct JsBindgen<'a> {
 
     /// List of all core Wasm exported functions (and if is async) referenced in
     /// `src` so far.
+    ///
+    /// The second boolean is true when async procelain is required *or* if the
+    /// export itself is async.
     all_core_exported_funcs: Vec<(String, bool)>,
 }
 
@@ -397,6 +400,7 @@ impl JsBindgen<'_> {
             );
         }
 
+        // Render all imports
         let imports_object = if self.opts.instantiation.is_some() {
             Some("imports")
         } else {
@@ -405,6 +409,7 @@ impl JsBindgen<'_> {
         self.esm_bindgen
             .render_imports(&mut output, imports_object, &mut self.local_names);
 
+        // Create instantiation code
         if self.opts.instantiation.is_some() {
             uwrite!(&mut self.src.js, "{}", &core_exported_funcs as &str);
             self.esm_bindgen.render_exports(
@@ -2423,7 +2428,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "");
 
                 // Write new function ending
-                if requires_async_porcelain {
+                if requires_async_porcelain | is_async {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");
@@ -2552,6 +2557,8 @@ impl<'a> Instantiator<'a, '_> {
             };
         }
 
+        // TODO: maybe here? 
+
         // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
@@ -2576,6 +2583,12 @@ impl<'a> Instantiator<'a, '_> {
                 )
             }
         };
+
+        // AT THIS POINT, ITS WRONG:
+        // 
+        // GENERATED IMPORT NAME: asyncSleepMillis (kind: AsyncFreestanding), (func_name [async]sleep-millis)
+        //
+        eprintln!("GENERATED IMPORT NAME: {import_name} (kind: {:?}), (func_name {})", func.kind, func_name);
 
         self.ensure_import(
             import_specifier,
@@ -3526,7 +3539,8 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        let maybe_async = if requires_async_porcelain {
+        let is_async = is_async_fn(func, options);
+        let maybe_async = if requires_async_porcelain | is_async {
             "async "
         } else {
             ""
@@ -3545,7 +3559,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let {local_name};");
                 self.bindgen
                     .all_core_exported_funcs
-                    .push((core_export_fn.clone(), requires_async_porcelain));
+                    .push((core_export_fn.clone(), requires_async_porcelain | is_async));
                 local_name
             }
         };
@@ -3651,7 +3665,7 @@ impl<'a> Instantiator<'a, '_> {
             remote_resource_map: export_remote_resource_map,
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
-            is_async: is_async_fn(func, options),
+            is_async,
         });
 
         // End the function

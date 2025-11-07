@@ -46,6 +46,28 @@ suite('post-return async sleep scenario', () => {
             callerPath,
             calleePath,
         });
-        await testComponent({ componentPath });
+        await testComponent({
+            componentPath,
+            instantiation: {
+                imports: {
+                    // WIT:
+                    // ```
+                    // sleep-millis: async func(time-in-millis: u64);
+                    // ```
+                    // see: wasmtime/crates/misc/component-async-tests/wit/test.wit
+                    sleepMillis: async (ms) => {
+                        await new Promise((resolve) => setTimeout(resolve, ms));
+                    },
+                }
+            },
+            transpile: {
+                imports: {
+
+                },
+                extraArgs: {
+                    minify: false,
+                }
+            },
+        });
     });
 });
