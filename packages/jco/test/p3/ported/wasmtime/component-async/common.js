@@ -27,13 +27,7 @@ async function ensureFile(filePath) {
 }
 
 /**
- * Run a single component test for a component that
- * exports `local:local/run` (normally async) in the style of
- * wasmtime component-async-tests
- *
- * This test will generally transpile the component and then run its' 'local:local/run' export
- *
- * @see https://github.com/bytecodealliance/wasmtime/blob/main/crates/misc/component-async-tests/tests/scenario/util.rs
+ * Build and transpile a component for use in a test
  *
  * @param {object} args
  * @param {string} args.componentPath - path to the wasm binary that should be tested
@@ -42,7 +36,7 @@ async function ensureFile(filePath) {
  * @param {object} args.transpile.extraArgs - extra arguments that should be used during transpilation (ex. `{minify: false}`)
  * @returns {Promise<void>} A Promise that resolves when the test completes
  */
-export async function testComponent(args) {
+export async function buildAndTranspile(args) {
     const componentPath = await ensureFile(args.componentPath);
     const { esModule, cleanup } = await setupAsyncTest({
         asyncMode: 'jspi',
@@ -72,45 +66,11 @@ export async function testComponent(args) {
         }
     );
 
-    let runFn;
-    let result;
-    if ('local:local/run' in instance) {
-        runFn = instance['local:local/run'].asyncRun;
-        assert.strictEqual(
-            runFn instanceof AsyncFunction,
-            true,
-            'local:local/run should be async'
-        );
-    } else if ('wasi:cli/run@0.2.6' in instance) {
-        runFn = instance['wasi:cli/run@0.2.6'].run;
-    }
-
-    if (runFn) {
-        if (runFn instanceof AsyncFunction) {
-            result = await runFn();
-        } else {
-            result = runFn();
-        }
-    }
-
-    // Ensure our test does *something* via a detected export or if testing
-    // will happen outside, due to noCleanup
-    if (!runFn && !args.noCleanup) {
-        throw new Error("no detected function was run, and cleanup is specified");
-    }
-
-    if (args.noCleanup) {
-        return {
-            result,
-            instance,
-            esModule,
-            cleanup,
-        };
-    }
-
-    await cleanup();
-
-    return { result };
+    return {
+        instance,
+        esModule,
+        cleanup,
+    };
 }
 
 /**

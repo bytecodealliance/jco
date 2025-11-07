@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 
-import { suite, test } from 'vitest';
+import { suite, test, expect, vi } from 'vitest';
 
-import { testComponent, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
+import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
 
 // These tests are ported from upstream wasmtime's component-async-tests
 //
@@ -23,7 +23,16 @@ suite.skip('post-return scenario', () => {
             callerPath,
             calleePath,
         });
-        await testComponent({ componentPath });
+
+        let cleanup;
+        try {
+            const res = await buildAndTranspile({ componentPath });
+            const instance = res.instance;
+            cleanup = res.cleanup;
+            await instance['local:local/run'].asyncRun();
+        } finally {
+            if (cleanup) { await cleanup(); }
+        }
     });
 });
 
@@ -46,31 +55,49 @@ suite('post-return async sleep scenario', () => {
             callerPath,
             calleePath,
         });
-        await testComponent({
-            componentPath,
-            instantiation: {
-                imports: {
-                    'local:local/sleep': {
-                        // WIT:
-                        // ```
-                        // sleep-millis: async func(time-in-millis: u64);
-                        // ```
-                        // see: wasmtime/crates/misc/component-async-tests/wit/test.wit
 
-                        // sleepMillis: async (ms) => {
-                        //     await new Promise((resolve) => setTimeout(resolve, ms));
-                        // },
-                        // asyncSleepMillis: async (ms) => {
-                        //     await new Promise((resolve) => setTimeout(resolve, ms));
-                        // },
-                    }
-                }
-            },
-            transpile: {
-                extraArgs: {
-                    minify: false,
-                }
-            },
+        const waitTimeMs = 300;
+        const asyncSleepMillis = vi.fn(async (ms) => {
+            expect(ms).toStrictEqual(waitTimeMs);
+            await new Promise((resolve) => setTimeout(resolve, ms));
         });
+
+        let cleanup;
+        try {
+            const res = await buildAndTranspile({
+                componentPath,
+                noCleanup: true,
+                instantiation: {
+                    imports: {
+                        'local:local/sleep': {
+                            // WIT:
+                            //
+                            // ```
+                            // sleep-millis: async func(time-in-millis: u64);
+                            // ```
+                            // see: wasmtime/crates/misc/component-async-tests/wit/test.wit
+                            asyncSleepMillis,
+                        }
+                    }
+                },
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    }
+                },
+            });
+            const instance = res.instance;
+            cleanup = res.cleanup;
+
+            await instance['local:local/sleep-post-return'].asyncRun(waitTimeMs);
+
+            // TODO: fix: sleep-post-return is running but *does not* call the import properly,
+            // likely because the task is not actually the thing being returned -- the promise is 
+            // returning early?
+
+            expect(asyncSleepMillis).toHaveBeenCalled();
+        } finally {
+            if (cleanup) { await cleanup(); }
+        }
     });
 });

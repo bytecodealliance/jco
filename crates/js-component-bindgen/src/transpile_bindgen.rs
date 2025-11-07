@@ -2562,23 +2562,19 @@ impl<'a> Instantiator<'a, '_> {
         // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => (
-                // TODO: if we want to avoid async<some fn> for imports,
-                // we need to use the code below:
+                // TODO: if we want to avoid the naming of 'async<fn name>' (e.g. 'asyncSleepMillis'
+                // vs 'sleepMillis' which just *is* an imported async function)....
+                //
+                // We need to use the code below:
                 //
                 // func_name
                 //     .strip_prefix("[async]")
                 //     .unwrap_or(func_name)
                 //     .to_lower_camel_case(),
                 //
-                // This would break *a lot* of downstream though.
-
-                // func_name.to_lower_camel_case(),
-
-                func_name
-                    .strip_prefix("[async]")
-                    .unwrap_or(func_name)
-                    .to_lower_camel_case(),
-
+                // This has the potential to break a lot of downstream consumers who are expecting to
+                // provide 'async<fn name>`, so it must be done before a breaking change.
+                func_name.to_lower_camel_case(),
                 callee_name,
             ),
 
