@@ -21,6 +21,11 @@ const WASM_PATH = fileURLToPath(
     new URL(env.WASM_PATH ?? "../dist/component.wasm", import.meta.url),
 );
 
+/** Path to the `wasi:config` bindings file to be used */
+const WASI_CONFIG_BINDINGS_PATH = fileURLToPath(
+    new URL(env.WASM_PATH ?? "../host-binding-wasi-config-store.mjs", import.meta.url),
+);
+
 async function main() {
     // Determine paths to jco and output wasm
     const wasmPathExists = await stat(WASM_PATH)
@@ -35,8 +40,16 @@ async function main() {
     // Generate a random port
     const randomPort = await getRandomPort();
 
+    const jcoArgs = [
+        "serve",
+        "--port",
+        randomPort,
+        `--jco-map=wasi:config/store=${WASI_CONFIG_BINDINGS_PATH}`,
+        WASM_PATH,
+
+    ];
     // Spawn jco serve
-    const proc = spawn(JCO_PATH, ["serve", "--port", randomPort, WASM_PATH], {
+    const proc = spawn(JCO_PATH, jcoArgs, {
         detached: false,
         stdio: "pipe",
         shell: false,
