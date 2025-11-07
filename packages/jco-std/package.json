@@ -41,19 +41,20 @@
     }
   },
   "scripts": {
+    "setup:jco-transpile:build": "npm run build -w @bytecodealliance/jco-transpile",
     "lint": "eslint -c ./eslint.config.mjs",
     "lint:fix": "npm run lint -- --fix",
     "build:bindings:wasi:http:0.2.6": "WIT_PATH=wit/http-v0m2p6 OUTPUT_DIR_PATH=src/wasi/0.2.6/generated/types node scripts/generate-wasi-bindings.mjs",
     "build:bindings:wasi:http:0.2.3": "WIT_PATH=wit/http-v0m2p3 OUTPUT_DIR_PATH=src/wasi/0.2.3/generated/types node scripts/generate-wasi-bindings.mjs",
     "build:bindings": "npm run build:bindings:wasi:http:0.2.3 && npm run build:bindings:wasi:http:0.2.6",
     "build:ts": "tsc",
-    "build": "npm run build:bindings && npm run build:ts",
+    "build": "npm run setup:jco-transpile:build && npm run build:bindings && npm run build:ts",
     "test": "vitest run -c test/vitest.ts",
     "prepack": "npm run build"
   },
   "devDependencies": {
     "typescript-eslint": "^8.43.0",
-    "@bytecodealliance/jco-transpile": "^0.1.0",
+    "@bytecodealliance/jco-transpile": "^0.1.1",
     "@bytecodealliance/preview2-shim": "^0.17.5",
     "@types/which": "^3.0.4",
     "hono": "^4.10.4",
