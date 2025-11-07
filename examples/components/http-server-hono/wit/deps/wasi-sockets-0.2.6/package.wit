@@ -1,6 +1,8 @@
-package wasi:sockets@0.2.3;
+package wasi:sockets@0.2.6;
 
 interface network {
+  use wasi:io/error@0.2.6.{error};
+
   resource network;
 
   enum error-code {
@@ -57,6 +59,8 @@ interface network {
     ipv4(ipv4-socket-address),
     ipv6(ipv6-socket-address),
   }
+
+  network-error-code: func(err: borrow<error>) -> option<error-code>;
 }
 
 interface instance-network {
@@ -66,7 +70,7 @@ interface instance-network {
 }
 
 interface udp {
-  use wasi:io/poll@0.2.3.{pollable};
+  use wasi:io/poll@0.2.6.{pollable};
   use network.{network, error-code, ip-socket-address, ip-address-family};
 
   record incoming-datagram {
@@ -115,9 +119,9 @@ interface udp-create-socket {
 }
 
 interface tcp {
-  use wasi:io/streams@0.2.3.{input-stream, output-stream};
-  use wasi:io/poll@0.2.3.{pollable};
-  use wasi:clocks/monotonic-clock@0.2.3.{duration};
+  use wasi:io/streams@0.2.6.{input-stream, output-stream};
+  use wasi:io/poll@0.2.6.{pollable};
+  use wasi:clocks/monotonic-clock@0.2.6.{duration};
   use network.{network, error-code, ip-socket-address, ip-address-family};
 
   enum shutdown-type {
@@ -166,7 +170,7 @@ interface tcp-create-socket {
 }
 
 interface ip-name-lookup {
-  use wasi:io/poll@0.2.3.{pollable};
+  use wasi:io/poll@0.2.6.{pollable};
   use network.{network, error-code, ip-address};
 
   resource resolve-address-stream {

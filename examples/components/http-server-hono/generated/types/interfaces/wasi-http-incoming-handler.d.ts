@@ -1,5 +1,5 @@
 /// <reference path="./wasi-http-types.d.ts" />
-declare module 'wasi:http/incoming-handler@0.2.3' {
+declare module 'wasi:http/incoming-handler@0.2.6' {
   /**
    * This function is invoked with an incoming HTTP Request, and a resource
    * `response-outparam` which provides the capability to reply with an HTTP
@@ -13,6 +13,6 @@ declare module 'wasi:http/incoming-handler@0.2.3' {
    * with an error on its behalf.
    */
   export function handle(request: IncomingRequest, responseOut: ResponseOutparam): void;
-  export type IncomingRequest = import('wasi:http/types@0.2.3').IncomingRequest;
-  export type ResponseOutparam = import('wasi:http/types@0.2.3').ResponseOutparam;
+  export type IncomingRequest = import('wasi:http/types@0.2.6').IncomingRequest;
+  export type ResponseOutparam = import('wasi:http/types@0.2.6').ResponseOutparam;
 }

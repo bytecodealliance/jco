@@ -7,15 +7,24 @@ name = "wasi:cli"
 registry = "wasi.dev"
 
 [[packages.versions]]
-requirement = "=0.2.3"
-version = "0.2.3"
-digest = "sha256:8f97d837e1f856a225422869d5c34752204d1befb5a04d0cd80541aec17a20c1"
+requirement = "=0.2.6"
+version = "0.2.6"
+digest = "sha256:fdbe84136b3dd46d94305ef37f24f3cf04a70cc2026dca2592ac2ec0c9de15c7"
+
+[[packages]]
+name = "wasi:config"
+registry = "wasi.dev"
+
+[[packages.versions]]
+requirement = "=0.2.0-rc.1"
+version = "0.2.0-rc.1"
+digest = "sha256:1b7f1b0fd07bb4cede16c6a6ec8852815dfb924639a78735fc7bdffdc164485d"
 
 [[packages]]
 name = "wasi:http"
 registry = "wasi.dev"
 
 [[packages.versions]]
-requirement = "=0.2.3"
-version = "0.2.3"
-digest = "sha256:e526c1586efc94cd148e33725139be05c4bb58ba20466d348282bd8dc3999f1d"
+requirement = "=0.2.6"
+version = "0.2.6"
+digest = "sha256:26a636620af0485dfcfc9a0563a0606564eedcf3fcabda031ab4d4ec0e505ff1"

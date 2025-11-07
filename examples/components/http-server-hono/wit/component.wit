@@ -1,8 +1,10 @@
 package example:hono;
 
 world component {
-    export wasi:http/incoming-handler@0.2.3;
+    // NOTE: Since jco-std can enable ENV and config middlewares,
+    // we include WASI interfaces for environment variables and config
+    import wasi:cli/environment@0.2.6;
+    import wasi:config/store@0.2.0-rc.1;
 
-    // TODO(FIX): v0.2.4 wasi interfaces can be leveraged after componentize-js v0.18.3 is used by jco
-    // export wasi:http/incoming-handler@0.2.4;
+    export wasi:http/incoming-handler@0.2.6;
 }

@@ -1,4 +1,4 @@
-package wasi:cli@0.2.3;
+package wasi:cli@0.2.6;
 
 @since(version = 0.2.0)
 interface environment {
@@ -28,6 +28,17 @@ interface exit {
   /// Exit the current instance and any linked instances.
   @since(version = 0.2.0)
   exit: func(status: result);
+
+  /// Exit the current instance and any linked instances, reporting the
+  /// specified status code to the host.
+  ///
+  /// The meaning of the code depends on the context, with 0 usually meaning
+  /// "success", and other values indicating various types of failure.
+  ///
+  /// This function does not return; the effect is analogous to a trap, but
+  /// without the connotation that something bad has happened.
+  @unstable(feature = cli-exit-with-code)
+  exit-with-code: func(status-code: u8);
 }
 
 @since(version = 0.2.0)
@@ -40,7 +51,7 @@ interface run {
 @since(version = 0.2.0)
 interface stdin {
   @since(version = 0.2.0)
-  use wasi:io/streams@0.2.3.{input-stream};
+  use wasi:io/streams@0.2.6.{input-stream};
 
   @since(version = 0.2.0)
   get-stdin: func() -> input-stream;
@@ -49,7 +60,7 @@ interface stdin {
 @since(version = 0.2.0)
 interface stdout {
   @since(version = 0.2.0)
-  use wasi:io/streams@0.2.3.{output-stream};
+  use wasi:io/streams@0.2.6.{output-stream};
 
   @since(version = 0.2.0)
   get-stdout: func() -> output-stream;
@@ -58,7 +69,7 @@ interface stdout {
 @since(version = 0.2.0)
 interface stderr {
   @since(version = 0.2.0)
-  use wasi:io/streams@0.2.3.{output-stream};
+  use wasi:io/streams@0.2.6.{output-stream};
 
   @since(version = 0.2.0)
   get-stderr: func() -> output-stream;
@@ -134,11 +145,11 @@ world imports {
   @since(version = 0.2.0)
   import exit;
   @since(version = 0.2.0)
-  import wasi:io/error@0.2.3;
+  import wasi:io/error@0.2.6;
   @since(version = 0.2.0)
-  import wasi:io/poll@0.2.3;
+  import wasi:io/poll@0.2.6;
   @since(version = 0.2.0)
-  import wasi:io/streams@0.2.3;
+  import wasi:io/streams@0.2.6;
   @since(version = 0.2.0)
   import stdin;
   @since(version = 0.2.0)
@@ -156,33 +167,35 @@ world imports {
   @since(version = 0.2.0)
   import terminal-stderr;
   @since(version = 0.2.0)
-  import wasi:clocks/monotonic-clock@0.2.3;
+  import wasi:clocks/monotonic-clock@0.2.6;
   @since(version = 0.2.0)
-  import wasi:clocks/wall-clock@0.2.3;
+  import wasi:clocks/wall-clock@0.2.6;
+  @unstable(feature = clocks-timezone)
+  import wasi:clocks/timezone@0.2.6;
   @since(version = 0.2.0)
-  import wasi:filesystem/types@0.2.3;
+  import wasi:filesystem/types@0.2.6;
   @since(version = 0.2.0)
-  import wasi:filesystem/preopens@0.2.3;
+  import wasi:filesystem/preopens@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/network@0.2.3;
+  import wasi:sockets/network@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/instance-network@0.2.3;
+  import wasi:sockets/instance-network@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/udp@0.2.3;
+  import wasi:sockets/udp@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/udp-create-socket@0.2.3;
+  import wasi:sockets/udp-create-socket@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/tcp@0.2.3;
+  import wasi:sockets/tcp@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/tcp-create-socket@0.2.3;
+  import wasi:sockets/tcp-create-socket@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/ip-name-lookup@0.2.3;
+  import wasi:sockets/ip-name-lookup@0.2.6;
   @since(version = 0.2.0)
-  import wasi:random/random@0.2.3;
+  import wasi:random/random@0.2.6;
   @since(version = 0.2.0)
-  import wasi:random/insecure@0.2.3;
+  import wasi:random/insecure@0.2.6;
   @since(version = 0.2.0)
-  import wasi:random/insecure-seed@0.2.3;
+  import wasi:random/insecure-seed@0.2.6;
 }
 @since(version = 0.2.0)
 world command {
@@ -191,11 +204,11 @@ world command {
   @since(version = 0.2.0)
   import exit;
   @since(version = 0.2.0)
-  import wasi:io/error@0.2.3;
+  import wasi:io/error@0.2.6;
   @since(version = 0.2.0)
-  import wasi:io/poll@0.2.3;
+  import wasi:io/poll@0.2.6;
   @since(version = 0.2.0)
-  import wasi:io/streams@0.2.3;
+  import wasi:io/streams@0.2.6;
   @since(version = 0.2.0)
   import stdin;
   @since(version = 0.2.0)
@@ -213,33 +226,35 @@ world command {
   @since(version = 0.2.0)
   import terminal-stderr;
   @since(version = 0.2.0)
-  import wasi:clocks/monotonic-clock@0.2.3;
+  import wasi:clocks/monotonic-clock@0.2.6;
   @since(version = 0.2.0)
-  import wasi:clocks/wall-clock@0.2.3;
+  import wasi:clocks/wall-clock@0.2.6;
+  @unstable(feature = clocks-timezone)
+  import wasi:clocks/timezone@0.2.6;
   @since(version = 0.2.0)
-  import wasi:filesystem/types@0.2.3;
+  import wasi:filesystem/types@0.2.6;
   @since(version = 0.2.0)
-  import wasi:filesystem/preopens@0.2.3;
+  import wasi:filesystem/preopens@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/network@0.2.3;
+  import wasi:sockets/network@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/instance-network@0.2.3;
+  import wasi:sockets/instance-network@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/udp@0.2.3;
+  import wasi:sockets/udp@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/udp-create-socket@0.2.3;
+  import wasi:sockets/udp-create-socket@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/tcp@0.2.3;
+  import wasi:sockets/tcp@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/tcp-create-socket@0.2.3;
+  import wasi:sockets/tcp-create-socket@0.2.6;
   @since(version = 0.2.0)
-  import wasi:sockets/ip-name-lookup@0.2.3;
+  import wasi:sockets/ip-name-lookup@0.2.6;
   @since(version = 0.2.0)
-  import wasi:random/random@0.2.3;
+  import wasi:random/random@0.2.6;
   @since(version = 0.2.0)
-  import wasi:random/insecure@0.2.3;
+  import wasi:random/insecure@0.2.6;
   @since(version = 0.2.0)
-  import wasi:random/insecure-seed@0.2.3;
+  import wasi:random/insecure-seed@0.2.6;
 
   @since(version = 0.2.0)
   export run;
