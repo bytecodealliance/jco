@@ -131,12 +131,20 @@ jobs:
       # see: https://github.com/npm/cli/issues/4828
       - name: Remove package-lock
         run: |
-          rm -rf package-lock.json
-      - name: Remove package-lock
+          mv package-lock.json hidden.json
+
+      - run: |
+          npm install -g patch-package
+
+      - name: Install oxc-parser
         if: ${{ matrix.node == '18.x' && matrix.os == 'ubuntu-22.04' }}
         run: |
           npm install oxc-parser --ignore-engines
           npm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
+
+      - name: Restore package-lock
+        run: |
+          mv hidden.json package-lock.json
 
       - name: Install NPM packages
         run: |
@@ -146,7 +154,7 @@ jobs:
         id: cache-puppeteer
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
-          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pacakges/jco/package.json') }}
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
           path: |
             /home/runner/.cache/puppeteer
       - name: Install puppeteer
@@ -322,7 +330,7 @@ jobs:
         id: cache-puppeteer
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
-          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pacakges/jco/package.json') }}
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/jco/package.json') }}
           path: |
             /home/runner/.cache/puppeteer
 
