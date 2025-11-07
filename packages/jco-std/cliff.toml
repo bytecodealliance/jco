@@ -23,7 +23,7 @@ body = """
     {% endfor %}
 {% endfor %}\n
 
-{%- if github -%}
+{%- if github and previous.version -%}
 {% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
   {% raw %}\n{% endraw -%}
   ## New Contributors
