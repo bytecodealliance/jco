@@ -16,7 +16,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@bytecodealliance/jco-std": "^0.0.1",
+    "@bytecodealliance/jco-std": "^0.0.2",
     "hono": "^4.10.4"
   },
   "devDependencies": {
