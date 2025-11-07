@@ -2221,6 +2221,7 @@ impl<'a> Instantiator<'a, '_> {
         let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
 
+        // Determine the name of the function
         let (func, func_name, iface_name) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
@@ -2239,6 +2240,7 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
+        // eprintln!("\nGENERATED FUNCTION NAME FOR IMPORT: {func_name} (import name? {import_name})");
 
         let is_async = is_async_fn(func, options);
 
@@ -2557,13 +2559,27 @@ impl<'a> Instantiator<'a, '_> {
             };
         }
 
-        // TODO: maybe here? 
-
         // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
-            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
-                (func_name.to_lower_camel_case(), callee_name)
-            }
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => (
+                // TODO: if we want to avoid async<some fn> for imports,
+                // we need to use the code below:
+                //
+                // func_name
+                //     .strip_prefix("[async]")
+                //     .unwrap_or(func_name)
+                //     .to_lower_camel_case(),
+                //
+                // This would break *a lot* of downstream though.
+                // func_name.to_lower_camel_case(),
+
+                func_name
+                    .strip_prefix("[async]")
+                    .unwrap_or(func_name)
+                    .to_lower_camel_case(),
+
+                callee_name,
+            ),
 
             FunctionKind::Method(tid)
             | FunctionKind::AsyncMethod(tid)
@@ -2584,11 +2600,16 @@ impl<'a> Instantiator<'a, '_> {
             }
         };
 
-        // AT THIS POINT, ITS WRONG:
-        // 
-        // GENERATED IMPORT NAME: asyncSleepMillis (kind: AsyncFreestanding), (func_name [async]sleep-millis)
-        //
-        eprintln!("GENERATED IMPORT NAME: {import_name} (kind: {:?}), (func_name {})", func.kind, func_name);
+        // // AT THIS POINT, ITS WRONG:
+        // //
+        // // GENERATED IMPORT NAME: asyncSleepMillis (kind: AsyncFreestanding), (func_name [async]sleep-millis)
+        // //
+        // eprintln!(
+        //     "GENERATED IMPORT NAME: {import_name} (kind: {:?}), (func_name {}, lower cameled ? {})",
+        //     func.kind,
+        //     func_name,
+        //     func_name.to_lower_camel_case()
+        // );
 
         self.ensure_import(
             import_specifier,

@@ -67,7 +67,7 @@ export async function testComponent(args) {
         undefined,
         {
             ...new WASIShim().getImportObject(),
-            ...(args.instantiation.imports ?? {}),
+            ...(args.instantiation?.imports ?? {}),
         }
     );
 
