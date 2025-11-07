@@ -451,7 +451,7 @@ jobs:
         wac:
           - version: 0.6.0
         node:
-          - version: 22.5.1
+          - version: 24.x
         project:
           - name: add
             workspace: examples/components/add
