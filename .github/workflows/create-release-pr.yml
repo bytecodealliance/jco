@@ -95,6 +95,11 @@ jobs:
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               ;;
+            jco-std)
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
+              export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
+              export IS_JS_PROJECT=true;
+              ;;
             preview2-shim)
               export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
