@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.2] - 2025-11-07
+
+### 🚀 Features
+
+* *(std)* remove star imports, add more docs by @vados-cosmonic in #1117
+
+
+### 🐛 Bug Fixes
+
+* *(std)* export paths by @vados-cosmonic
+
+
+
+
 ## [0.0.1] - 2025-11-07
 
 ### 🚀 Features
