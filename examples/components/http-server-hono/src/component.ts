@@ -8,7 +8,7 @@ import { logger } from 'hono/logger';
  *
  * @see https://github.com/WebAssembly/wasi-http
  */
-import { fire, buildLogger } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono';
+import { fire, buildLogger } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/server';
 
 const app = new Hono();
 
@@ -27,4 +27,4 @@ fire(app);
 // Although we've called `fire()` with wasi HTTP configured for use above,
 // we still need to actually export the `wasi:http/incoming-handler` interface object,
 // as jco will be looking for the ES module export.
-export { incomingHandler } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono';
+export { incomingHandler } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/server';
