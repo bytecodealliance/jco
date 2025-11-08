@@ -530,6 +530,8 @@ jobs:
         working-directory: ${{ matrix.project.dir }}
         run: npm install
 
+      - run: tree node_modules/@bytecodealliance
+
       - name: Run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
         run: npm run all --workspace ${{ matrix.project.workspace }}

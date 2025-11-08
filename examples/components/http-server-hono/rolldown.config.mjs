@@ -16,6 +16,8 @@ const alias = env.CI ? {
     '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono': join(WORKSPACE_JCO_STD, "dist/0.2.6/http/adapters/hono.js"),
 } : {};
 
+console.log("ALIAS?", alias);
+
 export default defineConfig({
     input: "src/component.ts",
     external: /wasi:.*/,
