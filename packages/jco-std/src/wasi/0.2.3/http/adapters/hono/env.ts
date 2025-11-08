@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 
 import { buildEnvHelperFromWASI, type WasiEnvironmentHelper } from '../../../../0.2.x/cli/environment.js';
 
-import * as wasiEnv from "wasi:cli/environment@00.2.3";
+import * as wasiEnv from "wasi:cli/environment@0.2.3";
 
 type WASIEnvMiddleware = {
     Variables: {
