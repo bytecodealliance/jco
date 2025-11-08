@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.1.0] - 2025-11-08
+
+### 🚀 Features
+
+* *(std)* introduce 0.2.x export by @vados-cosmonic
+
+* *(std)* add 0.2.x export by @vados-cosmonic
+
+* *(std)* separate exports for middlewares, refactor server export by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+* *(std)* add comments, make folder for middleware, fix exports by @vados-cosmonic
+
+
+### 🧪 Testing
+
+* *(std)* remove custom resolver config by @vados-cosmonic in #1125
+
+* *(std)* update tests to new export format by @vados-cosmonic
+
+* *(std)* fix node_modules resolution for app fixture tests by @vados-cosmonic
+
+
+
+
 ## [0.0.2] - 2025-11-07
 
 ### 🚀 Features
