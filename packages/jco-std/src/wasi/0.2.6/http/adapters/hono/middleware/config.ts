@@ -1,10 +1,16 @@
-import { createMiddleware } from "hono/factory";
+import { createMiddleware } from 'hono/factory';
 
-import { buildConfigHelperFromWASI, type WasiConfigHelper } from '../../../../0.2.x/config.js';
-
+// NOTE: this import is somewhat "magical", it is filled in by componentize-js when
+// building a component.
+//
+// Transpilers & bundlers must essentially ignore this component when building.
 import * as wasiConfig from "wasi:config/store@0.2.0-rc.1";
 
-type WASIConfigMiddleware = {
+import { buildConfigHelperFromWASI, type WasiConfigHelper } from '../../../../../0.2.x/config.js';
+
+export { type WasiConfigHelper } from '../../../../../0.2.x/config.js';
+
+export type WASIConfigMiddleware = {
     Variables: {
         config: WasiConfigHelper,
     },
@@ -41,7 +47,7 @@ type WASIConfigMiddleware = {
  */
 export const wasiConfigMiddleware = () => {
     return createMiddleware<WASIConfigMiddleware>(async (c, next) => {
-        c.set('config', buildConfigHelperFromWASI(wasiConfig));
+        c.set('config', buildConfigHelperFromWASI(wasiConfig))
         await next();
     });
 };
