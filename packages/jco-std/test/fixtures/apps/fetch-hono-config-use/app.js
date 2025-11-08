@@ -5,9 +5,10 @@ import { Hono } from 'hono';
 // integration, and as of now that is `wasi:http@0.2.3`
 import {
     fire,
-    wasiEnvMiddleware,
-    wasiConfigMiddleware
-} from '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono';
+} from '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/server';
+
+import { wasiEnvMiddleware } from '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/env';
+import { wasiConfigMiddleware } from '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/config';
 
 const app = new Hono();
 

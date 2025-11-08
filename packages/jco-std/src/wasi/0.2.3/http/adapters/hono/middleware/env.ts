@@ -1,9 +1,16 @@
-import { createMiddleware } from 'hono/factory';
+import { createMiddleware } from "hono/factory";
 
-import * as wasiEnv from "wasi:cli/environment@0.2.6";
-import { buildEnvHelperFromWASI, type WasiEnvironmentHelper } from '../../../../0.2.x/cli/environment.js';
+// NOTE: this import is somewhat "magical", it is filled in by componentize-js when
+// building a component.
+//
+// Transpilers & bundlers must essentially ignore this component when building.
+import * as wasiEnv from "wasi:cli/environment@0.2.3";
 
-type WASIEnvMiddleware = {
+import { buildEnvHelperFromWASI, type WasiEnvironmentHelper } from '../../../../../0.2.x/cli/environment.js';
+
+export type { WasiEnvironmentHelper } from '../../../../../0.2.x/cli/environment.js';
+
+export type WASIEnvMiddleware = {
     Variables: {
         env: WasiEnvironmentHelper,
     },
@@ -40,7 +47,7 @@ type WASIEnvMiddleware = {
  */
 export const wasiEnvMiddleware = () => {
     return createMiddleware<WASIEnvMiddleware>(async (c, next) => {
-        c.set('env', buildEnvHelperFromWASI(wasiEnv))
+        c.set('env', buildEnvHelperFromWASI(wasiEnv));
         await next();
     });
 };
