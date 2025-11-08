@@ -7,4 +7,10 @@ export default defineConfig({
         file: "dist/component.js",
         format: "esm",
     },
+    resolve: {
+        modules: [
+            "node_modules",
+            "../../../node_modules",
+        ]
+    },
 });
