@@ -11,9 +11,26 @@ import { componentize } from "@bytecodealliance/componentize-js";
 
 import { rolldown } from "rolldown";
 
+/** Path to fixture app directory */
 const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.url));
 
+/** Path to jco-std directory */
 const JCO_STD_DIR = fileURLToPath(new URL("../../", import.meta.url));
+
+/** Resolver configuration that can be used with rolldown when building test components */
+const TEST_RESOLVER_CONFIG = {
+    alias: {
+        '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/server': join(JCO_STD_DIR, "dist/0.2.3/http/adapters/hono/server.js"),
+        '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/env': join(JCO_STD_DIR, "dist/0.2.3/http/adapters/hono/middleware/env.js"),
+        '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/config': join(JCO_STD_DIR, "dist/0.2.3/http/adapters/hono/middleware/config.js"),
+        '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/server': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono/server.js"),
+        '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/middleware/env': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono/middleware/env.js"),
+        '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/middleware/config': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono/middleware/config.js"),
+        '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/server': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono/server.js"),
+        '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/middleware/env': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono/middleware/env.js"),
+        '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/middleware/config': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono/middleware/config.js"),
+    },
+}
 
 /** Get the binary path to wasmtime if it doesn't exist */
 async function getWasmtimeBin(env?: Record<string, string>): Promise<string> {
@@ -95,12 +112,7 @@ suite("hono apps", async () => {
                 external: [
                     /^wasi:.*/,
                 ],
-                resolve: {
-                    alias: {
-                        '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono': join(JCO_STD_DIR, "dist/0.2.3/http/adapters/hono.js"),
-                        '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono.js"),
-                    },
-                },
+                resolve: TEST_RESOLVER_CONFIG,
             });
             await bundle.write({
                 file: jsOutputPath,
