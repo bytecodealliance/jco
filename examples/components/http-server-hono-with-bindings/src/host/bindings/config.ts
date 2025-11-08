@@ -4,7 +4,7 @@
  * It is used in the demo (see scripts/demo.mjs), and is mapped *into* the transpiled
  * component dynamically when it is served via `jco serve`.
  *
- * A module like this could also be used as an input during `jco transpile`transpilation 
+ * A module like this could also be used as an input during `jco transpile`transpilation
  * as a mapping (`--map`) argument.
  *
  * see: https://github.com/WebAssembly/wasi-config
