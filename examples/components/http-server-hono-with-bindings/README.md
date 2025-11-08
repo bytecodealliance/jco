@@ -1,7 +1,11 @@
-# Hono HTTP server example
+# Hono HTTP server with host bindings
 
 This repository showcases using a WebAssembly component built with the Javascript WebAssembly Component
 toolchain (`jco`) to respond to web requests using the [Hono][hono] web framework.
+
+In addition to simply running a transpiled web component (see `scripts/demo.mjs`),
+we introduce a host binding for the [`wasi:config/store@0.2.0-rc.1` API][wasi-config]
+(see [`src/host/bindings/config.ts`](./src/host/bindings/config.ts)).
 
 ## How it works
 
@@ -23,6 +27,13 @@ that handles incoming HTTP requests (`wasi:http/incoming-handler`).
 > If you don't know what any of the above means, don't worry about it -- check out the [Component Model Book][cm-book],
 > or keep following along and experiment!
 
+**All of this is made easier to use by [`@bytecodealliance/jco-std`][jco-std]**, a package that offers
+easy to use exports to running on WebAssembly more Hono-native.
+
+*In addition* to using `wasi:http/incoming-handler`, this project uses `jco-std`'s support for [`wasi:cli/environment`][wasi-cli-environment]
+to enable reading environment variables and [`wasi:config/store`][wasi-config-store], to easily access ENV variables and
+custom configuration on the WebAssembly + WASI platform.
+
 [hono]: https://hono.dev
 [sm]: https://github.com/bytecodealliance/StarlingMonkey
 [wasi]: https://github.com/WebAssembly/WASI/tree/main
@@ -31,6 +42,9 @@ that handles incoming HTTP requests (`wasi:http/incoming-handler`).
 [p2-shims]: https://www.npmjs.com/package/@bytecodealliance/preview2-shim
 [cm-book]: https://component-model.bytecodealliance.org/
 [wintertc]: https://wintertc.org/
+[jco-std]: https://www.npmjs.com/package/@bytecodealliance/jco-std
+[wasi-config-store]: https://github.com/WebAssembly/wasi-config/blob/main/wit/store.wit
+[wasi-cli-environment]: https://github.com/WebAssembly/wasi-cli/blob/main/wit/environment.wit
 
 ## Quickstart
 

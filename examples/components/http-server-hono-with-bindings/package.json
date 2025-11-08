@@ -7,10 +7,10 @@
   "scripts": {
     "gen:types": "jco guest-types wit -o generated/types",
     "build:ts": "rolldown -c rolldown.config.mjs",
-    "build:component": "jco componentize -w wit -o dist/component.wasm dist/component.js",
+    "build:component": "jco componentize -w wit -o dist/guest/component.wasm dist/guest/component.js",
     "build": "npm run gen:types && npm run build:ts && npm run build:component",
-    "transpile": "jco transpile -o dist/transpiled dist/component.wasm",
-    "serve": "jco serve dist/component.wasm",
+    "transpile": "jco transpile -o dist/transpiled dist/guest/component.wasm",
+    "serve": "jco serve dist/guest/component.wasm",
     "demo": "node scripts/demo.mjs",
     "all": "npm run build && npm run demo"
   },

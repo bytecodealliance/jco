@@ -10,7 +10,7 @@ export default defineConfig([
         },
     },
     {
-        input: "src/host/bindings/*.ts",
+        input: "src/host/bindings/config.ts",
         external: /wasi:.*/,
         output: {
             dir: "dist/host/bindings",

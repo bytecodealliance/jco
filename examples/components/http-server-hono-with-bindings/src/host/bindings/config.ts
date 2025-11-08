@@ -11,14 +11,17 @@
  * see: https://github.com/WebAssembly/wasi-config/blob/main/wit/store.wit
  */
 
+const HARDCODED = {
+    "test-key": "test-value",
+};
+
 /** wasi:config/store.get */
-export const get = () => {
-    // TODO: read from a real config source
+export const get = (key: string) => {
+    if (key == "test-key") { return HARDCODED["test-key"]; }
     return undefined;
 };
 
 /** wasi:config/store.getAll */
 export const getAll = () => {
-    // TODO: read from a real config source
-    return [];
+    return Object.entries(HARDCODED);
 };
