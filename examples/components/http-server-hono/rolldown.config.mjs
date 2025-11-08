@@ -1,8 +1,20 @@
+import { env } from "node:process";
 import { URL, fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { defineConfig } from "rolldown";
 
-const WORKSPACE_NODE_MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url));
+// For some reason, rolldown will not properly resolve node modules when
+// in GitHub CI.
+//
+// The code below creates a manual mapping of the jco-std imports (and modified alias)
+// for CI environments and is NOT needed in a regular project
+const WORKSPACE_JCO_STD = fileURLToPath(new URL("../../../node_modules/@bytecodealliance/jco-std", import.meta.url));
+
+const alias = env.CI ? {
+    '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono': join(WORKSPACE_JCO_STD, "dist/0.2.3/http/adapters/hono.js"),
+    '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono': join(WORKSPACE_JCO_STD, "dist/0.2.6/http/adapters/hono.js"),
+} : {};
 
 export default defineConfig({
     input: "src/component.ts",
@@ -11,11 +23,5 @@ export default defineConfig({
         file: "dist/component.js",
         format: "esm",
     },
-    resolve: {
-        modules: [
-            "node_modules",
-            "../../../node_modules",
-            WORKSPACE_NODE_MODULES,
-        ]
-    },
+    resolve: { alias },
 });
