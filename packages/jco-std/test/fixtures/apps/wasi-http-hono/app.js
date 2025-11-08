@@ -8,7 +8,7 @@ import { Hono } from "hono";
  * It's only when using the fetch-event integration that we're limited to the
  * version built in to StarlingMonkey
  */
-import { fire } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono';
+import { fire } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/server';
 
 const app = new Hono();
 app.get("/", (c) => {
@@ -20,4 +20,4 @@ fire(app);
 // Although we've called `fire()` with wasi HTTP configured for use above,
 // we still need to actually export the `wasi:http/incoming-handler` interface object,
 // as componentize-js will be looking for the ES module export.
-export { incomingHandler } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono';
+export { incomingHandler } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/server';
