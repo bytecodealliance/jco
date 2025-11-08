@@ -27,9 +27,22 @@
     "dist"
   ],
   "exports": {
-    "./wasi/0.2.x/http/adapters/hono/server": "./wasi/0.2.6/http/adapters/hono/server",
-    "./wasi/0.2.x/http/adapters/hono/middleware/config": "./wasi/0.2.6/http/adapters/hono/middleware/config",
-    "./wasi/0.2.x/http/adapters/hono/middleware/env": "./wasi/0.2.6/http/adapters/hono/middleware/env",
+    "./wasi/0.2.x/http/adapters/hono/server": {
+      "types": "./dist/0.2.6/http/adapters/hono/server.d.ts",
+      "browser": "./dist/0.2.6/http/adapters/hono/server.js",
+      "default": "./dist/0.2.6/http/adapters/hono/server.js"
+    },
+    "./wasi/0.2.x/http/adapters/hono/middleware/config": {
+      "types": "./dist/0.2.6/http/adapters/hono/middleware/config.d.ts",
+      "browser": "./dist/0.2.6/http/adapters/hono/middleware/config.js",
+      "default": "./dist/0.2.6/http/adapters/hono/middleware/config.js"
+    },
+    "./wasi/0.2.x/http/adapters/hono/middleware/env": {
+      "types": "./dist/0.2.6/http/adapters/hono/middleware/env.d.ts",
+      "browser": "./dist/0.2.6/http/adapters/hono/middleware/env.js",
+      "default": "./dist/0.2.6/http/adapters/hono/middleware/env.js"
+    },
+
     "./wasi/0.2.6/http/adapters/hono/server": {
       "types": "./dist/0.2.6/http/adapters/hono/server.d.ts",
       "browser": "./dist/0.2.6/http/adapters/hono/server.js",
@@ -38,13 +51,14 @@
     "./wasi/0.2.6/http/adapters/hono/middleware/config": {
       "types": "./dist/0.2.6/http/adapters/hono/middleware/config.d.ts",
       "browser": "./dist/0.2.6/http/adapters/hono/middleware/config.js",
-      "default": "./dist/0.2.6/http/adapters/hono/middleware/config.js",
+      "default": "./dist/0.2.6/http/adapters/hono/middleware/config.js"
     },
     "./wasi/0.2.6/http/adapters/hono/middleware/env": {
       "types": "./dist/0.2.6/http/adapters/hono/middleware/env.d.ts",
       "browser": "./dist/0.2.6/http/adapters/hono/middleware/env.js",
-      "default": "./dist/0.2.6/http/adapters/hono/middleware/env.js",
+      "default": "./dist/0.2.6/http/adapters/hono/middleware/env.js"
     },
+
     "./wasi/0.2.3/http/adapters/hono/server": {
       "types": "./dist/0.2.3/http/adapters/hono/server.d.ts",
       "browser": "./dist/0.2.3/http/adapters/hono/server.js",
@@ -53,13 +67,13 @@
     "./wasi/0.2.3/http/adapters/hono/middleware/config": {
       "types": "./dist/0.2.3/http/adapters/hono/middleware/config.d.ts",
       "browser": "./dist/0.2.3/http/adapters/hono/middleware/config.js",
-      "default": "./dist/0.2.3/http/adapters/hono/middleware/config.js",
+      "default": "./dist/0.2.3/http/adapters/hono/middleware/config.js"
     },
     "./wasi/0.2.3/http/adapters/hono/middleware/env": {
       "types": "./dist/0.2.3/http/adapters/hono/middleware/env.d.ts",
       "browser": "./dist/0.2.3/http/adapters/hono/middleware/env.js",
-      "default": "./dist/0.2.3/http/adapters/hono/middleware/env.js",
-    },
+      "default": "./dist/0.2.3/http/adapters/hono/middleware/env.js"
+    }
   },
   "scripts": {
     "setup:jco-transpile:build": "npm run build -w @bytecodealliance/jco-transpile",
