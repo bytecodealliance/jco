@@ -28,7 +28,7 @@ use the `@bytecodealliance/jco-std/http/adapters/hono` export:
 ```ts
 import { Hono } from 'hono';
 
-import { fire } from '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/server';
+import { fire } from '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/server';
 
 const app = new Hono();
 app.get('/', () => "Hello World!");
@@ -38,8 +38,14 @@ fire(app);
 // Although we've called `fire()` with wasi HTTP configured for use above,
 // we still need to actually export the `wasi:http/incoming-handler` interface object,
 // as componentize-js will be looking for the ES module export.
-export { incomingHandler } from '@bytecodealliance/jco-std/http/adapters/hono/server';
+export { incomingHandler } from '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/server';
 ```
+
+> [!NOTE]
+> We use `@bytecodealliance/jco-std/wasi/0.2.x`, but if you'd like to use a specific version, you can
+> use an explicitly versioned export like `@bytecodealliance/jco-std/wasi/0.2.6`.
+>
+> Note that using `0.2.x` is similar to using `latest`, it may change at *any* library update.
 
 [hono]: https://hono.dev
 

@@ -27,6 +27,9 @@
     "dist"
   ],
   "exports": {
+    "./wasi/0.2.x/http/adapters/hono/server": "./wasi/0.2.6/http/adapters/hono/server",
+    "./wasi/0.2.x/http/adapters/hono/middleware/config": "./wasi/0.2.6/http/adapters/hono/middleware/config",
+    "./wasi/0.2.x/http/adapters/hono/middleware/env": "./wasi/0.2.6/http/adapters/hono/middleware/env",
     "./wasi/0.2.6/http/adapters/hono/server": {
       "types": "./dist/0.2.6/http/adapters/hono/server.d.ts",
       "browser": "./dist/0.2.6/http/adapters/hono/server.js",
