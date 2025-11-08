@@ -43,14 +43,25 @@ jobs:
       - name: Install NPM packages
         run: npm install
 
-      - name: Build
+      - name: Build jco
         run: npm run build
-      - name: Upload Jco Build
+
+      - name: Upload jco build
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: jco-build
           path: |
             packages/jco/obj
+
+      - name: Build jco-transpile
+        run: npm run build -w @bytecodealliance/jco-transpile
+
+      - name: Upload jco-transpile vendor
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: jco-transpile-vendor
+          path: |
+            packages/jco-transpile/vendor
 
   test-jco:
     runs-on: ${{ matrix.os }}
@@ -161,7 +172,7 @@ jobs:
         run: |
           npx puppeteer browsers install chrome
 
-      - name: Download Build
+      - name: Restore jco build
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: jco-build
@@ -215,7 +226,7 @@ jobs:
       - name: Install NPM packages
         run: npm install
 
-      - name: Download Build
+      - name: Restore jco build
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: jco-build
@@ -275,7 +286,7 @@ jobs:
           path: |
             node_modules
 
-      - name: Download Build
+      - name: Restore jco build
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: jco-build
@@ -284,13 +295,6 @@ jobs:
 
       - name: Install NPM packages
         run: npm install
-
-      - name: Download Build
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
-        with:
-          name: jco-build
-          path: |
-            packages/jco/obj
 
       - name: Generate tests
         run: |
@@ -474,6 +478,9 @@ jobs:
             workspace: examples/components/http-server-fetch-handler
           - name: http-server-hono
             workspace: examples/components/http-server-hono
+            setup: |
+              npm run build -w @bytecodealliance/jco-transpile
+              npm run build -w @bytecodealliance/jco-std
           - name: host-logging
             workspace: examples/components/host-logging
           - name: ts-resource-import
@@ -488,12 +495,19 @@ jobs:
         with:
           node-version: ${{ matrix.node.version }}
 
-      - name: Download Build
+      - name: Restore jco build
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: jco-build
           path: |
             packages/jco/obj
+
+      - name: Restore jco-transpile vendor
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: jco-transpile-vendor
+          path: |
+            packages/jco-transpile/vendor
 
       - name: Install Rust
         if: ${{ matrix.project.requires-crates != '[]' }}
@@ -530,7 +544,8 @@ jobs:
         working-directory: ${{ matrix.project.dir }}
         run: npm install
 
-      - run: tree node_modules/@bytecodealliance
+      - run: |
+          ${{ matrix.project.setup }}
 
       - name: Run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
