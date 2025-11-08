@@ -13,7 +13,7 @@ import { rolldown } from "rolldown";
 
 const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.url));
 
-const WORKSPACE_NODE_MODULES_DIR = fileURLToPath(new URL("../../../node_modules", import.meta.url));
+const JCO_STD_DIR = fileURLToPath(new URL("../../", import.meta.url));
 
 /** Get the binary path to wasmtime if it doesn't exist */
 async function getWasmtimeBin(env?: Record<string, string>): Promise<string> {
@@ -96,9 +96,10 @@ suite("hono apps", async () => {
                     /^wasi:.*/,
                 ],
                 resolve: {
-                    modules: [
-                        WORKSPACE_NODE_MODULES_DIR,
-                    ],
+                    alias: {
+                        '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono': join(JCO_STD_DIR, "dist/0.2.3/http/adapters/hono.js"),
+                        '@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono': join(JCO_STD_DIR, "dist/0.2.6/http/adapters/hono.js"),
+                    },
                 },
             });
             await bundle.write({
