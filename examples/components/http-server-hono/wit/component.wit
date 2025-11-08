@@ -1,10 +1,5 @@
-package example:hono;
+package example:http-server-hono;
 
 world component {
-    // NOTE: Since jco-std can enable ENV and config middlewares,
-    // we include WASI interfaces for environment variables and config
-    import wasi:cli/environment@0.2.6;
-    import wasi:config/store@0.2.0-rc.1;
-
     export wasi:http/incoming-handler@0.2.6;
 }

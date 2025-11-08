@@ -18,12 +18,12 @@ const JCO_PATH = env.JCO_PATH ?? "jco";
 
 /** Path to the WASM file to be used */
 const WASM_PATH = fileURLToPath(
-    new URL(env.WASM_PATH ?? "../dist/component.wasm", import.meta.url),
+    new URL(env.WASM_PATH ?? "../dist/guest/component.wasm", import.meta.url),
 );
 
 /** Path to the `wasi:config` bindings file to be used */
 const WASI_CONFIG_BINDINGS_PATH = fileURLToPath(
-    new URL(env.WASM_PATH ?? "../host-binding-wasi-config-store.mjs", import.meta.url),
+    new URL(env.WASM_PATH ?? "../dist/host/bindings/config.js", import.meta.url),
 );
 
 async function main() {

@@ -6,7 +6,7 @@
 /// <reference path="./interfaces/wasi-io-error.d.ts" />
 /// <reference path="./interfaces/wasi-io-poll.d.ts" />
 /// <reference path="./interfaces/wasi-io-streams.d.ts" />
-declare module 'example:hono/component' {
+declare module 'example:http-server-hono-with-bindings/component' {
   export type * as WasiCliEnvironment026 from 'wasi:cli/environment@0.2.6'; // import wasi:cli/environment@0.2.6
   export type * as WasiClocksMonotonicClock026 from 'wasi:clocks/monotonic-clock@0.2.6'; // import wasi:clocks/monotonic-clock@0.2.6
   export type * as WasiConfigStore020Rc1 from 'wasi:config/store@0.2.0-rc.1'; // import wasi:config/store@0.2.0-rc.1
