@@ -525,6 +525,10 @@ jobs:
 
       - run: npm install
 
+      - name: npm install (project)
+        working-directory: ${{ matrix.project.dir }}
+        run: npm install
+
       - name: Run all script for (${{ matrix.project.name }})
         working-directory: ${{ matrix.project.dir }}
         run: npm run all --workspace ${{ matrix.project.workspace }}
