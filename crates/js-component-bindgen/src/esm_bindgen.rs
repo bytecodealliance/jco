@@ -356,7 +356,10 @@ impl EsmBindgen {
                                 } else {
                                     uwrite!(output, "{external_name} as {iface_local_name}");
                                 }
-                                bound_external_names.push((external_name.to_string(), iface_local_name.to_string()));
+                                bound_external_names.push((
+                                    external_name.to_string(),
+                                    iface_local_name.to_string(),
+                                ));
                             }
 
                             ImportBinding::Local(local_names) => {
@@ -374,7 +377,8 @@ impl EsmBindgen {
                                     } else {
                                         uwrite!(output, "{external_name} as {local_name}");
                                     }
-                                    bound_external_names.push((external_name.to_string(), local_name.to_string()));
+                                    bound_external_names
+                                        .push((external_name.to_string(), local_name.to_string()));
                                 }
                             }
                         };
