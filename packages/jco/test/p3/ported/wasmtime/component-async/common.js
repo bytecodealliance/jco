@@ -4,11 +4,9 @@ import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { stat } from "node:fs/promises";
 
-import { assert } from "vitest";
 import which from "which";
 
 import { setupAsyncTest, getTmpDir } from '../../../../helpers.js';
-import { AsyncFunction } from '../../../../common.js';
 
 const exec = promisify(syncExec);
 
