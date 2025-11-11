@@ -144,6 +144,15 @@ impl ComponentIntrinsic {
 
                         #parkedTasks = new Map();
 
+                        #suspendedTasks = new Map();
+                        #suspendedTaskOrder = [];
+                        #taskResumerInterval = null;
+
+                        constructor(args) {{
+                            if (!args.componentIdx) {{ throw new Error('missing componentIdx when creating state'); }}
+                            this.#taskResumerInterval = setInterval(() => {{ this.resumeNextTask(); }}, 10);
+                        }}
+
                         callingSyncImport(val) {{
                             if (val === undefined) {{ return this.#callingAsyncImport; }}
                             if (typeof val !== 'boolean') {{ throw new TypeError('invalid setting for async import'); }}
@@ -242,6 +251,61 @@ impl ComponentIntrinsic {
 
                         isExclusivelyLocked() {{ return this.#lock !== null; }}
 
+                        #getSuspendedTaskMeta(taskID) {{
+                            return this.#suspendedTasks.get(taskID);
+                        }}
+
+                        #removeSuspendedTaskMeta(taskID) {{
+                            const idx = this.#suspendedTasksOrder.findIndex(t => t && t.taskID === taskID);
+                            const meta = this.#suspendedTasks.get(taskID);
+                            this.#suspendedTasksOrder[idx] = null;
+                            this.#suspendedTasks.delete(taskID);
+                            return meta;
+                        }}
+
+                        #addSuspendedTaskMeta(meta) {{
+                            this.#suspendedTasks.set(taskID, {{ resolve, taskID }});
+                            this.#suspendedTaskOrder.push(taskID);
+                            if (this.#suspendedTasks.size < suspendedTaskOrder.length - 10) {{
+                                this.#suspendedTaskOrder = this.#suspendedTaskOrder.filter(t => t !== null);
+                            }}
+                        }}
+
+                        suspendTask(args) {{
+                            const {{ task }} = args;
+                            const taskID = task.id();
+
+                            if (this.#getSuspendedTaskMeta(taskID)) {{
+                                throw new Error('task [' + taskID + '] already suspended');
+                            }}
+
+                            const {{ promise, resolve }} = Promise.withResolvers();
+                            this.#addSuspendedTaskMeta({{ resolve, taskID }});
+
+                            return promise;
+                        }}
+
+                        resumeTask(args) {{
+                            const {{ task }} = args;
+                            const taskID = task.id();
+
+                            const meta = this.#removeSuspendedTaskMeta(taskID);
+                            if (!meta || meta.taskID !== taskID) {{
+                                throw new Error('task [' + taskID + '] is not currently suspended');
+                            }}
+
+                            meta.resolve(null);
+                        }}
+
+                        resumeNextTask(args) {{
+                            const {{ task }} = args;
+                            const taskID = task.id();
+
+                            const nextTaskMeta = this.#suspendedTasks.find(t => t !== null);
+                            if (!nextTaskMeta) {{ return; }}
+
+                            this.resumeTask(nextTaskMeta.taskID);
+                        }}
                     }}
                     ",
                     class_name = self.name(),
@@ -256,7 +320,7 @@ impl ComponentIntrinsic {
                     "
                     function {get_state_fn}(componentIdx, init) {{
                         if (!{async_state_map}.has(componentIdx)) {{
-                            {async_state_map}.set(componentIdx, new {component_async_state_class}());
+                            {async_state_map}.set(componentIdx, new {component_async_state_class}({{ componentIdx }}));
                         }}
                         return {async_state_map}.get(componentIdx);
                     }}

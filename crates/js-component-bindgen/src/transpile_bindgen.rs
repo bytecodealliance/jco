@@ -3577,7 +3577,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let {local_name};");
                 self.bindgen
                     .all_core_exported_funcs
-                    .push((core_export_fn.clone(), requires_async_porcelain | is_async));
+                    .push((core_export_fn.clone(), requires_async_porcelain));
                 local_name
             }
         };

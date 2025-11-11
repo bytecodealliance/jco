@@ -36,7 +36,7 @@ async function ensureFile(filePath) {
  */
 export async function buildAndTranspile(args) {
     const componentPath = await ensureFile(args.componentPath);
-    const { esModule, cleanup } = await setupAsyncTest({
+    const { esModule, cleanup, outputDir } = await setupAsyncTest({
         asyncMode: 'jspi',
         component: {
             name: 'async-error-context',
@@ -68,6 +68,7 @@ export async function buildAndTranspile(args) {
         instance,
         esModule,
         cleanup,
+        outputDir,
     };
 }
 

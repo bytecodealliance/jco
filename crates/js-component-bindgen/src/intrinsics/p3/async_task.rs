@@ -1,7 +1,10 @@
 //! Intrinsics that represent helpers that implement async tasks
 
 use crate::{
-    intrinsics::{Intrinsic, component::ComponentIntrinsic, p3::waitable::WaitableIntrinsic},
+    intrinsics::{
+        Intrinsic, component::ComponentIntrinsic, conversion::ConversionIntrinsic,
+        p3::waitable::WaitableIntrinsic,
+    },
     source::Source,
 };
 
@@ -195,6 +198,38 @@ pub enum AsyncTaskIntrinsic {
     /// function unpackCallbackResult(callbackResult: i32): [i32, i32];
     /// ```
     UnpackCallbackResult,
+
+    /// JS that contains the loop which drives a given async task to completion.
+    ///
+    /// This intrinsic is not a canon function but instead a reusable JS snippet
+    /// that controls
+    ///
+    /// The Canonical ABI pseudo-code equivalent  be `thread_func(thread)` in `canon_lift`
+    /// though threads are not yet implemented.
+    ///
+    /// Normally, the async driver loop returns a Promise that resolves to the result
+    /// of the original async function that was called.
+    ///
+    /// See `Instruction::CallWasm` for example usage.
+    ///
+    /// ```ts
+    /// interface DriverLoopArgs {
+    ///     componentInstanceIdx: number,
+    ///     componentState: ComponentAsyncState,
+    ///     task: AsyncTask,
+    ///     fnName: string,
+    ///     callbackFnName: string,
+    ///     isAsync: boolean, // whether using JSPI *or* lifted async function
+    ///     callbackResult: number, // initial wasm call result that contains callback code and more metadata
+    ///     // Normally, the driver loop is run in a separately executing Promise,
+    ///     // so we ensure that the enclosing promise itself can eventually be resolved
+    ///     resolve: () => void,
+    ///     reject: () => void,
+    /// }
+    ///
+    /// function asyncDriverLoop(args: DriverLoopArgs): Promise<any>;
+    /// ```
+    DriverLoop,
 }
 
 impl AsyncTaskIntrinsic {
@@ -205,7 +240,26 @@ impl AsyncTaskIntrinsic {
 
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        ["taskReturn", "subtaskDrop"]
+        [
+            "ASYNC_BLOCKED_CODE",
+            "ASYNC_CURRENT_COMPONENT_IDXS",
+            "ASYNC_CURRENT_TASK_IDS",
+            "ASYNC_TASKS_BY_COMPONENT_IDX",
+            "AsyncSubtask",
+            "AsyncTask",
+            "asyncYield",
+            "contextGet",
+            "contextSet",
+            "endCurrentTask",
+            "getCurrentTask",
+            "startCurrentTask",
+            "subtaskCancel",
+            "subtaskDrop",
+            "subtaskDrop",
+            "taskCancel",
+            "taskReturn",
+            "unpackCallbackResult",
+        ]
     }
 
     /// Get the name for the intrinsic
@@ -228,6 +282,7 @@ impl AsyncTaskIntrinsic {
             Self::TaskReturn => "taskReturn",
             Self::Yield => "asyncYield",
             Self::UnpackCallbackResult => "unpackCallbackResult",
+            Self::DriverLoop => "_driverLoop",
         }
     }
 
@@ -296,8 +351,6 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::TaskReturn => {
-                // TODO(async): write results into provided memory, perform checks for task & result types
-                // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-taskreturn
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_return_fn = Self::TaskReturn.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
@@ -540,6 +593,8 @@ impl AsyncTaskIntrinsic {
                 ));
             }
 
+            // NOTE: since threads are not yet supported, places that would have called out to threads instead run
+            // `immediate<original function>` -- i.e. `Thread#suspendUntil` becomes `AsyncTask#immediateSuspendUntil`
             Self::AsyncTaskClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let get_or_create_async_state_fn =
@@ -718,10 +773,6 @@ impl AsyncTaskIntrinsic {
                             return event;
                         }}
 
-                        waitForEventSync(opts) {{
-                            throw new Error('{task_class}#yieldSync() not implemented')
-                        }}
-
                         async pollForEvent(opts) {{
                             const {{ waitableSetRep, isAsync }} = opts;
                             {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ taskID: this.#id, waitableSetRep, isAsync }});
@@ -731,10 +782,6 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             throw new Error('{task_class}#pollForEvent() not implemented');
-                        }}
-
-                        pollForEventSync(opts) {{
-                            throw new Error('{task_class}#yieldSync() not implemented')
                         }}
 
                         async blockOn(opts) {{
@@ -833,46 +880,73 @@ impl AsyncTaskIntrinsic {
                             throw new Error('AsyncTask#asyncOnBlock() not yet implemented');
                         }}
 
-                        async yield(opts) {{
-                            const {{ isCancellable, forCallback }} = opts;
-                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, isCancellable, forCallback }});
+                        async yieldUntil(opts) {{
+                            const {{ readyFunc, isCancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, isCancellable }});
 
-                            if (isCancellable && this.status === {task_class}.State.CANCEL_PENDING) {{
-                                this.#state = {task_class}.State.CANCELLED;
+                            const continue = await this.suspendUntil({{ readyFunc, cancellable }});
+                            if (!continue) {{
                                 return {{
                                     code: {event_code_enum}.TASK_CANCELLED,
-                                    payload: [0, 0],
-                                }};
-                            }}
-
-                            // TODO: Awaitables need to *always* trigger the parking mechanism when they're done...?
-                            // TODO: Component async state should remember which awaitables are done and work to clear tasks waiting
-
-                            const blockResult = await this.blockOn({{
-                                awaitable: new {awaitable_class}(new Promise(resolve => setTimeout(resolve, 0))),
-                                isCancellable,
-                                forCallback,
-                            }});
-
-                            if (blockResult === {task_class}.BlockResult.CANCELLED) {{
-                                if (this.#state !== {task_class}.State.INITIAL) {{
-                                    throw new Error('task should be in initial state found [' + this.#state + ']');
-                                }}
-                                this.#state = {task_class}.State.CANCELLED;
-                                return {{
-                                    code: {event_code_enum}.TASK_CANCELLED,
-                                    payload: [0, 0],
+                                    index: 0,
+                                    result: 0,
                                 }};
                             }}
 
                             return {{
                                 code: {event_code_enum}.NONE,
-                                payload: [0, 0],
+                                index: 0,
+                                result: 0,
                             }};
                         }}
 
-                        yieldSync(opts) {{
-                            throw new Error('{task_class}#yieldSync() not implemented')
+                        suspendUntil(opts) {{
+                            const {{ cancellable, readyFunc }} = opts;
+                            {debug_log_fn}('[{task_class}#suspendUntil()] args', {{ cancellable }});
+
+                            const pendingCancelled = this.deliverPendingCancel({{ cancellable }});
+                            if (pendingCancelled) {{ return false; }}
+
+                            const completed = immediateSuspendUntil({{ readyFunc, cancellable }});
+                            return completed;
+                        }}
+
+                        immediateSuspendUntil(opts) {{ // NOTE: equivalent to thread.suspend_until()
+                            const {{ cancellable, readyFunc }} = opts;
+                            {debug_log_fn}('[{task_class}#immediateSuspendUntil()] args', {{ cancellable, readyFunc }});
+
+                            const ready = readyFunc();
+                            if (ready && !{global_async_determinism} && {coin_flip_fn}()) {{
+                                return true;
+                            }}
+
+                            const pendingCancelled = this.immediateSuspend({{ cancellable }});
+                            return pendingCancelled;
+                        }}
+
+                        immediateSuspend(opts) {{ // NOTE: equivalent to thread.suspend()
+                            const {{ cancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#immediateSuspend()] args', {{ cancellable }});
+
+                            const pendingCancelled = this.deliverPendingCancel({{ cancellable }});
+                            if (pendingCancelled) {{ return false; }}
+
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            if (forCallback) {{ cstate.exclusiveRelease(); }}
+
+                            await cstate.suspendTask({{ task: this }});
+                        }}
+
+                        deliverPendingCancel(opts) {{
+                            const {{ cancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#deliverPendingCancel()] args', {{ cancellable }});
+
+                            if (cancellable && this.#state === {task_class}.State.PENDING_CANCEL) {{
+                                this.#state = Task.State.CANCEL_DELIVERED;
+                                return true;
+                            }}
+
+                            return false;
                         }}
 
                         cancel() {{
@@ -892,6 +966,7 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('task is already resolved');
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
+                            console.log('subtasks?', {{ subtasks: this.#subtasks }} );
                             this.#onResolve(results.length === 1 ? results[0] : results);
                             this.#state = {task_class}.State.RESOLVED;
                         }}
@@ -914,12 +989,10 @@ impl AsyncTaskIntrinsic {
                             }}
                             state.inSyncExportCall = false;
 
-                            this.startPendingTask();
-                        }}
-
-                        startPendingTask(args) {{
-                            {debug_log_fn}('[{task_class}#startPendingTask()] args', args);
-                            throw new Error('{task_class}#startPendingTask() not implemented');
+                            if (!state.isExclusivelyLocked()) {{
+                                throw new Error('task should have been exclusively locked at end of execution');
+                            }}
+                            state.exclusiveRelease();
                         }}
 
                         createSubtask(args) {{
@@ -1103,6 +1176,132 @@ impl AsyncTaskIntrinsic {
                         // TODO: table max length check?
                         const waitableSetIdx = result >> 4;
                         return [eventCode, waitableSetIdx];
+                    }}
+                ",
+                ));
+            }
+
+            // TODO: This function likely needs to be a generator
+            // that first yields the task promise result, then tries to push resolution
+            Self::DriverLoop => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let driver_loop_fn = Self::DriverLoop.name();
+                let i32_typecheck = Intrinsic::TypeCheckValidI32.name();
+                let to_int32_fn = Intrinsic::Conversion(ConversionIntrinsic::ToInt32).name();
+                let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
+
+                output.push_str(&format!("
+                    async function {driver_loop_fn}(args) {{
+                        {debug_log_fn}('[{driver_loop_fn}()] args', args);
+                        const {{
+                            componentInstanceIdx,
+                            componentState,
+                            task,
+                            fnName,
+                            callbackFnName,
+                            callbackFn,
+                            isAsync,
+                            resolve,
+                            reject,
+
+                            callbackResult,
+                        }} = args;
+
+                        if (callbackResult !== undefined) {{
+                            if (!({i32_typecheck}(callbackResult))) {{ throw new Error('invalid callback result [' + callbackResult + '], not a number'); }}
+                            if (callbackResult < 0 || callbackResult > 3) {{
+                                throw new Error('invalid async return value, outside callback code range');
+                            }}
+                        }}
+                        let [callbackCode, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
+
+                        try {{
+                            while (true) {{
+                                if (callbackCode !== 0) {{
+                                    cstate.exclusiveRelease();
+                                }}
+
+                                switch (callbackCode) {{
+                                    case 0: // EXIT
+                                        {debug_log_fn}('[{driver_loop_fn}()] async exit indicated', {{
+                                            fnName,
+                                            callbackFnName,
+                                            taskID: task.id()
+                                        }});
+                                        task.exit();
+                                        resolve(null);
+                                        return;
+
+                                    case 1: // YIELD
+                                        {debug_log_fn}('[{driver_loop_fn}()] yield', {{
+                                            fnName,
+                                            callbackFnName,
+                                            taskID: task.id()
+                                        }});
+
+                                        taskRes = await task.yieldUntil({{
+                                            isCancellable: true,
+                                            readyFunc: () => !componentState.isExclusivelyLocked()
+                                        }});
+                                        break;
+
+                                    case 2: // WAIT for a given waitable set
+                                        {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
+                                            fnName,
+                                            callbackFnName,
+                                            taskID: task.id()
+                                            waitableSetIdx,
+                                        }});
+                                        taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
+                                        break;
+
+                                    case 3: // POLL
+                                        {debug_log_fn}('[{driver_loop_fn}()] polling for event', {{
+                                            fnName,
+                                            callbackFnName,
+                                            taskID: task.id()
+                                            waitableSetIdx,
+                                        }});
+                                        taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
+                                        break;
+
+                                    default:
+                                        throw new Error('Unrecognized async function result [' + ret + ']');
+                                }}
+
+                                cstate.exclusiveLock();
+
+                                eventCode = taskRes.code;
+                                index = taskRes.payload[0];
+                                result = taskRes.paylod[1];
+
+                                {debug_log_fn}('[{driver_loop_fn}()] performing callback', {{
+                                    fnName,
+                                    callbackFnName,
+                                    eventCode,
+                                    index,
+                                    result
+                                }});
+
+                                const callbackRes = callbackFn(
+                                    {to_int32_fn}(eventCode),
+                                    {to_int32_fn}(index),
+                                    {to_int32_fn}(result),
+                                );
+                                const unpacked = {unpack_callback_result_fn}(callbackRes);
+                                callbackCode = unpacked[0];
+                                waitableSetIdx = unpacked[1];
+                            }}
+                        }} catch (err) {{
+                            {debug_log_fn}('[{driver_loop_fn}()] error while resovling in async driver loop', {{
+                                fnName,
+                                callbackFnName,
+                                eventCode,
+                                index,
+                                result
+                            }});
+                            reject(err);
+                        }}
                     }}
                 ",
                 ));

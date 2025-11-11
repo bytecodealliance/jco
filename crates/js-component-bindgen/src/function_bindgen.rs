@@ -228,6 +228,7 @@ impl FunctionBindgen<'_> {
     /// Write result assignment lines to output
     ///
     /// In general this either means writing preambles, for example that look like the following:
+    ///
     /// ```js
     /// const ret =
     /// ```
@@ -235,14 +236,22 @@ impl FunctionBindgen<'_> {
     /// ```
     /// var [ ret0, ret1, ret2 ] =
     /// ```
-    fn write_result_assignment(&mut self, amt: usize, results: &mut Vec<String>) {
-        match amt {
-            0 => {}
-            1 => {
+    fn write_result_assignment(&mut self, amt: usize, results: &mut Vec<String>, is_async: bool) {
+        // For async functions there is always a result returned and it's a single integer
+        // which indicates async state. This is a sort of "meta" result -- i.e. it shouldn't be counted
+        // as a regular function result but *should* be made available to the JS internal code.
+        if is_async {
+            uwrite!(self.src, "const ret = ");
+            return;
+        }
+        match (is_async, amt) {
+            (true, _) => {}
+            (false, 0) => {}
+            (false, 1) => {
                 uwrite!(self.src, "const ret = ");
                 results.push("ret".to_string());
             }
-            n => {
+            (false, n) => {
                 uwrite!(self.src, "var [");
                 for i in 0..n {
                     if i > 0 {
@@ -1215,9 +1224,15 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Inject machinery for starting an async 'current' task
                 self.start_current_task(inst, self.is_async, self.callee);
 
+                // TODO: trap if this component is already on the call stack (re-entrancy)
+
+                // TODO(threads): start a thread
+                // TODO(threads): Task#enter needs to be called with the thread that is executing (inside thread_func)
+                // TODO(threads): thread_func will contain the actual call rather than attempting to execute immediately
+
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
-                self.write_result_assignment(sig_results_length, results);
+                self.write_result_assignment(sig_results_length, results, self.is_async);
 
                 uwriteln!(
                     self.src,
@@ -1230,6 +1245,12 @@ impl Bindgen for FunctionBindgen<'_> {
                         ""
                     }
                 );
+
+                uwriteln!(
+                    self.src,
+                    "console.log('===> DEBUG' , {{ callee: '{}', ret }});",
+                    self.callee
+                ); // TODO: REMOVE
 
                 // Print post-return if tracing is enabled
                 if self.tracing_enabled {
@@ -1251,7 +1272,76 @@ impl Bindgen for FunctionBindgen<'_> {
                 // after the call has completed.
                 if !self.is_async {
                     self.end_current_task();
+                    return;
                 }
+
+                // If we're dealing with an async call, then `ret` is actually the
+                // state of async behavior.
+                //
+                // The result *should* be a Promise that resolves to whatever the current task
+                // will eventually resolve to.
+                //
+                // NOTE: Regardless of whether async porcelain is required here, we want to return the result
+                // of the computation as a whole, not the current async state (which is what `ret` currently is).
+                //
+                // `ret` is only a Promise if we have async-lowered the function in question (e.g. via JSPI)
+                //
+                // ```ts
+                // type ret = number | Promise<number>;
+                let component_instance_idx = self.canon_opts.instance.as_u32();
+                let get_current_task_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let async_driver_loop_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
+                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GetOrCreateAsyncState,
+                ));
+                let is_async_js = self.requires_async_porcelain | self.is_async;
+                let callback_fn_name = self
+                    .canon_opts
+                    .callback
+                    .map(|v| format!("callback_{}", v.as_u32()))
+                    .expect(&format!("missing callback for async function {name}"));
+
+                // Resolve the promise that *would* have been returned via `WebAssembly.promising`
+                if self.requires_async_porcelain {
+                    uwriteln!(self.src, "ret = await ret;");
+                }
+
+                // Perform the reaction to async state
+                uwriteln!(
+                    self.src,
+                    r#"
+                      const componentState = {get_or_create_async_state_fn}(this.#componentIdx);
+                      if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
+
+                      const taskMeta = {get_current_task_fn}({component_instance_idx});
+                      if (!taskMeta) {{ throw new Error('failed to find current task metadata'); }}
+
+                      const task = taskMeta.task;
+                      if (!task) {{ throw new Error('missing/invalid task in current task metadata'); }}
+
+                      const task = taskMeta.task;
+                      if (!task) {{ throw new Error('missing/invalid task in current task metadata'); }}
+
+                      new Promise((resolve, reject) => {{
+                          {async_driver_loop_fn}({{
+                              componentInstanceIdx: {component_instance_idx},
+                              componentState,
+                              task,
+                              fnName: '{name}',
+                              callbackFnName: '{callback_fn_name}',
+                              callbackFn: {callback_fn_name},
+                              isAsync: {is_async_js},
+                              callbackCode: ret,
+                              resolve,
+                              reject
+                          }});
+                      }});
+
+                      return task.completionPromise();
+                      "#,
+                );
             }
 
             // Call to an interface, usually but not always an externally imported interface
@@ -1315,7 +1405,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                     results.push("ret".to_string());
                 } else {
-                    self.write_result_assignment(results_length, results);
+                    self.write_result_assignment(results_length, results, self.is_async);
                     uwriteln!(self.src, "{call};");
                 }
 
@@ -2196,26 +2286,14 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Generate the fn signatures for task function calls,
                 // since we may be using async porcelain or not for this function
-                let (
-                    task_fn_call_prefix,
-                    task_yield_fn,
-                    task_wait_for_event_fn,
-                    task_poll_for_event_fn,
-                ) = if self.requires_async_porcelain {
-                    (
-                        "await ",
-                        "task.yield",
-                        "task.waitForEvent",
-                        "task.pollForEvent",
-                    )
+                let task_fn_call_prefix = if self.requires_async_porcelain | self.is_async {
+                    "await "
                 } else {
-                    (
-                        "",
-                        "task.yieldSync",
-                        "task.waitForEventSync",
-                        "task.pollForEventSync",
-                    )
+                    ""
                 };
+                let task_yield_fn = "task.yield";
+                let task_wait_for_event_fn = "task.waitForEvent";
+                let task_poll_for_event_fn = "task.pollForEvent";
 
                 uwriteln!(
                     self.src,
