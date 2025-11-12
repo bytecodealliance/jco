@@ -144,6 +144,20 @@ impl ComponentIntrinsic {
 
                         #parkedTasks = new Map();
 
+                        #suspendedTasksByTaskID = new Map();
+                        #suspendedTaskIDs = [];
+                        #taskResumerInterval = null;
+
+                        constructor(args) {{
+                            this.#taskResumerInterval = setInterval(() => {{
+                                try {{
+                                    this.resumeNextTask();
+                                }} catch (err) {{
+                                    {debug_log_fn}('[{class_name}#taskResumer()] failed to resume next task', {{ err }});
+                                }}
+                            }}, 10);
+                        }};
+
                         callingSyncImport(val) {{
                             if (val === undefined) {{ return this.#callingAsyncImport; }}
                             if (typeof val !== 'boolean') {{ throw new TypeError('invalid setting for async import'); }}
@@ -242,6 +256,57 @@ impl ComponentIntrinsic {
 
                         isExclusivelyLocked() {{ return this.#lock !== null; }}
 
+                        #getSuspendedTaskMeta(taskID) {{
+                            return this.#suspendedTasksByTaskID.get(taskID);
+                        }}
+
+                        #removeSuspendedTaskMeta(taskID) {{
+                            const idx = this.#suspendedTaskIDs.findIndex(t => t && t.taskID === taskID);
+                            const meta = this.#suspendedTasksByTaskID.get(taskID);
+                            this.#suspendedTaskIDs[idx] = null;
+                            this.#suspendedTasksByTaskID.delete(taskID);
+                            return meta;
+                        }}
+
+                        #addSuspendedTaskMeta(meta) {{
+                            if (!meta) {{ throw new Error('missing task meta'); }}
+                            const taskID = meta.taskID;
+                            this.#suspendedTasksByTaskID.set(taskID, meta);
+                            this.#suspendedTaskIDs.push(taskID);
+                            if (this.#suspendedTasksByTaskID.size < this.#suspendedTaskIDs.length - 10) {{
+                                this.#suspendedTaskIDs = this.#suspendedTaskIDs.filter(t => t !== null);
+                            }}
+                        }}
+
+                        suspendTask(args) {{
+                            const {{ task }} = args;
+                            const taskID = task.id();
+
+                            if (this.#getSuspendedTaskMeta(taskID)) {{
+                                throw new Error('task [' + taskID + '] already suspended');
+                            }}
+
+                            const {{ promise, resolve }} = Promise.withResolvers();
+                            this.#addSuspendedTaskMeta({{ resolve, taskID }});
+
+                            return promise;
+                        }}
+
+                        resumeTaskByID(taskID) {{
+                            const meta = this.#removeSuspendedTaskMeta(taskID);
+                            if (!meta) {{ return; }}
+                            if (meta.taskID !== taskID) {{
+                                throw new Error('task ID does not match');
+                            }}
+
+                            meta.resolve(null);
+                        }}
+
+                        resumeNextTask() {{
+                            const taskID = this.#suspendedTaskIDs.find(t => t !== null);
+                            if (!taskID) {{ return; }}
+                            this.resumeTaskByID(taskID);
+                        }}
                     }}
                     ",
                     class_name = self.name(),
