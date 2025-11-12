@@ -400,9 +400,6 @@ impl AsyncTaskIntrinsic {
                             results.push(val);
                         }}
 
-                        // TODO: running a non async function that does async stuff inside of it??
-
-                        console.log('RESOLVING!', {{ args, taskID: task.id(), results }});
                         task.resolve(results);
                     }}
                 "));
@@ -1177,8 +1174,8 @@ impl AsyncTaskIntrinsic {
                         }}
                         if (result < 0 || result >= 2**32) {{ throw new Error('invalid callback result'); }}
                         // TODO: table max length check?
-                        const waitableSetIdx = result >> 4;
-                        return [eventCode, waitableSetIdx];
+                        const waitableSetRep = result >> 4;
+                        return [eventCode, waitableSetRep];
                     }}
                 ",
                 ));
@@ -1216,7 +1213,7 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('invalid async return value, outside callback code range');
                             }}
                         }}
-                        let [callbackCode, waitableSetIdx] = {unpack_callback_result_fn}(callbackResult);
+                        let [callbackCode, waitableSetRep] = {unpack_callback_result_fn}(callbackResult);
 
                         let eventCode;
                         let index;
@@ -1256,9 +1253,9 @@ impl AsyncTaskIntrinsic {
                                             fnName,
                                             callbackFnName,
                                             taskID: task.id(),
-                                            waitableSetIdx,
+                                            waitableSetRep,
                                         }});
-                                        asyncRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
+                                        asyncRes = await task.waitForEvent({{ isAsync: true, waitableSetRep }});
                                         break;
 
                                     case 3: // POLL
@@ -1266,9 +1263,9 @@ impl AsyncTaskIntrinsic {
                                             fnName,
                                             callbackFnName,
                                             taskID: task.id(),
-                                            waitableSetIdx,
+                                            waitableSetRep,
                                         }});
-                                        asyncRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
+                                        asyncRes = await task.pollForEvent({{ isAsync: true, waitableSetRep }});
                                         break;
 
                                     default:
@@ -1296,7 +1293,7 @@ impl AsyncTaskIntrinsic {
                                 );
                                 const unpacked = {unpack_callback_result_fn}(callbackRes);
                                 callbackCode = unpacked[0];
-                                waitableSetIdx = unpacked[1];
+                                waitableSetRep = unpacked[1];
                             }}
                         }} catch (err) {{
                             {debug_log_fn}('[{driver_loop_fn}()] error while resolving in async driver loop', {{

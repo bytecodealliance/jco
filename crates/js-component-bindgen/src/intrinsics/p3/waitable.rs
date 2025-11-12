@@ -193,6 +193,23 @@ impl WaitableIntrinsic {
                             this.#waitables.push(waitable);
                         }}
 
+                        hasPendingEvent() {{
+                            {debug_log_fn}('[{waitable_set_class}#hasPendingEvent()] args', {{ }});
+                            const waitable = this.#waitables.find(w => w.hasPendingEvent());
+                            return waitable !== undefined;
+                        }}
+
+                        getPendingEvent() {{
+                            {debug_log_fn}('[{waitable_set_class}#getPendingEvent()] args', {{ }});
+                            this.shuffleWaitables();
+                            for (const waitable of this.#waitables) {{
+                                if (!waitable.hasPendingEvent()) {{ continue; }}
+                                return waitable.getPendingEvent();
+                            }}
+                            console.log('waitables?', this.#waitables);
+                            throw new Error('no waitables had a pending event');
+                        }}
+
                         async poll() {{
                             {debug_log_fn}('[{waitable_set_class}#poll()] args', {{ }});
 
@@ -234,6 +251,10 @@ impl WaitableIntrinsic {
                             return !!this.#pendingEvent;
                         }}
 
+                        setPendingEvent(event) {{
+                            this.#pendingEvent = event;
+                        }}
+
                         getPendingEvent() {{
                             {debug_log_fn}('[{waitable_class}#getPendingEvent()] args', {{ }});
                             if (!this.#pendingEvent) {{ return null; }}
@@ -263,9 +284,12 @@ impl WaitableIntrinsic {
                         }}
 
                         join(waitableSet) {{
-                            if (!waitableSet) {{ throw new Error('no waitable set specified'); }}
+                            if (!waitableSet) {{
+                                this.#waitableSet = null;
+                                return;
+                            }}
                             waitableSet.addWaitable(this);
-                            this.waitableSet = waitableSet;
+                            this.#waitableSet = waitableSet;
                         }}
                     }}
                 "));
