@@ -356,13 +356,11 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = Self::GetCurrentTask.name();
 
                 output.push_str(&format!("
-                    function {task_return_fn}(componentIdx, useDirectParams, memory, callbackFnIdx, liftFns) {{
-                        const params = [...arguments].slice(5);
+                    function {task_return_fn}(args) {{
+                        const {{ componentIdx, useDirectParams, memory, callbackFnIdx, liftFns }} = args;
+                        const params = [...arguments].slice(1);
                         {debug_log_fn}('[{task_return_fn}()] args', {{
-                            componentIdx,
-                            memory,
-                            callbackFnIdx,
-                            liftFns,
+                            ...args,
                             params,
                         }});
 
@@ -402,6 +400,9 @@ impl AsyncTaskIntrinsic {
                             results.push(val);
                         }}
 
+                        // TODO: running a non async function that does async stuff inside of it??
+
+                        console.log('RESOLVING!', {{ args, taskID: task.id(), results }});
                         task.resolve(results);
                     }}
                 "));
@@ -748,7 +749,10 @@ impl AsyncTaskIntrinsic {
 
                             const state = {get_or_create_async_state_fn}(this.#componentIdx);
                             const waitableSet = state.waitableSets.get(waitableSetRep);
-                            if (!waitableSet) {{ throw new Error('missing/invalid waitable set'); }}
+                            if (!waitableSet) {{
+                                console.log('waitable sets?', state.waitableSets);
+                                throw new Error('cannot wait for waitable set: no set for rep [' + waitableSetRep + ']');
+                            }}
 
                             waitableSet.numWaiting += 1;
                             let event = null;
@@ -881,11 +885,11 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         async yieldUntil(opts) {{
-                            const {{ readyFunc, isCancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, isCancellable }});
+                            const {{ readyFunc, cancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, cancellable }});
 
-                            const continue = await this.suspendUntil({{ readyFunc, cancellable }});
-                            if (!continue) {{
+                            const keepGoing = await this.suspendUntil({{ readyFunc, cancellable }});
+                            if (!keepGoing) {{
                                 return {{
                                     code: {event_code_enum}.TASK_CANCELLED,
                                     index: 0,
@@ -900,18 +904,18 @@ impl AsyncTaskIntrinsic {
                             }};
                         }}
 
-                        suspendUntil(opts) {{
+                        async suspendUntil(opts) {{
                             const {{ cancellable, readyFunc }} = opts;
                             {debug_log_fn}('[{task_class}#suspendUntil()] args', {{ cancellable }});
 
                             const pendingCancelled = this.deliverPendingCancel({{ cancellable }});
                             if (pendingCancelled) {{ return false; }}
 
-                            const completed = immediateSuspendUntil({{ readyFunc, cancellable }});
+                            const completed = await this.immediateSuspendUntil({{ readyFunc, cancellable }});
                             return completed;
                         }}
 
-                        immediateSuspendUntil(opts) {{ // NOTE: equivalent to thread.suspend_until()
+                        async immediateSuspendUntil(opts) {{ // NOTE: equivalent to thread.suspend_until()
                             const {{ cancellable, readyFunc }} = opts;
                             {debug_log_fn}('[{task_class}#immediateSuspendUntil()] args', {{ cancellable, readyFunc }});
 
@@ -920,11 +924,11 @@ impl AsyncTaskIntrinsic {
                                 return true;
                             }}
 
-                            const pendingCancelled = this.immediateSuspend({{ cancellable }});
+                            const pendingCancelled = await this.immediateSuspend({{ cancellable }});
                             return pendingCancelled;
                         }}
 
-                        immediateSuspend(opts) {{ // NOTE: equivalent to thread.suspend()
+                        async immediateSuspend(opts) {{ // NOTE: equivalent to thread.suspend()
                             const {{ cancellable }} = opts;
                             {debug_log_fn}('[{task_class}#immediateSuspend()] args', {{ cancellable }});
 
@@ -932,7 +936,6 @@ impl AsyncTaskIntrinsic {
                             if (pendingCancelled) {{ return false; }}
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-                            if (forCallback) {{ cstate.exclusiveRelease(); }}
 
                             await cstate.suspendTask({{ task: this }});
                         }}
@@ -1213,12 +1216,16 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('invalid async return value, outside callback code range');
                             }}
                         }}
-                        let [callbackCode, waitableSetIdx] = {unpack_callback_result_fn}(currentRes);
+                        let [callbackCode, waitableSetIdx] = {unpack_callback_result_fn}(callbackResult);
 
+                        let eventCode;
+                        let index;
+                        let result;
+                        let asyncRes;
                         try {{
                             while (true) {{
                                 if (callbackCode !== 0) {{
-                                    cstate.exclusiveRelease();
+                                    componentState.exclusiveRelease();
                                 }}
 
                                 switch (callbackCode) {{
@@ -1238,9 +1245,8 @@ impl AsyncTaskIntrinsic {
                                             callbackFnName,
                                             taskID: task.id()
                                         }});
-
-                                        taskRes = await task.yieldUntil({{
-                                            isCancellable: true,
+                                        asyncRes = await task.yieldUntil({{
+                                            cancellable: true,
                                             readyFunc: () => !componentState.isExclusivelyLocked()
                                         }});
                                         break;
@@ -1249,31 +1255,31 @@ impl AsyncTaskIntrinsic {
                                         {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
                                             fnName,
                                             callbackFnName,
-                                            taskID: task.id()
+                                            taskID: task.id(),
                                             waitableSetIdx,
                                         }});
-                                        taskRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
+                                        asyncRes = await task.waitForEvent({{ isAsync: true, waitableSetIdx }});
                                         break;
 
                                     case 3: // POLL
                                         {debug_log_fn}('[{driver_loop_fn}()] polling for event', {{
                                             fnName,
                                             callbackFnName,
-                                            taskID: task.id()
+                                            taskID: task.id(),
                                             waitableSetIdx,
                                         }});
-                                        taskRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
+                                        asyncRes = await task.pollForEvent({{ isAsync: true, waitableSetIdx }});
                                         break;
 
                                     default:
                                         throw new Error('Unrecognized async function result [' + ret + ']');
                                 }}
 
-                                cstate.exclusiveLock();
+                                componentState.exclusiveLock();
 
-                                eventCode = taskRes.code;
-                                index = taskRes.payload[0];
-                                result = taskRes.paylod[1];
+                                eventCode = asyncRes.code;
+                                index = asyncRes.index;
+                                result = asyncRes.result;
 
                                 {debug_log_fn}('[{driver_loop_fn}()] performing callback', {{
                                     fnName,
@@ -1293,12 +1299,13 @@ impl AsyncTaskIntrinsic {
                                 waitableSetIdx = unpacked[1];
                             }}
                         }} catch (err) {{
-                            {debug_log_fn}('[{driver_loop_fn}()] error while resovling in async driver loop', {{
+                            {debug_log_fn}('[{driver_loop_fn}()] error while resolving in async driver loop', {{
                                 fnName,
                                 callbackFnName,
                                 eventCode,
                                 index,
-                                result
+                                result,
+                                err,
                             }});
                             reject(err);
                         }}

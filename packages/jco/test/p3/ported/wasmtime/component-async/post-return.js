@@ -91,7 +91,6 @@ suite('post-return async sleep scenario', () => {
             console.log("OUTPUT DIR:", res.outputDir);
 
             const result = await instance['local:local/sleep-post-return'].asyncRun(waitTimeMs);
-            console.log("RETURNED", result);
 
             // TODO: fix: sleep-post-return is running but *does not* call the import properly,
             // likely because the task is not actually the thing being returned -- the promise is 

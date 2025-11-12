@@ -47,8 +47,8 @@ use crate::intrinsics::{
 };
 use crate::names::{LocalNames, is_js_reserved_word, maybe_quote_id, maybe_quote_member};
 use crate::{
-    FunctionIdentifier, core, get_thrown_type, is_async_fn, requires_async_porcelain, source,
-    uwrite, uwriteln,
+    FunctionIdentifier, ManagesIntrinsics, core, get_thrown_type, is_async_fn,
+    requires_async_porcelain, source, uwrite, uwriteln,
 };
 
 /// Number of flat parameters allowed before spilling over to memory
@@ -190,6 +190,12 @@ struct JsFunctionBindgenArgs<'a> {
     requires_async_porcelain: bool,
     /// Whether the function in question is a guest async function (i.e. WASI P3)
     is_async: bool,
+}
+
+impl<'a> ManagesIntrinsics for JsBindgen<'a> {
+    fn add_intrinsic(&mut self, intrinsic: Intrinsic) {
+        self.intrinsic(intrinsic);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -573,6 +579,12 @@ struct Instantiator<'a, 'b> {
     async_exports: HashSet<String>,
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
+}
+
+impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
+    fn add_intrinsic(&mut self, intrinsic: Intrinsic) {
+        self.bindgen.intrinsic(intrinsic);
+    }
 }
 
 impl<'a> Instantiator<'a, '_> {
@@ -2016,11 +2028,14 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "const trampoline{i} = {task_return_fn}.bind(
                          null,
-                         {component_idx},
-                         {use_direct_params},
-                         {memory_js},
-                         {callback_fn_idx},
-                         {lift_fns_js},
+                         {{
+                             componentIdx: {component_idx},
+                             useDirectParams: {use_direct_params},
+                             memory: {memory_js},
+                             callbackFnIdx: {callback_fn_idx},
+                             liftFns: {lift_fns_js},
+                             isAsync: {async_},
+                         }},
                      );",
                 );
             }
@@ -3828,8 +3843,8 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 ///
 /// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
 ///
-fn gen_flat_lift_fn_js_expr(
-    bindgen: &mut JsBindgen<'_>,
+pub fn gen_flat_lift_fn_js_expr(
+    intrinsic_mgr: &mut impl ManagesIntrinsics,
     component_types: &ComponentTypes,
     ty: &InterfaceType,
     canon_opts: &CanonicalOptions,
@@ -3837,35 +3852,78 @@ fn gen_flat_lift_fn_js_expr(
     //let ty_abi = component_types.canonical_abi(ty);
     let string_encoding = canon_opts.string_encoding;
     match ty {
-        InterfaceType::Bool => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool)),
-        InterfaceType::S8 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8)),
-        InterfaceType::U8 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8)),
-        InterfaceType::S16 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16)),
-        InterfaceType::U16 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16)),
-        InterfaceType::S32 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32)),
-        InterfaceType::U32 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32)),
-        InterfaceType::S64 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64)),
-        InterfaceType::U64 => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64)),
+        InterfaceType::Bool => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatBool).name().into()
+        }
+        InterfaceType::S8 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatS8).name().into()
+        }
+        InterfaceType::U8 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatU8).name().into()
+        }
+        InterfaceType::S16 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatS16).name().into()
+        }
+        InterfaceType::U16 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatU16).name().into()
+        }
+        InterfaceType::S32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatS32).name().into()
+        }
+        InterfaceType::U32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatU32).name().into()
+        }
+        InterfaceType::S64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatS64).name().into()
+        }
+        InterfaceType::U64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatU64).name().into()
+        }
         InterfaceType::Float32 => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32)
+                .name()
+                .into()
         }
         InterfaceType::Float64 => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64)
+                .name()
+                .into()
         }
-        InterfaceType::Char => bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar)),
+        InterfaceType::Char => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatChar).name().into()
+        }
         InterfaceType::String => match string_encoding {
             wasmtime_environ::component::StringEncoding::Utf8 => {
-                bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
+                intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8));
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8)
+                    .name()
+                    .into()
             }
             wasmtime_environ::component::StringEncoding::Utf16 => {
-                bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
+                intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16));
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16)
+                    .name()
+                    .into()
             }
             wasmtime_environ::component::StringEncoding::CompactUtf16 => {
                 todo!("latin1+utf8 not supported")
             }
         },
         InterfaceType::Record(ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
+            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord).name();
             let record_ty = &component_types[*ty_idx];
             let mut keys_and_lifts_expr = String::from("[");
             for f in &record_ty.fields {
@@ -3875,7 +3933,7 @@ fn gen_flat_lift_fn_js_expr(
                 keys_and_lifts_expr.push_str(&format!(
                     "['{}', {}, {}],",
                     f.name,
-                    gen_flat_lift_fn_js_expr(bindgen, component_types, &f.ty, canon_opts),
+                    gen_flat_lift_fn_js_expr(intrinsic_mgr, component_types, &f.ty, canon_opts),
                     component_types.canonical_abi(ty).size32,
                 ));
             }
@@ -3883,7 +3941,8 @@ fn gen_flat_lift_fn_js_expr(
             format!("{lift_fn}({keys_and_lifts_expr})")
         }
         InterfaceType::Variant(ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
+            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
             let mut cases_and_lifts_expr = String::from("[");
             for (name, maybe_ty) in &variant_ty.cases {
@@ -3893,7 +3952,7 @@ fn gen_flat_lift_fn_js_expr(
                     maybe_ty
                         .as_ref()
                         .map(|ty| gen_flat_lift_fn_js_expr(
-                            bindgen,
+                            intrinsic_mgr,
                             component_types,
                             ty,
                             canon_opts
@@ -3907,25 +3966,31 @@ fn gen_flat_lift_fn_js_expr(
                 ));
             }
             cases_and_lifts_expr.push(']');
-            format!("{lift_fn}({cases_and_lifts_expr})",)
+            format!("{lift_fn}({cases_and_lifts_expr})")
         }
         InterfaceType::List(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name().into()
         }
         InterfaceType::Tuple(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple).name().into()
         }
         InterfaceType::Flags(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags).name().into()
         }
         InterfaceType::Enum(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name().into()
         }
         InterfaceType::Option(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatOption).name().into()
         }
         InterfaceType::Result(ty_idx) => {
-            let lift_fn = bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
+            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatResult).name();
             let result_ty = &component_types[*ty_idx];
             let mut cases_and_lifts_expr = String::from("[");
             cases_and_lifts_expr.push_str(&format!(
@@ -3934,7 +3999,12 @@ fn gen_flat_lift_fn_js_expr(
                 result_ty
                     .ok
                     .as_ref()
-                    .map(|ty| gen_flat_lift_fn_js_expr(bindgen, component_types, ty, canon_opts))
+                    .map(|ty| gen_flat_lift_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        ty,
+                        canon_opts
+                    ))
                     .unwrap_or(String::from("null")),
                 result_ty
                     .ok
@@ -3949,7 +4019,12 @@ fn gen_flat_lift_fn_js_expr(
                 result_ty
                     .err
                     .as_ref()
-                    .map(|ty| gen_flat_lift_fn_js_expr(bindgen, component_types, ty, canon_opts))
+                    .map(|ty| gen_flat_lift_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        ty,
+                        canon_opts
+                    ))
                     .unwrap_or(String::from("null")),
                 result_ty
                     .err
@@ -3960,22 +4035,29 @@ fn gen_flat_lift_fn_js_expr(
             ));
 
             cases_and_lifts_expr.push(']');
-            format!("{lift_fn}({cases_and_lifts_expr})",)
+            format!("{lift_fn}({cases_and_lifts_expr})")
         }
         InterfaceType::Own(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name().into()
         }
         InterfaceType::Borrow(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name().into()
         }
         InterfaceType::Future(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture).name().into()
         }
         InterfaceType::Stream(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatStream).name().into()
         }
         InterfaceType::ErrorContext(_ty_idx) => {
-            bindgen.intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext))
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
+            Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext)
+                .name()
+                .into()
         }
     }
 }

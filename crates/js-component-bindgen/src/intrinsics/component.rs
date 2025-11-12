@@ -144,14 +144,19 @@ impl ComponentIntrinsic {
 
                         #parkedTasks = new Map();
 
-                        #suspendedTasks = new Map();
-                        #suspendedTaskOrder = [];
+                        #suspendedTasksByTaskID = new Map();
+                        #suspendedTaskIDs = [];
                         #taskResumerInterval = null;
 
                         constructor(args) {{
-                            if (!args.componentIdx) {{ throw new Error('missing componentIdx when creating state'); }}
-                            this.#taskResumerInterval = setInterval(() => {{ this.resumeNextTask(); }}, 10);
-                        }}
+                            this.#taskResumerInterval = setInterval(() => {{
+                                try {{
+                                    this.resumeNextTask();
+                                }} catch (err) {{
+                                    {debug_log_fn}('[{class_name}#taskResumer()] failed to resume next task', {{ err }});
+                                }}
+                            }}, 10);
+                        }};
 
                         callingSyncImport(val) {{
                             if (val === undefined) {{ return this.#callingAsyncImport; }}
@@ -252,22 +257,24 @@ impl ComponentIntrinsic {
                         isExclusivelyLocked() {{ return this.#lock !== null; }}
 
                         #getSuspendedTaskMeta(taskID) {{
-                            return this.#suspendedTasks.get(taskID);
+                            return this.#suspendedTasksByTaskID.get(taskID);
                         }}
 
                         #removeSuspendedTaskMeta(taskID) {{
-                            const idx = this.#suspendedTasksOrder.findIndex(t => t && t.taskID === taskID);
-                            const meta = this.#suspendedTasks.get(taskID);
-                            this.#suspendedTasksOrder[idx] = null;
-                            this.#suspendedTasks.delete(taskID);
+                            const idx = this.#suspendedTaskIDs.findIndex(t => t && t.taskID === taskID);
+                            const meta = this.#suspendedTasksByTaskID.get(taskID);
+                            this.#suspendedTaskIDs[idx] = null;
+                            this.#suspendedTasksByTaskID.delete(taskID);
                             return meta;
                         }}
 
                         #addSuspendedTaskMeta(meta) {{
-                            this.#suspendedTasks.set(taskID, {{ resolve, taskID }});
-                            this.#suspendedTaskOrder.push(taskID);
-                            if (this.#suspendedTasks.size < suspendedTaskOrder.length - 10) {{
-                                this.#suspendedTaskOrder = this.#suspendedTaskOrder.filter(t => t !== null);
+                            if (!meta) {{ throw new Error('missing task meta'); }}
+                            const taskID = meta.taskID;
+                            this.#suspendedTasksByTaskID.set(taskID, meta);
+                            this.#suspendedTaskIDs.push(taskID);
+                            if (this.#suspendedTasksByTaskID.size < this.#suspendedTaskIDs.length - 10) {{
+                                this.#suspendedTaskIDs = this.#suspendedTaskIDs.filter(t => t !== null);
                             }}
                         }}
 
@@ -285,26 +292,20 @@ impl ComponentIntrinsic {
                             return promise;
                         }}
 
-                        resumeTask(args) {{
-                            const {{ task }} = args;
-                            const taskID = task.id();
-
+                        resumeTaskByID(taskID) {{
                             const meta = this.#removeSuspendedTaskMeta(taskID);
-                            if (!meta || meta.taskID !== taskID) {{
-                                throw new Error('task [' + taskID + '] is not currently suspended');
+                            if (!meta) {{ return; }}
+                            if (meta.taskID !== taskID) {{
+                                throw new Error('task ID does not match');
                             }}
 
                             meta.resolve(null);
                         }}
 
-                        resumeNextTask(args) {{
-                            const {{ task }} = args;
-                            const taskID = task.id();
-
-                            const nextTaskMeta = this.#suspendedTasks.find(t => t !== null);
-                            if (!nextTaskMeta) {{ return; }}
-
-                            this.resumeTask(nextTaskMeta.taskID);
+                        resumeNextTask() {{
+                            const taskID = this.#suspendedTaskIDs.find(t => t !== null);
+                            if (!taskID) {{ return; }}
+                            this.resumeTaskByID(taskID);
                         }}
                     }}
                     ",
@@ -320,7 +321,7 @@ impl ComponentIntrinsic {
                     "
                     function {get_state_fn}(componentIdx, init) {{
                         if (!{async_state_map}.has(componentIdx)) {{
-                            {async_state_map}.set(componentIdx, new {component_async_state_class}({{ componentIdx }}));
+                            {async_state_map}.set(componentIdx, new {component_async_state_class}());
                         }}
                         return {async_state_map}.get(componentIdx);
                     }}
