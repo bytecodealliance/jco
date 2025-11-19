@@ -102,7 +102,7 @@ jobs:
 
       - uses: taiki-e/cache-cargo-install-action@7447f04c51f2ba27ca35e7f1e28fab848c5b3ba7 # v2.3.1
         with:
-          tool: wasm-tools
+          tool: wasm-tools@1.240.0
 
       # Determine weval version
       - name: Determine weval version
