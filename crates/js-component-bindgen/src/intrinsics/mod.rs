@@ -310,6 +310,16 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::TypeCheckValidI32,
+            &Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
+        ]);
+    }
+
+    if args
+        .intrinsics
         .contains(&Intrinsic::Component(ComponentIntrinsic::BackpressureSet))
     {
         args.intrinsics.extend([&Intrinsic::Component(
@@ -335,6 +345,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
             &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
         ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass)]);
     }
 
     if args.intrinsics.contains(&Intrinsic::Component(

@@ -9,8 +9,8 @@ import { transpile } from '../../src/api';
 import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 
 const P3_FIXTURE_COMPONENTS = [
-    'backpressure/async_backpressure_callee.component.wasm',
-    'backpressure/async_backpressure_caller.component.wasm',
+    'backpressure/async-backpressure-callee.wasm',
+    'backpressure/async-backpressure-caller.wasm',
 
     'sockets/tcp/p3_sockets_tcp_states.component.wasm',
     'sockets/tcp/p3_sockets_tcp_sample_application.component.wasm',
@@ -33,9 +33,13 @@ const P3_FIXTURE_COMPONENTS = [
 
     'cli/p3_cli.component.wasm',
 
-    'general/async_post_return_caller.component.wasm',
+    'general/async-post-return-caller.wasm',
+    'general/async-post-return-callee.wasm',
+
+    'general/async-sleep-post-return-caller.wasm',
+    'general/async-sleep-post-return-callee.wasm',
+
     'general/async_borrowing_caller.component.wasm',
-    'general/async_post_return_callee.component.wasm',
     'general/async_borrowing_callee.component.wasm',
     'general/async_intertask_communication.component.wasm',
     'general/async_transmit_callee.component.wasm',
@@ -52,8 +56,8 @@ const P3_FIXTURE_COMPONENTS = [
     'round-trip/async_round_trip_many_stackless.component.wasm',
     'round-trip/async_round_trip_stackless_sync_import.component.wasm',
 
-    'backpressure/async_backpressure_caller.component.wasm',
-    'backpressure/async_backpressure_callee.component.wasm',
+    'backpressure/async-backpressure-caller.wasm',
+    'backpressure/async-backpressure-callee.wasm',
 
     'http/p3_http_outbound_request_unknown_method.component.wasm',
     'http/p3_http_outbound_request_invalid_dnsname.component.wasm',
