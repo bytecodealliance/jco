@@ -243,7 +243,7 @@ These PRs can be implemented by extending the [default map configuration provide
 
 > `shimpkg` in the above refers to a published npm package implementation to install per JS ecosystem conventions. This way, polyfill packages can be published to npm.
 
-Upstreaming into the [@bytecodealliance/preview2-shim](https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim) package is also possible for WASI proposals that have progressed to Phase 1 in the [WASI proposal stage process](https://github.com/WebAssembly/WASI/blob/main/Proposals.md).
+Upstreaming into the [@bytecodealliance/preview2-shim](https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim) package is also possible for WASI proposals that have progressed to Phase 1 in the [WASI proposal stage process](https://github.com/WebAssembly/WASI/blob/main/docs/Proposals.md).
 
 ## Instantiation
 
