@@ -1996,9 +1996,9 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
 
-                let memory_js = memory
-                    .map(|idx| format!("memory{}", idx.as_u32()))
-                    .unwrap_or_else(|| "null".into());
+                let get_memory_fn_js = memory
+                    .map(|idx| format!("() => memory{}", idx.as_u32()))
+                    .unwrap_or_else(|| "() => null".into());
                 let component_idx = instance.as_u32();
                 let task_return_fn = self
                     .bindgen
@@ -2011,11 +2011,13 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "const trampoline{i} = {task_return_fn}.bind(
                          null,
-                         {component_idx},
-                         {use_direct_params},
-                         {memory_js},
-                         {callback_fn_idx},
-                         {lift_fns_js},
+                         {{
+                             componentIdx: {component_idx},
+                             useDirectParams: {use_direct_params},
+                             getMemoryFn: {get_memory_fn_js},
+                             callbackFnIdx: {callback_fn_idx},
+                             liftFns: {lift_fns_js},
+                         }},
                      );",
                 );
             }

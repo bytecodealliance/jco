@@ -303,12 +303,14 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = Self::GetCurrentTask.name();
 
                 output.push_str(&format!("
-                    function {task_return_fn}(componentIdx, useDirectParams, memory, callbackFnIdx, liftFns) {{
-                        const params = [...arguments].slice(5);
+                    function {task_return_fn}(ctx) {{
+                        const {{ componentIdx, useDirectParams, getMemoryFn, callbackFnIdx, liftFns }} = ctx;
+                        const params = [...arguments].slice(1);
+                        const memory = getMemoryFn();
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
-                            memory,
                             callbackFnIdx,
+                            memory,
                             liftFns,
                             params,
                         }});
@@ -326,16 +328,9 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         let liftCtx = {{ memory, useDirectParams, params }};
-                        if (useDirectParams) {{
-                            liftCtx.memory = memory;
-                            liftCtx.params = params;
-                        }} else {{
+                        if (!useDirectParams) {{
                             liftCtx.storagePtr = params[0];
                             liftCtx.storageLen = params[1];
-                        }}
-
-                        if (memory && liftCtx.storageLen === undefined) {{
-                            throw new Error('storageLen must be provided if a memory is present');
                         }}
 
                         const results = [];
