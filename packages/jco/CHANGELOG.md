@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.15.4] - 2025-12-01
+
+### 🐛 Bug Fixes
+
+* *(jco)* async return writing for caller memory by @vados-cosmonic in #1143
+
+* *(jco)* require utf8 decoder for flat string lifts by @vados-cosmonic in #1142
+
+
+### 🧪 Testing
+
+* *(jco)* refactor vite SSR hack for vitest by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* fix imports of bare node 'url' builtin by @vados-cosmonic
+
+
+
+
 ## [1.15.3] - 2025-11-03
 
 ### 🚀 Features
