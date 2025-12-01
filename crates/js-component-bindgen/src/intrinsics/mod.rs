@@ -373,6 +373,22 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
+    {
+        args.intrinsics
+            .insert(Intrinsic::String(StringIntrinsic::Utf8Decoder));
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
+    {
+        args.intrinsics
+            .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
+    }
+
+    if args
+        .intrinsics
         .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask))
         || args
             .intrinsics
