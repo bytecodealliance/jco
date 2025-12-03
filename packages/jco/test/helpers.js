@@ -115,6 +115,30 @@ export async function getTmpDir() {
 /**
  * Set up an async test to be run
  *
+ * Example:
+ * ```
+ * const { instance, cleanup } = await setupAsyncTest({
+ *     component: {
+ *         path: join(
+ *             P3_COMPONENT_FIXTURES_DIR,
+ *             'async-simple-import.wasm',
+ *         ),
+ *         imports: {
+ *             ...new WASIShim().getImportObject(),
+ *             loadString: async () => "loaded",
+ *             loadU32: async () => 43,
+ *         },
+ *     },
+ *     jco: {
+ *         transpile: {
+ *             extraArgs: {
+ *                 minify: false, // for ease of debugging
+ *             }
+ *         }
+ *     }
+ * });
+ * ```
+ *
  * @param {object} args - Arguments for running the async test
  * @param {function} args.testFn - Arguments for running the async test
  * @param {object} args.jco - JCO-related confguration for running the async test
@@ -124,7 +148,7 @@ export async function getTmpDir() {
  * @param {object} args.component - configuration for an existing component that should be transpiled
  * @param {string} args.component.name - name of the component
  * @param {string} args.component.path - path to the WebAssembly binary for the existing component
- * @param {object[]} args.component.import - imports that should be provided to the module at instantiation time
+ * @param {object} args.component.imports - imports that should be provided to the module at instantiation time
  * @param {object} args.component.build - configuration for building an ephemeral component to be tested
  * @param {object} args.component.js.source - Javascript source code for a component
  * @param {object} args.component.wit.source - WIT definitions (inlined) for a component
@@ -215,7 +239,7 @@ export async function setupAsyncTest(args) {
 
     // Build a directory for the transpiled component output to be put in
     // (possibly inside the passed in outputDir)
-    const moduleOutputDir = join(outputDir, component.name);
+    const moduleOutputDir = join(outputDir, componentName);
     try {
         await stat(moduleOutputDir);
     } catch (err) {
@@ -259,6 +283,8 @@ export async function setupAsyncTest(args) {
     const esModuleOutputPath = join(moduleOutputDir, `${componentName}.js`);
     const esModuleSourcePathURL = pathToFileURL(esModuleOutputPath);
     const esModule = await import(esModuleSourcePathURL);
+
+    console.log('MODULE PATH?', esModuleOutputPath);
 
     // Optionally instantiate the ES module
     //
