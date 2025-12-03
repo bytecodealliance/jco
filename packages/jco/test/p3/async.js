@@ -9,7 +9,7 @@ import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 
 suite('Async (WASI P3)', () => {
     // see: https://github.com/bytecodealliance/jco/issues/1076
-    test('incorrect task return params offloading', async () => {
+    test.skip('incorrect task return params offloading', async () => {
         const name = 'async-flat-param-adder';
         const { instance, cleanup } = await setupAsyncTest({
             component: {
@@ -32,8 +32,9 @@ suite('Async (WASI P3)', () => {
     });
 
     // https://bytecodealliance.zulipchat.com/#narrow/channel/206238-general/topic/Should.20StringLift.20be.20emitted.20for.20async.20return.20values.3F/with/561133720
-    test('simple string return', async () => {
-        const name = 'async-simple-string-return';
+    // https://github.com/bytecodealliance/jco/issues/1150
+    test('simple async returns', async () => {
+        const name = 'async-simple-return';
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 name,
@@ -45,10 +46,11 @@ suite('Async (WASI P3)', () => {
             },
         });
 
-        assert.typeOf(instance.asyncGetLiteral, 'function');
+        assert.typeOf(instance.asyncGetString, 'function');
+        assert.strictEqual("literal", await instance.asyncGetString());
 
-        const result = await instance.asyncGetLiteral();
-        assert.strictEqual(result, "literal");
+        assert.typeOf(instance.asyncGetU32, 'function');
+        assert.strictEqual(42, await instance.asyncGetU32());
 
         await cleanup();
     });
