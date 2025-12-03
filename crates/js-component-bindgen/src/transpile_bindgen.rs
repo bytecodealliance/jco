@@ -2425,7 +2425,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "");
 
                 // Write new function ending
-                if requires_async_porcelain {
+                if requires_async_porcelain | is_async {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");
