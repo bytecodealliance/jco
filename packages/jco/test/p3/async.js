@@ -62,14 +62,23 @@ suite('Async (WASI P3)', () => {
                 ),
                 imports: {
                     ...new WASIShim().getImportObject(),
-                    loadString: async () => "loaded",
-                    loadU32: async () => 43,
+                    '[async]load-string': { default: async () => "loaded" },
+                    '[async]load-u32': { default: async () => 43 },
                 },
             },
             jco: {
                 transpile: {
                     extraArgs: {
                         minify: false,
+                        asyncMode: 'jspi',
+                        asyncImports: [
+                            '[async]load-string',
+                            '[async]load-u32',
+                        ],
+                        asyncExports: [
+                            '[async]get-string',
+                            '[async]get-u32',
+                        ],
                     }
                 }
             }
