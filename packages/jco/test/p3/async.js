@@ -66,6 +66,13 @@ suite('Async (WASI P3)', () => {
                     loadU32: async () => 43,
                 },
             },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    }
+                }
+            }
         });
 
         assert.typeOf(instance.asyncGetString, 'function');
