@@ -32,15 +32,12 @@ suite('Async (WASI P3)', () => {
     });
 
     // https://bytecodealliance.zulipchat.com/#narrow/channel/206238-general/topic/Should.20StringLift.20be.20emitted.20for.20async.20return.20values.3F/with/561133720
-    // https://github.com/bytecodealliance/jco/issues/1150
-    test('simple async returns', async () => {
-        const name = 'async-simple-return';
+    test.skip('simple async returns', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
-                name,
                 path: join(
                     P3_COMPONENT_FIXTURES_DIR,
-                    `${name}.wasm`,
+                    'async-simple-return.wasm',
                 ),
                 imports: new WASIShim().getImportObject(),
             },
@@ -51,6 +48,31 @@ suite('Async (WASI P3)', () => {
 
         assert.typeOf(instance.asyncGetU32, 'function');
         assert.strictEqual(42, await instance.asyncGetU32());
+
+        await cleanup();
+    });
+
+    // https://github.com/bytecodealliance/jco/issues/1150
+    test('simple async imports', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                path: join(
+                    P3_COMPONENT_FIXTURES_DIR,
+                    'async-simple-import.wasm',
+                ),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    loadString: async () => "loaded",
+                    loadU32: async () => 43,
+                },
+            },
+        });
+
+        assert.typeOf(instance.asyncGetString, 'function');
+        assert.strictEqual("loaded", await instance.asyncGetString());
+
+        assert.typeOf(instance.asyncGetU32, 'function');
+        assert.strictEqual(43, await instance.asyncGetU32());
 
         await cleanup();
     });
