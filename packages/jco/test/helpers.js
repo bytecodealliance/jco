@@ -133,6 +133,9 @@ export async function setupAsyncTest(args) {
             'Both component.path and component.build should not be specified at the same time'
         );
     }
+    if (componentPath && !componentName) {
+        componentName = basename(componentPath).replace(/.wasm$/,'');
+    }
 
     // If this component should be built "just in time" -- i.e. created when this test is run
     let componentBuildCleanup;
