@@ -284,8 +284,6 @@ export async function setupAsyncTest(args) {
     const esModuleSourcePathURL = pathToFileURL(esModuleOutputPath);
     const esModule = await import(esModuleSourcePathURL);
 
-    console.log('MODULE PATH?', esModuleOutputPath);
-
     // Optionally instantiate the ES module
     //
     // It's useful to be able to skip instantiation of the instantiation should happen
