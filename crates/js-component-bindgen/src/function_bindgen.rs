@@ -2237,7 +2237,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   reject
                               }});
                           }} catch (err) {{
-                              console.log("[AsyncTaskReturn] DRIVER LOOP CALL FAILED?", {{ err }});
+                              {debug_log_fn}("[AsyncTaskReturn] driver loop call failure", {{ err }});
                           }}
                       }});
 

@@ -329,7 +329,7 @@ impl HostIntrinsic {
                                     reject
                                 }});
                             }} catch (err) {{
-                                console.log("[AsyncStartCall] DRIVER LOOP CALL FAILED?", {{ err }});
+                                {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
                             }}
 
                         }});

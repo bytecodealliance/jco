@@ -46,8 +46,8 @@ export async function buildAndTranspile(args) {
         jco: {
             transpile: {
                 extraArgs: {
+                    asyncExports: ['local:local/run#run'] ,
                     ...(args.transpile?.extraArgs || {}),
-                    asyncExports: ['local:local/run#run'],
                 },
             },
         },

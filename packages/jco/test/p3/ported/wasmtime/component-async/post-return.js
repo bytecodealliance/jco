@@ -87,6 +87,15 @@ suite('post-return async sleep scenario', () => {
                 transpile: {
                     extraArgs: {
                         minify: false,
+                        asyncImports: [
+                            // Provided by the host
+                            'local:local/sleep#sleep-millis',
+                        ],
+                        asyncExports: [
+                            // NOTE: Provided by the component, but *does* trigger calling
+                            // of the host-provided async improt
+                            'local:local/sleep-post-return#run',
+                        ],
                     }
                 },
             });

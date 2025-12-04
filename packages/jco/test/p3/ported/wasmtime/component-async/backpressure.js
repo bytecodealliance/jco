@@ -26,7 +26,14 @@ suite('backpressure scenario', () => {
 
         let cleanup;
         try {
-            const res = await buildAndTranspile({ componentPath });
+            const res = await buildAndTranspile({
+                componentPath,
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    }
+                }
+            });
             const instance = res.instance;
             cleanup = res.cleanup;
             await instance['local:local/run'].asyncRun();

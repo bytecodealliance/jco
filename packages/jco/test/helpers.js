@@ -500,7 +500,7 @@ export async function startTestWebServer(args) {
     const serverPort = await getRandomPort();
 
     const server = createHttpServer(async (req, res) => {
-        // Build a utility fucntion for returning an error
+        // Build a utility function for returning an error
         const returnError = (e) => {
             log(`[webserver] failed to find file [${fileURL}]`);
             res.writeHead(404);
