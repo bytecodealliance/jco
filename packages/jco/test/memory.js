@@ -45,9 +45,9 @@ suite('Memory', () => {
 import { add } from './component.js';
 const before = process.memoryUsage();
 let runs = 0;
-for (var i = 0; i < ${CALL_COUNT}; i++) { 
-  add.add(1, 3); 
-  runs += 1; 
+for (var i = 0; i < ${CALL_COUNT}; i++) {
+  add.add(1, 3);
+  runs += 1;
 }
 const after = process.memoryUsage();
 process.stdout.write(JSON.stringify({ runs, memoryUsage: { before, after } }));
@@ -64,10 +64,11 @@ process.stdout.write(JSON.stringify({ runs, memoryUsage: { before, after } }));
         assert.ok(afterUsageRSS);
         assert.strictEqual(outputObj?.runs, CALL_COUNT);
 
-        const expectedUsageMb = 1000 * 1000 * 30;
+        const expectedUsageMB = 1000 * 1000 * 30;
+        const actualUsageMB = Math.ceil((afterUsageRSS - beforeUsageRSS) / (1000 * 1000));
         assert(
-            afterUsageRSS < beforeUsageRSS + expectedUsageMb,
-            '< 30Mb used for extra meomry'
+            afterUsageRSS < beforeUsageRSS + expectedUsageMB,
+            `< 30MB used for extra memory (actual ${actualUsageMB}MB)`
         );
     });
 });
