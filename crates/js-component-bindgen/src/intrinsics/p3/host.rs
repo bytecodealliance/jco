@@ -91,9 +91,9 @@ impl HostIntrinsic {
     /// Get the name for the intrinsic
     pub fn name(&self) -> &'static str {
         match self {
-            Self::PrepareCall => "prepareCall",
-            Self::AsyncStartCall => "asyncStartCall",
-            Self::SyncStartCall => "syncStartCall",
+            Self::PrepareCall => "_prepareCall",
+            Self::AsyncStartCall => "_asyncStartCall",
+            Self::SyncStartCall => "_syncStartCall",
         }
     }
 
@@ -112,35 +112,14 @@ impl HostIntrinsic {
             Self::PrepareCall => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let prepare_call_fn = Self::PrepareCall.name();
-                let current_async_task_id_globals =
-                    AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds.name();
-                let current_component_idx_globals =
-                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let start_current_task = Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask).name();
-
-                // See:
-                // https://github.com/bytecodealliance/wasmtime/blob/e2f9ca6be1b06b5c5c9e78834d10b8132cea0c80/crates/wasmtime/src/runtime/component/concurrent.rs#L2033
-                // https://github.com/bytecodealliance/wasmtime/blob/e2f9ca6be1b06b5c5c9e78834d10b8132cea0c80/crates/wasmtime/src/runtime/component/concurrent.rs#L3519
-                //
-                // We don't have `resultCountOrMax`, that's used by wasmtime upstream
-
-                // TODO: arguments for prepare came in like this:
-                //
-                // PREPARING! [ null, [Function: 4], [Function: 5], 4, 1, 1, 0, -1, 600n ]
-                //
-                // - everything to callee idx is right
-                // - taskReturnTypeidx is 1 (??)
-                // - stringEncoding is 0 is right, it's 0 according to rust
-                // - storagePtr -1 means no storage???
-                // - storageLen is actually the parameter in this case, already processed.
-                //   - this means we need to chop from there on if we're @ -1? need to get all args, up to max async
-                //   - should probably check we don't ever get over max async params...
-
-                // TODO: Finish implementing prepare properly
+                let start_current_task_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask).name();
+                let end_current_task_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask).name();
                 output.push_str(&format!(
-                    "
+                  r#"
                     function {prepare_call_fn}(
                         memoryIdx,
                         startFn,
@@ -155,28 +134,34 @@ impl HostIntrinsic {
                         {debug_log_fn}('[{prepare_call_fn}()] args', {{ memoryIdx }});
                         const argArray = [...arguments];
 
-                        const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
-                        if (!taskMeta) {{ throw new Error('invalid/missing current async task meta during prepare call'); }}
+                        const currentCallerTaskMeta = {current_task_get_fn}(callerInstanceIdx);
+                        if (!currentCallerTaskMeta) {{ throw new Error('invalid/missing current task for caller during prepare call'); }}
 
-                        const task = taskMeta.task;
-                        if (!task) {{ throw new Error('unexpectedly missing task in task meta during prepare call'); }}
+                        const currentCallerTask = currentCallerTaskMeta.task;
+                        if (!currentCallerTask) {{ throw new Error('unexpectedly missing task in meta for caller during prepare call'); }}
 
-                        if (task.componentIdx() !== callerInstanceIdx) {{
-                            throw new Error(`task component idx [${{ task.componentIdx() }}] differs from caller [${{ callerInstanceIdx }}]`);
+                        if (currentCallerTask.componentIdx() !== callerInstanceIdx) {{
+                            throw new Error(`task component idx [${{ currentCallerTask.componentIdx() }}] differs from caller [${{ callerInstanceIdx }}] (callee ${{ calleeInstanceIdx }})`);
                         }}
 
-                        const directParams = storagePtr === -1;
+                        // TODO: support indirect params based on storagePtr/args
+                        const directParams = true;
                         let getCalleeParamsFn;
                         if (directParams) {{
-                            const directParamsArr = argArray.slice(8);
+                            const directParamsArr = argArray.slice(9);
                             getCalleeParamsFn = () => directParamsArr;
                         }} else {{
-                            if (memoryIdx === null) {{ throw new Error('memory index not supplied to prepare depsite indirect params being used'); }}
+                            if (memoryIdx === null) {{
+                                throw new Error('memory idx not supplied to prepare depsite indirect params being used');
+                            }}
 
                             // TODO: call startFn() which lifts parameters into given space
                             //
                             // TODO: if we're using indirect params/the max number of params,
                             // then the last param is actually a return pointer?
+                            //
+                            // storagePtr can come in as -2 (likely packed)
+                            // storageLen can come in as a value like 1193328 (and then the wasm-sent params)
                             throw new Error(`indirect parameter loading not yet supported`);
                         }}
 
@@ -195,27 +180,31 @@ impl HostIntrinsic {
                                 throw new Error(`unrecognized string encoding enum [${{stringEncoding}}]`);
                         }}
 
-                        const [newTask, newTaskID] = {start_current_task}({{
+                        const [newTask, newTaskID] = {start_current_task_fn}({{
                             componentIdx: calleeInstanceIdx,
-                            isAsync: true, // TODO: we don't know if this task corresponds to an async function or not?
+                            isAsync: true,
                             getCalleeParamsFn,
+                            // TODO: find a way to pass the import name through here
+                            entryFnName: 'task/' + currentCallerTask.id() + '/new-prepare-task',
                             stringEncoding,
                         }});
 
-                        const subtask = task.createSubtask({{
-                           componentIdx: task.componentIdx(),
-                           parentTask: task,
+                        const subtask = currentCallerTask.createSubtask({{
+                           componentIdx: callerInstanceIdx,
+                           parentTask: currentCallerTask,
                            childTask: newTask,
                         }});
 
                         newTask.setParentSubtask(subtask);
+                        newTask.setMemoryIdx(memoryIdx);
 
                         newTask.completionPromise().then(() => {{
+                            {end_current_task_fn}(calleeInstanceIdx, newTaskID);
                             // TODO: run return function when the task finishes and the return is ready to be saved
                         }});
 
                     }}
-                "
+              "#
                 ));
             }
 
@@ -237,7 +226,10 @@ impl HostIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-                let async_driver_loop_fn = Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop).name();
+                let async_driver_loop_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop).name();
+                let subtask_class =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass).name();
                 output.push_str(&format!(r#"
                     function {async_start_call_fn}(args, callee, paramCount, resultCount, flags) {{
                         const {{ getCallbackFn, callbackIdx, getPostReturnFn, postReturnIdx }} = args;
@@ -269,18 +261,21 @@ impl HostIntrinsic {
                         // TODO: parse flags
 
                         const params = preparedTask.getCalleeParams();
-                        // TODO: double-check the result count expectation here (lifted vs core values? result ptr?)
                         const expectedParamCount = resultCount > 1 ? params.length - 1 : params.length;
                         if (paramCount !== expectedParamCount) {{
                             throw new Error(`unexpected param count [${{ paramCount }}], expected [${{ expectedParamCount }}]`);
                         }}
 
-                        let callbackResult = callee.apply(null, params);
+                        let callbackResultFn = WebAssembly.promising(callee);
+                        let callbackResult = callbackResultFn(...params);
+
+                        // TODO(fix): using promising here causes hang
+                        // let callbackResult = callee.apply(null, params);
 
                         // If a single call resolved the subtask, we can return immediately
                         if (subtask.resolved()) {{
                             subtask.deliverResolve();
-                            return Subtask.State.RETURNED;
+                            return {subtask_class}.State.RETURNED;
                         }}
 
                         const subtaskState = subtask.getStateNumber();
@@ -291,6 +286,8 @@ impl HostIntrinsic {
                         const callerComponentState = {get_or_create_async_state_fn}(subtask.componentIdx());
                         const rep = callerComponentState.subtasks.insert(subtask);
                         subtask.setRep(rep);
+
+                        const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
 
                         subtask.setOnProgressFn(() => {{
                             subtask.setPendingEventFn(() => {{
@@ -309,19 +306,32 @@ impl HostIntrinsic {
                             // TODO: result count space must be reserved in memory, will either
                             // be a callback code or nothing?
 
-                            newTask.completionPromise().then(v => {{
-                                subtask.onResolve(v);
-                            }});
+                            // TODO: retrieve/pass along actual fn name the callback corresponds to
+                            // (at least something like `<lifted fn name>_callback`)
+                            const fnName = [
+                                '<task ',
+                                subtask.parentTaskID(),
+                                '/subtask ',
+                                subtask.id(),
+                                '/task ',
+                                preparedTask.id(),
+                                '>',
+                            ].join("");
 
-                            {async_driver_loop_fn}({{
-                                componentState,
-                                task: newTask,
-                                fnName: '<task ' + subtask.taskID() + '/subtask ' + subtask.id() + '/task ' + newTask.id() + '>',
-                                isAsync: true,
-                                callbackResult,
-                                resolve,
-                                reject
-                            }});
+                            try {{
+                                await {async_driver_loop_fn}({{
+                                    componentState: calleeComponentState,
+                                    task: preparedTask,
+                                    fnName,
+                                    isAsync: true,
+                                    callbackResult,
+                                    resolve,
+                                    reject
+                                }});
+                            }} catch (err) {{
+                                console.log("[AsyncStartCall] DRIVER LOOP CALL FAILED?", {{ err }});
+                            }}
+
                         }});
 
                         return Number(subtask.waitableRep()) << 4 | subtaskState;

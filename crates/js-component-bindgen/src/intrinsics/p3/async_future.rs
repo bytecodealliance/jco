@@ -398,7 +398,9 @@ impl AsyncFutureIntrinsic {
                         }});
 
                         if (!isAsync && !e.hasPendingEvent()) {{
-                          await task.blockOn({{ promise: e.waitForPendingEvent(), isAsync: false }});
+                          // TODO: replace with what block on used to be? wait for?
+                          // await task.blockOn({{ promise: e.waitForPendingEvent(), isAsync: false }});
+                          throw new Error('not implemented');
                         }}
 
                         if (futureEnd.hasPendingEvent()) {{
@@ -458,7 +460,9 @@ impl AsyncFutureIntrinsic {
                           // TODO: cancel the shared thing (waitable?)
                           if (!futureEnd.hasPendingEvent()) {{
                             if (!isAsync) {{
-                              await task.blockOn({{ promise: futureEnd.waitable, isAsync: false }});
+                              // TODO: repalce with what task.blockOn used to do
+                              // await task.blockOn({{ promise: futureEnd.waitable, isAsync: false }});
+                              throw new Error('not implemented');
                             }} else {{
                               return {async_blocked_const};
                             }}

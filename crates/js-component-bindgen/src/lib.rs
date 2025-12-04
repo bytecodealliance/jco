@@ -298,7 +298,8 @@ pub(crate) fn requires_async_porcelain(
     let name = match func {
         FunctionIdentifier::Fn(func) => func.name.as_str(),
         FunctionIdentifier::CanonFnName(name) => name,
-    };
+    }
+    .trim_start_matches("[async]");
 
     if async_funcs.contains(name) {
         return true;

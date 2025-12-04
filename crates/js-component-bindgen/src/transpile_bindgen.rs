@@ -1756,7 +1756,6 @@ impl<'a> Instantiator<'a, '_> {
                 // const trampolineXX = WebAssembly.suspending(...)
                 // ```
 
-
                 // TODO: prepare call & start call are called BEFORE the wasm call that IS a subtask starts.
                 // this is our only way to distinguish between a regular host call and a host call from inside
                 // a component.
@@ -2111,6 +2110,9 @@ impl<'a> Instantiator<'a, '_> {
                 let get_memory_fn_js = memory
                     .map(|idx| format!("() => memory{}", idx.as_u32()))
                     .unwrap_or_else(|| "() => null".into());
+                let memory_idx_js = memory
+                    .map(|idx| idx.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let component_idx = instance.as_u32();
                 let task_return_fn = self
                     .bindgen
@@ -2127,6 +2129,7 @@ impl<'a> Instantiator<'a, '_> {
                              componentIdx: {component_idx},
                              useDirectParams: {use_direct_params},
                              getMemoryFn: {get_memory_fn_js},
+                             memoryIdx: {memory_idx_js},
                              callbackFnIdx: {callback_fn_idx},
                              liftFns: {lift_fns_js},
                          }},
@@ -3689,8 +3692,13 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let {local_name};");
                 self.bindgen
                     .all_core_exported_funcs
-                    // NOTE: we need
-                    .push((core_export_fn.clone(), requires_async_porcelain || is_async));
+                    // NOTE: this breaks because using WebAssembly.promising and trying to
+                    // await JS from the host is a bug ("trying to suspend JS frames")
+                    //
+                    // We trigger this either with --async-exports *OR* by widening the check as below
+                    //
+                    // .push((core_export_fn.clone(), requires_async_porcelain || is_async));
+                    .push((core_export_fn.clone(), requires_async_porcelain));
                 local_name
             }
         };
