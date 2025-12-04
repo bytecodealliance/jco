@@ -43,7 +43,14 @@ suite('error-context scenario', () => {
 
         let cleanup;
         try {
-            const res = await buildAndTranspile({ componentPath });
+            const res = await buildAndTranspile({
+                componentPath,
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    }
+                },
+            });
             cleanup = res.cleanup;
             const instance = res.instance;
             await instance['local:local/run'].asyncRun();

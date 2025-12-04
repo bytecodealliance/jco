@@ -43,7 +43,7 @@ suite('Context (WASI P3)', () => {
     });
 
     // TODO: re-enable after support of async task results
-    test.skip('context.get/set (async export, async porcelain)', async () => {
+    test('context.get/set (async export, async porcelain)', async () => {
         const componentName = 'context-async';
         const componentPath = join(
             P3_COMPONENT_FIXTURES_DIR,
@@ -81,7 +81,7 @@ suite('Context (WASI P3)', () => {
 
     // TODO: re-enable after support of async task results
     // TODO: support *Sync() variants of task fns like yield()
-    test.skip('context.get/set (async export, sync porcelain)', async () => {
+    test('context.get/set (async export, sync porcelain)', async () => {
         const componentName = 'context-async';
         const componentPath = join(
             P3_COMPONENT_FIXTURES_DIR,
