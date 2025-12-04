@@ -24,7 +24,7 @@ use crate::{ManagesIntrinsics, get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
 /// Method of error handling
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ErrHandling {
     /// Do no special handling of errors, requiring users to return objects that represent
     /// errors as represented in WIT
@@ -33,6 +33,16 @@ pub enum ErrHandling {
     ThrowResultErr,
     /// Catch thrown errors and convert them into result<t,e> error variants
     ResultCatchHandler,
+}
+
+impl ErrHandling {
+    fn to_js_string(&self) -> String {
+        match self {
+            ErrHandling::None => "none".into(),
+            ErrHandling::ThrowResultErr => "throw-result-err".into(),
+            ErrHandling::ResultCatchHandler => "result-catch-handler".into(),
+        }
+    }
 }
 
 /// Data related to a given resource
@@ -123,7 +133,7 @@ pub struct FunctionBindgen<'a> {
     /// Block storage
     pub block_storage: Vec<source::Source>,
 
-    /// Blocks of the fucntion
+    /// Blocks of the function
     pub blocks: Vec<(String, Vec<String>)>,
 
     /// Parameters of the function
@@ -230,28 +240,26 @@ impl FunctionBindgen<'_> {
     /// In general this either means writing preambles, for example that look like the following:
     ///
     /// ```js
-    /// const ret =
+    /// let ret =
     /// ```
     ///
     /// ```
     /// var [ ret0, ret1, ret2 ] =
     /// ```
-    fn write_result_assignment(&mut self, amt: usize, results: &mut Vec<String>, is_async: bool) {
-        // For async functions there is always a result returned and it's a single integer
-        // which indicates async state. This is a sort of "meta" result -- i.e. it shouldn't be counted
-        // as a regular function result but *should* be made available to the JS internal code.
-        if is_async {
-            uwrite!(self.src, "const ret = ");
-            return;
-        }
-        match (is_async, amt) {
-            (true, _) => {}
-            (false, 0) => {}
-            (false, 1) => {
-                uwrite!(self.src, "const ret = ");
+    ///
+    /// # Arguments
+    ///
+    /// * `amt` - number of results
+    /// * `results` - list of variables that will be returned
+    ///
+    fn write_result_assignment(&mut self, amt: usize, results: &mut Vec<String>) {
+        match amt {
+            0 => uwrite!(self.src, "let ret;"),
+            1 => {
+                uwrite!(self.src, "let ret = ");
                 results.push("ret".to_string());
             }
-            (false, n) => {
+            n => {
                 uwrite!(self.src, "var [");
                 for i in 0..n {
                     if i > 0 {
@@ -314,13 +322,15 @@ impl FunctionBindgen<'_> {
     }
 
     /// Start the current task
-    fn start_current_task(
-        &mut self,
-        instr: &Instruction,
-        is_async: bool,
-        fn_name: &str,
-        callback_fn_name: Option<String>,
-    ) {
+    fn start_current_task(&mut self, instr: &Instruction) {
+        let is_async = self.is_async;
+        let fn_name = self.callee;
+        let err_handling = self.err.to_js_string();
+        let callback_fn_name = self
+            .canon_opts
+            .callback
+            .as_ref()
+            .map(|v| format!("callback_{}", v.as_u32()));
         let prefix = match instr {
             Instruction::CallWasm { .. } => "_wasm_call_",
             Instruction::CallInterface { .. } => "_interface_call_",
@@ -341,10 +351,11 @@ impl FunctionBindgen<'_> {
                 entryFnName: '{fn_name}',
                 getCallbackFn: () => {callback_fn_name},
                 callbackFnName: '{callback_fn_name}',
+                errHandling: '{err_handling}',
             }});
             ",
             // NOTE: callback functions are missing on async imports that are host defined
-            callback_fn_name = callback_fn_name.unwrap_or_else(||"null".into()),
+            callback_fn_name = callback_fn_name.unwrap_or_else(|| "null".into()),
         );
     }
 
@@ -1230,13 +1241,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::IterBasePointer => results.push("base".to_string()),
 
             Instruction::CallWasm { name, sig } => {
-                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
-                    ComponentIntrinsic::GetOrCreateAsyncState,
-                ));
-                let current_task_get_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::CallWasm] enter', {{
@@ -1251,27 +1256,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     has_post_return = self.post_return.is_some(),
                 );
 
-                let component_instance_idx = self.canon_opts.instance.as_u32();
-
                 // Inject machinery for starting a 'current' task
-                self.start_current_task(
-                    inst,
-                    self.is_async,
-                    self.callee,
-                    self.canon_opts
-                        .callback
-                        .as_ref()
-                        .map(|v| format!("callback_{}", v.as_u32())),
-                );
-
-                // NOTE: PrepareCall and AsyncStartCall *do* happen right before the guest->guest call
-                // The CallWasm actually returns BEFORE any of that runs.
-                //
-                // This means that AsyncStartCall *DOES* have to start it's own push loop for the subtask,
-                // and call the callee itself???
-
-                // TODO: we need to distinguish between a call from host and guest
-                // so we can know when to create subtasks and also when to DO subtask stuff?
+                self.start_current_task(inst);
 
                 // TODO: trap if this component is already on the call stack (re-entrancy)
 
@@ -1281,7 +1267,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
-                self.write_result_assignment(sig_results_length, results, self.is_async);
+                self.write_result_assignment(sig_results_length, results);
 
                 // Write the rest of the result asignment -- calling the callee function
                 uwriteln!(
@@ -1321,6 +1307,13 @@ impl Bindgen for FunctionBindgen<'_> {
 
             // Call to an interface, usually but not always an externally imported interface
             Instruction::CallInterface { func, async_ } => {
+                // let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
+                //     ComponentIntrinsic::GetOrCreateAsyncState,
+                // ));
+                // let current_task_get_fn =
+                //     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                // let component_instance_idx = self.canon_opts.instance.as_u32();
+
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
@@ -1329,67 +1322,73 @@ impl Bindgen for FunctionBindgen<'_> {
                     async_ = async_.then_some("async").unwrap_or("sync"),
                 );
 
-                // Inject machinery for starting a 'current' task
-                self.start_current_task(
-                    inst,
-                    *async_,
-                    &func.name,
-                    self.canon_opts
-                        .callback
-                        .as_ref()
-                        .map(|v| format!("callback_{}", v.as_u32())),
-                );
+                // // Inject machinery for starting a 'current' task
+                // self.start_current_task(
+                //     inst,
+                //     *async_,
+                //     &func.name,
+                //     self.canon_opts
+                //         .callback
+                //         .as_ref()
+                //         .map(|v| format!("callback_{}", v.as_u32())),
+                // );
 
                 let results_length = if func.result.is_none() { 0 } else { 1 };
-                let maybe_async_await = if self.requires_async_porcelain | async_ {
+                let maybe_await = if self.requires_async_porcelain | async_ {
                     "await "
                 } else {
                     ""
                 };
 
+                // Build the call
                 let call = if self.callee_resource_dynamic {
                     format!(
-                        "{maybe_async_await}{}.{}({})",
+                        "{maybe_await} {}.{}({})",
                         operands[0],
                         self.callee,
                         operands[1..].join(", ")
                     )
                 } else {
-                    format!(
-                        "{maybe_async_await}{}({})",
-                        self.callee,
-                        operands.join(", ")
-                    )
+                    format!("{maybe_await} {}({})", self.callee, operands.join(", "))
                 };
 
-                if self.err == ErrHandling::ResultCatchHandler {
-                    // result<_, string> allows JS error coercion only, while
-                    // any other result type will trap for arbitrary JS errors.
-                    let err_payload = if let (_, Some(Type::Id(err_ty))) =
-                        get_thrown_type(self.resolve, func.result).unwrap()
-                    {
-                        match &self.resolve.types[*err_ty].kind {
-                            TypeDefKind::Type(Type::String) => {
-                                self.intrinsic(Intrinsic::GetErrorPayloadString)
+                match self.err {
+                    // If configured to do *no* error handling at all or throw
+                    // error objects directly, we can simply perform the call
+                    ErrHandling::None | ErrHandling::ThrowResultErr => {
+                        self.write_result_assignment(results_length, results);
+                        uwriteln!(self.src, "{call};");
+                    }
+                    // If configured to force all thrown errors into result objects,
+                    // then we add a try/catch around the call
+                    ErrHandling::ResultCatchHandler => {
+                        // result<_, string> allows JS error coercion only, while
+                        // any other result type will trap for arbitrary JS errors.
+                        let err_payload = if let (_, Some(Type::Id(err_ty))) =
+                            get_thrown_type(self.resolve, func.result).unwrap()
+                        {
+                            match &self.resolve.types[*err_ty].kind {
+                                TypeDefKind::Type(Type::String) => {
+                                    self.intrinsic(Intrinsic::GetErrorPayloadString)
+                                }
+                                _ => self.intrinsic(Intrinsic::GetErrorPayload),
                             }
-                            _ => self.intrinsic(Intrinsic::GetErrorPayload),
-                        }
-                    } else {
-                        self.intrinsic(Intrinsic::GetErrorPayload)
-                    };
-                    uwriteln!(
-                        self.src,
-                        "let ret;
-                        try {{
-                            ret = {{ tag: 'ok', val: {call} }};
-                        }} catch (e) {{
-                            ret = {{ tag: 'err', val: {err_payload}(e) }};
-                        }}",
-                    );
-                    results.push("ret".to_string());
-                } else {
-                    self.write_result_assignment(results_length, results, self.is_async);
-                    uwriteln!(self.src, "{call};");
+                        } else {
+                            self.intrinsic(Intrinsic::GetErrorPayload)
+                        };
+                        uwriteln!(
+                            self.src,
+                            r#"
+                          let ret;
+                          try {{
+                              ret = {{ tag: 'ok', val: {call} }};
+                          }} catch (e) {{
+                              ret = {{ tag: 'err', val: {err_payload}(e) }};
+                          }}
+                       "#,
+                        );
+                        results.push("ret".to_string());
+                    }
                 }
 
                 uwriteln!(
@@ -1453,10 +1452,10 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.clear_resource_borrows = false;
                 }
 
-                // For non-async p2 tasks, the current task should end as we will never call task.return
-                if !async_ {
-                    self.end_current_task();
-                }
+                // // For non-async calls, the current task can end immediately
+                // if !async_ {
+                //     self.end_current_task();
+                // }
             }
 
             Instruction::Return {
@@ -1498,31 +1497,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 };
 
                 assert!(!self.is_async, "async functions should use AsyncTaskReturn");
-
-                // // TODO: this shouldn't be here, handle via AsyncTaskReturn
-                // // see: https://github.com/bytecodealliance/wit-bindgen/pull/1414
-                // if self.is_async {
-                //     // Forward to handling of async task return
-                //     let fn_name = format!("[task-return]{}", func.name);
-                //     let params = {
-                //         let mut container = Vec::new();
-                //         let mut flattened_types = FlatTypes::new(&mut container);
-                //         for (_name, ty) in func.params.iter() {
-                //             self.resolve.push_flat(ty, &mut flattened_types);
-                //         }
-                //         flattened_types.to_vec()
-                //     };
-                //     self.emit(
-                //         resolve,
-                //         &Instruction::AsyncTaskReturn {
-                //             name: &fn_name,
-                //             params: &params,
-                //         },
-                //         operands,
-                //         results,
-                //     );
-                //     return;
-                // }
 
                 // Depending how many values are on the stack after returning, we must execute differently.
                 //
@@ -2208,10 +2182,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.is_async,
                     "non-async functions should not be performing async returns (func {name})",
                 );
-                assert!(
-                    self.post_return.is_none(),
-                    "async fn cannot have post_return specified (func {name})"
-                );
 
                 // If we're dealing with an async call, then `ret` is actually the
                 // state of async behavior.
@@ -2236,21 +2206,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 let component_instance_idx = self.canon_opts.instance.as_u32();
                 let is_async_js = self.requires_async_porcelain | self.is_async;
 
-                // Resolve the promise that *would* have been returned via `WebAssembly.promising`
-                if self.requires_async_porcelain {
-                    uwriteln!(self.src, "ret = await ret;");
-                }
-
-                // TODO: if we're returning from an async subtask, we need to call onProgress *before* callback
-                // TODO: when this is done, we need to call subtask.resolve ??
-
-                // TODO: If we're returning from a call that was initiated by another component,
-                // then there will be a current subtask... We need to detect that and
-                // use the callback that is from there instead/information from it?
+                // TODO(fix): Detecting whether to do return processing on returned value should be
+                // double checked with the known CM-level type of the wasm call (we should only do
+                // this for `result<t, string>`)
                 //
-                // If we're returning from a subtask, then we need to resolve the subtask!
-
-                // Perform the reaction to async state
+                // e.g. right now a correctly formatted record would trigger the code below,
+                // and it should not.
                 uwriteln!(
                     self.src,
                     r#"
@@ -2263,20 +2224,31 @@ impl Bindgen for FunctionBindgen<'_> {
                       const task = taskMeta.task;
                       if (!task) {{ throw new Error('missing/invalid task in current task metadata'); }}
 
-                      new Promise((resolve, reject) => {{
-                          {async_driver_loop_fn}({{
-                              componentInstanceIdx: {component_instance_idx},
-                              componentState,
-                              task,
-                              fnName: '{name}',
-                              isAsync: {is_async_js},
-                              callbackResult: ret,
-                              resolve,
-                              reject
-                          }});
+                      new Promise(async (resolve, reject) => {{
+                          try {{
+                              await {async_driver_loop_fn}({{
+                                  componentInstanceIdx: {component_instance_idx},
+                                  componentState,
+                                  task,
+                                  fnName: '{name}',
+                                  isAsync: {is_async_js},
+                                  callbackResult: ret,
+                                  resolve,
+                                  reject
+                              }});
+                          }} catch (err) {{
+                              console.log("[AsyncTaskReturn] DRIVER LOOP CALL FAILED?", {{ err }});
+                          }}
                       }});
 
-                      return task.completionPromise();
+                      let taskRes = await task.completionPromise();
+                      if (task.getErrHandling() === 'throw-result-err') {{
+                          if (typeof taskRes !== 'object') {{ return taskRes; }}
+                          if (taskRes.tag === 'err') {{ throw taskRes.val; }}
+                          if (taskRes.tag === 'ok') {{ taskRes = taskRes.val; }}
+                      }}
+
+                      return taskRes;
                       "#,
                 );
             }

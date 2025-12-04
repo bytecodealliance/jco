@@ -63,6 +63,14 @@ pub enum ComponentIntrinsic {
     /// ```
     ///
     LowerImport,
+
+    /// Intrinsic used to set all component async states to error.
+    ///
+    /// Practically, this stops all individual component event loops (`AsyncComponentState#tick()`)
+    /// and will usually allow the JS event loop which would otherwise be running `tick()` intervals
+    /// forever.
+    ///
+    ComponentStateSetAllError,
 }
 
 impl ComponentIntrinsic {
@@ -86,6 +94,7 @@ impl ComponentIntrinsic {
             Self::BackpressureDec => "backpressureDec",
             Self::ComponentAsyncStateClass => "ComponentAsyncState",
             Self::LowerImport => "_intrinsic_component_lowerImport",
+            Self::ComponentStateSetAllError => "_ComponentStateSetAllError",
         }
     }
 
@@ -147,32 +156,57 @@ impl ComponentIntrinsic {
                 output.push_str(&format!(
                     r#"
                     class {class_name} {{
+                        #componentIdx;
                         #callingAsyncImport = false;
                         #syncImportWait = promiseWithResolvers();
                         #lock = null;
+                        #parkedTasks = new Map();
+                        #suspendedTasksByTaskID = new Map();
+                        #suspendedTaskIDs = [];
+                        #taskResumerInterval = null;
+                        #pendingTasks = [];
+                        #errored = null;
 
                         mayLeave = true;
                         waitableSets = new {rep_table_class}();
                         waitables = new {rep_table_class}();
                         subtasks = new {rep_table_class}();
 
-                        #parkedTasks = new Map();
-
-                        #suspendedTasksByTaskID = new Map();
-                        #suspendedTaskIDs = [];
-                        #taskResumerInterval = null;
-
-                        #pendingTasks = [];
-
                         constructor(args) {{
-                            this.#taskResumerInterval = setInterval(() => {{
-                                try {{
-                                    this.tick();
-                                }} catch (err) {{
-                                    {debug_log_fn}('[{class_name}#taskResumer()] tick failed', {{ err }});
-                                }}
+                            this.#componentIdx = args.componentIdx;
+                            const self = this;
+
+                            this.#taskResumerInterval = setTimeout(() => {{
+                               try {{
+                                   if (self.errored()) {{
+                                       self.stopTaskResumer();
+                                       console.error(`(component ${{this.#errored.componentIdx}}) ASYNC ERROR:`, this.#errored);
+                                       return;
+                                   }}
+                                   if (this.tick()) {{ setTimeout(() => {{ this.tick(); }}, 0); }}
+                               }} catch (err) {{
+                                   {debug_log_fn}('[{class_name}#taskResumer()] tick failed', {{ err }});
+                               }}
                             }}, 0);
                         }};
+
+                        stopTaskResumer() {{
+                            if (!this.#taskResumerInterval) {{ throw new Error('missing task resumer interval'); }}
+                            clearInterval(this.#taskResumerInterval);
+                        }}
+
+                        componentIdx() {{ return this.#componentIdx; }}
+
+                        errored() {{ return this.#errored !== null; }}
+                        setErrored(err) {{
+                            {debug_log_fn}('[{class_name}#setErrored()] component errored', {{ err, componentIdx: this.#componentIdx }});
+                            if (this.#errored) {{ return; }}
+                            if (!err) {{
+                                err = new Error('error elswehere (see other component instance error)')
+                                err.componentIdx = this.#componentIdx;
+                            }}
+                            this.#errored = err;
+                        }}
 
                         callingSyncImport(val) {{
                             if (val === undefined) {{ return this.#callingAsyncImport; }}
@@ -328,14 +362,17 @@ impl ComponentIntrinsic {
                         }}
 
                         tick() {{
+                            let resumedTask = false;
                             for (const taskID of this.#suspendedTaskIDs.filter(t => t !== null)) {{
                                 const meta = this.#suspendedTasksByTaskID.get(taskID);
                                 if (!meta || !meta.readyFn) {{
                                     throw new Error('missing/invalid task despite ID [' + taskID + '] being present');
                                 }}
                                 if (!meta.readyFn()) {{ continue; }}
+                                resumedTask = true;
                                 this.resumeTaskByID(taskID);
                             }}
+                            return resumedTask;
                         }}
 
                         addPendingTask(task) {{
@@ -352,14 +389,15 @@ impl ComponentIntrinsic {
                 let async_state_map = Self::GlobalAsyncStateMap.name();
                 let component_async_state_class = Self::ComponentAsyncStateClass.name();
                 output.push_str(&format!(
-                    "
+                    r#"
                     function {get_state_fn}(componentIdx, init) {{
                         if (!{async_state_map}.has(componentIdx)) {{
-                            {async_state_map}.set(componentIdx, new {component_async_state_class}());
+                            const newState = new {component_async_state_class}({{ componentIdx }});
+                            {async_state_map}.set(componentIdx, newState);
                         }}
                         return {async_state_map}.get(componentIdx);
                     }}
-                "
+                   "#
                 ));
             }
 
@@ -376,6 +414,22 @@ impl ComponentIntrinsic {
                         throw new Error('runtime LowerImport not implmented');
                     }}
                     "
+                ));
+            }
+
+            Self::ComponentStateSetAllError => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let async_state_map = Self::GlobalAsyncStateMap.name();
+                let component_state_set_all_error_fn = Self::ComponentStateSetAllError.name();
+                output.push_str(&format!(
+                    r#"
+                    function {component_state_set_all_error_fn}() {{
+                        {debug_log_fn}('[{component_state_set_all_error_fn}()]');
+                        for (const state of {async_state_map}.values()) {{
+                            state.setErrored();
+                        }}
+                    }}
+                    "#
                 ));
             }
         }
