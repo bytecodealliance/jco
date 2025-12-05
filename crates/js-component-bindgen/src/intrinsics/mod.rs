@@ -61,7 +61,7 @@ pub enum Intrinsic {
     Host(HostIntrinsic),
 
     // Polyfills
-    PromiseWithResolversPolyfill,
+    PromiseWithResolversPonyfill,
 
     /// Enable debug logging
     DebugLog,
@@ -198,7 +198,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         AsyncTaskIntrinsic::UnpackCallbackResult,
     ));
     args.intrinsics
-        .insert(Intrinsic::PromiseWithResolversPolyfill);
+        .insert(Intrinsic::PromiseWithResolversPonyfill);
     args.intrinsics
         .insert(Intrinsic::Host(HostIntrinsic::PrepareCall));
     args.intrinsics
@@ -674,11 +674,13 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 ));
             }
 
-            Intrinsic::PromiseWithResolversPolyfill => {
+            Intrinsic::PromiseWithResolversPonyfill => {
                 output.push_str(
                     r#"
-                    if (!Promise.withResolvers) {
-                        Promise.withResolvers = () => {
+                    function promiseWithResolvers() {
+                        if (Promise.withResolvers) {
+                            return Promise.withResolvers();
+                        } else {
                             let resolve;
                             let reject;
                             const promise = new Promise((res, rej) => {
@@ -686,7 +688,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                                 reject = rej;
                             });
                             return { promise, resolve, reject };
-                        };
+                        }
                     }
                 "#,
                 );
@@ -959,7 +961,7 @@ impl Intrinsic {
 
             // Debugging
             Intrinsic::DebugLog => "_debugLog",
-            Intrinsic::PromiseWithResolversPolyfill => unreachable!("always global"),
+            Intrinsic::PromiseWithResolversPonyfill => unreachable!("always global"),
 
             // Types
             Intrinsic::ConstantI32Min => "I32_MIN",

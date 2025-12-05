@@ -135,7 +135,7 @@ impl ComponentIntrinsic {
                     "
                     class {class_name} {{
                         #callingAsyncImport = false;
-                        #syncImportWait = Promise.withResolvers();
+                        #syncImportWait = promiseWithResolvers();
                         #lock = null;
 
                         mayLeave = true;
@@ -156,7 +156,7 @@ impl ComponentIntrinsic {
 
                         #notifySyncImportEnd() {{
                             const existing = this.#syncImportWait;
-                            this.#syncImportWait = Promise.withResolvers();
+                            this.#syncImportWait = promiseWithResolvers();
                             existing.resolve();
                         }}
 
@@ -218,7 +218,7 @@ impl ComponentIntrinsic {
                                 if (finishedTicket === ticket - 1n) {{ break; }}
                             }}
 
-                            const {{ promise, resolve }} = Promise.withResolvers();
+                            const {{ promise, resolve }} = promiseWithResolvers();
                             this.#lock = {{
                                 ticket,
                                 promise,
