@@ -599,7 +599,7 @@ impl AsyncTaskIntrinsic {
                                promise: completionPromise,
                                resolve: resolveCompletionPromise,
                                reject: rejectCompletionPromise,
-                           }} = Promise.withResolvers();
+                           }} = promiseWithResolvers();
                            this.#completionPromise = completionPromise;
 
                            this.#onResolve = (results) => {{
@@ -785,7 +785,7 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             // Build a promise that this task can await on which resolves when it is awoken
-                            const {{ promise, resolve, reject }} = Promise.withResolvers();
+                            const {{ promise, resolve, reject }} = promiseWithResolvers();
                             this.awaitableResume = () => {{
                                 {debug_log_fn}('[{task_class}] resuming after onBlock', {{ taskID: this.#id }});
                                 resolve();
@@ -988,7 +988,7 @@ impl AsyncTaskIntrinsic {
                             if (args.waitable) {{
                                 this.#waitable = args.waitable;
                             }} else {{
-                                const {{ promise, resolve, reject }} = Promise.withResolvers();
+                                const {{ promise, resolve, reject }} = promiseWithResolvers();
                                 this.#waitableResolve = resolve;
                                 this.#waitableReject = reject;
 
