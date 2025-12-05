@@ -190,4 +190,5 @@ export const poll = {
     Pollable,
     pollList,
     pollOne,
+    poll: pollOne,
 };
