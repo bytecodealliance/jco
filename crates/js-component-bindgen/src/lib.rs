@@ -19,9 +19,11 @@ mod ts_bindgen;
 
 pub mod esm_bindgen;
 pub mod function_bindgen;
-pub mod intrinsics;
 pub mod names;
 pub mod source;
+
+pub mod intrinsics;
+use intrinsics::Intrinsic;
 
 use transpile_bindgen::transpile_bindgen;
 pub use transpile_bindgen::{AsyncMode, BindingsMode, InstantiationMode, TranspileOpts};
@@ -296,7 +298,8 @@ pub(crate) fn requires_async_porcelain(
     let name = match func {
         FunctionIdentifier::Fn(func) => func.name.as_str(),
         FunctionIdentifier::CanonFnName(name) => name,
-    };
+    }
+    .trim_start_matches("[async]");
 
     if async_funcs.contains(name) {
         return true;
@@ -316,4 +319,10 @@ pub(crate) fn requires_async_porcelain(
         }
     }
     false
+}
+
+/// Objects that can control the printing/setup of intrinsics (normally in some final codegen output)
+trait ManagesIntrinsics {
+    /// Add an intrinsic, supplying it's name afterwards
+    fn add_intrinsic(&mut self, intrinsic: Intrinsic);
 }

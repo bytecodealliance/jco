@@ -1,7 +1,10 @@
 //! Intrinsics that represent helpers that implement async tasks
 
 use crate::{
-    intrinsics::{Intrinsic, component::ComponentIntrinsic, p3::waitable::WaitableIntrinsic},
+    intrinsics::{
+        Intrinsic, component::ComponentIntrinsic, conversion::ConversionIntrinsic,
+        p3::waitable::WaitableIntrinsic,
+    },
     source::Source,
 };
 
@@ -195,6 +198,37 @@ pub enum AsyncTaskIntrinsic {
     /// function unpackCallbackResult(callbackResult: i32): [i32, i32];
     /// ```
     UnpackCallbackResult,
+
+    /// JS that contains the loop which drives a given async task to completion.
+    ///
+    /// This intrinsic is not a canon function but instead a reusable JS snippet
+    /// that controls
+    ///
+    /// The Canonical ABI pseudo-code equivalent  be `thread_func(thread)` in `canon_lift`
+    /// though threads are not yet implemented.
+    ///
+    /// Normally, the async driver loop returns a Promise that resolves to the result
+    /// of the original async function that was called.
+    ///
+    /// See `Instruction::CallWasm` for example usage.
+    ///
+    /// ```ts
+    /// interface DriverLoopArgs {
+    ///     componentState: ComponentAsyncState,
+    ///     task: AsyncTask,
+    ///     fnName: string,
+    ///     callbackFnName: string,
+    ///     isAsync: boolean, // whether using JSPI *or* lifted async function
+    ///     callbackResult: number, // initial wasm call result that contains callback code and more metadata
+    ///     // Normally, the driver loop is run in a separately executing Promise,
+    ///     // so we ensure that the enclosing promise itself can eventually be resolved
+    ///     resolve: () => void,
+    ///     reject: () => void,
+    /// }
+    ///
+    /// function asyncDriverLoop(args: DriverLoopArgs): Promise<any>;
+    /// ```
+    DriverLoop,
 }
 
 impl AsyncTaskIntrinsic {
@@ -205,7 +239,26 @@ impl AsyncTaskIntrinsic {
 
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        ["taskReturn", "subtaskDrop"]
+        [
+            "ASYNC_BLOCKED_CODE",
+            "ASYNC_CURRENT_COMPONENT_IDXS",
+            "ASYNC_CURRENT_TASK_IDS",
+            "ASYNC_TASKS_BY_COMPONENT_IDX",
+            "AsyncSubtask",
+            "AsyncTask",
+            "asyncYield",
+            "contextGet",
+            "contextSet",
+            "endCurrentTask",
+            "getCurrentTask",
+            "startCurrentTask",
+            "subtaskCancel",
+            "subtaskDrop",
+            "subtaskDrop",
+            "taskCancel",
+            "taskReturn",
+            "unpackCallbackResult",
+        ]
     }
 
     /// Get the name for the intrinsic
@@ -228,6 +281,7 @@ impl AsyncTaskIntrinsic {
             Self::TaskReturn => "taskReturn",
             Self::Yield => "asyncYield",
             Self::UnpackCallbackResult => "unpackCallbackResult",
+            Self::DriverLoop => "_driverLoop",
         }
     }
 
@@ -295,22 +349,21 @@ impl AsyncTaskIntrinsic {
                 "));
             }
 
+            // Equivalent of `task.return`
             Self::TaskReturn => {
-                // TODO(async): write results into provided memory, perform checks for task & result types
-                // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-taskreturn
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_return_fn = Self::TaskReturn.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
 
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
-                        const {{ componentIdx, useDirectParams, getMemoryFn, callbackFnIdx, liftFns }} = ctx;
+                        const {{ componentIdx, useDirectParams, getMemoryFn, memoryIdx, callbackFnIdx, liftFns }} = ctx;
                         const params = [...arguments].slice(1);
                         const memory = getMemoryFn();
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
                             callbackFnIdx,
-                            memory,
+                            memoryIdx,
                             liftFns,
                             params,
                         }});
@@ -320,6 +373,11 @@ impl AsyncTaskIntrinsic {
 
                         const task = taskMeta.task;
                         if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
+
+                        const expectedMemoryIdx = task.getMemoryIdx();
+                        if (expectedMemoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
+                            throw new Error('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
+                        }}
 
                         task.callbackFnIdx = callbackFnIdx;
 
@@ -346,7 +404,7 @@ impl AsyncTaskIntrinsic {
 
                         task.resolve(results);
                     }}
-                "));
+                "#));
             }
 
             Self::SubtaskDrop => {
@@ -442,32 +500,55 @@ impl AsyncTaskIntrinsic {
                 let task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
                 let component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
                 output.push_str(&format!(
-                    "
-                    let NEXT_TASK_ID = 0n;
-                    function {fn_name}(componentIdx, isAsync, entryFnName) {{
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isAsync }});
+                    r#"
+                    function {fn_name}(args) {{
+                        {debug_log_fn}('[{fn_name}()] args', args);
+                        const {{
+                            componentIdx,
+                            isAsync,
+                            entryFnName,
+                            parentSubtaskID,
+                            callbackFnName,
+                            getCallbackFn,
+                            getParamsFn,
+                            stringEncoding,
+                            errHandling,
+                            getCalleeParamsFn,
+                        }} = args;
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while starting task');
                         }}
                         const tasks = {global_task_map}.get(componentIdx);
+                        const callbackFn = getCallbackFn ? getCallbackFn() : null;
 
-                        const nextId = ++NEXT_TASK_ID;
-                        const newTask = new {task_class}({{ id: nextId, componentIdx, isAsync, entryFnName }});
-                        const newTaskMeta = {{ id: nextId, componentIdx, task: newTask }};
+                        const newTask = new {task_class}({{
+                            componentIdx,
+                            isAsync,
+                            entryFnName,
+                            callbackFn,
+                            callbackFnName,
+                            stringEncoding,
+                            getCalleeParamsFn,
+                            errHandling,
+                        }});
+                        newTask.enter();
 
-                        {task_id_globals}.push(nextId);
+                        const newTaskID = newTask.id();
+                        const newTaskMeta = {{ id: newTaskID, componentIdx, task: newTask }};
+
+                        {task_id_globals}.push(newTaskID);
                         {component_idx_globals}.push(componentIdx);
 
                         if (!tasks) {{
                             {global_task_map}.set(componentIdx, [newTaskMeta]);
-                            return nextId;
+                            return [newTask, newTaskID];
                         }} else {{
                             tasks.push(newTaskMeta);
                         }}
 
-                        return nextId;
+                        return [newTask, newTaskID];
                     }}
-                ",
+                "#,
                     fn_name = self.name(),
                 ));
             }
@@ -528,13 +609,16 @@ impl AsyncTaskIntrinsic {
                         {task_id_globals}.pop();
                         {component_idx_globals}.pop();
 
-                        return tasks.pop();
+                        const taskMeta = tasks.pop();
+                        return taskMeta.task;
                     }}
                 ",
                     fn_name = self.name()
                 ));
             }
 
+            // NOTE: since threads are not yet supported, places that would have called out to threads instead run
+            // `immediate<original function>` -- i.e. `Thread#suspendUntil` becomes `AsyncTask#immediateSuspendUntil`
             Self::AsyncTaskClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let get_or_create_async_state_fn =
@@ -548,8 +632,10 @@ impl AsyncTaskIntrinsic {
                 let coin_flip_fn = Intrinsic::CoinFlip.name();
 
                 // TODO: remove the public mutable members that are eagerly exposed for early impl
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     class {task_class} {{
+                        static _ID = 0n;
+
                         static State = {{
                             INITIAL: 'initial',
                             CANCELLED: 'cancelled',
@@ -567,10 +653,28 @@ impl AsyncTaskIntrinsic {
                         #componentIdx;
                         #state;
                         #isAsync;
-                        #onResolve = null;
                         #entryFnName = null;
                         #subtasks = [];
+
+                        #onResolve = null;
                         #completionPromise = null;
+
+                        #memoryIdx = null;
+
+                        #callbackFn = null;
+                        #callbackFnName = null;
+
+                        #postReturnFn = null;
+
+                        #getCalleeParamsFn = null;
+
+                        #stringEncoding = null;
+
+                        #parentSubtask = null;
+
+                        #needsExclusiveLock = false;
+
+                        #errHandling;
 
                         cancelled = false;
                         requested = false;
@@ -583,14 +687,14 @@ impl AsyncTaskIntrinsic {
                         awaitableResume = null;
                         awaitableCancel = null;
 
-
                         constructor(opts) {{
-                           if (opts?.id === undefined) {{ throw new TypeError('missing task ID during task creation'); }}
-                           this.#id = opts.id;
+                           this.#id = ++{task_class}._ID;
+
                            if (opts?.componentIdx === undefined) {{
                                throw new TypeError('missing component id during task creation');
                            }}
                            this.#componentIdx = opts.componentIdx;
+
                            this.#state = {task_class}.State.INITIAL;
                            this.#isAsync = opts?.isAsync ?? false;
                            this.#entryFnName = opts.entryFnName;
@@ -606,6 +710,19 @@ impl AsyncTaskIntrinsic {
                                // TODO: handle external facing cancellation (should likely be a rejection)
                                resolveCompletionPromise(results);
                            }}
+
+                           if (opts.callbackFn) {{ this.#callbackFn = opts.callbackFn; }}
+                           if (opts.callbackFnName) {{ this.#callbackFnName = opts.callbackFnName; }}
+
+                           if (opts.getCalleeParamsFn) {{ this.#getCalleeParamsFn = opts.getCalleeParamsFn; }}
+
+                           if (opts.stringEncoding) {{ this.#stringEncoding = opts.stringEncoding; }}
+
+                           if (opts.parentSubtask) {{ this.#parentSubtask = opts.parentSubtask; }}
+
+                           this.#needsExclusiveLock = this.isSync() || !this.hasCallback();
+
+                           if (opts.errHandling) {{ this.#errHandling = opts.errHandling; }}
                         }}
 
                         taskState() {{ return this.#state.slice(); }}
@@ -614,6 +731,52 @@ impl AsyncTaskIntrinsic {
                         isAsync() {{ return this.#isAsync; }}
                         entryFnName() {{ return this.#entryFnName; }}
                         completionPromise() {{ return this.#completionPromise; }}
+
+                        isAsync() {{ return this.#isAsync; }}
+                        isSync() {{ return !this.isAsync(); }}
+
+                        getErrHandling() {{ return this.#errHandling; }}
+
+                        hasCallback() {{ return this.#callbackFn !== null; }}
+
+                        setMemoryIdx(idx) {{ this.#memoryIdx = idx; }}
+                        getMemoryIdx(idx) {{ return this.#memoryIdx; }}
+
+                        setParentSubtask(subtask) {{
+                            if (!subtask || !(subtask instanceof {subtask_class})) {{ return }}
+                            if (this.#parentSubtask) {{ throw new Error('parent subtask can only be set once'); }}
+                            this.#parentSubtask = subtask;
+                        }}
+
+                        getParentSubtask() {{ return this.#parentSubtask; }}
+
+                        setPostReturnFn(f) {{
+                            if (!f) {{ return; }}
+                            if (this.#postReturnFn) {{ throw new Error('postReturn fn can only be set once'); }}
+                            this.#postReturnFn = f;
+                        }}
+
+                        setCallbackFn(f, name) {{
+                            if (!f) {{ return; }}
+                            if (this.#callbackFn) {{ throw new Error('callback fn can only be set once'); }}
+                            this.#callbackFn = f;
+                            this.#callbackFnName = name;
+                        }}
+
+                        getCallbackFnName() {{
+                            if (!this.#callbackFnName) {{ return undefined; }}
+                            return this.#callbackFnName;
+                        }}
+
+                        runCallbackFn(...args) {{
+                            if (!this.#callbackFn) {{ throw new Error('on callback function has been set for task'); }}
+                            return this.#callbackFn.apply(null, args);
+                        }}
+
+                        getCalleeParams() {{
+                            if (!this.#getCalleeParamsFn) {{ throw new Error('missing/invalid getCalleeParamsFn'); }}
+                            return this.#getCalleeParamsFn();
+                        }}
 
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
@@ -636,85 +799,46 @@ impl AsyncTaskIntrinsic {
                         async enter() {{
                             {debug_log_fn}('[{task_class}#enter()] args', {{ taskID: this.#id }});
 
-                            // TODO: assert scheduler locked
-                            // TODO: trap if on the stack
-
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
-                            let mayNotEnter = !this.mayEnter(this);
-                            const componentHasPendingTasks = cstate.pendingTasks > 0;
-                            if (mayNotEnter || componentHasPendingTasks) {{
-                                throw new Error('in enter()'); // TODO: remove
-                                cstate.pendingTasks.set(this.#id, new {awaitable_class}(new Promise()));
+                            // TODO: implement backpressure
 
-                                const blockResult = await this.onBlock(awaitable);
-                                if (blockResult) {{
-                                    // TODO: find this pending task in the component
-                                    const pendingTask = cstate.pendingTasks.get(this.#id);
-                                    if (!pendingTask) {{
-                                        throw new Error('pending task [' + this.#id + '] not found for component instance');
-                                    }}
-                                    cstate.pendingTasks.remove(this.#id);
-                                    this.#onResolve(new Error('failed enter'));
-                                    return false;
-                                }}
-
-                                mayNotEnter = !this.mayEnter(this);
-                                if (!mayNotEnter || !cstate.startPendingTask) {{
-                                    throw new Error('invalid component entrance/pending task resolution');
-                                }}
-                                cstate.startPendingTask = false;
-                            }}
-
-                            if (!this.isAsync) {{ cstate.callingSyncExport = true; }}
+                            if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
 
                             return true;
                         }}
 
-                        async waitForEvent(opts) {{
-                            const {{ waitableSetRep, isAsync }} = opts;
-                            {debug_log_fn}('[{task_class}#waitForEvent()] args', {{ taskID: this.#id, waitableSetRep, isAsync }});
+                        async waitUntil(opts) {{
+                            const {{ readyFn, waitableSetRep, cancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#waitUntil()] args', {{ taskID: this.#id, waitableSetRep, cancellable }});
 
-                            if (this.#isAsync !== isAsync) {{
-                                throw new Error('async waitForEvent called on non-async task');
-                            }}
+                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const wset = state.waitableSets.get(waitableSetRep);
 
-                            if (this.status === {task_class}.State.CANCEL_PENDING) {{
-                                this.#state = {task_class}.State.CANCEL_DELIVERED;
-                                return {{
+                            let event;
+
+                            wset.incrementNumWaiting();
+
+                            const keepGoing = await this.suspendUntil({{
+                                readyFn: () => {{
+                                    return readyFn() && wset.hasPendingEvent();
+                                }},
+                                cancellable,
+                            }});
+
+                            if (keepGoing) {{
+                                event = wset.getPendingEvent();
+                            }} else {{
+                                event = {{
                                     code: {event_code_enum}.TASK_CANCELLED,
+                                    index: 0,
+                                    result: 0,
                                 }};
                             }}
 
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
-                            const waitableSet = state.waitableSets.get(waitableSetRep);
-                            if (!waitableSet) {{ throw new Error('missing/invalid waitable set'); }}
+                            wset.decrementNumWaiting();
 
-                            waitableSet.numWaiting += 1;
-                            let event = null;
-
-                            while (event == null) {{
-                                const awaitable = new {awaitable_class}(waitableSet.getPendingEvent());
-                                const waited = await this.blockOn({{ awaitable, isAsync, isCancellable: true }});
-                                if (waited) {{
-                                    if (this.#state !== {task_class}.State.INITIAL) {{
-                                        throw new Error('task should be in initial state found [' + this.#state + ']');
-                                    }}
-                                    this.#state = {task_class}.State.CANCELLED;
-                                    return {{
-                                        code: {event_code_enum}.TASK_CANCELLED,
-                                    }};
-                                }}
-
-                                event = waitableSet.poll();
-                            }}
-
-                            waitableSet.numWaiting -= 1;
                             return event;
-                        }}
-
-                        waitForEventSync(opts) {{
-                            throw new Error('{task_class}#yieldSync() not implemented')
                         }}
 
                         async pollForEvent(opts) {{
@@ -726,56 +850,6 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             throw new Error('{task_class}#pollForEvent() not implemented');
-                        }}
-
-                        pollForEventSync(opts) {{
-                            throw new Error('{task_class}#yieldSync() not implemented')
-                        }}
-
-                        async blockOn(opts) {{
-                            const {{ awaitable, isCancellable, forCallback }} = opts;
-                            {debug_log_fn}('[{task_class}#blockOn()] args', {{ taskID: this.#id, awaitable, isCancellable, forCallback }});
-
-                            if (awaitable.resolved() && !{global_async_determinism} && {coin_flip_fn}()) {{
-                                return {task_class}.BlockResult.NOT_CANCELLED;
-                            }}
-
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-                            if (forCallback) {{ cstate.exclusiveRelease(); }}
-
-                            let cancelled = await this.onBlock(awaitable);
-                            if (cancelled === {task_class}.BlockResult.CANCELLED && !isCancellable) {{
-                                const secondCancel = await this.onBlock(awaitable);
-                                if (secondCancel !== {task_class}.BlockResult.NOT_CANCELLED) {{
-                                    throw new Error('uncancellable task was canceled despite second onBlock()');
-                                }}
-                            }}
-
-                            if (forCallback) {{
-                                const acquired = new {awaitable_class}(cstate.exclusiveLock());
-                                cancelled = await this.onBlock(acquired);
-                                if (cancelled === {task_class}.BlockResult.CANCELLED) {{
-                                    const secondCancel = await this.onBlock(acquired);
-                                    if (secondCancel !== {task_class}.BlockResult.NOT_CANCELLED) {{
-                                        throw new Error('uncancellable callback task was canceled despite second onBlock()');
-                                    }}
-                                }}
-                            }}
-
-                            if (cancelled === {task_class}.BlockResult.CANCELLED) {{
-                                if (this.#state !== {task_class}.State.INITIAL) {{
-                                    throw new Error('cancelled task is not at initial state');
-                                }}
-                                if (isCancellable) {{
-                                    this.#state = {task_class}.State.CANCELLED;
-                                    return {task_class}.BlockResult.CANCELLED;
-                                }} else {{
-                                    this.#state = {task_class}.State.CANCEL_PENDING;
-                                    return {task_class}.BlockResult.NOT_CANCELLED;
-                                }}
-                            }}
-
-                            return {task_class}.BlockResult.NOT_CANCELLED;
                         }}
 
                         async onBlock(awaitable) {{
@@ -828,47 +902,82 @@ impl AsyncTaskIntrinsic {
                             throw new Error('AsyncTask#asyncOnBlock() not yet implemented');
                         }}
 
-                        async yield(opts) {{
-                            const {{ isCancellable, forCallback }} = opts;
-                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, isCancellable, forCallback }});
+                        async yieldUntil(opts) {{
+                            const {{ readyFn, cancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, cancellable }});
 
-                            if (isCancellable && this.status === {task_class}.State.CANCEL_PENDING) {{
-                                this.#state = {task_class}.State.CANCELLED;
+                            const keepGoing = await this.suspendUntil({{ readyFn, cancellable }});
+                            if (!keepGoing) {{
                                 return {{
                                     code: {event_code_enum}.TASK_CANCELLED,
-                                    payload: [0, 0],
-                                }};
-                            }}
-
-                            // TODO: Awaitables need to *always* trigger the parking mechanism when they're done...?
-                            // TODO: Component async state should remember which awaitables are done and work to clear tasks waiting
-
-                            const blockResult = await this.blockOn({{
-                                awaitable: new {awaitable_class}(new Promise(resolve => setTimeout(resolve, 0))),
-                                isCancellable,
-                                forCallback,
-                            }});
-
-                            if (blockResult === {task_class}.BlockResult.CANCELLED) {{
-                                if (this.#state !== {task_class}.State.INITIAL) {{
-                                    throw new Error('task should be in initial state found [' + this.#state + ']');
-                                }}
-                                this.#state = {task_class}.State.CANCELLED;
-                                return {{
-                                    code: {event_code_enum}.TASK_CANCELLED,
-                                    payload: [0, 0],
+                                    index: 0,
+                                    result: 0,
                                 }};
                             }}
 
                             return {{
                                 code: {event_code_enum}.NONE,
-                                payload: [0, 0],
+                                index: 0,
+                                result: 0,
                             }};
                         }}
 
-                        yieldSync(opts) {{
-                            throw new Error('{task_class}#yieldSync() not implemented')
+                        async suspendUntil(opts) {{
+                            const {{ cancellable, readyFn }} = opts;
+                            {debug_log_fn}('[{task_class}#suspendUntil()] args', {{ cancellable }});
+
+                            const pendingCancelled = this.deliverPendingCancel({{ cancellable }});
+                            if (pendingCancelled) {{ return false; }}
+
+                            const completed = await this.immediateSuspendUntil({{ readyFn, cancellable }});
+                            return completed;
                         }}
+
+                        // TODO(threads): equivalent to thread.suspend_until()
+                        async immediateSuspendUntil(opts) {{
+                            const {{ cancellable, readyFn }} = opts;
+                            {debug_log_fn}('[{task_class}#immediateSuspendUntil()] args', {{ cancellable, readyFn }});
+
+                            const ready = readyFn();
+                            if (ready && !{global_async_determinism} && {coin_flip_fn}()) {{
+                                return true;
+                            }}
+
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            cstate.addPendingTask(this);
+
+                            const keepGoing = await this.immediateSuspend({{ cancellable, readyFn }});
+                            return keepGoing;
+                        }}
+
+                        async immediateSuspend(opts) {{ // NOTE: equivalent to thread.suspend()
+                            // TODO(threads): store readyFn on the thread
+                            const {{ cancellable, readyFn }} = opts;
+                            {debug_log_fn}('[{task_class}#immediateSuspend()] args', {{ cancellable, readyFn }});
+
+                            const pendingCancelled = this.deliverPendingCancel({{ cancellable }});
+                            if (pendingCancelled) {{ return false; }}
+
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+
+                            const taskWait = await cstate.suspendTask({{ task: this, readyFn }});
+                            const keepGoing = await taskWait;
+                            return keepGoing;
+                        }}
+
+                        deliverPendingCancel(opts) {{
+                            const {{ cancellable }} = opts;
+                            {debug_log_fn}('[{task_class}#deliverPendingCancel()] args', {{ cancellable }});
+
+                            if (cancellable && this.#state === {task_class}.State.PENDING_CANCEL) {{
+                                this.#state = Task.State.CANCEL_DELIVERED;
+                                return true;
+                            }}
+
+                            return false;
+                        }}
+
+                        isCancelled() {{ return this.cancelled }}
 
                         cancel() {{
                             {debug_log_fn}('[{task_class}#cancel()] args', {{ }});
@@ -876,7 +985,7 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('invalid task state for cancellation');
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
-
+                            this.cancelled = true;
                             this.#onResolve(new Error('cancelled'));
                             this.#state = {task_class}.State.RESOLVED;
                         }}
@@ -887,7 +996,16 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('task is already resolved');
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
-                            this.#onResolve(results.length === 1 ? results[0] : results);
+                            switch (results.length) {{
+                                case 0:
+                                    this.#onResolve(undefined);
+                                    break;
+                                case 1:
+                                    this.#onResolve(results[0]);
+                                    break;
+                                default:
+                                    throw new Error('unexpected number of results');
+                            }}
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
@@ -909,20 +1027,23 @@ impl AsyncTaskIntrinsic {
                             }}
                             state.inSyncExportCall = false;
 
-                            this.startPendingTask();
+                            if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
+                                throw new Error('task [' + this.#id + '] exit: component [' + this.#componentIdx + '] should have been exclusively locked');
+                            }}
+
+                            state.exclusiveRelease();
                         }}
 
-                        startPendingTask(args) {{
-                            {debug_log_fn}('[{task_class}#startPendingTask()] args', args);
-                            throw new Error('{task_class}#startPendingTask() not implemented');
-                        }}
+                        needsExclusiveLock() {{ return this.#needsExclusiveLock; }}
 
                         createSubtask(args) {{
                             {debug_log_fn}('[{task_class}#createSubtask()] args', args);
+                            const {{ componentIdx, memoryIdx, childTask }} = args;
                             const newSubtask = new {subtask_class}({{
-                                componentIdx: this.componentIdx(),
-                                taskID: this.id(),
-                                memoryIdx: args?.memoryIdx,
+                                componentIdx,
+                                childTask,
+                                parentTask: this,
+                                memoryIdx,
                             }});
                             this.#subtasks.push(newSubtask);
                             return newSubtask;
@@ -930,7 +1051,7 @@ impl AsyncTaskIntrinsic {
 
                         currentSubtask() {{
                             {debug_log_fn}('[{task_class}#currentSubtask()]');
-                            if (this.#subtasks.length === 0) {{ throw new Error('no current subtask'); }}
+                            if (this.#subtasks.length === 0) {{ return undefined; }}
                             return this.#subtasks.at(-1);
                         }}
 
@@ -942,7 +1063,7 @@ impl AsyncTaskIntrinsic {
                             return subtask;
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::AsyncSubtaskClass => {
@@ -951,19 +1072,24 @@ impl AsyncTaskIntrinsic {
                 let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     class {subtask_class} {{
+                        static _ID = 0n;
+
                         static State = {{
-                            STARTING: 'starting',
-                            STARTED: 'started',
-                            RETURNED: 'returned',
-                            CANCELLED_BEFORE_STARTED: 'cancelled-before-started',
-                            CANCELLED_BEFORE_RETURNED: 'cancelled-before-returned',
+                            STARTING: 0,
+                            STARTED: 1,
+                            RETURNED: 2,
+                            CANCELLED_BEFORE_STARTED: 3,
+                            CANCELLED_BEFORE_RETURNED: 4,
                         }};
 
+                        #id;
                         #state = {subtask_class}.State.STARTING;
                         #componentIdx;
-                        #taskID;
+
+                        #parentTask;
+                        #childTask = null;
 
                         #dropped = false;
                         #cancelRequested = false;
@@ -976,12 +1102,23 @@ impl AsyncTaskIntrinsic {
                         #waitableResolve = null;
                         #waitableReject = null;
 
+                        #callbackFn = null;
+                        #callbackFnName = null;
+
+                        #postReturnFn = null;
+                        #onProgressFn = null;
+                        #pendingEventFn = null;
+
+                        #componentRep = null;
+
                         constructor(args) {{
                             if (!args.componentIdx) {{ throw new Error('missing componentIdx for subtask creation'); }}
                             this.#componentIdx = args.componentIdx;
 
-                            if (!args.taskID) {{ throw new Error('missing taskID for subtask creation'); }}
-                            this.#taskID = args.taskID;
+                            if (!args.parentTask) {{ throw new Error('missing parent task during subtask creation'); }}
+                            this.#parentTask = args.parentTask;
+
+                            if (args.childTask) {{ this.#childTask = args.childTask; }}
 
                             if (args.memoryIdx) {{ this.#memoryIdx = args.memoryIdx; }}
 
@@ -997,23 +1134,82 @@ impl AsyncTaskIntrinsic {
                                     throw new Error('invalid/missing async state for component instance [' + componentInstanceID + ']');
                                 }}
 
-                                this.#waitable = new {waitable_class}(promise);
+                                this.#waitable = new {waitable_class}({{ promise,  componentInstanceID: this.#componentIdx }});
                                 this.#waitableRep = state.waitables.insert(this.#waitable);
                             }}
 
                             this.#lenders = [];
+                            this.#id = ++{subtask_class}._ID;
                         }}
 
-                        getStateNumber() {{
-                            switch (this.#state) {{
-                                case 'starting': return 0;
-                                case 'started': return 1;
-                                case 'returned': return 2;
-                                case 'cancelled-before-started': return 3;
-                                case 'cancelled-before-returned': return 4;
-                                default: throw new Error('unrecognized async subtask status [' + this.#state + ']');
+                        id() {{ return this.#id; }}
+                        parentTaskID() {{ return this.#parentTask?.id(); }}
+                        childTaskID() {{ return this.#childTask?.id(); }}
+
+                        componentIdx() {{ return this.#componentIdx; }}
+
+                        setCallbackFn(f, name) {{
+                            if (!f) {{ return; }}
+                            if (this.#callbackFn) {{ throw new Error('callback fn can only be set once'); }}
+                            this.#callbackFn = f;
+                            this.#callbackFnName = name;
+                        }}
+
+                        getCallbackFnName() {{
+                            if (!this.#callbackFn) {{ return undefined; }}
+                            return this.#callbackFn.name;
+                        }}
+
+                        setPostReturnFn(f) {{
+                            if (!f) {{ return; }}
+                            if (this.#postReturnFn) {{ throw new Error('postReturn fn can only be set once'); }}
+                            this.#postReturnFn = f;
+                        }}
+
+                        setOnProgressFn(f) {{
+                            if (this.#onProgressFn) {{ throw new Error('on progress fn can only be set once'); }}
+                            this.#onProgressFn = f;
+                        }}
+
+                        onStart(f) {{
+                            if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
+                            this.#onProgressFn();
+                            this.#state = {subtask_class}.State.STARTED;
+                        }}
+
+                        setPendingEventFn(fn) {{
+                            this.#waitable.setPendingEventFn(fn);
+                        }}
+
+                        onResolve(value) {{
+                            if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
+                            this.#onProgressFn();
+
+                            if (value === null) {{
+                                if (this.#cancelRequested) {{
+                                    throw new Error('cancel was not requested, but no value present at return');
+                                }}
+
+                                if (this.#state === {subtask_class}.State.STARTING) {{
+                                    this.#state = Subtask.State.CANCELLED_BEFORE_STARTED;
+                                }} else {{
+                                    if (this.#state !== {subtask_class}.State.STARTED) {{
+                                        throw new Error('cancelled subtask must have been started before cancellation');
+                                    }}
+                                    this.#state = {subtask_class}.State.CANCELLED_BEFORE_RETURNED;
+                                }}
+                            }} else {{
+                                if (this.#state !== {subtask_class}.State.STARTED) {{
+                                    throw new Error('cancelled subtask must have been started before cancellation');
+                                }}
+                                this.#state = {subtask_class}.State.RETURNED;
                             }}
                         }}
+
+                        setRep(rep) {{ this.#componentRep = rep; }}
+
+                        getStateNumber() {{ return this.#state; }}
+                        getWaitableRep() {{ return this.#waitableRep; }}
 
                         waitableRep() {{ return this.#waitableRep; }}
 
@@ -1079,7 +1275,7 @@ impl AsyncTaskIntrinsic {
                             return this.#waitableRep;
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::UnpackCallbackResult => {
@@ -1096,10 +1292,184 @@ impl AsyncTaskIntrinsic {
                         }}
                         if (result < 0 || result >= 2**32) {{ throw new Error('invalid callback result'); }}
                         // TODO: table max length check?
-                        const waitableSetIdx = result >> 4;
-                        return [eventCode, waitableSetIdx];
+                        const waitableSetRep = result >> 4;
+                        return [eventCode, waitableSetRep];
                     }}
                 ",
+                ));
+            }
+
+            // TODO: This function likely needs to be a generator
+            // that first yields the task promise result, then tries to push resolution
+            Self::DriverLoop => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let driver_loop_fn = Self::DriverLoop.name();
+                let i32_typecheck = Intrinsic::TypeCheckValidI32.name();
+                let to_int32_fn = Intrinsic::Conversion(ConversionIntrinsic::ToInt32).name();
+                let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
+                let error_all_component_states_fn =
+                    Intrinsic::Component(ComponentIntrinsic::ComponentStateSetAllError).name();
+
+                output.push_str(&format!(r#"
+                    async function {driver_loop_fn}(args) {{
+                        {debug_log_fn}('[{driver_loop_fn}()] args', args);
+                        const {{
+                            componentState,
+                            task,
+                            fnName,
+                            isAsync,
+                            resolve,
+                            reject,
+                        }} = args;
+                        let callbackResult = args.callbackResult;
+
+                        const callbackFnName = task.getCallbackFnName();
+
+                        try {{
+                            callbackResult = await callbackResult;
+                        }} catch (err) {{
+                            err.componentIdx = task.componentIdx();
+
+                            componentState.setErrored(err);
+                            {error_all_component_states_fn}();
+
+                            reject(err);
+                            task.resolve([]);
+                            return;
+                        }}
+
+                        // TODO(fix): callbackResult should not ever be undefined, *unless*
+                        // we are calling it on a function that was not async to begin with?...
+                        //
+                        // In practice, the callback of `[async]run` returns undefined.
+                        //
+                        if (callbackResult === undefined) {{
+                           {debug_log_fn}('[{driver_loop_fn}()] early exit due to undefined callback result', {{
+                               taskID: task.id(),
+                               subtaskID: task.currentSubtask()?.id(),
+                               parentTaskID: task.currentSubtask()?.parentTaskID(),
+                               fnName,
+                               callbackResult
+                           }});
+                           resolve(null);
+                           task.resolve([]);
+                           return;
+                        }}
+
+                        let callbackCode;
+                        let waitableSetRep;
+                        let unpacked;
+                        if (!({i32_typecheck}(callbackResult))) {{
+                            throw new Error('invalid callback result [' + callbackResult + '], not a number');
+                        }}
+                        if (callbackResult < 0 || callbackResult > 3) {{
+                            throw new Error('invalid async return value, outside callback code range');
+                        }}
+                        unpacked = {unpack_callback_result_fn}(callbackResult);
+                        callbackCode = unpacked[0];
+                        waitableSetRep = unpacked[1];
+
+                        let eventCode;
+                        let index;
+                        let result;
+                        let asyncRes;
+                        try {{
+                            while (true) {{
+                                if (callbackCode !== 0) {{
+                                    componentState.exclusiveRelease();
+                                }}
+
+                                switch (callbackCode) {{
+                                    case 0: // EXIT
+                                        {debug_log_fn}('[{driver_loop_fn}()] async exit indicated', {{
+                                            fnName,
+                                            callbackFnName,
+                                            taskID: task.id()
+                                        }});
+                                        task.exit();
+                                        resolve(null);
+                                        return;
+
+                                    case 1: // YIELD
+                                        {debug_log_fn}('[{driver_loop_fn}()] yield', {{
+                                            fnName,
+                                            callbackFnName,
+                                            taskID: task.id()
+                                        }});
+                                        asyncRes = await task.yieldUntil({{
+                                            cancellable: true,
+                                            readyFn: () => !componentState.isExclusivelyLocked()
+                                        }});
+                                        break;
+
+                                    case 2: // WAIT for a given waitable set
+                                        {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
+                                            fnName,
+                                            callbackFnName,
+                                            taskID: task.id(),
+                                            waitableSetRep,
+                                        }});
+                                        if (eventCode === 1 && waitableSetRep === task.currentSubtask().getWaitableRep()) {{
+                                            task.currentSubtask().doTheThing();
+                                        }}
+                                        asyncRes = await task.waitUntil({{
+                                            readyFn: () => true,
+                                            waitableSetRep,
+                                            cancellable: true,
+                                        }});
+                                        break;
+
+                                    case 3: // POLL
+                                        {debug_log_fn}('[{driver_loop_fn}()] polling for event', {{
+                                            fnName,
+                                            callbackFnName,
+                                            taskID: task.id(),
+                                            waitableSetRep,
+                                        }});
+                                        asyncRes = await task.pollForEvent({{ isAsync: true, waitableSetRep }});
+                                        break;
+
+                                    default:
+                                        throw new Error('Unrecognized async function result [' + ret + ']');
+                                }}
+
+                                componentState.exclusiveLock();
+
+                                eventCode = asyncRes.code;
+                                index = asyncRes.index;
+                                result = asyncRes.result;
+                                asyncRes = null;
+
+                                {debug_log_fn}('[{driver_loop_fn}()] performing callback', {{
+                                    fnName,
+                                    callbackFnName,
+                                    eventCode,
+                                    index,
+                                    result
+                                }});
+
+                                const callbackRes = task.runCallbackFn(
+                                    {to_int32_fn}(eventCode),
+                                    {to_int32_fn}(index),
+                                    {to_int32_fn}(result),
+                                );
+                                unpacked = {unpack_callback_result_fn}(callbackRes);
+                                callbackCode = unpacked[0];
+                                waitableSetRep = unpacked[1];
+                            }}
+                        }} catch (err) {{
+                            {debug_log_fn}('[{driver_loop_fn}()] error while resolving in async driver loop', {{
+                                fnName,
+                                callbackFnName,
+                                eventCode,
+                                index,
+                                result,
+                                err,
+                            }});
+                            reject(err);
+                        }}
+                    }}
+                "#,
                 ));
             }
         }

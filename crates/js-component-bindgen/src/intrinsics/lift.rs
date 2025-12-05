@@ -323,7 +323,7 @@ impl LiftIntrinsic {
                             ctx.params = ctx.params.slice(1);
                         }} else {{
                             if (ctx.storageLen < ctx.storagePtr + 2) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getInt16(storagePtr);
+                            val = new DataView(ctx.memory.buffer).getInt16(ctx.storagePtr);
                             ctx.storagePtr += 2;
                             ctx.storageLen -= 2;
                         }}
@@ -538,7 +538,7 @@ impl LiftIntrinsic {
                             ctx.params = ctx.params.slice(2);
                         }} else {{
                             const start = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, params[0], true);
-                            const codeUnits = new DataView(memory.buffer).getUint32(storagePtr, params[0] + 4, true);
+                            const codeUnits = new DataView(memory.buffer).getUint32(ctx.storagePtr, params[0] + 4, true);
                             val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
                             ctx.storagePtr += codeUnits;
                             ctx.storageLen -= codeUnits;
@@ -567,8 +567,8 @@ impl LiftIntrinsic {
                             ctx.params = ctx.params.slice(2);
                         }} else {{
                             const data = new DataView(ctx.memory.buffer)
-                            const start = data.getUint32(storagePtr, vals[0], true);
-                            const codeUnits = data.getUint32(storagePtr, vals[0] + 4, true);
+                            const start = data.getUint32(ctx.storagePtr, vals[0], true);
+                            const codeUnits = data.getUint32(ctx.storagePtr, vals[0] + 4, true);
                             val = {decoder}.decode(new Uint16Array(ctx.memory.buffer, start, codeUnits));
                             ctx.storagePtr = ctx.storagePtr + 2 * codeUnits,
                             ctx.storageLen = ctx.storageLen - 2 * codeUnits
@@ -599,7 +599,7 @@ impl LiftIntrinsic {
 
                             const res = {{}};
                             for (const [key, liftFn, alignment32] in keysAndLiftFns) {{
-                                ctx.storagePtr = Math.ceil(storagePtr / alignment32) * alignment32;
+                                ctx.storagePtr = Math.ceil(ctx.storagePtr / alignment32) * alignment32;
                                 let [val, newCtx] = liftFn(ctx);
                                 res[key] = val;
                                 ctx = newCtx;
@@ -844,9 +844,20 @@ impl LiftIntrinsic {
             Self::LiftFlatErrorContext => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _liftFlatErrorContext(size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_liftFlatErrorContext()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        throw new Error('flat lift for error-contexts not yet implemented!');
+                    function _liftFlatErrorContext(ctx) {{
+                        {debug_log_fn}('[_liftFlatErrorContext()] args', ctx);
+                        const {{ useDirectParams, params }} = ctx;
+
+                        let val;
+                        if (useDirectParams) {{
+                            if (params.length === 0) {{ throw new Error('expected at least one single i32 argument'); }}
+                            val = ctx.params[0];
+                            ctx.params = ctx.params.slice(1);
+                        }} else {{
+                            throw new Error('indirect flat lift for error-contexts not yet implemented!');
+                        }}
+
+                        return [val, ctx];
                     }}
                 "));
             }

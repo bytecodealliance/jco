@@ -1,15 +1,18 @@
+import { fileURLToPath, URL } from 'node:url';
 import { exec as syncExec } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { stat } from "node:fs/promises";
 
-import { assert } from "vitest";
 import which from "which";
 
 import { setupAsyncTest, getTmpDir } from '../../../../helpers.js';
-import { AsyncFunction } from '../../../../common.js';
 
 const exec = promisify(syncExec);
+
+export const COMPONENT_FIXTURES_DIR = fileURLToPath(
+    new URL('../../../../fixtures/components', import.meta.url)
+);
 
 /** Ensure that the given file path exists */
 async function ensureFile(filePath) {
@@ -22,23 +25,18 @@ async function ensureFile(filePath) {
 }
 
 /**
- * Run a single component test for a component that
- * exports `local:local/run` (normally async) in the style of
- * wasmtime component-async-tests
- *
- * This test will generally transpile the component and then run its' 'local:local/run' export
- *
- * @see https://github.com/bytecodealliance/wasmtime/blob/main/crates/misc/component-async-tests/tests/scenario/util.rs
+ * Build and transpile a component for use in a test
  *
  * @param {object} args
  * @param {string} args.componentPath - path to the wasm binary that should be tested
+ * @param {object} args.noCleanup - avoid cleaning up the async test
  * @param {object} args.transpile - options to control transpile
  * @param {object} args.transpile.extraArgs - extra arguments that should be used during transpilation (ex. `{minify: false}`)
  * @returns {Promise<void>} A Promise that resolves when the test completes
  */
-export async function testComponent(args) {
+export async function buildAndTranspile(args) {
     const componentPath = await ensureFile(args.componentPath);
-    const { esModule, cleanup } = await setupAsyncTest({
+    const { esModule, cleanup, outputDir } = await setupAsyncTest({
         asyncMode: 'jspi',
         component: {
             name: 'async-error-context',
@@ -48,8 +46,8 @@ export async function testComponent(args) {
         jco: {
             transpile: {
                 extraArgs: {
+                    asyncExports: ['local:local/run#run'] ,
                     ...(args.transpile?.extraArgs || {}),
-                    asyncExports: ['local:local/run#run'],
                 },
             },
         },
@@ -60,19 +58,18 @@ export async function testComponent(args) {
     );
     const instance = await esModule.instantiate(
         undefined,
-        new WASIShim().getImportObject()
+        {
+            ...new WASIShim().getImportObject(),
+            ...(args.instantiation?.imports ?? {}),
+        }
     );
 
-    const runFn = instance['local:local/run'].asyncRun;
-    assert.strictEqual(
-        runFn instanceof AsyncFunction,
-        true,
-        'local:local/run should be async'
-    );
-
-    await runFn();
-
-    await cleanup();
+    return {
+        instance,
+        esModule,
+        cleanup,
+        outputDir,
+    };
 }
 
 /**

@@ -51,6 +51,26 @@ pub enum ComponentIntrinsic {
 
     /// A class that encapsulates component-level async state
     ComponentAsyncStateClass,
+
+    /// Intrinsic used when components lower imports to be used
+    /// from other components or the host.
+    ///
+    /// # Component Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// ```
+    ///
+    LowerImport,
+
+    /// Intrinsic used to set all component async states to error.
+    ///
+    /// Practically, this stops all individual component event loops (`AsyncComponentState#tick()`)
+    /// and will usually allow the JS event loop which would otherwise be running `tick()` intervals
+    /// forever.
+    ///
+    ComponentStateSetAllError,
 }
 
 impl ComponentIntrinsic {
@@ -73,6 +93,8 @@ impl ComponentIntrinsic {
             Self::BackpressureInc => "backpressureInc",
             Self::BackpressureDec => "backpressureDec",
             Self::ComponentAsyncStateClass => "ComponentAsyncState",
+            Self::LowerImport => "_intrinsic_component_lowerImport",
+            Self::ComponentStateSetAllError => "_ComponentStateSetAllError",
         }
     }
 
@@ -132,17 +154,41 @@ impl ComponentIntrinsic {
                 let rep_table_class = Intrinsic::RepTableClass.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!(
-                    "
+                    r#"
                     class {class_name} {{
+                        #componentIdx;
                         #callingAsyncImport = false;
                         #syncImportWait = Promise.withResolvers();
                         #lock = null;
+                        #parkedTasks = new Map();
+                        #suspendedTasksByTaskID = new Map();
+                        #suspendedTaskIDs = [];
+                        #pendingTasks = [];
+                        #errored = null;
 
                         mayLeave = true;
                         waitableSets = new {rep_table_class}();
                         waitables = new {rep_table_class}();
+                        subtasks = new {rep_table_class}();
 
-                        #parkedTasks = new Map();
+                        constructor(args) {{
+                            this.#componentIdx = args.componentIdx;
+                            const self = this;
+
+                        }};
+
+                        componentIdx() {{ return this.#componentIdx; }}
+
+                        errored() {{ return this.#errored !== null; }}
+                        setErrored(err) {{
+                            {debug_log_fn}('[{class_name}#setErrored()] component errored', {{ err, componentIdx: this.#componentIdx }});
+                            if (this.#errored) {{ return; }}
+                            if (!err) {{
+                                err = new Error('error elswehere (see other component instance error)')
+                                err.componentIdx = this.#componentIdx;
+                            }}
+                            this.#errored = err;
+                        }}
 
                         callingSyncImport(val) {{
                             if (val === undefined) {{ return this.#callingAsyncImport; }}
@@ -242,8 +288,80 @@ impl ComponentIntrinsic {
 
                         isExclusivelyLocked() {{ return this.#lock !== null; }}
 
+                        #getSuspendedTaskMeta(taskID) {{
+                            return this.#suspendedTasksByTaskID.get(taskID);
+                        }}
+
+                        #removeSuspendedTaskMeta(taskID) {{
+                            {debug_log_fn}('[{class_name}#removeSuspendedTaskMeta()] removing suspended task', {{ taskID }});
+                            const idx = this.#suspendedTaskIDs.findIndex(t => t === taskID);
+                            const meta = this.#suspendedTasksByTaskID.get(taskID);
+                            this.#suspendedTaskIDs[idx] = null;
+                            this.#suspendedTasksByTaskID.delete(taskID);
+                            return meta;
+                        }}
+
+                        #addSuspendedTaskMeta(meta) {{
+                            if (!meta) {{ throw new Error('missing task meta'); }}
+                            const taskID = meta.taskID;
+                            this.#suspendedTasksByTaskID.set(taskID, meta);
+                            this.#suspendedTaskIDs.push(taskID);
+                            if (this.#suspendedTasksByTaskID.size < this.#suspendedTaskIDs.length - 10) {{
+                                this.#suspendedTaskIDs = this.#suspendedTaskIDs.filter(t => t !== null);
+                            }}
+                        }}
+
+                        suspendTask(args) {{
+                            // TODO(threads): readyFn is normally on the thread
+                            const {{ task, readyFn }} = args;
+                            const taskID = task.id();
+                            {debug_log_fn}('[{class_name}#suspendTask()]', {{ taskID }});
+
+                            if (this.#getSuspendedTaskMeta(taskID)) {{
+                                throw new Error('task [' + taskID + '] already suspended');
+                            }}
+
+                            const {{ promise, resolve }} = Promise.withResolvers();
+                            this.#addSuspendedTaskMeta({{
+                                task,
+                                taskID,
+                                readyFn,
+                                resume: () => {{
+                                    {debug_log_fn}('[{class_name}#suspendTask()] resuming suspended task', {{ taskID }});
+                                    // TODO(threads): it's thread cancellation we should be checking for below, not task
+                                    resolve(!task.isCancelled());
+                                }},
+                            }});
+
+                            return promise;
+                        }}
+
+                        resumeTaskByID(taskID) {{
+                            const meta = this.#removeSuspendedTaskMeta(taskID);
+                            if (!meta) {{ return; }}
+                            if (meta.taskID !== taskID) {{ throw new Error('task ID does not match'); }}
+                            meta.resume();
+                        }}
+
+                        tick() {{
+                            let resumedTask = false;
+                            for (const taskID of this.#suspendedTaskIDs.filter(t => t !== null)) {{
+                                const meta = this.#suspendedTasksByTaskID.get(taskID);
+                                if (!meta || !meta.readyFn) {{
+                                    throw new Error('missing/invalid task despite ID [' + taskID + '] being present');
+                                }}
+                                if (!meta.readyFn()) {{ continue; }}
+                                resumedTask = true;
+                                this.resumeTaskByID(taskID);
+                            }}
+                            return resumedTask;
+                        }}
+
+                        addPendingTask(task) {{
+                            this.#pendingTasks.push(task);
+                        }}
                     }}
-                    ",
+                    "#,
                     class_name = self.name(),
                 ));
             }
@@ -253,14 +371,47 @@ impl ComponentIntrinsic {
                 let async_state_map = Self::GlobalAsyncStateMap.name();
                 let component_async_state_class = Self::ComponentAsyncStateClass.name();
                 output.push_str(&format!(
-                    "
+                    r#"
                     function {get_state_fn}(componentIdx, init) {{
                         if (!{async_state_map}.has(componentIdx)) {{
-                            {async_state_map}.set(componentIdx, new {component_async_state_class}());
+                            const newState = new {component_async_state_class}({{ componentIdx }});
+                            {async_state_map}.set(componentIdx, newState);
                         }}
                         return {async_state_map}.get(componentIdx);
                     }}
-                "
+                   "#
+                ));
+            }
+
+            // NOTE: LowerImport is called but is *not used* as a function,
+            // instead having a chance to do some modification *before* the final
+            // creation of instantiated modules' exports
+            Self::LowerImport => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_import_fn = Self::LowerImport.name();
+                output.push_str(&format!(
+                    "
+                    function {lower_import_fn}(args) {{
+                        {debug_log_fn}('[{lower_import_fn}()] args', args);
+                        throw new Error('runtime LowerImport not implmented');
+                    }}
+                    "
+                ));
+            }
+
+            Self::ComponentStateSetAllError => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let async_state_map = Self::GlobalAsyncStateMap.name();
+                let component_state_set_all_error_fn = Self::ComponentStateSetAllError.name();
+                output.push_str(&format!(
+                    r#"
+                    function {component_state_set_all_error_fn}() {{
+                        {debug_log_fn}('[{component_state_set_all_error_fn}()]');
+                        for (const state of {async_state_map}.values()) {{
+                            state.setErrored();
+                        }}
+                    }}
+                    "#
                 ));
             }
         }
