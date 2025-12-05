@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve, extname, dirname } from 'node:path';
+import { env } from 'node:process';
 
 import puppeteer from 'puppeteer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -100,13 +101,13 @@ suite('Browser', () => {
         } catch {}
     });
 
-    test('Transpilation', { retry: 3 }, async () => {
-        await testPage(browser, port, 'transpile');
+    test('basic transpile', { retry: 3 }, async () => {
+        await testPage({ browser, port, hash: 'transpile' });
     });
 
     test('IDL window', async () => {
         // Componentize the webidl DOM window test
-        const { stderr } = await exec(
+        const args = [
             'src/jco.js',
             'componentize',
             'test/fixtures/idl/dom.test.js',
@@ -121,13 +122,17 @@ suite('Browser', () => {
             '-n',
             'window-test',
             '-o',
-            outFile
-        );
+            outFile,
+        ];
+        console.log(`EXEC\n${args.join(" ")}\n===\n`);
+
+        const { stderr } = await exec(...args);
         assert.strictEqual(stderr, '');
 
         // Transpile the test component
         const component = await readFile(outFile);
         const { files } = await transpile(component, { name: 'dom' });
+
 
         for (const [file, source] of Object.entries(files)) {
             const outPath = resolve(outDir, file);
@@ -136,7 +141,7 @@ suite('Browser', () => {
         }
 
         // Run the test function in the browser from the generated tmpdir
-        await testPage(browser, port, 'test:dom.js');
+        await testPage({ browser, port, hash: 'test:dom.js' });
     });
 
     test('IDL console', async () => {
@@ -170,12 +175,31 @@ suite('Browser', () => {
             await writeFile(outPath, source);
         }
 
-        await testPage(browser, port, 'test:console.js');
+        await testPage({ browser, port, hash: 'test:console.js' });
     });
 });
 
-export async function testPage(browser, port, hash) {
+/**
+ * Test an individual browser page that is set up to do a transpilation
+ * (see browser.html)
+ *
+ * NOTE: This test can fail if you are missing built outputs (e.g. in packages/jco/obj)
+ * or transpilation output, or have bad code coming out of component bindgen.
+ *
+ * If you find no output at all from the page, it's likely that loading a script
+ * has failed (something as simple as an incorrect path in the importmap, or missing
+ * dependency, dependency with bad code, etc.), and you should likely enable puppeteer
+ * logging.
+ *
+ * Consider setting JCO_DEBUG=true to see output from the headless browser.
+ *
+ */
+export async function testPage(args) {
+    const { browser, port, hash, expectedBodyContent } = args;
     const page = await browser.newPage();
+    if (env.JCO_DEBUG) {
+        page.on('console', msg => console.log('[browser]', msg.text()));
+    }
 
     assert.ok(
         (
@@ -191,6 +215,7 @@ export async function testPage(browser, port, hash) {
     while (bodyHtml === '<h1>Running</h1>') {
         bodyHtml = await body.evaluate((el) => el.innerHTML);
     }
-    assert.strictEqual(bodyHtml, '<h1>OK</h1>');
+    const expectedContent = expectedBodyContent ?? '<h1>OK</h1>';
+    assert.strictEqual(bodyHtml, expectedContent);
     await page.close();
 }

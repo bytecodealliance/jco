@@ -15,12 +15,7 @@ const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
 
 suite('Context (WASI P3)', () => {
     test('context.get/set (sync export, sync call)', async () => {
-        const componentName = 'context-sync';
-        const componentPath = join(
-            P3_COMPONENT_FIXTURES_DIR,
-            componentName,
-            'component.wasm'
-        );
+        const name = 'context-sync';
 
         // NOTE: Despite not specifying the export as async (via jco transpile options in setupAsyncTest),
         // the export is async -- since the component lifted the function in an async manner.
@@ -28,8 +23,12 @@ suite('Context (WASI P3)', () => {
         // This test performs a sync call of an async lifted export.
         const { instance, cleanup } = await setupAsyncTest({
             component: {
-                name: componentName,
-                path: componentPath,
+                name,
+                path: join(
+                    P3_COMPONENT_FIXTURES_DIR,
+                    name,
+                    'component.wasm'
+                ),
             },
         });
 
@@ -42,19 +41,17 @@ suite('Context (WASI P3)', () => {
         await cleanup();
     });
 
-    // TODO: re-enable after support of async task results
     test('context.get/set (async export, async porcelain)', async () => {
-        const componentName = 'context-async';
-        const componentPath = join(
-            P3_COMPONENT_FIXTURES_DIR,
-            componentName,
-            'component.wasm'
-        );
+        const name = 'context-async';
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
-                name: componentName,
-                path: componentPath,
+                name,
+                path: join(
+                    P3_COMPONENT_FIXTURES_DIR,
+                    name,
+                    'component.wasm'
+                ),
             },
             jco: {
                 transpile: {
@@ -73,41 +70,49 @@ suite('Context (WASI P3)', () => {
         assert.strictEqual(instance.pullContext instanceof AsyncFunction, true);
 
         await instance.pushContext(42);
-        // NOTE: context is wiped from task to task, and sync call tasks end as soon as they return
+        // NOTE: context is wiped from task to task
         expect(await instance.pullContext()).toEqual(0);
 
         await cleanup();
     });
 
-    // TODO: re-enable after support of async task results
-    // TODO: support *Sync() variants of task fns like yield()
-    test('context.get/set (async export, sync porcelain)', async () => {
-        const componentName = 'context-async';
-        const componentPath = join(
-            P3_COMPONENT_FIXTURES_DIR,
-            componentName,
-            'component.wasm'
-        );
+    /*
+     * TODO: enable support of sync lowering an async export that does NOT
+     * perform any calls to async imports (YIELD = no-op, WAIT / POLL = trap).
+     *
+     * In those cases, we must perform the waiting and checking synchronously,
+     * and not force the function to be a promise.
+     *
+     * The check of whether functions require porcelain is the ONLY indicator that should
+     * be used (rather than whether the function itself is async) as that's how we currently
+     * express the choice of how we lower an import.
+     */
+    test.skip('context.get/set (async export, sync porcelain)', async () => {
+        const name = 'context-async';
         const { instance, cleanup } = await setupAsyncTest({
             component: {
-                name: componentName,
-                path: componentPath,
+                name,
+                path: join(
+                    P3_COMPONENT_FIXTURES_DIR,
+                    name,
+                    'component.wasm'
+                ),
             },
         });
-
-        // TODO: we need to support sync porcelain on async exports...
-        // This means doing stuff like yieldSync etc
 
         expect(instance.pushContext).toBeTruthy();
         assert.strictEqual(
             instance.pushContext instanceof AsyncFunction,
-            false
+            false, // see TODO for test
+            "despite sync lower, async lift forces this function to be async",
         );
 
         expect(instance.pullContext).toBeTruthy();
         assert.strictEqual(
             instance.pullContext instanceof AsyncFunction,
-            false
+            false, // see TODO for test
+            'pullContext should not be an async function',
+
         );
 
         instance.pushContext(42);
