@@ -124,15 +124,12 @@ suite('Browser', () => {
             '-o',
             outFile,
         ];
-        console.log(`EXEC\n${args.join(" ")}\n===\n`);
-
         const { stderr } = await exec(...args);
         assert.strictEqual(stderr, '');
 
         // Transpile the test component
         const component = await readFile(outFile);
         const { files } = await transpile(component, { name: 'dom' });
-
 
         for (const [file, source] of Object.entries(files)) {
             const outPath = resolve(outDir, file);
