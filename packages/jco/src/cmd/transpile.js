@@ -179,6 +179,11 @@ export async function transpileComponent(component, opts = {}) {
             'async exports cannot be specified in sync mode (consider adding --async-mode=jspi)'
         );
     }
+    if (asyncMode === 'sync' && asyncImports.size > 0) {
+        throw new Error(
+            'async imports cannot be specified in sync mode (consider adding --async-mode=jspi)'
+        );
+    }
     let asyncModeObj;
     if (asyncMode === 'sync') {
         asyncModeObj = null;

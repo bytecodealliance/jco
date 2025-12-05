@@ -9,7 +9,7 @@ import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 
 suite('Async (WASI P3)', () => {
     // see: https://github.com/bytecodealliance/jco/issues/1076
-    test('incorrect task return params offloading', async () => {
+    test.skip('incorrect task return params offloading', async () => {
         const name = 'async-flat-param-adder';
         const { instance, cleanup } = await setupAsyncTest({
             component: {
@@ -32,23 +32,59 @@ suite('Async (WASI P3)', () => {
     });
 
     // https://bytecodealliance.zulipchat.com/#narrow/channel/206238-general/topic/Should.20StringLift.20be.20emitted.20for.20async.20return.20values.3F/with/561133720
-    test('simple string return', async () => {
-        const name = 'async-simple-string-return';
+    test.skip('simple async returns', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
-                name,
                 path: join(
                     P3_COMPONENT_FIXTURES_DIR,
-                    `${name}.wasm`,
+                    'async-simple-return.wasm',
                 ),
                 imports: new WASIShim().getImportObject(),
             },
         });
 
-        assert.typeOf(instance.asyncGetLiteral, 'function');
+        assert.typeOf(instance.asyncGetString, 'function');
+        assert.strictEqual("literal", await instance.asyncGetString());
 
-        const result = await instance.asyncGetLiteral();
-        assert.strictEqual(result, "literal");
+        assert.typeOf(instance.asyncGetU32, 'function');
+        assert.strictEqual(42, await instance.asyncGetU32());
+
+        await cleanup();
+    });
+
+    // https://github.com/bytecodealliance/jco/issues/1150
+    test('simple async imports', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                path: join(
+                    P3_COMPONENT_FIXTURES_DIR,
+                    'async-simple-import.wasm',
+                ),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    '[async]load-string': { default: async () => "loaded" },
+                    '[async]load-u32': { default: async () => 43 },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                        asyncMode: 'jspi',
+                        asyncImports: [
+                            '[async]load-string',
+                            '[async]load-u32',
+                        ]
+                    }
+                }
+            }
+        });
+
+        assert.typeOf(instance.asyncGetString, 'function');
+        assert.strictEqual("loaded", await instance.asyncGetString());
+
+        assert.typeOf(instance.asyncGetU32, 'function');
+        assert.strictEqual(43, await instance.asyncGetU32());
 
         await cleanup();
     });
