@@ -46,11 +46,11 @@ export const wasi = {
         getStdout() {},
     },
     'wasi:filesystem/preopens': {
-        getDirectores() {},
+        getDirectories() {},
     },
     'wasi:filesystem/types': {
         Descriptor: class Descriptor {},
-        filsystemErrorCode() {
+        filesystemErrorCode() {
             return 0;
         },
     },

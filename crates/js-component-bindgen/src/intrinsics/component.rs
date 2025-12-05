@@ -163,7 +163,6 @@ impl ComponentIntrinsic {
                         #parkedTasks = new Map();
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
-                        #taskResumerInterval = null;
                         #pendingTasks = [];
                         #errored = null;
 
@@ -176,24 +175,7 @@ impl ComponentIntrinsic {
                             this.#componentIdx = args.componentIdx;
                             const self = this;
 
-                            this.#taskResumerInterval = setTimeout(() => {{
-                               try {{
-                                   if (self.errored()) {{
-                                       self.stopTaskResumer();
-                                       console.error(`(component ${{this.#errored.componentIdx}}) ASYNC ERROR:`, this.#errored);
-                                       return;
-                                   }}
-                                   if (this.tick()) {{ setTimeout(() => {{ this.tick(); }}, 0); }}
-                               }} catch (err) {{
-                                   {debug_log_fn}('[{class_name}#taskResumer()] tick failed', {{ err }});
-                               }}
-                            }}, 0);
                         }};
-
-                        stopTaskResumer() {{
-                            if (!this.#taskResumerInterval) {{ throw new Error('missing task resumer interval'); }}
-                            clearInterval(this.#taskResumerInterval);
-                        }}
 
                         componentIdx() {{ return this.#componentIdx; }}
 
@@ -312,7 +294,7 @@ impl ComponentIntrinsic {
 
                         #removeSuspendedTaskMeta(taskID) {{
                             {debug_log_fn}('[{class_name}#removeSuspendedTaskMeta()] removing suspended task', {{ taskID }});
-                            const idx = this.#suspendedTaskIDs.findIndex(t => t && t.taskID === taskID);
+                            const idx = this.#suspendedTaskIDs.findIndex(t => t === taskID);
                             const meta = this.#suspendedTasksByTaskID.get(taskID);
                             this.#suspendedTaskIDs[idx] = null;
                             this.#suspendedTasksByTaskID.delete(taskID);

@@ -400,7 +400,9 @@ impl EsmBindgen {
                                 output,
                                 r#"
                                 if ({local_name} === undefined) {{
-                                    throw new Error("unexpectedly undefined instance import '{local_name}', was '{external_name}' available at instantiation?");
+                                    const err = new Error("unexpectedly undefined instance import '{local_name}', was '{external_name}' available at instantiation?");
+                                    console.error("ERROR:", err.toString());
+                                    throw err;
                                 }}
                                 "#,
                             );
@@ -478,7 +480,9 @@ impl EsmBindgen {
                     output,
                     r#"
                     if ({local_name} === undefined) {{
-                        throw new Error("unexpectedly undefined local import '{local_name}', was '{member_name}' available at instantiation?");
+                        const err = new Error("unexpectedly undefined local import '{local_name}', was '{member_name}' available at instantiation?");
+                        console.error("ERROR:", err.toString());
+                        throw err;
                     }}
                     "#,
                 );

@@ -73,24 +73,31 @@ export async function exec(cmd, ...args) {
         });
         cp.stdout.on('data', (chunk) => {
             stdout += chunk;
+            if (env.JCO_DEBUG) {
+                console.error(`[exec] [cmd=${cmd}] [stdout] ${chunk}`);
+            }
         });
         cp.stderr.on('data', (chunk) => {
             stderr += chunk;
+            if (env.JCO_DEBUG) {
+                console.error(`[exec] [cmd=${cmd}] [stderr] ${chunk}`);
+            }
         });
         cp.on('error', reject);
         cp.on('exit', (code) => {
-            if (code !== 0) {
-                const msg = [
-                    `error code [${code}] while executing [${processCmd} ${cmdArgs.join(' ')}]:`,
-                    'STDOUT:',
-                    stdout.toString(),
-                    'STDERR:',
-                    stderr.toString(),
-                ].join('\n');
-                reject(new Error(msg));
+            if (code === 0) {
+                resolve();
                 return;
             }
-            resolve();
+
+            const msg = [
+                `error code [${code}] while executing [${processCmd} ${cmdArgs.join(' ')}]:`,
+                'STDOUT:',
+                stdout.toString(),
+                'STDERR:',
+                stderr.toString(),
+            ].join('\n');
+            reject(new Error(msg));
         });
     });
     return { stdout, stderr };
@@ -132,6 +139,9 @@ export async function setupAsyncTest(args) {
         throw new Error(
             'Both component.path and component.build should not be specified at the same time'
         );
+    }
+    if (componentPath && componentPath.endsWith(".wasm") && !componentName) {
+        componentName = basename(componentPath).replace(/.wasm$/, "");
     }
 
     // If this component should be built "just in time" -- i.e. created when this test is run
