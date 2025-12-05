@@ -142,4 +142,14 @@ export const types = {
     listenToFutureIncomingResponse(_f) {
         console.log('[types] Listen to future incoming response');
     },
+    Fields: class Fields {},
+    FutureIncomingResponse: new class FutureIncomingResponse {},
+    IncomingBody: new class IncomingBody {},
+    IncomingRequest: new class IncomingRequest {},
+    IncomingResponse: new class IncomingResponse {},
+    OutgoingBody: new class OutgoingBody {},
+    OutgoingRequest: new class OutgoingRequest {},
+    OutgoingResponse: new class OutgoingResponse {},
+    RequestOptions: new class RequestOptions {},
+    ResponseOutparam: new class ResponseOutparam {},
 };
