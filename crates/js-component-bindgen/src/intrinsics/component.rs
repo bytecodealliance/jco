@@ -159,7 +159,8 @@ impl ComponentIntrinsic {
                         #componentIdx;
                         #callingAsyncImport = false;
                         #syncImportWait = promiseWithResolvers();
-                        #lock = null;
+                        #syncImportWait = Promise.withResolvers();
+                        #locked = false;
                         #parkedTasks = new Map();
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
@@ -244,49 +245,21 @@ impl ComponentIntrinsic {
                             task.awaitableResume();
                         }}
 
-                        async exclusiveLock() {{  // TODO: use atomics
-                            if (this.#lock === null) {{
-                                this.#lock = {{ ticket: 0n }};
-                            }}
-
-                            // Take a ticket for the next valid usage
-                            const ticket = ++this.#lock.ticket;
-
-                            {debug_log_fn}('[{class_name}#exclusiveLock()] locking', {{
-                                currentTicket: ticket - 1n,
-                                ticket
-                            }});
-
-                            // If there is an active promise, then wait for it
-                            let finishedTicket;
-                            while (this.#lock.promise) {{
-                                finishedTicket = await this.#lock.promise;
-                                if (finishedTicket === ticket - 1n) {{ break; }}
-                            }}
-
-                            const {{ promise, resolve }} = promiseWithResolvers();
-                            this.#lock = {{
-                                ticket,
-                                promise,
-                                resolve,
-                            }};
-
-                            return this.#lock.promise;
+                        // TODO: we might want to check for pre-locked status here
+                        exclusiveLock() {{
+                            this.#locked = true;
                         }}
 
                         exclusiveRelease() {{
                             {debug_log_fn}('[{class_name}#exclusiveRelease()] releasing', {{
-                                currentTicket: this.#lock === null ? 'none' : this.#lock.ticket,
+                                locked: this.#locked,
                             }});
 
-                            if (this.#lock === null) {{ return; }}
-
-                            const existingLock = this.#lock;
-                            this.#lock = null;
-                            existingLock.resolve(existingLock.ticket);
+                            if (!this.#locked) {{ throw new Error('not locked'); }}
+                            this.#locked = false
                         }}
 
-                        isExclusivelyLocked() {{ return this.#lock !== null; }}
+                        isExclusivelyLocked() {{ return this.#locked === true; }}
 
                         #getSuspendedTaskMeta(taskID) {{
                             return this.#suspendedTasksByTaskID.get(taskID);
