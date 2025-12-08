@@ -159,7 +159,6 @@ impl ComponentIntrinsic {
                         #componentIdx;
                         #callingAsyncImport = false;
                         #syncImportWait = promiseWithResolvers();
-                        #syncImportWait = Promise.withResolvers();
                         #locked = false;
                         #parkedTasks = new Map();
                         #suspendedTasksByTaskID = new Map();
@@ -255,7 +254,6 @@ impl ComponentIntrinsic {
                                 locked: this.#locked,
                             }});
 
-                            if (!this.#locked) {{ throw new Error('not locked'); }}
                             this.#locked = false
                         }}
 
