@@ -1663,12 +1663,7 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|v| (v.as_u32().to_string(), format!("callback_{}", v.as_u32())))
                     .unwrap_or_else(|| ("null".into(), "null".into()));
                 let (post_return_idx, post_return_fn) = post_return
-                    .map(|v| {
-                        (
-                            v.as_u32().to_string(),
-                            format!("post_return_{}", v.as_u32()),
-                        )
-                    })
+                    .map(|v| (v.as_u32().to_string(), format!("postReturn{}", v.as_u32())))
                     .unwrap_or_else(|| ("null".into(), "null".into()));
 
                 // TODO: need to find the callee[adapter0] for this

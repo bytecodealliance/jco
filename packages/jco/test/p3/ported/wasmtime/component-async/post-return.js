@@ -9,7 +9,7 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "
 // In the upstream wasmtime repo, see:
 // wasmtime/crates/misc/component-async-tests/tests/scenario/post_return.rs
 //
-suite.skip('post-return scenario', () => {
+suite('post-return scenario', () => {
     test('caller & callee', async () => {
         const callerPath = join(
             COMPONENT_FIXTURES_DIR,
