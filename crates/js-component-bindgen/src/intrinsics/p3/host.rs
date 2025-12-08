@@ -230,6 +230,9 @@ impl HostIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop).name();
                 let subtask_class =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass).name();
+
+                // TODO: lower here for non-zero param count
+                // https://github.com/bytecodealliance/wasmtime/blob/69ef9afc11a2846248c9e94affca0223dbd033fc/crates/wasmtime/src/runtime/component/concurrent.rs#L1775
                 output.push_str(&format!(r#"
                     function {async_start_call_fn}(args, callee, paramCount, resultCount, flags) {{
                         const {{ getCallbackFn, callbackIdx, getPostReturnFn, postReturnIdx }} = args;
