@@ -43,12 +43,6 @@ async function main() {
         'test:component/resources': {
             Example: LocalExample,
         },
-        'wasi:http/types': {},
-        'wasi:http/outgoing-handler': {
-            handle: () => {
-                throw new Error('NOT SUPPORTED');
-            },
-        },
     };
 
     // Instantiate the component with the custom imports
