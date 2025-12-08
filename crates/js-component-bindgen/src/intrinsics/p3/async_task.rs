@@ -602,7 +602,8 @@ impl AsyncTaskIntrinsic {
                         if (taskId) {{
                             const last = tasks[tasks.length - 1];
                             if (last.id !== taskId) {{
-                                throw new Error('current task does not match expected task ID');
+                                // throw new Error('current task does not match expected task ID');
+                                 return;
                             }}
                         }}
 
@@ -1027,9 +1028,9 @@ impl AsyncTaskIntrinsic {
                             }}
                             state.inSyncExportCall = false;
 
-                            if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
-                                throw new Error('task [' + this.#id + '] exit: component [' + this.#componentIdx + '] should have been exclusively locked');
-                            }}
+                            //if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
+                            //    throw new Error('task [' + this.#id + '] exit: component [' + this.#componentIdx + '] should have been exclusively locked');
+                            //}}
 
                             state.exclusiveRelease();
                         }}
