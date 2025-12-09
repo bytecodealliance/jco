@@ -396,6 +396,9 @@ impl EsmBindgen {
                             maybe_quote_member(specifier)
                         );
                         for (external_name, local_name) in bound_external_names {
+                            // For imports that are functions, ensure that they are noted as host provided
+                            uwriteln!(output, "{local_name}._isHostProvided = true;");
+
                             uwriteln!(
                                 output,
                                 r#"
@@ -436,6 +439,8 @@ impl EsmBindgen {
                     } else {
                         uwriteln!(output, "{local_name} from '{specifier}';");
                     }
+                    uwriteln!(output, "{local_name}._isHostProvided = true;");
+
                     for other_local_name in &binding_local_names[1..] {
                         uwriteln!(output, "const {other_local_name} = {local_name};");
                     }
@@ -473,9 +478,13 @@ impl EsmBindgen {
             }
             uwriteln!(output, "}} = {iface_local_name};");
 
-            // Ensure that the imports we destructured were defined
-            // (if they were not, the user is likely missing an import @ instantiation time)
+            // Process all external host-provided imports
             for (member_name, local_name) in generated_member_names {
+                // For imports that are functions, ensure that they are noted as host provided
+                uwriteln!(output, "{local_name}._isHostProvided = true;");
+
+                // Ensure that the imports we destructured were defined
+                // (if they were not, the user is likely missing an import @ instantiation time)
                 uwriteln!(
                     output,
                     r#"
