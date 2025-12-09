@@ -1256,6 +1256,10 @@ impl Bindgen for FunctionBindgen<'_> {
                     has_post_return = self.post_return.is_some(),
                 );
 
+                // Write out whether the caller was host provided
+                // (if we're calling into wasm then we know it was not)
+                uwriteln!(self.src, "const hostProvided = false;");
+
                 // Inject machinery for starting a 'current' task
                 self.start_current_task(inst);
 
@@ -1307,13 +1311,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
             // Call to an interface, usually but not always an externally imported interface
             Instruction::CallInterface { func, async_ } => {
-                // let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
-                //     ComponentIntrinsic::GetOrCreateAsyncState,
-                // ));
-                // let current_task_get_fn =
-                //     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                // let component_instance_idx = self.canon_opts.instance.as_u32();
-
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 uwriteln!(
                     self.src,
@@ -1322,17 +1319,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     async_ = async_.then_some("async").unwrap_or("sync"),
                 );
 
-                // // Inject machinery for starting a 'current' task
-                // self.start_current_task(
-                //     inst,
-                //     *async_,
-                //     &func.name,
-                //     self.canon_opts
-                //         .callback
-                //         .as_ref()
-                //         .map(|v| format!("callback_{}", v.as_u32())),
-                // );
-
                 let results_length = if func.result.is_none() { 0 } else { 1 };
                 let maybe_await = if self.requires_async_porcelain | async_ {
                     "await "
@@ -1340,17 +1326,21 @@ impl Bindgen for FunctionBindgen<'_> {
                     ""
                 };
 
-                // Build the call
-                let call = if self.callee_resource_dynamic {
-                    format!(
-                        "{maybe_await} {}.{}({})",
-                        operands[0],
-                        self.callee,
-                        operands[1..].join(", ")
+                // Determine the callee function and arguments
+                let (fn_js, args_js) = if self.callee_resource_dynamic {
+                    (
+                        format!("{}.{}", operands[0], self.callee),
+                        operands[1..].join(", "),
                     )
                 } else {
-                    format!("{maybe_await} {}({})", self.callee, operands.join(", "))
+                    (self.callee.into(), operands.join(", "))
                 };
+
+                // Write out whether the caller was host provided
+                uwriteln!(self.src, "const hostProvided = {fn_js}._isHostProvided;");
+
+                // Build the JS expression that calls the callee
+                let call = format!("{maybe_await} {fn_js}({args_js})",);
 
                 match self.err {
                     // If configured to do *no* error handling at all or throw
@@ -1451,11 +1441,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                     self.clear_resource_borrows = false;
                 }
-
-                // // For non-async calls, the current task can end immediately
-                // if !async_ {
-                //     self.end_current_task();
-                // }
             }
 
             Instruction::Return {
@@ -2163,6 +2148,7 @@ impl Bindgen for FunctionBindgen<'_> {
             //
             // At this point in code generation, the following things have already been set:
             // - `ret`: the original function return value, via (i.e. via `CallWasm`/`CallInterface`)
+            // - `hostProvided`: whether the original function was a host-provided (i.e. host provided import)
             //
             Instruction::AsyncTaskReturn { name, params } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
@@ -2171,7 +2157,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     "{debug_log_fn}('{prefix} [Instruction::AsyncTaskReturn]', {{
                          funcName: '{name}',
                          paramCount: {param_count},
-                         postReturn: {post_return_present}
+                         postReturn: {post_return_present},
+                         hostProvided,
                       }});",
                     param_count = params.len(),
                     post_return_present = self.post_return.is_some(),
@@ -2212,9 +2199,16 @@ impl Bindgen for FunctionBindgen<'_> {
                 //
                 // e.g. right now a correctly formatted record would trigger the code below,
                 // and it should not.
+                //
+                // NOTE: if the import was host provided we *already* have the result via
+                // JSPI and simply calling the host provided JS function -- there is no need
+                // to drive the async loop as with an async import that came from a component.
+                //
                 uwriteln!(
                     self.src,
                     r#"
+                      if (hostProvided) {{ return ret; }}
+
                       const componentState = {get_or_create_async_state_fn}({component_instance_idx});
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
 

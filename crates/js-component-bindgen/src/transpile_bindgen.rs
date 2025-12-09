@@ -2358,7 +2358,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        // Host lifted async (i.e. JSPI)
+        // Host lifted async import (i.e. JSPI)
         let requires_async_porcelain = requires_async_porcelain(
             FunctionIdentifier::Fn(func),
             import_name,
