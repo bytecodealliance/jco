@@ -72,12 +72,12 @@ suite('Async (WASI P3)', () => {
                         minify: false,
                         asyncMode: 'jspi',
                         asyncImports: [
-                            '[async]load-string',
-                            '[async]load-u32',
+                            'load-string',
+                            'load-u32',
                         ],
                         asyncExports: [
-                            '[async]get-string',
-                            '[async]get-u32',
+                            'get-string',
+                            'get-u32',
                         ],
                     }
                 }
