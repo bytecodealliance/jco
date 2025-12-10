@@ -1113,7 +1113,9 @@ impl AsyncTaskIntrinsic {
                         #componentRep = null;
 
                         constructor(args) {{
-                            if (!args.componentIdx) {{ throw new Error('missing componentIdx for subtask creation'); }}
+                            if (typeof args.componentIdx !== 'number') {{
+                                throw new Error('ivnalid componentIdx for subtask creation');
+                            }}
                             this.#componentIdx = args.componentIdx;
 
                             if (!args.parentTask) {{ throw new Error('missing parent task during subtask creation'); }}
