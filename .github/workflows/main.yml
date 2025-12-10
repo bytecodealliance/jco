@@ -515,7 +515,7 @@ jobs:
 
       - name: Install required rust crates
         if: ${{ matrix.project.requires-crates != '[]' }}
-        uses: taiki-e/install-action@cf46383a970594553a83cc6140075ef6a7f54dee # v2
+        uses: taiki-e/install-action@271014ec0fe73d05f4206c04b4392ad895d8f0e3 # v2
         with:
           tool: ${{ join(matrix.project.requires-crates, ',') }}
 
