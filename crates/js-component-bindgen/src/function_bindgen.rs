@@ -1386,7 +1386,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         createTask();
 
                         if (isHostAsyncImport) {{
-                           console.log("CREATING SUBTASK", {{ componentIdx: {component_instance_idx} }});
                            subtask = parentTask.createSubtask({{
                               componentIdx: {component_instance_idx},
                               parentTask,

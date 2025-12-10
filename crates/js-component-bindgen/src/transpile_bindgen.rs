@@ -697,6 +697,7 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn instantiate(&mut self) {
+        // Handle all built in trampolines
         for (i, trampoline) in self.translation.trampolines.iter() {
             let Trampoline::LowerImport {
                 index,
@@ -979,6 +980,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::ErrorContextDrop { .. }
                 | Trampoline::ErrorContextNew { .. }
                 | Trampoline::ErrorContextTransfer
+                | Trampoline::LowerImport { .. }
                 | Trampoline::PrepareCall { .. }
                 | Trampoline::ResourceDrop(_)
                 | Trampoline::ResourceNew(_)
@@ -1666,32 +1668,6 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|v| (v.as_u32().to_string(), format!("postReturn{}", v.as_u32())))
                     .unwrap_or_else(|| ("null".into(), "null".into()));
 
-                // TODO: need to find the callee[adapter0] for this
-                // it's known when we instantiateCore for a given component
-                //
-                // FOR EXAMPLE:
-                //
-                // ```js
-                // ({ exports: exports7 } = yield instantiateCore(yield module8, {
-                //   async: {
-                //     '[start-call]adapter0': trampoline45,
-                //   },
-                //   callback: {
-                //     f0: exports1['[callback][async-lift]local:local/sleep-post-return#[async]run'],
-                //   },
-                //   callee: {
-                //     adapter0: exports1['[async-lift]local:local/sleep-post-return#[async]run'],
-                //   },
-                //   flags: {
-                //     instance1: instanceFlags1,
-                //     instance4: instanceFlags4,
-                //   },
-                //   sync: {
-                //     '[prepare-call]adapter0': trampoline46,
-                //   },
-                // }));
-                // ```
-
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {async_start_call_fn}.bind(
@@ -1764,7 +1740,7 @@ impl<'a> Instantiator<'a, '_> {
 
                 uwriteln!(
                     self.src.js,
-                    "const trampoline_lower_{i} = {lower_import_fn}.bind(
+                    "const trampoline_lower_import_fn_{fn_idx} = {lower_import_fn}.bind(
                          null,
                          {{
                              functionIdx: {fn_idx},
@@ -2180,7 +2156,6 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let callback_{callback_idx};",);
                 uwriteln!(self.src.js_init, "callback_{callback_idx} = {core_def};");
             }
-
             GlobalInitializer::InstantiateModule(m) => match m {
                 InstantiateModule::Static(idx, args) => self.instantiate_static_module(*idx, args),
                 // This is only needed when instantiating an imported core wasm
@@ -2223,7 +2198,20 @@ impl<'a> Instantiator<'a, '_> {
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
         for (module, name, arg) in self.modules[idx].imports(args) {
-            let def = self.augmented_import_def(arg);
+            let def = if name.starts_with("[async-lower]")
+                && let core::AugmentedImport::CoreDef(CoreDef::Export(CoreExport {
+                    item: ExportItem::Index(EntityIndex::Function(fn_idx)),
+                    ..
+                })) = arg
+            {
+                // For async-lower imports, we should use a trampoline
+                // that corresponds to a Trampoline::LowerImport call
+                format!("trampoline_lower_import_fn_{}", fn_idx.as_u32())
+            } else {
+                // All other imports can be augmented normally
+                self.augmented_import_def(&arg)
+            };
+
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
             assert!(
@@ -2232,6 +2220,8 @@ impl<'a> Instantiator<'a, '_> {
             );
             assert!(prev.is_none());
         }
+
+        // Build list of imports
         let mut imports = String::new();
         if !import_obj.is_empty() {
             imports.push_str(", {\n");
@@ -2266,7 +2256,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js_init,
                     "({{ exports: exports{iu32} }} = {instantiate}(module{}{imports}));",
                     idx.as_u32(),
-                )
+                );
             }
         }
     }
@@ -2347,7 +2337,6 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
-        // eprintln!("\nGENERATED FUNCTION NAME FOR IMPORT: {func_name} (import name? {import_name})");
 
         let is_async = is_async_fn(func, options);
 
@@ -3347,7 +3336,7 @@ impl<'a> Instantiator<'a, '_> {
         self.src.js("}");
     }
 
-    fn augmented_import_def(&self, def: core::AugmentedImport<'_>) -> String {
+    fn augmented_import_def(&self, def: &core::AugmentedImport<'_>) -> String {
         match def {
             core::AugmentedImport::CoreDef(def) => self.core_def(def),
             core::AugmentedImport::Memory { mem, op } => {
@@ -3469,7 +3458,9 @@ impl<'a> Instantiator<'a, '_> {
             }
             ExportItem::Name(s) => s,
         };
+
         let i = export.instance.as_u32() as usize;
+
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
