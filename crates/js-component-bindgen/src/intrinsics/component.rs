@@ -167,14 +167,16 @@ impl ComponentIntrinsic {
                         #errored = null;
 
                         mayLeave = true;
-                        waitableSets = new {rep_table_class}();
-                        waitables = new {rep_table_class}();
-                        subtasks = new {rep_table_class}();
+
+                        waitableSets;
+                        waitables;
+                        subtasks;
 
                         constructor(args) {{
                             this.#componentIdx = args.componentIdx;
-                            const self = this;
-
+                            this.waitableSets = new {rep_table_class}({{ target: `compoennt [${{this.#componentIdx}}] waitable sets` }});
+                            this.waitables = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitables` }});
+                            this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
                         }};
 
                         componentIdx() {{ return this.#componentIdx; }}
