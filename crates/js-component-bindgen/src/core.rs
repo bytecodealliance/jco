@@ -64,6 +64,7 @@ pub enum Translation<'a> {
     },
 }
 
+#[derive(Debug)]
 pub enum AugmentedImport<'a> {
     CoreDef(&'a CoreDef),
     Memory { mem: &'a CoreDef, op: AugmentedOp },

@@ -832,9 +832,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 output.push_str(&format!("
                     class {rep_table_class} {{
                         #data = [0, null];
+                        #target;
+
+                        constructor(args) {{
+                            if (args.target) {{ this.target = args.target }}
+                        }}
 
                         insert(val) {{
-                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val }});
+                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val, target: this.target }});
                             const freeIdx = this.#data[0];
                             if (freeIdx === 0) {{
                                 this.#data.push(val);
@@ -849,20 +854,20 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         }}
 
                         get(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
                             const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
                             return val;
                         }}
 
                         contains(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
                             const baseIdx = rep << 1;
                             return !!this.#data[baseIdx];
                         }}
 
                         remove(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
                             const baseIdx = rep << 1;
@@ -876,7 +881,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         }}
 
                         clear() {{
-                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep, target: this.target }});
                             this.#data = [0, null];
                         }}
                     }}
