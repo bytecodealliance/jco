@@ -229,6 +229,18 @@ pub enum AsyncTaskIntrinsic {
     /// function asyncDriverLoop(args: DriverLoopArgs): Promise<any>;
     /// ```
     DriverLoop,
+
+    /// Intrinsic used when components lower imports to be used
+    /// from other components or the host.
+    ///
+    /// # Component Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// ```
+    ///
+    LowerImport,
 }
 
 impl AsyncTaskIntrinsic {
@@ -258,6 +270,8 @@ impl AsyncTaskIntrinsic {
             "taskCancel",
             "taskReturn",
             "unpackCallbackResult",
+            "_driverLoop",
+            "_lowerImport",
         ]
     }
 
@@ -282,6 +296,7 @@ impl AsyncTaskIntrinsic {
             Self::Yield => "asyncYield",
             Self::UnpackCallbackResult => "unpackCallbackResult",
             Self::DriverLoop => "_driverLoop",
+            Self::LowerImport => "_lowerImport",
         }
     }
 
@@ -1050,6 +1065,8 @@ impl AsyncTaskIntrinsic {
                             return newSubtask;
                         }}
 
+                        getLatestSubtask() {{ return this.#subtasks.at(-1); }}
+
                         currentSubtask() {{
                             {debug_log_fn}('[{task_class}#currentSubtask()]');
                             if (this.#subtasks.length === 0) {{ return undefined; }}
@@ -1150,6 +1167,13 @@ impl AsyncTaskIntrinsic {
                         childTaskID() {{ return this.#childTask?.id(); }}
 
                         componentIdx() {{ return this.#componentIdx; }}
+
+                        setChildTask(t) {{
+                            if (!t) {{ throw new Error('cannot set missing/invalid child task on subtask'); }}
+                            if (this.#childTask) {{ throw new Error('child task is already set on subtask'); }}
+                            this.#childTask = t;
+                        }}
+                        getChildTask(t) {{ return this.#childTask; }}
 
                         setCallbackFn(f, name) {{
                             if (!f) {{ return; }}
@@ -1473,6 +1497,39 @@ impl AsyncTaskIntrinsic {
                         }}
                     }}
                 "#,
+                ));
+            }
+
+            Self::LowerImport => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_import_fn = Self::LowerImport.name();
+                let current_task_get_fn = Self::GetCurrentTask.name();
+
+                // TODO: param lift functions should NOT be used until after subtask start!
+                // TODO: lower the imports @ task start via the subtask
+                output.push_str(&format!(
+                    r#"
+                    function {lower_import_fn}(args) {{
+                        const params = [...arguments].slice(1);
+                        {debug_log_fn}('[{lower_import_fn}()] args', {{ args, params }});
+                        const {{ functionIdx, componentIdx, isAsync, paramLiftFns, resultLowerFns }} = args;
+
+                        const parentTaskMeta = {current_task_get_fn}(componentIdx);
+                        const parentTask = parentTaskMeta?.task;
+
+                        const subtask = parentTask.createSubtask({{
+                           componentIdx,
+                           parentTask,
+                        }});
+
+                        const subtaskState = subtask.getStateNumber();
+                        if (subtaskState < 0 || subtaskState > 2**5) {{
+                            throw new Error('invalid subtask state, out of valid range');
+                        }}
+
+                        return Number(subtask.waitableRep()) << 4 | subtaskState;
+                    }}
+                    "#
                 ));
             }
         }
