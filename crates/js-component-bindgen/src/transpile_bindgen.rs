@@ -1693,6 +1693,12 @@ impl<'a> Instantiator<'a, '_> {
                 let lower_import_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImport));
+                let global_component_lowers_class = self
+                    .bindgen
+                    .intrinsic(Intrinsic::GlobalComponentAsyncLowersClass);
+
+                // TODO: Work to figure out the combination of the component(?) and the
+                // function index INTERNAL?
 
                 let canon_opts = self
                     .component
@@ -1701,6 +1707,7 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("failed to find options");
 
                 let fn_idx = index.as_u32();
+
                 let component_idx = canon_opts.instance.as_u32();
                 let is_async = canon_opts.async_;
                 let cancellable = canon_opts.cancellable;
@@ -1734,21 +1741,34 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|idx| format!("() => postReturn{}", idx.as_u32()))
                     .unwrap_or_else(|| "() => null".into());
 
+                // NOTE: we make this lowering trampoline identifiable by two things:
+                // - component idx
+                // - type index of exported function (in the relevant component)
+                //
+                // This is required to be able to wire up the [async-lower] import
+                // that will be put on the glue/shim module (via which the host wires up trampolines).
                 uwriteln!(
                     self.src.js,
-                    "const trampoline_lower_import_fn_{fn_idx} = {lower_import_fn}.bind(
-                         null,
-                         {{
-                             functionIdx: {fn_idx},
-                             componentIdx: {component_idx},
-                             isAsync: {is_async},
-                             paramLiftFns: {param_lift_fns_js},
-                             resultLowerFns: {result_lower_fns_js},
-                             getCallbackFn: {get_callback_fn_js},
-                             getPostReturnFn: {get_post_return_fn_js},
-                             isCancellable: {cancellable},
-                         }},
-                     );",
+                    r#"
+                    {global_component_lowers_class}.define({{
+                        componentIdx: {component_idx},
+                        importName: lowered_import_{fn_idx}_metadata.importName,
+                        fn: {lower_import_fn}.bind(
+                            null,
+                            {{
+                                trampolineIdx: {i},
+                                componentIdx: {component_idx},
+                                isAsync: {is_async},
+                                paramLiftFns: {param_lift_fns_js},
+                                metadata: lowered_import_{fn_idx}_metadata,
+                                resultLowerFns: {result_lower_fns_js},
+                                getCallbackFn: {get_callback_fn_js},
+                                getPostReturnFn: {get_post_return_fn_js},
+                                isCancellable: {cancellable},
+                            }},
+                        ),
+                    }});
+                    "#,
                 );
             }
 
@@ -2167,6 +2187,17 @@ impl<'a> Instantiator<'a, '_> {
                 InstantiateModule::Import(..) => unimplemented!(),
             },
             GlobalInitializer::LowerImport { index, import } => {
+                let fn_idx = index.as_u32();
+                let (import_index, _path) = &self.component.imports[*import];
+                let (import_name, _type_def) = &self.component.import_types[*import_index];
+                uwriteln!(
+                    self.src.js,
+                    r#"
+                    let lowered_import_{fn_idx}_metadata = {{
+                        importName: '{import_name}',
+                    }};
+                    "#,
+                );
                 self.lower_import(*index, *import);
             }
             GlobalInitializer::ExtractMemory(m) => {
@@ -2203,13 +2234,16 @@ impl<'a> Instantiator<'a, '_> {
         for (module, name, arg) in self.modules[idx].imports(args) {
             let def = if name.starts_with("[async-lower]")
                 && let core::AugmentedImport::CoreDef(CoreDef::Export(CoreExport {
-                    item: ExportItem::Index(EntityIndex::Function(fn_idx)),
-                    ..
+                    item: ExportItem::Index(EntityIndex::Function(_)),
+                    instance,
                 })) = arg
             {
-                // For async-lower imports, we should use a trampoline
-                // that corresponds to a Trampoline::LowerImport call
-                format!("trampoline_lower_import_fn_{}", fn_idx.as_u32())
+                let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
+                format!(
+                    "{global_lowers_class}.lookup({}, '{}')",
+                    instance.as_u32(),
+                    name.trim_start_matches("[async-lower]"),
+                )
             } else {
                 // All other imports can be augmented normally
                 self.augmented_import_def(&arg)

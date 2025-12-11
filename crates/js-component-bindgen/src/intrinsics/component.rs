@@ -161,7 +161,7 @@ impl ComponentIntrinsic {
 
                         constructor(args) {{
                             this.#componentIdx = args.componentIdx;
-                            this.waitableSets = new {rep_table_class}({{ target: `compoennt [${{this.#componentIdx}}] waitable sets` }});
+                            this.waitableSets = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitable sets` }});
                             this.waitables = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitables` }});
                             this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
                         }};
@@ -304,6 +304,7 @@ impl ComponentIntrinsic {
                         }}
 
                         tick() {{
+                            {debug_log_fn}('[{class_name}#tick()]', {{ suspendedTaskIDs: this.#suspendedTaskIDs }});
                             let resumedTask = false;
                             for (const taskID of this.#suspendedTaskIDs.filter(t => t !== null)) {{
                                 const meta = this.#suspendedTasksByTaskID.get(taskID);

@@ -1263,6 +1263,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "const hostProvided = false;");
 
                 // Inject machinery for starting a 'current' task
+                // (this will define the 'task' variable)
                 self.start_current_task(inst);
 
                 // TODO: trap if this component is already on the call stack (re-entrancy)
@@ -2270,6 +2271,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
+
                 let component_instance_idx = self.canon_opts.instance.as_u32();
                 let is_async_js = self.requires_async_porcelain | self.is_async;
 
@@ -2284,10 +2286,23 @@ impl Bindgen for FunctionBindgen<'_> {
                 // JSPI and simply calling the host provided JS function -- there is no need
                 // to drive the async loop as with an async import that came from a component.
                 //
+                //
+                // If a subtask is defined, then we're in the case of a lowered async import,
+                // which means that the first async call (to the callee fn) has occurred,
+                // and a subtask has been created, but has not been triggered as started.
+                //
+                // TODO: can we know that the latest subtask is the right one? Is it possible
+                // to have two subtasks prepped for this task on the same thread?
+                //
                 uwriteln!(
                     self.src,
                     r#"
                       if (hostProvided) {{ return ret; }}
+
+                      const currentSubtask = task.getLatestSubtask();
+                      if (currentSubtask) {{
+                          currentSubtask.onStart();
+                      }}
 
                       const componentState = {get_or_create_async_state_fn}({component_instance_idx});
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
