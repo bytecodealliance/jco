@@ -137,6 +137,9 @@ pub enum Intrinsic {
     /// Generally the only kind of type that can be borrowed is a resource
     /// handle, so this helper checks for that.
     IsBorrowedType,
+
+    /// Async lower functions that are saved by component instance
+    GlobalComponentAsyncLowersClass,
 }
 
 /// Profile for determinism to be used by async implementation
@@ -184,6 +187,8 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     // Intrinsics that should just always be present
     args.intrinsics.insert(Intrinsic::DebugLog);
     args.intrinsics.insert(Intrinsic::GlobalAsyncDeterminism);
+    args.intrinsics
+        .insert(Intrinsic::GlobalComponentAsyncLowersClass);
     args.intrinsics.insert(Intrinsic::CoinFlip);
     args.intrinsics.insert(Intrinsic::ConstantI32Min);
     args.intrinsics.insert(Intrinsic::ConstantI32Max);
@@ -887,6 +892,43 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                     }}
                 "));
             }
+
+            Intrinsic::GlobalComponentAsyncLowersClass => {
+                let global_component_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
+                output.push_str(&format!(
+                    r#"
+                    class {global_component_lowers_class} {{
+                        static map = new Map();
+
+                        constructor() {{ throw new Error('{global_component_lowers_class} should not be constructed'); }}
+
+                        static define(args) {{
+                            const {{ componentIdx, importName, fn }} = args;
+                            let inner = {global_component_lowers_class}.map.get(componentIdx);
+                            if (!{global_component_lowers_class}.map.has(componentIdx)) {{
+                                inner = new Map();
+                                {global_component_lowers_class}.map.set(componentIdx, inner);
+                            }}
+                            inner.set(importName, fn);
+                        }}
+
+                        static lookup(componentIdx, importName) {{
+                            let inner = {global_component_lowers_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                return () => {{ throw new Error(`no such component [${{componentIdx}}]`); }};
+                            }}
+
+                            const found = inner.get(importName);
+                            if (found) {{ return found; }}
+
+                            return () => {{
+                                throw new Error(`component [${{componentIdx}}] has no lower for [${{importName}}]`);
+                            }};
+                        }}
+                    }}
+                "#
+                ));
+            }
         }
     }
 
@@ -997,6 +1039,7 @@ impl Intrinsic {
             Intrinsic::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",
             Intrinsic::AwaitableClass => "Awaitable",
             Intrinsic::CoinFlip => "_coinFlip",
+            Intrinsic::GlobalComponentAsyncLowersClass => "GlobalComponentAsyncLowers",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",
