@@ -197,13 +197,17 @@ impl WaitableIntrinsic {
                         }}
 
                         hasPendingEvent() {{
-                            {debug_log_fn}('[{waitable_set_class}#hasPendingEvent()] args', {{ }});
+                            {debug_log_fn}('[{waitable_set_class}#hasPendingEvent()] args', {{
+                                componentIdx: this.#componentInstanceID
+                            }});
                             const waitable = this.#waitables.find(w => w.hasPendingEvent());
                             return waitable !== undefined;
                         }}
 
                         getPendingEvent() {{
-                            {debug_log_fn}('[{waitable_set_class}#getPendingEvent()] args', {{ }});
+                            {debug_log_fn}('[{waitable_set_class}#getPendingEvent()] args', {{
+                                componentIdx: this.#componentInstanceID
+                            }});
                             for (const waitable of this.#waitables) {{
                                 if (!waitable.hasPendingEvent()) {{ continue; }}
                                 return waitable.getPendingEvent();
@@ -212,7 +216,9 @@ impl WaitableIntrinsic {
                         }}
 
                         async poll() {{
-                            {debug_log_fn}('[{waitable_set_class}#poll()] args', {{ }});
+                            {debug_log_fn}('[{waitable_set_class}#poll()] args', {{
+                                componentIdx: this.#componentInstanceID
+                            }});
 
                             const state = {get_or_create_async_state_fn}(this.#componentInstanceID);
 
