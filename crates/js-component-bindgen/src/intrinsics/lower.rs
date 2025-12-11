@@ -450,15 +450,27 @@ impl LowerIntrinsic {
             Self::LowerFlatRecord => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _lowerFlatRecord(size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatVariant()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        const [start] = vals;
-                        if (size > storageLen) {{
-                            throw new Error('not enough storage remaining for record flat lower');
+                    function _lowerFlatRecord(fieldMetas) {{
+                        return (size, memory, vals, storagePtr, storageLen) => {{
+                            const params = [...arguments].slice(5);
+                            {debug_log_fn}('[_lowerFlatRecord()] args', {{
+                                size,
+                                memory,
+                                vals,
+                                storagePtr,
+                                storageLen,
+                                params,
+                                fieldMetas
+                            }});
+
+                            const [start] = vals;
+                            if (size > storageLen) {{
+                                throw new Error('not enough storage remaining for record flat lower');
+                            }}
+                            const data = new Uint8Array(memory.buffer, start, size);
+                            new Uint8Array(memory.buffer, storagePtr, size).set(data);
+                            return data.byteLength;
                         }}
-                        const data = new Uint8Array(memory.buffer, start, size);
-                        new Uint8Array(memory.buffer, storagePtr, size).set(data);
-                        return data.byteLength;
                     }}
                 "));
             }
@@ -466,15 +478,27 @@ impl LowerIntrinsic {
             Self::LowerFlatVariant => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _lowerFlatVariant(size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatVariant()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        let [start, totalSize] = vals;
-                        if (size > storageLen) {{
-                            throw new Error('not enough storage remaining for variant flat lower');
+                    function _lowerFlatVariant(variantMetas, extra) {{
+                        return (size, memory, vals, storagePtr, storageLen) => {{
+                            const params = [...arguments].slice(5);
+                            {debug_log_fn}('[_lowerFlatVariant()] args', {{
+                                size,
+                                memory,
+                                vals,
+                                storagePtr,
+                                storageLen,
+                                params,
+                                variantMetas,
+                                extra,
+                            }});
+                            let [start, totalSize] = vals;
+                            if (size > storageLen) {{
+                                throw new Error('not enough storage remaining for variant flat lower');
+                            }}
+                            const data = new Uint8Array(memory.buffer, start, totalSize);
+                            new Uint8Array(memory.buffer, storagePtr, totalSize).set(data);
+                            return data.byteLength;
                         }}
-                        const data = new Uint8Array(memory.buffer, start, totalSize);
-                        new Uint8Array(memory.buffer, storagePtr, totalSize).set(data);
-                        return data.byteLength;
                     }}
                 "));
             }
@@ -556,20 +580,23 @@ impl LowerIntrinsic {
                 "));
             }
 
+            // Results are just a special case of lowering variants
             Self::LowerFlatResult => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!(r#"
-                    function _lowerFlatResult(size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatResult()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        let [start, totalSize] = vals;
-                        if (totalSize !== storageLen) {{
-                            throw new Error("storage length [" + storageLen + "] does not match variant size [" + totalSize + "]");
-                        }}
-                        const data = new Uint8Array(memory.buffer, start, totalSize);
-                        new Uint8Array(memory.buffer, storagePtr, totalSize).set(data);
-                        return data.byteLength;
+                let lower_variant_fn = Self::LowerFlatVariant.name();
+                output.push_str(&format!(
+                    r#"
+                    function _lowerFlatResult(variantMetas) {{
+                       const invalidTag = variantMetas.find(t => t.tag !== 'ok' && t.tag !== 'error')
+                       if (invalidTag) {{ throw new Error(`invalid variant tag [${{invalidTag}}] found for result`); }}
+
+                       return function _lowerFlatResultInner(ctx) {{
+                           {debug_log_fn}('[_lowerFlatResult()] args', {{ variantMetas }});
+                           {lower_variant_fn}(variantMetas, {{ forResult: true }});
+                       }};
                     }}
-                "#));
+                    "#
+                ));
             }
 
             Self::LowerFlatOwn => {

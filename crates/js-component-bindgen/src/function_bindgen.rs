@@ -349,11 +349,7 @@ impl FunctionBindgen<'_> {
         uwriteln!(
             self.src,
             r#"
-              if (hostProvided && {is_async}) {{
-                  // TODO
-              }}
-
-              const [_, {prefix}currentTaskID] = {start_current_task_fn}({{
+              const [task, {prefix}currentTaskID] = {start_current_task_fn}({{
                   componentIdx: {component_instance_idx},
                   isAsync: {is_async},
                   entryFnName: '{fn_name}',
@@ -362,7 +358,6 @@ impl FunctionBindgen<'_> {
                   errHandling: '{err_handling}',
               }});
             "#,
-            // NOTE: callback functions are missing on async imports that are host defined
         );
     }
 
@@ -1349,6 +1344,18 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Start the necessary subtasks and/or host task
                 //
                 // We must create a subtask in the case of an async host import.
+                //
+                // If there's no parent task, we're not executing in a subtask situation,
+                // so we can just create the new task and immediately continue execution.
+                //
+                // If there *is* a parent task, then we are likely about to create new task that
+                // matches/belongs to an existing subtask in the parent task.
+                //
+                // If we're dealing with a function that has been marked as a host import, then
+                // we expect that `Trampoline::LowerImport` and relevant intrinsics were called before
+                // this, and a subtask has been set up.
+                //
+                // TODO: we use getLatestSubtask(), but could ordering change? Not under threads (assuming same thread)?
                 uwriteln!(
                     self.src,
                     r#"
@@ -1369,31 +1376,23 @@ impl Bindgen for FunctionBindgen<'_> {
                     }};
 
                     taskCreation: {{
-                        const parentTaskMeta = {current_task_get_fn}({component_instance_idx});
-                        if (!parentTaskMeta) {{
-                            createTask();
-                            break taskCreation;
-                        }}
-
-                        parentTask = parentTaskMeta.task;
+                        parentTask = {current_task_get_fn}({component_instance_idx})?.task;
                         if (!parentTask) {{
                             createTask();
                             break taskCreation;
                         }}
 
-                        const isHostAsyncImport = hostProvided && {is_async};
-
                         createTask();
 
+                        const isHostAsyncImport = hostProvided && {is_async};
                         if (isHostAsyncImport) {{
-                           subtask = parentTask.createSubtask({{
-                              componentIdx: {component_instance_idx},
-                              parentTask,
-                              childTask: task,
-                           }});
+                            subtask = parentTask.getLatestSubtask();
+                            if (!subtask) {{
+                                throw new Error("Missing subtask for host import call, has the import been lowered?");
+                            }}
+                            subtask.setChildTask(task);
+                            task.setParentSubtask(subtask);
                         }}
-
-                        if (isHostAsyncImport) {{ task.setParentSubtask(subtask); }}
                     }}
                     "#,
                     is_async = self.is_async,

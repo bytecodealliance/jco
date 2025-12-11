@@ -283,7 +283,7 @@ impl HostIntrinsic {
 
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{
-                            throw new Error('invalid substack state, out of valid range');
+                            throw new Error('invalid subtask state, out of valid range');
                         }}
 
                         const callerComponentState = {get_or_create_async_state_fn}(subtask.componentIdx());
