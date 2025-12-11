@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
+use std::ops::Index;
 
 use base64::Engine as _;
 use base64::engine::general_purpose;
@@ -33,6 +34,7 @@ use crate::function_bindgen::{
 };
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::lift::LiftIntrinsic;
+use crate::intrinsics::lower::LowerIntrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
@@ -1683,16 +1685,15 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            // NOTE: lower import trampoline is called, and can generate a function,
-            // but that is *not currently used* by the generated code.
-            //
-            // The approach that probably works here is to WRAP the actual function (which is called `trampoline<lowered index>`)
-            // and do the relevant functionality that is inherent to canon_lower
             Trampoline::LowerImport {
                 index,
                 lower_ty,
                 options,
             } => {
+                let lower_import_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImport));
+
                 let canon_opts = self
                     .component
                     .options
@@ -1700,43 +1701,38 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("failed to find options");
 
                 let fn_idx = index.as_u32();
+                let component_idx = canon_opts.instance.as_u32();
+                let is_async = canon_opts.async_;
+                let cancellable = canon_opts.cancellable;
 
-                let lower_import_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::LowerImport));
+                let func_ty = self.types.index(*lower_ty);
 
-                let _ = (lower_ty, canon_opts);
+                // Build list of lift functions for the params of the lowered import
+                let param_types = &self.types.index(func_ty.params).types;
+                let param_lift_fns_js = gen_flat_lift_fn_list_js_expr(
+                    self,
+                    self.types,
+                    param_types.iter().as_slice(),
+                    canon_opts,
+                );
 
-                // TODO: this trampoline (trampoline{i}) is is *already present*?
-                // current lower input globalizer code already handles it??
-                //
-                // Maybe we need a special function name for this? OR does the other trampoline
-                // get called all the time as well? It can't be, because it *creates* the function
-                // that gets called?
-                //
-                // Maybe that is actually the lower that gets called all the time and should create the
-                // subtask!
+                // Build list of lower functions for the results of the lowered import
+                let result_types = &self.types.index(func_ty.results).types;
+                let result_lower_fns_js = gen_flat_lower_fn_list_js_expr(
+                    self,
+                    self.types,
+                    result_types.iter().as_slice(),
+                    canon_opts,
+                );
 
-                // TODO: the original trampoline (trampoline{i}) MAY point to a function that is
-                // lowered for use inside another component.
-                //
-                // In the post-return test we know that #17 is the async sleep millis and it IS
-                // fed into an instantiated component.
-                //
-                // ```
-                // const trampolineXX = WebAssembly.suspending(...)
-                // ```
-
-                // TODO: prepare call & start call are called BEFORE the wasm call that IS a subtask starts.
-                // this is our only way to distinguish between a regular host call and a host call from inside
-                // a component.
-                //
-                // This means one of them has to create the subtask that the rust side is going to be looking for.
-
-                // NOTE: this means that start_call is a guest->guest *only* thing previously prepared
-                // In our case the only valid thign is going to
-                //
-                // The functionidx is useless it seems, trampoline idx *does* match though
+                let get_callback_fn_js = canon_opts
+                    .callback
+                    .map(|idx| format!("() => callback_{}", idx.as_u32()))
+                    .unwrap_or_else(|| "() => null".into());
+                let get_post_return_fn_js = canon_opts
+                    .post_return
+                    .map(|idx| format!("() => postReturn{}", idx.as_u32()))
+                    .unwrap_or_else(|| "() => null".into());
 
                 uwriteln!(
                     self.src.js,
@@ -1744,6 +1740,13 @@ impl<'a> Instantiator<'a, '_> {
                          null,
                          {{
                              functionIdx: {fn_idx},
+                             componentIdx: {component_idx},
+                             isAsync: {is_async},
+                             paramLiftFns: {param_lift_fns_js},
+                             resultLowerFns: {result_lower_fns_js},
+                             getCallbackFn: {get_callback_fn_js},
+                             getPostReturnFn: {get_post_return_fn_js},
+                             isCancellable: {cancellable},
                          }},
                      );",
                 );
@@ -3921,6 +3924,25 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
     }
 }
 
+/// Generate the javascript that corresponds to a list of lifting functions for a given list of types
+pub fn gen_flat_lift_fn_list_js_expr(
+    intrinsic_mgr: &mut impl ManagesIntrinsics,
+    component_types: &ComponentTypes,
+    types: &[InterfaceType],
+    canon_opts: &CanonicalOptions,
+) -> String {
+    let mut lift_fns: Vec<String> = Vec::with_capacity(types.len());
+    for ty in types.iter() {
+        lift_fns.push(gen_flat_lift_fn_js_expr(
+            intrinsic_mgr,
+            component_types,
+            ty,
+            canon_opts,
+        ));
+    }
+    format!("[{}]", lift_fns.join(","))
+}
+
 /// Generate the javascript lifting function for a given type
 ///
 /// This function will a function object that can be executed with the right
@@ -4148,6 +4170,276 @@ pub fn gen_flat_lift_fn_js_expr(
         InterfaceType::ErrorContext(_ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext)
+                .name()
+                .into()
+        }
+    }
+}
+
+/// Generate the javascript that corresponds to a list of lowering functions for a given list of types
+pub fn gen_flat_lower_fn_list_js_expr(
+    intrinsic_mgr: &mut impl ManagesIntrinsics,
+    component_types: &ComponentTypes,
+    types: &[InterfaceType],
+    canon_opts: &CanonicalOptions,
+) -> String {
+    let mut lower_fns: Vec<String> = Vec::with_capacity(types.len());
+    for ty in types.iter() {
+        lower_fns.push(gen_flat_lower_fn_js_expr(
+            intrinsic_mgr,
+            component_types,
+            ty,
+            canon_opts,
+        ));
+    }
+    format!("[{}]", lower_fns.join(","))
+}
+
+/// Generate the javascript lowering function for a given type
+///
+/// This function will a function object that can be executed with the right
+/// context in order to perform the lower. For example, running this for bool
+/// will produce the following:
+///
+/// ```
+/// _lowerFlatBool
+/// ```
+///
+/// This is becasue all it takes to lower a flat boolean is to run the _lowerFlatBool function intrinsic.
+///
+/// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
+///
+pub fn gen_flat_lower_fn_js_expr(
+    intrinsic_mgr: &mut impl ManagesIntrinsics,
+    component_types: &ComponentTypes,
+    ty: &InterfaceType,
+    canon_opts: &CanonicalOptions,
+) -> String {
+    //let ty_abi = component_types.canonical_abi(ty);
+    let string_encoding = canon_opts.string_encoding;
+    match ty {
+        InterfaceType::Bool => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBool));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatBool)
+                .name()
+                .into()
+        }
+        InterfaceType::S8 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS8));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatS8).name().into()
+        }
+        InterfaceType::U8 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU8));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatU8).name().into()
+        }
+        InterfaceType::S16 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS16));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatS16).name().into()
+        }
+        InterfaceType::U16 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU16));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatU16).name().into()
+        }
+        InterfaceType::S32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS32));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatS32).name().into()
+        }
+        InterfaceType::U32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU32));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatU32).name().into()
+        }
+        InterfaceType::S64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS64));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatS64).name().into()
+        }
+        InterfaceType::U64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU64));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatU64).name().into()
+        }
+        InterfaceType::Float32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32)
+                .name()
+                .into()
+        }
+        InterfaceType::Float64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64)
+                .name()
+                .into()
+        }
+        InterfaceType::Char => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatChar));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatChar)
+                .name()
+                .into()
+        }
+        InterfaceType::String => match string_encoding {
+            wasmtime_environ::component::StringEncoding::Utf8 => {
+                intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8));
+                Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8)
+                    .name()
+                    .into()
+            }
+            wasmtime_environ::component::StringEncoding::Utf16 => {
+                intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16));
+                Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16)
+                    .name()
+                    .into()
+            }
+            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                todo!("latin1+utf8 not supported")
+            }
+        },
+        InterfaceType::Record(ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
+            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord).name();
+            let record_ty = &component_types[*ty_idx];
+            let mut keys_and_lowers_expr = String::from("[");
+            for f in &record_ty.fields {
+                // For each field we build a list of [name, lowerFn, 32bit alignment]
+                // so that the record lowering function (which is a higher level function)
+                // can properly generate a function that lowers the fields.
+                keys_and_lowers_expr.push_str(&format!(
+                    "{{ field: '{}', lowerFn: {}, align32: {} }},",
+                    f.name,
+                    gen_flat_lower_fn_js_expr(intrinsic_mgr, component_types, &f.ty, canon_opts),
+                    component_types.canonical_abi(ty).align32,
+                ));
+            }
+            keys_and_lowers_expr.push(']');
+            format!("{lower_fn}({keys_and_lowers_expr})")
+        }
+        InterfaceType::Variant(ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
+            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
+            let variant_ty = &component_types[*ty_idx];
+            let mut cases_and_lowers_expr = String::from("[");
+            for (name, maybe_ty) in &variant_ty.cases {
+                cases_and_lowers_expr.push_str(&format!(
+                    "{{ tag: '{}', lowerFn: {}, align32: {} }},",
+                    name,
+                    maybe_ty
+                        .as_ref()
+                        .map(|ty| gen_flat_lower_fn_js_expr(
+                            intrinsic_mgr,
+                            component_types,
+                            ty,
+                            canon_opts
+                        ))
+                        .unwrap_or(String::from("null")),
+                    maybe_ty
+                        .as_ref()
+                        .map(|ty| component_types.canonical_abi(ty).align32)
+                        .map(|n| n.to_string())
+                        .unwrap_or(String::from("null")),
+                ));
+            }
+            cases_and_lowers_expr.push(']');
+            format!("{lower_fn}({cases_and_lowers_expr})")
+        }
+        InterfaceType::List(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatList)
+                .name()
+                .into()
+        }
+        InterfaceType::Tuple(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple)
+                .name()
+                .into()
+        }
+        InterfaceType::Flags(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags)
+                .name()
+                .into()
+        }
+        InterfaceType::Enum(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum)
+                .name()
+                .into()
+        }
+        InterfaceType::Option(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatOption)
+                .name()
+                .into()
+        }
+        InterfaceType::Result(ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
+            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatResult).name();
+            let result_ty = &component_types[*ty_idx];
+            let mut cases_and_lowers_expr = String::from("[");
+            cases_and_lowers_expr.push_str(&format!(
+                "{{ tag: '{}', lowerFn: {}, align32: {} }},",
+                "ok",
+                result_ty
+                    .ok
+                    .as_ref()
+                    .map(|ty| gen_flat_lower_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        ty,
+                        canon_opts
+                    ))
+                    .unwrap_or(String::from("null")),
+                result_ty
+                    .ok
+                    .as_ref()
+                    .map(|ty| component_types.canonical_abi(ty).align32)
+                    .map(|n| n.to_string())
+                    .unwrap_or(String::from("null")),
+            ));
+            cases_and_lowers_expr.push_str(&format!(
+                "{{ tag: '{}', lowerFn: {}, align32: {} }},",
+                "error",
+                result_ty
+                    .err
+                    .as_ref()
+                    .map(|ty| gen_flat_lower_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        ty,
+                        canon_opts
+                    ))
+                    .unwrap_or(String::from("null")),
+                result_ty
+                    .err
+                    .as_ref()
+                    .map(|ty| component_types.canonical_abi(ty).align32)
+                    .map(|n| n.to_string())
+                    .unwrap_or(String::from("null")),
+            ));
+
+            cases_and_lowers_expr.push(']');
+            format!("{lower_fn}({cases_and_lowers_expr})")
+        }
+        InterfaceType::Own(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name().into()
+        }
+        InterfaceType::Borrow(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name().into()
+        }
+        InterfaceType::Future(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture)
+                .name()
+                .into()
+        }
+        InterfaceType::Stream(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStream));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatStream)
+                .name()
+                .into()
+        }
+        InterfaceType::ErrorContext(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext)
                 .name()
                 .into()
         }
