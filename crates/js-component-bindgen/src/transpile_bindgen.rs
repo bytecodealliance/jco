@@ -735,26 +735,86 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
-        // We push lower import initializers down to right before instantiate, so that the
-        // memory, realloc and postReturn functions are available to the import lowerings
-        // for optimized bindgen
+        // Process global initializers
+        //
+        // The order of initialization is unfortunately quite fragile.
+        //
+        // We take care in processing module instantiations because we must ensure that
+        // $wit-component.fixups must be instantiated directly after $wit-component.shim
+        //
         let mut lower_import_initializers = Vec::new();
+        // let mut found_shim = false;
+        // let mut processed_fixup_init = false;
+
+        // // Attempt to find the the wit-component fixups
+        // let fixup_init = self.component.initializers.iter().find(|init| {
+        //     if let GlobalInitializer::InstantiateModule(InstantiateModule::Static(idx, _)) = init
+        //         && let Some(translation) = self.modules.get(*idx)
+        //         && let Some("wit-component:fixups") = translation.name()
+        //     {
+        //         return true;
+        //     } else {
+        //         return false;
+        //     }
+        // });
+
+        // TODO: instantiating the global initializer CANNOT modify stuff. Makes it impossible to order the sections.
+
+        // Process first n lower import initializers until the first instantiate module initializer
         for init in self.component.initializers.iter() {
             match init {
-                GlobalInitializer::InstantiateModule(_) => {
-                    for init in lower_import_initializers.drain(..) {
-                        self.instantiation_global_initializer(init);
+                GlobalInitializer::InstantiateModule(_m) => {
+                    // Ensure lower import initializers are processed before the first module instantiation
+                    for lower_import_init in lower_import_initializers.drain(..) {
+                        self.instantiation_global_initializer(lower_import_init);
                     }
+
+                    // // If we're dealing with the shim, then we *should make sure that
+                    // // the next module instantiation we process is the one for fixups
+                    // if let InstantiateModule::Static(idx, _) = m
+                    //     && let Some(translation) = self.modules.get(*idx)
+                    //     && let Some("wit-component:shim") = translation.name()
+                    // {
+                    //     found_shim = true;
+                    // }
                 }
+
+                // We push lower import initializers down to right before instantiate, so that the
+                // memory, realloc and postReturn functions are available to the import lowerings
+                // for optimized bindgen
                 GlobalInitializer::LowerImport { .. } => {
                     lower_import_initializers.push(init);
                     continue;
                 }
                 _ => {}
             }
+
+            // match (found_shim, processed_fixup_init) {
+            //     // If we haven't found the shim, or we've found and processed it and the fixup,
+            //     // process initializations like normal
+            //     (false, false) | (true, true) => {
+            //         self.instantiation_global_initializer(init);
+            //     }
+
+            //     // If we just found the shim, ensure to process the fixup immediately
+            //     (true, false) => {
+            //         self.instantiation_global_initializer(init);
+
+            //         if found_shim && let Some(fixup_init) = fixup_init {
+            //             self.instantiation_global_initializer(fixup_init);
+            //         }
+            //         processed_fixup_init = true;
+            //     }
+
+            //     // It's impossible to enter the case where we didn't find the shim but processed the fixup
+            //     // the fixup would be processed via normal means otherwise
+            //     (false, true) => unreachable!(),
+            // }
+
             self.instantiation_global_initializer(init);
         }
 
+        // Process lower import initializers that were discovered after the last module instantiation
         for init in lower_import_initializers.drain(..) {
             self.instantiation_global_initializer(init);
         }
@@ -2179,13 +2239,17 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let callback_{callback_idx};",);
                 uwriteln!(self.src.js_init, "callback_{callback_idx} = {core_def};");
             }
+
             GlobalInitializer::InstantiateModule(m) => match m {
-                InstantiateModule::Static(idx, args) => self.instantiate_static_module(*idx, args),
+                InstantiateModule::Static(idx, args) => {
+                    self.instantiate_static_module(*idx, args);
+                }
                 // This is only needed when instantiating an imported core wasm
                 // module which while easy to implement here is not possible to
                 // test at this time so it's left unimplemented.
                 InstantiateModule::Import(..) => unimplemented!(),
             },
+
             GlobalInitializer::LowerImport { index, import } => {
                 let fn_idx = index.as_u32();
                 let (import_index, _path) = &self.component.imports[*import];
@@ -2200,25 +2264,30 @@ impl<'a> Instantiator<'a, '_> {
                 );
                 self.lower_import(*index, *import);
             }
+
             GlobalInitializer::ExtractMemory(m) => {
                 let def = self.core_export_var_name(&m.export);
                 let idx = m.index.as_u32();
                 uwriteln!(self.src.js, "let memory{idx};");
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
             }
+
             GlobalInitializer::ExtractRealloc(r) => {
                 let def = self.core_def(&r.def);
                 let idx = r.index.as_u32();
                 uwriteln!(self.src.js, "let realloc{idx};");
                 uwriteln!(self.src.js_init, "realloc{idx} = {def};",);
             }
+
             GlobalInitializer::ExtractPostReturn(p) => {
                 let def = self.core_def(&p.def);
                 let idx = p.index.as_u32();
                 uwriteln!(self.src.js, "let postReturn{idx};");
                 uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
             }
+
             GlobalInitializer::Resource(_) => {}
+
             GlobalInitializer::ExtractTable(extract_table) => {
                 let _ = extract_table;
             }
@@ -2232,23 +2301,39 @@ impl<'a> Instantiator<'a, '_> {
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
         for (module, name, arg) in self.modules[idx].imports(args) {
+            // By default, async-lower gets patched to the relevant export function directly,
+            // but it *should* be patched to the lower import intrinsic, as subtask rep/state
+            // needs to be returned to the calling component.
+            //
+            // The LowerImport intrinsic will take care of calling the original export,
+            // which will likely trigger an `Instruction::CallInterface for the actual import
+            // that was called.
+            //
             let def = if name.starts_with("[async-lower]")
                 && let core::AugmentedImport::CoreDef(CoreDef::Export(CoreExport {
                     item: ExportItem::Index(EntityIndex::Function(_)),
                     instance,
                 })) = arg
             {
+                let key = name.trim_start_matches("[async-lower]");
+                let instance = instance.as_u32();
+                let exec_fn = self.augmented_import_def(&arg);
                 let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
+                // NOTE: We are not actually wrapping a host import (`exec_fn`) below directly,
+                // but a trip *through* an exporting component table.
+                //
+                // The host import is imported, passed through an indirect call in a component,
+                // (see $wit-component.shims, $wit-component.fixups modules in generated transpile output)
+                // then it is called from the component that is actually performing the call..
                 format!(
-                    "{global_lowers_class}.lookup({}, '{}')",
-                    instance.as_u32(),
-                    name.trim_start_matches("[async-lower]"),
+                    "{global_lowers_class}.lookup({instance}, '{key}')?.bind(null, WebAssembly.promising({exec_fn}))"
                 )
             } else {
-                // All other imports can be augmented normally
+                // All other imports can be connected directly to the relevant export
                 self.augmented_import_def(&arg)
             };
 
+            // let def = self.augmented_import_def(&arg);
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
             assert!(
@@ -3485,7 +3570,14 @@ impl<'a> Instantiator<'a, '_> {
     {
         let name = match &export.item {
             ExportItem::Index(idx) => {
-                let module = &self.modules[self.instances[export.instance]];
+                let module_idx = self
+                    .instances
+                    .get(export.instance)
+                    .expect("unexpectedly missing export instance");
+                let module = &self
+                    .modules
+                    .get(*module_idx)
+                    .expect("unexpectedly missing module by idx");
                 let idx = (*idx).into();
                 module
                     .exports()
@@ -3495,10 +3587,9 @@ impl<'a> Instantiator<'a, '_> {
             }
             ExportItem::Name(s) => s,
         };
-
         let i = export.instance.as_u32() as usize;
-
-        format!("exports{i}{}", maybe_quote_member(name))
+        let quoted = maybe_quote_member(name);
+        return format!("exports{i}{quoted}");
     }
 
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {

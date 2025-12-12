@@ -9,7 +9,7 @@ import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 
 suite('Async (WASI P3)', () => {
     // see: https://github.com/bytecodealliance/jco/issues/1076
-    test.skip('incorrect task return params offloading', async () => {
+    test('incorrect task return params offloading', async () => {
         const name = 'async-flat-param-adder';
         const { instance, cleanup } = await setupAsyncTest({
             component: {
@@ -32,7 +32,7 @@ suite('Async (WASI P3)', () => {
     });
 
     // https://bytecodealliance.zulipchat.com/#narrow/channel/206238-general/topic/Should.20StringLift.20be.20emitted.20for.20async.20return.20values.3F/with/561133720
-    test.skip('simple async returns', async () => {
+    test('simple async returns', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 path: join(
@@ -54,6 +54,9 @@ suite('Async (WASI P3)', () => {
 
     // https://github.com/bytecodealliance/jco/issues/1150
     test('simple async imports', async () => {
+        const hostStr = "loaded-from-host";
+        const hostU32 = 43;
+
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 path: join(
@@ -62,8 +65,8 @@ suite('Async (WASI P3)', () => {
                 ),
                 imports: {
                     ...new WASIShim().getImportObject(),
-                    '[async]load-string': { default: async () => "loaded" },
-                    '[async]load-u32': { default: async () => 43 },
+                    '[async]load-string': { default: async () => hostStr },
+                    '[async]load-u32': { default: async () => hostU32 },
                 },
             },
             jco: {
@@ -85,10 +88,10 @@ suite('Async (WASI P3)', () => {
         });
 
         assert.typeOf(instance.asyncGetString, 'function');
-        assert.strictEqual("loaded", await instance.asyncGetString());
+        assert.strictEqual(hostStr, await instance.asyncGetString());
 
         assert.typeOf(instance.asyncGetU32, 'function');
-        assert.strictEqual(43, await instance.asyncGetU32());
+        assert.strictEqual(hostU32, await instance.asyncGetU32());
 
         await cleanup();
     });
