@@ -534,6 +534,7 @@ macro_rules! define_visit {
     ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*))*) => {
         $(
             #[allow(unreachable_code)]
+            #[allow(unused)]
             fn $visit(&mut self $( $( ,$arg: $argty)* )?) {
                 define_visit!(augment self $op $($($arg)*)?);
             }
@@ -675,6 +676,7 @@ macro_rules! define_translate {
         $(
             #[allow(unreachable_code)]
             #[allow(dropping_copy_types)]
+            #[allow(unused)]
             fn $visit(&mut self $(, $($arg: $argty),*)?)  {
                 #[allow(unused_imports)]
                 use wasm_encoder::{
@@ -747,6 +749,7 @@ macro_rules! define_translate {
     // wasm-encoder and then create the new instruction.
     (translate $self:ident $op:ident $($arg:ident)*) => {{
         $(
+            #[allow(unused)]
             let $arg = define_translate!(map $self $arg $arg);
         )*
         let insn = define_translate!(mk $op $($arg)*);
