@@ -90,7 +90,7 @@ impl StringIntrinsic {
                 let utf8EncodedLen = 0;
                 function utf8Encode(s, realloc, memory) {
                     if (typeof s !== 'string') \
-                    throw new TypeError('expected a string');
+                    throw new TypeError('expected a string, received [' + typeof s + ']');
                     if (s.length === 0) {
                         utf8EncodedLen = 0;
                         return 1;

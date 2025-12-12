@@ -137,6 +137,9 @@ pub enum Intrinsic {
     /// Generally the only kind of type that can be borrowed is a resource
     /// handle, so this helper checks for that.
     IsBorrowedType,
+
+    /// Async lower functions that are saved by component instance
+    GlobalComponentAsyncLowersClass,
 }
 
 /// Profile for determinism to be used by async implementation
@@ -184,6 +187,8 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     // Intrinsics that should just always be present
     args.intrinsics.insert(Intrinsic::DebugLog);
     args.intrinsics.insert(Intrinsic::GlobalAsyncDeterminism);
+    args.intrinsics
+        .insert(Intrinsic::GlobalComponentAsyncLowersClass);
     args.intrinsics.insert(Intrinsic::CoinFlip);
     args.intrinsics.insert(Intrinsic::ConstantI32Min);
     args.intrinsics.insert(Intrinsic::ConstantI32Max);
@@ -832,9 +837,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 output.push_str(&format!("
                     class {rep_table_class} {{
                         #data = [0, null];
+                        #target;
+
+                        constructor(args) {{
+                            if (args.target) {{ this.target = args.target }}
+                        }}
 
                         insert(val) {{
-                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val }});
+                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val, target: this.target }});
                             const freeIdx = this.#data[0];
                             if (freeIdx === 0) {{
                                 this.#data.push(val);
@@ -849,20 +859,20 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         }}
 
                         get(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
                             const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
                             return val;
                         }}
 
                         contains(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
                             const baseIdx = rep << 1;
                             return !!this.#data[baseIdx];
                         }}
 
                         remove(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
                             const baseIdx = rep << 1;
@@ -876,11 +886,48 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         }}
 
                         clear() {{
-                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep, target: this.target }});
                             this.#data = [0, null];
                         }}
                     }}
                 "));
+            }
+
+            Intrinsic::GlobalComponentAsyncLowersClass => {
+                let global_component_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
+                output.push_str(&format!(
+                    r#"
+                    class {global_component_lowers_class} {{
+                        static map = new Map();
+
+                        constructor() {{ throw new Error('{global_component_lowers_class} should not be constructed'); }}
+
+                        static define(args) {{
+                            const {{ componentIdx, importName, fn }} = args;
+                            let inner = {global_component_lowers_class}.map.get(componentIdx);
+                            if (!{global_component_lowers_class}.map.has(componentIdx)) {{
+                                inner = new Map();
+                                {global_component_lowers_class}.map.set(componentIdx, inner);
+                            }}
+                            inner.set(importName, fn);
+                        }}
+
+                        static lookup(componentIdx, importName) {{
+                            let inner = {global_component_lowers_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                return () => {{ throw new Error(`no such component [${{componentIdx}}]`); }};
+                            }}
+
+                            const found = inner.get(importName);
+                            if (found) {{ return found; }}
+
+                            return () => {{
+                                throw new Error(`component [${{componentIdx}}] has no lower for [${{importName}}]`);
+                            }};
+                        }}
+                    }}
+                "#
+                ));
             }
         }
     }
@@ -992,6 +1039,7 @@ impl Intrinsic {
             Intrinsic::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",
             Intrinsic::AwaitableClass => "Awaitable",
             Intrinsic::CoinFlip => "_coinFlip",
+            Intrinsic::GlobalComponentAsyncLowersClass => "GlobalComponentAsyncLowers",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",

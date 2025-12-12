@@ -52,18 +52,6 @@ pub enum ComponentIntrinsic {
     /// A class that encapsulates component-level async state
     ComponentAsyncStateClass,
 
-    /// Intrinsic used when components lower imports to be used
-    /// from other components or the host.
-    ///
-    /// # Component Intrinsic implementation function
-    ///
-    /// The function that implements this intrinsic has the following definition:
-    ///
-    /// ```ts
-    /// ```
-    ///
-    LowerImport,
-
     /// Intrinsic used to set all component async states to error.
     ///
     /// Practically, this stops all individual component event loops (`AsyncComponentState#tick()`)
@@ -93,7 +81,6 @@ impl ComponentIntrinsic {
             Self::BackpressureInc => "backpressureInc",
             Self::BackpressureDec => "backpressureDec",
             Self::ComponentAsyncStateClass => "ComponentAsyncState",
-            Self::LowerImport => "_intrinsic_component_lowerImport",
             Self::ComponentStateSetAllError => "_ComponentStateSetAllError",
         }
     }
@@ -167,14 +154,16 @@ impl ComponentIntrinsic {
                         #errored = null;
 
                         mayLeave = true;
-                        waitableSets = new {rep_table_class}();
-                        waitables = new {rep_table_class}();
-                        subtasks = new {rep_table_class}();
+
+                        waitableSets;
+                        waitables;
+                        subtasks;
 
                         constructor(args) {{
                             this.#componentIdx = args.componentIdx;
-                            const self = this;
-
+                            this.waitableSets = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitable sets` }});
+                            this.waitables = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitables` }});
+                            this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
                         }};
 
                         componentIdx() {{ return this.#componentIdx; }}
@@ -315,6 +304,7 @@ impl ComponentIntrinsic {
                         }}
 
                         tick() {{
+                            {debug_log_fn}('[{class_name}#tick()]', {{ suspendedTaskIDs: this.#suspendedTaskIDs }});
                             let resumedTask = false;
                             for (const taskID of this.#suspendedTaskIDs.filter(t => t !== null)) {{
                                 const meta = this.#suspendedTasksByTaskID.get(taskID);
@@ -351,22 +341,6 @@ impl ComponentIntrinsic {
                         return {async_state_map}.get(componentIdx);
                     }}
                    "#
-                ));
-            }
-
-            // NOTE: LowerImport is called but is *not used* as a function,
-            // instead having a chance to do some modification *before* the final
-            // creation of instantiated modules' exports
-            Self::LowerImport => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lower_import_fn = Self::LowerImport.name();
-                output.push_str(&format!(
-                    "
-                    function {lower_import_fn}(args) {{
-                        {debug_log_fn}('[{lower_import_fn}()] args', args);
-                        throw new Error('runtime LowerImport not implmented');
-                    }}
-                    "
                 ));
             }
 
