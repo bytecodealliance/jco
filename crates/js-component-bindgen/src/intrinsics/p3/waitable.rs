@@ -160,7 +160,7 @@ impl WaitableIntrinsic {
                 };
 
                 // TODO: remove the public mutable members that are eagerly exposed for early impl
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     class {waitable_set_class} {{
                         #componentInstanceID;
                         #waitables = [];
@@ -200,6 +200,7 @@ impl WaitableIntrinsic {
                             {debug_log_fn}('[{waitable_set_class}#hasPendingEvent()] args', {{
                                 componentIdx: this.#componentInstanceID
                             }});
+                            console.log("WAITABLES?", this.#waitables);
                             const waitable = this.#waitables.find(w => w.hasPendingEvent());
                             return waitable !== undefined;
                         }}
@@ -235,7 +236,7 @@ impl WaitableIntrinsic {
                             throw new Error('{waitable_set_class}#poll() not implemented');
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::WaitableClass => {
@@ -243,7 +244,7 @@ impl WaitableIntrinsic {
                 let waitable_class = Self::WaitableClass.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     class {waitable_class} {{
                         #componentInstanceID;
                         #pendingEventFn = null;
@@ -256,10 +257,12 @@ impl WaitableIntrinsic {
                         }}
 
                         hasPendingEvent() {{
+                            console.log("pendinge vent?",  this.#pendingEventFn);
                             return this.#pendingEventFn !== null;
                         }}
 
                         setPendingEventFn(fn) {{
+                            console.log("SETTING PENDING EVENT", fn.toString());
                             this.#pendingEventFn = fn;
                         }}
 
@@ -300,7 +303,8 @@ impl WaitableIntrinsic {
                             this.#waitableSet = waitableSet;
                         }}
                     }}
-                "));
+                "#
+                ));
             }
 
             Self::WaitableSetNew => {

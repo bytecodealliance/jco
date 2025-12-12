@@ -54,14 +54,25 @@ use wasmtime_environ::{EntityIndex, MemoryIndex, ModuleTranslation, PrimaryMap};
 fn unimplemented_try_table() -> wasm_encoder::Instruction<'static> {
     unimplemented!()
 }
+
 pub enum Translation<'a> {
     Normal(ModuleTranslation<'a>),
     Augmented {
         original: ModuleTranslation<'a>,
         wasm: Vec<u8>,
+        name: Option<String>,
         imports_removed: HashSet<(String, String)>,
         imports_added: Vec<(String, String, MemoryIndex, AugmentedOp)>,
     },
+}
+
+impl<'a> Translation<'a> {
+    pub(crate) fn name(&self) -> Option<&str> {
+        match self {
+            Translation::Normal(mt) => mt.module.name.as_deref(),
+            Translation::Augmented { name, .. } => name.as_deref(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -133,6 +144,7 @@ impl<'a> Translation<'a> {
         let wasm = augmenter.run()?;
         Ok(Translation::Augmented {
             wasm,
+            name: translation.module.name.clone(),
             imports_removed: augmenter.imports_removed,
             imports_added: augmenter.imports_added,
             original: translation,
@@ -535,6 +547,7 @@ macro_rules! define_visit {
     ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*))*) => {
         $(
             #[allow(unreachable_code)]
+            #[allow(unused)]
             fn $visit(&mut self $( $( ,$arg: $argty)* )?) {
                 define_visit!(augment self $op $($($arg)*)?);
             }
@@ -676,6 +689,7 @@ macro_rules! define_translate {
         $(
             #[allow(unreachable_code)]
             #[allow(dropping_copy_types)]
+            #[allow(unused)]
             fn $visit(&mut self $(, $($arg: $argty),*)?)  {
                 #[allow(unused_imports)]
                 use wasm_encoder::{
@@ -748,6 +762,7 @@ macro_rules! define_translate {
     // wasm-encoder and then create the new instruction.
     (translate $self:ident $op:ident $($arg:ident)*) => {{
         $(
+            #[allow(unused)]
             let $arg = define_translate!(map $self $arg $arg);
         )*
         let insn = define_translate!(mk $op $($arg)*);

@@ -976,6 +976,7 @@ impl AsyncTaskIntrinsic {
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
+                            setTimeout(() => cstate.tick(), 0);
                             const taskWait = await cstate.suspendTask({{ task: this, readyFn }});
                             const keepGoing = await taskWait;
                             return keepGoing;
@@ -1200,6 +1201,11 @@ impl AsyncTaskIntrinsic {
 
                         onStart() {{
                             if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
+                            {debug_log_fn}('[{subtask_class}#onStart()] args', {{
+                                componentIdx: this.#componentIdx,
+                                taskID: this.#id,
+                                parentTaskID: this.parentTaskID(),
+                            }});
                             this.#onProgressFn();
                             this.#state = {subtask_class}.State.STARTED;
                         }}
@@ -1507,6 +1513,22 @@ impl AsyncTaskIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+
+                // EXAMPLE OUTPUT FOR LOWER IMPORT
+                //
+                // LOWER IMPORT {
+                //   args: {
+                //     functionIdx: 1,
+                //     componentIdx: 0,
+                //     isAsync: false,
+                //     paramLiftFns: [ [Function: _liftFlatResultInner] ],
+                //     resultLowerFns: [],
+                //     getCallbackFn: [Function: getCallbackFn],
+                //     getPostReturnFn: [Function: getPostReturnFn],
+                //     isCancellable: false
+                //   },
+                //   params: [ 1058192 ]
+                // }
 
                 // TODO: param lift functions should NOT be used until after subtask start!
                 //
