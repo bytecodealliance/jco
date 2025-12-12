@@ -1337,7 +1337,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     (self.callee.into(), operands.join(", "))
                 };
 
-                // Write out whether the caller was host provided
+                // // Write out whether the caller was host provided
                 uwriteln!(self.src, "const hostProvided = {fn_js}._isHostProvided;");
 
                 let component_instance_idx = self.canon_opts.instance.as_u32();
@@ -1385,6 +1385,8 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         createTask();
 
+                        // TODO: we need to set this up without depending on hostProvided...
+                        // Maybe tag something on the current task?
                         const isHostAsyncImport = hostProvided && {is_async};
                         if (isHostAsyncImport) {{
                             subtask = parentTask.getLatestSubtask();
@@ -2271,6 +2273,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
+                let end_current_task_fn =
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask));
 
                 let component_instance_idx = self.canon_opts.instance.as_u32();
                 let is_async_js = self.requires_async_porcelain | self.is_async;
@@ -2286,21 +2290,39 @@ impl Bindgen for FunctionBindgen<'_> {
                 // JSPI and simply calling the host provided JS function -- there is no need
                 // to drive the async loop as with an async import that came from a component.
                 //
-                //
                 // If a subtask is defined, then we're in the case of a lowered async import,
                 // which means that the first async call (to the callee fn) has occurred,
                 // and a subtask has been created, but has not been triggered as started.
                 //
+                // NOTE: for host provided functions, we know that the resolution fo the
+                // function itself are the lifted (component model -- i.e. a string not a pointer + len)
+                // results. In those cases, we can simply return the result that was provided by the host.
+                //
+                // Alternatively, if we have entered an async return, and are part of a subtask
+                // then we should start it, given that the task we have recently created (however we got to
+                // the async return) is going to continue to be polled soon (via the driver loop).
+                //
                 // TODO: can we know that the latest subtask is the right one? Is it possible
                 // to have two subtasks prepped for this task on the same thread?
+                //
                 //
                 uwriteln!(
                     self.src,
                     r#"
-                      if (hostProvided) {{ return ret; }}
+                      if (hostProvided) {{
+                          {debug_log_fn}('[Instruction::AsyncTaskReturn] signaling host-provided async return completion', {{
+                              task: task.id(),
+                              subtask: subtask?.id(),
+                              result: ret,
+                          }})
+                          task.resolve([ret]);
+                          {end_current_task_fn}({component_instance_idx}, task.id());
+                          return task.completionPromise();
+                      }}
 
                       const currentSubtask = task.getLatestSubtask();
                       if (currentSubtask) {{
+                          {debug_log_fn}("[Instruction::AsyncTaskReturn] starting subtask", {{ fnName: '{name}' }});
                           currentSubtask.onStart();
                       }}
 
@@ -2309,6 +2331,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                       new Promise(async (resolve, reject) => {{
                           try {{
+                              {debug_log_fn}("[Instruction::AsyncTaskReturn] starting driver loop", {{ fnName: '{name}' }});
                               await {async_driver_loop_fn}({{
                                   componentInstanceIdx: {component_instance_idx},
                                   componentState,
@@ -2320,7 +2343,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   reject
                               }});
                           }} catch (err) {{
-                              {debug_log_fn}("[AsyncTaskReturn] driver loop call failure", {{ err }});
+                              {debug_log_fn}("[Instruction::AsyncTaskReturn] driver loop call failure", {{ err }});
                           }}
                       }});
 
