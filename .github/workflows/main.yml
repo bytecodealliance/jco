@@ -173,7 +173,7 @@ jobs:
           npx puppeteer browsers install chrome
 
       - name: Restore jco build
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: jco-build
           path: |
@@ -227,7 +227,7 @@ jobs:
         run: npm install
 
       - name: Restore jco build
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: jco-build
           path: |
@@ -287,7 +287,7 @@ jobs:
             node_modules
 
       - name: Restore jco build
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: jco-build
           path: |
@@ -496,14 +496,14 @@ jobs:
           node-version: ${{ matrix.node.version }}
 
       - name: Restore jco build
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: jco-build
           path: |
             packages/jco/obj
 
       - name: Restore jco-transpile vendor
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: jco-transpile-vendor
           path: |
