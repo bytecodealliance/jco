@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use crate::source::Source;
-use crate::uwrite;
+use crate::{uwrite, uwriteln};
 
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
@@ -76,6 +76,8 @@ pub enum Intrinsic {
     ConstantI32Max,
     ConstantI32Min,
     TypeCheckValidI32,
+    TypeCheckAsyncFn,
+    AsyncFunctionCtor,
 
     Base64Compile,
     ClampGuest,
@@ -193,6 +195,8 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     args.intrinsics.insert(Intrinsic::ConstantI32Min);
     args.intrinsics.insert(Intrinsic::ConstantI32Max);
     args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
+    args.intrinsics.insert(Intrinsic::TypeCheckAsyncFn);
+    args.intrinsics.insert(Intrinsic::AsyncFunctionCtor);
     args.intrinsics.insert(Intrinsic::AsyncTask(
         AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds,
     ));
@@ -506,6 +510,27 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = current_intrinsic.name()))
             }
 
+            Intrinsic::AsyncFunctionCtor => {
+                let async_fn_type = Intrinsic::AsyncFunctionCtor.name();
+                uwriteln!(
+                    output,
+                    "const {async_fn_type} = (async () => {{}}).constructor;"
+                );
+            }
+
+            Intrinsic::TypeCheckAsyncFn => {
+                let async_fn_check = Intrinsic::TypeCheckAsyncFn.name();
+                let async_fn_ctor = Intrinsic::AsyncFunctionCtor.name();
+                uwriteln!(
+                    output,
+                    r#"
+                    const {async_fn_check} = (f) => {{
+                        return f instanceof {async_fn_ctor};
+                    }};
+                    "#,
+                );
+            }
+
             Intrinsic::Base64Compile => {
                 if !args.no_nodejs_compat {
                     output.push_str("
@@ -814,9 +839,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
                 let buffer_manager_class = Intrinsic::BufferManagerClass.name();
                 output.push_str(&format!(
-                    "
-                    const {global_buffer_manager} = new {buffer_manager_class}();
-                "
+                    "const {global_buffer_manager} = new {buffer_manager_class}();"
                 ));
             }
 
@@ -894,7 +917,8 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             }
 
             Intrinsic::GlobalComponentAsyncLowersClass => {
-                let global_component_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
+                let global_component_lowers_class =
+                    Intrinsic::GlobalComponentAsyncLowersClass.name();
                 output.push_str(&format!(
                     r#"
                     class {global_component_lowers_class} {{
@@ -909,6 +933,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                                 inner = new Map();
                                 {global_component_lowers_class}.map.set(componentIdx, inner);
                             }}
+
                             inner.set(importName, fn);
                         }}
 
@@ -1034,6 +1059,8 @@ impl Intrinsic {
             Intrinsic::ConstantI32Max => "I32_MAX",
             Intrinsic::TypeCheckValidI32 => "_typeCheckValidI32",
             Intrinsic::IsBorrowedType => "_isBorrowedType",
+            Intrinsic::TypeCheckAsyncFn => "_typeCheckAsyncFn",
+            Intrinsic::AsyncFunctionCtor => "ASYNC_FN_CTOR",
 
             // Async
             Intrinsic::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",
