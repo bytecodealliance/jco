@@ -29,7 +29,7 @@ With Jco (and related projects in this repository), you can:
 - **Build WebAssembly components** from Javascript/Typescript with the help of [`componentize-js`][cjs]
 - **"Transpile" WebAssembly components** into ES modules that can run in environments like NodeJS and the browser, combining platform-native WebAssembly core support with the advanced features of WebAssembly Components
 - **Run WebAssembly components** whether single-shot applications or web servers (similar to [`wasmtime run`][wasmtime-run]/[`wasmtime serve`][wasmtime-serve])
-- **Reuse WebAssembly component workflows** (e.g. building components, tranpsiling, etc) from your own JS projects
+- **Reuse WebAssembly component workflows** (e.g. building components, transpiling, etc) from your own JS projects
 - **Utilize [`wasm-tools`][wt]** as a library from JS
 
 [cm-book]: https://component-model.bytecodealliance.org/
@@ -50,10 +50,10 @@ As Jco aims to do many things, it contains many subprojects that are organized i
 | `preview2-shim`                  | Javascript | `packages/preview2-shim`                | Library that provides a mapping of [WASI Preview 2][wasi-p2] for NodeJS and Browsers            |
 | `preview3-shim`                  | Javascript | `packages/preview3-shim`                | Library that provides a mapping of WASI Preview 3 for NodeJS                                    |
 | `js-component-bindgen`           | Rust       | `crates/js-component-bindgen`           | Enables `jco transpile` and other features, reusing the Rust WebAssembly ecosystem              |
-| `js-component-bindgen-component` | Rust       | `crates/js-component-bindgen-component` | WebAssembly component that (when transipled) makes `js-component-bindgen` available in JS `jco` |
+| `js-component-bindgen-component` | Rust       | `crates/js-component-bindgen-component` | WebAssembly component that (when transpiled) makes `js-component-bindgen` available in JS `jco` |
 | `wasm-tools-component`           | Rust       | `crates/wasm-tools-component`           | WebAssembly component containing pieces of [`wasm-tools`][wt] used by `jco`                     |
 
-[wasi-p2]: https://github.com/WebAssembly/WASI/tree/main/wasip2
+[wasi-p2]: https://github.com/WebAssembly/WASI/blob/main/docs/Preview2.md
 
 ## Quickstart
 
