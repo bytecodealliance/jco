@@ -160,7 +160,7 @@ impl WaitableIntrinsic {
                 };
 
                 // TODO: remove the public mutable members that are eagerly exposed for early impl
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     class {waitable_set_class} {{
                         #componentInstanceID;
                         #waitables = [];
@@ -235,7 +235,7 @@ impl WaitableIntrinsic {
                             throw new Error('{waitable_set_class}#poll() not implemented');
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::WaitableClass => {
@@ -243,23 +243,33 @@ impl WaitableIntrinsic {
                 let waitable_class = Self::WaitableClass.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     class {waitable_class} {{
+                        static _ID =  0n; // NOTE: this id is *not* the component model representation (aka 'rep')
+
+                        #id;
                         #componentInstanceID;
                         #pendingEventFn = null;
                         #waitableSet;
                         #promise;
 
                         constructor({{ promise, componentInstanceID }}) {{
+                            this.#id = ++{waitable_class}.ID;
                             this.#componentInstanceID = componentInstanceID;
                             this.#promise = promise;
                         }}
 
                         hasPendingEvent() {{
+                            {debug_log_fn}('[{waitable_class}#hasPendingEvent()]', {{
+                                componentIdx: this.#componentInstanceID,
+                                waitableSet: this.#waitableSet,
+                                hasPendingEvent: this.#pendingEventFn,
+                            }});
                             return this.#pendingEventFn !== null;
                         }}
 
                         setPendingEventFn(fn) {{
+                            {debug_log_fn}('[{waitable_class}#setPendingEvent()] args', {{ }});
                             this.#pendingEventFn = fn;
                         }}
 
@@ -272,7 +282,10 @@ impl WaitableIntrinsic {
                         }}
 
                         async poll() {{
-                            {debug_log_fn}('[{waitable_class}#poll()] args', {{ }});
+                            {debug_log_fn}('[{waitable_class}#poll()] args', {{
+                                componentIdx: this.#componentInstanceID,
+                                _id: this.#id,
+                            }});
 
                             const state = {get_or_create_async_state_fn}(this.#componentInstanceID);
                             if (!state) {{
@@ -292,6 +305,7 @@ impl WaitableIntrinsic {
                         }}
 
                         join(waitableSet) {{
+                            if (this.#waitableSet) {{ this.#waitableSet.removeWaitable(this); }}
                             if (!waitableSet) {{
                                 this.#waitableSet = null;
                                 return;
@@ -299,8 +313,21 @@ impl WaitableIntrinsic {
                             waitableSet.addWaitable(this);
                             this.#waitableSet = waitableSet;
                         }}
+
+                        drop() {{
+                            {debug_log_fn}('[{waitable_class}#drop()] args', {{
+                                componentIdx: this.#componentInstanceID,
+                                _id: this.#id,
+                            }});
+                            if (this.hasPendingEvent()) {{
+                                throw new Error('waitables with pending events cannot be dropped');
+                            }}
+                            this.join(null);
+                        }}
+
                     }}
-                "));
+                "#
+                ));
             }
 
             Self::WaitableSetNew => {
@@ -327,7 +354,7 @@ impl WaitableIntrinsic {
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     async function {waitable_set_wait_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
                         {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
                         const task = {current_task_get_fn}(componentInstanceID);
@@ -338,7 +365,7 @@ impl WaitableIntrinsic {
                         const event = await task.waitForEvent({{ waitableSetRep, isAsync }});
                         {write_async_event_to_memory_fn}(memory, task, event, resultPtr);
                     }}
-                "));
+                "#));
             }
 
             Self::WaitableSetPoll => {
@@ -348,7 +375,7 @@ impl WaitableIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
                 output.push_str(&format!("
-                    function {waitable_set_poll_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
+                    async function {waitable_set_poll_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
                         {debug_log_fn}('[{waitable_set_poll_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
                         const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw Error('invalid/missing async task'); }}
