@@ -525,12 +525,12 @@ impl LowerIntrinsic {
                 output.push_str(&format!("
                     function _lowerFlatTuple(size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_lowerFlatTuple()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        let [start, size] = vals;
-                        if (size > storageLen) {{
+                        let [start, len] = vals;
+                        if (len > storageLen) {{
                             throw new Error('not enough storage remaining for tuple flat lower');
                         }}
-                        const data = new Uint8Array(memory.buffer, start, size);
-                        new Uint8Array(memory.buffer, storagePtr, size).set(data);
+                        const data = new Uint8Array(memory.buffer, start, len);
+                        new Uint8Array(memory.buffer, storagePtr, len).set(data);
                         return data.byteLength;
                     }}
                 "));
