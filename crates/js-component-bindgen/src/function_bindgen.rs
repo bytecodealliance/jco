@@ -1337,9 +1337,23 @@ impl Bindgen for FunctionBindgen<'_> {
                     (self.callee.into(), operands.join(", "))
                 };
 
-                // // Write out whether the caller was host provided
-                uwriteln!(self.src, "const hostProvided = {fn_js}._isHostProvided;");
-
+                match func.kind {
+                    wit_parser::FunctionKind::Constructor(_) => {
+                        uwriteln!(
+                            self.src,
+                            "const hostProvided = {}._isHostProvided;",
+                            fn_js.trim_start_matches("new ")
+                        )
+                    }
+                    wit_parser::FunctionKind::Freestanding
+                    | wit_parser::FunctionKind::AsyncFreestanding
+                    | wit_parser::FunctionKind::Method(_)
+                    | wit_parser::FunctionKind::AsyncMethod(_)
+                    | wit_parser::FunctionKind::Static(_)
+                    | wit_parser::FunctionKind::AsyncStatic(_) => {
+                        uwriteln!(self.src, "const hostProvided = {fn_js}._isHostProvided;")
+                    }
+                }
                 let component_instance_idx = self.canon_opts.instance.as_u32();
 
                 // Start the necessary subtasks and/or host task
