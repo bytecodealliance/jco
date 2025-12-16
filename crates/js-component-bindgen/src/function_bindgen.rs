@@ -1472,13 +1472,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 }
 
-                uwriteln!(
-                    self.src,
-                    "{debug_log_fn}('{prefix} [Instruction::CallInterface] ({async_}, @ post-call)');",
-                    prefix = self.tracing_prefix,
-                    async_ = async_.then_some("async").unwrap_or("sync"),
-                );
-
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
                     let to_result_string =
