@@ -42,7 +42,7 @@ suite('post-return scenario', () => {
 // wasmtime/crates/misc/component-async-tests/tests/scenario/post_return.rs
 //
 suite('post-return async sleep scenario', () => {
-    test.skip('caller & callee', async () => {
+    test('caller & callee', async () => {
         const callerPath = join(
             COMPONENT_FIXTURES_DIR,
             "p3/general/async-sleep-post-return-caller.wasm"
