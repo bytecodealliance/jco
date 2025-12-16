@@ -328,7 +328,6 @@ impl AsyncTaskIntrinsic {
                 let type_check_i32 = Intrinsic::TypeCheckValidI32.name();
                 output.push_str(&format!(r#"
                     function {context_set_fn}(slot, value) {{
-                        {debug_log_fn}('[{context_set_fn}()] args', {{ slot, value }});
                         if (!({type_check_i32}(value))) {{ throw new Error('invalid value for context set (not valid i32)'); }}
                         const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
@@ -338,7 +337,16 @@ impl AsyncTaskIntrinsic {
                         // TODO(threads): context has been moved to be stored on the thread, not the task.
                         // Until threads are implemented, we simulate a task with only one thread by storing
                         // the thread state on the topmost task
-                        task = task.getRootTask();
+                        //task = task.getRootTask();
+
+                        {debug_log_fn}('[{context_set_fn}()] args', {{
+                            _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
+                            slot,
+                            value,
+                            storage: task.storage,
+                            taskID: task.id(),
+                            componentIdx: task.componentIdx(),
+                        }});
 
                         if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
                         task.storage[slot] = value;
@@ -354,10 +362,6 @@ impl AsyncTaskIntrinsic {
                 let current_component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
                 output.push_str(&format!(r#"
                     function {context_get_fn}(slot) {{
-                        {debug_log_fn}('[{context_get_fn}()] args', {{
-                            _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
-                            slot,
-                        }});
                         const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
                         let task = taskMeta.task;
@@ -366,7 +370,15 @@ impl AsyncTaskIntrinsic {
                         // TODO(threads): context has been moved to be stored on the thread, not the task.
                         // Until threads are implemented, we simulate a task with only one thread by storing
                         // the thread state on the topmost task
-                        task = task.getRootTask();
+                        //task = task.getRootTask();
+
+                        {debug_log_fn}('[{context_get_fn}()] args', {{
+                            _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
+                            slot,
+                            storage: task.storage,
+                            taskID: task.id(),
+                            componentIdx: task.componentIdx(),
+                        }});
 
                         if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
 
@@ -608,13 +620,15 @@ impl AsyncTaskIntrinsic {
                 let component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
                 output.push_str(&format!(
                     "
-                    function {fn_name}(componentIdx, taskId) {{
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                    function {fn_name}(componentIdx, taskID) {{
                         componentIdx ??= {component_idx_globals}.at(-1);
-                        taskId ??= {task_id_globals}.at(-1);
+                        taskID ??= {task_id_globals}.at(-1);
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, taskID }});
+
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while ending current task');
                         }}
+
                         const tasks = {global_task_map}.get(componentIdx);
                         if (!tasks || !Array.isArray(tasks)) {{
                             throw new Error('missing/invalid tasks for component instance while ending task');
@@ -623,9 +637,9 @@ impl AsyncTaskIntrinsic {
                             throw new Error('no current task(s) for component instance while ending task');
                         }}
 
-                        if (taskId) {{
+                        if (taskID) {{
                             const last = tasks[tasks.length - 1];
-                            if (last.id !== taskId) {{
+                            if (last.id !== taskID) {{
                                 // throw new Error('current task does not match expected task ID');
                                  return;
                             }}
@@ -681,7 +695,7 @@ impl AsyncTaskIntrinsic {
                         #entryFnName = null;
                         #subtasks = [];
 
-                        #onResolve = null;
+                        #onResolveHandlers = [];
                         #completionPromise = null;
 
                         #memoryIdx = null;
@@ -731,10 +745,10 @@ impl AsyncTaskIntrinsic {
                            }} = promiseWithResolvers();
                            this.#completionPromise = completionPromise;
 
-                           this.#onResolve = (results) => {{
+                           this.#onResolveHandlers.push((results) => {{
                                // TODO: handle external facing cancellation (should likely be a rejection)
                                resolveCompletionPromise(results);
-                           }}
+                           }})
 
                            if (opts.callbackFn) {{ this.#callbackFn = opts.callbackFn; }}
                            if (opts.callbackFnName) {{ this.#callbackFnName = opts.callbackFnName; }}
@@ -1025,22 +1039,36 @@ impl AsyncTaskIntrinsic {
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
                             this.cancelled = true;
-                            this.#onResolve(new Error('cancelled'));
+                            this.onResolve(new Error('cancelled'));
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
+                        onResolve(v) {{
+                            for (const f of this.#onResolveHandlers) {{
+                                f(v);
+                            }}
+                        }}
+
+                        registerOnResolveHandler(f) {{
+                            this.#onResolveHandlers.push(f);
+                        }}
+
                         resolve(results) {{
-                            {debug_log_fn}('[{task_class}#resolve()] args', {{ results }});
+                            {debug_log_fn}('[{task_class}#resolve()] args', {{
+                                results,
+                                componentIdx: this.#componentIdx,
+                                taskID: this.#id,
+                            }});
                             if (this.#state === {task_class}.State.RESOLVED) {{
                                 throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved`);
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
                             switch (results.length) {{
                                 case 0:
-                                    this.#onResolve(undefined);
+                                    this.onResolve(undefined);
                                     break;
                                 case 1:
-                                    this.#onResolve(results[0]);
+                                    this.onResolve(results[0]);
                                     break;
                                 default:
                                     throw new Error('unexpected number of results');
@@ -1396,11 +1424,12 @@ impl AsyncTaskIntrinsic {
                         let callbackResult = args.callbackResult;
 
                         const callbackFnName = task.getCallbackFnName();
+                        const componentIdx = task.componentIdx();
 
                         try {{
                             callbackResult = await callbackResult;
                         }} catch (err) {{
-                            err.componentIdx = task.componentIdx();
+                            err.componentIdx = componentIdx;
 
                             componentState.setErrored(err);
                             {error_all_component_states_fn}();
@@ -1471,6 +1500,7 @@ impl AsyncTaskIntrinsic {
                                     case 0: // EXIT
                                         {debug_log_fn}('[{driver_loop_fn}()] async exit indicated', {{
                                             fnName,
+                                            componentIdx,
                                             callbackFnName,
                                             taskID: task.id()
                                         }});
@@ -1481,6 +1511,7 @@ impl AsyncTaskIntrinsic {
                                     case 1: // YIELD
                                         {debug_log_fn}('[{driver_loop_fn}()] yield', {{
                                             fnName,
+                                            componentIdx,
                                             callbackFnName,
                                             taskID: task.id()
                                         }});
@@ -1493,6 +1524,7 @@ impl AsyncTaskIntrinsic {
                                     case 2: // WAIT for a given waitable set
                                         {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
                                             fnName,
+                                            componentIdx,
                                             callbackFnName,
                                             taskID: task.id(),
                                             waitableSetRep,
@@ -1507,6 +1539,7 @@ impl AsyncTaskIntrinsic {
                                     case 3: // POLL
                                         {debug_log_fn}('[{driver_loop_fn}()] polling for event', {{
                                             fnName,
+                                            componentIdx,
                                             callbackFnName,
                                             taskID: task.id(),
                                             waitableSetRep,
@@ -1527,6 +1560,7 @@ impl AsyncTaskIntrinsic {
 
                                 {debug_log_fn}('[{driver_loop_fn}()] performing callback', {{
                                     fnName,
+                                    componentIdx,
                                     callbackFnName,
                                     eventCode,
                                     index,
@@ -1639,7 +1673,7 @@ impl AsyncTaskIntrinsic {
                                 {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ exportFn }});
                                 exportFn();
                                 const task = subtask.getChildTask();
-                                task.completionPromise().then((res) => {{
+                                task.registerOnResolveHandler((res) => {{
                                     {debug_log_fn}('[{lower_import_fn}()] signaling subtask completion', {{
                                         childTaskID: task.id(),
                                         subtaskID: subtask.id(),
