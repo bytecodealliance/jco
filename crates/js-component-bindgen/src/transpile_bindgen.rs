@@ -2324,17 +2324,32 @@ impl<'a> Instantiator<'a, '_> {
             {
                 let key = name.trim_start_matches("[async-lower]");
                 let instance = instance.as_u32();
-                let exec_fn = self.augmented_import_def(&arg);
+                let mut exec_fn = self.augmented_import_def(&arg);
                 let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
-                // NOTE: We are not actually wrapping a host import (`exec_fn`) below directly,
-                // but a trip *through* an exporting component table.
+
+                // For host imports that are asynchronous, we must wrap with WebAssembly.promising,
+                // as the callee will be a host function (that will suspend).
+                //
+                // Note that there is also a separate case where the import *is* from another component,
+                // and we do not want to call that as a promise, because it will return an async return code
+                // and follow the normal p3 async component call pattern.
+                //
+                if self
+                    .async_imports
+                    .contains(key.trim_start_matches("[async]"))
+                {
+                    exec_fn = format!("WebAssembly.promising({exec_fn})");
+                }
+
+                // NOTE: Regardless of whether we're using a host import or not, we are likely *not*
+                // actually wrapping a host javascript function below -- rather, the host import is
+                // called via a trip a trip *through* an exporting component table.
                 //
                 // The host import is imported, passed through an indirect call in a component,
                 // (see $wit-component.shims, $wit-component.fixups modules in generated transpile output)
                 // then it is called from the component that is actually performing the call..
-                format!(
-                    "{global_lowers_class}.lookup({instance}, '{key}')?.bind(null, WebAssembly.promising({exec_fn}))"
-                )
+                //
+                format!("{global_lowers_class}.lookup({instance}, '{key}')?.bind(null, {exec_fn})")
             } else {
                 // All other imports can be connected directly to the relevant export
                 self.augmented_import_def(&arg)
