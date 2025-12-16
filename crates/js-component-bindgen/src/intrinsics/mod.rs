@@ -142,6 +142,9 @@ pub enum Intrinsic {
 
     /// Async lower functions that are saved by component instance
     GlobalComponentAsyncLowersClass,
+
+    /// Tracking of component memories
+    GlobalComponentMemoriesClass,
 }
 
 /// Profile for determinism to be used by async implementation
@@ -191,6 +194,8 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     args.intrinsics.insert(Intrinsic::GlobalAsyncDeterminism);
     args.intrinsics
         .insert(Intrinsic::GlobalComponentAsyncLowersClass);
+    args.intrinsics
+        .insert(Intrinsic::GlobalComponentMemoriesClass);
     args.intrinsics.insert(Intrinsic::CoinFlip);
     args.intrinsics.insert(Intrinsic::ConstantI32Min);
     args.intrinsics.insert(Intrinsic::ConstantI32Max);
@@ -950,8 +955,36 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
                             return (...args) => {{
                                 const [originalFn, ...params] = args;
-                                return originalFn(originalFn, ...params);
+                                return originalFn(...params);
                             }};
+                        }}
+                    }}
+                "#
+                ));
+            }
+
+            Intrinsic::GlobalComponentMemoriesClass => {
+                let global_component_memories_class =
+                    Intrinsic::GlobalComponentMemoriesClass.name();
+                output.push_str(&format!(
+                    r#"
+                    class {global_component_memories_class} {{
+                        static map = new Map();
+
+                        constructor() {{ throw new Error('{global_component_memories_class} should not be constructed'); }}
+
+                        static save(args) {{
+                            const {{ componentIdx, memory }} = args;
+                            let inner = {global_component_memories_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                inner = [];
+                                {global_component_memories_class}.map.set(componentIdx, inner);
+                            }}
+                            inner.push(memory);
+                        }}
+
+                        static getMemoriesForComponentIdx(componentIdx) {{
+                            return {global_component_memories_class}.map.get(componentIdx);
                         }}
                     }}
                 "#
@@ -1012,6 +1045,8 @@ impl Intrinsic {
                 "Uint8Array",
                 "URL",
                 "WebAssembly",
+                "GlobalComponentMemories",
+                "GlobalComponentAsyncLowers",
             ])
     }
 
@@ -1070,6 +1105,7 @@ impl Intrinsic {
             Intrinsic::AwaitableClass => "Awaitable",
             Intrinsic::CoinFlip => "_coinFlip",
             Intrinsic::GlobalComponentAsyncLowersClass => "GlobalComponentAsyncLowers",
+            Intrinsic::GlobalComponentMemoriesClass => "GlobalComponentMemories",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",

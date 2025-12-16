@@ -2266,10 +2266,17 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             GlobalInitializer::ExtractMemory(m) => {
+                let component_idx = m.export.instance.as_u32();
                 let def = self.core_export_var_name(&m.export);
                 let idx = m.index.as_u32();
+                let global_component_memories_class =
+                    Intrinsic::GlobalComponentMemoriesClass.name();
                 uwriteln!(self.src.js, "let memory{idx};");
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
+                uwriteln!(
+                    self.src.js_init,
+                    "{global_component_memories_class}.save({{ componentIdx: {component_idx}, memory: memory{idx} }});"
+                );
             }
 
             GlobalInitializer::ExtractRealloc(r) => {
