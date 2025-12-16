@@ -53,11 +53,11 @@ suite('Async (WASI P3)', () => {
     });
 
     // https://github.com/bytecodealliance/jco/issues/1150
-    test('simple async imports', async () => {
+    test('simple async host imports', async () => {
         const hostStr = "loaded-from-host";
         const hostU32 = 43;
 
-        const { instance, cleanup } = await setupAsyncTest({
+        const { instance, cleanup, outputDir } = await setupAsyncTest({
             component: {
                 path: join(
                     P3_COMPONENT_FIXTURES_DIR,
