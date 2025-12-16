@@ -337,7 +337,7 @@ impl AsyncTaskIntrinsic {
                         // TODO(threads): context has been moved to be stored on the thread, not the task.
                         // Until threads are implemented, we simulate a task with only one thread by storing
                         // the thread state on the topmost task
-                        //task = task.getRootTask();
+                        task = task.getRootTask();
 
                         {debug_log_fn}('[{context_set_fn}()] args', {{
                             _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
@@ -370,7 +370,7 @@ impl AsyncTaskIntrinsic {
                         // TODO(threads): context has been moved to be stored on the thread, not the task.
                         // Until threads are implemented, we simulate a task with only one thread by storing
                         // the thread state on the topmost task
-                        //task = task.getRootTask();
+                        task = task.getRootTask();
 
                         {debug_log_fn}('[{context_get_fn}()] args', {{
                             _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
@@ -589,13 +589,12 @@ impl AsyncTaskIntrinsic {
                 ));
             }
 
+            // Debug log for this is disabled since it is fairly noisy
             Self::GetCurrentTask => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!(
                     "
                     function {fn_name}(componentIdx) {{
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index [' + componentIdx + '] while getting current task');
                         }}
