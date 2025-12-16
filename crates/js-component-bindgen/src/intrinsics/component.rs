@@ -241,6 +241,7 @@ impl ComponentIntrinsic {
                         exclusiveRelease() {{
                             {debug_log_fn}('[{class_name}#exclusiveRelease()] releasing', {{
                                 locked: this.#locked,
+                                componentIdx: this.#componentIdx,
                             }});
 
                             this.#locked = false

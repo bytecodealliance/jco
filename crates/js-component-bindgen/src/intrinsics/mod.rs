@@ -929,7 +929,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         static define(args) {{
                             const {{ componentIdx, importName, fn }} = args;
                             let inner = {global_component_lowers_class}.map.get(componentIdx);
-                            if (!{global_component_lowers_class}.map.has(componentIdx)) {{
+                            if (!inner) {{
                                 inner = new Map();
                                 {global_component_lowers_class}.map.set(componentIdx, inner);
                             }}
@@ -940,14 +940,16 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         static lookup(componentIdx, importName) {{
                             let inner = {global_component_lowers_class}.map.get(componentIdx);
                             if (!inner) {{
-                                return () => {{ throw new Error(`no such component [${{componentIdx}}]`); }};
+                                inner = new Map();
+                                {global_component_lowers_class}.map.set(componentIdx, inner);
                             }}
 
                             const found = inner.get(importName);
                             if (found) {{ return found; }}
 
-                            return () => {{
-                                throw new Error(`component [${{componentIdx}}] has no lower for [${{importName}}]`);
+                            return (...args) => {{
+                                const [originalFn, ...params] = args;
+                                return originalFn(originalFn, ...params);
                             }};
                         }}
                     }}

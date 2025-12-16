@@ -198,10 +198,13 @@ impl HostIntrinsic {
                         newTask.setParentSubtask(subtask);
                         newTask.setMemoryIdx(memoryIdx);
 
-                        newTask.completionPromise().then(() => {{
-                            {end_current_task_fn}(calleeInstanceIdx, newTaskID);
-                            // TODO: run return function when the task finishes and the return is ready to be saved
-                        }});
+
+                        // TODO: should we be doing this here? leading to double ending of current task!
+                        //
+                        //newTask.registerOnResolveHandler(() => {{
+                        //    {end_current_task_fn}(calleeInstanceIdx, newTaskID);
+                        //    // TODO: run return function when the task finishes and the return is ready to be saved
+                        //}});
 
                     }}
               "#
@@ -252,7 +255,8 @@ impl HostIntrinsic {
                             // TODO: signal to the task that the last param is a result pointer
                         }}
 
-                        preparedTask.setCallbackFn(getCallbackFn(), 'callback_' + callbackIdx);
+                        const callbackFnName = 'callback_' + callbackIdx;
+                        preparedTask.setCallbackFn(getCallbackFn(), callbackFnName);
                         preparedTask.setPostReturnFn(getPostReturnFn());
 
                         const subtask = preparedTask.getParentSubtask();
@@ -269,17 +273,16 @@ impl HostIntrinsic {
                             throw new Error(`unexpected param count [${{ paramCount }}], expected [${{ expectedParamCount }}]`);
                         }}
 
-                        let callbackResultFn = WebAssembly.promising(callee);
-                        let callbackResult = callbackResultFn(...params);
-
-                        // TODO(fix): using promising here causes hang
-                        // let callbackResult = callee.apply(null, params);
-
-                        // If a single call resolved the subtask, we can return immediately
-                        if (subtask.resolved()) {{
-                            subtask.deliverResolve();
-                            return {subtask_class}.State.RETURNED;
-                        }}
+                        subtask.setOnProgressFn(() => {{
+                            subtask.setPendingEventFn(() => {{
+                                if (subtask.resolved()) {{ subtask.deliverResolve(); }}
+                                return {{
+                                    code: {async_event_code_enum}.SUBTASK,
+                                    index: rep,
+                                    result: subtask.getStateNumber(),
+                                }}
+                            }});
+                        }});
 
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{
@@ -292,18 +295,39 @@ impl HostIntrinsic {
 
                         const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
 
-                        subtask.setOnProgressFn(() => {{
-                            subtask.setPendingEventFn(() => {{
-                                if (subtask.resolved()) {{ subtask.deliverResolve(); }}
-                                return {{
-                                    code: {async_event_code_enum}.SUBTASK,
-                                    index: rep,
-                                    result: subtask.getStateNumber(),
-                                }}
+                        subtask.onStart();
+
+                        preparedTask.registerOnResolveHandler((res) => {{
+                            {debug_log_fn}('[{async_start_call_fn}()] signaling subtask completion due to task completion', {{
+                                childTaskID: preparedTask.id(),
+                                subtaskID: subtask.id(),
+                                parentTaskID: subtask.getParentTask().id(),
                             }});
+                            subtask.onResolve(res);
                         }});
 
-                        subtask.onStart();
+                        {debug_log_fn}("[{async_start_call_fn}()] initial call", {{
+                            task: preparedTask.id(),
+                            subtaskID: subtask.id(),
+                            calleeFnName: callee.name,
+                        }});
+                        let callbackResultFn = WebAssembly.promising(callee);
+                        let callbackResult = callbackResultFn(...params);
+                        {debug_log_fn}("[{async_start_call_fn}()] after initial call", {{
+                            task: preparedTask.id(),
+                            subtaskID: subtask.id(),
+                            calleeFnName: callee.name,
+                        }});
+
+                        // If a single call resolved the subtask, we can return immediately
+                        if (subtask.resolved()) {{
+                            {debug_log_fn}("[{async_start_call_fn}()] instantly resolved", {{
+                                task: preparedTask.id(),
+                                subtaskID: subtask.id(),
+                            }});
+                            subtask.deliverResolve();
+                            return {subtask_class}.State.RETURNED;
+                        }}
 
                         new Promise(async (resolve, reject) => {{
                             // TODO: result count space must be reserved in memory, will either
@@ -322,6 +346,7 @@ impl HostIntrinsic {
                             ].join("");
 
                             try {{
+                              {debug_log_fn}("[{async_start_call_fn}()] starting driver loop", {{ fnName, componentIdx: preparedTask.componentIdx(), }});
                                 await {async_driver_loop_fn}({{
                                     componentState: calleeComponentState,
                                     task: preparedTask,
