@@ -284,6 +284,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     {
         args.intrinsics.extend([
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::ReserveGlobalRep),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::CreateLocalHandle),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
