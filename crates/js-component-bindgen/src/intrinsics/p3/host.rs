@@ -128,8 +128,8 @@ impl HostIntrinsic {
                         calleeInstanceIdx,
                         taskReturnTypeIdx,
                         stringEncoding,
-                        storagePtr,
-                        storageLen,
+                        storagePtr, // TODO: this is something else (-2!)
+                        resultPtr, // TODO: this is passed manually from gathered async lower call
                     ) {{
                         {debug_log_fn}('[{prepare_call_fn}()] args', {{ memoryIdx }});
                         const argArray = [...arguments];
@@ -165,6 +165,8 @@ impl HostIntrinsic {
                             throw new Error(`indirect parameter loading not yet supported`);
                         }}
 
+                        // TODO: use returnFn???
+
                         let encoding;
                         switch (stringEncoding) {{
                             case 0:
@@ -193,11 +195,15 @@ impl HostIntrinsic {
                            componentIdx: callerInstanceIdx,
                            parentTask: currentCallerTask,
                            childTask: newTask,
+                           callMetadata: {{
+                              resultPtr,
+                              returnFn,
+                              startFn,
+                           }}
                         }});
 
                         newTask.setParentSubtask(subtask);
                         newTask.setMemoryIdx(memoryIdx);
-
 
                         // TODO: should we be doing this here? leading to double ending of current task!
                         //
@@ -205,7 +211,6 @@ impl HostIntrinsic {
                         //    {end_current_task_fn}(calleeInstanceIdx, newTaskID);
                         //    // TODO: run return function when the task finishes and the return is ready to be saved
                         //}});
-
                     }}
               "#
                 ));
@@ -233,6 +238,8 @@ impl HostIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop).name();
                 let subtask_class =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass).name();
+                let global_component_memories_class =
+                    Intrinsic::GlobalComponentMemoriesClass.name();
 
                 // TODO: lower here for non-zero param count
                 // https://github.com/bytecodealliance/wasmtime/blob/69ef9afc11a2846248c9e94affca0223dbd033fc/crates/wasmtime/src/runtime/component/concurrent.rs#L1775
@@ -256,7 +263,8 @@ impl HostIntrinsic {
                         }}
 
                         const callbackFnName = 'callback_' + callbackIdx;
-                        preparedTask.setCallbackFn(getCallbackFn(), callbackFnName);
+                        const callbackFn = getCallbackFn();
+                        preparedTask.setCallbackFn(callbackFn, callbackFnName);
                         preparedTask.setPostReturnFn(getPostReturnFn());
 
                         const subtask = preparedTask.getParentSubtask();
@@ -311,8 +319,11 @@ impl HostIntrinsic {
                             subtaskID: subtask.id(),
                             calleeFnName: callee.name,
                         }});
+
+
                         let callbackResultFn = WebAssembly.promising(callee);
                         let callbackResult = callbackResultFn(...params);
+
                         {debug_log_fn}("[{async_start_call_fn}()] after initial call", {{
                             task: preparedTask.id(),
                             subtaskID: subtask.id(),
@@ -326,6 +337,24 @@ impl HostIntrinsic {
                                 subtaskID: subtask.id(),
                             }});
                             subtask.deliverResolve();
+
+                            const memories = {global_component_memories_class}.getMemoriesForComponentIdx(subtask.componentIdx());
+                            if (memories.length !== 1) {{
+                                throw new Error('only single memory components are currently expected');
+                            }}
+                            const memory = memories[0];
+
+                            const meta = subtask.getCallMetadata();
+
+                            const {{ resultPtr, returnFn }} = meta;
+                            if (!resultPtr) {{
+                                throw new Error('missing return pointer for lowering instant of async call result');
+                            }}
+
+                            // TODO: Write all results in here into the memory of the caller before returnFn call
+
+                            if (returnFn) {{ returnFn(); }}
+
                             return {subtask_class}.State.RETURNED;
                         }}
 
