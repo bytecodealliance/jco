@@ -339,21 +339,24 @@ impl HostIntrinsic {
                             subtask.deliverResolve();
 
                             const memories = {global_component_memories_class}.getMemoriesForComponentIdx(subtask.componentIdx());
-                            if (memories.length !== 1) {{
-                                throw new Error('only single memory components are currently expected');
+                            if (memories?.length === 1) {{
+                                const memory = memories[0];
+                                const meta = subtask.getCallMetadata();
+                                const {{ resultPtr, returnFn }} = meta;
+                                if (!resultPtr) {{
+                                    throw new Error('missing return pointer for lowering instant of async call result');
+                                }}
+
+                                // TODO: Write results into the memory of the caller before returnFn call
+                                if (returnFn) {{ returnFn(); }}
+                            }} else {{
+                                {debug_log_fn}("[{async_start_call_fn}()] missing memory", {{
+                                    task: preparedTask.id(),
+                                    subtaskID: subtask.id(),
+                                    callbackResult,
+                                    componentIdx: subtask.componentIdx(),
+                                }});
                             }}
-                            const memory = memories[0];
-
-                            const meta = subtask.getCallMetadata();
-
-                            const {{ resultPtr, returnFn }} = meta;
-                            if (!resultPtr) {{
-                                throw new Error('missing return pointer for lowering instant of async call result');
-                            }}
-
-                            // TODO: Write all results in here into the memory of the caller before returnFn call
-
-                            if (returnFn) {{ returnFn(); }}
 
                             return {subtask_class}.State.RETURNED;
                         }}
