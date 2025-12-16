@@ -42,7 +42,7 @@ suite('Context (WASI P3)', () => {
     });
 
     // TODO: fix
-    test.skip('context.get/set (async export, async porcelain)', async () => {
+    test('context.get/set (async export, async porcelain)', async () => {
         const name = 'context-async';
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
@@ -88,7 +88,7 @@ suite('Context (WASI P3)', () => {
      * be used (rather than whether the function itself is async) as that's how we currently
      * express the choice of how we lower an import.
      */
-    test.skip('context.get/set (async export, sync porcelain)', async () => {
+    test('context.get/set (async export, sync porcelain)', async () => {
         const name = 'context-async';
         const { instance, cleanup } = await setupAsyncTest({
             component: {

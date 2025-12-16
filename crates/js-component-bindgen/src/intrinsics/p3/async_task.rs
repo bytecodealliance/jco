@@ -1,12 +1,10 @@
 //! Intrinsics that represent helpers that implement async tasks
 
-use crate::{
-    intrinsics::{
-        Intrinsic, component::ComponentIntrinsic, conversion::ConversionIntrinsic,
-        p3::waitable::WaitableIntrinsic,
-    },
-    source::Source,
-};
+use crate::intrinsics::Intrinsic;
+use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::conversion::ConversionIntrinsic;
+use crate::intrinsics::p3::waitable::WaitableIntrinsic;
+use crate::source::Source;
 
 /// This enum contains intrinsics that implement async tasks
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -229,6 +227,18 @@ pub enum AsyncTaskIntrinsic {
     /// function asyncDriverLoop(args: DriverLoopArgs): Promise<any>;
     /// ```
     DriverLoop,
+
+    /// Intrinsic used when components lower imports to be used
+    /// from other components or the host.
+    ///
+    /// # Component Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// ```
+    ///
+    LowerImport,
 }
 
 impl AsyncTaskIntrinsic {
@@ -258,6 +268,8 @@ impl AsyncTaskIntrinsic {
             "taskCancel",
             "taskReturn",
             "unpackCallbackResult",
+            "_driverLoop",
+            "_lowerImport",
         ]
     }
 
@@ -282,6 +294,7 @@ impl AsyncTaskIntrinsic {
             Self::Yield => "asyncYield",
             Self::UnpackCallbackResult => "unpackCallbackResult",
             Self::DriverLoop => "_driverLoop",
+            Self::LowerImport => "_lowerImport",
         }
     }
 
@@ -313,18 +326,32 @@ impl AsyncTaskIntrinsic {
                 let current_async_task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
                 let current_component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
                 let type_check_i32 = Intrinsic::TypeCheckValidI32.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {context_set_fn}(slot, value) {{
-                        {debug_log_fn}('[{context_set_fn}()] args', {{ slot, value }});
                         if (!({type_check_i32}(value))) {{ throw new Error('invalid value for context set (not valid i32)'); }}
                         const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
-                        const task = taskMeta.task;
+                        let task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing current task in metadata while setting context'); }}
+
+                        // TODO(threads): context has been moved to be stored on the thread, not the task.
+                        // Until threads are implemented, we simulate a task with only one thread by storing
+                        // the thread state on the topmost task
+                        task = task.getRootTask();
+
+                        {debug_log_fn}('[{context_set_fn}()] args', {{
+                            _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
+                            slot,
+                            value,
+                            storage: task.storage,
+                            taskID: task.id(),
+                            componentIdx: task.componentIdx(),
+                        }});
+
                         if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
                         task.storage[slot] = value;
                     }}
-                "));
+                "#));
             }
 
             Self::ContextGet => {
@@ -333,20 +360,31 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = Self::GetCurrentTask.name();
                 let current_async_task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
                 let current_component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {context_get_fn}(slot) {{
+                        const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
+                        if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
+                        let task = taskMeta.task;
+                        if (!task) {{ throw new Error('invalid/missing current task in metadata while getting context'); }}
+
+                        // TODO(threads): context has been moved to be stored on the thread, not the task.
+                        // Until threads are implemented, we simulate a task with only one thread by storing
+                        // the thread state on the topmost task
+                        task = task.getRootTask();
+
                         {debug_log_fn}('[{context_get_fn}()] args', {{
                             _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
                             slot,
+                            storage: task.storage,
+                            taskID: task.id(),
+                            componentIdx: task.componentIdx(),
                         }});
-                        const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
-                        if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
-                        const task = taskMeta.task;
-                        if (!task) {{ throw new Error('invalid/missing current task in metadata while getting context'); }}
+
                         if (slot < 0 || slot >= task.storage.length) {{ throw new Error('invalid slot for current task'); }}
+
                         return task.storage[slot];
                     }}
-                "));
+                    "#));
             }
 
             // Equivalent of `task.return`
@@ -408,15 +446,13 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::SubtaskDrop => {
-                // TODO: ensure task is marked "may_leave", drop task for relevant component
-                // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-subtaskdrop
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let subtask_drop_fn = Self::SubtaskDrop.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
                     function {subtask_drop_fn}(componentInstanceID, subtaskID) {{
-                        {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentInstanceID, taskId }});
+                        {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentInstanceID, subtaskID }});
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
@@ -553,13 +589,12 @@ impl AsyncTaskIntrinsic {
                 ));
             }
 
+            // Debug log for this is disabled since it is fairly noisy
             Self::GetCurrentTask => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!(
                     "
                     function {fn_name}(componentIdx) {{
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index [' + componentIdx + '] while getting current task');
                         }}
@@ -584,13 +619,15 @@ impl AsyncTaskIntrinsic {
                 let component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
                 output.push_str(&format!(
                     "
-                    function {fn_name}(componentIdx, taskId) {{
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx }});
+                    function {fn_name}(componentIdx, taskID) {{
                         componentIdx ??= {component_idx_globals}.at(-1);
-                        taskId ??= {task_id_globals}.at(-1);
+                        taskID ??= {task_id_globals}.at(-1);
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, taskID }});
+
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while ending current task');
                         }}
+
                         const tasks = {global_task_map}.get(componentIdx);
                         if (!tasks || !Array.isArray(tasks)) {{
                             throw new Error('missing/invalid tasks for component instance while ending task');
@@ -599,9 +636,9 @@ impl AsyncTaskIntrinsic {
                             throw new Error('no current task(s) for component instance while ending task');
                         }}
 
-                        if (taskId) {{
+                        if (taskID) {{
                             const last = tasks[tasks.length - 1];
-                            if (last.id !== taskId) {{
+                            if (last.id !== taskID) {{
                                 // throw new Error('current task does not match expected task ID');
                                  return;
                             }}
@@ -657,7 +694,7 @@ impl AsyncTaskIntrinsic {
                         #entryFnName = null;
                         #subtasks = [];
 
-                        #onResolve = null;
+                        #onResolveHandlers = [];
                         #completionPromise = null;
 
                         #memoryIdx = null;
@@ -707,10 +744,10 @@ impl AsyncTaskIntrinsic {
                            }} = promiseWithResolvers();
                            this.#completionPromise = completionPromise;
 
-                           this.#onResolve = (results) => {{
+                           this.#onResolveHandlers.push((results) => {{
                                // TODO: handle external facing cancellation (should likely be a rejection)
                                resolveCompletionPromise(results);
-                           }}
+                           }})
 
                            if (opts.callbackFn) {{ this.#callbackFn = opts.callbackFn; }}
                            if (opts.callbackFnName) {{ this.#callbackFnName = opts.callbackFnName; }}
@@ -750,6 +787,18 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         getParentSubtask() {{ return this.#parentSubtask; }}
+
+                        // TODO(threads): this is very inefficient, we can pass along a root task,
+                        // and ideally do not need this once thread support is in place
+                        getRootTask() {{
+                            let currentSubtask = this.getParentSubtask();
+                            let task = this;
+                            while (currentSubtask) {{
+                                task = currentSubtask.getParentTask();
+                                currentSubtask = task.getParentSubtask();
+                            }}
+                            return task;
+                        }}
 
                         setPostReturnFn(f) {{
                             if (!f) {{ return; }}
@@ -822,7 +871,8 @@ impl AsyncTaskIntrinsic {
 
                             const keepGoing = await this.suspendUntil({{
                                 readyFn: () => {{
-                                    return readyFn() && wset.hasPendingEvent();
+                                    const hasPendingEvent = wset.hasPendingEvent();
+                                    return readyFn() && hasPendingEvent;
                                 }},
                                 cancellable,
                             }});
@@ -961,6 +1011,7 @@ impl AsyncTaskIntrinsic {
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
+                            setTimeout(() => cstate.tick(), 0);
                             const taskWait = await cstate.suspendTask({{ task: this, readyFn }});
                             const keepGoing = await taskWait;
                             return keepGoing;
@@ -983,26 +1034,40 @@ impl AsyncTaskIntrinsic {
                         cancel() {{
                             {debug_log_fn}('[{task_class}#cancel()] args', {{ }});
                             if (!this.taskState() !== {task_class}.State.CANCEL_DELIVERED) {{
-                                throw new Error('invalid task state for cancellation');
+                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] invalid task state for cancellation`);
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
                             this.cancelled = true;
-                            this.#onResolve(new Error('cancelled'));
+                            this.onResolve(new Error('cancelled'));
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
+                        onResolve(v) {{
+                            for (const f of this.#onResolveHandlers) {{
+                                f(v);
+                            }}
+                        }}
+
+                        registerOnResolveHandler(f) {{
+                            this.#onResolveHandlers.push(f);
+                        }}
+
                         resolve(results) {{
-                            {debug_log_fn}('[{task_class}#resolve()] args', {{ results }});
+                            {debug_log_fn}('[{task_class}#resolve()] args', {{
+                                results,
+                                componentIdx: this.#componentIdx,
+                                taskID: this.#id,
+                            }});
                             if (this.#state === {task_class}.State.RESOLVED) {{
-                                throw new Error('task is already resolved');
+                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved`);
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
                             switch (results.length) {{
                                 case 0:
-                                    this.#onResolve(undefined);
+                                    this.onResolve(undefined);
                                     break;
                                 case 1:
-                                    this.#onResolve(results[0]);
+                                    this.onResolve(results[0]);
                                     break;
                                 default:
                                     throw new Error('unexpected number of results');
@@ -1039,16 +1104,19 @@ impl AsyncTaskIntrinsic {
 
                         createSubtask(args) {{
                             {debug_log_fn}('[{task_class}#createSubtask()] args', args);
-                            const {{ componentIdx, memoryIdx, childTask }} = args;
+                            const {{ componentIdx, memoryIdx, childTask, callMetadata }} = args;
                             const newSubtask = new {subtask_class}({{
                                 componentIdx,
                                 childTask,
                                 parentTask: this,
                                 memoryIdx,
+                                callMetadata,
                             }});
                             this.#subtasks.push(newSubtask);
                             return newSubtask;
                         }}
+
+                        getLatestSubtask() {{ return this.#subtasks.at(-1); }}
 
                         currentSubtask() {{
                             {debug_log_fn}('[{task_class}#currentSubtask()]');
@@ -1112,8 +1180,12 @@ impl AsyncTaskIntrinsic {
 
                         #componentRep = null;
 
+                        #callMetadata = {{}};
+
                         constructor(args) {{
-                            if (!args.componentIdx) {{ throw new Error('missing componentIdx for subtask creation'); }}
+                            if (typeof args.componentIdx !== 'number') {{
+                                throw new Error('ivnalid componentIdx for subtask creation');
+                            }}
                             this.#componentIdx = args.componentIdx;
 
                             if (!args.parentTask) {{ throw new Error('missing parent task during subtask creation'); }}
@@ -1141,6 +1213,8 @@ impl AsyncTaskIntrinsic {
 
                             this.#lenders = [];
                             this.#id = ++{subtask_class}._ID;
+
+                            if (args.callMetadata) {{ this.#callMetadata = args.callMetadata; }}
                         }}
 
                         id() {{ return this.#id; }}
@@ -1148,6 +1222,15 @@ impl AsyncTaskIntrinsic {
                         childTaskID() {{ return this.#childTask?.id(); }}
 
                         componentIdx() {{ return this.#componentIdx; }}
+
+                        setChildTask(t) {{
+                            if (!t) {{ throw new Error('cannot set missing/invalid child task on subtask'); }}
+                            if (this.#childTask) {{ throw new Error('child task is already set on subtask'); }}
+                            this.#childTask = t;
+                        }}
+                        getChildTask(t) {{ return this.#childTask; }}
+
+                        getParentTask() {{ return this.#parentTask; }}
 
                         setCallbackFn(f, name) {{
                             if (!f) {{ return; }}
@@ -1172,10 +1255,18 @@ impl AsyncTaskIntrinsic {
                             this.#onProgressFn = f;
                         }}
 
-                        onStart(f) {{
+                        onStart() {{
                             if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
+                            {debug_log_fn}('[{subtask_class}#onStart()] args', {{
+                                componentIdx: this.#componentIdx,
+                                taskID: this.#id,
+                                parentTaskID: this.parentTaskID(),
+                            }});
                             this.#onProgressFn();
                             this.#state = {subtask_class}.State.STARTED;
+
+                            // TODO: this should be called before to lift the params (if present) into place
+                            if (this.#callMetadata.startFn) {{ this.#callMetadata.startFn(); }}
                         }}
 
                         setPendingEventFn(fn) {{
@@ -1183,6 +1274,13 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         onResolve(value) {{
+                            {debug_log_fn}('[{subtask_class}#onResolve()] args', {{
+                                componentIdx: this.#componentIdx,
+                                subtaskID: this.#id,
+                                childTaskID: this.childTaskID(),
+                                parentTaskID: this.parentTaskID(),
+                                value,
+                            }});
                             if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
                             this.#onProgressFn();
 
@@ -1214,6 +1312,8 @@ impl AsyncTaskIntrinsic {
 
                         waitableRep() {{ return this.#waitableRep; }}
 
+                        getCallMetadata() {{ return this.#callMetadata; }}
+
                         resolved() {{
                             if (this.#state === {subtask_class}.State.STARTING
                                 || this.#state === {subtask_class}.State.STARTED) {{
@@ -1240,16 +1340,25 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         deliverResolve() {{
-                            {debug_log_fn}('[{subtask_class}#deliverResolve()] args', {{ }});
-                            if (this.resolveDelivered() || this.resolved()) {{
-                                throw new Error('subtask has already been resolved');
+                            {debug_log_fn}('[{subtask_class}#deliverResolve()] args', {{
+                                lenders: this.#lenders,
+                                parentTaskID: this.parentTaskID(),
+                                subtaskID: this.#id,
+                                childTaskID: this.childTaskID(),
+                                resolved: this.resolved(),
+                                resolveDelivered: this.resolveDelivered(),
+                            }});
+
+                            const canDeliverResolve = !this.resolveDelivered() && this.resolved();
+                            if (!canDeliverResolve) {{
+                                throw new Error('subtask cannot deliver resolution twice, and the subtask must be resolved');
                             }}
 
                             for (const lender of this.#lenders) {{
                                 lender.lends--;
                             }}
 
-                            self.lenders = null;
+                            this.#lenders = null;
                         }}
 
                         resolveDelivered() {{
@@ -1257,7 +1366,7 @@ impl AsyncTaskIntrinsic {
                             if (this.#lenders === null && !this.resolved()) {{
                                 throw new Error('invalid subtask state, lenders missing and subtask has not been resolved');
                             }}
-                            return this.#lenders.length === 0;
+                            return this.#lenders === null;
                         }}
 
                         drop() {{
@@ -1325,11 +1434,12 @@ impl AsyncTaskIntrinsic {
                         let callbackResult = args.callbackResult;
 
                         const callbackFnName = task.getCallbackFnName();
+                        const componentIdx = task.componentIdx();
 
                         try {{
                             callbackResult = await callbackResult;
                         }} catch (err) {{
-                            err.componentIdx = task.componentIdx();
+                            err.componentIdx = componentIdx;
 
                             componentState.setErrored(err);
                             {error_all_component_states_fn}();
@@ -1357,18 +1467,34 @@ impl AsyncTaskIntrinsic {
                            return;
                         }}
 
+                        // TODO: the callback result here IS a number,
+                        // because task-return was called with a host function.
+                        //
+                        // Is our job here to resolve the task promise w/ the results?
+                        //
+                        //
+                        // Or maybe to take the results, lower them back in for the component
+                        // that did this call (possibly) to use??
+
                         let callbackCode;
                         let waitableSetRep;
                         let unpacked;
-                        if (!({i32_typecheck}(callbackResult))) {{
-                            throw new Error('invalid callback result [' + callbackResult + '], not a number');
+                        try {{
+                            if (!({i32_typecheck}(callbackResult))) {{
+                                throw new Error('invalid callback result [' + callbackResult + '], not a number');
+                            }}
+
+                            unpacked = {unpack_callback_result_fn}(callbackResult);
+                            callbackCode = unpacked[0];
+                            waitableSetRep = unpacked[1];
+                        }} catch(err) {{
+                            console.error("failed to unpack callback result", err);
+                            throw err;
                         }}
-                        if (callbackResult < 0 || callbackResult > 3) {{
+
+                        if (callbackCode < 0 || callbackCode > 3) {{
                             throw new Error('invalid async return value, outside callback code range');
                         }}
-                        unpacked = {unpack_callback_result_fn}(callbackResult);
-                        callbackCode = unpacked[0];
-                        waitableSetRep = unpacked[1];
 
                         let eventCode;
                         let index;
@@ -1384,6 +1510,7 @@ impl AsyncTaskIntrinsic {
                                     case 0: // EXIT
                                         {debug_log_fn}('[{driver_loop_fn}()] async exit indicated', {{
                                             fnName,
+                                            componentIdx,
                                             callbackFnName,
                                             taskID: task.id()
                                         }});
@@ -1394,6 +1521,7 @@ impl AsyncTaskIntrinsic {
                                     case 1: // YIELD
                                         {debug_log_fn}('[{driver_loop_fn}()] yield', {{
                                             fnName,
+                                            componentIdx,
                                             callbackFnName,
                                             taskID: task.id()
                                         }});
@@ -1406,13 +1534,11 @@ impl AsyncTaskIntrinsic {
                                     case 2: // WAIT for a given waitable set
                                         {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
                                             fnName,
+                                            componentIdx,
                                             callbackFnName,
                                             taskID: task.id(),
                                             waitableSetRep,
                                         }});
-                                        if (eventCode === 1 && waitableSetRep === task.currentSubtask().getWaitableRep()) {{
-                                            task.currentSubtask().doTheThing();
-                                        }}
                                         asyncRes = await task.waitUntil({{
                                             readyFn: () => true,
                                             waitableSetRep,
@@ -1423,6 +1549,7 @@ impl AsyncTaskIntrinsic {
                                     case 3: // POLL
                                         {debug_log_fn}('[{driver_loop_fn}()] polling for event', {{
                                             fnName,
+                                            componentIdx,
                                             callbackFnName,
                                             taskID: task.id(),
                                             waitableSetRep,
@@ -1436,13 +1563,14 @@ impl AsyncTaskIntrinsic {
 
                                 componentState.exclusiveLock();
 
-                                eventCode = asyncRes.code;
-                                index = asyncRes.index;
-                                result = asyncRes.result;
+                                eventCode = asyncRes.code; // async event enum code
+                                index = asyncRes.index; // idx of related waitable set
+                                result = asyncRes.result; // task state
                                 asyncRes = null;
 
                                 {debug_log_fn}('[{driver_loop_fn}()] performing callback', {{
                                     fnName,
+                                    componentIdx,
                                     callbackFnName,
                                     eventCode,
                                     index,
@@ -1454,12 +1582,13 @@ impl AsyncTaskIntrinsic {
                                     {to_int32_fn}(index),
                                     {to_int32_fn}(result),
                                 );
+
                                 unpacked = {unpack_callback_result_fn}(callbackRes);
                                 callbackCode = unpacked[0];
                                 waitableSetRep = unpacked[1];
                             }}
                         }} catch (err) {{
-                            {debug_log_fn}('[{driver_loop_fn}()] error while resolving in async driver loop', {{
+                            {debug_log_fn}('[{driver_loop_fn}()] error during async driver loop', {{
                                 fnName,
                                 callbackFnName,
                                 eventCode,
@@ -1471,6 +1600,107 @@ impl AsyncTaskIntrinsic {
                         }}
                     }}
                 "#,
+                ));
+            }
+
+            // NOTE: the function that is output by this intrinsic also receives the
+            // function that *should* be called (i.e. a trampoline to CallWasm, etc)
+            Self::LowerImport => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_import_fn = Self::LowerImport.name();
+                let current_task_get_fn = Self::GetCurrentTask.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+
+                // EXAMPLE OUTPUT FOR LOWER IMPORT
+                //
+                // LOWER IMPORT {
+                //   args: {
+                //     functionIdx: 1,
+                //     componentIdx: 0,
+                //     isAsync: false,
+                //     paramLiftFns: [ [Function: _liftFlatResultInner] ],
+                //     resultLowerFns: [],
+                //     getCallbackFn: [Function: getCallbackFn],
+                //     getPostReturnFn: [Function: getPostReturnFn],
+                //     isCancellable: false
+                //   },
+                //   params: [ 1058192 ]
+                // }
+
+                // TODO: param lift functions should NOT be used until after subtask start!
+                //
+                // TODO: lower the imports @ task start via the subtask
+                //
+                // TODO: params needs to be packaged into a ctx, and be run via the param lifting functions
+                //       similar to the code in `Self::TaskReturn` impl
+                output.push_str(&format!(
+                    r#"
+                    function {lower_import_fn}(args, exportFn) {{
+                        const params = [...arguments].slice(2);
+                        {debug_log_fn}('[{lower_import_fn}()] args', {{ args, params, exportFn }});
+                        const {{ functionIdx, componentIdx, isAsync, paramLiftFns, resultLowerFns, metadata }} = args;
+
+                        const parentTaskMeta = {current_task_get_fn}(componentIdx);
+                        const parentTask = parentTaskMeta?.task;
+                        if (!parentTask) {{ throw new Error('missing parent task during lower of import'); }}
+
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                        const subtask = parentTask.createSubtask({{
+                           componentIdx,
+                           parentTask,
+                        }});
+
+                        const rep = cstate.subtasks.insert(subtask);
+                        subtask.setRep(rep);
+
+                        subtask.setOnProgressFn(() => {{
+                            subtask.setPendingEventFn(() => {{
+                                if (subtask.resolved()) {{ subtask.deliverResolve(); }}
+                                return {{
+                                    code: {async_event_code_enum}.SUBTASK,
+                                    index: rep,
+                                    result: subtask.getStateNumber(),
+                                }}
+                            }});
+                        }});
+
+                        // TODO: lower params lift results
+
+                        const subtaskState = subtask.getStateNumber();
+                        if (subtaskState < 0 || subtaskState > 2**5) {{
+                            throw new Error('invalid subtask state, out of valid range');
+                        }}
+
+                        // NOTE: we must wait a bit before calling the export funtion,
+                        // to ensure the subtask state is not modified before the lower call return
+                        //
+                        // TODO: we should trigger via subtask state changing, rather than a static wait?
+                        setTimeout(async () => {{
+                            try {{
+                                {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ exportFn }});
+                                exportFn();
+                                const task = subtask.getChildTask();
+                                task.registerOnResolveHandler((res) => {{
+                                    {debug_log_fn}('[{lower_import_fn}()] signaling subtask completion', {{
+                                        childTaskID: task.id(),
+                                        subtaskID: subtask.id(),
+                                        parentTaskID: parentTask.id(),
+                                    }});
+                                    subtask.onResolve(res)
+                                    cstate.tick();
+                                }});
+                            }} catch (err) {{
+                                console.error("post-lower import fn error:", err);
+                                throw e;
+                            }}
+                        }}, 100);
+
+                        return Number(subtask.waitableRep()) << 4 | subtaskState;
+                    }}
+                    "#
                 ));
             }
         }
