@@ -1104,12 +1104,13 @@ impl AsyncTaskIntrinsic {
 
                         createSubtask(args) {{
                             {debug_log_fn}('[{task_class}#createSubtask()] args', args);
-                            const {{ componentIdx, memoryIdx, childTask }} = args;
+                            const {{ componentIdx, memoryIdx, childTask, callMetadata }} = args;
                             const newSubtask = new {subtask_class}({{
                                 componentIdx,
                                 childTask,
                                 parentTask: this,
                                 memoryIdx,
+                                callMetadata,
                             }});
                             this.#subtasks.push(newSubtask);
                             return newSubtask;
@@ -1179,6 +1180,8 @@ impl AsyncTaskIntrinsic {
 
                         #componentRep = null;
 
+                        #callMetadata = {{}};
+
                         constructor(args) {{
                             if (typeof args.componentIdx !== 'number') {{
                                 throw new Error('ivnalid componentIdx for subtask creation');
@@ -1210,6 +1213,8 @@ impl AsyncTaskIntrinsic {
 
                             this.#lenders = [];
                             this.#id = ++{subtask_class}._ID;
+
+                            if (args.callMetadata) {{ this.#callMetadata = args.callMetadata; }}
                         }}
 
                         id() {{ return this.#id; }}
@@ -1259,6 +1264,9 @@ impl AsyncTaskIntrinsic {
                             }});
                             this.#onProgressFn();
                             this.#state = {subtask_class}.State.STARTED;
+
+                            // TODO: this should be called before to lift the params (if present) into place
+                            if (this.#callMetadata.startFn) {{ this.#callMetadata.startFn(); }}
                         }}
 
                         setPendingEventFn(fn) {{
@@ -1268,7 +1276,8 @@ impl AsyncTaskIntrinsic {
                         onResolve(value) {{
                             {debug_log_fn}('[{subtask_class}#onResolve()] args', {{
                                 componentIdx: this.#componentIdx,
-                                taskID: this.#id,
+                                subtaskID: this.#id,
+                                childTaskID: this.childTaskID(),
                                 parentTaskID: this.parentTaskID(),
                                 value,
                             }});
@@ -1302,6 +1311,8 @@ impl AsyncTaskIntrinsic {
                         getWaitableRep() {{ return this.#waitableRep; }}
 
                         waitableRep() {{ return this.#waitableRep; }}
+
+                        getCallMetadata() {{ return this.#callMetadata; }}
 
                         resolved() {{
                             if (this.#state === {subtask_class}.State.STARTING
