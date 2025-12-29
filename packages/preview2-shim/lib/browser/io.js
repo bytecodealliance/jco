@@ -17,7 +17,7 @@ const IoError = class Error {
  *   blockingRead: (len: BigInt) => Uint8Array,
  *   skip?: (len: BigInt) => BigInt,
  *   blockingSkip?: (len: BigInt) => BigInt,
- *   subscribe: () => void,
+ *   subscribe: () => Pollable,
  *   drop?: () => void,
  * }} InputStreamHandler
  *
@@ -33,7 +33,7 @@ const IoError = class Error {
  *   splice?: (src: InputStream, len: BigInt) => BigInt,
  *   blockingSplice?: (src: InputStream, len: BigInt) => BigInt,
  *   forward?: (src: InputStream) => void,
- *   subscribe?: () => void,
+ *   subscribe?: () => Pollable,
  *   drop?: () => void,
  * }} OutputStreamHandler
  *
@@ -78,6 +78,7 @@ class InputStream {
     }
     subscribe() {
         console.log(`[streams] Subscribe to input stream ${this.id}`);
+        return new Pollable();
     }
     [symbolDispose]() {
         if (this.handler.drop) {
@@ -168,6 +169,7 @@ class OutputStream {
     }
     subscribe() {
         console.log(`[streams] Subscribe to output stream ${this.id}`);
+        return new Pollable();
     }
     [symbolDispose]() {}
 }
