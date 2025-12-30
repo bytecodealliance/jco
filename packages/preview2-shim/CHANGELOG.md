@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.17.6] - 2025-12-30
+
+### 🐛 Bug Fixes
+
+* *(p2-shim)* return protocol from stream subscribe by @molarmanful in #1184
+
+* *(p2-shim)* missing browser shim bits by @vados-cosmonic in #1155
+
+
+### 🧪 Testing
+
+* *(p2-shim)* set retry for pollable tests by @vados-cosmonic
+
+* *(p2-shim)* avoid tight monotonic test in CI by @vados-cosmonic in #1099
+
+* *(p2-shim)* increase tolerance for pollable ready testing by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(p2-shim)* remove unused eslint rule by @vados-cosmonic
+
+
+
+## New Contributors
+* @molarmanful made their first contribution in [#1184](https://github.com/bytecodealliance/jco/pull/1184)
+
+
 ## [0.17.5] - 2025-11-03
 
 ### 🐛 Bug Fixes
