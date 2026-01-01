@@ -48,11 +48,12 @@ suite('error-context scenario', () => {
                 transpile: {
                     extraArgs: {
                         minify: false,
-                    }
+                    },
                 },
             });
             cleanup = res.cleanup;
             const instance = res.instance;
+
             await instance['local:local/run'].asyncRun();
         } finally {
             if (cleanup) { await cleanup(); }

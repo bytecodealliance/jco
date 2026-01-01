@@ -106,8 +106,6 @@ export async function composeCallerCallee(args) {
         calleePath,
         "--output",
         outputComponentPath,
-        // TODO: validation in wasm-tools compose should arguably have async turned on
-        // https://github.com/bytecodealliance/wasm-tools/pull/2354
         "--skip-validation",
     ].join(" ");
     await exec(cmd);
