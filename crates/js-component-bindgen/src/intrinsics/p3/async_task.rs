@@ -599,12 +599,8 @@ impl AsyncTaskIntrinsic {
                             throw new Error('missing/invalid component instance index [' + componentIdx + '] while getting current task');
                         }}
                         const tasks = {global_task_map}.get(componentIdx);
-                        if (tasks === undefined) {{
-                            throw new Error('missing task lookup for component ID [' + componentIdx + '] while getting current task');
-                        }}
-                        if (tasks.length === 0) {{
-                            throw new Error('missing/invalid tasks for component while getting current task');
-                        }}
+                        if (tasks === undefined) {{ return undefined; }}
+                        if (tasks.length === 0) {{ return undefined; }}
                         return tasks[tasks.length - 1];
                     }}
                 ",
