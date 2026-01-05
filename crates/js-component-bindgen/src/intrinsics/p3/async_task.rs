@@ -1076,10 +1076,10 @@ impl AsyncTaskIntrinsic {
 
                             // TODO: ensure there is only one task at a time (scheduler.lock() functionality)
                             if (this.#state !== {task_class}.State.RESOLVED) {{
-                                throw new Error('task exited without resolution');
+                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
                             }}
                             if (this.borrowedHandles > 0) {{
-                                throw new Error('task exited without clearing borrowed handles');
+                                throw new Error('task [${{this.#id}}] exited without clearing borrowed handles');
                             }}
 
                             const state = {get_or_create_async_state_fn}(this.#componentIdx);
