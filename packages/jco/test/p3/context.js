@@ -77,17 +77,6 @@ suite('Context (WASI P3)', () => {
         await cleanup();
     });
 
-    /*
-     * TODO: enable support of sync lowering an async export that does NOT
-     * perform any calls to async imports (YIELD = no-op, WAIT / POLL = trap).
-     *
-     * In those cases, we must perform the waiting and checking synchronously,
-     * and not force the function to be a promise.
-     *
-     * The check of whether functions require porcelain is the ONLY indicator that should
-     * be used (rather than whether the function itself is async) as that's how we currently
-     * express the choice of how we lower an import.
-     */
     test('context.get/set (async export, sync porcelain)', async () => {
         const name = 'context-async';
         const { instance, cleanup } = await setupAsyncTest({
@@ -99,27 +88,30 @@ suite('Context (WASI P3)', () => {
                     'component.wasm'
                 ),
             },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncMode: "jspi",
+                        asyncExports: ['push-context', 'pull-context'],
+                    },
+                },
+            },
         });
 
         expect(instance.pushContext).toBeTruthy();
         assert.strictEqual(
             instance.pushContext instanceof AsyncFunction,
-            false, // see TODO for test
-            "despite sync lower, async lift forces this function to be async",
+            true,
         );
 
         expect(instance.pullContext).toBeTruthy();
         assert.strictEqual(
             instance.pullContext instanceof AsyncFunction,
-            false, // see TODO for test
-            'pullContext should not be an async function',
-
+            true,
         );
 
         instance.pushContext(42);
-        // NOTE: context is wiped from task to task, and sync call tasks end as soon as they return
-        // expect( instance.pullContext()).toEqual(0);
-        expect(instance.pullContext()).toBe(42);
+        expect(await instance.pullContext()).toEqual(0);
 
         await cleanup();
     });
