@@ -81,7 +81,7 @@
            mod.test();
            ok();
          } catch (e) {
-           err(e.toString() + `\nrunning "${testModule}"`);
+           err(e);
          }
        } else {
          err(`Unknown test case "${testName}"`);
@@ -94,7 +94,7 @@
    document.body.innerHTML = '<h1>OK</h1>';
  }
  function err (e) {
-   document.body.innerHTML = `<h1>Error: ${e}`;
+   document.body.innerHTML = `<h1>Error: ${e}\n${e.stack}`;
  }
 
  await main()
