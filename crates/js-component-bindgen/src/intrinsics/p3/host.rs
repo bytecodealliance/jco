@@ -114,10 +114,8 @@ impl HostIntrinsic {
                 let prepare_call_fn = Self::PrepareCall.name();
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let start_current_task_fn =
+                let create_new_current_task_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask).name();
-                let end_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask).name();
                 output.push_str(&format!(
                   r#"
                     function {prepare_call_fn}(
@@ -182,7 +180,7 @@ impl HostIntrinsic {
                                 throw new Error(`unrecognized string encoding enum [${{stringEncoding}}]`);
                         }}
 
-                        const [newTask, newTaskID] = {start_current_task_fn}({{
+                        const [newTask, newTaskID] = {create_new_current_task_fn}({{
                             componentIdx: calleeInstanceIdx,
                             isAsync: true,
                             getCalleeParamsFn,
@@ -190,6 +188,11 @@ impl HostIntrinsic {
                             entryFnName: 'task/' + currentCallerTask.id() + '/new-prepare-task',
                             stringEncoding,
                         }});
+
+                        // newTask.enter();
+                        // TODO: where should this task start? After the subtask has started, probably???
+                        // TODO: Is creating the task here actually completely unnecessary, because CallWasm/CallInterface will
+                        // happen later and create a task where necessary?
 
                         const subtask = currentCallerTask.createSubtask({{
                            componentIdx: callerInstanceIdx,
@@ -204,13 +207,6 @@ impl HostIntrinsic {
 
                         newTask.setParentSubtask(subtask);
                         newTask.setMemoryIdx(memoryIdx);
-
-                        // TODO: should we be doing this here? leading to double ending of current task!
-                        //
-                        //newTask.registerOnResolveHandler(() => {{
-                        //    {end_current_task_fn}(calleeInstanceIdx, newTaskID);
-                        //    // TODO: run return function when the task finishes and the return is ready to be saved
-                        //}});
                     }}
               "#
                 ));
@@ -355,7 +351,6 @@ impl HostIntrinsic {
                                 {debug_log_fn}("[{async_start_call_fn}()] missing memory", {{
                                     task: preparedTask.id(),
                                     subtaskID: subtask.id(),
-                                    callbackResult,
                                     componentIdx: subtask.componentIdx(),
                                 }});
                             }}
