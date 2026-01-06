@@ -115,7 +115,7 @@ impl HostIntrinsic {
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let start_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask).name();
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask).name();
                 let end_current_task_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask).name();
                 output.push_str(&format!(
