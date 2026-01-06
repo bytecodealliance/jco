@@ -422,7 +422,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask))
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask))
         || args
             .intrinsics
             .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))

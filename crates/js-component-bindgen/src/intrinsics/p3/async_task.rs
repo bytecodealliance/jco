@@ -125,7 +125,7 @@ pub enum AsyncTaskIntrinsic {
     GetCurrentTask,
 
     /// Function that creates the current task
-    StartCurrentTask,
+    CreateNewCurrentTask,
 
     /// Function that stops the current task
     EndCurrentTask,
@@ -261,7 +261,7 @@ impl AsyncTaskIntrinsic {
             "contextSet",
             "endCurrentTask",
             "getCurrentTask",
-            "startCurrentTask",
+            "createNewCurrentTask",
             "subtaskCancel",
             "subtaskDrop",
             "subtaskDrop",
@@ -282,7 +282,7 @@ impl AsyncTaskIntrinsic {
             Self::ContextGet => "contextGet",
             Self::ContextSet => "contextSet",
             Self::GetCurrentTask => "getCurrentTask",
-            Self::StartCurrentTask => "startCurrentTask",
+            Self::CreateNewCurrentTask => "createNewCurrentTask",
             Self::EndCurrentTask => "endCurrentTask",
             Self::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
             Self::GlobalAsyncCurrentTaskIds => "ASYNC_CURRENT_TASK_IDS",
@@ -529,7 +529,7 @@ impl AsyncTaskIntrinsic {
                 "));
             }
 
-            Self::StartCurrentTask => {
+            Self::CreateNewCurrentTask => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_class = Self::AsyncTaskClass.name();
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
