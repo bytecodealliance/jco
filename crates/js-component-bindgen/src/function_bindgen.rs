@@ -2336,6 +2336,8 @@ impl Bindgen for FunctionBindgen<'_> {
                       const componentState = {get_or_create_async_state_fn}({component_instance_idx});
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
 
+                      console.log("BEFORE START TASK");
+
                       new Promise(async (resolve, reject) => {{
                           try {{
                               {debug_log_fn}("[Instruction::AsyncTaskReturn] starting driver loop", {{ fnName: '{name}' }});
