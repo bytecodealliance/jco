@@ -124,7 +124,7 @@ pub enum AsyncTaskIntrinsic {
     /// Function that retrieves the current global async current task
     GetCurrentTask,
 
-    /// Function that creates the current task
+    /// Function that creates a new task, and marks it as the current executing task
     CreateNewCurrentTask,
 
     /// Function that stops the current task
