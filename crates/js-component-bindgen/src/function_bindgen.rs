@@ -343,7 +343,7 @@ impl FunctionBindgen<'_> {
             ),
         };
         let start_current_task_fn =
-            self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
+            self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask));
         let component_instance_idx = self.canon_opts.instance.as_u32();
 
         uwriteln!(
@@ -1316,7 +1316,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::CallInterface { func, async_ } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let start_current_task_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask));
+                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask));
                 let current_task_get_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
