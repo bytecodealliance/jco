@@ -102,7 +102,7 @@ impl ComponentIntrinsic {
                         {debug_log_fn}('[{backpressure_set_fn}()] args', {{ componentInstanceID, value }});
                         if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        state.backpressure = value !== 0;
+                        state.setBackpressure(value);
                     }}
                 "));
             }
@@ -116,7 +116,7 @@ impl ComponentIntrinsic {
                     function {backpressure_inc_fn}(componentInstanceID) {{
                         {debug_log_fn}('[{backpressure_inc_fn}()] args', {{ componentInstanceID }});
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        state.backpressure += 1;
+                        state.incrementBackpressure();
                     }}
                 "
                 ));
@@ -131,7 +131,7 @@ impl ComponentIntrinsic {
                     function {backpressure_dec_fn}(componentInstanceID) {{
                         {debug_log_fn}('[{backpressure_dec_fn}()] args', {{ componentInstanceID }});
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        state.backpressure = Math.max(0, state.backpressure - 1) ;
+                        state.decrementBackpressure();
                     }}
                 "
                 ));
@@ -143,6 +143,8 @@ impl ComponentIntrinsic {
                 output.push_str(&format!(
                     r#"
                     class {class_name} {{
+                        static EVENT_HANDLER_EVENTS = [ 'backpressure-change' ];
+
                         #componentIdx;
                         #callingAsyncImport = false;
                         #syncImportWait = promiseWithResolvers();
@@ -152,6 +154,12 @@ impl ComponentIntrinsic {
                         #suspendedTaskIDs = [];
                         #pendingTasks = [];
                         #errored = null;
+
+                        #backpressure = 0;
+                        #backpressureWaiters = 0n;
+
+                        #handlerMap = new Map();
+                        #nextHandlerID = 0n;
 
                         mayLeave = true;
 
@@ -197,6 +205,56 @@ impl ComponentIntrinsic {
 
                         async waitForSyncImportCallEnd() {{
                             await this.#syncImportWait.promise;
+                        }}
+
+                        setBackpressure(v) {{ this.#backpressure = v; }}
+                        getBackpressure(v) {{ return this.#backpressure; }}
+                        incrementBackpressure() {{
+                            const newValue = this.getBackpressure() + 1;
+                            if (newValue > 2**16) {{ throw new Error("invalid backpressure value, overflow"); }}
+                            this.setBackpressure(newValue);
+                        }}
+                        decrementBackpressure() {{
+                            this.setBackpressure(Math.max(0, this.getBackpressure() - 1));
+                        }}
+                        hasBackpressure() {{ return this.#backpressure > 0; }}
+
+                        registerHandler(args) {{
+                            const {{ event, fn }} = args;
+                            if (!event) {{ throw new Error("missing handler event"); }}
+                            if (!fn) {{ throw new Error("missing handler fn"); }}
+
+                            if (!{class_name}.EVENT_HANDLER_EVENTS.includes(event)) {{
+                                throw new Error(`unrecognized event handler [${{event}}]`);
+                            }}
+
+                            const handlerID = this.#nextHandlerID++;
+                            let handlers = this.#handlerMap.get(event);
+                            if (!handlers) {{
+                                handlers = [];
+                                this.#handlerMap.set(event, handlers)
+                            }}
+
+                            handlers.push({{ id: handlerID, fn, event }});
+                            return handlerID;
+                        }}
+
+                        removeHandler(args) {{
+                            const {{ event, handlerID }} = args;
+                            const registeredHandlers = this.#handlerMap.get(event);
+                            if (!registeredHandlers) {{ return; }}
+                            const found = registeredHandlers.find(h => h.id === handlerID);
+                            if (!found) {{ return; }}
+                            this.#handlerMap.set(event, this.#handlerMap.get(event).filter(h => h.id !== handlerID));
+                        }}
+
+                        getBackpressureWaiters() {{ return this.#backpressureWaiters; }}
+                        addBackpressureWaiter() {{ this.#backpressureWaiters++; }}
+                        removeBackpressureWaiter() {{ 
+                            this.#backpressureWaiters--;
+                            if (this.#backpressureWaiters < 0) {{
+                                throw new Error("unexepctedly negative number of backpressure waiters");
+                            }}
                         }}
 
                         parkTaskOnAwaitable(args) {{
