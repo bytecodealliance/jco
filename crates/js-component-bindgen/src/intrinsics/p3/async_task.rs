@@ -710,6 +710,9 @@ impl AsyncTaskIntrinsic {
 
                         #errHandling;
 
+                        #backpressurePromise;
+                        #backpressureWaiters = 0n;
+
                         cancelled = false;
                         requested = false;
                         alwaysTaskReturn = false;
@@ -826,7 +829,7 @@ impl AsyncTaskIntrinsic {
 
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-                            if (!cstate.backpressure) {{
+                            if (cstate.hasBackpressure()) {{
                                 {debug_log_fn}('[{task_class}#mayEnter()] disallowed due to backpressure', {{ taskID: this.#id }});
                                 return false;
                             }}
@@ -842,12 +845,34 @@ impl AsyncTaskIntrinsic {
                             return true;
                         }}
 
+                        // TODO: enter should be called from driver run loop
                         async enter() {{
                             {debug_log_fn}('[{task_class}#enter()] args', {{ taskID: this.#id }});
-
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
-                            // TODO: implement backpressure
+                            if (this.isSync()) {{ return true; }}
+
+                            if (cstate.hasBackpressure()) {{
+                                const backpressureCleared = false;
+                                cstate.addBackpressureWaiter();
+
+                                const handlerID = cstate.registerHandler({{
+                                    event: 'backpressure-change',
+                                    fn: (bp) => {{
+                                        if (bp === 0) {{
+                                            cstate.removeHandler(handlerID);
+                                            backpressureCleared = true;
+                                        }}
+                                    }}
+                                }});
+
+                                // TODO: need to get the result of suspend until, use that to prevent event loop starting
+                                // TODO: if cancelled, cancel the task
+
+                                console.log("WOULD HAVE WAITED FOR BACKPRESSURE!");
+
+                                cstate.removeBackpressureWaiter();
+                            }}
 
                             if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
 

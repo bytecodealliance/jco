@@ -330,6 +330,8 @@ impl HostIntrinsic {
                             calleeFnName: callee.name,
                         }});
 
+                        // TODO: enter the task here?
+
                         // If a single call resolved the subtask, we can return immediately
                         if (subtask.resolved()) {{
                             {debug_log_fn}("[{async_start_call_fn}()] instantly resolved", {{
