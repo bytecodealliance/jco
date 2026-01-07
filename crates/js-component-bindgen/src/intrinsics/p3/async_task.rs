@@ -1286,6 +1286,10 @@ impl AsyncTaskIntrinsic {
                             if (this.#callMetadata.startFn) {{ this.#callMetadata.startFn(); }}
                         }}
 
+                        onHostStart() {{
+                            this.#state = {subtask_class}.State.STARTED;
+                        }}
+
                         setPendingEventFn(fn) {{
                             this.#waitable.setPendingEventFn(fn);
                         }}
