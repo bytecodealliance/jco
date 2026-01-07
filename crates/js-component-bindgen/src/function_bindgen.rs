@@ -342,8 +342,9 @@ impl FunctionBindgen<'_> {
                 "unrecognized instruction triggering start of current task: [{instr:?}]"
             ),
         };
-        let start_current_task_fn =
-            self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask));
+        let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::CreateNewCurrentTask,
+        ));
         let component_instance_idx = self.canon_opts.instance.as_u32();
 
         uwriteln!(
@@ -1272,6 +1273,23 @@ impl Bindgen for FunctionBindgen<'_> {
                 // TODO(threads): Task#enter needs to be called with the thread that is executing (inside thread_func)
                 // TODO(threads): thread_func will contain the actual call rather than attempting to execute immediately
 
+                // If we're dealing with an async task, do explicit task enter
+                if self.requires_async_porcelain {
+                    uwriteln!(
+                        self.src,
+                        r#"
+                        const started = await task.enter();
+                        if (!started) {{
+                            {debug_log_fn}('[Instruction::AsyncTaskReturn] failed to enter task', {{
+                                taskID: preparedTask.id(),
+                                subtaskID: currentSubtask?.id(),
+                            }});
+                            throw new Error("failed to enter task");
+                        }}
+                        "#,
+                    );
+                }
+
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
                 self.write_result_assignment(sig_results_length, results);
@@ -1315,8 +1333,9 @@ impl Bindgen for FunctionBindgen<'_> {
             // Call to an interface, usually but not always an externally imported interface
             Instruction::CallInterface { func, async_ } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let start_current_task_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask));
+                let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::CreateNewCurrentTask,
+                ));
                 let current_task_get_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
@@ -1424,14 +1443,30 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 let results_length = if func.result.is_none() { 0 } else { 1 };
-                let maybe_await = if self.requires_async_porcelain | async_ {
-                    "await "
-                } else {
-                    ""
-                };
+                let is_async = self.requires_async_porcelain || *async_;
+
+                // If the task is async, do an explicit wait for backpressure before the call execution
+                if is_async {
+                    uwriteln!(
+                        self.src,
+                        r#"
+                        const started = await task.enter();
+                        if (!started) {{
+                            {debug_log_fn}('[Instruction::CallInterface] failed to enter task', {{
+                                taskID: preparedTask.id(),
+                                subtaskID: currentSubtask?.id(),
+                            }});
+                            throw new Error("failed to enter task");
+                        }}
+                        "#,
+                    );
+                }
 
                 // Build the JS expression that calls the callee
-                let call = format!("{maybe_await} {fn_js}({args_js})",);
+                let call = format!(
+                    "{maybe_await} {fn_js}({args_js})",
+                    maybe_await = if is_async { "await " } else { "" }
+                );
 
                 match self.err {
                     // If configured to do *no* error handling at all or throw
@@ -2328,6 +2363,10 @@ impl Bindgen for FunctionBindgen<'_> {
                       }}
 
                       const currentSubtask = task.getLatestSubtask();
+                      if (currentSubtask) {{
+                          // TODO(fix): host functions shoudl not need special handling for subtask starts
+                          currentSubtask.onHostStart();
+                      }}
 
                       const componentState = {get_or_create_async_state_fn}({component_instance_idx});
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
