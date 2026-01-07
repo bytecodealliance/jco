@@ -1801,6 +1801,23 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|idx| format!("() => postReturn{}", idx.as_u32()))
                     .unwrap_or_else(|| "() => null".into());
 
+                // Build the memory and realloc metadata
+                let (memory_expr_js, realloc_expr_js) =
+                    if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                        memory,
+                        realloc,
+                    }) = canon_opts.data_model
+                    {
+                        (
+                            memory.map(|idx| format!("() => memory{}", idx.as_u32())),
+                            realloc.map(|idx| format!("() => realloc{}", idx.as_u32())),
+                        )
+                    } else {
+                        (None, None)
+                    };
+                let memory_expr_js = memory_expr_js.unwrap_or_else(|| "() => null".into());
+                let realloc_expr_js = realloc_expr_js.unwrap_or_else(|| "() => null".into());
+
                 // NOTE: we make this lowering trampoline identifiable by two things:
                 // - component idx
                 // - type index of exported function (in the relevant component)
@@ -1825,6 +1842,8 @@ impl<'a> Instantiator<'a, '_> {
                                 getCallbackFn: {get_callback_fn_js},
                                 getPostReturnFn: {get_post_return_fn_js},
                                 isCancellable: {cancellable},
+                                getMemoryFn: {memory_expr_js},
+                                getReallocFn: {realloc_expr_js},
                             }},
                         ),
                     }});
