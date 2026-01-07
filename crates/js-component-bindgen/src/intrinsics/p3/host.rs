@@ -209,6 +209,7 @@ impl HostIntrinsic {
                         }});
 
                         newTask.setParentSubtask(subtask);
+                        newTask.setMemoryIdx(memoryIdx);
                     }}
               "#
                 ));
