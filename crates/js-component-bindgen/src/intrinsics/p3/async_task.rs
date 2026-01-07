@@ -1119,12 +1119,11 @@ impl AsyncTaskIntrinsic {
 
                         createSubtask(args) {{
                             {debug_log_fn}('[{task_class}#createSubtask()] args', args);
-                            const {{ componentIdx, memoryIdx, childTask, callMetadata }} = args;
+                            const {{ componentIdx, childTask, callMetadata }} = args;
                             const newSubtask = new {subtask_class}({{
                                 componentIdx,
                                 childTask,
                                 parentTask: this,
-                                memoryIdx,
                                 callMetadata,
                             }});
                             this.#subtasks.push(newSubtask);
@@ -1196,6 +1195,8 @@ impl AsyncTaskIntrinsic {
                         #componentRep = null;
 
                         #callMetadata = {{}};
+
+                        #onResolveHandlers = [];
 
                         constructor(args) {{
                             if (typeof args.componentIdx !== 'number') {{
@@ -1286,26 +1287,26 @@ impl AsyncTaskIntrinsic {
                             if (this.#callMetadata.startFn) {{ this.#callMetadata.startFn(); }}
                         }}
 
-                        onHostStart() {{
-                            this.#state = {subtask_class}.State.STARTED;
-                        }}
-
                         setPendingEventFn(fn) {{
                             this.#waitable.setPendingEventFn(fn);
                         }}
 
-                        onResolve(value) {{
+                        registerOnResolveHandler(f) {{
+                            this.#onResolveHandlers.push(f);
+                        }}
+
+                        onResolve(subtaskValue) {{
                             {debug_log_fn}('[{subtask_class}#onResolve()] args', {{
                                 componentIdx: this.#componentIdx,
                                 subtaskID: this.#id,
                                 childTaskID: this.childTaskID(),
                                 parentTaskID: this.parentTaskID(),
-                                value,
+                                subtaskValue,
                             }});
                             if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
                             this.#onProgressFn();
 
-                            if (value === null) {{
+                            if (subtaskValue === null) {{
                                 if (this.#cancelRequested) {{
                                     throw new Error('cancel was not requested, but no value present at return');
                                 }}
@@ -1324,6 +1325,11 @@ impl AsyncTaskIntrinsic {
                                 }}
                                 this.#state = {subtask_class}.State.RETURNED;
                             }}
+
+                            for (const f of this.#onResolveHandlers) {{
+                                f(subtaskValue);
+                            }}
+
                         }}
 
                         setRep(rep) {{ this.#componentRep = rep; }}
@@ -1626,6 +1632,20 @@ impl AsyncTaskIntrinsic {
 
             // NOTE: the function that is output by this intrinsic also receives the
             // function that *should* be called (i.e. a trampoline to CallWasm, etc)
+            //
+            // LowerImport serves as the calling point of a lowered import that is *not*
+            // a guest->guest async call.
+            //
+            // For example, consider a scenario where the host calls a guest that calls a host
+            // import. The following entities are created:
+            //
+            // 1. A Task for the "entrypoint" exported guest fn
+            // 2. A Subtask that wraps the component call to the imported host fn
+            // 3. A Task for execution of the imported host fn
+            //
+            // Between (2) and (3), this LowerImport intrinsic should be called, serving a role
+            // similar to PrepareCall/AsyncStartCall in guest->guest async lowered import calls.
+            //
             Self::LowerImport => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_import_fn = Self::LowerImport.name();
@@ -1633,22 +1653,6 @@ impl AsyncTaskIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
-
-                // EXAMPLE OUTPUT FOR LOWER IMPORT
-                //
-                // LOWER IMPORT {
-                //   args: {
-                //     functionIdx: 1,
-                //     componentIdx: 0,
-                //     isAsync: false,
-                //     paramLiftFns: [ [Function: _liftFlatResultInner] ],
-                //     resultLowerFns: [],
-                //     getCallbackFn: [Function: getCallbackFn],
-                //     getPostReturnFn: [Function: getPostReturnFn],
-                //     isCancellable: false
-                //   },
-                //   params: [ 1058192 ]
-                // }
 
                 // TODO: param lift functions should NOT be used until after subtask start!
                 //
@@ -1661,7 +1665,17 @@ impl AsyncTaskIntrinsic {
                     function {lower_import_fn}(args, exportFn) {{
                         const params = [...arguments].slice(2);
                         {debug_log_fn}('[{lower_import_fn}()] args', {{ args, params, exportFn }});
-                        const {{ functionIdx, componentIdx, isAsync, paramLiftFns, resultLowerFns, metadata }} = args;
+                        const {{
+                            functionIdx,
+                            componentIdx,
+                            isAsync,
+                            paramLiftFns,
+                            resultLowerFns,
+                            metadata,
+                            memoryIdx,
+                            getMemoryFn,
+                            getReallocFn,
+                        }} = args;
 
                         const parentTaskMeta = {current_task_get_fn}(componentIdx);
                         const parentTask = parentTaskMeta?.task;
@@ -1672,6 +1686,11 @@ impl AsyncTaskIntrinsic {
                         const subtask = parentTask.createSubtask({{
                            componentIdx,
                            parentTask,
+                           callMetadata: {{
+                               memoryIdx,
+                               memory: getMemoryFn(),
+                               resultPtr: params[0],
+                           }}
                         }});
 
                         const rep = cstate.subtasks.insert(subtask);
@@ -1679,9 +1698,7 @@ impl AsyncTaskIntrinsic {
 
                         subtask.setOnProgressFn(() => {{
                             subtask.setPendingEventFn(() => {{
-                                if (subtask.resolved()) {{ 
-                                    subtask.deliverResolve(); 
-                                }}
+                                if (subtask.resolved()) {{ subtask.deliverResolve(); }}
                                 return {{
                                     code: {async_event_code_enum}.SUBTASK,
                                     index: rep,
@@ -1690,14 +1707,20 @@ impl AsyncTaskIntrinsic {
                             }});
                         }});
 
-                        // TODO: lower params lift results
+                        // TODO: lower params into callee memory (if necessary)
+
+                        // Set up a handler on subtask completion to lower results from the call into the caller's memory region.
+                        subtask.registerOnResolveHandler((res) => {{
+                            {debug_log_fn}('[{lower_import_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
+                            console.log("GOT A SUBTASK RESULT RESULT!", {{ res, subtaskID: subtask.id() }});
+                        }});
 
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{
                             throw new Error('invalid subtask state, out of valid range');
                         }}
 
-                        // NOTE: we must wait a bit before calling the export funtion,
+                        // NOTE: we must wait a bit before calling the export function,
                         // to ensure the subtask state is not modified before the lower call return
                         //
                         // TODO: we should trigger via subtask state changing, rather than a static wait?
@@ -1712,7 +1735,7 @@ impl AsyncTaskIntrinsic {
                                         subtaskID: subtask.id(),
                                         parentTaskID: parentTask.id(),
                                     }});
-                                    subtask.onResolve(res)
+                                    subtask.onResolve(res);
                                     cstate.tick();
                                 }});
                             }} catch (err) {{
