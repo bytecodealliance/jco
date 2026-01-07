@@ -567,7 +567,6 @@ impl AsyncTaskIntrinsic {
                             getCalleeParamsFn,
                             errHandling,
                         }});
-                        newTask.enter();
 
                         const newTaskID = newTask.id();
                         const newTaskMeta = {{ id: newTaskID, componentIdx, task: newTask }};
@@ -845,7 +844,6 @@ impl AsyncTaskIntrinsic {
                             return true;
                         }}
 
-                        // TODO: enter should be called from driver run loop
                         async enter() {{
                             {debug_log_fn}('[{task_class}#enter()] args', {{ taskID: this.#id }});
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
@@ -853,25 +851,21 @@ impl AsyncTaskIntrinsic {
                             if (this.isSync()) {{ return true; }}
 
                             if (cstate.hasBackpressure()) {{
-                                const backpressureCleared = false;
+                                // TODO: this wait needs to affect/delay actual task execution!
+                                // Check where tasks are being run!
                                 cstate.addBackpressureWaiter();
 
-                                const handlerID = cstate.registerHandler({{
-                                    event: 'backpressure-change',
-                                    fn: (bp) => {{
-                                        if (bp === 0) {{
-                                            cstate.removeHandler(handlerID);
-                                            backpressureCleared = true;
-                                        }}
-                                    }}
+                                const result = await this.waitUntil({{
+                                    readyFn: () => !cstate.hasBackpressure(),
+                                    cancellable: true,
                                 }});
 
-                                // TODO: need to get the result of suspend until, use that to prevent event loop starting
-                                // TODO: if cancelled, cancel the task
-
-                                console.log("WOULD HAVE WAITED FOR BACKPRESSURE!");
-
                                 cstate.removeBackpressureWaiter();
+
+                                if (result === {task_class}.BlockResult.CANCELLED) {{
+                                    this.cancel();
+                                    return false;
+                                }}
                             }}
 
                             if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
@@ -1241,6 +1235,7 @@ impl AsyncTaskIntrinsic {
                         id() {{ return this.#id; }}
                         parentTaskID() {{ return this.#parentTask?.id(); }}
                         childTaskID() {{ return this.#childTask?.id(); }}
+                        state() {{ return this.#state; }}
 
                         componentIdx() {{ return this.#componentIdx; }}
 
@@ -1284,6 +1279,7 @@ impl AsyncTaskIntrinsic {
                                 parentTaskID: this.parentTaskID(),
                             }});
                             this.#onProgressFn();
+
                             this.#state = {subtask_class}.State.STARTED;
 
                             // TODO: this should be called before to lift the params (if present) into place
@@ -1679,7 +1675,9 @@ impl AsyncTaskIntrinsic {
 
                         subtask.setOnProgressFn(() => {{
                             subtask.setPendingEventFn(() => {{
-                                if (subtask.resolved()) {{ subtask.deliverResolve(); }}
+                                if (subtask.resolved()) {{ 
+                                    subtask.deliverResolve(); 
+                                }}
                                 return {{
                                     code: {async_event_code_enum}.SUBTASK,
                                     index: rep,

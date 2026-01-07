@@ -298,9 +298,9 @@ impl HostIntrinsic {
                         subtask.setRep(rep);
 
                         const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
+                        const calleeBackpressure = calleeComponentState.hasBackpressure();
 
                         subtask.onStart();
-
                         preparedTask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{async_start_call_fn}()] signaling subtask completion due to task completion', {{
                                 childTaskID: preparedTask.id(),
@@ -316,9 +316,7 @@ impl HostIntrinsic {
                             calleeFnName: callee.name,
                         }});
 
-
-                        let callbackResultFn = WebAssembly.promising(callee);
-                        let callbackResult = callbackResultFn(...params);
+                        let callbackResult = callee(...params);
 
                         {debug_log_fn}("[{async_start_call_fn}()] after initial call", {{
                             task: preparedTask.id(),
@@ -326,14 +324,7 @@ impl HostIntrinsic {
                             calleeFnName: callee.name,
                         }});
 
-                        // TODO: enter the task here?
-
-                        // If a single call resolved the subtask, we can return immediately
-                        if (subtask.resolved()) {{
-                            {debug_log_fn}("[{async_start_call_fn}()] instantly resolved", {{
-                                task: preparedTask.id(),
-                                subtaskID: subtask.id(),
-                            }});
+                        const doSubtaskResolve = () => {{
                             subtask.deliverResolve();
 
                             const memories = {global_component_memories_class}.getMemoriesForComponentIdx(subtask.componentIdx());
@@ -354,12 +345,48 @@ impl HostIntrinsic {
                                     componentIdx: subtask.componentIdx(),
                                 }});
                             }}
+                        }};
 
+                        // If a single call resolved the subtask and there is no backpressure in the guest,
+                        // we can return immediately
+                        if (subtask.resolved() && !calleeBackpressure) {{
+                            {debug_log_fn}("[{async_start_call_fn}()] instantly resolved", {{
+                                calleeComponentIdx: preparedTask.componentIdx(),
+                                task: preparedTask.id(),
+                                subtaskID: subtask.id(),
+                                callerComponentIdx: subtask.componentIdx(),
+                            }});
+                            doSubtaskResolve();
                             return {subtask_class}.State.RETURNED;
                         }}
 
+                        // Start the (event) driver loop that will resolve the task
                         new Promise(async (resolve, reject) => {{
-                            // TODO: result count space must be reserved in memory, will either
+                            if (subtask.resolved() && calleeBackpressure) {{
+                                await calleeComponentState.waitForBackpressure();
+
+                                {debug_log_fn}("[{async_start_call_fn}()] instantly resolved after cleared backpressure", {{
+                                    calleeComponentIdx: preparedTask.componentIdx(),
+                                    task: preparedTask.id(),
+                                    subtaskID: subtask.id(),
+                                    callerComponentIdx: subtask.componentIdx(),
+                                }});
+                                doSubtaskResolve();
+                                return;
+                            }}
+
+                            const started = await preparedTask.enter();
+                            if (!started) {{
+                                {debug_log_fn}('[{async_start_call_fn}()] task failed early', {{
+                                    taskID: preparedTask.id(),
+                                    subtaskID: subtask.id(),
+                                }});
+                                throw new Error("task failed to start");
+                                return;
+                            }}
+
+                            // TODO: read in params if necessary
+                            // result count space must be reserved in memory, will either
                             // be a callback code or nothing?
 
                             // TODO: retrieve/pass along actual fn name the callback corresponds to
