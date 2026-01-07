@@ -219,6 +219,29 @@ impl ComponentIntrinsic {
                         }}
                         hasBackpressure() {{ return this.#backpressure > 0; }}
 
+                        waitForBackpressure() {{
+                            const backpressureCleared = false;
+                            const cstate = this;
+                            cstate.addBackpressureWaiter();
+                            const handlerID = this.registerHandler({{
+                                event: 'backpressure-change',
+                                fn: (bp) => {{
+                                    if (bp === 0) {{
+                                        cstate.removeHandler(handlerID);
+                                        backpressureCleared = true;
+                                    }}
+                                }}
+                            }});
+                            return new Promise((resolve) => {{
+                                const interval = setInterval(() => {{
+                                    if (backpressureCleared) {{ return; }}
+                                    clearInterval(interval);
+                                    cstate.removeBackpressureWaiter();
+                                    resolve(null);
+                                }}, 0);
+                            }});
+                        }}
+
                         registerHandler(args) {{
                             const {{ event, fn }} = args;
                             if (!event) {{ throw new Error("missing handler event"); }}
@@ -250,7 +273,7 @@ impl ComponentIntrinsic {
 
                         getBackpressureWaiters() {{ return this.#backpressureWaiters; }}
                         addBackpressureWaiter() {{ this.#backpressureWaiters++; }}
-                        removeBackpressureWaiter() {{ 
+                        removeBackpressureWaiter() {{
                             this.#backpressureWaiters--;
                             if (this.#backpressureWaiters < 0) {{
                                 throw new Error("unexepctedly negative number of backpressure waiters");

@@ -2328,10 +2328,6 @@ impl Bindgen for FunctionBindgen<'_> {
                       }}
 
                       const currentSubtask = task.getLatestSubtask();
-                      if (currentSubtask) {{
-                          {debug_log_fn}("[Instruction::AsyncTaskReturn] starting subtask", {{ fnName: '{name}' }});
-                          currentSubtask.onStart();
-                      }}
 
                       const componentState = {get_or_create_async_state_fn}({component_instance_idx});
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
