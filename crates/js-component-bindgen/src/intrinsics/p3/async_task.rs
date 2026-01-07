@@ -414,6 +414,7 @@ impl AsyncTaskIntrinsic {
 
                         const expectedMemoryIdx = task.getMemoryIdx();
                         if (expectedMemoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
+                            {debug_log_fn}("[{task_return_fn}()] mismatched memory indices", {{ expectedMemoryIdx, memoryIdx }});
                             throw new Error('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
                         }}
 
@@ -1692,6 +1693,7 @@ impl AsyncTaskIntrinsic {
                                resultPtr: params[0],
                            }}
                         }});
+                        parentTask.setMemoryIdx(memoryIdx);
 
                         const rep = cstate.subtasks.insert(subtask);
                         subtask.setRep(rep);
