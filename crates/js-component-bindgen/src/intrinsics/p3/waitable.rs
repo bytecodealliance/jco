@@ -254,7 +254,7 @@ impl WaitableIntrinsic {
                         #promise;
 
                         constructor({{ promise, componentInstanceID }}) {{
-                            this.#id = ++{waitable_class}.ID;
+                            this.#id = ++{waitable_class}._ID;
                             this.#componentInstanceID = componentInstanceID;
                             this.#promise = promise;
                         }}

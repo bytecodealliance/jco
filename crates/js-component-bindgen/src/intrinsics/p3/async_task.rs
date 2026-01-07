@@ -1057,9 +1057,9 @@ impl AsyncTaskIntrinsic {
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
-                        onResolve(v) {{
+                        onResolve(taskValue) {{
                             for (const f of this.#onResolveHandlers) {{
-                                f(v);
+                                f(taskValue);
                             }}
                         }}
 
