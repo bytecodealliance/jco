@@ -120,6 +120,7 @@ impl HostIntrinsic {
                   r#"
                     function {prepare_call_fn}(
                         memoryIdx,
+                        getMemoryFn,
                         startFn,
                         returnFn,
                         callerInstanceIdx,
@@ -129,7 +130,12 @@ impl HostIntrinsic {
                         storagePtr, // TODO: this is something else (-2!)
                         resultPtr, // TODO: this is passed manually from gathered async lower call
                     ) {{
-                        {debug_log_fn}('[{prepare_call_fn}()] args', {{ memoryIdx }});
+                        {debug_log_fn}('[{prepare_call_fn}()]', {{
+                            callerInstanceIdx,
+                            calleeInstanceIdx,
+                            taskReturnTypeIdx,
+                            stringEncoding,
+                        }});
                         const argArray = [...arguments];
 
                         const currentCallerTaskMeta = {current_task_get_fn}(callerInstanceIdx);
@@ -189,16 +195,13 @@ impl HostIntrinsic {
                             stringEncoding,
                         }});
 
-                        // newTask.enter();
-                        // TODO: where should this task start? After the subtask has started, probably???
-                        // TODO: Is creating the task here actually completely unnecessary, because CallWasm/CallInterface will
-                        // happen later and create a task where necessary?
-
                         const subtask = currentCallerTask.createSubtask({{
                            componentIdx: callerInstanceIdx,
                            parentTask: currentCallerTask,
                            childTask: newTask,
                            callMetadata: {{
+                              memory: getMemoryFn(),
+                              memoryIdx,
                               resultPtr,
                               returnFn,
                               startFn,
@@ -206,7 +209,6 @@ impl HostIntrinsic {
                         }});
 
                         newTask.setParentSubtask(subtask);
-                        newTask.setMemoryIdx(memoryIdx);
                     }}
               "#
                 ));

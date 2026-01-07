@@ -1692,12 +1692,18 @@ impl<'a> Instantiator<'a, '_> {
                 let prepare_call_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Host(HostIntrinsic::PrepareCall));
+                let (memory_idx_js, memory_fn_js) = memory
+                    .map(|v| {
+                        (
+                            v.as_u32().to_string(),
+                            format!("() => memory{}", v.as_u32()),
+                        )
+                    })
+                    .unwrap_or_else(|| ("null".into(), "() => null".into()));
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {prepare_call_fn}.bind(null, {memory});",
-                    memory = memory
-                        .map(|v| v.as_u32().to_string())
-                        .unwrap_or_else(|| "null".into()),
+                    "const trampoline{i} = {prepare_call_fn}.bind(null, {memory_idx_js}, {memory_fn_js});",
                 )
             }
 
