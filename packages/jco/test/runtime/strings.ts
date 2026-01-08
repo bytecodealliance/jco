@@ -6,12 +6,13 @@ import * as assert from 'assert';
 // @ts-ignore
 import { instantiate } from '../output/strings/strings.js';
 // @ts-ignore
-import { wasi, loadWasm } from './helpers.js';
+import { loadWasm } from './helpers.js';
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
 
 async function run() {
     // @ts-ignore
     const wasm = await instantiate(loadWasm, {
-        ...wasi,
+        ...new WASIShim().getImportObject(),
         'test:strings/imports': {
             takeBasic(s: string) {
                 assert.strictEqual(s, 'latin utf16');
