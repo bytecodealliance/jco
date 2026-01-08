@@ -522,7 +522,7 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStringUtf8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let decoder = Intrinsic::String(StringIntrinsic::Utf8Decoder).name();
+                let decoder = Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8).name();
                 output.push_str(&format!("
                     function _liftFlatStringUTF8(ctx) {{
                         {debug_log_fn}('[_liftFlatStringUTF8()] args', {{ ctx }});

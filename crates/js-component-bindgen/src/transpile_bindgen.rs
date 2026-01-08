@@ -1542,7 +1542,7 @@ impl<'a> Instantiator<'a, '_> {
                 let decoder = match string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => self
                         .bindgen
-                        .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Decoder)),
+                        .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8)),
                     wasmtime_environ::component::StringEncoding::Utf16 => self
                         .bindgen
                         .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder)),
@@ -1609,15 +1609,12 @@ impl<'a> Instantiator<'a, '_> {
                         let encode_fn = self
                             .bindgen
                             .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
-                        let encode_len_var =
-                            Intrinsic::String(StringIntrinsic::Utf8EncodedLen).name();
                         uwriteln!(
                             self.src.js,
                             "function trampoline{i}OutputStr(s, outputPtr) {{
                                  const memory = memory{memory_idx};
                                  const reallocFn = realloc{realloc_fn_idx};
-                                 let ptr = {encode_fn}(s, reallocFn, memory);
-                                 let len = {encode_len_var};
+                                 let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
                                  new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
                                  new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
                              }}"
@@ -1687,7 +1684,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "const trampoline{i} = {transfer_fn};");
             }
 
-            // This sets up a subtask (sets parent, etc)
+            // This sets up a subtask (sets parent, etc) for guest -> guest calls
             Trampoline::PrepareCall { memory } => {
                 let prepare_call_fn = self
                     .bindgen
@@ -1700,7 +1697,6 @@ impl<'a> Instantiator<'a, '_> {
                         )
                     })
                     .unwrap_or_else(|| ("null".into(), "() => null".into()));
-
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {prepare_call_fn}.bind(null, {memory_idx_js}, {memory_fn_js});",
