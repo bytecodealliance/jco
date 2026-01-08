@@ -1151,7 +1151,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     "#,
                     encoded_len = match self.encoding {
                         StringEncoding::UTF8 => "encodeRes.len".into(),
-                        _ => format!("{s}.length"),
+                        _ => format!("{}.length", s),
                     }
                 );
                 results.push(format!("ptr{tmp}"));
