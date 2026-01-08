@@ -1,6 +1,6 @@
 //! Intrinsics that represent helpers that enable Lower integration
 
-use crate::{intrinsics::Intrinsic, source::Source};
+use crate::{intrinsics::{Intrinsic, string::StringIntrinsic}, source::Source};
 
 use super::conversion::ConversionIntrinsic;
 
@@ -332,11 +332,10 @@ impl LowerIntrinsic {
             Self::LowerFlatU32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _lowerFlatU32(memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatU32()] args', {{ memory, vals, storagePtr, storageLen }});
-                        if (vals.length !== 1) {{
-                            throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
-                        }}
+                    function _lowerFlatU32(memoryAndRealloc, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_lowerFlatU32()] args', {{ memoryAndRealloc, vals, storagePtr, storageLen }});
+                        const {{ memory, realloc }} = memoryAndRealloc;
+                        if (vals.length !== 1) {{ throw new Error('expected single value to lower, got (' + vals.length + ')'); }}
                         if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
                         return 32;
@@ -429,20 +428,20 @@ impl LowerIntrinsic {
 
             Self::LowerFlatStringUtf8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let utf8_encode_fn = Intrinsic::String(StringIntrinsic::Utf8Encode).name();
                 output.push_str(&format!("
-                    function _lowerFlatStringUTF8(memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatStringUTF8()] args', {{ memory, vals, storagePtr, storageLen }});
-                        const start = new DataView(memory.buffer).getUint32(storagePtr, vals[0], true);
-                        const codeUnits = new DataView(memory.buffer).getUint32(storagePtr, vals[0] + 4, true);
-                        var bytes = new Uint8Array(memory.buffer, start, codeUnits);
-                        if (memory.buffer.byteLength < start + bytes.byteLength) {{
-                            throw new Error('memory out of bounds');
-                        }}
-                        if (storageLen !== bytes.byteLength) {{
-                            throw new Error('storage length (' + storageLen + ') != (' + bytes.byteLength + ')');
-                        }}
-                        new Uint8Array(memory.buffer, storagePtr).set(bytes);
-                        return bytes.byteLength;
+                    function _lowerFlatStringUTF8(memoryAndRealloc, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_lowerFlatStringUTF8()] args', {{ memoryAndRealloc, vals, storagePtr, storageLen }});
+                        const {{ memory, realloc }} = memoryAndRealloc;
+
+                        const s = vals[0];
+                        const {{ ptr, len, codepoints }} = {utf8_encode_fn}(vals[0], realloc, memory);
+
+                        const view = new DataView(memory.buffer);
+                        view.setUint32(storagePtr, ptr, true);
+                        view.setUint32(storagePtr + 4, codepoints, true);
+
+                        return len;
                     }}
                 "));
             }

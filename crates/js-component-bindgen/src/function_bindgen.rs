@@ -1141,18 +1141,19 @@ impl Bindgen for FunctionBindgen<'_> {
                 let memory = self.memory.as_ref().unwrap();
                 let str = String::from("cabi_realloc");
                 let realloc = self.realloc.unwrap_or(&str);
+                let s = &operands[0];
                 uwriteln!(
                     self.src,
-                    "var ptr{tmp} = {encode}({}, {realloc}, {memory});",
-                    operands[0],
+                    r#"
+                      var encodeRes = {encode}({s}, {realloc}, {memory});
+                      var ptr{tmp} = encodeRes.ptr;
+                      var len{tmp} = {encoded_len};
+                    "#,
+                    encoded_len = match self.encoding {
+                        StringEncoding::UTF8 => "encodeRes.len".into(),
+                        _ => format!("{s}.length"),
+                    }
                 );
-                if self.encoding == StringEncoding::UTF8 {
-                    let encoded_len =
-                        self.intrinsic(Intrinsic::String(StringIntrinsic::Utf8EncodedLen));
-                    uwriteln!(self.src, "var len{tmp} = {encoded_len};");
-                } else {
-                    uwriteln!(self.src, "var len{tmp} = {}.length;", operands[0]);
-                }
                 results.push(format!("ptr{tmp}"));
                 results.push(format!("len{tmp}"));
             }
@@ -1163,12 +1164,10 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.encoding,
                     StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
-                let intrinsic = if self.encoding == StringEncoding::UTF16 {
-                    Intrinsic::String(StringIntrinsic::Utf16Decoder)
-                } else {
-                    Intrinsic::String(StringIntrinsic::Utf8Decoder)
-                };
-                let decoder = self.intrinsic(intrinsic);
+                let decoder = self.intrinsic(match self.encoding {
+                    StringEncoding::UTF16 => Intrinsic::String(StringIntrinsic::Utf16Decoder),
+                    _ => Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8),
+                });
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
                 uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);

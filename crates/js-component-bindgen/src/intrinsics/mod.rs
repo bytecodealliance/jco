@@ -272,6 +272,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ));
     }
 
+    if args
+        .intrinsics
+        .contains(&Intrinsic::String(StringIntrinsic::Utf8Encode))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8)]);
+    }
+
     // Attempting to perform a debug message hoist will require string encoding to memory
     if args
         .intrinsics
@@ -409,7 +417,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
     {
         args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::Utf8Decoder));
+            .insert(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
     }
 
     if args
@@ -420,12 +428,11 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
     }
 
-    if args
+    if args.intrinsics.contains(&Intrinsic::AsyncTask(
+        AsyncTaskIntrinsic::CreateNewCurrentTask,
+    )) || args
         .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
         || args
             .intrinsics
             .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask))

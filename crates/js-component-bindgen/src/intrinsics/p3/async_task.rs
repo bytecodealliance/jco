@@ -1285,6 +1285,9 @@ impl AsyncTaskIntrinsic {
                             this.#state = {subtask_class}.State.STARTED;
 
                             // TODO: this should be called before to lift the params (if present) into place
+                            //
+                            // TODO: the call to startFn needs a memory location where the params have been
+                            // written to?
                             if (this.#callMetadata.startFn) {{ this.#callMetadata.startFn(); }}
                         }}
 
@@ -1690,6 +1693,7 @@ impl AsyncTaskIntrinsic {
                            callMetadata: {{
                                memoryIdx,
                                memory: getMemoryFn(),
+                               realloc: getReallocFn(),
                                resultPtr: params[0],
                            }}
                         }});
@@ -1711,12 +1715,6 @@ impl AsyncTaskIntrinsic {
 
                         // TODO: lower params into callee memory (if necessary)
 
-                        // Set up a handler on subtask completion to lower results from the call into the caller's memory region.
-                        subtask.registerOnResolveHandler((res) => {{
-                            {debug_log_fn}('[{lower_import_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
-                            console.log("GOT A SUBTASK RESULT RESULT!", {{ res, subtaskID: subtask.id() }});
-                        }});
-
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{
                             throw new Error('invalid subtask state, out of valid range');
@@ -1730,14 +1728,20 @@ impl AsyncTaskIntrinsic {
                             try {{
                                 {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ exportFn }});
                                 exportFn();
+
                                 const task = subtask.getChildTask();
                                 task.registerOnResolveHandler((res) => {{
-                                    {debug_log_fn}('[{lower_import_fn}()] signaling subtask completion', {{
+                                    {debug_log_fn}('[{lower_import_fn}()] cascading subtask completion', {{
                                         childTaskID: task.id(),
                                         subtaskID: subtask.id(),
                                         parentTaskID: parentTask.id(),
                                     }});
+
+                                    const {{ memory, resultPtr, realloc }} = subtask.getCallMetadata();
+                                    resultLowerFns[0]({{ memory, realloc }}, [res], resultPtr);
+
                                     subtask.onResolve(res);
+
                                     cstate.tick();
                                 }});
                             }} catch (err) {{
