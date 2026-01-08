@@ -401,12 +401,15 @@ impl WaitableIntrinsic {
                     function {waitable_set_drop_fn}(componentInstanceID, waitableSetRep) {{
                         {debug_log_fn}('[{waitable_set_drop_fn}()] args', {{ componentInstanceID, waitableSetRep }});
                         const task = {current_task_get_fn}(componentInstanceID);
+
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
                         if (task.componentIdx !== componentInstanceID) {{
                             throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
                         }}
+
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
+
                         {remove_waitable_set_fn}({{ state, waitableSetRep, task }});
                     }}
                 "));

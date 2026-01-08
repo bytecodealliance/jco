@@ -413,7 +413,7 @@ impl AsyncTaskIntrinsic {
                         if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
 
                         const expectedMemoryIdx = task.getMemoryIdx();
-                        if (expectedMemoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
+                        if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
                             {debug_log_fn}("[{task_return_fn}()] mismatched memory indices", {{ expectedMemoryIdx, memoryIdx }});
                             throw new Error('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
                         }}
@@ -455,7 +455,7 @@ impl AsyncTaskIntrinsic {
                     function {subtask_drop_fn}(componentInstanceID, subtaskID) {{
                         {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentInstanceID, subtaskID }});
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
+                        if (!state.mayLeave) {{ throw new Error('component is not marked as may leave, cannot be cancelled'); }}
 
                         const subtask =  state.subtasks.remove(subtaskID);
                         if (!subtask) {{ throw new Error('missing/invalid subtask specified for drop in component instance'); }}
@@ -636,7 +636,7 @@ impl AsyncTaskIntrinsic {
                             const last = tasks[tasks.length - 1];
                             if (last.id !== taskID) {{
                                 // throw new Error('current task does not match expected task ID');
-                                 return;
+                                return;
                             }}
                         }}
 
@@ -1330,6 +1330,8 @@ impl AsyncTaskIntrinsic {
                                 this.#state = {subtask_class}.State.RETURNED;
                             }}
 
+                            //state.waitables.remove(this.#waitableRep);
+
                             for (const f of this.#onResolveHandlers) {{
                                 f(subtaskValue);
                             }}
@@ -1406,8 +1408,24 @@ impl AsyncTaskIntrinsic {
                                 throw new Error('cannot drop subtask before resolve is delivered');
                             }}
                             if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
-                            this.#waitable.drop();
+
+                            const state = this.#getComponentState();
+                            const waitable = state.waitables.remove(this.#waitableRep);
+
+                            if (waitable !== this.#waitable) {{
+                                throw new Error('unexpectedly different waitable from removed rep');
+                            }}
+                            waitable.drop();
+
                             this.#dropped = true;
+                        }}
+
+                        #getComponentState() {{
+                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
+                            if (!state) {{
+                                throw new Error('invalid/missing async state for component [' + componentInstanceID + ']');
+                            }}
+                            return state;
                         }}
 
                         getWaitableHandleIdx() {{
@@ -1715,6 +1733,13 @@ impl AsyncTaskIntrinsic {
 
                         // TODO: lower params into callee memory (if necessary)
 
+                        // Set up a handler on subtask completion to lower results from the call into the caller's memory region.
+                        subtask.registerOnResolveHandler((res) => {{
+                            {debug_log_fn}('[{lower_import_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
+                            const {{ memory, resultPtr, realloc }} = subtask.getCallMetadata();
+                            resultLowerFns[0]({{ memory, realloc }}, [res], resultPtr);
+                        }});
+
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{
                             throw new Error('invalid subtask state, out of valid range');
@@ -1736,9 +1761,6 @@ impl AsyncTaskIntrinsic {
                                         subtaskID: subtask.id(),
                                         parentTaskID: parentTask.id(),
                                     }});
-
-                                    const {{ memory, resultPtr, realloc }} = subtask.getCallMetadata();
-                                    resultLowerFns[0]({{ memory, realloc }}, [res], resultPtr);
 
                                     subtask.onResolve(res);
 

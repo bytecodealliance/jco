@@ -53,7 +53,7 @@ suite('Async (WASI P3)', () => {
     });
 
     // https://github.com/bytecodealliance/jco/issues/1150
-    test('simple async host imports', async () => {
+    test('simple bare async host imports', async () => {
         const hostStr = "loaded-from-host";
         const hostU32 = 43;
 
