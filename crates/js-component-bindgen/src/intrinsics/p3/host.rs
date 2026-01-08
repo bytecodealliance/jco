@@ -201,6 +201,7 @@ impl HostIntrinsic {
                            childTask: newTask,
                            callMetadata: {{
                               memory: getMemoryFn(),
+                              // TODO: we need a realloc fn for guest -> guest calls???
                               memoryIdx,
                               resultPtr,
                               returnFn,
