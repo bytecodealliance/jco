@@ -5,8 +5,7 @@ import { URL, fileURLToPath } from 'node:url';
 import { suite, test, assert } from 'vitest';
 
 import { getDefaultComponentFixtures } from './common.js';
-import { jcoPath, exec, readFixtureFlags } from './helpers.js';
-import { tsGenerationPromise } from './typescript.js';
+import { jcoPath, exec, readFixtureFlags, tsGenerationPromise } from './helpers.js';
 
 /**
  * To run the runtime tests specified below, transpilation must be performed
