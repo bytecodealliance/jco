@@ -674,3 +674,23 @@ export async function getCurrentWitComponentVersion() {
     CURRENT_WIT_COMPONENT_VERSION = version;
     return CURRENT_WIT_COMPONENT_VERSION;
 }
+
+let TS_GEN_PROMISE;
+export function tsGenerationPromise() {
+    if (TS_GEN_PROMISE) {
+        return TS_GEN_PROMISE;
+    }
+    return (TS_GEN_PROMISE = (async () => {
+        const tsConfigPath = fileURLToPath(
+            new URL('./tsconfig.json', import.meta.url)
+        );
+        var { stderr } = await exec(
+            NODE_MODULES_TSC_BIN_PATH,
+            '-p',
+            tsConfigPath
+        );
+        if (stderr !== '') {
+            throw new Error(`stderr unexpectedly contains content: ${stderr}`);
+        }
+    })());
+}
