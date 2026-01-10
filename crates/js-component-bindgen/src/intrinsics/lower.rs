@@ -417,7 +417,7 @@ impl LowerIntrinsic {
                         if (memory.buffer.byteLength < start + bytes.byteLength) {{
                             throw new Error('memory out of bounds');
                         }}
-                        if (storageLen !== bytes.byteLength) {{
+                        if (storageLen !== undefined && storageLen !== bytes.byteLength) {{
                             throw new Error('storage length (' + storageLen + ') != (' + bytes.byteLength + ')');
                         }}
                         new Uint16Array(memory.buffer, storagePtr).set(bytes);
@@ -463,7 +463,7 @@ impl LowerIntrinsic {
                             }});
 
                             const [start] = vals;
-                            if (size > storageLen) {{
+                            if (storageLen !== undefined && size > storageLen) {{
                                 throw new Error('not enough storage remaining for record flat lower');
                             }}
                             const data = new Uint8Array(memory.buffer, start, size);
@@ -491,7 +491,7 @@ impl LowerIntrinsic {
                                 extra,
                             }});
                             let [start, totalSize] = vals;
-                            if (size > storageLen) {{
+                            if (storageLen !== undefined && size > storageLen) {{
                                 throw new Error('not enough storage remaining for variant flat lower');
                             }}
                             const data = new Uint8Array(memory.buffer, start, totalSize);
@@ -509,7 +509,7 @@ impl LowerIntrinsic {
                         {debug_log_fn}('[_lowerFlatList()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         let [start, len] = vals;
                         const totalSizeBytes = len * elemSize;
-                        if (totalSizeBytes > storageLen) {{
+                        if (storageLen !== undefined && totalSizeBytes > storageLen) {{
                             throw new Error('not enough storage remaining for list flat lower');
                         }}
                         const data = new Uint8Array(memory.buffer, start, totalSizeBytes);
@@ -525,7 +525,7 @@ impl LowerIntrinsic {
                     function _lowerFlatTuple(size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_lowerFlatTuple()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         let [start, len] = vals;
-                        if (len > storageLen) {{
+                        if (storageLen !== undefined && len > storageLen) {{
                             throw new Error('not enough storage remaining for tuple flat lower');
                         }}
                         const data = new Uint8Array(memory.buffer, start, len);
@@ -553,7 +553,7 @@ impl LowerIntrinsic {
                     function _lowerFlatEnum(size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_lowerFlatEnum()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         let [start] = vals;
-                        if (size > storageLen) {{
+                        if (storageLen !== undefined && size > storageLen) {{
                             throw new Error('not enough storage remaining for enum flat lower');
                         }}
                         const data = new Uint8Array(memory.buffer, start, size);
@@ -569,7 +569,7 @@ impl LowerIntrinsic {
                     function _lowerFlatOption(size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_lowerFlatOption()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         let [start] = vals;
-                        if (size > storageLen) {{
+                        if (storageLen !== undefined && size > storageLen) {{
                             throw new Error('not enough storage remaining for option flat lower');
                         }}
                         const data = new Uint8Array(memory.buffer, start, size);
