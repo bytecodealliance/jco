@@ -412,7 +412,7 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
 
-                        const expectedMemoryIdx = task.getMemoryIdx();
+                        const expectedMemoryIdx = task.getReturnMemoryIdx();
                         if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
                             {debug_log_fn}("[{task_return_fn}()] mismatched memory indices", {{ expectedMemoryIdx, memoryIdx }});
                             throw new Error('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
@@ -551,6 +551,7 @@ impl AsyncTaskIntrinsic {
                             stringEncoding,
                             errHandling,
                             getCalleeParamsFn,
+                            resultPtr,
                         }} = args;
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while starting task');
@@ -566,6 +567,7 @@ impl AsyncTaskIntrinsic {
                             callbackFnName,
                             stringEncoding,
                             getCalleeParamsFn,
+                            resultPtr,
                             errHandling,
                         }});
 
@@ -776,8 +778,8 @@ impl AsyncTaskIntrinsic {
 
                         hasCallback() {{ return this.#callbackFn !== null; }}
 
-                        setMemoryIdx(idx) {{ this.#memoryIdx = idx; }}
-                        getMemoryIdx(idx) {{ return this.#memoryIdx; }}
+                        setReturnMemoryIdx(idx) {{ this.#memoryIdx = idx; }}
+                        getReturnMemoryIdx() {{ return this.#memoryIdx; }}
 
                         setParentSubtask(subtask) {{
                             if (!subtask || !(subtask instanceof {subtask_class})) {{ return }}
@@ -1715,7 +1717,7 @@ impl AsyncTaskIntrinsic {
                                resultPtr: params[0],
                            }}
                         }});
-                        parentTask.setMemoryIdx(memoryIdx);
+                        parentTask.setReturnMemoryIdx(memoryIdx);
 
                         const rep = cstate.subtasks.insert(subtask);
                         subtask.setRep(rep);

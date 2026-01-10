@@ -2303,7 +2303,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
                 uwriteln!(
                     self.src.js_init,
-                    "{global_component_memories_class}.save({{ componentIdx: {component_idx}, memory: memory{idx} }});"
+                    "{global_component_memories_class}.save({{ idx: {idx}, componentIdx: {component_idx}, memory: memory{idx} }});"
                 );
             }
 

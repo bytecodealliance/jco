@@ -981,17 +981,23 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         constructor() {{ throw new Error('{global_component_memories_class} should not be constructed'); }}
 
                         static save(args) {{
-                            const {{ componentIdx, memory }} = args;
+                            const {{ idx, componentIdx, memory }} = args;
                             let inner = {global_component_memories_class}.map.get(componentIdx);
                             if (!inner) {{
                                 inner = [];
                                 {global_component_memories_class}.map.set(componentIdx, inner);
                             }}
-                            inner.push(memory);
+                            inner.push({{ memory, idx }});
                         }}
 
                         static getMemoriesForComponentIdx(componentIdx) {{
-                            return {global_component_memories_class}.map.get(componentIdx);
+                            const metas = {global_component_memories_class}.map.get(componentIdx);
+                            return metas.map(meta => meta.memory);
+                        }}
+
+                        static getMemory(componentIdx, idx) {{
+                            const metas = {global_component_memories_class}.map.get(componentIdx);
+                            return metas.find(meta => meta.idx === idx)?.memory;
                         }}
                     }}
                 "#
