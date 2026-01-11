@@ -271,19 +271,25 @@ impl LowerIntrinsic {
 
             Self::LowerFlatU8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _lowerFlatU8(memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatU8()] args', {{ memory, vals, storagePtr, storageLen }});
+                output.push_str(&format!(r#"
+                    function _lowerFlatU8(memoryAndRealloc, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_lowerFlatU8()] args', {{ memoryAndRealloc, vals, storagePtr, storageLen }});
                         if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 255 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u8'); }}
+                        const {{ memory }} = memoryAndRealloc;
+                        if (!memory) {{ throw new Error("missing memory for lower"); }}
+
+                        // VALS is undefined???
+
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
-                        return 8;
+                        return 1;
                     }}
-                "));
+                "#));
             }
 
+            // TODO: alignment checks
             Self::LowerFlatS16 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -294,7 +300,7 @@ impl LowerIntrinsic {
                         }}
                         if (vals[0] > 32_767 || vals[0] < -32_768) {{ throw new Error('invalid value for core value representing s16'); }}
                         new DataView(memory.buffer).setInt16(storagePtr, vals[0], true);
-                        return 16;
+                        return 2;
                     }}
                 "));
             }
@@ -309,7 +315,7 @@ impl LowerIntrinsic {
                         }}
                         if (vals[0] > 65_535 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u16'); }}
                         new DataView(memory.buffer).setUint16(storagePtr, vals[0], true);
-                        return 16;
+                        return 2;
                     }}
                 "));
             }
@@ -324,7 +330,7 @@ impl LowerIntrinsic {
                         }}
                         if (vals[0] > 2_147_483_647 || vals[0] < -2_147_483_648) {{ throw new Error('invalid value for core value representing s32'); }}
                         new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
-                        return 32;
+                        return 4;
                     }}
                 "));
             }
@@ -338,7 +344,7 @@ impl LowerIntrinsic {
                         if (vals.length !== 1) {{ throw new Error('expected single value to lower, got (' + vals.length + ')'); }}
                         if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
-                        return 32;
+                        return 4;
                     }}
                 "));
             }
@@ -351,7 +357,7 @@ impl LowerIntrinsic {
                         if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         if (vals[0] > 9_223_372_036_854_775_807n || vals[0] < -9_223_372_036_854_775_808n) {{ throw new Error('invalid value for core value representing s64'); }}
                         new DataView(memory.buffer).setBigInt64(storagePtr, vals[0], true);
-                        return 64;
+                        return 8;
                     }}
                 "));
             }
@@ -364,7 +370,7 @@ impl LowerIntrinsic {
                         if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         if (vals[0] > 18_446_744_073_709_551_615n || vals[0] < 0n) {{ throw new Error('invalid value for core value representing u64'); }}
                         new DataView(memory.buffer).setBigUint64(storagePtr, vals[0], true);
-                        return 64;
+                        return 8;
                     }}
                 "));
             }
@@ -376,7 +382,7 @@ impl LowerIntrinsic {
                         {debug_log_fn}('[_lowerFlatFloat32()] args', {{ memory, vals, storagePtr, storageLen }});
                         if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(memory.buffer).setFloat32(storagePtr, vals[0], true);
-                        return 32;
+                        return 4;
                     }}
                 "));
             }
@@ -388,7 +394,7 @@ impl LowerIntrinsic {
                         {debug_log_fn}('[_lowerFlatFloat64()] args', {{ memory, vals, storagePtr, storageLen }});
                         if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
                         new DataView(memory.buffer).setFloat64(storagePtr, vals[0], true);
-                        return 64;
+                        return 8;
                     }}
                 "));
             }
@@ -400,7 +406,7 @@ impl LowerIntrinsic {
                     function _lowerFlatChar(memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_lowerFlatChar()] args', {{ memory, vals, storagePtr, storageLen }});
                         if (vals.length !== 1) {{ throw new Error('unexpected number of core vals'); }}
-                        new DataView(memory.buffer).setFloat64(storagePtr, {i32_to_char_fn}(vals[0]), true);
+                        new DataView(memory.buffer).setUint32(storagePtr, {i32_to_char_fn}(vals[0]), true);
                         return 4;
                     }}
                 "));
@@ -463,7 +469,7 @@ impl LowerIntrinsic {
                             }});
 
                             const [start] = vals;
-                            if (storageLen !== undefined && size > storageLen) {{
+                            if (storageLen !== undefined && size !== undefined && size > storageLen) {{
                                 throw new Error('not enough storage remaining for record flat lower');
                             }}
                             const data = new Uint8Array(memory.buffer, start, size);
@@ -476,39 +482,60 @@ impl LowerIntrinsic {
 
             Self::LowerFlatVariant => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _lowerFlatVariant(variantMetas, extra) {{
-                        return (size, memory, vals, storagePtr, storageLen) => {{
-                            const params = [...arguments].slice(5);
+                let lower_u8_fn = Self::LowerFlatU8.name();
+                let lower_u16_fn = Self::LowerFlatU16.name();
+                let lower_u32_fn = Self::LowerFlatU32.name();
+                output.push_str(&format!(r#"
+                    function _lowerFlatVariant(metadata, extra) {{
+                        const {{ discriminantSizeBytes, lowerMetas }} = metadata;
+
+                        return (memoryAndRealloc, vals, storagePtr, storageLen) => {{
                             {debug_log_fn}('[_lowerFlatVariant()] args', {{
-                                size,
-                                memory,
+                                memoryAndRealloc,
                                 vals,
                                 storagePtr,
                                 storageLen,
-                                params,
-                                variantMetas,
-                                extra,
                             }});
-                            let [start, totalSize] = vals;
-                            if (storageLen !== undefined && size > storageLen) {{
-                                throw new Error('not enough storage remaining for variant flat lower');
+
+                            const {{ tag, val }} = vals[0];
+                            const variant = lowerMetas.find(vm => vm.tag === tag);
+                            if (!variant) {{ throw new Error(`missing/invalid variant, no tag matches [${{tag}}] (options were ${{variantMetas.map(vm => vm.tag)}})`); }}
+                            if (!variant.discriminant) {{ throw new Error(`missing/invalid discriminant for variant [${{variant}}]`); }}
+
+                            let bytesWritten;
+                            switch (discriminantSizeBytes) {{
+                                case 1:
+                                    bytesWritten = {lower_u8_fn}(memoryAndRealloc, [variant.discriminant], storagePtr);
+                                    break;
+                                case 2:
+                                    bytesWritten = {lower_u16_fn}(memoryAndRealloc, [variant.discriminant], storagePtr);
+                                    break;
+                                case 4:
+                                    bytesWritten = {lower_u32_fn}(memoryAndRealloc, [variant.discriminant], storagePtr);
+                                    break;
+                                default:
+                                    throw new Error(`unexpected discriminant size bytes [${{discriminantSizeBytes}}]`);
                             }}
-                            const data = new Uint8Array(memory.buffer, start, totalSize);
-                            new Uint8Array(memory.buffer, storagePtr, totalSize).set(data);
-                            return data.byteLength;
+                            if (bytesWritten !== discriminantSizeBytes) {{
+                                throw new Error("unexpectedly wrote more bytes than discriminant");
+                            }}
+                            storagePtr += bytesWritten;
+
+                            bytesWritten += variant.lowerFn(memoryAndRealloc, [val], storagePtr, storageLen);
+
+                            return bytesWritten;
                         }}
                     }}
-                "));
+                "#));
             }
 
             Self::LowerFlatList => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _lowerFlatList(elemSize, memory, vals, storagePtr, storageLen) {{
+                    function _lowerFlatList(size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_lowerFlatList()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         let [start, len] = vals;
-                        const totalSizeBytes = len * elemSize;
+                        const totalSizeBytes = len * size;
                         if (storageLen !== undefined && totalSizeBytes > storageLen) {{
                             throw new Error('not enough storage remaining for list flat lower');
                         }}
@@ -553,7 +580,7 @@ impl LowerIntrinsic {
                     function _lowerFlatEnum(size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_lowerFlatEnum()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         let [start] = vals;
-                        if (storageLen !== undefined && size > storageLen) {{
+                        if (storageLen !== undefined && size !== undefined && size > storageLen) {{
                             throw new Error('not enough storage remaining for enum flat lower');
                         }}
                         const data = new Uint8Array(memory.buffer, start, size);
@@ -569,7 +596,7 @@ impl LowerIntrinsic {
                     function _lowerFlatOption(size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_lowerFlatOption()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         let [start] = vals;
-                        if (storageLen !== undefined && size > storageLen) {{
+                        if (storageLen !== undefined && size !== undefined && size > storageLen) {{
                             throw new Error('not enough storage remaining for option flat lower');
                         }}
                         const data = new Uint8Array(memory.buffer, start, size);
@@ -585,13 +612,14 @@ impl LowerIntrinsic {
                 let lower_variant_fn = Self::LowerFlatVariant.name();
                 output.push_str(&format!(
                     r#"
-                    function _lowerFlatResult(variantMetas) {{
-                       const invalidTag = variantMetas.find(t => t.tag !== 'ok' && t.tag !== 'error')
+                    function _lowerFlatResult(lowerMetas) {{
+                       const invalidTag = lowerMetas.find(t => t.tag !== 'ok' && t.tag !== 'error')
                        if (invalidTag) {{ throw new Error(`invalid variant tag [${{invalidTag}}] found for result`); }}
 
-                       return function _lowerFlatResultInner(ctx) {{
-                           {debug_log_fn}('[_lowerFlatResult()] args', {{ variantMetas }});
-                           {lower_variant_fn}(variantMetas, {{ forResult: true }});
+                       return function _lowerFlatResultInner() {{
+                           {debug_log_fn}('[_lowerFlatResult()] args', {{ lowerMetas }});
+                           let lowerFn = {lower_variant_fn}({{ discriminantSizeBytes: 1, lowerMetas }}, {{ forResult: true }});
+                           return lowerFn.apply(null, arguments);
                        }};
                     }}
                     "#
@@ -640,10 +668,11 @@ impl LowerIntrinsic {
 
             Self::LowerFlatErrorContext => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_u32_fn = Self::LowerFlatU32.name();
                 output.push_str(&format!("
-                    function _lowerFlatErrorContext(size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatErrorContext()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        throw new Error('flat lower for error-contexts not yet implemented!');
+                    function _lowerFlatErrorContext(memoryAndRealloc, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[_lowerFlatErrorContext()] args', {{ memoryAndRealloc, vals, storagePtr, storageLen }});
+                        return {lower_u32_fn}(memoryAndRealloc, vals, storagePtr, storageLen);
                     }}
                 "));
             }

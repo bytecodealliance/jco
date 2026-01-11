@@ -395,7 +395,7 @@ impl AsyncTaskIntrinsic {
 
                 output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
-                        const {{ componentIdx, useDirectParams, getMemoryFn, memoryIdx, callbackFnIdx, liftFns }} = ctx;
+                        const {{ componentIdx, useDirectParams, getMemoryFn, memoryIdx, callbackFnIdx, liftFns, lowerFns }} = ctx;
                         const params = [...arguments].slice(1);
                         const memory = getMemoryFn();
                         {debug_log_fn}('[{task_return_fn}()] args', {{
@@ -403,6 +403,7 @@ impl AsyncTaskIntrinsic {
                             callbackFnIdx,
                             memoryIdx,
                             liftFns,
+                            lowerFns,
                             params,
                         }});
 
@@ -411,6 +412,8 @@ impl AsyncTaskIntrinsic {
 
                         const task = taskMeta.task;
                         if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
+
+                        task.setReturnLowerFns(lowerFns);
 
                         const expectedMemoryIdx = task.getReturnMemoryIdx();
                         if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
@@ -715,6 +718,8 @@ impl AsyncTaskIntrinsic {
                         #backpressurePromise;
                         #backpressureWaiters = 0n;
 
+                        #returnLowerFns = null;
+
                         cancelled = false;
                         requested = false;
                         alwaysTaskReturn = false;
@@ -780,6 +785,9 @@ impl AsyncTaskIntrinsic {
 
                         setReturnMemoryIdx(idx) {{ this.#memoryIdx = idx; }}
                         getReturnMemoryIdx() {{ return this.#memoryIdx; }}
+
+                        setReturnLowerFns(fns) {{ this.#returnLowerFns = fns; }}
+                        getReturnLowerFns() {{ return this.#returnLowerFns; }}
 
                         setParentSubtask(subtask) {{
                             if (!subtask || !(subtask instanceof {subtask_class})) {{ return }}
