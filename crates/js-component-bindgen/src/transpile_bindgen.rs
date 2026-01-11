@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
+use std::ops::Index;
 
 use base64::Engine as _;
 use base64::engine::general_purpose;
@@ -33,6 +34,7 @@ use crate::function_bindgen::{
 };
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::lift::LiftIntrinsic;
+use crate::intrinsics::lower::LowerIntrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
@@ -697,6 +699,7 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn instantiate(&mut self) {
+        // Handle all built in trampolines
         for (i, trampoline) in self.translation.trampolines.iter() {
             let Trampoline::LowerImport {
                 index,
@@ -732,26 +735,86 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
-        // We push lower import initializers down to right before instantiate, so that the
-        // memory, realloc and postReturn functions are available to the import lowerings
-        // for optimized bindgen
+        // Process global initializers
+        //
+        // The order of initialization is unfortunately quite fragile.
+        //
+        // We take care in processing module instantiations because we must ensure that
+        // $wit-component.fixups must be instantiated directly after $wit-component.shim
+        //
         let mut lower_import_initializers = Vec::new();
+        // let mut found_shim = false;
+        // let mut processed_fixup_init = false;
+
+        // // Attempt to find the the wit-component fixups
+        // let fixup_init = self.component.initializers.iter().find(|init| {
+        //     if let GlobalInitializer::InstantiateModule(InstantiateModule::Static(idx, _)) = init
+        //         && let Some(translation) = self.modules.get(*idx)
+        //         && let Some("wit-component:fixups") = translation.name()
+        //     {
+        //         return true;
+        //     } else {
+        //         return false;
+        //     }
+        // });
+
+        // TODO: instantiating the global initializer CANNOT modify stuff. Makes it impossible to order the sections.
+
+        // Process first n lower import initializers until the first instantiate module initializer
         for init in self.component.initializers.iter() {
             match init {
-                GlobalInitializer::InstantiateModule(_) => {
-                    for init in lower_import_initializers.drain(..) {
-                        self.instantiation_global_initializer(init);
+                GlobalInitializer::InstantiateModule(_m) => {
+                    // Ensure lower import initializers are processed before the first module instantiation
+                    for lower_import_init in lower_import_initializers.drain(..) {
+                        self.instantiation_global_initializer(lower_import_init);
                     }
+
+                    // // If we're dealing with the shim, then we *should make sure that
+                    // // the next module instantiation we process is the one for fixups
+                    // if let InstantiateModule::Static(idx, _) = m
+                    //     && let Some(translation) = self.modules.get(*idx)
+                    //     && let Some("wit-component:shim") = translation.name()
+                    // {
+                    //     found_shim = true;
+                    // }
                 }
+
+                // We push lower import initializers down to right before instantiate, so that the
+                // memory, realloc and postReturn functions are available to the import lowerings
+                // for optimized bindgen
                 GlobalInitializer::LowerImport { .. } => {
                     lower_import_initializers.push(init);
                     continue;
                 }
                 _ => {}
             }
+
+            // match (found_shim, processed_fixup_init) {
+            //     // If we haven't found the shim, or we've found and processed it and the fixup,
+            //     // process initializations like normal
+            //     (false, false) | (true, true) => {
+            //         self.instantiation_global_initializer(init);
+            //     }
+
+            //     // If we just found the shim, ensure to process the fixup immediately
+            //     (true, false) => {
+            //         self.instantiation_global_initializer(init);
+
+            //         if found_shim && let Some(fixup_init) = fixup_init {
+            //             self.instantiation_global_initializer(fixup_init);
+            //         }
+            //         processed_fixup_init = true;
+            //     }
+
+            //     // It's impossible to enter the case where we didn't find the shim but processed the fixup
+            //     // the fixup would be processed via normal means otherwise
+            //     (false, true) => unreachable!(),
+            // }
+
             self.instantiation_global_initializer(init);
         }
 
+        // Process lower import initializers that were discovered after the last module instantiation
         for init in lower_import_initializers.drain(..) {
             self.instantiation_global_initializer(init);
         }
@@ -979,6 +1042,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::ErrorContextDrop { .. }
                 | Trampoline::ErrorContextNew { .. }
                 | Trampoline::ErrorContextTransfer
+                | Trampoline::LowerImport { .. }
                 | Trampoline::PrepareCall { .. }
                 | Trampoline::ResourceDrop(_)
                 | Trampoline::ResourceNew(_)
@@ -1478,7 +1542,7 @@ impl<'a> Instantiator<'a, '_> {
                 let decoder = match string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => self
                         .bindgen
-                        .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Decoder)),
+                        .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8)),
                     wasmtime_environ::component::StringEncoding::Utf16 => self
                         .bindgen
                         .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder)),
@@ -1545,15 +1609,12 @@ impl<'a> Instantiator<'a, '_> {
                         let encode_fn = self
                             .bindgen
                             .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
-                        let encode_len_var =
-                            Intrinsic::String(StringIntrinsic::Utf8EncodedLen).name();
                         uwriteln!(
                             self.src.js,
                             "function trampoline{i}OutputStr(s, outputPtr) {{
                                  const memory = memory{memory_idx};
                                  const reallocFn = realloc{realloc_fn_idx};
-                                 let ptr = {encode_fn}(s, reallocFn, memory);
-                                 let len = {encode_len_var};
+                                 let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
                                  new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
                                  new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
                              }}"
@@ -1623,17 +1684,22 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "const trampoline{i} = {transfer_fn};");
             }
 
-            // This sets up a subtask (sets parent, etc)
+            // This sets up a subtask (sets parent, etc) for guest -> guest calls
             Trampoline::PrepareCall { memory } => {
                 let prepare_call_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Host(HostIntrinsic::PrepareCall));
+                let (memory_idx_js, memory_fn_js) = memory
+                    .map(|v| {
+                        (
+                            v.as_u32().to_string(),
+                            format!("() => memory{}", v.as_u32()),
+                        )
+                    })
+                    .unwrap_or_else(|| ("null".into(), "() => null".into()));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {prepare_call_fn}.bind(null, {memory});",
-                    memory = memory
-                        .map(|v| v.as_u32().to_string())
-                        .unwrap_or_else(|| "null".into()),
+                    "const trampoline{i} = {prepare_call_fn}.bind(null, {memory_idx_js}, {memory_fn_js});",
                 )
             }
 
@@ -1649,6 +1715,11 @@ impl<'a> Instantiator<'a, '_> {
                         .unwrap_or_else(|| "null".into()),
                 );
             }
+
+            // TODO: TASK RETURN NEEDS TO MAKE SURE THE LOWER IS THERE!
+            // IF WE GENERATE A LIFT, WE NEED TO GENERATE (AND SAVE BY TYPE ID) A LOWER!
+            //
+            // Async fns must lift the value out, so the host can make use of a lower.
 
             // This actually starts a Task (whose parent is a subtask generated during PrepareCall)
             // for a from-component async import call
@@ -1666,32 +1737,6 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|v| (v.as_u32().to_string(), format!("postReturn{}", v.as_u32())))
                     .unwrap_or_else(|| ("null".into(), "null".into()));
 
-                // TODO: need to find the callee[adapter0] for this
-                // it's known when we instantiateCore for a given component
-                //
-                // FOR EXAMPLE:
-                //
-                // ```js
-                // ({ exports: exports7 } = yield instantiateCore(yield module8, {
-                //   async: {
-                //     '[start-call]adapter0': trampoline45,
-                //   },
-                //   callback: {
-                //     f0: exports1['[callback][async-lift]local:local/sleep-post-return#[async]run'],
-                //   },
-                //   callee: {
-                //     adapter0: exports1['[async-lift]local:local/sleep-post-return#[async]run'],
-                //   },
-                //   flags: {
-                //     instance1: instanceFlags1,
-                //     instance4: instanceFlags4,
-                //   },
-                //   sync: {
-                //     '[prepare-call]adapter0': trampoline46,
-                //   },
-                // }));
-                // ```
-
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {async_start_call_fn}.bind(
@@ -1707,16 +1752,21 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            // NOTE: lower import trampoline is called, and can generate a function,
-            // but that is *not currently used* by the generated code.
-            //
-            // The approach that probably works here is to WRAP the actual function (which is called `trampoline<lowered index>`)
-            // and do the relevant functionality that is inherent to canon_lower
             Trampoline::LowerImport {
                 index,
                 lower_ty,
                 options,
             } => {
+                let lower_import_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImport));
+                let global_component_lowers_class = self
+                    .bindgen
+                    .intrinsic(Intrinsic::GlobalComponentAsyncLowersClass);
+
+                // TODO: Work to figure out the combination of the component(?) and the
+                // function index INTERNAL?
+
                 let canon_opts = self
                     .component
                     .options
@@ -1725,51 +1775,93 @@ impl<'a> Instantiator<'a, '_> {
 
                 let fn_idx = index.as_u32();
 
-                let lower_import_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::LowerImport));
+                let component_idx = canon_opts.instance.as_u32();
+                let is_async = canon_opts.async_;
+                let cancellable = canon_opts.cancellable;
 
-                let _ = (lower_ty, canon_opts);
+                let func_ty = self.types.index(*lower_ty);
 
-                // TODO: this trampoline (trampoline{i}) is is *already present*?
-                // current lower input globalizer code already handles it??
-                //
-                // Maybe we need a special function name for this? OR does the other trampoline
-                // get called all the time as well? It can't be, because it *creates* the function
-                // that gets called?
-                //
-                // Maybe that is actually the lower that gets called all the time and should create the
-                // subtask!
+                // Build list of lift functions for the params of the lowered import
+                let param_types = &self.types.index(func_ty.params).types;
+                let param_lift_fns_js = gen_flat_lift_fn_list_js_expr(
+                    self,
+                    self.types,
+                    param_types.iter().as_slice(),
+                    canon_opts,
+                );
 
-                // TODO: the original trampoline (trampoline{i}) MAY point to a function that is
-                // lowered for use inside another component.
-                //
-                // In the post-return test we know that #17 is the async sleep millis and it IS
-                // fed into an instantiated component.
-                //
-                // ```
-                // const trampolineXX = WebAssembly.suspending(...)
-                // ```
+                // Build list of lower functions for the results of the lowered import
+                let result_types = &self.types.index(func_ty.results).types;
+                let result_lower_fns_js = gen_flat_lower_fn_list_js_expr(
+                    self,
+                    self.types,
+                    result_types.iter().as_slice(),
+                    canon_opts,
+                );
 
-                // TODO: prepare call & start call are called BEFORE the wasm call that IS a subtask starts.
-                // this is our only way to distinguish between a regular host call and a host call from inside
-                // a component.
-                //
-                // This means one of them has to create the subtask that the rust side is going to be looking for.
+                let get_callback_fn_js = canon_opts
+                    .callback
+                    .map(|idx| format!("() => callback_{}", idx.as_u32()))
+                    .unwrap_or_else(|| "() => null".into());
+                let get_post_return_fn_js = canon_opts
+                    .post_return
+                    .map(|idx| format!("() => postReturn{}", idx.as_u32()))
+                    .unwrap_or_else(|| "() => null".into());
 
-                // NOTE: this means that start_call is a guest->guest *only* thing previously prepared
-                // In our case the only valid thign is going to
-                //
-                // The functionidx is useless it seems, trampoline idx *does* match though
+                // Build the memory and realloc js expressions, retrieving the memory index and getter functions
+                let (memory_exprs, realloc_expr_js) =
+                    if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                        memory,
+                        realloc,
+                    }) = canon_opts.data_model
+                    {
+                        (
+                            memory.map(|idx| {
+                                (
+                                    idx.as_u32().to_string(),
+                                    format!("() => memory{}", idx.as_u32()),
+                                )
+                            }),
+                            realloc.map(|idx| format!("() => realloc{}", idx.as_u32())),
+                        )
+                    } else {
+                        (None, None)
+                    };
+                let (memory_idx_js, memory_expr_js) =
+                    memory_exprs.unwrap_or_else(|| ("null".into(), "() => null".into()));
+                let realloc_expr_js = realloc_expr_js.unwrap_or_else(|| "() => null".into());
 
+                // NOTE: we make this lowering trampoline identifiable by two things:
+                // - component idx
+                // - type index of exported function (in the relevant component)
+                //
+                // This is required to be able to wire up the [async-lower] import
+                // that will be put on the glue/shim module (via which the host wires up trampolines).
                 uwriteln!(
                     self.src.js,
-                    "const trampoline_lower_{i} = {lower_import_fn}.bind(
-                         null,
-                         {{
-                             functionIdx: {fn_idx},
-                         }},
-                     );",
+                    r#"
+                    {global_component_lowers_class}.define({{
+                        componentIdx: {component_idx},
+                        importName: lowered_import_{fn_idx}_metadata.importName,
+                        fn: {lower_import_fn}.bind(
+                            null,
+                            {{
+                                trampolineIdx: {i},
+                                componentIdx: {component_idx},
+                                isAsync: {is_async},
+                                paramLiftFns: {param_lift_fns_js},
+                                metadata: lowered_import_{fn_idx}_metadata,
+                                resultLowerFns: {result_lower_fns_js},
+                                getCallbackFn: {get_callback_fn_js},
+                                getPostReturnFn: {get_post_return_fn_js},
+                                isCancellable: {cancellable},
+                                memoryIdx: {memory_idx_js},
+                                getMemoryFn: {memory_expr_js},
+                                getReallocFn: {realloc_expr_js},
+                            }},
+                        ),
+                    }});
+                    "#,
                 );
             }
 
@@ -2102,6 +2194,19 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
 
+                // In the case of a guest->guest call, teh host will also need to lower the result values into
+                // a given memory location for the calling component. Here, we generate lowers
+                let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
+                for result_ty in result_types {
+                    lower_fns.push(gen_flat_lower_fn_js_expr(
+                        self.bindgen,
+                        self.types,
+                        result_ty,
+                        canon_opts,
+                    ));
+                }
+                let lower_fns_js = format!("[{}]", lower_fns.join(","));
+
                 let get_memory_fn_js = memory
                     .map(|idx| format!("() => memory{}", idx.as_u32()))
                     .unwrap_or_else(|| "() => null".into());
@@ -2127,6 +2232,7 @@ impl<'a> Instantiator<'a, '_> {
                              memoryIdx: {memory_idx_js},
                              callbackFnIdx: {callback_fn_idx},
                              liftFns: {lift_fns_js},
+                             lowerFns: {lower_fns_js},
                          }},
                      );",
                 );
@@ -2182,34 +2288,60 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             GlobalInitializer::InstantiateModule(m) => match m {
-                InstantiateModule::Static(idx, args) => self.instantiate_static_module(*idx, args),
+                InstantiateModule::Static(idx, args) => {
+                    self.instantiate_static_module(*idx, args);
+                }
                 // This is only needed when instantiating an imported core wasm
                 // module which while easy to implement here is not possible to
                 // test at this time so it's left unimplemented.
                 InstantiateModule::Import(..) => unimplemented!(),
             },
+
             GlobalInitializer::LowerImport { index, import } => {
+                let fn_idx = index.as_u32();
+                let (import_index, _path) = &self.component.imports[*import];
+                let (import_name, _type_def) = &self.component.import_types[*import_index];
+                uwriteln!(
+                    self.src.js,
+                    r#"
+                    let lowered_import_{fn_idx}_metadata = {{
+                        importName: '{import_name}',
+                    }};
+                    "#,
+                );
                 self.lower_import(*index, *import);
             }
+
             GlobalInitializer::ExtractMemory(m) => {
+                let component_idx = m.export.instance.as_u32();
                 let def = self.core_export_var_name(&m.export);
                 let idx = m.index.as_u32();
+                let global_component_memories_class =
+                    Intrinsic::GlobalComponentMemoriesClass.name();
                 uwriteln!(self.src.js, "let memory{idx};");
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
+                uwriteln!(
+                    self.src.js_init,
+                    "{global_component_memories_class}.save({{ idx: {idx}, componentIdx: {component_idx}, memory: memory{idx} }});"
+                );
             }
+
             GlobalInitializer::ExtractRealloc(r) => {
                 let def = self.core_def(&r.def);
                 let idx = r.index.as_u32();
                 uwriteln!(self.src.js, "let realloc{idx};");
                 uwriteln!(self.src.js_init, "realloc{idx} = {def};",);
             }
+
             GlobalInitializer::ExtractPostReturn(p) => {
                 let def = self.core_def(&p.def);
                 let idx = p.index.as_u32();
                 uwriteln!(self.src.js, "let postReturn{idx};");
                 uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
             }
+
             GlobalInitializer::Resource(_) => {}
+
             GlobalInitializer::ExtractTable(extract_table) => {
                 let _ = extract_table;
             }
@@ -2223,7 +2355,54 @@ impl<'a> Instantiator<'a, '_> {
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
         for (module, name, arg) in self.modules[idx].imports(args) {
-            let def = self.augmented_import_def(arg);
+            // By default, async-lower gets patched to the relevant export function directly,
+            // but it *should* be patched to the lower import intrinsic, as subtask rep/state
+            // needs to be returned to the calling component.
+            //
+            // The LowerImport intrinsic will take care of calling the original export,
+            // which will likely trigger an `Instruction::CallInterface for the actual import
+            // that was called.
+            //
+            let def = if name.starts_with("[async-lower]")
+                && let core::AugmentedImport::CoreDef(CoreDef::Export(CoreExport {
+                    item: ExportItem::Index(EntityIndex::Function(_)),
+                    instance,
+                })) = arg
+            {
+                let key = name.trim_start_matches("[async-lower]");
+                let instance = instance.as_u32();
+                let mut exec_fn = self.augmented_import_def(&arg);
+                let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
+
+                // For host imports that are asynchronous, we must wrap with WebAssembly.promising,
+                // as the callee will be a host function (that will suspend).
+                //
+                // Note that there is also a separate case where the import *is* from another component,
+                // and we do not want to call that as a promise, because it will return an async return code
+                // and follow the normal p3 async component call pattern.
+                //
+                if self
+                    .async_imports
+                    .contains(key.trim_start_matches("[async]"))
+                {
+                    exec_fn = format!("WebAssembly.promising({exec_fn})");
+                }
+
+                // NOTE: Regardless of whether we're using a host import or not, we are likely *not*
+                // actually wrapping a host javascript function below -- rather, the host import is
+                // called via a trip a trip *through* an exporting component table.
+                //
+                // The host import is imported, passed through an indirect call in a component,
+                // (see $wit-component.shims, $wit-component.fixups modules in generated transpile output)
+                // then it is called from the component that is actually performing the call..
+                //
+                format!("{global_lowers_class}.lookup({instance}, '{key}')?.bind(null, {exec_fn})")
+            } else {
+                // All other imports can be connected directly to the relevant export
+                self.augmented_import_def(&arg)
+            };
+
+            // let def = self.augmented_import_def(&arg);
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
             assert!(
@@ -2232,6 +2411,8 @@ impl<'a> Instantiator<'a, '_> {
             );
             assert!(prev.is_none());
         }
+
+        // Build list of imports
         let mut imports = String::new();
         if !import_obj.is_empty() {
             imports.push_str(", {\n");
@@ -2266,7 +2447,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js_init,
                     "({{ exports: exports{iu32} }} = {instantiate}(module{}{imports}));",
                     idx.as_u32(),
-                )
+                );
             }
         }
     }
@@ -2347,7 +2528,6 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
-        // eprintln!("\nGENERATED FUNCTION NAME FOR IMPORT: {func_name} (import name? {import_name})");
 
         let is_async = is_async_fn(func, options);
 
@@ -2358,7 +2538,7 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        // Host lifted async (i.e. JSPI)
+        // Host lifted async import (i.e. JSPI)
         let requires_async_porcelain = requires_async_porcelain(
             FunctionIdentifier::Fn(func),
             import_name,
@@ -3347,7 +3527,7 @@ impl<'a> Instantiator<'a, '_> {
         self.src.js("}");
     }
 
-    fn augmented_import_def(&self, def: core::AugmentedImport<'_>) -> String {
+    fn augmented_import_def(&self, def: &core::AugmentedImport<'_>) -> String {
         match def {
             core::AugmentedImport::CoreDef(def) => self.core_def(def),
             core::AugmentedImport::Memory { mem, op } => {
@@ -3459,7 +3639,14 @@ impl<'a> Instantiator<'a, '_> {
     {
         let name = match &export.item {
             ExportItem::Index(idx) => {
-                let module = &self.modules[self.instances[export.instance]];
+                let module_idx = self
+                    .instances
+                    .get(export.instance)
+                    .expect("unexpectedly missing export instance");
+                let module = &self
+                    .modules
+                    .get(*module_idx)
+                    .expect("unexpectedly missing module by idx");
                 let idx = (*idx).into();
                 module
                     .exports()
@@ -3470,7 +3657,8 @@ impl<'a> Instantiator<'a, '_> {
             ExportItem::Name(s) => s,
         };
         let i = export.instance.as_u32() as usize;
-        format!("exports{i}{}", maybe_quote_member(name))
+        let quoted = maybe_quote_member(name);
+        return format!("exports{i}{quoted}");
     }
 
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
@@ -3930,6 +4118,25 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
     }
 }
 
+/// Generate the javascript that corresponds to a list of lifting functions for a given list of types
+pub fn gen_flat_lift_fn_list_js_expr(
+    intrinsic_mgr: &mut impl ManagesIntrinsics,
+    component_types: &ComponentTypes,
+    types: &[InterfaceType],
+    canon_opts: &CanonicalOptions,
+) -> String {
+    let mut lift_fns: Vec<String> = Vec::with_capacity(types.len());
+    for ty in types.iter() {
+        lift_fns.push(gen_flat_lift_fn_js_expr(
+            intrinsic_mgr,
+            component_types,
+            ty,
+            canon_opts,
+        ));
+    }
+    format!("[{}]", lift_fns.join(","))
+}
+
 /// Generate the javascript lifting function for a given type
 ///
 /// This function will a function object that can be executed with the right
@@ -4157,6 +4364,282 @@ pub fn gen_flat_lift_fn_js_expr(
         InterfaceType::ErrorContext(_ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext)
+                .name()
+                .into()
+        }
+    }
+}
+
+/// Generate the javascript that corresponds to a list of lowering functions for a given list of types
+pub fn gen_flat_lower_fn_list_js_expr(
+    intrinsic_mgr: &mut impl ManagesIntrinsics,
+    component_types: &ComponentTypes,
+    types: &[InterfaceType],
+    canon_opts: &CanonicalOptions,
+) -> String {
+    let mut lower_fns: Vec<String> = Vec::with_capacity(types.len());
+    for ty in types.iter() {
+        lower_fns.push(gen_flat_lower_fn_js_expr(
+            intrinsic_mgr,
+            component_types,
+            ty,
+            canon_opts,
+        ));
+    }
+    format!("[{}]", lower_fns.join(","))
+}
+
+/// Generate the javascript lowering function for a given type
+///
+/// This function will a function object that can be executed with the right
+/// context in order to perform the lower. For example, running this for bool
+/// will produce the following:
+///
+/// ```
+/// _lowerFlatBool
+/// ```
+///
+/// This is becasue all it takes to lower a flat boolean is to run the _lowerFlatBool function intrinsic.
+///
+/// The intrinsic it guaranteed to be in scope once execution time because it wlil be used in the relevant branch.
+///
+pub fn gen_flat_lower_fn_js_expr(
+    intrinsic_mgr: &mut impl ManagesIntrinsics,
+    component_types: &ComponentTypes,
+    ty: &InterfaceType,
+    canon_opts: &CanonicalOptions,
+) -> String {
+    //let ty_abi = component_types.canonical_abi(ty);
+    let string_encoding = canon_opts.string_encoding;
+    match ty {
+        InterfaceType::Bool => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBool));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatBool)
+                .name()
+                .into()
+        }
+        InterfaceType::S8 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS8));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatS8).name().into()
+        }
+        InterfaceType::U8 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU8));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatU8).name().into()
+        }
+        InterfaceType::S16 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS16));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatS16).name().into()
+        }
+        InterfaceType::U16 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU16));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatU16).name().into()
+        }
+        InterfaceType::S32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS32));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatS32).name().into()
+        }
+        InterfaceType::U32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU32));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatU32).name().into()
+        }
+        InterfaceType::S64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS64));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatS64).name().into()
+        }
+        InterfaceType::U64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU64));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatU64).name().into()
+        }
+        InterfaceType::Float32 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32)
+                .name()
+                .into()
+        }
+        InterfaceType::Float64 => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64)
+                .name()
+                .into()
+        }
+        InterfaceType::Char => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatChar));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatChar)
+                .name()
+                .into()
+        }
+        InterfaceType::String => match string_encoding {
+            wasmtime_environ::component::StringEncoding::Utf8 => {
+                intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8));
+                Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8)
+                    .name()
+                    .into()
+            }
+            wasmtime_environ::component::StringEncoding::Utf16 => {
+                intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16));
+                Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16)
+                    .name()
+                    .into()
+            }
+            wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                todo!("latin1+utf8 not supported")
+            }
+        },
+        InterfaceType::Record(ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
+            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord).name();
+            let record_ty = &component_types[*ty_idx];
+            let mut keys_and_lowers_expr = String::from("[");
+            for f in &record_ty.fields {
+                // For each field we build a list of [name, lowerFn, 32bit alignment]
+                // so that the record lowering function (which is a higher level function)
+                // can properly generate a function that lowers the fields.
+                keys_and_lowers_expr.push_str(&format!(
+                    "{{ field: '{}', lowerFn: {}, align32: {} }},",
+                    f.name,
+                    gen_flat_lower_fn_js_expr(intrinsic_mgr, component_types, &f.ty, canon_opts),
+                    component_types.canonical_abi(ty).align32,
+                ));
+            }
+            keys_and_lowers_expr.push(']');
+            format!("{lower_fn}({keys_and_lowers_expr})")
+        }
+        InterfaceType::Variant(ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
+            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
+            let variant_ty = &component_types[*ty_idx];
+            let mut lower_metas_expr = String::from("[");
+            let mut case_idx = 0;
+            for (name, maybe_ty) in &variant_ty.cases {
+                lower_metas_expr.push_str(&format!(
+                    "{{ discriminant: {}, tag: '{}', lowerFn: {}, align32: {}, }},",
+                    case_idx,
+                    name,
+                    maybe_ty
+                        .as_ref()
+                        .map(|ty| gen_flat_lower_fn_js_expr(
+                            intrinsic_mgr,
+                            component_types,
+                            ty,
+                            canon_opts
+                        ))
+                        .unwrap_or(String::from("null")),
+                    maybe_ty
+                        .as_ref()
+                        .map(|ty| component_types.canonical_abi(ty).align32)
+                        .map(|n| n.to_string())
+                        .unwrap_or(String::from("null")),
+                ));
+                case_idx += 1;
+            }
+            lower_metas_expr.push(']');
+            format!(
+                "{lower_fn}({{ discriminantSizeBytes: {}, lowerMetas: {lower_metas_expr} }})",
+                variant_ty.info.size.byte_size(),
+            )
+        }
+        InterfaceType::List(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatList)
+                .name()
+                .into()
+        }
+        InterfaceType::Tuple(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple)
+                .name()
+                .into()
+        }
+        InterfaceType::Flags(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags)
+                .name()
+                .into()
+        }
+        InterfaceType::Enum(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum)
+                .name()
+                .into()
+        }
+        InterfaceType::Option(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatOption)
+                .name()
+                .into()
+        }
+        InterfaceType::Result(ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
+            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatResult).name();
+            let result_ty = &component_types[*ty_idx];
+            let mut cases_and_lowers_expr = String::from("[");
+            cases_and_lowers_expr.push_str(&format!(
+                "{{ discriminant: 0, tag: '{}', lowerFn: {}, align32: {} }},",
+                "ok",
+                result_ty
+                    .ok
+                    .as_ref()
+                    .map(|ty| gen_flat_lower_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        ty,
+                        canon_opts
+                    ))
+                    .unwrap_or(String::from("null")),
+                result_ty
+                    .ok
+                    .as_ref()
+                    .map(|ty| component_types.canonical_abi(ty).align32)
+                    .map(|n| n.to_string())
+                    .unwrap_or(String::from("null")),
+            ));
+            cases_and_lowers_expr.push_str(&format!(
+                "{{ discriminant: 1, tag: '{}', lowerFn: {}, align32: {} }},",
+                "error",
+                result_ty
+                    .err
+                    .as_ref()
+                    .map(|ty| gen_flat_lower_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        ty,
+                        canon_opts
+                    ))
+                    .unwrap_or(String::from("null")),
+                result_ty
+                    .err
+                    .as_ref()
+                    .map(|ty| component_types.canonical_abi(ty).align32)
+                    .map(|n| n.to_string())
+                    .unwrap_or(String::from("null")),
+            ));
+
+            cases_and_lowers_expr.push(']');
+            format!("{lower_fn}({cases_and_lowers_expr})")
+        }
+        InterfaceType::Own(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name().into()
+        }
+        InterfaceType::Borrow(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name().into()
+        }
+        InterfaceType::Future(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture)
+                .name()
+                .into()
+        }
+        InterfaceType::Stream(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStream));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatStream)
+                .name()
+                .into()
+        }
+        InterfaceType::ErrorContext(_ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext));
+            Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext)
                 .name()
                 .into()
         }

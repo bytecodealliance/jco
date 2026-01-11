@@ -20,8 +20,8 @@ import {
     getTmpDir,
     getRandomPort,
     readComponentBytes,
+    tsGenerationPromise,
 } from './helpers.js';
-import { tsGenerationPromise } from './typescript.js';
 import { getDefaultComponentFixtures, ESLINT_PATH } from './common.js';
 
 suite(`Transpiler codegen`, async () => {

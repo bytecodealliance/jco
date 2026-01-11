@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use crate::source::Source;
-use crate::uwrite;
+use crate::{uwrite, uwriteln};
 
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
@@ -76,6 +76,8 @@ pub enum Intrinsic {
     ConstantI32Max,
     ConstantI32Min,
     TypeCheckValidI32,
+    TypeCheckAsyncFn,
+    AsyncFunctionCtor,
 
     Base64Compile,
     ClampGuest,
@@ -137,6 +139,12 @@ pub enum Intrinsic {
     /// Generally the only kind of type that can be borrowed is a resource
     /// handle, so this helper checks for that.
     IsBorrowedType,
+
+    /// Async lower functions that are saved by component instance
+    GlobalComponentAsyncLowersClass,
+
+    /// Tracking of component memories
+    GlobalComponentMemoriesClass,
 }
 
 /// Profile for determinism to be used by async implementation
@@ -184,10 +192,16 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     // Intrinsics that should just always be present
     args.intrinsics.insert(Intrinsic::DebugLog);
     args.intrinsics.insert(Intrinsic::GlobalAsyncDeterminism);
+    args.intrinsics
+        .insert(Intrinsic::GlobalComponentAsyncLowersClass);
+    args.intrinsics
+        .insert(Intrinsic::GlobalComponentMemoriesClass);
     args.intrinsics.insert(Intrinsic::CoinFlip);
     args.intrinsics.insert(Intrinsic::ConstantI32Min);
     args.intrinsics.insert(Intrinsic::ConstantI32Max);
     args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
+    args.intrinsics.insert(Intrinsic::TypeCheckAsyncFn);
+    args.intrinsics.insert(Intrinsic::AsyncFunctionCtor);
     args.intrinsics.insert(Intrinsic::AsyncTask(
         AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds,
     ));
@@ -258,6 +272,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ));
     }
 
+    if args
+        .intrinsics
+        .contains(&Intrinsic::String(StringIntrinsic::Utf8Encode))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8)]);
+    }
+
     // Attempting to perform a debug message hoist will require string encoding to memory
     if args
         .intrinsics
@@ -275,6 +297,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     {
         args.intrinsics.extend([
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::ReserveGlobalRep),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::CreateLocalHandle),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
@@ -391,10 +414,29 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args
         .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU8),
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU16),
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
+        ]);
+    }
+
+    if args
+        .intrinsics
         .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
     {
         args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::Utf8Decoder));
+            .insert(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8))
+    {
+        args.intrinsics
+            .insert(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
     }
 
     if args
@@ -405,12 +447,11 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
     }
 
-    if args
+    if args.intrinsics.contains(&Intrinsic::AsyncTask(
+        AsyncTaskIntrinsic::CreateNewCurrentTask,
+    )) || args
         .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
         || args
             .intrinsics
             .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask))
@@ -499,6 +540,27 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 let i32_const_min = Intrinsic::ConstantI32Min.name();
                 let i32_const_max = Intrinsic::ConstantI32Max.name();
                 output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = current_intrinsic.name()))
+            }
+
+            Intrinsic::AsyncFunctionCtor => {
+                let async_fn_type = Intrinsic::AsyncFunctionCtor.name();
+                uwriteln!(
+                    output,
+                    "const {async_fn_type} = (async () => {{}}).constructor;"
+                );
+            }
+
+            Intrinsic::TypeCheckAsyncFn => {
+                let async_fn_check = Intrinsic::TypeCheckAsyncFn.name();
+                let async_fn_ctor = Intrinsic::AsyncFunctionCtor.name();
+                uwriteln!(
+                    output,
+                    r#"
+                    const {async_fn_check} = (f) => {{
+                        return f instanceof {async_fn_ctor};
+                    }};
+                    "#,
+                );
             }
 
             Intrinsic::Base64Compile => {
@@ -809,9 +871,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
                 let buffer_manager_class = Intrinsic::BufferManagerClass.name();
                 output.push_str(&format!(
-                    "
-                    const {global_buffer_manager} = new {buffer_manager_class}();
-                "
+                    "const {global_buffer_manager} = new {buffer_manager_class}();"
                 ));
             }
 
@@ -832,9 +892,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 output.push_str(&format!("
                     class {rep_table_class} {{
                         #data = [0, null];
+                        #target;
+
+                        constructor(args) {{
+                            if (args.target) {{ this.target = args.target }}
+                        }}
 
                         insert(val) {{
-                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val }});
+                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val, target: this.target }});
                             const freeIdx = this.#data[0];
                             if (freeIdx === 0) {{
                                 this.#data.push(val);
@@ -849,20 +914,20 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         }}
 
                         get(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
                             const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
                             return val;
                         }}
 
                         contains(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
                             const baseIdx = rep << 1;
                             return !!this.#data[baseIdx];
                         }}
 
                         remove(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
                             const baseIdx = rep << 1;
@@ -876,11 +941,86 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         }}
 
                         clear() {{
-                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep }});
+                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep, target: this.target }});
                             this.#data = [0, null];
                         }}
                     }}
                 "));
+            }
+
+            Intrinsic::GlobalComponentAsyncLowersClass => {
+                let global_component_lowers_class =
+                    Intrinsic::GlobalComponentAsyncLowersClass.name();
+                output.push_str(&format!(
+                    r#"
+                    class {global_component_lowers_class} {{
+                        static map = new Map();
+
+                        constructor() {{ throw new Error('{global_component_lowers_class} should not be constructed'); }}
+
+                        static define(args) {{
+                            const {{ componentIdx, importName, fn }} = args;
+                            let inner = {global_component_lowers_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                inner = new Map();
+                                {global_component_lowers_class}.map.set(componentIdx, inner);
+                            }}
+
+                            inner.set(importName, fn);
+                        }}
+
+                        static lookup(componentIdx, importName) {{
+                            let inner = {global_component_lowers_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                inner = new Map();
+                                {global_component_lowers_class}.map.set(componentIdx, inner);
+                            }}
+
+                            const found = inner.get(importName);
+                            if (found) {{ return found; }}
+
+                            return (...args) => {{
+                                const [originalFn, ...params] = args;
+                                return originalFn(...params);
+                            }};
+                        }}
+                    }}
+                "#
+                ));
+            }
+
+            Intrinsic::GlobalComponentMemoriesClass => {
+                let global_component_memories_class =
+                    Intrinsic::GlobalComponentMemoriesClass.name();
+                output.push_str(&format!(
+                    r#"
+                    class {global_component_memories_class} {{
+                        static map = new Map();
+
+                        constructor() {{ throw new Error('{global_component_memories_class} should not be constructed'); }}
+
+                        static save(args) {{
+                            const {{ idx, componentIdx, memory }} = args;
+                            let inner = {global_component_memories_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                inner = [];
+                                {global_component_memories_class}.map.set(componentIdx, inner);
+                            }}
+                            inner.push({{ memory, idx }});
+                        }}
+
+                        static getMemoriesForComponentIdx(componentIdx) {{
+                            const metas = {global_component_memories_class}.map.get(componentIdx);
+                            return metas.map(meta => meta.memory);
+                        }}
+
+                        static getMemory(componentIdx, idx) {{
+                            const metas = {global_component_memories_class}.map.get(componentIdx);
+                            return metas.find(meta => meta.idx === idx)?.memory;
+                        }}
+                    }}
+                "#
+                ));
             }
         }
     }
@@ -937,6 +1077,8 @@ impl Intrinsic {
                 "Uint8Array",
                 "URL",
                 "WebAssembly",
+                "GlobalComponentMemories",
+                "GlobalComponentAsyncLowers",
             ])
     }
 
@@ -987,11 +1129,15 @@ impl Intrinsic {
             Intrinsic::ConstantI32Max => "I32_MAX",
             Intrinsic::TypeCheckValidI32 => "_typeCheckValidI32",
             Intrinsic::IsBorrowedType => "_isBorrowedType",
+            Intrinsic::TypeCheckAsyncFn => "_typeCheckAsyncFn",
+            Intrinsic::AsyncFunctionCtor => "ASYNC_FN_CTOR",
 
             // Async
             Intrinsic::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",
             Intrinsic::AwaitableClass => "Awaitable",
             Intrinsic::CoinFlip => "_coinFlip",
+            Intrinsic::GlobalComponentAsyncLowersClass => "GlobalComponentAsyncLowers",
+            Intrinsic::GlobalComponentMemoriesClass => "GlobalComponentMemories",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",

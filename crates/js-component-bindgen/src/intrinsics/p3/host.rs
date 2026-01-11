@@ -114,25 +114,52 @@ impl HostIntrinsic {
                 let prepare_call_fn = Self::PrepareCall.name();
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let start_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::StartCurrentTask).name();
-                let end_current_task_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask).name();
+                let create_new_current_task_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask).name();
                 output.push_str(&format!(
                   r#"
                     function {prepare_call_fn}(
                         memoryIdx,
+                        getMemoryFn,
                         startFn,
                         returnFn,
                         callerInstanceIdx,
                         calleeInstanceIdx,
                         taskReturnTypeIdx,
                         stringEncoding,
-                        storagePtr,
-                        storageLen,
+                        resultCountOrAsync,
                     ) {{
-                        {debug_log_fn}('[{prepare_call_fn}()] args', {{ memoryIdx }});
+                        {debug_log_fn}('[{prepare_call_fn}()]', {{
+                            callerInstanceIdx,
+                            calleeInstanceIdx,
+                            taskReturnTypeIdx,
+                            stringEncoding,
+                            resultCountOrAsync,
+                        }});
                         const argArray = [...arguments];
+                        //console.log("ARGS AT PREPARE", {{ argArray, sliced: argArray.slice(9) }});
+
+                        // Since Rust will happily pass large u32s over, resultCountOrAsync should be one of:
+                        // (a) u32 max size     => callee is async fn with no result
+                        // (b) u32 max size - 1 => callee is async fn with result
+                        // (c) any other value  => callee is sync with the given result count
+                        //
+                        // Due to JS handling the value as 2s complement, the `resultCountOrAsync` ends up being:
+                        // (a) -1 as u32 max size
+                        // (b) -2 as u32 max size - 1
+                        // (c) x
+                        //
+                        // Due to JS mishandling the value as 2s complement, the actual values we get are:
+                        // see. https://github.com/wasm-bindgen/wasm-bindgen/issues/1388
+                        let isAsync = false;
+                        let hasResultPointer = false;
+                        if (resultCountOrAsync === -1) {{
+                            isAsync = true;
+                            hasResultPointer = false;
+                        }} else if (resultCountOrAsync === -2) {{
+                            isAsync = true;
+                            hasResultPointer = true;
+                        }}
 
                         const currentCallerTaskMeta = {current_task_get_fn}(callerInstanceIdx);
                         if (!currentCallerTaskMeta) {{ throw new Error('invalid/missing current task for caller during prepare call'); }}
@@ -147,9 +174,16 @@ impl HostIntrinsic {
                         // TODO: support indirect params based on storagePtr/args
                         const directParams = true;
                         let getCalleeParamsFn;
+                        let resultPtr = null;
                         if (directParams) {{
-                            const directParamsArr = argArray.slice(9);
-                            getCalleeParamsFn = () => directParamsArr;
+                            if (hasResultPointer) {{
+                                const directParamsArr = argArray.slice(10);
+                                getCalleeParamsFn = () => directParamsArr;
+                                resultPtr = argArray[9];
+                            }} else {{
+                                const directParamsArr = argArray.slice(9);
+                                getCalleeParamsFn = () => directParamsArr;
+                            }}
                         }} else {{
                             if (memoryIdx === null) {{
                                 throw new Error('memory idx not supplied to prepare depsite indirect params being used');
@@ -180,9 +214,9 @@ impl HostIntrinsic {
                                 throw new Error(`unrecognized string encoding enum [${{stringEncoding}}]`);
                         }}
 
-                        const [newTask, newTaskID] = {start_current_task_fn}({{
+                        const [newTask, newTaskID] = {create_new_current_task_fn}({{
                             componentIdx: calleeInstanceIdx,
-                            isAsync: true,
+                            isAsync,
                             getCalleeParamsFn,
                             // TODO: find a way to pass the import name through here
                             entryFnName: 'task/' + currentCallerTask.id() + '/new-prepare-task',
@@ -193,16 +227,22 @@ impl HostIntrinsic {
                            componentIdx: callerInstanceIdx,
                            parentTask: currentCallerTask,
                            childTask: newTask,
+                           callMetadata: {{
+                              memory: getMemoryFn(),
+                              memoryIdx,
+                              resultPtr,
+                              returnFn,
+                              startFn,
+
+                              // TODO: Add lower fn metas (entitySize + lower fn) for the result!
+
+                           }}
                         }});
 
                         newTask.setParentSubtask(subtask);
-                        newTask.setMemoryIdx(memoryIdx);
-
-                        newTask.completionPromise().then(() => {{
-                            {end_current_task_fn}(calleeInstanceIdx, newTaskID);
-                            // TODO: run return function when the task finishes and the return is ready to be saved
-                        }});
-
+                        // TODO: This isn't really a return memory idx for the caller, it's for checking
+                        // against the task.return (which will be called from the callee)
+                        newTask.setReturnMemoryIdx(memoryIdx);
                     }}
               "#
                 ));
@@ -230,6 +270,8 @@ impl HostIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop).name();
                 let subtask_class =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass).name();
+                let global_component_memories_class =
+                    Intrinsic::GlobalComponentMemoriesClass.name();
 
                 // TODO: lower here for non-zero param count
                 // https://github.com/bytecodealliance/wasmtime/blob/69ef9afc11a2846248c9e94affca0223dbd033fc/crates/wasmtime/src/runtime/component/concurrent.rs#L1775
@@ -240,6 +282,9 @@ impl HostIntrinsic {
 
                         const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
                         if (!taskMeta) {{ throw new Error('invalid/missing current async task meta during prepare call'); }}
+
+                        const argArray = [...arguments];
+                        //console.log("ARGS AT START CALL", {{ argArray }});
 
                         // NOTE: at this point we know the current task is the one that was started
                         // in PrepareCall, so we *should* be able to pop it back off and be left with
@@ -252,45 +297,19 @@ impl HostIntrinsic {
                             // TODO: signal to the task that the last param is a result pointer
                         }}
 
-                        preparedTask.setCallbackFn(getCallbackFn(), 'callback_' + callbackIdx);
+                        const callbackFnName = 'callback_' + callbackIdx;
+                        const callbackFn = getCallbackFn();
+                        preparedTask.setCallbackFn(callbackFn, callbackFnName);
                         preparedTask.setPostReturnFn(getPostReturnFn());
 
                         const subtask = preparedTask.getParentSubtask();
 
                         if (resultCount < 0 || resultCount > 1) {{ throw new Error(`unsupported result count [${{ resultCount }}]`); }}
 
-                        // TODO: handle paramCount
-                        // TODO: handle resultCount
-                        // TODO: parse flags
-
                         const params = preparedTask.getCalleeParams();
-                        const expectedParamCount = resultCount > 1 ? params.length - 1 : params.length;
-                        if (paramCount !== expectedParamCount) {{
+                        if (paramCount !== params.length) {{
                             throw new Error(`unexpected param count [${{ paramCount }}], expected [${{ expectedParamCount }}]`);
                         }}
-
-                        let callbackResultFn = WebAssembly.promising(callee);
-                        let callbackResult = callbackResultFn(...params);
-
-                        // TODO(fix): using promising here causes hang
-                        // let callbackResult = callee.apply(null, params);
-
-                        // If a single call resolved the subtask, we can return immediately
-                        if (subtask.resolved()) {{
-                            subtask.deliverResolve();
-                            return {subtask_class}.State.RETURNED;
-                        }}
-
-                        const subtaskState = subtask.getStateNumber();
-                        if (subtaskState < 0 || subtaskState > 2**5) {{
-                            throw new Error('invalid substack state, out of valid range');
-                        }}
-
-                        const callerComponentState = {get_or_create_async_state_fn}(subtask.componentIdx());
-                        const rep = callerComponentState.subtasks.insert(subtask);
-                        subtask.setRep(rep);
-
-                        const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
 
                         subtask.setOnProgressFn(() => {{
                             subtask.setPendingEventFn(() => {{
@@ -303,10 +322,142 @@ impl HostIntrinsic {
                             }});
                         }});
 
-                        subtask.onStart();
+                        const subtaskState = subtask.getStateNumber();
+                        if (subtaskState < 0 || subtaskState > 2**5) {{
+                            throw new Error('invalid subtask state, out of valid range');
+                        }}
 
+                        const callerComponentState = {get_or_create_async_state_fn}(subtask.componentIdx());
+                        const rep = callerComponentState.subtasks.insert(subtask);
+                        subtask.setRep(rep);
+
+                        const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
+                        const calleeBackpressure = calleeComponentState.hasBackpressure();
+
+                        // Set up a handler on subtask completion to lower results from the call into the caller's memory region.
+                        subtask.registerOnResolveHandler((res) => {{
+                            {debug_log_fn}('[{async_start_call_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
+                            let subtaskCallMeta = subtask.getCallMetadata();
+
+                            // NOTE: in the case of guest -> guest async calls, there may be no memory/realloc present,
+                            // as the host will intermediate the value storage/movement between calls.
+                            //
+                            // We can simply take the value and lower it as a parameter
+                            if (subtaskCallMeta.memory || subtaskCallMeta.realloc) {{
+                                throw new Error("call metadata unexpectedly contains memory/realloc for guest->guest call");
+                            }}
+
+                            const callerTask = subtask.getParentTask();
+                            const calleeTask = preparedTask;
+                            const callerComponentIdx = callerTask.componentIdx();
+                            const resultPtr = subtaskCallMeta.resultPtr;
+
+                            if (resultPtr) {{
+                                const callerMemoryIdx = callerTask.getReturnMemoryIdx();
+                                let callerMemory;
+                                if (callerMemoryIdx) {{
+                                    callerMemory = {global_component_memories_class}.getMemory(callerComponentIdx, callerMemoryIdx);
+                                }} else {{
+                                    const callerMemories = {global_component_memories_class}.getMemoriesForComponentIdx(callerComponentIdx);
+                                    if (callerMemories.length != 1) {{ throw new Error(`unsupported amount of caller memories`); }}
+                                    callerMemory = callerMemories[0];
+                               }}
+
+                                if (!callerMemory) {{
+                                    throw new Error(`missing memory for to guest->guest call result (subtask [${{subtask.id()}}])`);
+                               }}
+
+                                const lowerFns = calleeTask.getReturnLowerFns();
+                                if (!lowerFns || lowerFns.length === 0) {{
+                                    throw new Error(`missing result lower metadata for guest->guest call (subtask [${{subtask.id()}}])`);
+                                }}
+
+                                if (lowerFns.length !== 1) {{
+                                    throw new Error(`only single result supported for guest->guest calls (subtask [${{subtask.id()}}])`);
+                                }}
+
+                                // Lower the result into the callers memory
+                                // TODO should we me able to get a realloc for the caller here?
+                                lowerFns[0]({{ realloc: undefined, memory: callerMemory }}, [res], resultPtr);
+
+                                // TODO: resultPtr is out of bounds for the memory? Are we dealing with the caller???
+
+                                // TODO: We need to realloc space into the caller (we need the size of this thing...) maybe in taskReturn?
+
+                           }}
+
+                        }});
+
+                        subtask.onStart();
+                        preparedTask.registerOnResolveHandler((res) => {{
+                            {debug_log_fn}('[{async_start_call_fn}()] signaling subtask completion due to task completion', {{
+                                childTaskID: preparedTask.id(),
+                                subtaskID: subtask.id(),
+                                parentTaskID: subtask.getParentTask().id(),
+                            }});
+                            subtask.onResolve(res);
+                        }});
+
+                        {debug_log_fn}("[{async_start_call_fn}()] initial call", {{
+                            task: preparedTask.id(),
+                            subtaskID: subtask.id(),
+                            calleeFnName: callee.name,
+                        }});
+
+                        let callbackResult = callee();
+
+                        {debug_log_fn}("[{async_start_call_fn}()] after initial call", {{
+                            task: preparedTask.id(),
+                            subtaskID: subtask.id(),
+                            calleeFnName: callee.name,
+                        }});
+
+                        const doSubtaskResolve = () => {{
+                            subtask.deliverResolve();
+                            const meta = subtask.getCallMetadata();
+                            if (meta.returnFn) {{ meta.returnFn(); }}
+                        }};
+
+                        // If a single call resolved the subtask and there is no backpressure in the guest,
+                        // we can return immediately
+                        if (subtask.resolved() && !calleeBackpressure) {{
+                            {debug_log_fn}("[{async_start_call_fn}()] instantly resolved", {{
+                                calleeComponentIdx: preparedTask.componentIdx(),
+                                task: preparedTask.id(),
+                                subtaskID: subtask.id(),
+                                callerComponentIdx: subtask.componentIdx(),
+                            }});
+                            doSubtaskResolve();
+                            return {subtask_class}.State.RETURNED;
+                        }}
+
+                        // Start the (event) driver loop that will resolve the task
                         new Promise(async (resolve, reject) => {{
-                            // TODO: result count space must be reserved in memory, will either
+                            if (subtask.resolved() && calleeBackpressure) {{
+                                await calleeComponentState.waitForBackpressure();
+
+                                {debug_log_fn}("[{async_start_call_fn}()] instantly resolved after cleared backpressure", {{
+                                    calleeComponentIdx: preparedTask.componentIdx(),
+                                    task: preparedTask.id(),
+                                    subtaskID: subtask.id(),
+                                    callerComponentIdx: subtask.componentIdx(),
+                                }});
+                                doSubtaskResolve();
+                                return;
+                            }}
+
+                            const started = await preparedTask.enter();
+                            if (!started) {{
+                                {debug_log_fn}('[{async_start_call_fn}()] task failed early', {{
+                                    taskID: preparedTask.id(),
+                                    subtaskID: subtask.id(),
+                                }});
+                                throw new Error("task failed to start");
+                                return;
+                            }}
+
+                            // TODO: read in params if necessary
+                            // result count space must be reserved in memory, will either
                             // be a callback code or nothing?
 
                             // TODO: retrieve/pass along actual fn name the callback corresponds to
@@ -322,6 +473,7 @@ impl HostIntrinsic {
                             ].join("");
 
                             try {{
+                              {debug_log_fn}("[{async_start_call_fn}()] starting driver loop", {{ fnName, componentIdx: preparedTask.componentIdx(), }});
                                 await {async_driver_loop_fn}({{
                                     componentState: calleeComponentState,
                                     task: preparedTask,

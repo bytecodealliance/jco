@@ -32,23 +32,66 @@ suite('Async (WASI P3)', () => {
     });
 
     // https://bytecodealliance.zulipchat.com/#narrow/channel/206238-general/topic/Should.20StringLift.20be.20emitted.20for.20async.20return.20values.3F/with/561133720
-    test('simple string return', async () => {
-        const name = 'async-simple-string-return';
+    test('simple async returns', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
-                name,
                 path: join(
                     P3_COMPONENT_FIXTURES_DIR,
-                    `${name}.wasm`,
+                    'async-simple-return.wasm',
                 ),
                 imports: new WASIShim().getImportObject(),
             },
         });
 
-        assert.typeOf(instance.asyncGetLiteral, 'function');
+        assert.typeOf(instance.asyncGetString, 'function');
+        assert.strictEqual("literal", await instance.asyncGetString());
 
-        const result = await instance.asyncGetLiteral();
-        assert.strictEqual(result, "literal");
+        assert.typeOf(instance.asyncGetU32, 'function');
+        assert.strictEqual(42, await instance.asyncGetU32());
+
+        await cleanup();
+    });
+
+    // https://github.com/bytecodealliance/jco/issues/1150
+    test('simple bare async host imports', async () => {
+        const hostStr = "loaded-from-host";
+        const hostU32 = 43;
+
+        const { instance, cleanup, outputDir } = await setupAsyncTest({
+            component: {
+                path: join(
+                    P3_COMPONENT_FIXTURES_DIR,
+                    'async-simple-import.wasm',
+                ),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    '[async]load-string': { default: async () => hostStr },
+                    '[async]load-u32': { default: async () => hostU32 },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                        asyncMode: 'jspi',
+                        asyncImports: [
+                            'load-string',
+                            'load-u32',
+                        ],
+                        asyncExports: [
+                            'get-string',
+                            'get-u32',
+                        ],
+                    }
+                }
+            }
+        });
+
+        assert.typeOf(instance.asyncGetString, 'function');
+        assert.strictEqual(hostStr, await instance.asyncGetString());
+
+        assert.typeOf(instance.asyncGetU32, 'function');
+        assert.strictEqual(hostU32, await instance.asyncGetU32());
 
         await cleanup();
     });

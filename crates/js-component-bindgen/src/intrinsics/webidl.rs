@@ -52,7 +52,11 @@ impl WebIdlIntrinsic {
                                 if (prop.startsWith('as')) return () => receiver;
                                 const res = Reflect.get(origTarget, prop);
                                 if (res === undefined && prop[0].toUpperCase() === prop[0]) {
-                                    return Object.getPrototypeOf(globalThis[`${prop[0].toLowerCase()}${prop.slice(1)}`]).constructor;
+                                    const key = `${prop[0].toLowerCase()}${prop.slice(1)}`;
+                                    const obj = globalThis[key];
+                                    if (obj) {{
+                                        return Object.getPrototypeOf(obj).constructor;
+                                    }}
                                 }
                                 return maybeProxy(res, prop);
                             },

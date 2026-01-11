@@ -52,18 +52,6 @@ pub enum ComponentIntrinsic {
     /// A class that encapsulates component-level async state
     ComponentAsyncStateClass,
 
-    /// Intrinsic used when components lower imports to be used
-    /// from other components or the host.
-    ///
-    /// # Component Intrinsic implementation function
-    ///
-    /// The function that implements this intrinsic has the following definition:
-    ///
-    /// ```ts
-    /// ```
-    ///
-    LowerImport,
-
     /// Intrinsic used to set all component async states to error.
     ///
     /// Practically, this stops all individual component event loops (`AsyncComponentState#tick()`)
@@ -93,7 +81,6 @@ impl ComponentIntrinsic {
             Self::BackpressureInc => "backpressureInc",
             Self::BackpressureDec => "backpressureDec",
             Self::ComponentAsyncStateClass => "ComponentAsyncState",
-            Self::LowerImport => "_intrinsic_component_lowerImport",
             Self::ComponentStateSetAllError => "_ComponentStateSetAllError",
         }
     }
@@ -115,7 +102,7 @@ impl ComponentIntrinsic {
                         {debug_log_fn}('[{backpressure_set_fn}()] args', {{ componentInstanceID, value }});
                         if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        state.backpressure = value !== 0;
+                        state.setBackpressure(value);
                     }}
                 "));
             }
@@ -129,7 +116,7 @@ impl ComponentIntrinsic {
                     function {backpressure_inc_fn}(componentInstanceID) {{
                         {debug_log_fn}('[{backpressure_inc_fn}()] args', {{ componentInstanceID }});
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        state.backpressure += 1;
+                        state.incrementBackpressure();
                     }}
                 "
                 ));
@@ -144,7 +131,7 @@ impl ComponentIntrinsic {
                     function {backpressure_dec_fn}(componentInstanceID) {{
                         {debug_log_fn}('[{backpressure_dec_fn}()] args', {{ componentInstanceID }});
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        state.backpressure = Math.max(0, state.backpressure - 1) ;
+                        state.decrementBackpressure();
                     }}
                 "
                 ));
@@ -156,6 +143,8 @@ impl ComponentIntrinsic {
                 output.push_str(&format!(
                     r#"
                     class {class_name} {{
+                        static EVENT_HANDLER_EVENTS = [ 'backpressure-change' ];
+
                         #componentIdx;
                         #callingAsyncImport = false;
                         #syncImportWait = promiseWithResolvers();
@@ -166,15 +155,23 @@ impl ComponentIntrinsic {
                         #pendingTasks = [];
                         #errored = null;
 
+                        #backpressure = 0;
+                        #backpressureWaiters = 0n;
+
+                        #handlerMap = new Map();
+                        #nextHandlerID = 0n;
+
                         mayLeave = true;
-                        waitableSets = new {rep_table_class}();
-                        waitables = new {rep_table_class}();
-                        subtasks = new {rep_table_class}();
+
+                        waitableSets;
+                        waitables;
+                        subtasks;
 
                         constructor(args) {{
                             this.#componentIdx = args.componentIdx;
-                            const self = this;
-
+                            this.waitableSets = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitable sets` }});
+                            this.waitables = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitables` }});
+                            this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
                         }};
 
                         componentIdx() {{ return this.#componentIdx; }}
@@ -208,6 +205,79 @@ impl ComponentIntrinsic {
 
                         async waitForSyncImportCallEnd() {{
                             await this.#syncImportWait.promise;
+                        }}
+
+                        setBackpressure(v) {{ this.#backpressure = v; }}
+                        getBackpressure(v) {{ return this.#backpressure; }}
+                        incrementBackpressure() {{
+                            const newValue = this.getBackpressure() + 1;
+                            if (newValue > 2**16) {{ throw new Error("invalid backpressure value, overflow"); }}
+                            this.setBackpressure(newValue);
+                        }}
+                        decrementBackpressure() {{
+                            this.setBackpressure(Math.max(0, this.getBackpressure() - 1));
+                        }}
+                        hasBackpressure() {{ return this.#backpressure > 0; }}
+
+                        waitForBackpressure() {{
+                            const backpressureCleared = false;
+                            const cstate = this;
+                            cstate.addBackpressureWaiter();
+                            const handlerID = this.registerHandler({{
+                                event: 'backpressure-change',
+                                fn: (bp) => {{
+                                    if (bp === 0) {{
+                                        cstate.removeHandler(handlerID);
+                                        backpressureCleared = true;
+                                    }}
+                                }}
+                            }});
+                            return new Promise((resolve) => {{
+                                const interval = setInterval(() => {{
+                                    if (backpressureCleared) {{ return; }}
+                                    clearInterval(interval);
+                                    cstate.removeBackpressureWaiter();
+                                    resolve(null);
+                                }}, 0);
+                            }});
+                        }}
+
+                        registerHandler(args) {{
+                            const {{ event, fn }} = args;
+                            if (!event) {{ throw new Error("missing handler event"); }}
+                            if (!fn) {{ throw new Error("missing handler fn"); }}
+
+                            if (!{class_name}.EVENT_HANDLER_EVENTS.includes(event)) {{
+                                throw new Error(`unrecognized event handler [${{event}}]`);
+                            }}
+
+                            const handlerID = this.#nextHandlerID++;
+                            let handlers = this.#handlerMap.get(event);
+                            if (!handlers) {{
+                                handlers = [];
+                                this.#handlerMap.set(event, handlers)
+                            }}
+
+                            handlers.push({{ id: handlerID, fn, event }});
+                            return handlerID;
+                        }}
+
+                        removeHandler(args) {{
+                            const {{ event, handlerID }} = args;
+                            const registeredHandlers = this.#handlerMap.get(event);
+                            if (!registeredHandlers) {{ return; }}
+                            const found = registeredHandlers.find(h => h.id === handlerID);
+                            if (!found) {{ return; }}
+                            this.#handlerMap.set(event, this.#handlerMap.get(event).filter(h => h.id !== handlerID));
+                        }}
+
+                        getBackpressureWaiters() {{ return this.#backpressureWaiters; }}
+                        addBackpressureWaiter() {{ this.#backpressureWaiters++; }}
+                        removeBackpressureWaiter() {{
+                            this.#backpressureWaiters--;
+                            if (this.#backpressureWaiters < 0) {{
+                                throw new Error("unexepctedly negative number of backpressure waiters");
+                            }}
                         }}
 
                         parkTaskOnAwaitable(args) {{
@@ -252,6 +322,7 @@ impl ComponentIntrinsic {
                         exclusiveRelease() {{
                             {debug_log_fn}('[{class_name}#exclusiveRelease()] releasing', {{
                                 locked: this.#locked,
+                                componentIdx: this.#componentIdx,
                             }});
 
                             this.#locked = false
@@ -315,6 +386,7 @@ impl ComponentIntrinsic {
                         }}
 
                         tick() {{
+                            {debug_log_fn}('[{class_name}#tick()]', {{ suspendedTaskIDs: this.#suspendedTaskIDs }});
                             let resumedTask = false;
                             for (const taskID of this.#suspendedTaskIDs.filter(t => t !== null)) {{
                                 const meta = this.#suspendedTasksByTaskID.get(taskID);
@@ -351,22 +423,6 @@ impl ComponentIntrinsic {
                         return {async_state_map}.get(componentIdx);
                     }}
                    "#
-                ));
-            }
-
-            // NOTE: LowerImport is called but is *not used* as a function,
-            // instead having a chance to do some modification *before* the final
-            // creation of instantiated modules' exports
-            Self::LowerImport => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lower_import_fn = Self::LowerImport.name();
-                output.push_str(&format!(
-                    "
-                    function {lower_import_fn}(args) {{
-                        {debug_log_fn}('[{lower_import_fn}()] args', args);
-                        throw new Error('runtime LowerImport not implmented');
-                    }}
-                    "
                 ));
             }
 

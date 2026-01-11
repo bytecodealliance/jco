@@ -8,26 +8,7 @@ import { typesComponent } from '../src/cmd/types.js';
 
 import { suite, test, beforeAll, assert } from 'vitest';
 
-import { exec } from './helpers.js';
-import { NODE_MODULES_TSC_BIN_PATH } from './common.js';
-
-let TS_GEN_PROMISE;
-export function tsGenerationPromise() {
-    if (TS_GEN_PROMISE) {
-        return TS_GEN_PROMISE;
-    }
-    return (TS_GEN_PROMISE = (async () => {
-        const tsConfigPath = fileURLToPath(
-            new URL('./tsconfig.json', import.meta.url)
-        );
-        var { stderr } = await exec(
-            NODE_MODULES_TSC_BIN_PATH,
-            '-p',
-            tsConfigPath
-        );
-        assert.strictEqual(stderr, '');
-    })());
-}
+import { tsGenerationPromise } from './helpers.js';
 
 suite(`TypeScript`, async () => {
     beforeAll(async () => {
