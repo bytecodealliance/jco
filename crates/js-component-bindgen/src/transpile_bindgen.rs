@@ -1716,6 +1716,11 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
+            // TODO: TASK RETURN NEEDS TO MAKE SURE THE LOWER IS THERE!
+            // IF WE GENERATE A LIFT, WE NEED TO GENERATE (AND SAVE BY TYPE ID) A LOWER!
+            //
+            // Async fns must lift the value out, so the host can make use of a lower.
+
             // This actually starts a Task (whose parent is a subtask generated during PrepareCall)
             // for a from-component async import call
             Trampoline::AsyncStartCall {
@@ -2189,6 +2194,19 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
 
+                // In the case of a guest->guest call, teh host will also need to lower the result values into
+                // a given memory location for the calling component. Here, we generate lowers
+                let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
+                for result_ty in result_types {
+                    lower_fns.push(gen_flat_lower_fn_js_expr(
+                        self.bindgen,
+                        self.types,
+                        result_ty,
+                        canon_opts,
+                    ));
+                }
+                let lower_fns_js = format!("[{}]", lower_fns.join(","));
+
                 let get_memory_fn_js = memory
                     .map(|idx| format!("() => memory{}", idx.as_u32()))
                     .unwrap_or_else(|| "() => null".into());
@@ -2214,6 +2232,7 @@ impl<'a> Instantiator<'a, '_> {
                              memoryIdx: {memory_idx_js},
                              callbackFnIdx: {callback_fn_idx},
                              liftFns: {lift_fns_js},
+                             lowerFns: {lower_fns_js},
                          }},
                      );",
                 );
@@ -4489,10 +4508,12 @@ pub fn gen_flat_lower_fn_js_expr(
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
-            let mut cases_and_lowers_expr = String::from("[");
+            let mut lower_metas_expr = String::from("[");
+            let mut case_idx = 0;
             for (name, maybe_ty) in &variant_ty.cases {
-                cases_and_lowers_expr.push_str(&format!(
-                    "{{ tag: '{}', lowerFn: {}, align32: {} }},",
+                lower_metas_expr.push_str(&format!(
+                    "{{ discriminant: {}, tag: '{}', lowerFn: {}, align32: {}, }},",
+                    case_idx,
                     name,
                     maybe_ty
                         .as_ref()
@@ -4509,9 +4530,13 @@ pub fn gen_flat_lower_fn_js_expr(
                         .map(|n| n.to_string())
                         .unwrap_or(String::from("null")),
                 ));
+                case_idx += 1;
             }
-            cases_and_lowers_expr.push(']');
-            format!("{lower_fn}({cases_and_lowers_expr})")
+            lower_metas_expr.push(']');
+            format!(
+                "{lower_fn}({{ discriminantSizeBytes: {}, lowerMetas: {lower_metas_expr} }})",
+                variant_ty.info.size.byte_size(),
+            )
         }
         InterfaceType::List(_ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
@@ -4549,7 +4574,7 @@ pub fn gen_flat_lower_fn_js_expr(
             let result_ty = &component_types[*ty_idx];
             let mut cases_and_lowers_expr = String::from("[");
             cases_and_lowers_expr.push_str(&format!(
-                "{{ tag: '{}', lowerFn: {}, align32: {} }},",
+                "{{ discriminant: 0, tag: '{}', lowerFn: {}, align32: {} }},",
                 "ok",
                 result_ty
                     .ok
@@ -4569,7 +4594,7 @@ pub fn gen_flat_lower_fn_js_expr(
                     .unwrap_or(String::from("null")),
             ));
             cases_and_lowers_expr.push_str(&format!(
-                "{{ tag: '{}', lowerFn: {}, align32: {} }},",
+                "{{ discriminant: 1, tag: '{}', lowerFn: {}, align32: {} }},",
                 "error",
                 result_ty
                     .err

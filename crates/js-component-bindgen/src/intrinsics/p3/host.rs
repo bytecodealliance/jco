@@ -348,10 +348,10 @@ impl HostIntrinsic {
                             }}
 
                             const callerTask = subtask.getParentTask();
+                            const calleeTask = preparedTask;
                             const callerComponentIdx = callerTask.componentIdx();
                             const resultPtr = subtaskCallMeta.resultPtr;
 
-                            console.log("RESULT POINTER?", resultPtr);
                             if (resultPtr) {{
                                 const callerMemoryIdx = callerTask.getReturnMemoryIdx();
                                 let callerMemory;
@@ -367,18 +367,23 @@ impl HostIntrinsic {
                                     throw new Error(`missing memory for to guest->guest call result (subtask [${{subtask.id()}}])`);
                                }}
 
-                                const lowerMetas = subtaskCallMeta.resultLowerMetas;
-                                if (!lowerMetas || lowerMetas.length === 0) {{
+                                const lowerFns = calleeTask.getReturnLowerFns();
+                                if (!lowerFns || lowerFns.length === 0) {{
                                     throw new Error(`missing result lower metadata for guest->guest call (subtask [${{subtask.id()}}])`);
                                 }}
 
-                                if (lowerMetas.length !== 1) {{
+                                if (lowerFns.length !== 1) {{
                                     throw new Error(`only single result supported for guest->guest calls (subtask [${{subtask.id()}}])`);
                                 }}
 
                                 // Lower the result into the callers memory
-                                const [elemSize, lowerFn] = lowerMetas[0];
-                                lowerFn(elemSize, callerMemory, [res], resultPtr);
+                                // TODO should we me able to get a realloc for the caller here?
+                                lowerFns[0]({{ realloc: undefined, memory: callerMemory }}, [res], resultPtr);
+
+                                // TODO: resultPtr is out of bounds for the memory? Are we dealing with the caller???
+
+                                // TODO: We need to realloc space into the caller (we need the size of this thing...) maybe in taskReturn?
+
                            }}
 
                         }});
