@@ -1,6 +1,6 @@
 //! Intrinsics that represent helpers that enable Lower integration
 
-use crate::{intrinsics::{Intrinsic, string::StringIntrinsic}, source::Source};
+use crate::{intrinsics::{Intrinsic, p3::error_context::ErrCtxIntrinsic, string::StringIntrinsic}, source::Source};
 
 use super::conversion::ConversionIntrinsic;
 
@@ -272,13 +272,13 @@ impl LowerIntrinsic {
             Self::LowerFlatU8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!(r#"
-                    function _lowerFlatU8(memoryAndRealloc, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatU8()] args', {{ memoryAndRealloc, vals, storagePtr, storageLen }});
+                    function _lowerFlatU8(ctx) {{
+                        {debug_log_fn}('[_lowerFlatU8()] args', ctx);
+                        const {{ memory, realloc, vals, storagePtr, storageLen }} = ctx;
                         if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 255 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u8'); }}
-                        const {{ memory }} = memoryAndRealloc;
                         if (!memory) {{ throw new Error("missing memory for lower"); }}
 
                         // VALS is undefined???
@@ -338,11 +338,16 @@ impl LowerIntrinsic {
             Self::LowerFlatU32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _lowerFlatU32(memoryAndRealloc, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatU32()] args', {{ memoryAndRealloc, vals, storagePtr, storageLen }});
-                        const {{ memory, realloc }} = memoryAndRealloc;
+                    function _lowerFlatU32(ctx) {{
+                        {debug_log_fn}('[_lowerFlatU32()] args', ctx);
+                        const {{ memory, realloc, vals, storagePtr, storageLen }} = ctx;
                         if (vals.length !== 1) {{ throw new Error('expected single value to lower, got (' + vals.length + ')'); }}
                         if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
+
+                        // TODO: fix misaligned writes properly
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
                         return 4;
                     }}
@@ -436,9 +441,9 @@ impl LowerIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let utf8_encode_fn = Intrinsic::String(StringIntrinsic::Utf8Encode).name();
                 output.push_str(&format!("
-                    function _lowerFlatStringUTF8(memoryAndRealloc, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatStringUTF8()] args', {{ memoryAndRealloc, vals, storagePtr, storageLen }});
-                        const {{ memory, realloc }} = memoryAndRealloc;
+                    function _lowerFlatStringUTF8(ctx) {{
+                        {debug_log_fn}('[_lowerFlatStringUTF8()] args', ctx);
+                        const {{ memory, realloc, vals, storagePtr, storageLen }} = ctx;
 
                         const s = vals[0];
                         const {{ ptr, len, codepoints }} = {utf8_encode_fn}(vals[0], realloc, memory);
@@ -489,13 +494,10 @@ impl LowerIntrinsic {
                     function _lowerFlatVariant(metadata, extra) {{
                         const {{ discriminantSizeBytes, lowerMetas }} = metadata;
 
-                        return (memoryAndRealloc, vals, storagePtr, storageLen) => {{
-                            {debug_log_fn}('[_lowerFlatVariant()] args', {{
-                                memoryAndRealloc,
-                                vals,
-                                storagePtr,
-                                storageLen,
-                            }});
+                        return function _lowerFlatVariantInner(ctx) {{
+                            {debug_log_fn}('[_lowerFlatVariant()] args', ctx);
+                            const {{ memory, realloc, vals, storageLen, componentIdx }} = ctx;
+                            let storagePtr = ctx.storagePtr;
 
                             const {{ tag, val }} = vals[0];
                             const variant = lowerMetas.find(vm => vm.tag === tag);
@@ -503,15 +505,16 @@ impl LowerIntrinsic {
                             if (!variant.discriminant) {{ throw new Error(`missing/invalid discriminant for variant [${{variant}}]`); }}
 
                             let bytesWritten;
+                            let discriminantLowerArgs = {{ memory, realloc, vals: [variant.discriminant], storagePtr, componentIdx }}
                             switch (discriminantSizeBytes) {{
                                 case 1:
-                                    bytesWritten = {lower_u8_fn}(memoryAndRealloc, [variant.discriminant], storagePtr);
+                                    bytesWritten = {lower_u8_fn}(discriminantLowerArgs);
                                     break;
                                 case 2:
-                                    bytesWritten = {lower_u16_fn}(memoryAndRealloc, [variant.discriminant], storagePtr);
+                                    bytesWritten = {lower_u16_fn}(discriminantLowerArgs);
                                     break;
                                 case 4:
-                                    bytesWritten = {lower_u32_fn}(memoryAndRealloc, [variant.discriminant], storagePtr);
+                                    bytesWritten = {lower_u32_fn}(discriminantLowerArgs);
                                     break;
                                 default:
                                     throw new Error(`unexpected discriminant size bytes [${{discriminantSizeBytes}}]`);
@@ -521,7 +524,7 @@ impl LowerIntrinsic {
                             }}
                             storagePtr += bytesWritten;
 
-                            bytesWritten += variant.lowerFn(memoryAndRealloc, [val], storagePtr, storageLen);
+                            bytesWritten += variant.lowerFn({{ memory, realloc, vals: [val], storagePtr, storageLen, componentIdx }});
 
                             return bytesWritten;
                         }}
@@ -666,15 +669,35 @@ impl LowerIntrinsic {
                 "));
             }
 
+            // When a component-model level error context is lowered, it contains the global error-context
+            // and not a component-local handle value (as it did pre-lift).
+            //
+            // By lowering the error context into a given component (w/ a given error context table)
+            // we translate the global component model level rep into a local handle.
+            //
+            // see: `LiftIntrinsic::LiftFlatErrorContext`
             Self::LowerFlatErrorContext => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_u32_fn = Self::LowerFlatU32.name();
-                output.push_str(&format!("
-                    function _lowerFlatErrorContext(memoryAndRealloc, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatErrorContext()] args', {{ memoryAndRealloc, vals, storagePtr, storageLen }});
-                        return {lower_u32_fn}(memoryAndRealloc, vals, storagePtr, storageLen);
+                let create_local_handle_fn = ErrCtxIntrinsic::CreateLocalHandle.name();
+                let err_ctx_ref_count_add_fn = ErrCtxIntrinsic::GlobalRefCountAdd.name();
+                let get_err_ctx_local_table_fn = ErrCtxIntrinsic::GetLocalTable.name();
+                output.push_str(&format!(r#"
+                    function _lowerFlatErrorContext(componentTableIdx, ctx) {{
+                        {debug_log_fn}('[_lowerFlatErrorContext()] args', {{ componentTableIdx, ctx }});
+                        const {{ memory, realloc, vals, storagePtr, storageLen, componentIdx }} = ctx;
+
+                        const errCtxRep = vals[0];
+                        //console.log("BEFORE CALL", {{ errCtxRep, componentIdx }});
+                        const componentTable = {get_err_ctx_local_table_fn}(componentIdx, componentTableIdx, {{upsert: true}});
+                        const handle = {create_local_handle_fn}(componentTable, errCtxRep);
+                        {err_ctx_ref_count_add_fn}(errCtxRep, -1);
+
+                        console.log("POST LOWER", {{ handle, componentTable, errCtxRep, componentTableIdx }});
+
+                        return {lower_u32_fn}({{ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx }});
                     }}
-                "));
+                "#));
             }
         }
     }

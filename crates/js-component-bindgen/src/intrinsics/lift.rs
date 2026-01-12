@@ -1,6 +1,7 @@
 //! Intrinsics that represent helpers that enable Lift integration
 
 use crate::intrinsics::Intrinsic;
+use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::source::Source;
 
@@ -804,7 +805,7 @@ impl LiftIntrinsic {
             Self::LiftFlatOwn => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _liftFlatOwn(size, memory, vals, storagePtr, storageLen) {{
+                    function _liftFlatOwn(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatOwn()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         throw new Error('flat lift for owned resources not yet implemented!');
                     }}
@@ -814,7 +815,7 @@ impl LiftIntrinsic {
             Self::LiftFlatBorrow => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _liftFlatBorrow(size, memory, vals, storagePtr, storageLen) {{
+                    function _liftFlatBorrow(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatBorrow()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         throw new Error('flat lift for borrowed resources not yet implemented!');
                     }}
@@ -824,7 +825,7 @@ impl LiftIntrinsic {
             Self::LiftFlatFuture => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _liftFlatFuture(memory, vals, storagePtr, storageLen) {{
+                    function _liftFlatFuture(componentTableIdx, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatFuture()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         throw new Error('flat lift for futures not yet implemented!');
                     }}
@@ -834,32 +835,56 @@ impl LiftIntrinsic {
             Self::LiftFlatStream => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
-                    function _liftFlatStream(size, memory, vals, storagePtr, storageLen) {{
+                    function _liftFlatStream(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
                         {debug_log_fn}('[_liftFlatStream()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         throw new Error('flat lift for streams not yet implemented!');
                     }}
                 "));
             }
 
+            // Since error contexts are reference counted, when one is lifted from a component to a
+            // component model value, we assume that the host has taken control of it until it has been lowered
+            // into a component
+            //
+            // When we lift an error context, we increase the global ref count as it must be accounted for
+            // at the component model (host) level.
+            //
+            // This means that *before* lifting an error context object's `val` property represents a local
+            // handle (an index into a component-local error context table), but *after* lifting, it represents
+            // a component-global "rep" (i.e. the component model represenation).
+            //
             Self::LiftFlatErrorContext => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _liftFlatErrorContext(ctx) {{
+                let get_err_ctx_local_table_fn = ErrCtxIntrinsic::GetLocalTable.name();
+                let err_ctx_ref_count_add_fn = ErrCtxIntrinsic::GlobalRefCountAdd.name();
+
+                output.push_str(&format!(r#"
+                    function _liftFlatErrorContext(componentTableIdx, ctx) {{
                         {debug_log_fn}('[_liftFlatErrorContext()] args', ctx);
-                        const {{ useDirectParams, params }} = ctx;
+                        const {{ useDirectParams, params, componentIdx }} = ctx;
 
                         let val;
+                        let table;
                         if (useDirectParams) {{
                             if (params.length === 0) {{ throw new Error('expected at least one single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
+                            table = {get_err_ctx_local_table_fn}(componentIdx, componentTableIdx);
                         }} else {{
                             throw new Error('indirect flat lift for error-contexts not yet implemented!');
                         }}
 
-                        return [val, ctx];
+                        let errCtx = table.get(val);
+                        if (!errCtx) {{
+                            throw new Error(`missing/invalid errCtx with handle [${{val}}] in component [${{component}}] error context table [${{componentTableIdx}}]`);
+                        }}
+
+                        {err_ctx_ref_count_add_fn}(errCtx.rep);
+                        // TODO: we need to save some information for when we are going to lower it back down into somewhere?
+
+                        return [errCtx.rep, ctx];
                     }}
-                "));
+                "#));
             }
         }
     }

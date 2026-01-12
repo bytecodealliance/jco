@@ -196,6 +196,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         .insert(Intrinsic::GlobalComponentAsyncLowersClass);
     args.intrinsics
         .insert(Intrinsic::GlobalComponentMemoriesClass);
+    args.intrinsics.insert(Intrinsic::RepTableClass);
     args.intrinsics.insert(Intrinsic::CoinFlip);
     args.intrinsics.insert(Intrinsic::ConstantI32Min);
     args.intrinsics.insert(Intrinsic::ConstantI32Max);
@@ -281,19 +282,19 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     }
 
     // Attempting to perform a debug message hoist will require string encoding to memory
-    if args
-        .intrinsics
-        .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::DebugMessage))
-    {
+    if args.intrinsics.contains(&Intrinsic::ErrCtx(
+        ErrCtxIntrinsic::ErrorContextDebugMessage,
+    )) {
         args.intrinsics.extend([
             &Intrinsic::String(StringIntrinsic::Utf8Encode),
             &Intrinsic::String(StringIntrinsic::Utf16Encode),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
         ]);
     }
+
     if args
         .intrinsics
-        .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::New))
+        .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew))
     {
         args.intrinsics.extend([
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable),
@@ -304,13 +305,12 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ]);
     }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::DebugMessage))
-    {
+    if args.intrinsics.contains(&Intrinsic::ErrCtx(
+        ErrCtxIntrinsic::ErrorContextDebugMessage,
+    )) {
         args.intrinsics.extend([
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::Drop),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
             &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
         ]);
     }
@@ -895,7 +895,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         #target;
 
                         constructor(args) {{
-                            if (args.target) {{ this.target = args.target }}
+                            if (args?.target) {{ this.target = args.target }}
                         }}
 
                         insert(val) {{
