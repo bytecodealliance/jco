@@ -743,22 +743,6 @@ impl<'a> Instantiator<'a, '_> {
         // $wit-component.fixups must be instantiated directly after $wit-component.shim
         //
         let mut lower_import_initializers = Vec::new();
-        // let mut found_shim = false;
-        // let mut processed_fixup_init = false;
-
-        // // Attempt to find the the wit-component fixups
-        // let fixup_init = self.component.initializers.iter().find(|init| {
-        //     if let GlobalInitializer::InstantiateModule(InstantiateModule::Static(idx, _)) = init
-        //         && let Some(translation) = self.modules.get(*idx)
-        //         && let Some("wit-component:fixups") = translation.name()
-        //     {
-        //         return true;
-        //     } else {
-        //         return false;
-        //     }
-        // });
-
-        // TODO: instantiating the global initializer CANNOT modify stuff. Makes it impossible to order the sections.
 
         // Process first n lower import initializers until the first instantiate module initializer
         for init in self.component.initializers.iter() {
@@ -768,15 +752,6 @@ impl<'a> Instantiator<'a, '_> {
                     for lower_import_init in lower_import_initializers.drain(..) {
                         self.instantiation_global_initializer(lower_import_init);
                     }
-
-                    // // If we're dealing with the shim, then we *should make sure that
-                    // // the next module instantiation we process is the one for fixups
-                    // if let InstantiateModule::Static(idx, _) = m
-                    //     && let Some(translation) = self.modules.get(*idx)
-                    //     && let Some("wit-component:shim") = translation.name()
-                    // {
-                    //     found_shim = true;
-                    // }
                 }
 
                 // We push lower import initializers down to right before instantiate, so that the
@@ -788,28 +763,6 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 _ => {}
             }
-
-            // match (found_shim, processed_fixup_init) {
-            //     // If we haven't found the shim, or we've found and processed it and the fixup,
-            //     // process initializations like normal
-            //     (false, false) | (true, true) => {
-            //         self.instantiation_global_initializer(init);
-            //     }
-
-            //     // If we just found the shim, ensure to process the fixup immediately
-            //     (true, false) => {
-            //         self.instantiation_global_initializer(init);
-
-            //         if found_shim && let Some(fixup_init) = fixup_init {
-            //             self.instantiation_global_initializer(fixup_init);
-            //         }
-            //         processed_fixup_init = true;
-            //     }
-
-            //     // It's impossible to enter the case where we didn't find the shim but processed the fixup
-            //     // the fixup would be processed via normal means otherwise
-            //     (false, true) => unreachable!(),
-            // }
 
             self.instantiation_global_initializer(init);
         }
@@ -923,6 +876,7 @@ impl<'a> Instantiator<'a, '_> {
         let err_ctx_local_tables = self
             .bindgen
             .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentLocalTable));
+        let rep_table_class = Intrinsic::RepTableClass.name();
         let c = component_idx.as_u32();
         if !self.error_context_component_initialized[component_idx] {
             uwriteln!(self.src.js, "{err_ctx_local_tables}.set({c}, new Map());");
@@ -932,7 +886,7 @@ impl<'a> Instantiator<'a, '_> {
             let t = err_ctx_tbl_idx.as_u32();
             uwriteln!(
                 self.src.js,
-                "{err_ctx_local_tables}.get({c}).set({t}, new Map());"
+                "{err_ctx_local_tables}.get({c}).set({t}, new {rep_table_class}({{ target: `component [{c}] local error ctx table [{t}]` }}));"
             );
             self.error_context_component_table_initialized[err_ctx_tbl_idx] = true;
         }
@@ -1202,11 +1156,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            // TODO: build a lookup of types that could be used in streams for a given component?
-            // Need to have a way to look up/serialize the type indices per component into
-            // a lookup of lifting functions? Or just use the cabiLower?
-            //
-            // TODO: Do we need the component idx
             Trampoline::StreamNew { ty } => {
                 let stream_new_fn = self
                     .bindgen
@@ -1559,15 +1508,17 @@ impl<'a> Instantiator<'a, '_> {
 
                 let err_ctx_new_fn = self
                     .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::New));
+                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew));
                 // Store the options associated with this new error context for later use in the global array
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {err_ctx_new_fn}.bind(
                          null,
-                         {component_idx},
-                         {local_err_tbl_idx},
-                         trampoline{i}InputStr,
+                         {{
+                             componentIdx: {component_idx},
+                             localTableIdx: {local_err_tbl_idx},
+                             readStrFn: trampoline{i}InputStr,
+                         }}
                      );
                     "
                 );
@@ -1594,7 +1545,7 @@ impl<'a> Instantiator<'a, '_> {
 
                 let debug_message_fn = self
                     .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::DebugMessage));
+                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDebugMessage));
 
                 let realloc_fn_idx = realloc
                     .expect("missing realloc fn idx for error-context.debug-message")
@@ -1657,30 +1608,37 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     "const trampoline{i} = {debug_message_fn}.bind(
                          null,
-                         {component_idx},
-                         {local_err_tbl_idx},
-                         {options_obj},
-                         trampoline{i}OutputStr,
-                      );"
+                         {{
+                             componentIdx: {component_idx},
+                             localTableIdx: {local_err_tbl_idx},
+                             options: {options_obj},
+                             writeStrFn: trampoline{i}OutputStr,
+                         }}
+                     );"
                 );
             }
 
             Trampoline::ErrorContextDrop { ty } => {
                 let drop_fn = self
                     .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::Drop));
+                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop));
                 let local_err_tbl_idx = ty.as_u32();
                 let component_idx = self.types[*ty].instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {drop_fn}.bind(null, {component_idx}, {local_err_tbl_idx});"
+                    r#"
+                      const trampoline{i} = {drop_fn}.bind(
+                          null,
+                          {{ componentIdx: {component_idx}, localTableIdx: {local_err_tbl_idx} }},
+                      );
+                    "#
                 );
             }
 
             Trampoline::ErrorContextTransfer => {
                 let transfer_fn = self
                     .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::Transfer));
+                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextTransfer));
                 uwriteln!(self.src.js, "const trampoline{i} = {transfer_fn};");
             }
 
@@ -1715,11 +1673,6 @@ impl<'a> Instantiator<'a, '_> {
                         .unwrap_or_else(|| "null".into()),
                 );
             }
-
-            // TODO: TASK RETURN NEEDS TO MAKE SURE THE LOWER IS THERE!
-            // IF WE GENERATE A LIFT, WE NEED TO GENERATE (AND SAVE BY TYPE ID) A LOWER!
-            //
-            // Async fns must lift the value out, so the host can make use of a lower.
 
             // This actually starts a Task (whose parent is a subtask generated during PrepareCall)
             // for a from-component async import call
@@ -1763,10 +1716,6 @@ impl<'a> Instantiator<'a, '_> {
                 let global_component_lowers_class = self
                     .bindgen
                     .intrinsic(Intrinsic::GlobalComponentAsyncLowersClass);
-
-                // TODO: Work to figure out the combination of the component(?) and the
-                // function index INTERNAL?
-
                 let canon_opts = self
                     .component
                     .options
@@ -1796,7 +1745,7 @@ impl<'a> Instantiator<'a, '_> {
                     self,
                     self.types,
                     result_types.iter().as_slice(),
-                    canon_opts,
+                    &canon_opts.string_encoding,
                 );
 
                 let get_callback_fn_js = canon_opts
@@ -2140,7 +2089,6 @@ impl<'a> Instantiator<'a, '_> {
                 };
 
                 // Validate canonopts
-                // TODO: these should be traps at runtime rather than failures at transpilation time
                 if realloc.is_some() && memory.is_none() {
                     panic!("memory must be present if realloc is");
                 }
@@ -2161,9 +2109,6 @@ impl<'a> Instantiator<'a, '_> {
                         _ => panic!("unexpected results for async callback fn"),
                     }
                 }
-
-                // TODO: async callbacks always have a result, but that's not the *actual* return,
-                // it's the async one.
 
                 let result_types = &self.types[*results].types;
 
@@ -2189,20 +2134,19 @@ impl<'a> Instantiator<'a, '_> {
                         self.bindgen,
                         self.types,
                         result_ty,
-                        canon_opts,
+                        &canon_opts.string_encoding,
                     ));
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
 
-                // In the case of a guest->guest call, teh host will also need to lower the result values into
-                // a given memory location for the calling component. Here, we generate lowers
+                // TODO: REMOVE, these are the wrong lowers, wrong component
                 let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
                 for result_ty in result_types {
                     lower_fns.push(gen_flat_lower_fn_js_expr(
                         self.bindgen,
                         self.types,
                         result_ty,
-                        canon_opts,
+                        &canon_opts.string_encoding,
                     ));
                 }
                 let lower_fns_js = format!("[{}]", lower_fns.join(","));
@@ -2370,6 +2314,63 @@ impl<'a> Instantiator<'a, '_> {
                 })) = arg
             {
                 let key = name.trim_start_matches("[async-lower]");
+
+                // // // TODO: NEW BUGS :(
+
+                // // // Unfortunately, for guest->guest async calls, LowerImport is *not* called,
+                // // // and the appropriate lowering information is *not* present.
+                // // //
+                // // // In particular, lowering must occur on the *results* (if any) of a guest->guest
+                // // // async call, to place information in the memory of the caller.
+                // // //
+                // // // Here, we perform a brute force search for the component model types
+                // // // associated with the export of the async function we know is exported
+                // // //
+                // // // This code is almost certainly NOT the way to do this, and it suffers from
+                // // // being vulnerable to finding the *wrong* function. We know that there is at
+                // // // least one, but not at most one function with the given name.
+                // let mut found = 0;
+                // for idx in 0.. {
+                //     if found >= 2 {
+                //         break;
+                //     }
+                //     let inst_idx =
+                //         wasmtime_environ::component::TypeComponentInstanceIndex::from_u32(idx);
+                //     let types = &self.types[inst_idx];
+
+                //     for (export_name, export_ty) in &types.exports {
+                //         if export_name == key
+                //             && let TypeDef::ComponentFunc(func_ty_idx) = export_ty
+                //         {
+                //             let func_ty = &self.types[*func_ty_idx];
+                //             let func_ty_result_idx = func_ty.results;
+                //             let result_types = &self.types[func_ty_result_idx].types;
+
+                //             let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
+                //             for result_ty in result_types {
+                //                 lower_fns.push(gen_flat_lower_fn_js_expr(
+                //                     self.bindgen,
+                //                     self.types,
+                //                     result_ty,
+                //                     // TODO: we need to know the real runtime dependent string encoding here?
+                //                     &wasmtime_environ::component::StringEncoding::Utf8,
+                //                 ));
+                //             }
+                //             let _lower_fns_js = format!("[{}]", lower_fns.join(","));
+
+                //             // TODO: Check for lower import initializer (this indicates not a guest->guest call?)
+
+                //             // // TODO: save lower functions
+                //             // format!(
+                //             //     "{global_component_type_lowers_class}.register({component_idx}, {result_ty}, {func_ty_result_idx})"
+                //             // );
+
+                //             found += 1;
+                //             break;
+                //         }
+                //     }
+                // }
+
                 let instance = instance.as_u32();
                 let mut exec_fn = self.augmented_import_def(&arg);
                 let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
@@ -2401,6 +2402,12 @@ impl<'a> Instantiator<'a, '_> {
                 // All other imports can be connected directly to the relevant export
                 self.augmented_import_def(&arg)
             };
+
+            // TODO: Look for [async-lower] or [prepare-call] or something and the function??
+            //
+            // - needs to be an async-lower
+            //   - Will be a function index... (rt idx is 4, off by one? 5 is the caller that we get back to)
+            // -
 
             // let def = self.augmented_import_def(&arg);
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
@@ -2576,6 +2583,7 @@ impl<'a> Instantiator<'a, '_> {
             },
         );
 
+        // Create mappings for resources
         let mut import_resource_map = ResourceMap::new();
         let mut import_remote_resource_map = RemoteResourceMap::new();
         self.create_resource_fn_map(
@@ -3442,20 +3450,6 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        // Every call to a component export should create a new Task
-        let is_guest_top_level_export = matches!(
-            func.kind,
-            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding
-        ) && matches!(
-            abi,
-            AbiVariant::GuestExport
-                | AbiVariant::GuestExportAsync
-                | AbiVariant::GuestExportAsyncStackful
-        );
-        if is_guest_top_level_export {
-            // TODO: create a new Task for this export call
-        }
-
         // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
@@ -4131,7 +4125,7 @@ pub fn gen_flat_lift_fn_list_js_expr(
             intrinsic_mgr,
             component_types,
             ty,
-            canon_opts,
+            &canon_opts.string_encoding,
         ));
     }
     format!("[{}]", lift_fns.join(","))
@@ -4155,63 +4149,73 @@ pub fn gen_flat_lift_fn_js_expr(
     intrinsic_mgr: &mut impl ManagesIntrinsics,
     component_types: &ComponentTypes,
     ty: &InterfaceType,
-    canon_opts: &CanonicalOptions,
+    string_encoding: &wasmtime_environ::component::StringEncoding,
 ) -> String {
-    //let ty_abi = component_types.canonical_abi(ty);
-    let string_encoding = canon_opts.string_encoding;
     match ty {
         InterfaceType::Bool => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatBool).name().into()
         }
+
         InterfaceType::S8 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatS8).name().into()
         }
+
         InterfaceType::U8 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatU8).name().into()
         }
+
         InterfaceType::S16 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatS16).name().into()
         }
+
         InterfaceType::U16 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatU16).name().into()
         }
+
         InterfaceType::S32 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatS32).name().into()
         }
+
         InterfaceType::U32 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatU32).name().into()
         }
+
         InterfaceType::S64 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatS64).name().into()
         }
+
         InterfaceType::U64 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatU64).name().into()
         }
+
         InterfaceType::Float32 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32)
                 .name()
                 .into()
         }
+
         InterfaceType::Float64 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64)
                 .name()
                 .into()
         }
+
         InterfaceType::Char => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar));
             Intrinsic::Lift(LiftIntrinsic::LiftFlatChar).name().into()
         }
+
         InterfaceType::String => match string_encoding {
             wasmtime_environ::component::StringEncoding::Utf8 => {
                 intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8));
@@ -4229,6 +4233,7 @@ pub fn gen_flat_lift_fn_js_expr(
                 todo!("latin1+utf8 not supported")
             }
         },
+
         InterfaceType::Record(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord).name();
@@ -4241,13 +4246,19 @@ pub fn gen_flat_lift_fn_js_expr(
                 keys_and_lifts_expr.push_str(&format!(
                     "['{}', {}, {}],",
                     f.name,
-                    gen_flat_lift_fn_js_expr(intrinsic_mgr, component_types, &f.ty, canon_opts),
+                    gen_flat_lift_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        &f.ty,
+                        string_encoding
+                    ),
                     component_types.canonical_abi(ty).size32,
                 ));
             }
             keys_and_lifts_expr.push(']');
             format!("{lift_fn}({keys_and_lifts_expr})")
         }
+
         InterfaceType::Variant(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant).name();
@@ -4263,7 +4274,7 @@ pub fn gen_flat_lift_fn_js_expr(
                             intrinsic_mgr,
                             component_types,
                             ty,
-                            canon_opts
+                            string_encoding
                         ))
                         .unwrap_or(String::from("null")),
                     maybe_ty
@@ -4276,25 +4287,35 @@ pub fn gen_flat_lift_fn_js_expr(
             cases_and_lifts_expr.push(']');
             format!("{lift_fn}({cases_and_lifts_expr})")
         }
-        InterfaceType::List(_ty_idx) => {
+        InterfaceType::List(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name().into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
-        InterfaceType::Tuple(_ty_idx) => {
+        InterfaceType::Tuple(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple).name().into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
-        InterfaceType::Flags(_ty_idx) => {
+        InterfaceType::Flags(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags).name().into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
-        InterfaceType::Enum(_ty_idx) => {
+        InterfaceType::Enum(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name().into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
-        InterfaceType::Option(_ty_idx) => {
+        InterfaceType::Option(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatOption).name().into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOption).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
         InterfaceType::Result(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
@@ -4311,7 +4332,7 @@ pub fn gen_flat_lift_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
                         ty,
-                        canon_opts
+                        string_encoding
                     ))
                     .unwrap_or(String::from("null")),
                 result_ty
@@ -4331,7 +4352,7 @@ pub fn gen_flat_lift_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
                         ty,
-                        canon_opts
+                        string_encoding
                     ))
                     .unwrap_or(String::from("null")),
                 result_ty
@@ -4345,27 +4366,40 @@ pub fn gen_flat_lift_fn_js_expr(
             cases_and_lifts_expr.push(']');
             format!("{lift_fn}({cases_and_lifts_expr})")
         }
-        InterfaceType::Own(_ty_idx) => {
+
+        InterfaceType::Own(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name().into()
+            let table_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name();
+            format!("{f}.bind(null, {table_idx})")
         }
-        InterfaceType::Borrow(_ty_idx) => {
+
+        InterfaceType::Borrow(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name().into()
+            let table_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name();
+            format!("{f}.bind(null, {table_idx})")
         }
-        InterfaceType::Future(_ty_idx) => {
+
+        InterfaceType::Future(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture).name().into()
+            let table_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture).name();
+            format!("{f}.bind(null, {table_idx})")
         }
-        InterfaceType::Stream(_ty_idx) => {
+
+        InterfaceType::Stream(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatStream).name().into()
+            let table_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatStream).name();
+            format!("{f}.bind(null, {table_idx})")
         }
-        InterfaceType::ErrorContext(_ty_idx) => {
+
+        InterfaceType::ErrorContext(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext)
-                .name()
-                .into()
+            let table_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext).name();
+            format!("{f}.bind(null, {table_idx})")
         }
     }
 }
@@ -4375,7 +4409,7 @@ pub fn gen_flat_lower_fn_list_js_expr(
     intrinsic_mgr: &mut impl ManagesIntrinsics,
     component_types: &ComponentTypes,
     types: &[InterfaceType],
-    canon_opts: &CanonicalOptions,
+    string_encoding: &wasmtime_environ::component::StringEncoding,
 ) -> String {
     let mut lower_fns: Vec<String> = Vec::with_capacity(types.len());
     for ty in types.iter() {
@@ -4383,7 +4417,7 @@ pub fn gen_flat_lower_fn_list_js_expr(
             intrinsic_mgr,
             component_types,
             ty,
-            canon_opts,
+            string_encoding,
         ));
     }
     format!("[{}]", lower_fns.join(","))
@@ -4407,10 +4441,8 @@ pub fn gen_flat_lower_fn_js_expr(
     intrinsic_mgr: &mut impl ManagesIntrinsics,
     component_types: &ComponentTypes,
     ty: &InterfaceType,
-    canon_opts: &CanonicalOptions,
+    string_encoding: &wasmtime_environ::component::StringEncoding,
 ) -> String {
-    //let ty_abi = component_types.canonical_abi(ty);
-    let string_encoding = canon_opts.string_encoding;
     match ty {
         InterfaceType::Bool => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBool));
@@ -4418,56 +4450,68 @@ pub fn gen_flat_lower_fn_js_expr(
                 .name()
                 .into()
         }
+
         InterfaceType::S8 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS8));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatS8).name().into()
         }
+
         InterfaceType::U8 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU8));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatU8).name().into()
         }
+
         InterfaceType::S16 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS16));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatS16).name().into()
         }
+
         InterfaceType::U16 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU16));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatU16).name().into()
         }
+
         InterfaceType::S32 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS32));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatS32).name().into()
         }
+
         InterfaceType::U32 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU32));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatU32).name().into()
         }
+
         InterfaceType::S64 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS64));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatS64).name().into()
         }
+
         InterfaceType::U64 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU64));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatU64).name().into()
         }
+
         InterfaceType::Float32 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32)
                 .name()
                 .into()
         }
+
         InterfaceType::Float64 => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64)
                 .name()
                 .into()
         }
+
         InterfaceType::Char => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatChar));
             Intrinsic::Lower(LowerIntrinsic::LowerFlatChar)
                 .name()
                 .into()
         }
+
         InterfaceType::String => match string_encoding {
             wasmtime_environ::component::StringEncoding::Utf8 => {
                 intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8));
@@ -4485,6 +4529,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 todo!("latin1+utf8 not supported")
             }
         },
+
         InterfaceType::Record(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord).name();
@@ -4497,13 +4542,19 @@ pub fn gen_flat_lower_fn_js_expr(
                 keys_and_lowers_expr.push_str(&format!(
                     "{{ field: '{}', lowerFn: {}, align32: {} }},",
                     f.name,
-                    gen_flat_lower_fn_js_expr(intrinsic_mgr, component_types, &f.ty, canon_opts),
+                    gen_flat_lower_fn_js_expr(
+                        intrinsic_mgr,
+                        component_types,
+                        &f.ty,
+                        string_encoding
+                    ),
                     component_types.canonical_abi(ty).align32,
                 ));
             }
             keys_and_lowers_expr.push(']');
             format!("{lower_fn}({keys_and_lowers_expr})")
         }
+
         InterfaceType::Variant(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
@@ -4521,7 +4572,7 @@ pub fn gen_flat_lower_fn_js_expr(
                             intrinsic_mgr,
                             component_types,
                             ty,
-                            canon_opts
+                            string_encoding,
                         ))
                         .unwrap_or(String::from("null")),
                     maybe_ty
@@ -4538,36 +4589,42 @@ pub fn gen_flat_lower_fn_js_expr(
                 variant_ty.info.size.byte_size(),
             )
         }
-        InterfaceType::List(_ty_idx) => {
+
+        InterfaceType::List(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatList)
-                .name()
-                .into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
-        InterfaceType::Tuple(_ty_idx) => {
+
+        InterfaceType::Tuple(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple)
-                .name()
-                .into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
-        InterfaceType::Flags(_ty_idx) => {
+
+        InterfaceType::Flags(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags)
-                .name()
-                .into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
-        InterfaceType::Enum(_ty_idx) => {
+
+        InterfaceType::Enum(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum)
-                .name()
-                .into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
-        InterfaceType::Option(_ty_idx) => {
+
+        InterfaceType::Option(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatOption)
-                .name()
-                .into()
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOption).name();
+            format!("{f}.bind(null, {ty_idx})")
         }
+
         InterfaceType::Result(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatResult).name();
@@ -4583,7 +4640,7 @@ pub fn gen_flat_lower_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
                         ty,
-                        canon_opts
+                        string_encoding,
                     ))
                     .unwrap_or(String::from("null")),
                 result_ty
@@ -4603,7 +4660,7 @@ pub fn gen_flat_lower_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
                         ty,
-                        canon_opts
+                        string_encoding,
                     ))
                     .unwrap_or(String::from("null")),
                 result_ty
@@ -4617,31 +4674,42 @@ pub fn gen_flat_lower_fn_js_expr(
             cases_and_lowers_expr.push(']');
             format!("{lower_fn}({cases_and_lowers_expr})")
         }
-        InterfaceType::Own(_ty_idx) => {
+
+        InterfaceType::Own(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name().into()
+            let table_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name();
+            format!("{f}.bind(null, {table_idx})")
         }
-        InterfaceType::Borrow(_ty_idx) => {
+
+        InterfaceType::Borrow(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name().into()
+            let table_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name();
+            format!("{f}.bind(null, {table_idx})")
         }
-        InterfaceType::Future(_ty_idx) => {
+
+        InterfaceType::Future(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture)
-                .name()
-                .into()
+            let table_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture).name();
+
+            format!("{f}.bind(null, {table_idx})")
         }
-        InterfaceType::Stream(_ty_idx) => {
+
+        InterfaceType::Stream(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStream));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatStream)
-                .name()
-                .into()
+            let table_idx = ty_idx.as_u32();
+            let lower_flat_stream_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatStream).name();
+            format!("{lower_flat_stream_fn}.bind(null, {table_idx})")
         }
-        InterfaceType::ErrorContext(_ty_idx) => {
+
+        InterfaceType::ErrorContext(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext)
-                .name()
-                .into()
+            let table_idx = ty_idx.as_u32();
+            let lower_flat_err_ctx_fn =
+                Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext).name();
+            format!("{lower_flat_err_ctx_fn}.bind(null, {table_idx})")
         }
     }
 }

@@ -73,7 +73,7 @@ pub enum ErrCtxIntrinsic {
     ComponentLocalTable,
 
     /// Create a new error context
-    New,
+    ErrorContextNew,
 
     /// Drop an existing error context
     ///
@@ -88,7 +88,7 @@ pub enum ErrCtxIntrinsic {
     /// ```
     ///
     /// see also: [`Intrinsic::ErrorContextComponentLocalTable`]
-    Drop,
+    ErrorContextDrop,
 
     /// Transfer a remote error context to a local one, from one component to another
     ///
@@ -112,7 +112,7 @@ pub enum ErrCtxIntrinsic {
     /// function errCtxTransfer(tbl: ErrorContextComponentLocalTable, errContextHandle: u32): bool;
     /// ```
     ///
-    Transfer,
+    ErrorContextTransfer,
 
     /// Retrieve the debug message for an existing error context
     ///
@@ -138,7 +138,7 @@ pub enum ErrCtxIntrinsic {
     /// );
     /// ```
     ///
-    DebugMessage,
+    ErrorContextDebugMessage,
 
     /// Retrieve the per component sparse array lookup of error contexts
     ///
@@ -200,12 +200,12 @@ impl ErrCtxIntrinsic {
     /// Get the name for the intrinsic
     pub fn name(&self) -> &'static str {
         match self {
-            Self::ComponentGlobalTable => "errCtxGlobal",
+            Self::ComponentGlobalTable => "GlobalErrorContextTable",
             Self::ComponentLocalTable => "errCtxLocal",
-            Self::New => "errCtxNew",
-            Self::Drop => "errCtxDrop",
-            Self::Transfer => "errCtxTransfer",
-            Self::DebugMessage => "errCtxDebugMessage",
+            Self::ErrorContextNew => "errCtxNew",
+            Self::ErrorContextDrop => "errCtxDrop",
+            Self::ErrorContextTransfer => "errCtxTransfer",
+            Self::ErrorContextDebugMessage => "errCtxDebugMessage",
             Self::GetHandleRep => "errCtxGetHandleRep",
             Self::GlobalRefCountAdd => "errCtxGlobalRefCountAdd",
             Self::GetLocalTable => "errCtxGetLocalTable",
@@ -219,84 +219,123 @@ impl ErrCtxIntrinsic {
         match self {
             Self::ComponentGlobalTable => {
                 let name = Self::ComponentGlobalTable.name();
-                output.push_str(&format!("const {name} = new Map();"));
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                output.push_str(&format!(r#"
+                class {name} {{
+                     static data = null;
+                     static get() {{
+                         if ({name}.data === null) {{
+                             {name}.data = new {rep_table_class}({{ target: "global error context table" }});
+                         }}
+                         return {name}.data;
+                     }}
+                }}
+                "#));
             }
 
+            // NOTE: the top and middle level of the component local table are regular maps, with
+            // leaves being actual `RepTable`s
             Self::ComponentLocalTable => {
                 let name = Self::ComponentLocalTable.name();
-                output.push_str(&format!("const {name} = new Map();"));
+                output.push_str(&format!(r#"let {name} = new Map();"#));
             }
 
-            Self::New => {
+            Self::ErrorContextNew => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let create_local_handle_fn = Self::CreateLocalHandle.name();
                 let reserve_global_err_ctx_fn = Self::ReserveGlobalRep.name();
-                let new_fn = Self::New.name();
+                let err_ctx_new_fn = Self::ErrorContextNew.name();
                 let get_local_tbl_fn = Self::GetLocalTable.name();
                 output.push_str(&format!(
-                    "
-                    function {new_fn}(componentIdx, errCtxTblIdx, readInputStrFn, msgPtr, msgLen) {{
-                        const componentTable = {get_local_tbl_fn}(componentIdx, errCtxTblIdx);
-                        const debugMessage = readInputStrFn(msgPtr, msgLen);
+                    r#"
+                    function {err_ctx_new_fn}(args, msgPtr, msgLen) {{
+                        {debug_log_fn}('[{err_ctx_new_fn}()] args', {{ args, msgPtr, msgLen }});
+                        const {{ componentIdx, localTableIdx, readStrFn }} = args;
+
+                        const componentTable = {get_local_tbl_fn}(componentIdx, localTableIdx);
+                        const debugMessage = readStrFn(msgPtr, msgLen);
                         const rep = {reserve_global_err_ctx_fn}(debugMessage, 0);
-                        return {create_local_handle_fn}(componentTable, rep);
+
+                        const res = {create_local_handle_fn}(componentTable, rep);
+                        return res;
                     }}
-                "
+                "#
                 ));
             }
 
-            Self::DebugMessage => {
+            Self::ErrorContextDebugMessage => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let global_tbl = Self::ComponentGlobalTable.name();
-                let err_ctx_debug_msg_fn = Self::DebugMessage.name();
+                let err_ctx_debug_msg_fn = Self::ErrorContextDebugMessage.name();
                 let get_local_tbl_fn = Self::GetLocalTable.name();
-                output.push_str(&format!("
-                    function {err_ctx_debug_msg_fn}(componentIdx, errCtxTblIdx, opts, writeOutputStrFn, handle, outputStrPtr) {{
-                        const componentTable = {get_local_tbl_fn}(componentIdx, errCtxTblIdx);
-                        if (!componentTable.get(handle)) {{ throw new Error('missing error-context in component while retrieving debug msg'); }}
+                output.push_str(&format!(r#"
+                    function {err_ctx_debug_msg_fn}(args, handle, outputStrPtr) {{
+                        {debug_log_fn}('[{err_ctx_debug_msg_fn}()] args', {{ args, handle, outputStrPtr }});
+                        const {{ componentIdx, localTableIdx, writeStrFn }} = args;
+                        const globalTable = {global_tbl}.get();
+
+                        console.log("About to retrieve debug message", {{ componentIdx, localTableIdx, handle }});
+                        const componentTable = {get_local_tbl_fn}(componentIdx, localTableIdx);
+                        if (!componentTable.get(handle)) {{
+                            throw new Error(`missing error-context handle [${{handle}}] in component [${{componentIdx}}] while retrieving debug msg`);
+                        }}
+
                         const rep = componentTable.get(handle).rep;
-                        const msg = {global_tbl}.get(rep).debugMessage;
-                        writeOutputStrFn(msg, outputStrPtr)
+                        const msg = globalTable.get(rep).debugMessage;
+                        writeStrFn(msg, outputStrPtr);
                     }}
-                "));
+                "#));
             }
 
-            Self::Drop => {
+            Self::ErrorContextDrop => {
                 let global_ref_count_add_fn = Self::GlobalRefCountAdd.name();
                 let global_tbl = Self::ComponentGlobalTable.name();
-                let err_ctx_drop_fn = Self::Drop.name();
+                let err_ctx_drop_fn = Self::ErrorContextDrop.name();
                 let get_local_tbl_fn = Self::GetLocalTable.name();
-                output.push_str(&format!("
-                    function {err_ctx_drop_fn}(componentIdx, errCtxTblIdx, handle) {{
-                        const localErrCtxTable = {get_local_tbl_fn}(componentIdx, errCtxTblIdx);
-                        if (!localErrCtxTable.get(handle)) {{ throw new Error('missing error-context in component during drop'); }}
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                output.push_str(&format!(r#"
+                    function {err_ctx_drop_fn}(args, handle) {{
+                        {debug_log_fn}('[{err_ctx_drop_fn}()] args', {{ args, handle }});
+                        const {{ componentIdx, localTableIdx }} = args;
+                        const globalTable = {global_tbl}.get();
+
+                        const localErrCtxTable = {get_local_tbl_fn}(componentIdx, localTableIdx);
+                        if (!localErrCtxTable.get(handle)) {{
+                            throw new Error(`missing error-context with handle [${{handle}}] in component [${{componentIdx}}] during drop`);
+                        }}
                         const existing = localErrCtxTable.get(handle);
                         existing.refCount -= 1;
-                        if (existing.refCount === 0) {{ localErrCtxTable.delete(handle); }}
+                        if (existing.refCount === 0) {{ localErrCtxTable.remove(handle); }}
                         const globalRefCount = {global_ref_count_add_fn}(existing.rep, -1);
                         if (globalRefCount === 0) {{
                             if (existing.refCount !== 0) {{ throw new Error('local refCount exceeds global during removal'); }}
-                            {global_tbl}.delete(existing.rep);
+                            globalTable.remove(existing.rep);
                         }}
                         return true;
                     }}
-                "));
+                "#));
             }
 
-            Self::Transfer => {
+            Self::ErrorContextTransfer => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let get_local_tbl_fn = Self::GetLocalTable.name();
-                let drop_fn = Self::Drop.name();
+                let err_ctx_drop_fn = Self::ErrorContextDrop.name();
                 let get_handle_rep_fn = Self::GetHandleRep.name();
                 let global_ref_count_add_fn = Self::GlobalRefCountAdd.name();
-                let err_ctx_transfer_fn = Self::Transfer.name();
+                let err_ctx_transfer_fn = Self::ErrorContextTransfer.name();
                 let create_local_handle_fn = Self::CreateLocalHandle.name();
                 // NOTE: the handle described below is *not* the error-context rep, but rather the
                 // component-local handle for the canonical rep of a certain global error-context.
+                //
+                // handles are component instance local, reps are component (model) global
                 output.push_str(&format!("
                     function {err_ctx_transfer_fn}(fromComponentIdx, toComponentIdx, handle, fromTableIdx, toTableIdx) {{
+                        {debug_log_fn}('[{err_ctx_transfer_fn}()] args', {{ fromComponentIdx, toComponentIdx, handle, fromTableIdx, toTableIdx }});
                         const fromTbl = {get_local_tbl_fn}(fromComponentIdx, fromTableIdx);
                         const toTbl = {get_local_tbl_fn}(toComponentIdx, toTableIdx);
                         const rep = {get_handle_rep_fn}(fromTbl, handle);
                         {global_ref_count_add_fn}(rep, 1); // Add an extra global ref count to avoid premature removal during drop
-                        {drop_fn}(fromTbl, handle);
+                        {err_ctx_drop_fn}(fromTbl, handle);
                         const newHandle = {create_local_handle_fn}(toTbl, rep);
                         {global_ref_count_add_fn}(rep, -1); // Re-normalize the global count
                         return newHandle;
@@ -306,12 +345,14 @@ impl ErrCtxIntrinsic {
 
             Self::GetHandleRep => {
                 let err_ctx_get_handle_rep_fn = Self::GetHandleRep.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {err_ctx_get_handle_rep_fn}(componentTable, handle) {{
-                        if (!Array.isArray(componentTable[handle])) {{ throw new Error('missing error-context in component while retrieving rep'); }}
+                        if (!Array.isArray(componentTable[handle])) {{
+                            throw new Error(`missing error-context with handle [${{handle}}] in component while retrieving rep`);
+                        }}
                         return componentTable[handle][1];
                     }}
-                "));
+                "#));
             }
 
             Self::GlobalRefCountAdd => {
@@ -319,8 +360,12 @@ impl ErrCtxIntrinsic {
                 let err_ctx_global_ref_count_add_fn = Self::GlobalRefCountAdd.name();
                 output.push_str(&format!("
                     function {err_ctx_global_ref_count_add_fn}(rep, amount) {{
-                        if (!{global_tbl}.get(rep)) {{ throw new Error('missing global error-context for rep [' + rep + '] while incrementing refcount'); }}
-                        return {global_tbl}.get(rep).refCount += amount;
+                        const globalTable = {global_tbl}.get();
+                        const errCtx = globalTable.get(rep);
+                        if (!errCtx) {{
+                            throw new Error(`missing global error-context [${{rep}}] while incrementing refcount`);
+                        }}
+                        return errCtx.refCount += amount ?? 1;
                     }}
                 "));
             }
@@ -328,45 +373,60 @@ impl ErrCtxIntrinsic {
             Self::GetLocalTable => {
                 let get_local_tbl_fn = Self::GetLocalTable.name();
                 let local_tbl_var = Self::ComponentLocalTable.name();
-                output.push_str(&format!("
-                    function {get_local_tbl_fn}(componentIdx, tableIdx) {{
-                        if (!{local_tbl_var}.get(componentIdx)) {{ throw new Error('missing/invalid error-context sub-component idx [' + componentIdx + '] while getting local table'); }}
-                        if (!{local_tbl_var}.get(componentIdx).get(tableIdx)) {{
-                            throw new Error('missing/invalid error-context sub-component idx [' + componentIdx + '] table idx [' + tableIdx + '] while getting local table');
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                output.push_str(&format!(r#"
+                    function {get_local_tbl_fn}(componentIdx, tableIdx, opts) {{
+                        const localTables = {local_tbl_var};
+                        let tables = localTables.get(componentIdx);
+                        if (!tables) {{
+                            if (opts?.upsert) {{
+                                tables = new Map();
+                                localTables.set(componentIdx, tables);
+                            }} else {{
+                                throw new Error(`missing local error context table for component [${{componentIdx}}] while getting local table`);
+                            }}
                         }}
-                        return {local_tbl_var}.get(componentIdx).get(tableIdx);
+
+                        let errCtxTable = tables.get(tableIdx);
+                        if (!errCtxTable) {{
+                            if (opts?.upsert) {{
+                                errCtxTable = new {rep_table_class}({{ target: `component [${{componentIdx}}] error contexts` }});
+                                tables.set(tableIdx, errCtxTable);
+                            }} else {{
+                                throw new Error(`missing table [${{tableIdx}}] in tables for component [${{componentIdx}}] while getting local table`);
+                            }}
+                        }}
+
+                        return errCtxTable;
                     }}
-                "));
+                "#));
             }
 
             Self::CreateLocalHandle => {
-                // TODO: Refactor to efficient tuple array sparse array setup + non-racy nextId mechanism
+                // NOTE: `rep`s are global component model representations, `handle`s are component-local table indices
                 let create_local_handle_fn = Self::CreateLocalHandle.name();
                 let global_tbl = Self::ComponentGlobalTable.name();
-                output.push_str(&format!("
-                    function {create_local_handle_fn}(table, rep) {{
-                        if (!{global_tbl}.get(rep)) {{ throw new Error('missing/invalid global error-context w/ rep [' + rep + ']'); }}
-                        const nextHandle = table.size + 1;
-                        if (table.has(nextHandle)) {{ throw new Error('unexpected rep collision in global error-context map'); }}
-                        table.set(nextHandle, {{ rep, refCount: 1 }});
-                        {global_tbl}.get(rep).refCount += 1;
-                        return nextHandle;
+                output.push_str(&format!(r#"
+                    function {create_local_handle_fn}(componentLocalTable, rep) {{
+                        const globalTable = {global_tbl}.get();
+                        if (!globalTable.contains(rep)) {{ throw new Error(`missing global error-context [${{rep}}]`); }}
+                        const localHandle = componentLocalTable.insert({{ rep, refCount: 1 }});
+                        globalTable.get(rep).refCount += 1;
+                        return localHandle;
                     }}
-                "));
+                "#));
             }
 
             Self::ReserveGlobalRep => {
-                // TODO: Refactor to efficient tuple array sparse array setup + non-racy nextId mechanism
                 let global_tbl = Self::ComponentGlobalTable.name();
-                let reserve_global_err_ctx_fn = Self::ReserveGlobalRep.name();
-                output.push_str(&format!("
-                    function {reserve_global_err_ctx_fn}(debugMessage, refCount) {{
-                        const nextRep = {global_tbl}.size + 1;
-                        if ({global_tbl}.has(nextRep)) {{ throw new Error('unexpected rep collision in global error-context map'); }}
-                        {global_tbl}.set(nextRep, {{ refCount, debugMessage }});
-                        return nextRep;
+                let reserve_global_rep_fn = Self::ReserveGlobalRep.name();
+                output.push_str(&format!(r#"
+                    function {reserve_global_rep_fn}(debugMessage, refCount) {{
+                        const globalTable = {global_tbl}.get();
+                        const rep = globalTable.insert({{ refCount, debugMessage }});
+                        return rep;
                     }}
-                "));
+                "#));
             }
         }
     }

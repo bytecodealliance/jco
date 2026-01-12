@@ -397,6 +397,8 @@ impl AsyncTaskIntrinsic {
                     function {task_return_fn}(ctx) {{
                         const {{ componentIdx, useDirectParams, getMemoryFn, memoryIdx, callbackFnIdx, liftFns, lowerFns }} = ctx;
                         const params = [...arguments].slice(1);
+                        console.log("PARAMS", params);
+
                         const memory = getMemoryFn();
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
@@ -413,6 +415,17 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
 
+                        // If we are in a subtask, and have a fused helper function provided to use
+                        // via PrepareCall, we can use that function rather than performing lifting manually.
+                        //
+                        // See also documentation on `HostIntrinsic::PrepareCall`
+                        const subtask = task.getParentSubtask();
+                        const returnFn = subtask?.getCallMetadata()?.returnFn;
+                        if (returnFn) {{
+                            returnFn(params);
+                            return;
+                        }}
+
                         task.setReturnLowerFns(lowerFns);
 
                         const expectedMemoryIdx = task.getReturnMemoryIdx();
@@ -427,7 +440,7 @@ impl AsyncTaskIntrinsic {
                             throw new Error('memory must be present if more than max async flat lifts are performed');
                         }}
 
-                        let liftCtx = {{ memory, useDirectParams, params }};
+                        let liftCtx = {{ memory, useDirectParams, params, componentIdx }};
                         if (!useDirectParams) {{
                             liftCtx.storagePtr = params[0];
                             liftCtx.storageLen = params[1];
@@ -1294,11 +1307,16 @@ impl AsyncTaskIntrinsic {
 
                             this.#state = {subtask_class}.State.STARTED;
 
-                            // TODO: this should be called before to lift the params (if present) into place
+                            // If we have been provided a helper start function as a result of
+                            // component fusion performed by wasmtime tooling, then we can call that helper and lifts/lowers will
+                            // be performed for us.
                             //
-                            // TODO: the call to startFn needs a memory location where the params have been
-                            // written to?
-                            if (this.#callMetadata.startFn) {{ this.#callMetadata.startFn(); }}
+                            // See also documentation on `HostIntrinsic::PrepareCall`
+                            //
+                            if (this.#callMetadata.startFn) {{
+                                const {{ resultPtr }} = this.#callMetadata;
+                                const res = this.#callMetadata.startFn(resultPtr); // TODO: rest of params
+                            }}
                         }}
 
                         setPendingEventFn(fn) {{
@@ -1747,7 +1765,8 @@ impl AsyncTaskIntrinsic {
                         subtask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{lower_import_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
                             const {{ memory, resultPtr, realloc }} = subtask.getCallMetadata();
-                            resultLowerFns[0]({{ memory, realloc }}, [res], resultPtr);
+                            console.log("PRE LOWER IN ASYNC TASK", {{ res, componentIdx }});
+                            resultLowerFns[0]({{ componentIdx, memory, realloc, vals: [res], storagePtr: resultPtr }});
                         }});
 
                         const subtaskState = subtask.getStateNumber();

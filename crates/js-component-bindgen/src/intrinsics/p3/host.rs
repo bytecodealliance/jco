@@ -125,7 +125,7 @@ impl HostIntrinsic {
                         returnFn,
                         callerInstanceIdx,
                         calleeInstanceIdx,
-                        taskReturnTypeIdx,
+                        taskReturnTypeIdx, //19
                         stringEncoding,
                         resultCountOrAsync,
                     ) {{
@@ -293,9 +293,6 @@ impl HostIntrinsic {
                         if (!preparedTask) {{ throw new Error('unexpectedly missing task in task meta during prepare call'); }}
 
                         if (resultCount < 0 || resultCount > 1) {{ throw new Error('invalid/unsupported result count'); }}
-                        if (resultCount === 1) {{
-                            // TODO: signal to the task that the last param is a result pointer
-                        }}
 
                         const callbackFnName = 'callback_' + callbackIdx;
                         const callbackFn = getCallbackFn();
@@ -378,11 +375,14 @@ impl HostIntrinsic {
 
                                 // Lower the result into the callers memory
                                 // TODO should we me able to get a realloc for the caller here?
-                                lowerFns[0]({{ realloc: undefined, memory: callerMemory }}, [res], resultPtr);
-
-                                // TODO: resultPtr is out of bounds for the memory? Are we dealing with the caller???
-
-                                // TODO: We need to realloc space into the caller (we need the size of this thing...) maybe in taskReturn?
+                                console.log("PRE LOWER IN HOST", {{ res }});
+                                lowerFns[0]({{
+                                    realloc: undefined,
+                                    memory: callerMemory,
+                                    vals: [res],
+                                    storagePtr: resultPtr,
+                                    componentIdx: callerComponentIdx
+                                }});
 
                            }}
 
@@ -415,7 +415,10 @@ impl HostIntrinsic {
                         const doSubtaskResolve = () => {{
                             subtask.deliverResolve();
                             const meta = subtask.getCallMetadata();
-                            if (meta.returnFn) {{ meta.returnFn(); }}
+                            if (meta.returnFn) {{ 
+                                console.log("RETURN FN", meta.returnFn.toString());
+                                meta.returnFn();
+                            }}
                         }};
 
                         // If a single call resolved the subtask and there is no backpressure in the guest,
