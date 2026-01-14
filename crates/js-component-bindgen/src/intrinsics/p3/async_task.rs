@@ -395,17 +395,15 @@ impl AsyncTaskIntrinsic {
 
                 output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
-                        const {{ componentIdx, useDirectParams, getMemoryFn, memoryIdx, callbackFnIdx, liftFns, lowerFns }} = ctx;
+                        const {{ componentIdx, useDirectParams, getMemoryFn, memoryIdx, callbackFnIdx, liftFns }} = ctx;
                         const params = [...arguments].slice(1);
-                        console.log("PARAMS", params);
-
                         const memory = getMemoryFn();
+
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
                             callbackFnIdx,
                             memoryIdx,
                             liftFns,
-                            lowerFns,
                             params,
                         }});
 
@@ -414,19 +412,6 @@ impl AsyncTaskIntrinsic {
 
                         const task = taskMeta.task;
                         if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
-
-                        // If we are in a subtask, and have a fused helper function provided to use
-                        // via PrepareCall, we can use that function rather than performing lifting manually.
-                        //
-                        // See also documentation on `HostIntrinsic::PrepareCall`
-                        const subtask = task.getParentSubtask();
-                        const returnFn = subtask?.getCallMetadata()?.returnFn;
-                        if (returnFn) {{
-                            returnFn(params);
-                            return;
-                        }}
-
-                        task.setReturnLowerFns(lowerFns);
 
                         const expectedMemoryIdx = task.getReturnMemoryIdx();
                         if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
@@ -457,7 +442,17 @@ impl AsyncTaskIntrinsic {
                             results.push(val);
                         }}
 
+
+                        // TODO(opt): during fused guest->guest calls, we have a helper fn for lift/lower
+                        // so this task.return could be reduced to ~no-op
                         task.resolve(results);
+
+                        // If we are in a subtask, and have a fused helper function provided to use
+                        // via PrepareCall, we can use that function rather than performing lifting manually.
+                        //
+                        // See also documentation on `HostIntrinsic::PrepareCall`
+                        const returnFn = task.getParentSubtask()?.getCallMetadata()?.returnFn;
+                        if (returnFn) {{ returnFn(params); }}
                     }}
                 "#));
             }
@@ -1296,7 +1291,7 @@ impl AsyncTaskIntrinsic {
                             this.#onProgressFn = f;
                         }}
 
-                        onStart() {{
+                        onStart(args) {{
                             if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
                             {debug_log_fn}('[{subtask_class}#onStart()] args', {{
                                 componentIdx: this.#componentIdx,
@@ -1315,7 +1310,10 @@ impl AsyncTaskIntrinsic {
                             //
                             if (this.#callMetadata.startFn) {{
                                 const {{ resultPtr }} = this.#callMetadata;
-                                const res = this.#callMetadata.startFn(resultPtr); // TODO: rest of params
+                                const startFnArgs = [];
+                                if (this.#callMetadata.resultPtr) {{ startFnArgs.push(this.#callMetadata.resultPtr); }}
+                                if (args?.startFnParams) {{ startFnArgs.push(...args?.startFnParams); }}
+                                this.#callMetadata.startFn.apply(null, startFnArgs);
                             }}
                         }}
 
@@ -1357,8 +1355,6 @@ impl AsyncTaskIntrinsic {
                                 }}
                                 this.#state = {subtask_class}.State.RETURNED;
                             }}
-
-                            //state.waitables.remove(this.#waitableRep);
 
                             for (const f of this.#onResolveHandlers) {{
                                 f(subtaskValue);
@@ -1704,12 +1700,6 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
 
-                // TODO: param lift functions should NOT be used until after subtask start!
-                //
-                // TODO: lower the imports @ task start via the subtask
-                //
-                // TODO: params needs to be packaged into a ctx, and be run via the param lifting functions
-                //       similar to the code in `Self::TaskReturn` impl
                 output.push_str(&format!(
                     r#"
                     function {lower_import_fn}(args, exportFn) {{
@@ -1759,13 +1749,10 @@ impl AsyncTaskIntrinsic {
                             }});
                         }});
 
-                        // TODO: lower params into callee memory (if necessary)
-
                         // Set up a handler on subtask completion to lower results from the call into the caller's memory region.
                         subtask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{lower_import_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
                             const {{ memory, resultPtr, realloc }} = subtask.getCallMetadata();
-                            console.log("PRE LOWER IN ASYNC TASK", {{ res, componentIdx }});
                             resultLowerFns[0]({{ componentIdx, memory, realloc, vals: [res], storagePtr: resultPtr }});
                         }});
 

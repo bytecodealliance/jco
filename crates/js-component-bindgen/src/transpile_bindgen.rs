@@ -2139,18 +2139,6 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
 
-                // TODO: REMOVE, these are the wrong lowers, wrong component
-                let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
-                for result_ty in result_types {
-                    lower_fns.push(gen_flat_lower_fn_js_expr(
-                        self.bindgen,
-                        self.types,
-                        result_ty,
-                        &canon_opts.string_encoding,
-                    ));
-                }
-                let lower_fns_js = format!("[{}]", lower_fns.join(","));
-
                 let get_memory_fn_js = memory
                     .map(|idx| format!("() => memory{}", idx.as_u32()))
                     .unwrap_or_else(|| "() => null".into());
@@ -2176,7 +2164,6 @@ impl<'a> Instantiator<'a, '_> {
                              memoryIdx: {memory_idx_js},
                              callbackFnIdx: {callback_fn_idx},
                              liftFns: {lift_fns_js},
-                             lowerFns: {lower_fns_js},
                          }},
                      );",
                 );
@@ -2315,62 +2302,6 @@ impl<'a> Instantiator<'a, '_> {
             {
                 let key = name.trim_start_matches("[async-lower]");
 
-                // // // TODO: NEW BUGS :(
-
-                // // // Unfortunately, for guest->guest async calls, LowerImport is *not* called,
-                // // // and the appropriate lowering information is *not* present.
-                // // //
-                // // // In particular, lowering must occur on the *results* (if any) of a guest->guest
-                // // // async call, to place information in the memory of the caller.
-                // // //
-                // // // Here, we perform a brute force search for the component model types
-                // // // associated with the export of the async function we know is exported
-                // // //
-                // // // This code is almost certainly NOT the way to do this, and it suffers from
-                // // // being vulnerable to finding the *wrong* function. We know that there is at
-                // // // least one, but not at most one function with the given name.
-                // let mut found = 0;
-                // for idx in 0.. {
-                //     if found >= 2 {
-                //         break;
-                //     }
-                //     let inst_idx =
-                //         wasmtime_environ::component::TypeComponentInstanceIndex::from_u32(idx);
-                //     let types = &self.types[inst_idx];
-
-                //     for (export_name, export_ty) in &types.exports {
-                //         if export_name == key
-                //             && let TypeDef::ComponentFunc(func_ty_idx) = export_ty
-                //         {
-                //             let func_ty = &self.types[*func_ty_idx];
-                //             let func_ty_result_idx = func_ty.results;
-                //             let result_types = &self.types[func_ty_result_idx].types;
-
-                //             let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
-                //             for result_ty in result_types {
-                //                 lower_fns.push(gen_flat_lower_fn_js_expr(
-                //                     self.bindgen,
-                //                     self.types,
-                //                     result_ty,
-                //                     // TODO: we need to know the real runtime dependent string encoding here?
-                //                     &wasmtime_environ::component::StringEncoding::Utf8,
-                //                 ));
-                //             }
-                //             let _lower_fns_js = format!("[{}]", lower_fns.join(","));
-
-                //             // TODO: Check for lower import initializer (this indicates not a guest->guest call?)
-
-                //             // // TODO: save lower functions
-                //             // format!(
-                //             //     "{global_component_type_lowers_class}.register({component_idx}, {result_ty}, {func_ty_result_idx})"
-                //             // );
-
-                //             found += 1;
-                //             break;
-                //         }
-                //     }
-                // }
-
                 let instance = instance.as_u32();
                 let mut exec_fn = self.augmented_import_def(&arg);
                 let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
@@ -2403,13 +2334,6 @@ impl<'a> Instantiator<'a, '_> {
                 self.augmented_import_def(&arg)
             };
 
-            // TODO: Look for [async-lower] or [prepare-call] or something and the function??
-            //
-            // - needs to be an async-lower
-            //   - Will be a function index... (rt idx is 4, off by one? 5 is the caller that we get back to)
-            // -
-
-            // let def = self.augmented_import_def(&arg);
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
             assert!(

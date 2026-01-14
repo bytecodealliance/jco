@@ -686,15 +686,10 @@ impl LowerIntrinsic {
                     function _lowerFlatErrorContext(componentTableIdx, ctx) {{
                         {debug_log_fn}('[_lowerFlatErrorContext()] args', {{ componentTableIdx, ctx }});
                         const {{ memory, realloc, vals, storagePtr, storageLen, componentIdx }} = ctx;
-
                         const errCtxRep = vals[0];
-                        //console.log("BEFORE CALL", {{ errCtxRep, componentIdx }});
                         const componentTable = {get_err_ctx_local_table_fn}(componentIdx, componentTableIdx, {{upsert: true}});
                         const handle = {create_local_handle_fn}(componentTable, errCtxRep);
                         {err_ctx_ref_count_add_fn}(errCtxRep, -1);
-
-                        console.log("POST LOWER", {{ handle, componentTable, errCtxRep, componentTableIdx }});
-
                         return {lower_u32_fn}({{ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx }});
                     }}
                 "#));
