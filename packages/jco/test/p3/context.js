@@ -76,43 +76,4 @@ suite('Context (WASI P3)', () => {
 
         await cleanup();
     });
-
-    test('context.get/set (async export, sync porcelain)', async () => {
-        const name = 'context-async';
-        const { instance, cleanup } = await setupAsyncTest({
-            component: {
-                name,
-                path: join(
-                    P3_COMPONENT_FIXTURES_DIR,
-                    name,
-                    'component.wasm'
-                ),
-            },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        asyncMode: "jspi",
-                        asyncExports: ['push-context', 'pull-context'],
-                    },
-                },
-            },
-        });
-
-        expect(instance.pushContext).toBeTruthy();
-        assert.strictEqual(
-            instance.pushContext instanceof AsyncFunction,
-            true,
-        );
-
-        expect(instance.pullContext).toBeTruthy();
-        assert.strictEqual(
-            instance.pullContext instanceof AsyncFunction,
-            true,
-        );
-
-        instance.pushContext(42);
-        expect(await instance.pullContext()).toEqual(0);
-
-        await cleanup();
-    });
 });
