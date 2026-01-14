@@ -1388,7 +1388,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 // we expect that `Trampoline::LowerImport` and relevant intrinsics were called before
                 // this, and a subtask has been set up.
                 //
-                // TODO: we use getLatestSubtask(), but could ordering change? Not under threads (assuming same thread)?
                 uwriteln!(
                     self.src,
                     r#"
