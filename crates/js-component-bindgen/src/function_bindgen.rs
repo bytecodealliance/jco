@@ -335,9 +335,9 @@ impl FunctionBindgen<'_> {
             .as_ref()
             .map(|v| format!("callback_{}", v.as_u32()))
             .unwrap_or_else(|| "null".into());
-        let prefix = match instr {
-            Instruction::CallWasm { .. } => "_wasm_call_",
-            Instruction::CallInterface { .. } => "_interface_call_",
+        let (calling_wasm_export, prefix) = match instr {
+            Instruction::CallWasm { .. } => (true, "_wasm_call_"),
+            Instruction::CallInterface { .. } => (false, "_interface_call_"),
             _ => unreachable!(
                 "unrecognized instruction triggering start of current task: [{instr:?}]"
             ),
@@ -357,6 +357,7 @@ impl FunctionBindgen<'_> {
                   getCallbackFn: () => {callback_fn_js},
                   callbackFnName: '{callback_fn_js}',
                   errHandling: '{err_handling}',
+                  callingWasmExport: {calling_wasm_export},
               }});
             "#,
         );
@@ -1403,6 +1404,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             getCallbackFn: () => {callback_fn_js},
                             callbackFnName: '{callback_fn_js}',
                             errHandling: '{err_handling}',
+                            callingWasmExport: false,
                         }});
                         task = results[0];
                     }};

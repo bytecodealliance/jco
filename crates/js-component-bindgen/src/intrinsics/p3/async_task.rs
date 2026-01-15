@@ -563,12 +563,20 @@ impl AsyncTaskIntrinsic {
                             errHandling,
                             getCalleeParamsFn,
                             resultPtr,
+                            callingWasmExport,
                         }} = args;
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while starting task');
                         }}
-                        const tasks = {global_task_map}.get(componentIdx);
+                        const taskMetas = {global_task_map}.get(componentIdx);
                         const callbackFn = getCallbackFn ? getCallbackFn() : null;
+
+                        if (callingWasmExport && taskMetas) {{
+                            const runningTasks = taskMetas.filter(t => t.task.isRunning());
+                            if (runningTasks.length > 0) {{
+                                throw new Error("an async task is already running (did you forget to await a previous call?)");
+                            }}
+                        }}
 
                         const newTask = new {task_class}({{
                             componentIdx,
@@ -588,11 +596,10 @@ impl AsyncTaskIntrinsic {
                         {task_id_globals}.push(newTaskID);
                         {component_idx_globals}.push(componentIdx);
 
-                        if (!tasks) {{
+                        if (!taskMetas) {{
                             {global_task_map}.set(componentIdx, [newTaskMeta]);
-                            return [newTask, newTaskID];
                         }} else {{
-                            tasks.push(newTaskMeta);
+                            taskMetas.push(newTaskMeta);
                         }}
 
                         return [newTask, newTaskID];
@@ -777,7 +784,7 @@ impl AsyncTaskIntrinsic {
                            if (opts.errHandling) {{ this.#errHandling = opts.errHandling; }}
                         }}
 
-                        taskState() {{ return this.#state.slice(); }}
+                        taskState() {{ return this.#state; }}
                         id() {{ return this.#id; }}
                         componentIdx() {{ return this.#componentIdx; }}
                         isAsync() {{ return this.#isAsync; }}
@@ -890,6 +897,10 @@ impl AsyncTaskIntrinsic {
                             if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
 
                             return true;
+                        }}
+
+                        isRunning() {{
+                            return this.#state !== {task_class}.State.RESOLVED;
                         }}
 
                         async waitUntil(opts) {{
@@ -1093,7 +1104,7 @@ impl AsyncTaskIntrinsic {
                                 taskID: this.#id,
                             }});
                             if (this.#state === {task_class}.State.RESOLVED) {{
-                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved`);
+                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved (did you forget to wait for an import?)`);
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
                             switch (results.length) {{
