@@ -348,10 +348,16 @@ impl HostIntrinsic {
 
                             // If a helper function was provided we are likely in a fused guest->guest call,
                             // and the result will be delivered (lift/lowered) via helper function
-                            if (subtaskCallMeta.returnFn) {{ return; }}
+                            if (subtaskCallMeta.returnFn) {{
+                                {debug_log_fn}('[{async_start_call_fn}()] return function present while ahndling subtask result, returning early (skipping lower)');
+                                    return;
+                            }}
 
                             // If there is no where to lower the results, exit early
-                            if (!resultPtr) {{ return; }}
+                            if (!subtaskCallMeta.resultPtr) {{
+                                {debug_log_fn}('[{async_start_call_fn}()] no result ptr during subtask result handling, returning early (skipping lower)');
+                                return;
+                            }}
 
                             let callerMemory;
                             if (callerMemoryIdx) {{
@@ -386,6 +392,7 @@ impl HostIntrinsic {
                         }});
 
                         subtask.onStart({{ startFnParams: params  }});
+
                         preparedTask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{async_start_call_fn}()] signaling subtask completion due to task completion', {{
                                 childTaskID: preparedTask.id(),
@@ -422,6 +429,18 @@ impl HostIntrinsic {
                                 subtaskID: subtask.id(),
                                 callerComponentIdx: subtask.componentIdx(),
                             }});
+
+                            // If a fused component return function was specified for the subtask,
+                            // we've likely already called it during resolution of the task.
+                            //
+                            // In this case, we do not want to actually return 2 AKA "RETURNED",
+                            // but the normal started task state, because the fused component expects to get
+                            // the waitable + the original subtask state (0 AKA "STARTING")
+                            //
+                            if (subtask.getCallMetadata().returnFn) {{
+                                return Number(subtask.waitableRep()) << 4 | subtaskState;
+                            }}
+
                             doSubtaskResolve();
                             return {subtask_class}.State.RETURNED;
                         }}

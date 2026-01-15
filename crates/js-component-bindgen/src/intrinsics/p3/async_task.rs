@@ -442,7 +442,6 @@ impl AsyncTaskIntrinsic {
                             results.push(val);
                         }}
 
-
                         // TODO(opt): during fused guest->guest calls, we have a helper fn for lift/lower
                         // so this task.return could be reduced to ~no-op
                         task.resolve(results);
@@ -452,7 +451,11 @@ impl AsyncTaskIntrinsic {
                         //
                         // See also documentation on `HostIntrinsic::PrepareCall`
                         const returnFn = task.getParentSubtask()?.getCallMetadata()?.returnFn;
-                        if (returnFn) {{ returnFn(params); }}
+                        if (returnFn) {{
+                            const returnFnArgs = [...params];
+                            returnFn.apply(null, returnFnArgs);
+                            return;
+                        }}
                     }}
                 "#));
             }
@@ -1089,7 +1092,12 @@ impl AsyncTaskIntrinsic {
 
                         onResolve(taskValue) {{
                             for (const f of this.#onResolveHandlers) {{
-                                f(taskValue);
+                                try {{
+                                    f(taskValue);
+                                }} catch (err) {{
+                                    console.error("error during task resolve handler", err);
+                                    throw err;
+                                }}
                             }}
                         }}
 
@@ -1344,6 +1352,7 @@ impl AsyncTaskIntrinsic {
                                 parentTaskID: this.parentTaskID(),
                                 subtaskValue,
                             }});
+
                             if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
                             this.#onProgressFn();
 
@@ -1368,7 +1377,12 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             for (const f of this.#onResolveHandlers) {{
-                                f(subtaskValue);
+                                try {{
+                                    f(subtaskValue);
+                                }} catch (err) {{
+                                    console.error("error during subtask resolve handler", err);
+                                    throw err;
+                                }}
                             }}
 
                         }}
