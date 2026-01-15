@@ -268,6 +268,7 @@ pub fn transpile_bindgen(
         exports_resource_types: Default::default(),
         resources_initialized: BTreeMap::new(),
         resource_tables_initialized: BTreeMap::new(),
+        init_host_async_import_lookup: BTreeMap::new(),
     };
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
@@ -581,6 +582,15 @@ struct Instantiator<'a, 'b> {
     async_exports: HashSet<String>,
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
+
+    /// Temporary storage for async host lowered functions that must be wired during
+    /// component intializer processsing
+    ///
+    /// This lookup depends on initializer processing order -- it expects that
+    /// module instantiations come first, then are quickly followed by relevant import lowerings
+    /// such that the lookup is filled and emptied to bridge a module and the lowered imports it
+    /// uses.
+    init_host_async_import_lookup: BTreeMap<String, StaticModuleIndex>,
 }
 
 impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
@@ -1728,6 +1738,9 @@ impl<'a> Instantiator<'a, '_> {
                 let is_async = canon_opts.async_;
                 let cancellable = canon_opts.cancellable;
 
+                // TODO: is there *anything* that connects this lower import trampoline
+                // and the earlier module instantiation??
+
                 let func_ty = self.types.index(*lower_ty);
 
                 // Build list of lift functions for the params of the lowered import
@@ -1790,8 +1803,8 @@ impl<'a> Instantiator<'a, '_> {
                     self.src.js,
                     r#"
                     {global_component_lowers_class}.define({{
-                        componentIdx: {component_idx},
-                        importName: lowered_import_{fn_idx}_metadata.importName,
+                        componentIdx: lowered_import_{fn_idx}_metadata.moduleIdx,
+                        qualifiedImportFn: lowered_import_{fn_idx}_metadata.qualifiedImportFn,
                         fn: {lower_import_fn}.bind(
                             null,
                             {{
@@ -2230,16 +2243,33 @@ impl<'a> Instantiator<'a, '_> {
 
             GlobalInitializer::LowerImport { index, import } => {
                 let fn_idx = index.as_u32();
-                let (import_index, _path) = &self.component.imports[*import];
-                let (import_name, _type_def) = &self.component.import_types[*import_index];
+                let (import_index, path) = &self.component.imports[*import];
+                let (import_iface, _type_def) = &self.component.import_types[*import_index];
+
+                let [fn_name] = &path[..] else {
+                    todo!(
+                        "multi-part import paths not supported -- only single function names are allowed"
+                    );
+                };
+                let qualified_import_fn =
+                    format!("{import_iface}#{}", fn_name.trim_start_matches("[async]"));
+
+                let maybe_module_idx = self
+                    .init_host_async_import_lookup
+                    .remove(&qualified_import_fn)
+                    .map(|x| x.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
+
                 uwriteln!(
                     self.src.js,
                     r#"
                     let lowered_import_{fn_idx}_metadata = {{
-                        importName: '{import_name}',
+                        qualifiedImportFn: '{qualified_import_fn}',
+                        moduleIdx: {maybe_module_idx},
                     }};
                     "#,
                 );
+
                 self.lower_import(*index, *import);
             }
 
@@ -2279,13 +2309,13 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn instantiate_static_module(&mut self, idx: StaticModuleIndex, args: &[CoreDef]) {
+    fn instantiate_static_module(&mut self, module_idx: StaticModuleIndex, args: &[CoreDef]) {
         // Build a JS "import object" which represents `args`. The `args` is a
         // flat representation which needs to be zip'd with the list of names to
         // correspond to the JS wasm embedding API. This is one of the major
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
-        for (module, name, arg) in self.modules[idx].imports(args) {
+        for (module, name, arg) in self.modules[module_idx].imports(args) {
             // By default, async-lower gets patched to the relevant export function directly,
             // but it *should* be patched to the lower import intrinsic, as subtask rep/state
             // needs to be returned to the calling component.
@@ -2297,12 +2327,11 @@ impl<'a> Instantiator<'a, '_> {
             let def = if name.starts_with("[async-lower]")
                 && let core::AugmentedImport::CoreDef(CoreDef::Export(CoreExport {
                     item: ExportItem::Index(EntityIndex::Function(_)),
-                    instance,
+                    ..
                 })) = arg
             {
-                let key = name.trim_start_matches("[async-lower]");
+                let key = name.trim_start_matches("[async-lower][async]");
 
-                let instance = instance.as_u32();
                 let mut exec_fn = self.augmented_import_def(&arg);
                 let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
 
@@ -2313,12 +2342,23 @@ impl<'a> Instantiator<'a, '_> {
                 // and we do not want to call that as a promise, because it will return an async return code
                 // and follow the normal p3 async component call pattern.
                 //
-                if self
-                    .async_imports
-                    .contains(key.trim_start_matches("[async]"))
-                {
+                let full_async_import_key = format!("{module}#{key}");
+                if self.async_imports.contains(&full_async_import_key) {
+                    // Save the import for later to match it with it's lower import initializer
+                    self.init_host_async_import_lookup
+                        .insert(full_async_import_key.clone(), module_idx);
                     exec_fn = format!("WebAssembly.promising({exec_fn})");
                 }
+
+                // TODO: save generated lookup information for later
+                //
+                // We need a lookup of the async import key to the runtime instance index (static module also fine??)
+                // Decide whether we need the instance on the export or the static module (the import)
+                //
+                // (probably do the import? we're about to do the corresponding lowers afterwards)?
+                //
+                // In the lower import initializers, when looking at the metadata we'll add
+                // the static module index that we need to look up the right function (i.e. what we'll use for define)
 
                 // NOTE: Regardless of whether we're using a host import or not, we are likely *not*
                 // actually wrapping a host javascript function below -- rather, the host import is
@@ -2328,7 +2368,10 @@ impl<'a> Instantiator<'a, '_> {
                 // (see $wit-component.shims, $wit-component.fixups modules in generated transpile output)
                 // then it is called from the component that is actually performing the call..
                 //
-                format!("{global_lowers_class}.lookup({instance}, '{key}')?.bind(null, {exec_fn})")
+                format!(
+                    "{global_lowers_class}.lookup({}, '{full_async_import_key}')?.bind(null, {exec_fn})",
+                    module_idx.as_u32(),
+                )
             } else {
                 // All other imports can be connected directly to the relevant export
                 self.augmented_import_def(&arg)
@@ -2359,7 +2402,7 @@ impl<'a> Instantiator<'a, '_> {
             imports.push('}');
         }
 
-        let i = self.instances.push(idx);
+        let i = self.instances.push(module_idx);
         let iu32 = i.as_u32();
         let instantiate = self.bindgen.intrinsic(Intrinsic::InstantiateCore);
         uwriteln!(self.src.js, "let exports{iu32};");
@@ -2369,7 +2412,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js_init,
                     "({{ exports: exports{iu32} }} = yield {instantiate}(yield module{}{imports}));",
-                    idx.as_u32(),
+                    module_idx.as_u32(),
                 )
             }
 
@@ -2377,7 +2420,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js_init,
                     "({{ exports: exports{iu32} }} = {instantiate}(module{}{imports}));",
-                    idx.as_u32(),
+                    module_idx.as_u32(),
                 );
             }
         }
@@ -2611,8 +2654,19 @@ impl<'a> Instantiator<'a, '_> {
             .len();
 
         // Generate the JS trampoline function
+        let trampoline_idx = trampoline.as_u32();
         match self.bindgen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
+                // TODO: we need to *not* do this if it's a host-provided import,
+                // because we'll be suspending a non-Wasm frame and trigger the
+                // "trying to suspend JS frames" error
+
+                // NOTE: we cannot "just" do everything with a non-async function
+                // because task.enter() is actually async
+
+                // What we can do is signal to some external runner via a regular function
+                // that some work needs to be done?
+
                 // Write out function declaration start
                 if requires_async_porcelain | is_async {
                     // If an import is either an async host import (i.e. JSPI powered)
@@ -2620,12 +2674,11 @@ impl<'a> Instantiator<'a, '_> {
                     // use WebAssembly.Suspending to allow suspending this component
                     uwrite!(
                         self.src.js,
-                        "\nconst trampoline{} = new WebAssembly.Suspending(async function",
-                        trampoline.as_u32()
+                        "\nconst trampoline{trampoline_idx} = new WebAssembly.Suspending(async function",
                     );
                 } else {
                     // If the import is not async in any way, use a regular trampoline
-                    uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
+                    uwrite!(self.src.js, "\nfunction trampoline{trampoline_idx}");
                 }
 
                 // Write out the function (brace + body + brace)
@@ -2657,7 +2710,7 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Some(BindingsMode::Optimized) | Some(BindingsMode::DirectOptimized) => {
-                uwriteln!(self.src.js, "let trampoline{};", trampoline.as_u32());
+                uwriteln!(self.src.js, "let trampoline{trampoline_idx};");
             }
         };
 

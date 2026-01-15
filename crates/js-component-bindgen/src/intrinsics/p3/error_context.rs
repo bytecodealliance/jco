@@ -267,7 +267,6 @@ impl ErrCtxIntrinsic {
                         const {{ componentIdx, localTableIdx, writeStrFn }} = args;
                         const globalTable = {global_tbl}.get();
 
-                        console.log("About to retrieve debug message", {{ componentIdx, localTableIdx, handle }});
                         const componentTable = {get_local_tbl_fn}(componentIdx, localTableIdx);
                         if (!componentTable.get(handle)) {{
                             throw new Error(`missing error-context handle [${{handle}}] in component [${{componentIdx}}] while retrieving debug msg`);

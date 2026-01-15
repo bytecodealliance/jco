@@ -1310,6 +1310,10 @@ impl AsyncTaskIntrinsic {
                             this.#onProgressFn = f;
                         }}
 
+                        isNotStarted() {{
+                            return this.#state == {subtask_class}.State.STARTING;
+                        }}
+
                         onStart(args) {{
                             if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
                             {debug_log_fn}('[{subtask_class}#onStart()] args', {{
@@ -1318,6 +1322,8 @@ impl AsyncTaskIntrinsic {
                                 parentTaskID: this.parentTaskID(),
                             }});
                             this.#onProgressFn();
+
+                            let result;
 
                             this.#state = {subtask_class}.State.STARTED;
 
@@ -1331,9 +1337,11 @@ impl AsyncTaskIntrinsic {
                                 const {{ resultPtr }} = this.#callMetadata;
                                 const startFnArgs = [];
                                 if (this.#callMetadata.resultPtr) {{ startFnArgs.push(this.#callMetadata.resultPtr); }}
-                                if (args?.startFnParams) {{ startFnArgs.push(...args?.startFnParams); }}
-                                this.#callMetadata.startFn.apply(null, startFnArgs);
+                                if (args?.startFnParams) {{ startFnArgs.push(...args.startFnParams); }}
+                                result = this.#callMetadata.startFn.apply(null, startFnArgs);
                             }}
+
+                            return result;
                         }}
 
                         setPendingEventFn(fn) {{
@@ -1741,6 +1749,7 @@ impl AsyncTaskIntrinsic {
                             getMemoryFn,
                             getReallocFn,
                         }} = args;
+                        console.log("LOWERING IMPORT!", {{ args, exportFn }});
 
                         const parentTaskMeta = {current_task_get_fn}(componentIdx);
                         const parentTask = parentTaskMeta?.task;
@@ -1792,8 +1801,8 @@ impl AsyncTaskIntrinsic {
                         // TODO: we should trigger via subtask state changing, rather than a static wait?
                         setTimeout(async () => {{
                             try {{
-                                {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ exportFn }});
-                                exportFn();
+                                {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ exportFn, params }});
+                                exportFn.apply(null, params);
 
                                 const task = subtask.getChildTask();
                                 task.registerOnResolveHandler((res) => {{
@@ -1809,7 +1818,7 @@ impl AsyncTaskIntrinsic {
                                 }});
                             }} catch (err) {{
                                 console.error("post-lower import fn error:", err);
-                                throw e;
+                                throw err;
                             }}
                         }}, 100);
 
