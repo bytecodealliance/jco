@@ -27,7 +27,7 @@ suite('error-context scenario', () => {
         }
     });
 
-    test.only('caller & callee', async () => {
+    test('caller & callee', async () => {
         const callerPath = join(
             COMPONENT_FIXTURES_DIR,
             "p3/error-context/async-error-context-caller.wasm"

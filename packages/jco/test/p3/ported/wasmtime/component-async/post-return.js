@@ -63,7 +63,7 @@ suite('post-return async sleep scenario', () => {
             if (ms > BigInt(Number.MAX_SAFE_INTEGER) || ms < BigInt(Number.MIN_SAFE_INTEGER)) {
                 throw new Error('wait time value cannot be represented safely as a Number');
             }
-            await new Promise((resolve) => setTimeout(resolve, Number(ms)));
+            return await new Promise((resolve) => setTimeout(resolve, Number(ms)));
         });
 
         let cleanup;
@@ -88,7 +88,7 @@ suite('post-return async sleep scenario', () => {
                     extraArgs: {
                         minify: false,
                         asyncImports: [
-                            // Provided by the host
+                            // Host-provided async imports must be marked as such
                             'local:local/sleep#sleep-millis',
                         ],
                         asyncExports: [

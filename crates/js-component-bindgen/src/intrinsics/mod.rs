@@ -959,24 +959,24 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         constructor() {{ throw new Error('{global_component_lowers_class} should not be constructed'); }}
 
                         static define(args) {{
-                            const {{ componentIdx, importName, fn }} = args;
+                            const {{ componentIdx, qualifiedImportFn, fn }} = args;
                             let inner = {global_component_lowers_class}.map.get(componentIdx);
                             if (!inner) {{
                                 inner = new Map();
                                 {global_component_lowers_class}.map.set(componentIdx, inner);
                             }}
 
-                            inner.set(importName, fn);
+                            inner.set(qualifiedImportFn, fn);
                         }}
 
-                        static lookup(componentIdx, importName) {{
+                        static lookup(componentIdx, qualifiedImportFn) {{
                             let inner = {global_component_lowers_class}.map.get(componentIdx);
                             if (!inner) {{
                                 inner = new Map();
                                 {global_component_lowers_class}.map.set(componentIdx, inner);
                             }}
 
-                            const found = inner.get(importName);
+                            const found = inner.get(qualifiedImportFn);
                             if (found) {{ return found; }}
 
                             return (...args) => {{

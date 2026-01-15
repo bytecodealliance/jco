@@ -109,6 +109,8 @@ impl HostIntrinsic {
             // NOTE: it's possible for PrepareCall to be combined with AsyncStartCall
             // in a future component model release.
             //
+            // TODO: document startFn & returnFn for fused components (note callee in AsyncPrepareCall too)
+            //
             Self::PrepareCall => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let prepare_call_fn = Self::PrepareCall.name();
@@ -175,23 +177,18 @@ impl HostIntrinsic {
                         }}
 
                         // TODO: support indirect params based on storagePtr/args
-                        const directParams = true;
                         let getCalleeParamsFn;
                         let resultPtr = null;
-                        if (directParams) {{
-                            if (hasResultPointer) {{
-                                const directParamsArr = argArray.slice(10);
-                                getCalleeParamsFn = () => directParamsArr;
-                                resultPtr = argArray[9];
-                            }} else {{
-                                const directParamsArr = argArray.slice(9);
-                                getCalleeParamsFn = () => directParamsArr;
-                            }}
-                        }} else {{
+                        if (hasResultPointer) {{
                             if (memoryIdx === null) {{
                                 throw new Error('memory idx not supplied to prepare depsite indirect params being used');
                             }}
-                            throw new Error(`indirect parameter loading not yet supported`);
+                            const directParamsArr = argArray.slice(10);
+                            getCalleeParamsFn = () => directParamsArr;
+                            resultPtr = argArray[9];
+                        }} else {{
+                            const directParamsArr = argArray.slice(9);
+                            getCalleeParamsFn = () => directParamsArr;
                         }}
 
                         let encoding;
@@ -228,14 +225,11 @@ impl HostIntrinsic {
                               resultPtr,
                               returnFn,
                               startFn,
-
-                              // TODO: Add lower fn metas (entitySize + lower fn) for the result!
-
                            }}
                         }});
 
                         newTask.setParentSubtask(subtask);
-                        // TODO: This isn't really a return memory idx for the caller, it's for checking
+                        // NOTE: This isn't really a return memory idx for the caller, it's for checking
                         // against the task.return (which will be called from the callee)
                         newTask.setReturnMemoryIdx(memoryIdx);
                     }}
@@ -391,7 +385,19 @@ impl HostIntrinsic {
 
                         }});
 
-                        subtask.onStart({{ startFnParams: params  }});
+                        // Build call params
+                        const subtaskCallMeta = subtask.getCallMetadata();
+                        let startFnParams = [];
+                        let calleeParams = [];
+                        if (subtaskCallMeta.startFn && subtaskCallMeta.resultPtr) {{
+                            // If we're using a fused component start fn  and a result pointer is present,
+                            // then we need to pass the result pointer and other params to the start fn
+                            startFnParams.push(subtaskCallMeta.resultPtr, ...params);
+                        }} else {{
+                            // if not we need to pass params to the callee instead
+                            startFnParams.push(...params);
+                            calleeParams.push(...params);
+                        }}
 
                         preparedTask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{async_start_call_fn}()] signaling subtask completion due to task completion', {{
@@ -402,13 +408,26 @@ impl HostIntrinsic {
                             subtask.onResolve(res);
                         }});
 
+                        subtask.onStart({{ startFnParams }});
+                        // const startResult = subtask.onStart({{ startFnParams }});
+                        // if (startResult) {{
+                        //     {debug_log_fn}("[{async_start_call_fn}()] detected result to subtask start fn, early return", {{
+                        //         task: preparedTask.id(),
+                        //         subtaskID: subtask.id(),
+                        //         calleeFnName: callee.name,
+                        //     }});
+                        //     preparedTask.resolve([startResult]);
+                        //     return Number(subtask.waitableRep()) << 4 | subtaskState;
+                        //     //return {subtask_class}.State.RETURNED;
+                        // }}
+
                         {debug_log_fn}("[{async_start_call_fn}()] initial call", {{
                             task: preparedTask.id(),
                             subtaskID: subtask.id(),
                             calleeFnName: callee.name,
                         }});
 
-                        let callbackResult = callee();
+                        const callbackResult = callee.apply(null, calleeParams);
 
                         {debug_log_fn}("[{async_start_call_fn}()] after initial call", {{
                             task: preparedTask.id(),
