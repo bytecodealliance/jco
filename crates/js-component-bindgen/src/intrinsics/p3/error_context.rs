@@ -1,6 +1,8 @@
 //! Intrinsics that represent helpers that implement error contexts
 
-use crate::{intrinsics::Intrinsic, source::Source};
+use crate::intrinsics::Intrinsic;
+use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
+use crate::source::Source;
 
 /// This enum contains intrinsics that implement error contexts
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -147,13 +149,6 @@ pub enum ErrCtxIntrinsic {
     /// This is a utility function that is used internally but does not translate to an actual component model intrinsic.
     GetLocalTable,
 
-    /// Retrieve the component-global rep for a given component-local error-context handle
-    ///
-    /// See [`Intrinsics::ErrorcontextComponentLocalTable`] for the shape of the per-component error-context table.
-    ///
-    /// This is a utility function that is used internally but does not translate to an actual component model intrinsic.
-    GetHandleRep,
-
     /// Increment the ref count for a component-global error-context
     ///
     /// See [`Intrinsics::ErrorcontextComponentLocalTable`] for the shape of the global error-context table.
@@ -189,7 +184,6 @@ impl ErrCtxIntrinsic {
             "errCtxDrop",
             "errCtxTransfer",
             "errCtxDebugMessage",
-            "errCtxGetHandleRep",
             "errCtxGlobalRefCountAdd",
             "errCtxGetLocalTable",
             "errCtxCreateLocalHandle",
@@ -206,7 +200,6 @@ impl ErrCtxIntrinsic {
             Self::ErrorContextDrop => "errCtxDrop",
             Self::ErrorContextTransfer => "errCtxTransfer",
             Self::ErrorContextDebugMessage => "errCtxDebugMessage",
-            Self::GetHandleRep => "errCtxGetHandleRep",
             Self::GlobalRefCountAdd => "errCtxGlobalRefCountAdd",
             Self::GetLocalTable => "errCtxGetLocalTable",
             Self::CreateLocalHandle => "errCtxCreateLocalHandle",
@@ -319,38 +312,38 @@ impl ErrCtxIntrinsic {
             Self::ErrorContextTransfer => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let get_local_tbl_fn = Self::GetLocalTable.name();
-                let err_ctx_drop_fn = Self::ErrorContextDrop.name();
-                let get_handle_rep_fn = Self::GetHandleRep.name();
-                let global_ref_count_add_fn = Self::GlobalRefCountAdd.name();
                 let err_ctx_transfer_fn = Self::ErrorContextTransfer.name();
                 let create_local_handle_fn = Self::CreateLocalHandle.name();
+                let current_component_idx_globals =
+                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
+
                 // NOTE: the handle described below is *not* the error-context rep, but rather the
                 // component-local handle for the canonical rep of a certain global error-context.
                 //
                 // handles are component instance local, reps are component (model) global
-                output.push_str(&format!("
-                    function {err_ctx_transfer_fn}(fromComponentIdx, toComponentIdx, handle, fromTableIdx, toTableIdx) {{
-                        {debug_log_fn}('[{err_ctx_transfer_fn}()] args', {{ fromComponentIdx, toComponentIdx, handle, fromTableIdx, toTableIdx }});
-                        const fromTbl = {get_local_tbl_fn}(fromComponentIdx, fromTableIdx);
-                        const toTbl = {get_local_tbl_fn}(toComponentIdx, toTableIdx);
-                        const rep = {get_handle_rep_fn}(fromTbl, handle);
-                        {global_ref_count_add_fn}(rep, 1); // Add an extra global ref count to avoid premature removal during drop
-                        {err_ctx_drop_fn}(fromTbl, handle);
-                        const newHandle = {create_local_handle_fn}(toTbl, rep);
-                        {global_ref_count_add_fn}(rep, -1); // Re-normalize the global count
-                        return newHandle;
-                    }}
-                "));
-            }
-
-            Self::GetHandleRep => {
-                let err_ctx_get_handle_rep_fn = Self::GetHandleRep.name();
+                //
+                // When an error transfer context is called, we expect to be in a task that performed
+                // the transfer, and we get the result of where the transfer should go.
                 output.push_str(&format!(r#"
-                    function {err_ctx_get_handle_rep_fn}(componentTable, handle) {{
-                        if (!Array.isArray(componentTable[handle])) {{
-                            throw new Error(`missing error-context with handle [${{handle}}] in component while retrieving rep`);
+                    function {err_ctx_transfer_fn}(handle, srcTable, destTable) {{
+                        {debug_log_fn}('[{err_ctx_transfer_fn}()] args', {{ handle, srcTable, destTable }});
+
+                        const componentIdx = {current_component_idx_globals}.at(-1);
+                        if (!componentIdx) {{
+                            throw new Error("missing current component idx");
                         }}
-                        return componentTable[handle][1];
+
+                        const fromTbl = {get_local_tbl_fn}(componentIdx, srcTable);
+                        const toTbl = {get_local_tbl_fn}(componentIdx, destTable, {{ upsert: true }});
+
+                        const errCtx = fromTbl.get(handle);
+                        if (!errCtx) {{ throw new Error(`missing error context with handle [${{handle}}]`); }}
+                        const rep = errCtx.rep;
+                        if (!rep) {{ throw new Error(`unexpectedly missing rep from error context object`); }}
+
+                        const newHandle = {create_local_handle_fn}(toTbl, rep);
+
+                        return newHandle;
                     }}
                 "#));
             }
@@ -420,13 +413,15 @@ impl ErrCtxIntrinsic {
             Self::ReserveGlobalRep => {
                 let global_tbl = Self::ComponentGlobalTable.name();
                 let reserve_global_rep_fn = Self::ReserveGlobalRep.name();
-                output.push_str(&format!(r#"
+                output.push_str(&format!(
+                    r#"
                     function {reserve_global_rep_fn}(debugMessage, refCount) {{
                         const globalTable = {global_tbl}.get();
                         const rep = globalTable.insert({{ refCount, debugMessage }});
                         return rep;
                     }}
-                "#));
+                "#
+                ));
             }
         }
     }
