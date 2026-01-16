@@ -1,6 +1,9 @@
 //! Intrinsics that represent helpers that enable Lower integration
 
-use crate::{intrinsics::{Intrinsic, p3::error_context::ErrCtxIntrinsic, string::StringIntrinsic}, source::Source};
+use crate::{
+    intrinsics::{Intrinsic, p3::error_context::ErrCtxIntrinsic, string::StringIntrinsic},
+    source::Source,
+};
 
 use super::conversion::ConversionIntrinsic;
 
