@@ -84,7 +84,7 @@ jobs:
 
       - name: Cache npm install
         id: cache-node-modules
-        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
           key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
@@ -252,7 +252,7 @@ jobs:
 
       - name: Cache npm install
         id: cache-node-modules
-        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
@@ -390,7 +390,7 @@ jobs:
       # NOTE: We install node modules because the pre-pack for various projects may require
       # the cargo xtask build in release mode (even though we're using),
       - name: Cache npm install
-        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
@@ -505,7 +505,7 @@ jobs:
       - name: Cache npm install
         continue-on-error: true
         id: cache-node-modules
-        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
           key: node-modules-dev-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           path: |
