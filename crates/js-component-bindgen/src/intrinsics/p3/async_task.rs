@@ -444,6 +444,9 @@ impl AsyncTaskIntrinsic {
 
                         // TODO(opt): during fused guest->guest calls, we have a helper fn for lift/lower
                         // so this task.return could be reduced to ~no-op
+                        // 
+                        // We perform a superfluous lift and resolve in this fn to keep consistent with 
+                        // the task machinery as it is normally used.
                         task.resolve(results);
 
                         // If we are in a subtask, and have a fused helper function provided to use
@@ -573,13 +576,6 @@ impl AsyncTaskIntrinsic {
                         }}
                         const taskMetas = {global_task_map}.get(componentIdx);
                         const callbackFn = getCallbackFn ? getCallbackFn() : null;
-
-                        // if (callingWasmExport && taskMetas) {{
-                        //     const runningTasks = taskMetas.filter(t => t.task.isRunning());
-                        //     if (runningTasks.length > 0) {{
-                        //         throw new Error("an async task is already running (did you forget to await a previous call?)");
-                        //     }}
-                        // }}
 
                         const newTask = new {task_class}({{
                             componentIdx,
@@ -880,8 +876,6 @@ impl AsyncTaskIntrinsic {
                             if (this.isSync()) {{ return true; }}
 
                             if (cstate.hasBackpressure()) {{
-                                // TODO: this wait needs to affect/delay actual task execution!
-                                // Check where tasks are being run!
                                 cstate.addBackpressureWaiter();
 
                                 const result = await this.waitUntil({{
@@ -1263,7 +1257,7 @@ impl AsyncTaskIntrinsic {
 
                         constructor(args) {{
                             if (typeof args.componentIdx !== 'number') {{
-                                throw new Error('ivnalid componentIdx for subtask creation');
+                                throw new Error('invalid componentIdx for subtask creation');
                             }}
                             this.#componentIdx = args.componentIdx;
 

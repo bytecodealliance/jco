@@ -2665,16 +2665,6 @@ impl<'a> Instantiator<'a, '_> {
         let trampoline_idx = trampoline.as_u32();
         match self.bindgen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                // TODO: we need to *not* do this if it's a host-provided import,
-                // because we'll be suspending a non-Wasm frame and trigger the
-                // "trying to suspend JS frames" error
-
-                // NOTE: we cannot "just" do everything with a non-async function
-                // because task.enter() is actually async
-
-                // What we can do is signal to some external runner via a regular function
-                // that some work needs to be done?
-
                 // Write out function declaration start
                 if requires_async_porcelain | is_async {
                     // If an import is either an async host import (i.e. JSPI powered)
