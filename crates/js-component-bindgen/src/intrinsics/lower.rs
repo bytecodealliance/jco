@@ -280,9 +280,6 @@ impl LowerIntrinsic {
                         }}
                         if (vals[0] > 255 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u8'); }}
                         if (!memory) {{ throw new Error("missing memory for lower"); }}
-
-                        // VALS is undefined???
-
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
                         return 1;
                     }}
@@ -344,7 +341,7 @@ impl LowerIntrinsic {
                         if (vals.length !== 1) {{ throw new Error('expected single value to lower, got (' + vals.length + ')'); }}
                         if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
 
-                        // TODO: fix misaligned writes properly
+                        // TODO(fix): fix misaligned writes properly
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 

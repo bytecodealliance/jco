@@ -1418,8 +1418,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         createTask();
 
-                        // TODO: we need to set this up without depending on hostProvided...
-                        // Maybe tag something on the current task?
                         const isHostAsyncImport = hostProvided && {is_async};
                         if (isHostAsyncImport) {{
                             subtask = parentTask.getLatestSubtask();
@@ -2321,13 +2319,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 let component_instance_idx = self.canon_opts.instance.as_u32();
                 let is_async_js = self.requires_async_porcelain | self.is_async;
 
-                // TODO(fix): Detecting whether to do return processing on returned value should be
-                // double checked with the known CM-level type of the wasm call (we should only do
-                // this for `result<t, string>`)
-                //
-                // e.g. right now a correctly formatted record would trigger the code below,
-                // and it should not.
-                //
                 // NOTE: if the import was host provided we *already* have the result via
                 // JSPI and simply calling the host provided JS function -- there is no need
                 // to drive the async loop as with an async import that came from a component.
@@ -2343,10 +2334,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 // Alternatively, if we have entered an async return, and are part of a subtask
                 // then we should start it, given that the task we have recently created (however we got to
                 // the async return) is going to continue to be polled soon (via the driver loop).
-                //
-                // TODO: can we know that the latest subtask is the right one? Is it possible
-                // to have two subtasks prepped for this task on the same thread?
-                //
                 //
                 uwriteln!(
                     self.src,

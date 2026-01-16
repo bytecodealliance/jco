@@ -60,20 +60,10 @@ pub enum Translation<'a> {
     Augmented {
         original: ModuleTranslation<'a>,
         wasm: Vec<u8>,
-        // name: Option<String>,
         imports_removed: HashSet<(String, String)>,
         imports_added: Vec<(String, String, MemoryIndex, AugmentedOp)>,
     },
 }
-
-// impl<'a> Translation<'a> {
-//     pub(crate) fn name(&self) -> Option<&str> {
-//         match self {
-//             Translation::Normal(mt) => mt.module.name.as_deref(),
-//             Translation::Augmented { name, .. } => name.as_deref(),
-//         }
-//     }
-// }
 
 #[derive(Debug)]
 pub enum AugmentedImport<'a> {
@@ -144,7 +134,6 @@ impl<'a> Translation<'a> {
         let wasm = augmenter.run()?;
         Ok(Translation::Augmented {
             wasm,
-            // name: translation.module.name.clone(),
             imports_removed: augmenter.imports_removed,
             imports_added: augmenter.imports_added,
             original: translation,
