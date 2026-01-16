@@ -57,7 +57,7 @@ suite('Async (WASI P3)', () => {
         const hostStr = "loaded-from-host";
         const hostU32 = 43;
 
-        const { instance, cleanup, outputDir } = await setupAsyncTest({
+        const { instance, cleanup } = await setupAsyncTest({
             component: {
                 path: join(
                     P3_COMPONENT_FIXTURES_DIR,
