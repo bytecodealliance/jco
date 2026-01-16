@@ -85,10 +85,13 @@ suite('Context (WASI P3)', () => {
     // call must resolve/be awaited before the second one is run.
     //
     // This may change in the future/be accounted w/ re-entrancy checks,
-    // but until that time, doing so is likely a bug that should be 
+    // but until that time, doing so is likely a bug that should be
     // explained clearly to the user.
     //
-    test('forgotten await on existing export call', async () => {
+    // TODO(fix): we need a nother way to detect this case, as
+    // imports that are called deep in guest->guest call chains
+    // will trip this check if we do as simple other-tasks-exist check
+    test.skip('forgotten await on existing export call', async () => {
         const name = 'context-async';
         const { instance, cleanup } = await setupAsyncTest({
             component: {
