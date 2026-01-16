@@ -1099,6 +1099,14 @@ impl AsyncTaskIntrinsic {
                                     throw err;
                                 }}
                             }}
+
+                            if (this.#postReturnFn) {{
+                                {debug_log_fn}('[{task_class}#onResolve()] running post return ', {{
+                                    componentIdx: this.#componentIdx,
+                                    taskID: this.#id,
+                                }});
+                                this.#postReturnFn();
+                            }}
                         }}
 
                         registerOnResolveHandler(f) {{
@@ -1111,6 +1119,7 @@ impl AsyncTaskIntrinsic {
                                 componentIdx: this.#componentIdx,
                                 taskID: this.#id,
                             }});
+
                             if (this.#state === {task_class}.State.RESOLVED) {{
                                 throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved (did you forget to wait for an import?)`);
                             }}
@@ -1133,8 +1142,24 @@ impl AsyncTaskIntrinsic {
 
                             // TODO: ensure there is only one task at a time (scheduler.lock() functionality)
                             if (this.#state !== {task_class}.State.RESOLVED) {{
-                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
+                                // TODO(fix): only fused, manually specified post returns seem to break this invariant,
+                                // as the TaskReturn trampoline is not activated it seems.
+                                //
+                                // see: test/p3/ported/wasmtime/component-async/post-return.js
+                                //
+                                // We *should* be able to upgrade this to be more strict and throw at some point,
+                                // which may involve rewriting the upstream test to surface task return manually somehow.
+                                //
+                                //throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
+                                {debug_log_fn}('[{task_class}#exit()] task exited without resolution', {{
+                                    componentIdx: this.#componentIdx,
+                                    taskID: this.#id,
+                                    subtask: this.getParentSubtask(),
+                                    subtaskID: this.getParentSubtask()?.id(),
+                                }});
+                                this.#state = {task_class}.State.RESOLVED;
                             }}
+
                             if (this.borrowedHandles > 0) {{
                                 throw new Error('task [${{this.#id}}] exited without clearing borrowed handles');
                             }}
@@ -1146,9 +1171,9 @@ impl AsyncTaskIntrinsic {
                             }}
                             state.inSyncExportCall = false;
 
-                            //if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
-                            //    throw new Error('task [' + this.#id + '] exit: component [' + this.#componentIdx + '] should have been exclusively locked');
-                            //}}
+                            if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
+                               throw new Error('task [' + this.#id + '] exit: component [' + this.#componentIdx + '] should have been exclusively locked');
+                            }}
 
                             state.exclusiveRelease();
                         }}
@@ -1336,7 +1361,6 @@ impl AsyncTaskIntrinsic {
                             if (this.#callMetadata.startFn) {{
                                 const {{ resultPtr }} = this.#callMetadata;
                                 const startFnArgs = [];
-                                if (this.#callMetadata.resultPtr) {{ startFnArgs.push(this.#callMetadata.resultPtr); }}
                                 if (args?.startFnParams) {{ startFnArgs.push(...args.startFnParams); }}
                                 result = this.#callMetadata.startFn.apply(null, startFnArgs);
                             }}

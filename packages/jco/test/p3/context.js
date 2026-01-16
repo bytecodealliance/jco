@@ -57,8 +57,8 @@ suite('Context (WASI P3)', () => {
             jco: {
                 transpile: {
                     extraArgs: {
+                        // minify: false,
                         asyncExports: ['pull-context', 'push-context'],
-                        minify: false,
                     },
                 },
             },
@@ -105,9 +105,9 @@ suite('Context (WASI P3)', () => {
             jco: {
                 transpile: {
                     extraArgs: {
+                        // minify: false,
                         asyncMode: "jspi",
                         asyncExports: ['push-context', 'pull-context'],
-                        minify: false,
                     },
                 },
             },

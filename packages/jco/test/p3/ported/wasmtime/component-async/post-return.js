@@ -26,7 +26,18 @@ suite('post-return scenario', () => {
 
         let cleanup;
         try {
-            const res = await buildAndTranspile({ componentPath });
+            const res = await buildAndTranspile({
+                componentPath,
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                        // NOTE: these are for hosts? we don't actually want it to be an async import
+                        // asyncImports: [
+                        //     'local:local/post-return#foo',
+                        // ]
+                    }
+                },
+            });
             const instance = res.instance;
             cleanup = res.cleanup;
             await instance['local:local/run'].asyncRun();
@@ -86,7 +97,7 @@ suite('post-return async sleep scenario', () => {
                 },
                 transpile: {
                     extraArgs: {
-                        minify: false,
+                        // minify: false,
                         asyncImports: [
                             // Host-provided async imports must be marked as such
                             'local:local/sleep#sleep-millis',
