@@ -1749,7 +1749,6 @@ impl AsyncTaskIntrinsic {
                             getMemoryFn,
                             getReallocFn,
                         }} = args;
-                        console.log("LOWERING IMPORT!", {{ args, exportFn }});
 
                         const parentTaskMeta = {current_task_get_fn}(componentIdx);
                         const parentTask = parentTaskMeta?.task;
