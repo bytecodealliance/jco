@@ -3637,7 +3637,7 @@ impl<'a> Instantiator<'a, '_> {
         };
         let i = export.instance.as_u32() as usize;
         let quoted = maybe_quote_member(name);
-        return format!("exports{i}{quoted}");
+        format!("exports{i}{quoted}")
     }
 
     fn exports(&mut self, exports: &NameMap<String, ExportIndex>) {
@@ -4545,8 +4545,7 @@ pub fn gen_flat_lower_fn_js_expr(
             let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
             let variant_ty = &component_types[*ty_idx];
             let mut lower_metas_expr = String::from("[");
-            let mut case_idx = 0;
-            for (name, maybe_ty) in &variant_ty.cases {
+            for (case_idx, (name, maybe_ty)) in variant_ty.cases.iter().enumerate() {
                 lower_metas_expr.push_str(&format!(
                     "{{ discriminant: {}, tag: '{}', lowerFn: {}, align32: {}, }},",
                     case_idx,
@@ -4566,7 +4565,6 @@ pub fn gen_flat_lower_fn_js_expr(
                         .map(|n| n.to_string())
                         .unwrap_or(String::from("null")),
                 ));
-                case_idx += 1;
             }
             lower_metas_expr.push(']');
             format!(
