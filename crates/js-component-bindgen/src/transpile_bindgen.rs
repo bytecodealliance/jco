@@ -2246,13 +2246,17 @@ impl<'a> Instantiator<'a, '_> {
                 let (import_index, path) = &self.component.imports[*import];
                 let (import_iface, _type_def) = &self.component.import_types[*import_index];
 
-                let [fn_name] = &path[..] else {
-                    todo!(
-                        "multi-part import paths not supported -- only single function names are allowed"
-                    );
+                let qualified_import_fn = match &path[..] {
+                    // Likely a bare name like `[async]foo` which becomes 'foo'
+                    [] => import_iface.trim_start_matches("[async]").into(),
+                    // Fully qualified function name `ns:pkg/iface#[async]foo` which becomes `ns:pkg/iface#foo`
+                    [fn_name] => {
+                        format!("{import_iface}#{}", fn_name.trim_start_matches("[async]"))
+                    }
+                    _ => unimplemented!(
+                        "multi-part import paths ({path:?}) not supported (iface: '{import_iface}') -- only single function names are allowed"
+                    ),
                 };
-                let qualified_import_fn =
-                    format!("{import_iface}#{}", fn_name.trim_start_matches("[async]"));
 
                 let maybe_module_idx = self
                     .init_host_async_import_lookup

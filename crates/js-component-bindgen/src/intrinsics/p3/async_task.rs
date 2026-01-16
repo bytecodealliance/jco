@@ -574,12 +574,12 @@ impl AsyncTaskIntrinsic {
                         const taskMetas = {global_task_map}.get(componentIdx);
                         const callbackFn = getCallbackFn ? getCallbackFn() : null;
 
-                        if (callingWasmExport && taskMetas) {{
-                            const runningTasks = taskMetas.filter(t => t.task.isRunning());
-                            if (runningTasks.length > 0) {{
-                                throw new Error("an async task is already running (did you forget to await a previous call?)");
-                            }}
-                        }}
+                        // if (callingWasmExport && taskMetas) {{
+                        //     const runningTasks = taskMetas.filter(t => t.task.isRunning());
+                        //     if (runningTasks.length > 0) {{
+                        //         throw new Error("an async task is already running (did you forget to await a previous call?)");
+                        //     }}
+                        // }}
 
                         const newTask = new {task_class}({{
                             componentIdx,
