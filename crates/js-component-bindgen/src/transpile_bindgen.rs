@@ -2248,7 +2248,7 @@ impl<'a> Instantiator<'a, '_> {
 
                 let qualified_import_fn = match &path[..] {
                     // Likely a bare name like `[async]foo` which becomes 'foo'
-                    [] => import_iface.trim_start_matches("[async]").into(),
+                    [] => format!("$root#{}", import_iface.trim_start_matches("[async]")),
                     // Fully qualified function name `ns:pkg/iface#[async]foo` which becomes `ns:pkg/iface#foo`
                     [fn_name] => {
                         format!("{import_iface}#{}", fn_name.trim_start_matches("[async]"))
@@ -2347,7 +2347,11 @@ impl<'a> Instantiator<'a, '_> {
                 // and follow the normal p3 async component call pattern.
                 //
                 let full_async_import_key = format!("{module}#{key}");
-                if self.async_imports.contains(&full_async_import_key) {
+                if self.async_imports.contains(&full_async_import_key)
+                    || self
+                        .async_imports
+                        .contains(full_async_import_key.trim_start_matches("$root#"))
+                {
                     // Save the import for later to match it with it's lower import initializer
                     self.init_host_async_import_lookup
                         .insert(full_async_import_key.clone(), module_idx);

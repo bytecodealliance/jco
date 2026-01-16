@@ -2366,7 +2366,7 @@ impl Bindgen for FunctionBindgen<'_> {
                       if (currentSubtask && currentSubtask.isNotStarted()) {{
                           {debug_log_fn}('[Instruction::AsyncTaskReturn] subtask not started at end of task run, starting it', {{
                               task: task.id(),
-                              subtask: subtask?.id(),
+                              subtask: currentSubtask?.id(),
                               result: ret,
                           }})
                           currentSubtask.onStart();
