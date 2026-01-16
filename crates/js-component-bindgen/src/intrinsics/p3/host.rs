@@ -127,7 +127,7 @@ impl HostIntrinsic {
                         returnFn,
                         callerInstanceIdx,
                         calleeInstanceIdx,
-                        taskReturnTypeIdx, //19
+                        taskReturnTypeIdx,
                         stringEncoding,
                         resultCountOrAsync,
                     ) {{
@@ -180,9 +180,6 @@ impl HostIntrinsic {
                         let getCalleeParamsFn;
                         let resultPtr = null;
                         if (hasResultPointer) {{
-                            if (memoryIdx === null) {{
-                                throw new Error('memory idx not supplied to prepare depsite indirect params being used');
-                            }}
                             const directParamsArr = argArray.slice(10);
                             getCalleeParamsFn = () => directParamsArr;
                             resultPtr = argArray[9];
@@ -408,18 +405,10 @@ impl HostIntrinsic {
                             subtask.onResolve(res);
                         }});
 
+                        // TODO(fix): start fns sometimes produce results, how should they be used?
+                        // the result should theoretically be used for flat lowering, but fused components do
+                        // this automatically!
                         subtask.onStart({{ startFnParams }});
-                        // const startResult = subtask.onStart({{ startFnParams }});
-                        // if (startResult) {{
-                        //     {debug_log_fn}("[{async_start_call_fn}()] detected result to subtask start fn, early return", {{
-                        //         task: preparedTask.id(),
-                        //         subtaskID: subtask.id(),
-                        //         calleeFnName: callee.name,
-                        //     }});
-                        //     preparedTask.resolve([startResult]);
-                        //     return Number(subtask.waitableRep()) << 4 | subtaskState;
-                        //     //return {subtask_class}.State.RETURNED;
-                        // }}
 
                         {debug_log_fn}("[{async_start_call_fn}()] initial call", {{
                             task: preparedTask.id(),

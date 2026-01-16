@@ -72,7 +72,7 @@ suite('Async (WASI P3)', () => {
             jco: {
                 transpile: {
                     extraArgs: {
-                        minify: false,
+                        // minify: false,
                         asyncMode: 'jspi',
                         asyncImports: [
                             'load-string',

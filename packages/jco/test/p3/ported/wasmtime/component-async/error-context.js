@@ -45,11 +45,11 @@ suite('error-context scenario', () => {
         try {
             const res = await buildAndTranspile({
                 componentPath,
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    },
-                },
+                // transpile: {
+                //     extraArgs: {
+                //         minify: false,
+                //     },
+                // },
             });
             cleanup = res.cleanup;
             const instance = res.instance;

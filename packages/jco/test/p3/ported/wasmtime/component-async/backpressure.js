@@ -28,11 +28,11 @@ suite('backpressure scenario', () => {
         try {
             const res = await buildAndTranspile({
                 componentPath,
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    }
-                }
+                // transpile: {
+                //     extraArgs: {
+                //         minify: false,
+                //     }
+                // }
             });
             const instance = res.instance;
             cleanup = res.cleanup;

@@ -1,7 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
 import { exec as syncExec } from "node:child_process";
 import { promisify } from "node:util";
-import { resolve } from "node:path";
+import { resolve, basename } from "node:path";
 import { stat } from "node:fs/promises";
 
 import which from "which";
@@ -39,7 +39,7 @@ export async function buildAndTranspile(args) {
     const { esModule, cleanup, outputDir } = await setupAsyncTest({
         asyncMode: 'jspi',
         component: {
-            name: 'async-error-context',
+            name: basename(args.componentPath, '.wasm'),
             path: componentPath,
             skipInstantiation: true,
         },
