@@ -646,10 +646,11 @@ impl<'a> Instantiator<'a, '_> {
                     let iface = &self.resolve.interfaces[*id];
                     for (ty_name, ty) in &iface.types {
                         match &import_ty.exports.get(ty_name) {
-                            Some(TypeDef::Resource(resource)) => {
+                            Some(TypeDef::Resource(resource_table_idx)) => {
                                 let ty = crate::dealias(self.resolve, *ty);
-                                let resource_idx = self.types[*resource].ty;
-                                self.imports_resource_types.insert(ty, resource_idx);
+                                let resource_table_ty = &self.types[*resource_table_idx];
+                                self.imports_resource_types
+                                    .insert(ty, resource_table_ty.unwrap_concrete_ty());
                             }
                             Some(TypeDef::Interface(_)) | None => {}
                             Some(_) => unreachable!("unexpected type in interface"),
@@ -660,8 +661,9 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(ty) => match import {
                     TypeDef::Resource(resource) => {
                         let ty = crate::dealias(self.resolve, *ty);
-                        let resource_idx = self.types[*resource].ty;
-                        self.imports_resource_types.insert(ty, resource_idx);
+                        let resource_table_ty = &self.types[*resource];
+                        self.imports_resource_types
+                            .insert(ty, resource_table_ty.unwrap_concrete_ty());
                     }
                     TypeDef::Interface(_) => {}
                     _ => unreachable!("unexpected type in import world item"),
@@ -691,8 +693,9 @@ impl<'a> Instantiator<'a, '_> {
                         {
                             Export::Type(TypeDef::Resource(resource)) => {
                                 let ty = crate::dealias(self.resolve, *ty);
-                                let resource_idx = self.types[resource].ty;
-                                self.exports_resource_types.insert(ty, resource_idx);
+                                let resource_table_ty = &self.types[resource];
+                                self.exports_resource_types
+                                    .insert(ty, resource_table_ty.unwrap_concrete_ty());
                             }
                             Export::Type(_) => {}
                             _ => unreachable!(
@@ -851,11 +854,11 @@ impl<'a> Instantiator<'a, '_> {
             // Table per-resource
             for tidx in 0..self.component.num_resources {
                 let tid = TypeResourceTableIndex::from_u32(tidx);
-                let rid = self.types[tid].ty;
+                let resource_table_ty = &self.types[tid];
+                let rid = resource_table_ty.unwrap_concrete_ty();
                 if let Some(defined_index) = self.component.defined_resource_index(rid) {
-                    if self.types[tid].instance
-                        == self.component.defined_resource_instances[defined_index]
-                    {
+                    let instance_idx = resource_table_ty.unwrap_concrete_instance();
+                    if instance_idx == self.component.defined_resource_instances[defined_index] {
                         uwrite!(definitions, "true,");
                     }
                 } else {
@@ -908,15 +911,19 @@ impl<'a> Instantiator<'a, '_> {
     /// blocks, exactly once.
     ///
     /// This is not done for *all* resources, but instead for those that are explicitly used.
-    fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
-        if self.resource_tables_initialized.contains_key(&id) {
+    fn ensure_resource_table(&mut self, resource_table_idx: TypeResourceTableIndex) {
+        if self
+            .resource_tables_initialized
+            .contains_key(&resource_table_idx)
+        {
             return;
         }
 
-        let resource = self.types[id].ty;
+        let resource_table_ty = &self.types[resource_table_idx];
+        let resource_idx = resource_table_ty.unwrap_concrete_ty();
 
         let (is_imported, maybe_dtor) =
-            if let Some(resource_idx) = self.component.defined_resource_index(resource) {
+            if let Some(resource_idx) = self.component.defined_resource_index(resource_idx) {
                 let resource_def = self
                     .component
                     .initializers
@@ -944,20 +951,20 @@ impl<'a> Instantiator<'a, '_> {
             .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
 
-        let rtid = id.as_u32();
+        let rtid = resource_table_idx.as_u32();
         if is_imported {
             uwriteln!(
                 self.src.js,
                 "const handleTable{rtid} = [{rsc_table_flag}, 0];",
             );
-            if !self.resources_initialized.contains_key(&resource) {
-                let ridx = resource.as_u32();
+            if !self.resources_initialized.contains_key(&resource_idx) {
+                let ridx = resource_idx.as_u32();
                 uwriteln!(
                     self.src.js,
                     "const captureTable{ridx} = new Map();
                     let captureCnt{ridx} = 0;"
                 );
-                self.resources_initialized.insert(resource, true);
+                self.resources_initialized.insert(resource_idx, true);
             }
         } else {
             let finalization_registry_create = self
@@ -973,7 +980,8 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
         uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
-        self.resource_tables_initialized.insert(id, true);
+        self.resource_tables_initialized
+            .insert(resource_table_idx, true);
     }
 
     fn instance_flags(&mut self) {
@@ -1000,17 +1008,17 @@ impl<'a> Instantiator<'a, '_> {
             trampoline,
             Trampoline::AsyncStartCall { .. }
                 | Trampoline::BackpressureSet { .. }
-                | Trampoline::ContextGet(_)
-                | Trampoline::ContextSet(_)
+                | Trampoline::ContextGet { .. }
+                | Trampoline::ContextSet { .. }
                 | Trampoline::ErrorContextDebugMessage { .. }
                 | Trampoline::ErrorContextDrop { .. }
                 | Trampoline::ErrorContextNew { .. }
                 | Trampoline::ErrorContextTransfer
                 | Trampoline::LowerImport { .. }
                 | Trampoline::PrepareCall { .. }
-                | Trampoline::ResourceDrop(_)
-                | Trampoline::ResourceNew(_)
-                | Trampoline::ResourceRep(_)
+                | Trampoline::ResourceDrop { .. }
+                | Trampoline::ResourceNew { .. }
+                | Trampoline::ResourceRep { .. }
                 | Trampoline::ResourceTransferBorrow
                 | Trampoline::ResourceTransferOwn
                 | Trampoline::StreamNew { .. }
@@ -1086,7 +1094,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::WaitableSetWait { options } => {
+            Trampoline::WaitableSetWait { options, .. } => {
                 let CanonicalOptions {
                     instance,
                     async_,
@@ -1115,7 +1123,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::WaitableSetPoll { options } => {
+            Trampoline::WaitableSetPoll { options, .. } => {
                 let CanonicalOptions {
                     instance,
                     async_,
@@ -1166,7 +1174,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamNew { ty } => {
+            Trampoline::StreamNew { ty, .. } => {
                 let stream_new_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
@@ -1177,7 +1185,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamRead { ty, options } => {
+            Trampoline::StreamRead { ty, options, .. } => {
                 let options = self
                     .component
                     .options
@@ -1221,7 +1229,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamWrite { ty, options } => {
+            Trampoline::StreamWrite { ty, options, .. } => {
                 let options = self
                     .component
                     .options
@@ -1267,7 +1275,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamCancelRead { ty, async_ } => {
+            Trampoline::StreamCancelRead { ty, async_, .. } => {
                 let stream_cancel_read_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamCancelRead,
                 ));
@@ -1278,7 +1286,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamCancelWrite { ty, async_ } => {
+            Trampoline::StreamCancelWrite { ty, async_, .. } => {
                 let stream_cancel_write_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamCancelWrite,
                 ));
@@ -1289,7 +1297,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamDropReadable { ty } => {
+            Trampoline::StreamDropReadable { ty, .. } => {
                 let stream_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropReadable,
                 ));
@@ -1300,7 +1308,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamDropWritable { ty } => {
+            Trampoline::StreamDropWritable { ty, .. } => {
                 let stream_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropWritable,
                 ));
@@ -1313,7 +1321,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::StreamTransfer => todo!("Trampoline::StreamTransfer"),
 
-            Trampoline::FutureNew { ty } => {
+            Trampoline::FutureNew { ty, .. } => {
                 let future_new_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew));
@@ -1324,7 +1332,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureRead { ty, options } => {
+            Trampoline::FutureRead { ty, options, .. } => {
                 let options = self
                     .component
                     .options
@@ -1380,7 +1388,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureWrite { ty, options } => {
+            Trampoline::FutureWrite { ty, options, .. } => {
                 let options = self
                     .component
                     .options
@@ -1426,7 +1434,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureCancelRead { ty, async_ } => {
+            Trampoline::FutureCancelRead { ty, async_, .. } => {
                 let future_cancel_read_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureCancelRead,
                 ));
@@ -1437,7 +1445,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureCancelWrite { ty, async_ } => {
+            Trampoline::FutureCancelWrite { ty, async_, .. } => {
                 let future_cancel_write_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureCancelWrite,
                 ));
@@ -1448,7 +1456,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureDropReadable { ty } => {
+            Trampoline::FutureDropReadable { ty, .. } => {
                 let future_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureDropReadable,
                 ));
@@ -1459,7 +1467,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::FutureDropWritable { ty } => {
+            Trampoline::FutureDropWritable { ty, .. } => {
                 let future_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureDropWritable,
                 ));
@@ -1472,7 +1480,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::FutureTransfer => todo!("Trampoline::FutureTransfer"),
 
-            Trampoline::ErrorContextNew { ty, options } => {
+            Trampoline::ErrorContextNew { ty, options, .. } => {
                 let CanonicalOptions {
                     instance,
                     string_encoding,
@@ -1534,7 +1542,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ErrorContextDebugMessage { ty, options } => {
+            Trampoline::ErrorContextDebugMessage { ty, options, .. } => {
                 let CanonicalOptions {
                     instance,
                     async_,
@@ -1628,7 +1636,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ErrorContextDrop { ty } => {
+            Trampoline::ErrorContextDrop { ty, .. } => {
                 let drop_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop));
@@ -1904,9 +1912,12 @@ impl<'a> Instantiator<'a, '_> {
                 };
             }
 
-            Trampoline::ResourceNew(resource) => {
-                self.ensure_resource_table(*resource);
-                let rid = resource.as_u32();
+            Trampoline::ResourceNew {
+                ty: resource_ty_idx,
+                ..
+            } => {
+                self.ensure_resource_table(*resource_ty_idx);
+                let rid = resource_ty_idx.as_u32();
                 let rsc_table_create_own = self.bindgen.intrinsic(Intrinsic::Resource(
                     ResourceIntrinsic::ResourceTableCreateOwn,
                 ));
@@ -1916,9 +1927,12 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ResourceRep(resource) => {
-                self.ensure_resource_table(*resource);
-                let rid = resource.as_u32();
+            Trampoline::ResourceRep {
+                ty: resource_ty_idx,
+                ..
+            } => {
+                self.ensure_resource_table(*resource_ty_idx);
+                let rid = resource_ty_idx.as_u32();
                 let rsc_flag = self
                     .bindgen
                     .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
@@ -1930,15 +1944,19 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ResourceDrop(resource) => {
-                self.ensure_resource_table(*resource);
-                let tid = resource.as_u32();
-                let resource_ty = &self.types[*resource];
-                let rid = resource_ty.ty.as_u32();
+            Trampoline::ResourceDrop {
+                ty: resource_table_ty_idx,
+                ..
+            } => {
+                self.ensure_resource_table(*resource_table_ty_idx);
+                let tid = resource_table_ty_idx.as_u32();
+                let resource_table_ty = &self.types[*resource_table_ty_idx];
+                let resource_ty = resource_table_ty.unwrap_concrete_ty();
+                let rid = resource_ty.as_u32();
 
                 // Build the code fragment that encapsulates calling the destructor
                 let dtor = if let Some(resource_idx) =
-                    self.component.defined_resource_index(resource_ty.ty)
+                    self.component.defined_resource_index(resource_ty)
                 {
                     let resource_def = self
                         .component
@@ -1972,7 +1990,7 @@ impl<'a> Instantiator<'a, '_> {
 
                     // previous imports walk should define all imported resources which are accessible
                     if let Some(imported_resource_local_name) =
-                        self.bindgen.local_names.try_get(resource_ty.ty)
+                        self.bindgen.local_names.try_get(resource_ty)
                     {
                         format!(
                                             "
@@ -1988,7 +2006,7 @@ impl<'a> Instantiator<'a, '_> {
                         // If not, then capture / disposal paths are never called
                         format!(
                             "throw new TypeError('unreachable trampoline for resource [{:?}]')",
-                            resource_ty.ty
+                            resource_ty
                         )
                     }
                 };
@@ -2062,7 +2080,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ContextSet(slot) => {
+            Trampoline::ContextSet { slot, .. } => {
                 let context_set_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet));
@@ -2072,7 +2090,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ContextGet(slot) => {
+            Trampoline::ContextGet { slot, .. } => {
                 let context_get_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet));
@@ -2082,7 +2100,9 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::TaskReturn { results, options } => {
+            Trampoline::TaskReturn {
+                results, options, ..
+            } => {
                 let canon_opts = self
                     .component
                     .options
@@ -2204,7 +2224,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ThreadYield { cancellable } => {
+            Trampoline::ThreadYield { cancellable, .. } => {
                 let yield_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
@@ -2213,6 +2233,13 @@ impl<'a> Instantiator<'a, '_> {
                     "const trampoline{i} = {yield_fn}.bind(null, {cancellable});\n",
                 );
             }
+            Trampoline::CheckBlocking => todo!("Trampoline::CheckBlocking"),
+            Trampoline::ThreadIndex => todo!("Trampoline::ThreadIndex"),
+            Trampoline::ThreadNewIndirect { .. } => todo!("Trampoline::ThreadNewIndirect"),
+            Trampoline::ThreadSwitchTo { .. } => todo!("Trampoline::ThreadSwitchTo"),
+            Trampoline::ThreadSuspend { .. } => todo!("Trampoline::ThreadSuspend"),
+            Trampoline::ThreadResumeLater { .. } => todo!("Trampoline::ThreadResumeLater"),
+            Trampoline::ThreadYieldTo { .. } => todo!("Trampoline::ThreadYieldTo"),
         }
     }
 
@@ -2990,13 +3017,14 @@ impl<'a> Instantiator<'a, '_> {
     fn connect_host_resource(
         &mut self,
         t: TypeId,
-        tid: TypeResourceTableIndex,
+        resource_table_ty_idx: TypeResourceTableIndex,
         resource_map: &mut ResourceMap,
     ) {
-        self.ensure_resource_table(tid);
+        self.ensure_resource_table(resource_table_ty_idx);
 
         // Figure out whether the resource index we're dealing with is for an imported type
-        let resource_idx = self.types[tid].ty;
+        let resource_table_ty = &self.types[resource_table_ty_idx];
+        let resource_idx = resource_table_ty.unwrap_concrete_ty();
         let imported = self
             .component
             .defined_resource_index(resource_idx)
@@ -3100,8 +3128,8 @@ impl<'a> Instantiator<'a, '_> {
         let entry = ResourceTable {
             imported,
             data: ResourceData::Host {
-                tid,
-                rid: self.types[tid].ty,
+                tid: resource_table_ty_idx,
+                rid: resource_idx,
                 local_name,
                 dtor_name: dtor_str,
             },
@@ -3598,6 +3626,10 @@ impl<'a> Instantiator<'a, '_> {
                 // SAFETY: short-lived borrow-mut.
                 self.used_instance_flags.borrow_mut().insert(*i);
                 format!("instanceFlags{}", i.as_u32())
+            }
+            CoreDef::UnsafeIntrinsic(ui) => {
+                let idx = ui.index();
+                format!("unsafeIntrinsic{idx}")
             }
         }
     }
