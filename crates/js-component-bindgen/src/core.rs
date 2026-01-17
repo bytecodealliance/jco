@@ -238,9 +238,9 @@ impl Augmenter<'_> {
                         self.types.push(grp?);
                     }
                 }
-                Payload::ImportSection(s) => {
-                    for i in s {
-                        let i = i?;
+                Payload::ImportSection(section) => {
+                    for import in section.into_imports() {
+                        let i = import?;
                         match i.ty {
                             TypeRef::Func(_) => self.imported_funcs += 1,
                             TypeRef::Memory(_) => {
@@ -378,6 +378,7 @@ impl Augmenter<'_> {
                 }),
                 TypeRef::Table(_) => unimplemented!(),
                 TypeRef::Tag(_) => unimplemented!(),
+                TypeRef::FuncExact(_) => unimplemented!(),
             };
             imports.import(import.module, import.name, ty);
         }
@@ -418,6 +419,7 @@ impl Augmenter<'_> {
                     (ExportKind::Memory, e.index)
                 }
                 ExternalKind::Tag => (ExportKind::Tag, e.index),
+                ExternalKind::FuncExact => (ExportKind::Func, self.remap_func(e.index)),
             };
             exports.export(e.name, kind, index);
         }
@@ -525,6 +527,9 @@ fn valtype(ty: wasmparser::ValType) -> wasm_encoder::ValType {
                         )
                     }
                 },
+                wasmparser::HeapType::Exact(idx) => wasm_encoder::HeapType::Exact(
+                    u32::try_from(idx.as_core_type_id().unwrap().index()).unwrap(),
+                ),
             },
         }),
     }

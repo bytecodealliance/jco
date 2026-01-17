@@ -243,6 +243,7 @@ pub fn ts_bindgen(
                             GeneratedTypeMeta { is_export: false },
                         ),
                         TypeDefKind::Handle(_) => todo!("type generation for handle"),
+                        TypeDefKind::Map(_, _) => todo!("type generation for map"),
                     }
                     let (src, references) = generator.finish();
                     bindgen.src.push_str(&src);
@@ -843,6 +844,7 @@ impl<'a> TsInterface<'a> {
                     },
                 ),
                 TypeDefKind::Handle(_) => todo!("types for handle"),
+                TypeDefKind::Map(_, _) => todo!("types for map<k,v>"),
             }
         }
     }
@@ -920,6 +922,7 @@ impl<'a> TsInterface<'a> {
                         }
                         panic!("anonymous resource handle");
                     }
+                    TypeDefKind::Map(_, _) => todo!("[print_ty()] map"),
                 }
             }
         }
