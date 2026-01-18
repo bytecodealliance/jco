@@ -10,7 +10,7 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "
 // wasmtime/crates/misc/component-async-tests/tests/scenario/error_context.rs
 //
 suite('error-context scenario', () => {
-    test('single-component', async () => {
+    test.only('single-component', async () => {
         const componentPath = join(
             COMPONENT_FIXTURES_DIR,
             'p3/error-context/async-error-context.wasm'
@@ -18,9 +18,21 @@ suite('error-context scenario', () => {
 
         let cleanup;
         try {
-            const res = await buildAndTranspile({ componentPath });
+            const res = await buildAndTranspile({
+                componentPath,
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                        asyncExports: [
+                            "run",
+                        ],
+                    },
+
+                },
+            });
             const instance = res.instance;
             cleanup = res.cleanup;
+            console.log("INSTANCE KEYS?", Object.keys(instance['local:local/run']));
             await instance['local:local/run'].asyncRun();
         } finally {
             if (cleanup) { await cleanup(); }
@@ -45,6 +57,9 @@ suite('error-context scenario', () => {
         try {
             const res = await buildAndTranspile({
                 componentPath,
+                        asyncExports: [
+                            "run",
+                        ],
                 // transpile: {
                 //     extraArgs: {
                 //         minify: false,
