@@ -432,7 +432,7 @@ impl AsyncFutureIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 output.push_str(&format!("
-                    function {future_cancel_fn}(
+                    async function {future_cancel_fn}(
                         futureIdx,
                         isAsync,
                         futureEndIdx,
