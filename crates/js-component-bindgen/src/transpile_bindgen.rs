@@ -2706,7 +2706,7 @@ impl<'a> Instantiator<'a, '_> {
         match self.bindgen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
                 // Write out function declaration start
-                if requires_async_porcelain | is_async {
+                if requires_async_porcelain || is_async {
                     // If an import is either an async host import (i.e. JSPI powered)
                     // or a guest async lifted import from another component,
                     // use WebAssembly.Suspending to allow suspending this component
@@ -3870,6 +3870,7 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let is_async = is_async_fn(func, options);
+
         let maybe_async = if requires_async_porcelain || is_async {
             "async "
         } else {

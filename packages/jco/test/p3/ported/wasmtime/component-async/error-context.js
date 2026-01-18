@@ -10,7 +10,7 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "
 // wasmtime/crates/misc/component-async-tests/tests/scenario/error_context.rs
 //
 suite('error-context scenario', () => {
-    test.only('single-component', async () => {
+    test('single-component', async () => {
         const componentPath = join(
             COMPONENT_FIXTURES_DIR,
             'p3/error-context/async-error-context.wasm'
@@ -32,8 +32,7 @@ suite('error-context scenario', () => {
             });
             const instance = res.instance;
             cleanup = res.cleanup;
-            console.log("INSTANCE KEYS?", Object.keys(instance['local:local/run']));
-            await instance['local:local/run'].asyncRun();
+            await instance['local:local/run'].run();
         } finally {
             if (cleanup) { await cleanup(); }
         }
@@ -69,7 +68,7 @@ suite('error-context scenario', () => {
             cleanup = res.cleanup;
             const instance = res.instance;
 
-            await instance['local:local/run'].asyncRun();
+            await instance['local:local/run'].run();
         } finally {
             if (cleanup) { await cleanup(); }
         }

@@ -8,7 +8,7 @@ use wasmtime_environ::component::{
 };
 use wasmtime_environ::wasmparser::WasmFeatures;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
-use wit_bindgen_core::wit_parser::{Function, FunctionKind};
+use wit_bindgen_core::wit_parser::Function;
 use wit_component::DecodedWasm;
 use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
 
@@ -261,12 +261,7 @@ pub(crate) fn is_async_fn(func: &Function, canon_opts: &CanonicalOptions) -> boo
     if canon_opts.async_ {
         return true;
     }
-    matches!(
-        func.kind,
-        FunctionKind::AsyncMethod(_)
-            | FunctionKind::AsyncStatic(_)
-            | FunctionKind::AsyncFreestanding
-    )
+    func.kind.is_async()
 }
 
 /// Identifier for a function used
