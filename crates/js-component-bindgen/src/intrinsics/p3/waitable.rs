@@ -380,7 +380,7 @@ impl WaitableIntrinsic {
                         const task = {current_task_get_fn}(componentInstanceID);
                         if (!task) {{ throw Error('invalid/missing async task'); }}
                         if (task.componentIdx !== componentInstanceID) {{
-                            throw Error(['task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
+                            throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
                         }}
                         const event = await task.pollForEvent({{ waitableSetRep, isAsync }});
                         {write_async_event_to_memory_fn}(memory, task, event, resultPtr);

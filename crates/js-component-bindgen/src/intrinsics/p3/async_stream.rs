@@ -466,7 +466,7 @@ impl AsyncStreamIntrinsic {
 
                         streamEnd.copy({{
                             bufID,
-                            onCopy: (reclaimBufferFn) => {{ processFn({stream_end_class}.CopyResult.COMPLETED, reclaimBufferFn); }}
+                            onCopy: (reclaimBufferFn) => {{ processFn({stream_end_class}.CopyResult.COMPLETED, reclaimBufferFn); }},
                             onCopyDone: (result) => {{ processFn(result); }}
                         }});
 
@@ -509,7 +509,7 @@ impl AsyncStreamIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
-                    function {stream_cancel_fn}(
+                    async function {stream_cancel_fn}(
                         streamIdx,
                         isAsync,
                         streamEndIdx,

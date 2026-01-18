@@ -1014,6 +1014,12 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::ErrorContextDrop { .. }
                 | Trampoline::ErrorContextNew { .. }
                 | Trampoline::ErrorContextTransfer
+                | Trampoline::FutureCancelRead { .. }
+                | Trampoline::FutureCancelWrite { .. }
+                | Trampoline::FutureDropReadable { .. }
+                | Trampoline::FutureDropWritable { .. }
+                | Trampoline::FutureRead { .. }
+                | Trampoline::FutureWrite { .. }
                 | Trampoline::LowerImport { .. }
                 | Trampoline::PrepareCall { .. }
                 | Trampoline::ResourceDrop { .. }
@@ -1021,7 +1027,13 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::ResourceRep { .. }
                 | Trampoline::ResourceTransferBorrow
                 | Trampoline::ResourceTransferOwn
+                | Trampoline::StreamCancelRead { .. }
+                | Trampoline::StreamCancelWrite { .. }
+                | Trampoline::StreamDropReadable { .. }
+                | Trampoline::StreamDropWritable { .. }
                 | Trampoline::StreamNew { .. }
+                | Trampoline::StreamRead { .. }
+                | Trampoline::StreamWrite { .. }
                 | Trampoline::SubtaskCancel { .. }
                 | Trampoline::SubtaskDrop { .. }
                 | Trampoline::SyncStartCall { .. }
@@ -1029,6 +1041,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::TaskReturn { .. }
                 | Trampoline::WaitableJoin { .. }
                 | Trampoline::WaitableSetDrop { .. }
+                | Trampoline::WaitableSetPoll { .. }
                 | Trampoline::WaitableSetNew { .. }
         )
     }
