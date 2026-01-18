@@ -102,7 +102,7 @@ jobs:
 
       - uses: taiki-e/cache-cargo-install-action@34ce5120836e5f9f1508d8713d7fdea0e8facd6f # v3.0.1
         with:
-          tool: wasm-tools@1.240.0
+          tool: wasm-tools@1.244.0
 
       # Determine weval version
       - name: Determine weval version
@@ -415,22 +415,9 @@ jobs:
           path: |
             node_modules
 
-      - name: Cache wasmtime binary
-        id: custom-wasmtime-bin
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+      - uses: taiki-e/cache-cargo-install-action@34ce5120836e5f9f1508d8713d7fdea0e8facd6f # v3.0.1
         with:
-          key: wasmtime-custom-bin-${{ runner.os }}-${{ runner.arch }}-29f2a1ca66c849a2d2e533a2df87c221daa8e2de
-          path: |
-            /home/runner/.cargo/bin/wasmtime
-
-      # TODO: update when wasmtime w/ this commit is released
-      - name: Install wasmtime CLI
-        if: ${{ steps.custom-wasmtime-bin.outputs.cache-hit != 'true' }}
-        run: |
-          cargo install \
-            --git https://github.com/bytecodealliance/wasmtime \
-            --rev 29f2a1ca66c849a2d2e533a2df87c221daa8e2de \
-            wasmtime-cli
+          tool: wasmtime-cli@40.0.2
 
       - name: Install NPM packages
         working-directory: packages/${{ matrix.workspace }}
