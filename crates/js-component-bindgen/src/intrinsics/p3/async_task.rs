@@ -444,8 +444,8 @@ impl AsyncTaskIntrinsic {
 
                         // TODO(opt): during fused guest->guest calls, we have a helper fn for lift/lower
                         // so this task.return could be reduced to ~no-op
-                        // 
-                        // We perform a superfluous lift and resolve in this fn to keep consistent with 
+                        //
+                        // We perform a superfluous lift and resolve in this fn to keep consistent with
                         // the task machinery as it is normally used.
                         task.resolve(results);
 
@@ -939,7 +939,7 @@ impl AsyncTaskIntrinsic {
                             {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ taskID: this.#id, waitableSetRep, isAsync }});
 
                             if (this.#isAsync !== isAsync) {{
-                                throw new Error('async pollForEvent called on non-async task');
+                                throw new Error(`pollForEvent (waitable [${{waitableSetRep}}]) called on non-async task [${{this.#id}}]`);
                             }}
 
                             throw new Error('{task_class}#pollForEvent() not implemented');

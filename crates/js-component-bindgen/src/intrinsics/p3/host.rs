@@ -128,6 +128,7 @@ impl HostIntrinsic {
                         callerInstanceIdx,
                         calleeInstanceIdx,
                         taskReturnTypeIdx,
+                        isCalleeAsyncInt,
                         stringEncoding,
                         resultCountOrAsync,
                     ) {{
@@ -135,6 +136,7 @@ impl HostIntrinsic {
                             callerInstanceIdx,
                             calleeInstanceIdx,
                             taskReturnTypeIdx,
+                            isCalleeAsyncInt,
                             stringEncoding,
                             resultCountOrAsync,
                         }});
@@ -176,15 +178,14 @@ impl HostIntrinsic {
                             throw new Error(`task component idx [${{ currentCallerTask.componentIdx() }}] !== [${{ callerInstanceIdx }}] (callee ${{ calleeInstanceIdx }})`);
                         }}
 
-                        // TODO: support indirect params based on storagePtr/args
                         let getCalleeParamsFn;
                         let resultPtr = null;
                         if (hasResultPointer) {{
-                            const directParamsArr = argArray.slice(10);
+                            const directParamsArr = argArray.slice(12);
                             getCalleeParamsFn = () => directParamsArr;
-                            resultPtr = argArray[9];
+                            resultPtr = argArray[10];
                         }} else {{
-                            const directParamsArr = argArray.slice(9);
+                            const directParamsArr = argArray.slice(10);
                             getCalleeParamsFn = () => directParamsArr;
                         }}
 
@@ -205,7 +206,7 @@ impl HostIntrinsic {
 
                         const [newTask, newTaskID] = {create_new_current_task_fn}({{
                             componentIdx: calleeInstanceIdx,
-                            isAsync,
+                            isAsync: isCalleeAsyncInt !== 0,
                             getCalleeParamsFn,
                             // TODO: find a way to pass the import name through here
                             entryFnName: 'task/' + currentCallerTask.id() + '/new-prepare-task',
@@ -290,7 +291,7 @@ impl HostIntrinsic {
 
                         const params = preparedTask.getCalleeParams();
                         if (paramCount !== params.length) {{
-                            throw new Error(`unexpected param count [${{ paramCount }}], expected [${{ expectedParamCount }}]`);
+                            throw new Error(`unexpected param count [${{ paramCount }}], expected [${{ params.length }}]`);
                         }}
 
                         subtask.setOnProgressFn(() => {{

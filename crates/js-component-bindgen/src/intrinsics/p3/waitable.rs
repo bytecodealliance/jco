@@ -377,11 +377,15 @@ impl WaitableIntrinsic {
                 output.push_str(&format!("
                     async function {waitable_set_poll_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
                         {debug_log_fn}('[{waitable_set_poll_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
-                        const task = {current_task_get_fn}(componentInstanceID);
-                        if (!task) {{ throw Error('invalid/missing async task'); }}
-                        if (task.componentIdx !== componentInstanceID) {{
+                        const taskMeta = {current_task_get_fn}(componentInstanceID);
+                        if (!taskMeta) {{ throw Error('invalid/missing current task meta'); }}
+                        if (taskMeta.componentIdx !== componentInstanceID) {{
                             throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
                         }}
+
+                        const task = taskMeta.task;
+                        if (!task) {{ throw Error('invalid/missing async task in task meta'); }}
+
                         const event = await task.pollForEvent({{ waitableSetRep, isAsync }});
                         {write_async_event_to_memory_fn}(memory, task, event, resultPtr);
                     }}

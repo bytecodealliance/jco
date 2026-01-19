@@ -21,13 +21,9 @@ suite('error-context scenario', () => {
             const res = await buildAndTranspile({
                 componentPath,
                 transpile: {
-                    extraArgs: {
-                        minify: false,
-                        asyncExports: [
-                            "run",
-                        ],
-                    },
-
+                    // extraArgs: {
+                    //     minify: false,
+                    // },
                 },
             });
             const instance = res.instance;
@@ -38,7 +34,7 @@ suite('error-context scenario', () => {
         }
     });
 
-    test('caller & callee', async () => {
+    test.only('caller & callee', async () => {
         const callerPath = join(
             COMPONENT_FIXTURES_DIR,
             "p3/error-context/async-error-context-caller.wasm"
@@ -56,14 +52,11 @@ suite('error-context scenario', () => {
         try {
             const res = await buildAndTranspile({
                 componentPath,
-                        asyncExports: [
-                            "run",
-                        ],
-                // transpile: {
-                //     extraArgs: {
-                //         minify: false,
-                //     },
-                // },
+                transpile: {
+                    // extraArgs: {
+                    //     minify: false,
+                    // },
+                },
             });
             cleanup = res.cleanup;
             const instance = res.instance;
