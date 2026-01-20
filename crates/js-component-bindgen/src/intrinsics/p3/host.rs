@@ -75,6 +75,9 @@ pub enum HostIntrinsic {
     /// ```
     ///
     SyncStartCall,
+
+    /// Used for writing out an event's contents into component memory (`unpack_event`)
+    StoreEventInComponentMemory,
 }
 
 impl HostIntrinsic {
@@ -94,6 +97,7 @@ impl HostIntrinsic {
             Self::PrepareCall => "_prepareCall",
             Self::AsyncStartCall => "_asyncStartCall",
             Self::SyncStartCall => "_syncStartCall",
+            Self::StoreEventInComponentMemory => "_storeEventInComponentMemory",
         }
     }
 
@@ -523,6 +527,25 @@ impl HostIntrinsic {
                         throw new Error('synchronous start call not implemented!');
                     }}
                 "
+                ));
+            }
+
+            Self::StoreEventInComponentMemory => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let store_event_in_component_memory_fn = Self::StoreEventInComponentMemory.name();
+                output.push_str(&format!(
+                    r#"
+                    function {store_event_in_component_memory_fn}(args) {{
+                        {debug_log_fn}('[{store_event_in_component_memory_fn}()] args', args);
+                        const {{ memory, ptr, event }} = args;
+                        if (!memory) {{ throw new Error('unexpectedly missing memory'); }}
+                        if (ptr === undefined || ptr === null) {{ throw new Error('unexpectedly missing pointer'); }}
+                        if (!event) {{ throw new Error('event object missing'); }}
+                        const dv = new DataView(memory.buffer);
+                        dv.setUint32(ptr, event.index, true);
+                        dv.setUint32(ptr + 4, event.result, true);
+                    }}
+                    "#
                 ));
             }
         }

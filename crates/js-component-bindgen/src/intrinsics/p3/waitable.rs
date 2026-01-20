@@ -2,6 +2,7 @@
 
 use super::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::p3::host::HostIntrinsic;
 use crate::intrinsics::{AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
@@ -159,7 +160,6 @@ impl WaitableIntrinsic {
                     ""
                 };
 
-                // TODO: remove the public mutable members that are eagerly exposed for early impl
                 output.push_str(&format!(r#"
                     class {waitable_set_class} {{
                         #componentInstanceID;
@@ -373,23 +373,55 @@ impl WaitableIntrinsic {
                 let waitable_set_poll_fn = Self::WaitableSetPoll.name();
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
-                output.push_str(&format!("
-                    async function {waitable_set_poll_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
-                        {debug_log_fn}('[{waitable_set_poll_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
-                        const taskMeta = {current_task_get_fn}(componentInstanceID);
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let store_event_in_component_memory_fn =
+                    HostIntrinsic::StoreEventInComponentMemory.name();
+                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                output.push_str(&format!(r#"
+                    async function {waitable_set_poll_fn}(ctx, waitableSetRep, resultPtr) {{
+                        const {{ componentIdx, memoryIdx, getMemoryFn, isAsync, isCancellable }} = ctx;
+                        {debug_log_fn}('[{waitable_set_poll_fn}()] args', {{
+                            componentIdx,
+                            memoryIdx,
+                            waitableSetRep,
+                            resultPtr,
+                            waitableSetRep,
+                            resultPtr
+                        }});
+
+                        const taskMeta = {current_task_get_fn}(componentIdx);
                         if (!taskMeta) {{ throw Error('invalid/missing current task meta'); }}
-                        if (taskMeta.componentIdx !== componentInstanceID) {{
-                            throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
+                        if (taskMeta.componentIdx !== componentIdx) {{
+                            throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentIdx + ']');
                         }}
 
                         const task = taskMeta.task;
                         if (!task) {{ throw Error('invalid/missing async task in task meta'); }}
 
-                        const event = await task.pollForEvent({{ waitableSetRep, isAsync }});
-                        {write_async_event_to_memory_fn}(memory, task, event, resultPtr);
+                        if (task.componentIdx() !== componentIdx) {{
+                            throw Error(`task component idx [${{task.componentIdx()}}] does not match generated [${{componentIdx}}]`);
+                        }}
+
+                        const cstate = {get_or_create_async_state_fn}(task.componentIdx());
+                        const wset = cstate.waitableSets.get(waitableSetRep);
+                        if (!wset) {{
+                            throw new Error(`missing waitable set [${{waitableSetRep}}] in component [${{componentIdx}}]`);
+                        }}
+
+                        let event;
+                        const cancelDelivered = task.deliverPendingCancel({{ cancelalble: isCancellable }});
+                        if (cancelDelivered) {{
+                            event = {{ code: {async_event_code_enum}.TASK_CANCELLED, index: 0, result: 0 }};
+                        }} else if (!wset.hasPendingEvent()) {{
+                            event = {{ code: {async_event_code_enum}.NONE, index: 0, result: 0 }};
+                        }} else {{
+                            event = wset.getPendingEvent();
+                        }}
+
+                        return {store_event_in_component_memory_fn}({{ event, ptr: resultPtr, memory: getMemoryFn() }});
                     }}
-                "));
+                "#));
             }
 
             Self::WaitableSetDrop => {

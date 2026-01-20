@@ -1142,6 +1142,7 @@ impl<'a> Instantiator<'a, '_> {
                     async_,
                     data_model:
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
+                    cancellable,
                     ..
                 } = self
                     .component
@@ -1152,16 +1153,28 @@ impl<'a> Instantiator<'a, '_> {
                     panic!("unexpected memory data model during waitable-set.poll");
                 };
 
+                let instance_idx = instance.as_u32();
+                let memory_idx = memory
+                    .expect("missing memory idx for waitable-set.poll")
+                    .as_u32();
                 let waitable_set_poll_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {waitable_set_poll_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
-                    instance_idx = instance.as_u32(),
-                    memory_idx = memory
-                        .expect("missing memory idx for waitable-set.poll")
-                        .as_u32(),
+                    r#"
+                    const trampoline{i} = {waitable_set_poll_fn}.bind(
+                        null,
+                        {{
+                            componentIdx: {instance_idx},
+                            isAsync: {async_},
+                            isCancellable: {cancellable},
+                            memoryIdx: {memory_idx},
+                            getMemoryFn: () => memory{memory_idx},
+                        }}
+                    );
+                    "#,
                 );
             }
 

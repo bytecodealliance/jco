@@ -378,6 +378,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             .extend([&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass)]);
     }
 
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
+    }
+
     if args.intrinsics.contains(&Intrinsic::Component(
         ComponentIntrinsic::GetOrCreateAsyncState,
     )) {
