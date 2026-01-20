@@ -1422,7 +1422,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         if (isHostAsyncImport) {{
                             subtask = parentTask.getLatestSubtask();
                             if (!subtask) {{
-                                throw new Error("Missing subtask for host import call, has the import been lowered?");
+                                throw new Error("Missing subtask for host import, has the import been lowered? (ensure asyncImports are set properly)");
                             }}
                             subtask.setChildTask(task);
                             task.setParentSubtask(subtask);

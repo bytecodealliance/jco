@@ -185,7 +185,7 @@ impl HostIntrinsic {
                         let getCalleeParamsFn;
                         let resultPtr = null;
                         if (hasResultPointer) {{
-                            const directParamsArr = argArray.slice(12);
+                            const directParamsArr = argArray.slice(11);
                             getCalleeParamsFn = () => directParamsArr;
                             resultPtr = argArray[10];
                         }} else {{
@@ -295,7 +295,7 @@ impl HostIntrinsic {
 
                         const params = preparedTask.getCalleeParams();
                         if (paramCount !== params.length) {{
-                            throw new Error(`unexpected param count [${{ paramCount }}], expected [${{ params.length }}]`);
+                            throw new Error(`unexpected callee param count [${{ params.length }}], {async_start_call_fn} invocation expected [${{ paramCount }}]`);
                         }}
 
                         subtask.setOnProgressFn(() => {{
