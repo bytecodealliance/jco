@@ -1007,6 +1007,8 @@ impl<'a> Instantiator<'a, '_> {
         matches!(
             trampoline,
             Trampoline::AsyncStartCall { .. }
+                | Trampoline::BackpressureDec { .. }
+                | Trampoline::BackpressureInc { .. }
                 | Trampoline::BackpressureSet { .. }
                 | Trampoline::ContextGet { .. }
                 | Trampoline::ContextSet { .. }
