@@ -2,14 +2,9 @@
 title = "jco"
 authors = ["Guy Bedford", "Yosh Wuyts", "Victor Adossi"]
 language = "en"
-multilingual = false
 
 src = "src"
 
 [output.html]
 git-repository-url = "https://github.com/bytecodealliance/jco"
 edit-url-template = "https://github.com/bytecodealliance/jco/tree/main/docs/{path}"
-
-[preprocessor.alerts]
-
-[output.linkcheck]
