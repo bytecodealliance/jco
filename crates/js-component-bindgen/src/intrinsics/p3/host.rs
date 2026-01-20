@@ -469,7 +469,6 @@ impl HostIntrinsic {
                                     subtaskID: subtask.id(),
                                     callerComponentIdx: subtask.componentIdx(),
                                 }});
-                                doSubtaskResolve();
                                 return;
                             }}
 
