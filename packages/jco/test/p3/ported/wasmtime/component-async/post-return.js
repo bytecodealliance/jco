@@ -28,19 +28,15 @@ suite('post-return scenario', () => {
         try {
             const res = await buildAndTranspile({
                 componentPath,
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                        // NOTE: these are for hosts? we don't actually want it to be an async import
-                        // asyncImports: [
-                        //     'local:local/post-return#foo',
-                        // ]
-                    }
-                },
+                // transpile: {
+                //     extraArgs: {
+                //         minify: false,
+                //     }
+                // },
             });
             const instance = res.instance;
             cleanup = res.cleanup;
-            await instance['local:local/run'].asyncRun();
+            await instance['local:local/run'].run();
         } finally {
             if (cleanup) { await cleanup(); }
         }
@@ -68,7 +64,7 @@ suite('post-return async sleep scenario', () => {
         });
 
         const waitTimeMs = 300;
-        const asyncSleepMillis = vi.fn(async (ms) => {
+        const sleepMillis = vi.fn(async (ms) => {
             // NOTE: as written, the caller/callee manipulate (double) the original wait time before use
             expect(ms).toStrictEqual(BigInt(waitTimeMs * 2));
             if (ms > BigInt(Number.MAX_SAFE_INTEGER) || ms < BigInt(Number.MIN_SAFE_INTEGER)) {
@@ -91,7 +87,7 @@ suite('post-return async sleep scenario', () => {
                             // sleep-millis: async func(time-in-millis: u64);
                             // ```
                             // see: wasmtime/crates/misc/component-async-tests/wit/test.wit
-                            asyncSleepMillis,
+                            sleepMillis,
                         }
                     }
                 },
@@ -113,14 +109,14 @@ suite('post-return async sleep scenario', () => {
             const instance = res.instance;
             cleanup = res.cleanup;
 
-            const result = await instance['local:local/sleep-post-return'].asyncRun(waitTimeMs);
+            const result = await instance['local:local/sleep-post-return'].run(waitTimeMs);
             expect(result).toBeUndefined();
 
             // Although the original async export call has finished, we expect that the spawned task
             // that occurred during it to run to completion (and eventually call the import we provided),
             // in the runtime itself.
             await vi.waitFor(
-                () => expect(asyncSleepMillis).toHaveBeenCalled(),
+                () => expect(sleepMillis).toHaveBeenCalled(),
                 { timeout: 5_000 },
             );
 
