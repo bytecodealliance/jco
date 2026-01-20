@@ -935,12 +935,17 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         async pollForEvent(opts) {{
-                            const {{ waitableSetRep, isAsync }} = opts;
+                            const {{ waitableSetRep, isAsync, cancellable }} = opts;
                             {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ taskID: this.#id, waitableSetRep, isAsync }});
 
-                            if (this.#isAsync !== isAsync) {{
+                            if (isAsync !== undefined && this.#isAsync !== isAsync) {{
                                 throw new Error(`pollForEvent (waitable [${{waitableSetRep}}]) called on non-async task [${{this.#id}}]`);
                             }}
+
+                            // TODO: get waitable set (error if missing)
+                            // TODO: check deliver pending cancel (pass cancellable)
+                            // TODO: get pending event (or do (None, 0 , 0)
+                            // TODO: return the unpacked event (which requires writing to a memory!)
 
                             throw new Error('{task_class}#pollForEvent() not implemented');
                         }}
