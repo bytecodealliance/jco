@@ -2387,7 +2387,9 @@ impl<'a> Instantiator<'a, '_> {
                     ..
                 })) = arg
             {
-                let key = name.trim_start_matches("[async-lower][async]");
+                let key = name
+                    .trim_start_matches("[async-lower]")
+                    .trim_start_matches("[async]");
 
                 let mut exec_fn = self.augmented_import_def(&arg);
                 let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
@@ -2410,16 +2412,6 @@ impl<'a> Instantiator<'a, '_> {
                         .insert(full_async_import_key.clone(), module_idx);
                     exec_fn = format!("WebAssembly.promising({exec_fn})");
                 }
-
-                // TODO: save generated lookup information for later
-                //
-                // We need a lookup of the async import key to the runtime instance index (static module also fine??)
-                // Decide whether we need the instance on the export or the static module (the import)
-                //
-                // (probably do the import? we're about to do the corresponding lowers afterwards)?
-                //
-                // In the lower import initializers, when looking at the metadata we'll add
-                // the static module index that we need to look up the right function (i.e. what we'll use for define)
 
                 // NOTE: Regardless of whether we're using a host import or not, we are likely *not*
                 // actually wrapping a host javascript function below -- rather, the host import is
