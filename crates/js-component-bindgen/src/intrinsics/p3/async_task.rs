@@ -684,7 +684,6 @@ impl AsyncTaskIntrinsic {
                 let global_async_determinism = Intrinsic::GlobalAsyncDeterminism.name();
                 let coin_flip_fn = Intrinsic::CoinFlip.name();
 
-                // TODO: remove the public mutable members that are eagerly exposed for early impl
                 output.push_str(&format!(r#"
                     class {task_class} {{
                         static _ID = 0n;
@@ -765,7 +764,6 @@ impl AsyncTaskIntrinsic {
                            this.#completionPromise = completionPromise;
 
                            this.#onResolveHandlers.push((results) => {{
-                               // TODO: handle external facing cancellation (should likely be a rejection)
                                resolveCompletionPromise(results);
                            }})
 
@@ -932,22 +930,6 @@ impl AsyncTaskIntrinsic {
                             wset.decrementNumWaiting();
 
                             return event;
-                        }}
-
-                        async pollForEvent(opts) {{
-                            const {{ waitableSetRep, isAsync, cancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#pollForEvent()] args', {{ taskID: this.#id, waitableSetRep, isAsync }});
-
-                            if (isAsync !== undefined && this.#isAsync !== isAsync) {{
-                                throw new Error(`pollForEvent (waitable [${{waitableSetRep}}]) called on non-async task [${{this.#id}}]`);
-                            }}
-
-                            // TODO: get waitable set (error if missing)
-                            // TODO: check deliver pending cancel (pass cancellable)
-                            // TODO: get pending event (or do (None, 0 , 0)
-                            // TODO: return the unpacked event (which requires writing to a memory!)
-
-                            throw new Error('{task_class}#pollForEvent() not implemented');
                         }}
 
                         async onBlock(awaitable) {{
@@ -1673,17 +1655,6 @@ impl AsyncTaskIntrinsic {
                                             waitableSetRep,
                                             cancellable: true,
                                         }});
-                                        break;
-
-                                    case 3: // POLL
-                                        {debug_log_fn}('[{driver_loop_fn}()] polling for event', {{
-                                            fnName,
-                                            componentIdx,
-                                            callbackFnName,
-                                            taskID: task.id(),
-                                            waitableSetRep,
-                                        }});
-                                        asyncRes = await task.pollForEvent({{ isAsync: true, waitableSetRep }});
                                         break;
 
                                     default:
