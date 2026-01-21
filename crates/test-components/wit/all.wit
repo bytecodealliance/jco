@@ -1,0 +1,9 @@
+package jco:test-components;
+
+world async-simple-import {
+  import load-u32: async func() -> u32;
+  import load-string: async func() -> string;
+
+  export get-u32: async func() -> u32;
+  export get-string: async func() -> string;
+}

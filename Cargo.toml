@@ -1,11 +1,20 @@
 [workspace]
 resolver = "2"
+default-members = [
+  "crates/js-component-bindgen",
+  "crates/js-component-bindgen-component",
+  "crates/wasm-tools-component",
+  "crates/xtask",
+  "crates/jco",
+]
 members = [
   "crates/js-component-bindgen",
   "crates/js-component-bindgen-component",
   "crates/wasm-tools-component",
   "crates/xtask",
   "crates/jco",
+  "crates/test-components",
+  "crates/test-components/artifacts",
 ]
 
 [workspace.package]
@@ -27,12 +36,15 @@ strip = true
 [workspace.dependencies]
 anyhow = { version = "1.0.95", default-features = false }
 base64 = { version = "0.22.1", default-features = false }
+cargo_metadata = { version = "0.19.2", default-features = false }
 heck = { version = "0.5.0", default-features = false }
 log = { version = "0.4.22", default-features = false }
 semver = { version = "1.0.25", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
 webidl2wit = { version = "0.1.0", default-features = false }
 xshell = { version = "0.2.6", default-features = false }
+wasmtime = { version = "41.0.0", default-features = false }
+tokio = { version = "1.49.0", default-features = false }
 
 wasm-encoder = { version = "0.244.0", default-features = false }
 wasm-metadata = { version = "0.244.0", default-features = false }
@@ -43,9 +55,9 @@ wat = { version = "1.244.0", default-features = false }
 wit-component = { version = "0.244.0", features = ["dummy-module"] }
 wit-parser = { version = "0.244.0", default-features = false }
 
-# TODO: replace with upstream once merged
-# see: https://github.com/bytecodealliance/wit-bindgen/pull/1455
-wit-bindgen = { git = "https://github.com/vados-cosmonic/wit-bindgen", rev = "7db2cdbe2399d3a86e0b19f7335a1b6aaf351ab5", default-features = false }
-wit-bindgen-core = { git = "https://github.com/vados-cosmonic/wit-bindgen", rev = "7db2cdbe2399d3a86e0b19f7335a1b6aaf351ab5", default-features = false }
+
+# TODO: replace with version once this commit is released
+wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "10291cd2252856863d2f4fd74ad5b2aa553e9d92", default-features = false }
+wit-bindgen-core = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "10291cd2252856863d2f4fd74ad5b2aa553e9d92", default-features = false }
 
 js-component-bindgen = { version = "1.13.0", path = "./crates/js-component-bindgen" }
