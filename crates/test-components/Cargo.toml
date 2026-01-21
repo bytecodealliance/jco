@@ -1,0 +1,14 @@
+[package]
+name = "jco-test-components"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = """
+Test components for use during jco testing
+"""
+
+[dependencies]
+wit-bindgen = { workspace = true, features = [ "macros", "async" ] }
+
+[build-dependencies]
+anyhow = { workspace = true }
