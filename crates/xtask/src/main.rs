@@ -12,8 +12,8 @@ enum Cmd {
     Test(Platform),
     /// Generate code
     Generate(Generate),
-    /// Build test binaries (i.e. `test-components` crate)
-    BuildTestBinaries,
+    /// Build test components (i.e. `test-components` crate)
+    BuildTestComponents,
 }
 
 #[derive(StructOpt)]
@@ -26,9 +26,9 @@ enum Platform {
 
 #[derive(StructOpt)]
 enum Build {
-    /// Build the project and copy the binaries
+    /// Build the project and copy the components
     Debug,
-    /// Build the project for release and copy the binaries
+    /// Build the project for release and copy the components
     Release,
 }
 
@@ -62,8 +62,8 @@ fn main() -> anyhow::Result<()> {
             build::jco::run(true)?;
             Ok(())
         }
-        Cmd::BuildTestBinaries => {
-            build::test_binaries::run()?;
+        Cmd::BuildTestComponents => {
+            build::test_components::run()?;
             Ok(())
         }
         Cmd::Test(Platform::Node) => test::run(false),

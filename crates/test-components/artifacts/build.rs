@@ -9,6 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, ensure};
+use heck::ToKebabCase as _;
 use tokio::process::Command;
 use wit_component::ComponentEncoder;
 
@@ -67,7 +68,7 @@ async fn main() -> Result<()> {
         );
         tokio::fs::copy(
             &wasm_path,
-            rust_test_components_dir.join(format!("{name}.wasm")),
+            rust_test_components_dir.join(format!("{}.wasm", name.to_kebab_case())),
         )
         .await
         .with_context(|| format!("failed to copy over built wasm [{}]", wasm_path.display()))?;
