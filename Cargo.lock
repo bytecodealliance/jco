@@ -1166,6 +1166,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
+ "heck 0.5.0",
  "tokio",
  "wasmtime",
  "wit-component",
