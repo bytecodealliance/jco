@@ -53,6 +53,13 @@ jobs:
           path: |
             packages/jco/obj
 
+      - name: Upload jco test components
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: jco-test-components
+          path: |
+            packages/jco/test/output/rust-test-components
+
       - name: Build jco-transpile
         run: npm run build -w @bytecodealliance/jco-transpile
 
@@ -179,6 +186,13 @@ jobs:
           path: |
             packages/jco/obj
 
+      - name: Restore jco test components
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: jco-test-components
+          path: |
+            packages/jco/test/output/rust-test-components
+
       - name: Test LTS Node.js
         if: matrix.node == '18.x' || matrix.node == '20.x' || matrix.ndoe == '22.x'
         working-directory: packages/jco
@@ -232,6 +246,13 @@ jobs:
           name: jco-build
           path: |
             packages/jco/obj
+
+      - name: Restore jco test components
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: jco-test-components
+          path: |
+            packages/jco/test/output/rust-test-components
 
       - name: Generate tests
         run: |
@@ -292,6 +313,13 @@ jobs:
           name: jco-build
           path: |
             packages/jco/obj
+
+      - name: Restore jco test components
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: jco-test-components
+          path: |
+            packages/jco/test/output/rust-test-components
 
       - name: Install NPM packages
         run: npm install
@@ -488,6 +516,13 @@ jobs:
           name: jco-build
           path: |
             packages/jco/obj
+
+      - name: Restore jco test components
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: jco-test-components
+          path: |
+            packages/jco/test/output/rust-test-components
 
       - name: Restore jco-transpile vendor
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
