@@ -12,7 +12,7 @@ enum Cmd {
     Test(Platform),
     /// Generate code
     Generate(Generate),
-    /// Build test binaries
+    /// Build test binaries (i.e. `test-components` crate)
     BuildTestBinaries,
 }
 
