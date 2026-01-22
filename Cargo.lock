@@ -696,6 +696,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "jco-test-components-artifacts"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "cargo_metadata",
+ "heck 0.5.0",
+ "tokio",
+ "wasmtime",
+ "wit-component",
+]
+
+[[package]]
 name = "js-component-bindgen"
 version = "1.13.0"
 dependencies = [
@@ -1158,18 +1170,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "test-programs-artifacts"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "cargo_metadata",
- "heck 0.5.0",
- "tokio",
- "wasmtime",
- "wit-component",
 ]
 
 [[package]]

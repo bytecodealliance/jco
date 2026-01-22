@@ -3,7 +3,7 @@
 #
 # This crate's only purpose is to *build* the wasm components availabe in the test-programs crate
 [package]
-name = "test-programs-artifacts"
+name = "jco-test-components-artifacts"
 version = "0.0.0"
 publish = false
 

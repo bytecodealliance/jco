@@ -5,11 +5,11 @@ import { suite, test, assert } from 'vitest';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 import { setupAsyncTest } from '../helpers.js';
-import { LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 
 suite('Async (WASI P3)', () => {
     // see: https://github.com/bytecodealliance/jco/issues/1076
-    test.skip('incorrect task return params offloading', async () => {
+    test('incorrect task return params offloading', async () => {
         const name = 'async-flat-param-adder';
         const { instance, cleanup } = await setupAsyncTest({
             component: {
@@ -20,19 +20,30 @@ suite('Async (WASI P3)', () => {
                 ),
                 imports: new WASIShim().getImportObject(),
             },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify: false,
+                    },
+                },
+            },
         });
 
-        assert(instance.test3);
-        assert.typeOf(instance.test3.asyncTest4, 'function');
-
-        const result = await instance.test3.asyncTest4(2,2);
+        assert(instance.asyncAddS32);
+        assert.instanceOf(instance.asyncAddS32.add, AsyncFunction);
+        const result = await instance.asyncAddS32.add(2,2);
         assert.strictEqual(result, 4);
+
+        // TODO(fix): this line should throw the value, not return a result object,
+        // this behavior does not match the default for non-erroring call
+        const res = await instance.asyncAddS32.add(1,2147483647);
+        assert.deepStrictEqual(res, {tag: 'error', val: 'overflow'});
 
         await cleanup();
     });
 
     // https://bytecodealliance.zulipchat.com/#narrow/channel/206238-general/topic/Should.20StringLift.20be.20emitted.20for.20async.20return.20values.3F/with/561133720
-    test.skip('simple async returns', async () => {
+    test('simple async returns', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 path: join(
@@ -43,11 +54,11 @@ suite('Async (WASI P3)', () => {
             },
         });
 
-        assert.typeOf(instance.asyncGetString, 'function');
-        assert.strictEqual("literal", await instance.asyncGetString());
+        assert.instanceOf(instance.getString, AsyncFunction);
+        assert.strictEqual("Hello World!", await instance.getString());
 
-        assert.typeOf(instance.asyncGetU32, 'function');
-        assert.strictEqual(42, await instance.asyncGetU32());
+        assert.instanceOf(instance.getU32, AsyncFunction);
+        assert.strictEqual(42, await instance.getU32());
 
         await cleanup();
     });

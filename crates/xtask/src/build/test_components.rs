@@ -9,13 +9,15 @@ static WORKSPACE_DIR: LazyLock<PathBuf> =
 
 /// Build the test component binaries
 ///
-/// Building the `test-programs/artifacts` project is what actually builds 
+/// Building the `test-components/artifacts` project is what actually builds
 /// the code that is in the `test-programs` crate (i.e. via the build.rs script)
 pub(crate) fn run() -> Result<()> {
     let _ = WORKSPACE_DIR;
-    eprintln!("building test-programs-artifacts project...");
     let sh = Shell::new().context("failed to build shell")?;
-    cmd!(sh, "cargo build -p test-programs-artifacts")
+    cmd!(sh, "cargo build -p jco-test-components")
+        .read()
+        .context("failed to read output from cargo build")?;
+    cmd!(sh, "cargo build -p jco-test-components-artifacts")
         .read()
         .context("failed to read output from cargo build")?;
     Ok(())

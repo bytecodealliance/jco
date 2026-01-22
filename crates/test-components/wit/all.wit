@@ -1,9 +1,30 @@
 package jco:test-components;
 
+interface local-run {
+    run: async func();
+}
+
+interface async-add-s32 {
+    add: async func(a: s32, b: s32) -> result<s32, string>;
+}
+
 world async-simple-import {
   import load-u32: async func() -> u32;
   import load-string: async func() -> string;
 
+  export get-u32: async func() -> u32;
+  export get-string: async func() -> string;
+}
+
+world async-error-context {
+  export local-run;
+}
+
+world async-flat-param-adder {
+  export async-add-s32;
+}
+
+world async-simple-return {
   export get-u32: async func() -> u32;
   export get-string: async func() -> string;
 }
