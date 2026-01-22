@@ -116,7 +116,7 @@ async fn build_test_p3_components(
                 );
                 built_components.push(BuiltComponent {
                     cm_version: ComponentModelVersion::P3,
-                    name: name,
+                    name,
                     wasm_path: p3_component_path,
                 })
             }
@@ -161,7 +161,7 @@ async fn build_test_components(output_dir: impl AsRef<Path>) -> Result<Vec<Built
         .context("unexpectedly missing test-components package in output of cargo-metadata")?
         .targets
         .iter()
-        .filter(move |t| t.kind == &[cargo_metadata::TargetKind::Bin])
+        .filter(move |t| t.kind == [cargo_metadata::TargetKind::Bin])
         .map(|t| &t.name)
         .collect::<Vec<_>>();
     for target in targets {
