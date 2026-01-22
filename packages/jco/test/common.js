@@ -28,6 +28,9 @@ export const COMPONENT_FIXTURES_DIR = fileURLToPath(
 /** Path to p3 related fixture components */
 export const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
 
+/** Path to built custom rust components (i.e. output of `cargo xtask build-test-components`) */
+export const LOCAL_TEST_COMPONENTS_DIR = join(COMPONENT_FIXTURES_DIR, '../../output/rust-test-components');
+
 /**
  * Retrieve a list of all component fixtures
  *
@@ -53,4 +56,3 @@ export async function getDefaultComponentFixtures() {
             )
             .map((f) => f.name);
 }
-
