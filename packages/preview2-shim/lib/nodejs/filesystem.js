@@ -738,6 +738,10 @@ export const types = {
     },
 };
 
+/**
+ * Replace all preopens with the given set.
+ * @param {Record<string, string>} preopens - Map of virtual paths to host paths
+ */
 export function _setPreopens(preopens) {
     preopenEntries = [];
     for (const [virtualPath, hostPreopen] of Object.entries(preopens)) {
@@ -745,9 +749,44 @@ export function _setPreopens(preopens) {
     }
 }
 
+/**
+ * Add a single preopen mapping.
+ * @param {string} virtualPath - The virtual path visible to the guest
+ * @param {string} hostPreopen - The host filesystem path
+ */
 export function _addPreopen(virtualPath, hostPreopen) {
     const preopenEntry = [descriptorCreatePreopen(hostPreopen), virtualPath];
     preopenEntries.push(preopenEntry);
+}
+
+/**
+ * Clear all preopens, giving the guest no filesystem access.
+ * Call this immediately after import to disable default full filesystem access.
+ *
+ * @example
+ * import { _clearPreopens } from '@bytecodealliance/preview2-shim/filesystem';
+ * _clearPreopens(); // Now guest has no filesystem access by default
+ */
+export function _clearPreopens() {
+    preopenEntries = [];
+}
+
+/**
+ * Get current preopens configuration.
+ * @returns {Array<[Descriptor, string]>} Array of [descriptor, virtualPath] pairs
+ */
+export function _getPreopens() {
+    return [...preopenEntries];
+}
+
+/**
+ * Create a preopen descriptor for a host path.
+ * This is used internally to create isolated preopen instances.
+ * @param {string} hostPreopen - The host filesystem path
+ * @returns {Descriptor} A preopen descriptor
+ */
+export function _createPreopenDescriptor(hostPreopen) {
+    return descriptorCreatePreopen(hostPreopen);
 }
 
 function convertFsError(e) {

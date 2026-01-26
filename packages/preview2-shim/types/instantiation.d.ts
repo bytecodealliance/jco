@@ -65,6 +65,34 @@ type AppendVersion<
     : never;
 
 /**
+ * Configuration options for WASIShim
+ */
+interface WASIShimConfig {
+    /** Custom CLI shim */
+    cli?: object;
+    /** Custom filesystem shim */
+    filesystem?: object;
+    /** Custom I/O shim */
+    io?: object;
+    /** Custom random shim */
+    random?: object;
+    /** Custom clocks shim */
+    clocks?: object;
+    /** Custom sockets shim */
+    sockets?: object;
+    /** Custom HTTP shim */
+    http?: object;
+    /** Filesystem preopens mapping (virtual path -> host path) */
+    preopens?: Record<string, string>;
+    /** Environment variables visible to the guest */
+    env?: Record<string, string>;
+    /** Command-line arguments */
+    args?: string[];
+    /** Whether to enable network access (sockets, HTTP). Default: true */
+    enableNetwork?: boolean;
+}
+
+/**
  * (EXPERIMENTAL) A class that holds WASI shims and can be used to configure
  * an instantiation of a WebAssembly component transpiled with jco
  * (i.e. via `jco transpile`).
@@ -108,6 +136,29 @@ type AppendVersion<
  * const component = await instantiate(null, customWASIShim.getImportObject())
  * ```
  *
+ * For sandboxing, you can configure preopens, environment variables, and other
+ * capabilities:
+ *
+ * ```js
+ * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
+ *
+ * // Fully sandboxed - no filesystem, network, or env access
+ * const sandboxedShim = new WASIShim({
+ *     preopens: {},           // No filesystem access
+ *     env: {},                // No environment variables
+ *     args: ['program'],      // Custom arguments
+ *     enableNetwork: false,   // Disable network
+ * });
+ *
+ * // Limited filesystem access
+ * const limitedShim = new WASIShim({
+ *     preopens: {
+ *         '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+ *         '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+ *     }
+ * });
+ * ```
+ *
  * Note that this object is similar but not identical to the Node `WASI` object --
  * it is solely concerned with shimming of preview2 when dealing with a WebAssembly
  * component transpiled by Jco. While this object *does* work with Node (and the browser)
@@ -116,7 +167,7 @@ type AppendVersion<
  * @class WASIShim
  */
 export class WASIShim {
-    constructor(shims?: Partial<WASIImportObject>);
+    constructor(config?: WASIShimConfig);
 
     /**
      * Generate an import object for the shim that can be used with

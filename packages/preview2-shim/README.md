@@ -51,6 +51,50 @@ const component = await instantiate(loader, new WASIShim().getImportObject());
 // TODO: Code that uses your component's exports goes here.
 ```
 
+## Sandboxing
+
+By default, the preview2-shim provides full access to the host filesystem, environment variables,
+and network - matching the default behavior of Node.js libraries. However, you can configure
+sandboxing to restrict what guests can access.
+
+### Using WASIShim for sandboxing
+
+The `WASIShim` class accepts configuration options to control access:
+
+```js
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+
+// Fully sandboxed - no filesystem, network, or env access
+const sandboxedShim = new WASIShim({
+    preopens: {},           // No filesystem access
+    env: {},                // No environment variables
+    args: ['arg1'],         // Custom arguments
+    enableNetwork: false,   // Disable network access
+});
+
+// Limited filesystem access - map virtual paths to host paths
+const limitedShim = new WASIShim({
+    preopens: {
+        '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+        '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+    },
+    env: { 'ENV1': '42' },           // Only expose specific env vars
+});
+
+const component = await instantiate(loader, sandboxedShim.getImportObject());
+```
+
+### Notes on sandboxing
+
+- By default (when no options are passed), the shim is providing full access to match typical
+  Node.js library behavior.
+- Each `WASIShim` instance has its own isolated preopens, environment variables, and arguments.
+  Multiple instances with different configurations will not affect each other.
+- The direct preopen functions (`_setPreopens`, `_clearPreopens`, etc.) modify global state and
+  affect all components not using `WASIShim` with explicit configuration. For isolation, prefer
+  using `WASIShim` with the `preopens` and `env` options.
+- When `enableNetwork: false`, all socket and HTTP operations will throw "access-denied" errors.
+
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 
 # License

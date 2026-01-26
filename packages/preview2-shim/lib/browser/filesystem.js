@@ -322,6 +322,56 @@ export const preopens = {
     },
 };
 
+/**
+ * Replace all preopens with the given set.
+ * @param {Record<string, object>} preopensConfig - Map of virtual paths to file data entries
+ */
+export function _setPreopens(preopensConfig) {
+    _preopens = [];
+    for (const [virtualPath, fileData] of Object.entries(preopensConfig)) {
+        _addPreopen(virtualPath, fileData);
+    }
+}
+
+/**
+ * Add a single preopen mapping.
+ * @param {string} virtualPath - The virtual path visible to the guest
+ * @param {object} fileData - The file data object representing the directory
+ */
+export function _addPreopen(virtualPath, fileData) {
+    const descriptor = new Descriptor(fileData);
+    _preopens.push([descriptor, virtualPath]);
+    if (virtualPath === '/') {
+        _rootPreopen = [descriptor, virtualPath];
+    }
+}
+
+/**
+ * Clear all preopens, giving the guest no filesystem access.
+ */
+export function _clearPreopens() {
+    _preopens = [];
+    _rootPreopen = null;
+}
+
+/**
+ * Get current preopens configuration.
+ * @returns {Array<[Descriptor, string]>} Array of [descriptor, virtualPath] pairs
+ */
+export function _getPreopens() {
+    return [..._preopens];
+}
+
+/**
+ * Create a preopen descriptor for file data.
+ * This is used internally to create isolated preopen instances.
+ * @param {object} fileData - The file data object representing the directory
+ * @returns {Descriptor} A preopen descriptor
+ */
+export function _createPreopenDescriptor(fileData) {
+    return new Descriptor(fileData);
+}
+
 export const types = {
     Descriptor,
     DirectoryEntryStream,
