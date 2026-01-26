@@ -4,7 +4,7 @@ import {
 } from "node:assert";
 import { fileURLToPath } from "node:url";
 
-import { suite, test, assert, vi } from "vitest";
+import { suite, test, assert, vi, beforeEach, afterEach } from "vitest";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -568,6 +568,298 @@ suite("Instantiation", () => {
   });
 });
 
+
+suite("Sandboxing", () => {
+  let originalEnv;
+  let originalArgs;
+
+  beforeEach(async () => {
+    const { cli, filesystem } = await import("@bytecodealliance/preview2-shim");
+    // Save original state
+    originalEnv = cli.environment.getEnvironment();
+    originalArgs = cli.environment.getArguments();
+  });
+
+  afterEach(async () => {
+    const { cli, filesystem } = await import("@bytecodealliance/preview2-shim");
+    // Restore default state
+    filesystem._setPreopens({ '/': '/' });
+    cli._setEnv(Object.fromEntries(originalEnv));
+    cli._setArgs(originalArgs);
+  });
+
+  test("_clearPreopens removes filesystem access", async () => {
+    const { filesystem } = await import("@bytecodealliance/preview2-shim");
+    const initialPreopens = filesystem.preopens.getDirectories();
+
+    assert.ok(initialPreopens.length > 0, "Should have default preopens");
+    filesystem._clearPreopens();
+
+    const clearedPreopens = filesystem.preopens.getDirectories();
+    assert.strictEqual(clearedPreopens.length, 0, "Preopens should be empty after clear");
+  });
+
+  test("_setPreopens replaces preopens", async () => {
+    const { filesystem } = await import("@bytecodealliance/preview2-shim");
+
+    filesystem._setPreopens({
+      '/custom': '/tmp'
+    });
+
+    const preopens = filesystem.preopens.getDirectories();
+    assert.strictEqual(preopens.length, 1, "Should have exactly one preopen");
+    assert.strictEqual(preopens[0][1], '/custom', "Virtual path should be /custom");
+  });
+
+  test("_getPreopens returns current preopens", async () => {
+    const { filesystem } = await import("@bytecodealliance/preview2-shim");
+
+    const preopens = filesystem._getPreopens();
+    assert.ok(Array.isArray(preopens), "Should return an array");
+    // The returned array should be a copy
+    preopens.push(['fake', '/fake']);
+    const preopensAfter = filesystem._getPreopens();
+    assert.notStrictEqual(preopens.length, preopensAfter.length, "Should return a copy");
+  });
+
+  test("WASIShim with empty preopens provides no filesystem access", async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+    const sandboxedShim = new WASIShim({
+      preopens: {}
+    });
+
+    const importObj = sandboxedShim.getImportObject();
+    const dirs = importObj['wasi:filesystem/preopens'].getDirectories();
+    assert.strictEqual(dirs.length, 0, "Should have no preopens");
+  });
+
+  test("WASIShim with custom env", async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+    const customShim = new WASIShim({
+      env: { 'CUSTOM_VAR': 'custom_value', 'ANOTHER': 'value2' }
+    });
+
+    const importObj = customShim.getImportObject();
+    const env = importObj['wasi:cli/environment'].getEnvironment();
+    assert.deepStrictEqual(env, [['CUSTOM_VAR', 'custom_value'], ['ANOTHER', 'value2']]);
+  });
+
+  test("WASIShim with custom args", async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+    const customShim = new WASIShim({
+      args: ['program', '--flag', 'value']
+    });
+
+    const importObj = customShim.getImportObject();
+    const args = importObj['wasi:cli/environment'].getArguments();
+    assert.deepStrictEqual(args, ['program', '--flag', 'value']);
+  });
+
+  test("WASIShim with enableNetwork=false denies network", async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+    const noNetworkShim = new WASIShim({
+      enableNetwork: false
+    });
+
+    const importObj = noNetworkShim.getImportObject();
+
+    // TCP socket can be created, but operations are denied
+    const tcpSocket = importObj['wasi:sockets/tcp-create-socket'].createTcpSocket('ipv4');
+    const network = importObj['wasi:sockets/instance-network'].instanceNetwork();
+
+    // Bind should throw access-denied
+    assert.throws(() => {
+      tcpSocket.startBind(network, { tag: 'ipv4', val: { address: [127, 0, 0, 1], port: 0 } });
+    }, /access-denied/);
+
+    // UDP socket can be created, but operations are denied
+    const udpSocket = importObj['wasi:sockets/udp-create-socket'].createUdpSocket('ipv4');
+
+    // Bind should throw access-denied
+    assert.throws(() => {
+      udpSocket.startBind(network, { tag: 'ipv4', val: { address: [127, 0, 0, 1], port: 0 } });
+    }, /access-denied/);
+  });
+
+  test("WASIShim with enableNetwork=true (default) allows network", async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+    const { sockets } = await import("@bytecodealliance/preview2-shim");
+
+    const defaultShim = new WASIShim();
+
+    const importObj = defaultShim.getImportObject();
+
+    // Should have the real implementations
+    assert.strictEqual(
+      importObj['wasi:sockets/tcp-create-socket'].createTcpSocket,
+      sockets.tcpCreateSocket.createTcpSocket
+    );
+    assert.strictEqual(
+      importObj['wasi:sockets/udp-create-socket'].createUdpSocket,
+      sockets.udpCreateSocket.createUdpSocket
+    );
+  });
+
+  test("Fully sandboxed WASIShim", async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+    const sandboxed = new WASIShim({
+      preopens: {},
+      env: {},
+      args: ['sandboxed-program'],
+      enableNetwork: false
+    });
+
+    const importObj = sandboxed.getImportObject();
+
+    // Verify all restrictions
+    assert.strictEqual(
+      importObj['wasi:filesystem/preopens'].getDirectories().length,
+      0,
+      "No filesystem access"
+    );
+    assert.deepStrictEqual(
+      importObj['wasi:cli/environment'].getEnvironment(),
+      [],
+      "No environment variables"
+    );
+    assert.deepStrictEqual(
+      importObj['wasi:cli/environment'].getArguments(),
+      ['sandboxed-program'],
+      "Custom arguments"
+    );
+
+    // Network operations should be denied
+    const tcpSocket = importObj['wasi:sockets/tcp-create-socket'].createTcpSocket('ipv4');
+    const network = importObj['wasi:sockets/instance-network'].instanceNetwork();
+    assert.throws(() => {
+      tcpSocket.startBind(network, { tag: 'ipv4', val: { address: [127, 0, 0, 1], port: 0 } });
+    }, /access-denied/, "No network access");
+  });
+
+  test("Multiple WASIShim instances have isolated preopens", async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+    // Create two shims with different preopens
+    const shim1 = new WASIShim({
+      preopens: { '/a': '/tmp/a' }
+    });
+    const shim2 = new WASIShim({
+      preopens: { '/b': '/tmp/b' }
+    });
+
+    const obj1 = shim1.getImportObject();
+    const obj2 = shim2.getImportObject();
+
+    const dirs1 = obj1['wasi:filesystem/preopens'].getDirectories();
+    const dirs2 = obj2['wasi:filesystem/preopens'].getDirectories();
+
+    assert.strictEqual(dirs1.length, 1, "shim1 should have 1 preopen");
+    assert.strictEqual(dirs2.length, 1, "shim2 should have 1 preopen");
+    assert.strictEqual(dirs1[0][1], '/a', "shim1 should have /a");
+    assert.strictEqual(dirs2[0][1], '/b', "shim2 should have /b");
+
+    // They should not affect each other
+    assert.notStrictEqual(dirs1, dirs2, "Should be different arrays");
+  });
+
+  test("Multiple WASIShim instances have isolated env and args", async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+
+    const shim1 = new WASIShim({
+      env: { 'VAR': 'value1' },
+      args: ['prog1']
+    });
+    const shim2 = new WASIShim({
+      env: { 'VAR': 'value2' },
+      args: ['prog2']
+    });
+
+    const obj1 = shim1.getImportObject();
+    const obj2 = shim2.getImportObject();
+
+    const env1 = obj1['wasi:cli/environment'].getEnvironment();
+    const env2 = obj2['wasi:cli/environment'].getEnvironment();
+    const args1 = obj1['wasi:cli/environment'].getArguments();
+    const args2 = obj2['wasi:cli/environment'].getArguments();
+
+    assert.deepStrictEqual(env1, [['VAR', 'value1']], "shim1 env");
+    assert.deepStrictEqual(env2, [['VAR', 'value2']], "shim2 env");
+    assert.deepStrictEqual(args1, ['prog1'], "shim1 args");
+    assert.deepStrictEqual(args2, ['prog2'], "shim2 args");
+  });
+
+  test("WASIShim isolated preopens can read files", testWithGCWrap(async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+    const { dirname } = await import("node:path");
+
+    const testFilePath = fileURLToPath(import.meta.url);
+    const testDir = dirname(testFilePath);
+    const testFileName = "test.js";
+
+    // Create a shim with preopens pointing to the test directory
+    const shim = new WASIShim({
+      preopens: { '/test': testDir }
+    });
+
+    const importObj = shim.getImportObject();
+    const preopens = importObj['wasi:filesystem/preopens'];
+    const dirs = preopens.getDirectories();
+
+    assert.strictEqual(dirs.length, 1, "Should have one preopen");
+    assert.strictEqual(dirs[0][1], '/test', "Virtual path should be /test");
+
+    const [rootDescriptor] = dirs[0];
+
+    // Open and read the test file
+    const childDescriptor = rootDescriptor.openAt(
+      {},
+      testFileName,
+      {},
+      { read: true }
+    );
+
+    const stream = childDescriptor.readViaStream(0);
+    const poll = stream.subscribe();
+    poll.block();
+    let buf = stream.read(10000n);
+    while (buf.byteLength === 0) buf = stream.read(10000n);
+    const source = new TextDecoder().decode(buf);
+
+    // Verify we read the actual test file content
+    assert.ok(source.includes("UNIQUE STRING"), "Should read file content");
+
+    // Dispose in correct order: poll first, then stream, then descriptor
+    poll[symbolDispose]();
+    stream[symbolDispose]();
+    childDescriptor[symbolDispose]();
+  }));
+
+  test("WASIShim isolated preopens don't access paths outside preopen", testWithGCWrap(async () => {
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+    const { dirname } = await import("node:path");
+
+    const testFilePath = fileURLToPath(import.meta.url);
+    const testDir = dirname(testFilePath);
+
+    // Create a shim with limited preopens
+    const shim = new WASIShim({
+      preopens: { '/test': testDir }
+    });
+
+    const importObj = shim.getImportObject();
+    const [rootDescriptor] = importObj['wasi:filesystem/preopens'].getDirectories()[0];
+
+    // Attempting to traverse outside the preopen should fail
+    assert.throws(() => {
+      rootDescriptor.openAt({}, '../package.json', {}, { read: true });
+    }, /not-permitted/, "Should not allow traversing outside preopen");
+  }));
+});
 function testWithGCWrap(asyncTestFn) {
   return async () => {
     await asyncTestFn();

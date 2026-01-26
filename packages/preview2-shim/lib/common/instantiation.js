@@ -44,6 +44,29 @@ import * as wasi from '@bytecodealliance/preview2-shim';
  * const component = await instantiate(null, customWASIShim.getImportObject())
  * ```
  *
+ * For sandboxing, you can configure preopens, environment variables, and other
+ * capabilities:
+ *
+ * ```js
+ * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
+ *
+ * // Fully sandboxed - no filesystem, network, or env access
+ * const sandboxedShim = new WASIShim({
+ *     preopens: {},           // No filesystem access
+ *     env: {},                // No environment variables
+ *     args: ['program'],      // Custom arguments
+ *     enableNetwork: false,   // Disable network (default: true for backward compat)
+ * });
+ *
+ * // Limited filesystem access
+ * const limitedShim = new WASIShim({
+ *     preopens: {
+ *         '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+ *         '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+ *     }
+ * });
+ * ```
+ *
  * Note that this object is similar but not identical to the Node `WASI` object --
  * it is solely concerned with shimming of preview2 when dealing with a WebAssembly
  * component transpiled by Jco. While this object *does* work with Node (and the browser)
@@ -66,8 +89,31 @@ export class WASIShim {
     #sockets;
     /** Object that confirms to the shim interface for `wasi:http` */
     #http;
+    /** Isolated preopens for this instance */
+    #preopens;
+    /** Isolated environment for this instance */
+    #environment;
 
-    constructor(shims) {
+    /**
+     * Create a new WASIShim instance.
+     *
+     * @param {object} [config] - Configuration options
+     * @param {object} [config.cli] - Custom CLI shim
+     * @param {object} [config.filesystem] - Custom filesystem shim
+     * @param {object} [config.io] - Custom I/O shim
+     * @param {object} [config.random] - Custom random shim
+     * @param {object} [config.clocks] - Custom clocks shim
+     * @param {object} [config.sockets] - Custom sockets shim
+     * @param {object} [config.http] - Custom HTTP shim
+     * @param {Record<string, string>} [config.preopens] - Filesystem preopens mapping (virtual path -> host path)
+     * @param {Record<string, string>} [config.env] - Environment variables
+     * @param {string[]} [config.args] - Command-line arguments
+     * @param {boolean} [config.enableNetwork=true] - Whether to enable network access
+     */
+    constructor(config) {
+        // Support both old 'shims' parameter name and new 'config' style
+        const shims = config;
+
         this.#cli = shims?.cli ?? wasi.cli;
         this.#filesystem = shims?.filesystem ?? wasi.filesystem;
         this.#io = shims?.io ?? wasi.io;
@@ -75,6 +121,34 @@ export class WASIShim {
         this.#clocks = shims?.clocks ?? wasi.clocks;
         this.#sockets = shims?.sockets ?? wasi.sockets;
         this.#http = shims?.http ?? wasi.http;
+
+        // Create isolated preopens if configured
+        if (shims?.preopens !== undefined) {
+            this.#preopens = createIsolatedPreopens(shims.preopens);
+        }
+
+        // Create isolated environment if env or args are configured
+        if (shims?.env !== undefined || shims?.args !== undefined) {
+            this.#environment = createIsolatedEnvironment(
+                shims?.env,
+                shims?.args,
+                this.#cli
+            );
+        }
+
+        // Apply network restrictions if disabled
+        if (shims?.enableNetwork === false) {
+            // Use the sockets module's built-in deny functions
+            if (this.#sockets._denyTcp) {
+                this.#sockets._denyTcp();
+            }
+            if (this.#sockets._denyUdp) {
+                this.#sockets._denyUdp();
+            }
+            if (this.#sockets._denyDnsLookup) {
+                this.#sockets._denyDnsLookup();
+            }
+        }
     }
 
     /**
@@ -93,7 +167,8 @@ export class WASIShim {
         const versionSuffix = opts?.asVersion ? `@${opts.asVersion}` : '';
 
         const obj = {};
-        obj[`wasi:cli/environment${versionSuffix}`] = this.#cli.environment;
+
+        obj[`wasi:cli/environment${versionSuffix}`] = this.#environment ?? this.#cli.environment;
         obj[`wasi:cli/exit${versionSuffix}`] = this.#cli.exit;
         obj[`wasi:cli/stderr${versionSuffix}`] = this.#cli.stderr;
         obj[`wasi:cli/stdin${versionSuffix}`] = this.#cli.stdin;
@@ -112,7 +187,7 @@ export class WASIShim {
         obj[`wasi:sockets/udp${versionSuffix}`] = this.#sockets.udp;
         obj[`wasi:sockets/udp-create-socket${versionSuffix}`] = this.#sockets.udpCreateSocket;
 
-        obj[`wasi:filesystem/preopens${versionSuffix}`] = this.#filesystem.preopens;
+        obj[`wasi:filesystem/preopens${versionSuffix}`] = this.#preopens ?? this.#filesystem.preopens;
         obj[`wasi:filesystem/types${versionSuffix}`] = this.#filesystem.types;
 
         obj[`wasi:io/error${versionSuffix}`] = this.#io.error;
@@ -131,4 +206,56 @@ export class WASIShim {
 
         return obj;
     }
+}
+
+/**
+ * Create an isolated preopens object with its own preopen entries.
+ *
+ * @param {Record<string, string>} preopensConfig - Map of virtual paths to host paths
+ * @returns {object} A preopens object with Descriptor and getDirectories()
+ */
+function createIsolatedPreopens(preopensConfig) {
+    const { types, _createPreopenDescriptor } = wasi.filesystem;
+    const entries = [];
+
+    // Populate entries using the filesystem's descriptor creation
+    if (_createPreopenDescriptor) {
+        for (const [virtualPath, hostPath] of Object.entries(preopensConfig)) {
+            const descriptor = _createPreopenDescriptor(hostPath);
+            entries.push([descriptor, virtualPath]);
+        }
+    }
+
+    return {
+        Descriptor: types.Descriptor,
+        getDirectories() {
+            return entries;
+        },
+    };
+}
+
+/**
+ * Create an isolated CLI environment with its own env and args.
+ *
+ * @param {Record<string, string>} env - Environment variables
+ * @param {string[]} args - Command-line arguments
+ * @param {object} baseCli - The base CLI module to extend
+ * @returns {object} An isolated CLI environment object
+ */
+function createIsolatedEnvironment(env, args, baseCli) {
+    const envEntries = env ? Object.entries(env) : null;
+    const argsArray = args || null;
+
+    return {
+        ...baseCli.environment,
+        getEnvironment() {
+            return envEntries ?? baseCli.environment.getEnvironment();
+        },
+        getArguments() {
+            return argsArray ?? baseCli.environment.getArguments();
+        },
+        initialCwd() {
+            return baseCli.environment.initialCwd();
+        },
+    };
 }
