@@ -348,6 +348,9 @@ export function _addPreopen(virtualPath, fileData) {
 
 /**
  * Clear all preopens, giving the guest no filesystem access.
+ * 
+ * This functionality exists mostly to maintain backwards compatibility. Prefer setting preopens
+ * via `WASIShim` rather than making top level changes to preopens using these functions.
  */
 export function _clearPreopens() {
     _preopens = [];
