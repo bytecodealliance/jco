@@ -6,6 +6,25 @@ export { _setCwd } from './config.js';
 
 const { InputStream, OutputStream } = streams;
 
+/**
+ * @typedef {Object} FileDataEntry
+ * @property {Record<string, FileDataEntry>} [dir] - Directory contents (present for directories)
+ * @property {Uint8Array|string} [source] - File contents (present for files)
+ */
+
+/**
+ * @typedef {FileDataEntry} FileData
+ * Root file data structure representing a filesystem tree.
+ * Each entry is either a directory (has `dir` property) or a file (has `source` property).
+ * @example
+ * // A simple filesystem with one directory containing one file:
+ * const fileData = {
+ *   dir: {
+ *     'myfile.txt': { source: new Uint8Array([72, 101, 108, 108, 111]) }
+ *   }
+ * };
+ */
+
 export function _setFileData(fileData) {
     _fileData = fileData;
     _rootPreopen[0] = new Descriptor(fileData);
@@ -324,7 +343,7 @@ export const preopens = {
 
 /**
  * Replace all preopens with the given set.
- * @param {Record<string, object>} preopensConfig - Map of virtual paths to file data entries
+ * @param {Record<string, FileData>} preopensConfig - Map of virtual paths to file data entries
  */
 export function _setPreopens(preopensConfig) {
     _preopens = [];
@@ -336,7 +355,7 @@ export function _setPreopens(preopensConfig) {
 /**
  * Add a single preopen mapping.
  * @param {string} virtualPath - The virtual path visible to the guest
- * @param {object} fileData - The file data object representing the directory
+ * @param {FileData} fileData - The file data object representing the directory
  */
 export function _addPreopen(virtualPath, fileData) {
     const descriptor = new Descriptor(fileData);
@@ -368,7 +387,7 @@ export function _getPreopens() {
 /**
  * Create a preopen descriptor for file data.
  * This is used internally to create isolated preopen instances.
- * @param {object} fileData - The file data object representing the directory
+ * @param {FileData} fileData - The file data object representing the directory
  * @returns {Descriptor} A preopen descriptor
  */
 export function _createPreopenDescriptor(fileData) {

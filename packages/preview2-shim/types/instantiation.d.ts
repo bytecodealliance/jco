@@ -65,6 +65,20 @@ type AppendVersion<
     : never;
 
 /**
+ * Sandbox configuration options for WASIShim
+ */
+interface SandboxConfig {
+    /** Filesystem preopens mapping (virtual path -> host path) */
+    preopens?: Record<string, string>;
+    /** Environment variables visible to the guest */
+    env?: Record<string, string>;
+    /** Command-line arguments */
+    args?: string[];
+    /** Whether to enable network access (sockets, HTTP). Default: true */
+    enableNetwork?: boolean;
+}
+
+/**
  * Configuration options for WASIShim
  */
 interface WASIShimConfig {
@@ -82,14 +96,8 @@ interface WASIShimConfig {
     sockets?: object;
     /** Custom HTTP shim */
     http?: object;
-    /** Filesystem preopens mapping (virtual path -> host path) */
-    preopens?: Record<string, string>;
-    /** Environment variables visible to the guest */
-    env?: Record<string, string>;
-    /** Command-line arguments */
-    args?: string[];
-    /** Whether to enable network access (sockets, HTTP). Default: true */
-    enableNetwork?: boolean;
+    /** Sandbox configuration for restricting guest capabilities */
+    sandbox?: SandboxConfig;
 }
 
 /**
@@ -137,24 +145,28 @@ interface WASIShimConfig {
  * ```
  *
  * For sandboxing, you can configure preopens, environment variables, and other
- * capabilities:
+ * capabilities via the `sandbox` option:
  *
  * ```js
  * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
  *
  * // Fully sandboxed - no filesystem, network, or env access
  * const sandboxedShim = new WASIShim({
- *     preopens: {},           // No filesystem access
- *     env: {},                // No environment variables
- *     args: ['program'],      // Custom arguments
- *     enableNetwork: false,   // Disable network
+ *     sandbox: {
+ *         preopens: {},           // No filesystem access
+ *         env: {},                // No environment variables
+ *         args: ['program'],      // Custom arguments
+ *         enableNetwork: false,   // Disable network
+ *     }
  * });
  *
  * // Limited filesystem access
  * const limitedShim = new WASIShim({
- *     preopens: {
- *         '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
- *         '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+ *     sandbox: {
+ *         preopens: {
+ *             '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+ *             '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+ *         }
  *     }
  * });
  * ```
