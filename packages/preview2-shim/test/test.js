@@ -626,7 +626,9 @@ suite("Sandboxing", () => {
     const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const sandboxedShim = new WASIShim({
-      preopens: {}
+      sandbox: {
+        preopens: {}
+      }
     });
 
     const importObj = sandboxedShim.getImportObject();
@@ -638,7 +640,9 @@ suite("Sandboxing", () => {
     const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const customShim = new WASIShim({
-      env: { 'CUSTOM_VAR': 'custom_value', 'ANOTHER': 'value2' }
+      sandbox: {
+        env: { 'CUSTOM_VAR': 'custom_value', 'ANOTHER': 'value2' }
+      }
     });
 
     const importObj = customShim.getImportObject();
@@ -650,7 +654,9 @@ suite("Sandboxing", () => {
     const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const customShim = new WASIShim({
-      args: ['program', '--flag', 'value']
+      sandbox: {
+        args: ['program', '--flag', 'value']
+      }
     });
 
     const importObj = customShim.getImportObject();
@@ -662,7 +668,9 @@ suite("Sandboxing", () => {
     const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const noNetworkShim = new WASIShim({
-      enableNetwork: false
+      sandbox: {
+        enableNetwork: false
+      }
     });
 
     const importObj = noNetworkShim.getImportObject();
@@ -708,10 +716,12 @@ suite("Sandboxing", () => {
     const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const sandboxed = new WASIShim({
-      preopens: {},
-      env: {},
-      args: ['sandboxed-program'],
-      enableNetwork: false
+      sandbox: {
+        preopens: {},
+        env: {},
+        args: ['sandboxed-program'],
+        enableNetwork: false
+      }
     });
 
     const importObj = sandboxed.getImportObject();
@@ -746,10 +756,14 @@ suite("Sandboxing", () => {
 
     // Create two shims with different preopens
     const shim1 = new WASIShim({
-      preopens: { '/a': '/tmp/a' }
+      sandbox: {
+        preopens: { '/a': '/tmp/a' }
+      }
     });
     const shim2 = new WASIShim({
-      preopens: { '/b': '/tmp/b' }
+      sandbox: {
+        preopens: { '/b': '/tmp/b' }
+      }
     });
 
     const obj1 = shim1.getImportObject();
@@ -771,12 +785,16 @@ suite("Sandboxing", () => {
     const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
 
     const shim1 = new WASIShim({
-      env: { 'VAR': 'value1' },
-      args: ['prog1']
+      sandbox: {
+        env: { 'VAR': 'value1' },
+        args: ['prog1']
+      }
     });
     const shim2 = new WASIShim({
-      env: { 'VAR': 'value2' },
-      args: ['prog2']
+      sandbox: {
+        env: { 'VAR': 'value2' },
+        args: ['prog2']
+      }
     });
 
     const obj1 = shim1.getImportObject();
@@ -803,7 +821,9 @@ suite("Sandboxing", () => {
 
     // Create a shim with preopens pointing to the test directory
     const shim = new WASIShim({
-      preopens: { '/test': testDir }
+      sandbox: {
+        preopens: { '/test': testDir }
+      }
     });
 
     const importObj = shim.getImportObject();
@@ -848,7 +868,9 @@ suite("Sandboxing", () => {
 
     // Create a shim with limited preopens
     const shim = new WASIShim({
-      preopens: { '/test': testDir }
+      sandbox: {
+        preopens: { '/test': testDir }
+      }
     });
 
     const importObj = shim.getImportObject();

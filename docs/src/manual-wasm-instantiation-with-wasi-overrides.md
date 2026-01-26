@@ -150,4 +150,70 @@ const versioned: VersionedWASIImportObject<'0.2.3'> = shim.getImportObject({
 versioned satisfies VersionedWASIImportObject<'0.2.3'>;
 ```
 
+## Sandboxing with `WASIShim`
+
+By default, the `preview2-shim` provides full access to the host filesystem, environment variables,
+and network - matching the default behavior of Node.js libraries. You can use the `sandbox` option
+to restrict what guests can access.
+
+Each `WASIShim` instance has its own isolated preopens, environment variables, and arguments.
+Multiple instances with different configurations will not affect each other:
+
+### Fully sandboxed instance
+
+To create a fully sandboxed instance with no filesystem, network, or environment access:
+
+```js
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const sandboxedShim = new WASIShim({
+  sandbox: {
+    preopens: {},           // No filesystem access
+    env: {},                // No environment variables
+    args: ['my-program'],   // Custom arguments
+    enableNetwork: false,   // Disable network access
+  }
+});
+
+const component = await wasmESModule.instantiate(
+  loader,
+  sandboxedShim.getImportObject(),
+);
+```
+
+### Limited filesystem access
+
+To provide limited filesystem access by mapping virtual paths to host paths:
+
+```js
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const limitedShim = new WASIShim({
+  sandbox: {
+    preopens: {
+      '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+      '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+    },
+    env: { 'ENV1': '42' },         // Only expose specific env vars
+  }
+});
+
+const component = await wasmESModule.instantiate(
+  loader,
+  limitedShim.getImportObject(),
+);
+```
+
+### Sandbox options
+
+The `sandbox` configuration object supports the following options:
+
+| Option          | Type                     | Default         | Description                                                             |
+|-----------------|--------------------------|-----------------|-------------------------------------------------------------------------|
+| `preopens`      | `Record<string, string>` | Full filesystem | Map of virtual paths to host paths. Use `{}` for no filesystem access.  |
+| `env`           | `Record<string, string>` | `process.env`   | Environment variables visible to the guest. Use `{}` for no env access. |
+| `args`          | `string[]`               | `process.argv`  | Command-line arguments visible to the guest.                            |
+| `enableNetwork` | `boolean`                | `true`          | Whether to enable network access (sockets, HTTP).                       |
+
+
 [!NOTE]: #

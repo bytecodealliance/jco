@@ -45,25 +45,29 @@ import * as wasi from '@bytecodealliance/preview2-shim';
  * ```
  *
  * For sandboxing, you can configure preopens, environment variables, and other
- * capabilities:
+ * capabilities via the `sandbox` option:
  *
  * ```js
  * import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation"
  *
  * // Fully sandboxed - no filesystem, network, or env access
  * const sandboxedShim = new WASIShim({
+ *   sandbox: {
  *     preopens: {},           // No filesystem access
  *     env: {},                // No environment variables
  *     args: ['program'],      // Custom arguments
  *     enableNetwork: false,   // Disable network (default: true for backward compat)
+ *   }
  * });
  *
  * // Limited filesystem access
  * const limitedShim = new WASIShim({
+ *   sandbox: {
  *     preopens: {
- *         '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
- *         '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+ *       '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+ *       '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
  *     }
+ *   }
  * });
  * ```
  *
@@ -97,18 +101,7 @@ export class WASIShim {
     /**
      * Create a new WASIShim instance.
      *
-     * @param {object} [config] - Configuration options
-     * @param {object} [config.cli] - Custom CLI shim
-     * @param {object} [config.filesystem] - Custom filesystem shim
-     * @param {object} [config.io] - Custom I/O shim
-     * @param {object} [config.random] - Custom random shim
-     * @param {object} [config.clocks] - Custom clocks shim
-     * @param {object} [config.sockets] - Custom sockets shim
-     * @param {object} [config.http] - Custom HTTP shim
-     * @param {Record<string, string>} [config.preopens] - Filesystem preopens mapping (virtual path -> host path)
-     * @param {Record<string, string>} [config.env] - Environment variables
-     * @param {string[]} [config.args] - Command-line arguments
-     * @param {boolean} [config.enableNetwork=true] - Whether to enable network access
+     * @param {import('../types/instantiation.d.ts').WASIShimConfig} [config] - Configuration options
      */
     constructor(config) {
         // Support both old 'shims' parameter name and new 'config' style
@@ -122,22 +115,25 @@ export class WASIShim {
         this.#sockets = shims?.sockets ?? wasi.sockets;
         this.#http = shims?.http ?? wasi.http;
 
+        // Extract sandbox options
+        const sandbox = shims?.sandbox;
+
         // Create isolated preopens if configured
-        if (shims?.preopens !== undefined) {
-            this.#preopens = createIsolatedPreopens(shims.preopens);
+        if (sandbox?.preopens !== undefined) {
+            this.#preopens = createIsolatedPreopens(sandbox.preopens);
         }
 
         // Create isolated environment if env or args are configured
-        if (shims?.env !== undefined || shims?.args !== undefined) {
+        if (sandbox?.env !== undefined || sandbox?.args !== undefined) {
             this.#environment = createIsolatedEnvironment(
-                shims?.env,
-                shims?.args,
+                sandbox?.env,
+                sandbox?.args,
                 this.#cli
             );
         }
 
         // Apply network restrictions if disabled
-        if (shims?.enableNetwork === false) {
+        if (sandbox?.enableNetwork === false) {
             // Use the sockets module's built-in deny functions
             if (this.#sockets._denyTcp) {
                 this.#sockets._denyTcp();
