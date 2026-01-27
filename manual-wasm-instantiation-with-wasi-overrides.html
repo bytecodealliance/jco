@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6a3e8242.js";
+            window.path_to_searchindex_js = "searchindex-5bfb50bc.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-69241bbd.js"></script>
@@ -306,6 +306,64 @@ const versioned: VersionedWASIImportObject&lt;'0.2.3'&gt; = shim.getImportObject
 //console.log('versioned', versioned);
 versioned satisfies VersionedWASIImportObject&lt;'0.2.3'&gt;;
 </code></pre>
+<h2 id="sandboxing-with-wasishim"><a class="header" href="#sandboxing-with-wasishim">Sandboxing with <code>WASIShim</code></a></h2>
+<p>By default, the <code>preview2-shim</code> provides full access to the host filesystem, environment variables,
+and network - matching the default behavior of Node.js libraries. You can use the <code>sandbox</code> option
+to restrict what guests can access.</p>
+<p>Each <code>WASIShim</code> instance has its own isolated preopens, environment variables, and arguments.
+Multiple instances with different configurations will not affect each other:</p>
+<h3 id="fully-sandboxed-instance"><a class="header" href="#fully-sandboxed-instance">Fully sandboxed instance</a></h3>
+<p>To create a fully sandboxed instance with no filesystem, network, or environment access:</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const sandboxedShim = new WASIShim({
+  sandbox: {
+    preopens: {},           // No filesystem access
+    env: {},                // No environment variables
+    args: ['my-program'],   // Custom arguments
+    enableNetwork: false,   // Disable network access
+  }
+});
+
+const component = await wasmESModule.instantiate(
+  loader,
+  sandboxedShim.getImportObject(),
+);
+</code></pre>
+<h3 id="limited-filesystem-access"><a class="header" href="#limited-filesystem-access">Limited filesystem access</a></h3>
+<p>To provide limited filesystem access by mapping virtual paths to host paths:</p>
+<pre><code class="language-js">import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const limitedShim = new WASIShim({
+  sandbox: {
+    preopens: {
+      '/data': '/tmp/guest-data',  // Guest sees /data, maps to /tmp/guest-data
+      '/config': '/etc/app'        // Guest sees /config, maps to /etc/app
+    },
+    env: { 'ENV1': '42' },         // Only expose specific env vars
+  }
+});
+
+const component = await wasmESModule.instantiate(
+  loader,
+  limitedShim.getImportObject(),
+);
+</code></pre>
+<h3 id="sandbox-options"><a class="header" href="#sandbox-options">Sandbox options</a></h3>
+<p>The <code>sandbox</code> configuration object supports the following options:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>preopens</code></td><td><code>Record&lt;string, string&gt;</code></td><td>Full filesystem</td><td>Map of virtual paths to host paths. Use <code>{}</code> for no filesystem access.</td></tr>
+<tr><td><code>env</code></td><td><code>Record&lt;string, string&gt;</code></td><td><code>process.env</code></td><td>Environment variables visible to the guest. Use <code>{}</code> for no env access.</td></tr>
+<tr><td><code>args</code></td><td><code>string[]</code></td><td><code>process.argv</code></td><td>Command-line arguments visible to the guest.</td></tr>
+<tr><td><code>enableNetwork</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Whether to enable network access (sockets, HTTP).</td></tr>
+</tbody>
+</table>
+</div>
 
                     </main>
 
