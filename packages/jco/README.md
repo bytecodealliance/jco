@@ -30,7 +30,7 @@ Features include:
 * Run and serve commands like Wasmtime, as JS implementations of the Command and HTTP Proxy worlds.
 * "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
 
-For creating components in other languages, see the [Cargo Component](https://github.com/bytecodealliance/cargo-Component) project for Rust and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
+For creating components in other languages, see the [Component Model Book](https://component-model.bytecodealliance.org/language-support.html) and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 
 ## Installation
 
