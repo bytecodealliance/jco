@@ -43,7 +43,7 @@ semver = { version = "1.0.25", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
 webidl2wit = { version = "0.1.0", default-features = false }
 xshell = { version = "0.2.6", default-features = false }
-wasmtime = { version = "41.0.0", default-features = false }
+wasmtime = { version = "41.0.1", default-features = false }
 tokio = { version = "1.49.0", default-features = false }
 
 wasm-encoder = { version = "0.244.0", default-features = false }
