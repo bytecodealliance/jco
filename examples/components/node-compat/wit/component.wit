@@ -1,0 +1,5 @@
+package example:node-compat;
+
+world component {
+    export wasi:cli/run@0.2.6;
+}
