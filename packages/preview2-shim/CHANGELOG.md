@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.7] - 2026-01-30
+
+### 🚀 Features
+
+* *(p2-shim)* add sandboxing configuration to WASIShim by @andreiltd
+
+
+
+
 ## [0.17.6] - 2025-12-30
 
 ### 🐛 Bug Fixes
