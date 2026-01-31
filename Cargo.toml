@@ -60,4 +60,4 @@ wit-parser = { version = "0.244.0", default-features = false }
 wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "10291cd2252856863d2f4fd74ad5b2aa553e9d92", default-features = false }
 wit-bindgen-core = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "10291cd2252856863d2f4fd74ad5b2aa553e9d92", default-features = false }
 
-js-component-bindgen = { version = "1.13.0", path = "./crates/js-component-bindgen" }
+js-component-bindgen = { version = "1.14.0", path = "./crates/js-component-bindgen" }
