@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
@@ -22,7 +22,7 @@ import {
     readComponentBytes,
     tsGenerationPromise,
 } from './helpers.js';
-import { getDefaultComponentFixtures, ESLINT_PATH } from './common.js';
+import { getDefaultComponentFixtures, ESLINT_PATH, COMPONENT_FIXTURES_DIR } from './common.js';
 
 suite(`Transpiler codegen`, async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
@@ -271,5 +271,16 @@ suite(`Naming`, () => {
 
         assert.isOk(bindingsSource.includes('class Thing$1{'));
         assert.isOk(bindingsSource.includes('Thing: Thing$1'));
+    });
+});
+
+suite("Directive Prologue", () => {
+    test("shows directive", async () => {
+        const component = await readFile(join(COMPONENT_FIXTURES_DIR, "adder.component.wasm"));
+        const { files } = await transpile(component, { name: 'adder' });
+        const bindingsSource = new TextDecoder().decode(
+            files['adder.js']
+        );
+        assert.isOk(bindingsSource.includes('"use jco";'));
     });
 });
