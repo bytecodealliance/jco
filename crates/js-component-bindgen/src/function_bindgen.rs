@@ -2396,6 +2396,13 @@ impl Bindgen for FunctionBindgen<'_> {
             | Instruction::GuestDeallocateString
             | Instruction::GuestDeallocateList { .. }
             | Instruction::GuestDeallocateVariant { .. } => unimplemented!("Guest deallocation"),
+
+            Instruction::FixedLengthListLift { .. }
+            | Instruction::FixedLengthListLiftFromMemory { .. }
+            | Instruction::FixedLengthListLower { .. }
+            | Instruction::FixedLengthListLowerToMemory { .. } => {
+                unimplemented!("Fixed length lists")
+            }
         }
     }
 }
