@@ -1,5 +1,96 @@
 # Changelog
 
+## [1.16.0] - 2026-02-01
+
+### 🚀 Features
+
+* *(jco)* error on attempt to set async imports for sync transpile by @vados-cosmonic
+
+* *(jco)* enable p3 async post return test by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+* *(jco)* test use of push context by @vados-cosmonic
+
+* *(jco)* browser tests by @vados-cosmonic
+
+* *(jco)* tests, async tick() behavior by @vados-cosmonic
+
+
+### 🧪 Testing
+
+* *(jco)* test telemetry directive by @vados-cosmonic in #1228
+
+* *(jco)* re-add basic custom component tests by @vados-cosmonic
+
+* *(jco)* re-add basic backpressure test by @vados-cosmonic
+
+* *(jco)* update previously deleted test to use test components by @vados-cosmonic
+
+* *(jco)* add machinery for building local rust p3 test components by @vados-cosmonic
+
+* *(jco)* simply remove outdated async component tests by @vados-cosmonic
+
+* *(jco)* fix the post-return tests for updated upstream deps by @vados-cosmonic
+
+* *(jco)* update error-context tests by @vados-cosmonic
+
+* *(jco)* update error context to newer binaries by @vados-cosmonic
+
+* *(jco)* fix ts generation helper usage by @vados-cosmonic
+
+* *(jco)* refactor typescript fixture generation code by @vados-cosmonic
+
+* *(jco)* use p2-shim in strings test by @vados-cosmonic
+
+* *(jco)* update browser template by @vados-cosmonic
+
+* *(jco)* update async context test by @vados-cosmonic
+
+* *(jco)* re-enable skipped and excluded tests by @vados-cosmonic
+
+* *(jco)* add basic test for async imports by @vados-cosmonic
+
+* *(jco)* improve documentation for setup helper by @vados-cosmonic
+
+* *(jco)* add test for basic direct import async function by @vados-cosmonic
+
+* *(jco)* add/improve testing for direct exported async returns by @vados-cosmonic
+
+* *(jco)* skip hanging context.get/set test by @vados-cosmonic
+
+* *(jco)* print actual usage for memory leak test by @vados-cosmonic
+
+* *(jco)* update/fix tests with updated component bindgen by @vados-cosmonic
+
+* *(jco)* port p3 post-return scenario tests by @vados-cosmonic
+
+* *(jco)* port p3 backpressure scenario tests by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+* *(jco)* update transpile tests, replace & updatte wasm binaries by @vados-cosmonic
+
+* *(jco)* re-enable all error-context tests by @vados-cosmonic
+
+* *(jco)* update upstream p3 test binaries by @vados-cosmonic
+
+* *(jco)* update to latest upstream deps by @vados-cosmonic
+
+* *(jco)* fix lint by @vados-cosmonic
+
+* *(jco)* remove stale TODO by @vados-cosmonic
+
+
+
+## New Contributors
+* @molarmanful made their first contribution in [#1184](https://github.com/bytecodealliance/jco/pull/1184)
+* @wffurr made their first contribution in [#1172](https://github.com/bytecodealliance/jco/pull/1172)
+* @wooorm-arcjet made their first contribution in [#1156](https://github.com/bytecodealliance/jco/pull/1156)
+
+
 ## [1.15.4] - 2025-12-01
 
 ### 🐛 Bug Fixes
