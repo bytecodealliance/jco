@@ -382,6 +382,9 @@ impl JsBindgen<'_> {
             }
         }
 
+        // Render the telemery directive
+        uwrite!(output, r#""use jco";"#);
+
         let js_intrinsics = render_intrinsics(RenderIntrinsicsArgs {
             intrinsics: &mut self.all_intrinsics,
             no_nodejs_compat: self.opts.no_nodejs_compat,
