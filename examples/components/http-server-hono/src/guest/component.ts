@@ -22,6 +22,21 @@ app.get("/", (c) => {
     return c.text("Hello World!!!!");
 });
 
+app.post("/json/post", async (c) => {
+    const body = await c.req.json();
+    return c.json({ method: c.req.method, body });
+});
+
+app.delete("/json/delete", async (c) => {
+    const body = await c.req.json();
+    return c.json({ method: c.req.method, body });
+});
+
+app.patch("/json/patch", async (c) => {
+    const body = await c.req.json();
+    return c.json({ method: c.req.method, body });
+});
+
 fire(app);
 
 // Although we've called `fire()` with wasi HTTP configured for use above,

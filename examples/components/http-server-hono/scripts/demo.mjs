@@ -10,6 +10,7 @@ import { createServer as createNetServer } from "node:net";
 import { env } from "node:process";
 import { stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import assert from "node:assert";
 
 import terminate from "terminate";
 
@@ -58,15 +59,56 @@ async function main() {
         });
     });
 
+    const baseURL = `http://localhost:${randomPort}`;
     // Execute the WASM module running via jco serve
     try {
-        const resp = await fetch(`http://localhost:${randomPort}`);
-        const respText = await resp.text();
-        console.log(`fetch() OUTPUT:\n${respText}`);
+        await requestAndPrintOutput({ method: "GET", url: baseURL });
+
+        // NOTE: the logic below currently is tied tightly to component functionality
+        // for obvious reasons -- the componetn currently returns the method along with 
+        // the post body,w hich it assumes to be JSON.
+
+        let postBody = { data: 'example post body' };
+        const postRespText = await requestAndPrintOutput({ 
+            method: "POST", 
+            url: `${baseURL}/json/post`, 
+            body: JSON.stringify(postBody),
+        });
+        assert.deepEqual({ method: 'POST', body: postBody }, JSON.parse(postRespText));
+
+        let deleteBody = { data: 'example delete body' };
+        const deleteRespText = await requestAndPrintOutput({ 
+            method: "DELETE", 
+            url: `${baseURL}/json/delete`, 
+            body: JSON.stringify(deleteBody),
+        });
+        assert.deepEqual({ method: 'DELETE', body: deleteBody }, JSON.parse(deleteRespText));
+
+        let patchBody = { data: 'example patch body' };
+        const patchRespText = await requestAndPrintOutput({ 
+            method: "PATCH", 
+            url: `${baseURL}/json/patch`, 
+            body: JSON.stringify(patchBody),
+        });
+        assert.deepEqual({ method: 'PATCH', body: patchBody }, JSON.parse(patchRespText));
+
     } catch (err) {
         throw err;
     } finally {
         terminate(proc.pid);
+    }
+}
+
+// Helper to perform simple requests and print output
+async function requestAndPrintOutput({ url, method, body }) {
+    try {
+        const resp = await fetch(url, { method, body });
+        const respText = await resp.text();
+        console.log(`fetch(${method}, ${url}) OUTPUT:\n${respText}`);
+        return respText;
+    } catch (err) {
+        console.error(`${method} request to [${url}] failed`, err);
+        throw err;
     }
 }
 
