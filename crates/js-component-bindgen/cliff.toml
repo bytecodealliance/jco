@@ -79,3 +79,8 @@ tag_pattern = "^js-component-bindgen-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?"
 link_parsers = [
     { pattern = "\\(#(\\d+)\\)$", href = "https://github.com/bytecodealliance/jco/pull/$1" },
 ]
+
+include_paths = [
+    "crates/js-component-bindgen/**/*",
+    "crates/js-component-bindgen-component/**/*",
+]

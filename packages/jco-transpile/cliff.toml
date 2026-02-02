@@ -79,3 +79,7 @@ tag_pattern = "^jco-transpile-v[0-9]+.[0-9]+.[0-9]+(-beta|-rc|-alpha)?"
 link_parsers = [
     { pattern = "\\(#(\\d+)\\)$", href = "https://github.com/bytecodealliance/jco/pull/$1" },
 ]
+
+include_paths = [
+    "packages/jco-transpile/**/*",
+]
