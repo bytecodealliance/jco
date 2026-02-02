@@ -92,7 +92,6 @@ export function genReadWASIRequestFn(incomingBodyTy: typeof IncomingBody) {
                     // (this differs by WIT iface version)
                     incomingBodyTy.finish(incomingBody);
 
-                    wasiIncomingRequest[Symbol.dispose]();
                     controller.close();
                 },
             });
