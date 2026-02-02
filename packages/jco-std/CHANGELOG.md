@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.1] - 2026-02-02
+
+### 🐛 Bug Fixes
+
+* *(std)* remove incoming request resource disposal by @vados-cosmonic
+
+
+
+## New Contributors
+* @molarmanful made their first contribution in [#1184](https://github.com/bytecodealliance/jco/pull/1184)
+* @wffurr made their first contribution in [#1172](https://github.com/bytecodealliance/jco/pull/1172)
+* @wooorm-arcjet made their first contribution in [#1156](https://github.com/bytecodealliance/jco/pull/1156)
+
+
 ## [0.1.0] - 2025-11-08
 
 ### 🚀 Features
