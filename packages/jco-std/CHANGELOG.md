@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1] - 2026-02-02
+
+### 🐛 Bug Fixes
+
+* *(std)* remove incoming request resource disposal by @vados-cosmonic
+
+
+
+
 ## [0.1.0] - 2025-11-08
 
 ### 🚀 Features
