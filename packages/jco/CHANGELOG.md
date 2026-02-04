@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.16.1] - 2026-02-04
+
+### ⚙️ Miscellaneous Tasks
+
+* (update of js-component-bindgen to v1.14.1)
+
+
 ## [1.16.0] - 2026-02-01
 
 ### 🚀 Features
