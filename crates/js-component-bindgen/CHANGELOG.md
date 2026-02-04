@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.14.1] - 2026-02-04
+
+### 🐛 Bug Fixes
+
+* let instead of const on backpressureCleared because it is reassigned
+
+## New Contributors
+* @rgripper made their first contribution in [#1241](https://github.com/bytecodealliance/jco/pull/1241)
+
+
 ## [1.14.0] - 2026-02-01
 
 ### 🚀 Features
