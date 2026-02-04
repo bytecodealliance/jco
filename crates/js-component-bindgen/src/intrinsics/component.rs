@@ -220,7 +220,7 @@ impl ComponentIntrinsic {
                         hasBackpressure() {{ return this.#backpressure > 0; }}
 
                         waitForBackpressure() {{
-                            const backpressureCleared = false;
+                            let backpressureCleared = false;
                             const cstate = this;
                             cstate.addBackpressureWaiter();
                             const handlerID = this.registerHandler({{
