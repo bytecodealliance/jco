@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.8] - 2026-02-08
+
+### 🚀 Features
+
+* *(p2-shim)* implement browser HTTP fetch support via JSPI by @danbopes in #1249
+
+
+
+## New Contributors
+* @danbopes made their first contribution in [#1249](https://github.com/bytecodealliance/jco/pull/1249)
+
+
 ## [0.17.7] - 2026-01-30
 
 ### 🚀 Features
