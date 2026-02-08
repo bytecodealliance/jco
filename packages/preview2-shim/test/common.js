@@ -88,6 +88,45 @@ export async function startTestServer(args) {
         const htmlDirURL = pathToFileURL(htmlDir + '/');
 
         const newServer = createHTTPServer(async (req, res) => {
+            // Handle CORS preflight for all endpoints
+            if (req.method === 'OPTIONS') {
+                res.writeHead(204, {
+                    'access-control-allow-origin': '*',
+                    'access-control-allow-methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+                    'access-control-allow-headers': req.headers['access-control-request-headers'] || '*',
+                    'access-control-expose-headers': '*',
+                    'access-control-max-age': '86400',
+                });
+                res.end();
+                return;
+            }
+
+            if (req.url === '/api/test-echo') {
+                res.writeHead(200, {
+                    'content-type': 'application/json',
+                    'x-test-header': 'test-value',
+                    'access-control-allow-origin': '*',
+                });
+                res.end(JSON.stringify({ message: 'hello from test server' }));
+                return;
+            }
+
+            // Wasmtime-compatible echo endpoint: echoes method, URI, and body
+            if (req.url.startsWith('/echo/') || ['/get', '/post', '/put'].includes(req.url.split('?')[0])) {
+                const chunks = [];
+                for await (const chunk of req) chunks.push(chunk);
+                const body = Buffer.concat(chunks);
+                res.writeHead(200, {
+                    'content-type': 'application/octet-stream',
+                    'x-wasmtime-test-method': req.method,
+                    'x-wasmtime-test-uri': req.url,
+                    'access-control-allow-origin': '*',
+                    'access-control-expose-headers': 'x-wasmtime-test-method, x-wasmtime-test-uri',
+                });
+                res.end(body);
+                return;
+            }
+
             let fileURL;
             try {
                 if (req.url.startsWith('/transpiled/')) {

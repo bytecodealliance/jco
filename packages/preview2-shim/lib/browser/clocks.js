@@ -1,3 +1,6 @@
+import { poll } from './io.js';
+const { Pollable } = poll;
+
 export const monotonicClock = {
     resolution() {
         // usually we dont get sub-millisecond accuracy in the browser
@@ -10,15 +13,16 @@ export const monotonicClock = {
     },
     subscribeInstant(instant) {
         instant = BigInt(instant);
-        const now = this.now();
+        const now = monotonicClock.now();
         if (instant <= now) {
-            return this.subscribeDuration(0);
+            return new Pollable(new Promise(resolve => setTimeout(resolve, 0)));
         }
-        return this.subscribeDuration(instant - now);
+        return monotonicClock.subscribeDuration(instant - now);
     },
-    subscribeDuration(_duration) {
-        _duration = BigInt(_duration);
-        console.log(`[monotonic-clock] subscribe`);
+    subscribeDuration(duration) {
+        duration = BigInt(duration);
+        const ms = duration <= 0n ? 0 : Number(duration / 1_000_000n);
+        return new Pollable(new Promise(resolve => setTimeout(resolve, ms)));
     },
 };
 
