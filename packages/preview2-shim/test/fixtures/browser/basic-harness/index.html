@@ -97,7 +97,7 @@ At the end of the test, the document body will be updated with the state of exec
 
      // Run the exported function (which will call the async host import above), get response text
      // (Jco will encode results as the type if nothing is thrown)
-     const responseText = fn();
+     const responseText = await fn();
 
      updateOutput({ status: 'success', msg: responseText });
    } catch (e) {

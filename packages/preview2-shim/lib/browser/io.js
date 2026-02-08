@@ -77,7 +77,9 @@ class InputStream {
         return BigInt(bytes.byteLength);
     }
     subscribe() {
-        console.log(`[streams] Subscribe to input stream ${this.id}`);
+        if (this.handler.subscribe) {
+            return this.handler.subscribe();
+        }
         return new Pollable();
     }
     [symbolDispose]() {
@@ -168,7 +170,9 @@ class OutputStream {
         console.log(`[streams] Forward ${this.id}`);
     }
     subscribe() {
-        console.log(`[streams] Subscribe to output stream ${this.id}`);
+        if (this.handler.subscribe) {
+            return this.handler.subscribe();
+        }
         return new Pollable();
     }
     [symbolDispose]() {}
@@ -178,19 +182,75 @@ export const error = { Error: IoError };
 
 export const streams = { InputStream, OutputStream };
 
-class Pollable {}
+class Pollable {
+    #ready = false;
+    #promise = null;
 
-function pollList(_list) {
-    // TODO
+    constructor(promise) {
+        if (!promise) {
+            this.#ready = true;
+        } else {
+            this.#promise = promise.then(
+                () => { this.#ready = true; },
+                () => { this.#ready = true; }
+            );
+        }
+    }
+
+    ready() {
+        return this.#ready;
+    }
+
+    block() {
+        if (this.#ready) {
+            return Promise.resolve();
+        }
+        return this.#promise;
+    }
+
+    [symbolDispose]() {
+        this.#promise = null;
+    }
 }
 
-function pollOne(_poll) {
-    // TODO
+function pollList(list) {
+    if (list.length === 0) {
+        throw new Error('poll list must not be empty');
+    }
+    if (list.length > 0xFFFFFFFF) {
+        throw new Error('poll list length exceeds u32 index range');
+    }
+    const ready = [];
+    for (let i = 0; i < list.length; i++) {
+        if (list[i].ready()) {
+            ready.push(i);
+        }
+    }
+    if (ready.length > 0) {
+        return new Uint32Array(ready);
+    }
+    // None ready synchronously. Wait for the first to resolve via Promise.race,
+    // then sweep for any others that became ready concurrently.
+    return Promise.race(
+        list.map((p, i) => p.block().then(() => {
+            const result = [i];
+            for (let j = 0; j < list.length; j++) {
+                if (j !== i && list[j].ready()) {
+                    result.push(j);
+                }
+            }
+            return new Uint32Array(result);
+        }))
+    );
+}
+
+function pollOne(poll) {
+    return poll.block();
 }
 
 export const poll = {
     Pollable,
     pollList,
     pollOne,
-    poll: pollOne,
+    poll: pollList,
 };

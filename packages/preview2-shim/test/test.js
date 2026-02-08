@@ -882,6 +882,37 @@ suite("Sandboxing", () => {
     }, /not-permitted/, "Should not allow traversing outside preopen");
   }));
 });
+suite("Browser shim guards", () => {
+  test("pollList throws on empty list", async () => {
+    const { poll } = await import("../lib/browser/io.js");
+    assert.throws(() => poll.poll([]), /empty/);
+  });
+
+  test("pollList throws on list exceeding u32 range", async () => {
+    const { poll } = await import("../lib/browser/io.js");
+    const fakeList = { length: 0x100000000 };
+    assert.throws(() => poll.poll(fakeList), /u32/);
+  });
+
+  test("RequestOptions rejects negative connect timeout", async () => {
+    const { types } = await import("../lib/browser/http.js");
+    const opts = new types.RequestOptions();
+    assert.throws(() => opts.setConnectTimeout(-1n), /negative/);
+  });
+
+  test("RequestOptions rejects negative first-byte timeout", async () => {
+    const { types } = await import("../lib/browser/http.js");
+    const opts = new types.RequestOptions();
+    assert.throws(() => opts.setFirstByteTimeout(-1n), /negative/);
+  });
+
+  test("RequestOptions rejects negative between-bytes timeout", async () => {
+    const { types } = await import("../lib/browser/http.js");
+    const opts = new types.RequestOptions();
+    assert.throws(() => opts.setBetweenBytesTimeout(-1n), /negative/);
+  });
+});
+
 function testWithGCWrap(asyncTestFn) {
   return async () => {
     await asyncTestFn();
