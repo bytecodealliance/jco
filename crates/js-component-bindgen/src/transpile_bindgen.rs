@@ -7,6 +7,7 @@ use std::ops::Index;
 use base64::Engine as _;
 use base64::engine::general_purpose;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
+use semver::Version;
 use wasmtime_environ::component::{
     CanonicalOptions, CanonicalOptionsDataModel, Component, ComponentTranslation, ComponentTypes,
     CoreDef, CoreExport, Export, ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule,
@@ -4042,32 +4043,56 @@ impl Source {
     }
 }
 
+/// Compute the semver "compatibility track" for a version string.
+/// Mirrors wasmtime's `alternate_lookup_key()` logic.
+///
+/// Returns the compat key and parsed `Version` on success.
+///
+/// Examples (showing just the key):
+///   "1.2.3"  → Some(("1", ..))     — major > 0, compat within major
+///   "0.2.10" → Some(("0.2", ..))   — minor > 0, compat within 0.minor
+///   "0.0.1"  → None                — no semver compat
+///   "1.0.0-rc.1" → None            — pre-release, no compat
+fn semver_compat_key(version_str: &str) -> Option<(String, Version)> {
+    let version = Version::parse(version_str).ok()?;
+    if !version.pre.is_empty() {
+        None
+    } else if version.major != 0 {
+        Some((format!("{}", version.major), version))
+    } else if version.minor != 0 {
+        Some((format!("0.{}", version.minor), version))
+    } else {
+        None
+    }
+}
+
+fn parse_mapping(mapping: &str) -> (String, Option<String>) {
+    if mapping.len() > 1 {
+        if let Some(hash_idx) = mapping[1..].find('#') {
+            return (
+                mapping[0..hash_idx + 1].to_string(),
+                Some(mapping[hash_idx + 2..].into()),
+            );
+        }
+    }
+    (mapping.into(), None)
+}
+
 fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Option<String>) {
     let impt_sans_version = match impt.find('@') {
         Some(version_idx) => &impt[0..version_idx],
         None => impt,
     };
     if let Some(map) = map.as_ref() {
+        // Exact match (including version)
         if let Some(mapping) = map.get(impt) {
-            return if let Some(hash_idx) = mapping[1..].find('#') {
-                (
-                    mapping[0..hash_idx + 1].to_string(),
-                    Some(mapping[hash_idx + 2..].into()),
-                )
-            } else {
-                (mapping.into(), None)
-            };
+            return parse_mapping(mapping);
         }
+        // Match without version
         if let Some(mapping) = map.get(impt_sans_version) {
-            return if let Some(hash_idx) = mapping[1..].find('#') {
-                (
-                    mapping[0..hash_idx + 1].to_string(),
-                    Some(mapping[hash_idx + 2..].into()),
-                )
-            } else {
-                (mapping.into(), None)
-            };
+            return parse_mapping(mapping);
         }
+        // Wildcard matching (version-stripped and full)
         for (key, mapping) in map {
             if let Some(wildcard_idx) = key.find('*') {
                 let lhs = &key[0..wildcard_idx];
@@ -4076,27 +4101,77 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                     let matched = &impt_sans_version[wildcard_idx
                         ..wildcard_idx + impt_sans_version.len() - lhs.len() - rhs.len()];
                     let mapping = mapping.replace('*', matched);
-                    return if let Some(hash_idx) = mapping[1..].find('#') {
-                        (
-                            mapping[0..hash_idx + 1].to_string(),
-                            Some(mapping[hash_idx + 2..].into()),
-                        )
-                    } else {
-                        (mapping, None)
-                    };
+                    return parse_mapping(&mapping);
                 }
                 if impt.starts_with(lhs) && impt.ends_with(rhs) {
                     let matched =
                         &impt[wildcard_idx..wildcard_idx + impt.len() - lhs.len() - rhs.len()];
                     let mapping = mapping.replace('*', matched);
-                    return if let Some(hash_idx) = mapping[1..].find('#') {
-                        (
-                            mapping[0..hash_idx + 1].to_string(),
-                            Some(mapping[hash_idx + 2..].into()),
-                        )
-                    } else {
-                        (mapping, None)
+                    return parse_mapping(&mapping);
+                }
+            }
+        }
+        // Semver-compatible matching for versioned map entries.
+        // If the import has a parseable version and earlier steps didn't match,
+        // try matching against map entries with compatible versions.
+        if let Some(at) = impt.find('@') {
+            let impt_ver_str = &impt[at + 1..];
+            if let Some((impt_compat, _)) = semver_compat_key(impt_ver_str) {
+                let mut best_match: Option<(String, Version)> = None;
+
+                for (key, mapping) in map {
+                    // Only consider map entries that have a version
+                    let key_at = match key.find('@') {
+                        Some(at) => at,
+                        None => continue,
                     };
+                    let key_base = &key[..key_at];
+                    let key_ver_str = &key[key_at + 1..];
+
+                    // Check version compatibility
+                    let (key_compat, key_ver) = match semver_compat_key(key_ver_str) {
+                        Some(k) => k,
+                        None => continue,
+                    };
+                    if impt_compat != key_compat {
+                        continue;
+                    }
+
+                    // Versions are on the same compatibility track.
+                    // Now check if the base (sans version) matches.
+                    let resolved = if let Some(wildcard_idx) = key_base.find('*') {
+                        let lhs = &key_base[..wildcard_idx];
+                        let rhs = &key_base[wildcard_idx + 1..];
+                        if impt_sans_version.starts_with(lhs)
+                            && impt_sans_version.ends_with(rhs)
+                        {
+                            let matched = &impt_sans_version[wildcard_idx
+                                ..wildcard_idx + impt_sans_version.len()
+                                    - lhs.len()
+                                    - rhs.len()];
+                            Some(mapping.replace('*', matched))
+                        } else {
+                            None
+                        }
+                    } else if key_base == impt_sans_version {
+                        Some(mapping.clone())
+                    } else {
+                        None
+                    };
+
+                    if let Some(resolved_mapping) = resolved {
+                        // Prefer the highest compatible version
+                        match &best_match {
+                            Some((_, prev_ver)) if key_ver <= *prev_ver => {}
+                            _ => {
+                                best_match = Some((resolved_mapping, key_ver));
+                            }
+                        }
+                    }
+                }
+
+                if let Some((mapping, _)) = best_match {
+                    return parse_mapping(&mapping);
                 }
             }
         }
@@ -4740,5 +4815,231 @@ pub fn gen_flat_lower_fn_js_expr(
                 Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext).name();
             format!("{lower_flat_err_ctx_fn}.bind(null, {table_idx})")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to extract just the compat key string for cleaner test assertions.
+    fn compat_key(version_str: &str) -> Option<String> {
+        semver_compat_key(version_str).map(|(key, _)| key)
+    }
+
+    #[test]
+    fn test_semver_compat_key() {
+        assert_eq!(compat_key("1.0.0"), Some("1".into()));
+        assert_eq!(compat_key("1.2.3"), Some("1".into()));
+        assert_eq!(compat_key("2.0.0"), Some("2".into()));
+        assert_eq!(compat_key("0.2.0"), Some("0.2".into()));
+        assert_eq!(compat_key("0.2.10"), Some("0.2".into()));
+        assert_eq!(compat_key("0.1.0"), Some("0.1".into()));
+        assert_eq!(compat_key("0.0.1"), None);
+        assert_eq!(compat_key("1.0.0-rc.1"), None);
+        assert_eq!(compat_key("0.2.0-pre"), None);
+        assert_eq!(compat_key("not-a-version"), None);
+    }
+
+    #[test]
+    fn test_semver_compat_key_returns_parsed_version() {
+        let (key, ver) = semver_compat_key("1.2.3").unwrap();
+        assert_eq!(key, "1");
+        assert_eq!(ver, Version::new(1, 2, 3));
+    }
+
+    #[test]
+    fn test_map_import_exact_match() {
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types@0.2.0".into(), "./http.js#types".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.0"),
+            ("./http.js".into(), Some("types".into()))
+        );
+    }
+
+    #[test]
+    fn test_map_import_sans_version_match() {
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types".into(), "./http.js".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.10"),
+            ("./http.js".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_wildcard_sans_version() {
+        // Unversioned wildcard key matches via version-stripped path (pre-existing logic)
+        let mut map = HashMap::new();
+        map.insert("wasi:http/*".into(), "./http.js#*".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.10"),
+            ("./http.js".into(), Some("types".into()))
+        );
+    }
+
+    #[test]
+    fn test_map_import_semver_exact_key() {
+        // Map has @0.2.0, import is @0.2.10 — should match via semver
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types@0.2.0".into(), "./http.js".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.10"),
+            ("./http.js".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_semver_wildcard_key() {
+        // Map has wasi:http/*@0.2.0, import is @0.2.10 — should match via semver
+        let mut map = HashMap::new();
+        map.insert("wasi:http/*@0.2.1".into(), "./http.js#*".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.10"),
+            ("./http.js".into(), Some("types".into()))
+        );
+    }
+
+    #[test]
+    fn test_map_import_semver_lower_import_version() {
+        // Import version (0.2.1) is lower than map entry (0.2.10) — same compat track
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types@0.2.10".into(), "./http.js".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.1"),
+            ("./http.js".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_semver_no_cross_minor() {
+        // 0.2.x should NOT match 0.3.x
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types@0.3.0".into(), "./http.js".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.10"),
+            ("wasi:http/types".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_semver_prefers_highest() {
+        // Multiple compatible versions — should prefer highest
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types@0.2.1".into(), "./http-old.js".into());
+        map.insert("wasi:http/types@0.2.5".into(), "./http-new.js".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.10"),
+            ("./http-new.js".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_no_match_prerelease() {
+        let mut map = HashMap::new();
+        map.insert(
+            "wasi:http/types@0.2.0-rc.1".into(),
+            "./http.js".into(),
+        );
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.2.0"),
+            ("wasi:http/types".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_no_match_zero_zero() {
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types@0.0.1".into(), "./http.js".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@0.0.2"),
+            ("wasi:http/types".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_semver_major_version() {
+        // Major version compat: 1.0.0 and 1.2.3 share compat key "1"
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types@1.0.0".into(), "./http.js".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@1.2.3"),
+            ("./http.js".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_semver_no_cross_major() {
+        // 1.x.y should NOT match 2.x.y
+        let mut map = HashMap::new();
+        map.insert("wasi:http/types@1.0.0".into(), "./http.js".into());
+        let map = Some(map);
+        assert_eq!(
+            map_import(&map, "wasi:http/types@2.0.0"),
+            ("wasi:http/types".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_no_map() {
+        // No map provided — returns import sans version
+        assert_eq!(
+            map_import(&None, "wasi:http/types@0.2.0"),
+            ("wasi:http/types".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_map_import_no_map_unversioned() {
+        // No map, no version — returns import as-is
+        assert_eq!(
+            map_import(&None, "wasi:http/types"),
+            ("wasi:http/types".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_parse_mapping_with_hash() {
+        assert_eq!(
+            parse_mapping("./http.js#types"),
+            ("./http.js".into(), Some("types".into()))
+        );
+    }
+
+    #[test]
+    fn test_parse_mapping_without_hash() {
+        assert_eq!(
+            parse_mapping("./http.js"),
+            ("./http.js".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_parse_mapping_leading_hash() {
+        // Leading '#' should not be treated as a separator
+        assert_eq!(
+            parse_mapping("#foo"),
+            ("#foo".into(), None)
+        );
+    }
+
+    #[test]
+    fn test_parse_mapping_empty() {
+        assert_eq!(
+            parse_mapping(""),
+            ("".into(), None)
+        );
     }
 }
