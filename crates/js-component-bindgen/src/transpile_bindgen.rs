@@ -4142,13 +4142,9 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
                     let resolved = if let Some(wildcard_idx) = key_base.find('*') {
                         let lhs = &key_base[..wildcard_idx];
                         let rhs = &key_base[wildcard_idx + 1..];
-                        if impt_sans_version.starts_with(lhs)
-                            && impt_sans_version.ends_with(rhs)
-                        {
+                        if impt_sans_version.starts_with(lhs) && impt_sans_version.ends_with(rhs) {
                             let matched = &impt_sans_version[wildcard_idx
-                                ..wildcard_idx + impt_sans_version.len()
-                                    - lhs.len()
-                                    - rhs.len()];
+                                ..wildcard_idx + impt_sans_version.len() - lhs.len() - rhs.len()];
                             Some(mapping.replace('*', matched))
                         } else {
                             None
@@ -4946,10 +4942,7 @@ mod tests {
     #[test]
     fn test_map_import_no_match_prerelease() {
         let mut map = HashMap::new();
-        map.insert(
-            "wasi:http/types@0.2.0-rc.1".into(),
-            "./http.js".into(),
-        );
+        map.insert("wasi:http/types@0.2.0-rc.1".into(), "./http.js".into());
         let map = Some(map);
         assert_eq!(
             map_import(&map, "wasi:http/types@0.2.0"),
@@ -5020,26 +5013,17 @@ mod tests {
 
     #[test]
     fn test_parse_mapping_without_hash() {
-        assert_eq!(
-            parse_mapping("./http.js"),
-            ("./http.js".into(), None)
-        );
+        assert_eq!(parse_mapping("./http.js"), ("./http.js".into(), None));
     }
 
     #[test]
     fn test_parse_mapping_leading_hash() {
         // Leading '#' should not be treated as a separator
-        assert_eq!(
-            parse_mapping("#foo"),
-            ("#foo".into(), None)
-        );
+        assert_eq!(parse_mapping("#foo"), ("#foo".into(), None));
     }
 
     #[test]
     fn test_parse_mapping_empty() {
-        assert_eq!(
-            parse_mapping(""),
-            ("".into(), None)
-        );
+        assert_eq!(parse_mapping(""), ("".into(), None));
     }
 }
