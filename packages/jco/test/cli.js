@@ -724,7 +724,79 @@ suite('CLI', () => {
         const source = await readFile(outputJSPath, 'utf8');
         assert.ok(source.includes("imports['custom-wasi:filesystem/types']"));
     });
+
+    // NOTE: this test works because hello-stdout.component.wasm
+    // was built on a version of StarlingMonkey targeting WASI 0.2.3,
+    // and this test ensures a mapping to *newer* WASI versions will not error.
+    //
+    // see: https://github.com/bytecodealliance/jco/pull/1252
+    test('mapping version matching', async () => {
+        const name = "hello_stdout";
+        let res = await exec(
+            jcoPath,
+            'transpile',
+            `test/fixtures/modules/${name}.component.wasm`,
+            '--no-wasi-shim',
+            // interface wildcard matched, although 0.2.0 < 0.2.3
+            '--map', 'wasi:cli/*@0.2.0=./cli.js',
+            // interface wildcard sans version matches
+            '--map', 'wasi:io/*=./io.js',
+            // exact interface matches
+            '--map', 'wasi:filesystem/types@0.2.3=./filesystem.js',
+            "--name",
+            name,
+            '-o',
+            outDir
+        );
+        assert.strictEqual(res.stderr, '');
+        let source = await readFile(`${outDir}/${name}.js`);
+        source = source.toString();
+        assert(source.includes("from './cli.js'"));
+        assert(source.includes("from './io.js'"));
+        assert(source.includes("from './filesystem.js'"));
+
+        // Since there aren't enough individual imports to map differently,
+        // we perform the transpilation again with different settings below
+        res = await exec(
+            jcoPath,
+            'transpile',
+            `test/fixtures/modules/${name}.component.wasm`,
+            '--no-wasi-shim',
+            // interface without version matches
+            '--map', 'wasi:cli/stdout=./cli.js',
+            // exact match with older version
+            '--map', 'wasi:cli/environment@0.2.0=./cli-environment-older.js',
+            // exact match with newer version
+            '--map', 'wasi:cli/stderr@0.2.10=./cli-stderr-newer.js',
+            // no pre-release matching
+            '--map', 'wasi:cli/exit@0.2.3-rc.1=./cli-exit-prerelease.js',
+            // interface wildcard with older version
+            '--map', 'wasi:io/*@0.2.0=./io.js',
+            // incompat version (does *not* match)
+            '--map', 'wasi:filesystem/types@0.3.0=./filesystem-types.js',
+            // higher version wins
+            '--map', 'wasi:filesystem/preopens@0.2.5=./filesystem-preopens-lower.js',
+            '--map', 'wasi:filesystem/preopens@0.2.10=./filesystem-preopens-higher.js',
+            "--name",
+            name,
+            '-o',
+            outDir
+        );
+        assert.strictEqual(res.stderr, '');
+        source = await readFile(`${outDir}/${name}.js`);
+        source = source.toString();
+        assert(source.includes("from './cli.js'"));
+        assert(source.includes("from './cli-environment-older.js'"));
+        assert(source.includes("from './cli-stderr-newer.js'"));
+        assert(!source.includes("from './cli-exit-prerelease.js'"));
+        assert(source.includes("from './io.js'"));
+        assert(!source.includes("from './filesystem-types.js'"));
+        assert(source.includes("from './filesystem-preopens-higher.js'"));
+    });
+
 });
+
+
 
 // Cache of componentize byte outputs
 const CACHE_COMPONENTIZE_OUTPUT = {};
