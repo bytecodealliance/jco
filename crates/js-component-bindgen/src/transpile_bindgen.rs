@@ -4067,13 +4067,13 @@ fn semver_compat_key(version_str: &str) -> Option<(String, Version)> {
 }
 
 fn parse_mapping(mapping: &str) -> (String, Option<String>) {
-    if mapping.len() > 1 {
-        if let Some(hash_idx) = mapping[1..].find('#') {
-            return (
-                mapping[0..hash_idx + 1].to_string(),
-                Some(mapping[hash_idx + 2..].into()),
-            );
-        }
+    if mapping.len() > 1
+        && let Some(hash_idx) = mapping[1..].find('#')
+    {
+        return (
+            mapping[0..hash_idx + 1].to_string(),
+            Some(mapping[hash_idx + 2..].into()),
+        );
     }
     (mapping.into(), None)
 }
