@@ -39,7 +39,7 @@
   ],
   "scripts": {
     "compile:check": "tsc --noEmit types/index.d.ts",
-    "fmt": "npm run lint:fix",
+    "fmt": "oxfmt",
     "lint": "eslint -c ../../eslint.config.mjs --ext .js lib test",
     "lint:fix": "eslint -c ../../eslint.config.mjs --ext .js lib test --fix",
     "test": "vitest --run",
