@@ -75,7 +75,9 @@
   },
   "scripts": {
     "setup:jco-transpile:build": "npm run build -w @bytecodealliance/jco-transpile",
-    "lint": "eslint -c ./eslint.config.mjs",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
     "lint:fix": "npm run lint -- --fix",
     "build:bindings:wasi:http:0.2.6": "WIT_PATH=wit/http-v0m2p6 OUTPUT_DIR_PATH=src/wasi/0.2.6/generated/types node scripts/generate-wasi-bindings.mjs",
     "build:bindings:wasi:http:0.2.3": "WIT_PATH=wit/http-v0m2p3 OUTPUT_DIR_PATH=src/wasi/0.2.3/generated/types node scripts/generate-wasi-bindings.mjs",
@@ -92,7 +94,6 @@
     "@types/which": "^3.0.4",
     "hono": "^4.10.4",
     "rolldown": "^1.0.0-beta.46",
-    "typescript-eslint": "^8.43.0",
     "vitest": "^4.0.8",
     "which": "^5.0.0"
   }
