@@ -29,11 +29,14 @@
     "build:types:preview3-shim": "cargo xtask generate wasi-types preview3",
     "build:test:components": "npm run build:test:components --ws --if-present",
     "fmt": "npm run fmt --ws --if-present",
+    "fmt:check": "npm run fmt:check --ws --if-present",
     "lint": "npm run lint --ws --if-present",
     "lint:fix": "npm run lint:fix --ws --if-present"
   },
   "devDependencies": {
     "@actions/github": "^6.0.1",
-    "git-cliff": "^2.10.0"
+    "git-cliff": "^2.10.0",
+    "oxfmt": "^0.32.0",
+    "oxlint": "^1.47.0"
   }
 }

@@ -48,7 +48,7 @@
         "setup:jco:build": "npm run -w @bytecodealliance/jco build:release",
         "setup:jco:vendor": "cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
         "build:vendor": "node scripts/setup-vendor.mjs",
-        "fmt": "npm run lint:fix",
+        "fmt": "oxfmt",
         "lint": "eslint -c ./eslint.config.mjs ./src/**/*.ts ./test/**/*.ts",
         "lint:fix": "npm run lint -- --fix",
         "build:ts": "tsc -p tsconfig.json",
