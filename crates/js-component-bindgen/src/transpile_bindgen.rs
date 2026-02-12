@@ -3997,7 +3997,7 @@ impl<'a> Instantiator<'a, '_> {
         def: &CoreDef,
         options: &CanonicalOptions,
         func: &Function,
-        func_ty_idx: &TypeFuncIndex,
+        _func_ty_idx: &TypeFuncIndex,
         export_name: &String,
         export_resource_map: &ResourceMap,
     ) {
@@ -4053,69 +4053,71 @@ impl<'a> Instantiator<'a, '_> {
             Some(export_name)
         };
 
-        // Output the lift and lowering functions for the fn
+        // TODO: re-enable when needed for more complex objects
         //
-        // We do this here mostly to avoid introducing a breaking change at the FunctionBindgen
-        // level, and to encourage re-use of param lowering.
-        //
-        // TODO(breaking): pass `Function` reference along to `FunctionBindgen` and generate *and* lookup lower there
-        //
-        // This function will be called early in execution of generated functions that correspond
-        // to an async export, to lower parameters that were passed by JS into the component's memory.
-        //
-        if is_async {
-            let component_idx = options.instance.as_u32();
-            let global_async_param_lower_class = {
-                self.add_intrinsic(Intrinsic::GlobalAsyncParamLowersClass);
-                Intrinsic::GlobalAsyncParamLowersClass.name()
-            };
+        // // Output the lift and lowering functions for the fn
+        // //
+        // // We do this here mostly to avoid introducing a breaking change at the FunctionBindgen
+        // // level, and to encourage re-use of param lowering.
+        // //
+        // // TODO(breaking): pass `Function` reference along to `FunctionBindgen` and generate *and* lookup lower there
+        // //
+        // // This function will be called early in execution of generated functions that correspond
+        // // to an async export, to lower parameters that were passed by JS into the component's memory.
+        // //
+        // if is_async {
+        //     let component_idx = options.instance.as_u32();
+        //     let global_async_param_lower_class = {
+        //         self.add_intrinsic(Intrinsic::GlobalAsyncParamLowersClass);
+        //         Intrinsic::GlobalAsyncParamLowersClass.name()
+        //     };
 
-            // Get the interface-level types for the parameters to the function
-            // in case we need to do async lowering
-            let func_ty = &self.types[*func_ty_idx];
-            let param_types = func_ty.params;
-            let func_param_iface_types = &self.types[param_types].types;
+        //     // Get the interface-level types for the parameters to the function
+        //     // in case we need to do async lowering
+        //     let func_ty = &self.types[*func_ty_idx];
+        //     let param_types = func_ty.params;
+        //     let func_param_iface_types = &self.types[param_types].types;
 
-            // Generate lowering functions for params
-            let lower_fns_list_js = gen_flat_lower_fn_list_js_expr(
-                self,
-                self.types,
-                func_param_iface_types,
-                &options.string_encoding,
-            );
+        //     // Generate lowering functions for params
+        //     let lower_fns_list_js = gen_flat_lower_fn_list_js_expr(
+        //         self,
+        //         self.types,
+        //         func_param_iface_types,
+        //         &options.string_encoding,
+        //     );
 
-            // TODO(fix): add tests for indirect param (> 16 args)
-            //
-            // We *should* be able to just jump to the memory location in question and then
-            // start doing the reading.
-            self.src.js(&format!(
-                r#"
-                {global_async_param_lower_class}.define({{
-                    componentIdx: '{component_idx}',
-                    iface: '{iface}',
-                    fnName: '{callee}',
-                    fn: (args) => {{
-                        const {{ loweringParams, vals, memory, indirect }} = args;
-                        if (!memory) {{ throw new TypeError("missing memory for async param lower"); }}
-                        if (indirect === undefined) {{ throw new TypeError("missing memory for async param lower"); }}
-                        if (indirect) {{ throw new Error("indirect aysnc param lowers not yet supported"); }}
+        //     // TODO(fix): add tests for indirect param (> 16 args)
+        //     //
+        //     // We *should* be able to just jump to the memory location in question and then
+        //     // start doing the reading.
+        //     self.src.js(&format!(
+        //         r#"
+        //         {global_async_param_lower_class}.define({{
+        //             componentIdx: '{component_idx}',
+        //             iface: '{iface}',
+        //             fnName: '{callee}',
+        //             fn: (args) => {{
+        //                 const {{ loweringParams, vals, memory, indirect }} = args;
+        //                 if (!memory) {{ throw new TypeError("missing memory for async param lower"); }}
+        //                 if (indirect === undefined) {{ throw new TypeError("missing memory for async param lower"); }}
+        //                 if (indirect) {{ throw new Error("indirect aysnc param lowers not yet supported"); }}
 
-                        const lowerFns = {lower_fns_list_js};
-                        const lowerCtx = {{
-                            params: loweringParams,
-                            vals,
-                            memory,
-                            componentIdx: {component_idx},
-                            useDirectParams: !indirect,
-                        }};
+        //                 const lowerFns = {lower_fns_list_js};
+        //                 const lowerCtx = {{
+        //                     params: loweringParams,
+        //                     vals,
+        //                     memory,
+        //                     componentIdx: {component_idx},
+        //                     useDirectParams: !indirect,
+        //                 }};
 
-                        for (const lowerFn of lowerFns) {{ lowerFn(lowerCtx); }}
-                    }},
-                }});
-                "#,
-                iface = iface_name.map(|v| v.as_str()).unwrap_or( "$root"),
-            ));
-        }
+        //                 for (const lowerFn of lowerFns) {{ lowerFn(lowerCtx); }}
+        //             }},
+        //         }});
+        //         "#,
+        //         iface = iface_name.map(|v| v.as_str()).unwrap_or( "$root"),
+        //     ));
+        // }
 
         // Write function preamble (everything up to the `(` in `function (...`)
         match func.kind {
