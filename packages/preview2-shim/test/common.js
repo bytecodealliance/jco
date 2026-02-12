@@ -114,7 +114,7 @@ export async function startTestServer(args) {
             // Wasmtime-compatible echo endpoint: echoes method, URI, and body
             if (req.url.startsWith('/echo/') || ['/get', '/post', '/put'].includes(req.url.split('?')[0])) {
                 const chunks = [];
-                for await (const chunk of req) chunks.push(chunk);
+                for await (const chunk of req) {chunks.push(chunk);}
                 const body = Buffer.concat(chunks);
                 res.writeHead(200, {
                     'content-type': 'application/octet-stream',
