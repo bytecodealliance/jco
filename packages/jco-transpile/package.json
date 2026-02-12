@@ -49,7 +49,8 @@
         "setup:jco:vendor": "cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
         "build:vendor": "node scripts/setup-vendor.mjs",
         "fmt": "oxfmt",
-        "lint": "eslint -c ./eslint.config.mjs ./src/**/*.ts ./test/**/*.ts",
+        "fmt:check": "oxfmt --check",
+        "lint": "oxlint",
         "lint:fix": "npm run lint -- --fix",
         "build:ts": "tsc -p tsconfig.json",
         "build": "npm run build:vendor && npm run build:ts",
@@ -63,8 +64,6 @@
     "devDependencies": {
         "@npmcli/run-script": "^10.0.2",
         "@types/node": "^24.10.0",
-        "eslint": "^9.39.1",
-        "typescript-eslint": "^8.46.3",
         "vite": "^7.1.5",
         "vitest": "^4.0.7"
     }
