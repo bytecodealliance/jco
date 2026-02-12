@@ -8,7 +8,7 @@ Test components for use during jco testing
 """
 
 [dependencies]
-wit-bindgen = { workspace = true, features = [ "macros", "async" ] }
+wit-bindgen = { workspace = true, features = [ "macros", "async-spawn"] }
 
 [build-dependencies]
 anyhow = { workspace = true }
