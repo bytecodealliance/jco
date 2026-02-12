@@ -8,7 +8,7 @@ import { instantiate } from '../output/numbers/numbers.js';
 import { strictEqual } from 'node:assert';
 
 function assert(x: boolean) {
-    if (!x) throw new Error('assert failed');
+    if (!x) {throw new Error('assert failed');}
 }
 
 /*
