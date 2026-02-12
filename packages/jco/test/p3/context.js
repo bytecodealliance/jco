@@ -41,7 +41,6 @@ suite('Context (WASI P3)', () => {
         await cleanup();
     });
 
-    // TODO: fix
     test('context.get/set (async export, async porcelain)', async () => {
         const name = 'context-async';
         const { instance, cleanup } = await setupAsyncTest({

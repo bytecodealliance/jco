@@ -1099,8 +1099,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 let memory = self.memory.as_ref().unwrap();
                 let realloc = self.realloc.unwrap();
 
+                // Gather metadata about list element
                 let size = self.sizes.size(element).size_wasm32();
                 let align = ArchitectureSize::from(self.sizes.align(element)).size_wasm32();
+
+                // Alias the list to a local variable
                 uwriteln!(self.src, "var val{tmp} = {};", operands[0]);
                 if matches!(element, Type::U8) {
                     uwriteln!(self.src, "var len{tmp} = val{tmp}.byteLength;");
@@ -1108,26 +1111,53 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(self.src, "var len{tmp} = val{tmp}.length;");
                 }
 
+                // Allocate space for the type in question
                 uwriteln!(
                     self.src,
                     "var ptr{tmp} = {realloc}(0, 0, {align}, len{tmp} * {size});",
                 );
-                // TODO: this is the wrong endianness
-                if matches!(element, Type::U8) {
-                    uwriteln!(
-                        self.src,
-                        "var src{tmp} = new Uint8Array(val{tmp}.buffer || val{tmp}, val{tmp}.byteOffset, len{tmp} * {size});",
-                    );
-                } else {
-                    uwriteln!(
-                        self.src,
-                        "var src{tmp} = new Uint8Array(val{tmp}.buffer, val{tmp}.byteOffset, len{tmp} * {size});",
-                    );
-                }
+
+                // We may or may not be dealing with a buffer like object or a regular JS array,
+                // in which case we can detect and use the right value
+
+                // Determine what methods to use with a DataView when setting the data
+                let dataview_set_method = match element {
+                    Type::Bool | Type::U8 => "setUint8",
+                    Type::U16 => "setUint16",
+                    Type::U32 => "setUint32",
+                    Type::U64 => "setUint64",
+                    Type::S8 => "setInt8",
+                    Type::S16 => "setInt16",
+                    Type::S32 => "setInt32",
+                    Type::S64 => "setInt64",
+                    Type::F32 => "setFloat32",
+                    Type::F64 => "setFloat64",
+                    _ => unreachable!("unsupported type [{element:?}] for canonical list lower"),
+                };
+
+                // Detect whether we're dealing with a regular array
                 uwriteln!(
                     self.src,
-                    "(new Uint8Array({memory}.buffer, ptr{tmp}, len{tmp} * {size})).set(src{tmp});",
+                    r#"
+                        let valData{tmp};
+                        const valLenBytes{tmp} = len{tmp} * {size};
+                        if (Array.isArray(val{tmp})) {{
+                            // Regular array likely containing numbers, write values to memory
+                            let offset = 0;
+                            const dv{tmp} = new DataView({memory}.buffer);
+                            for (const v of val{tmp}) {{
+                                dv{tmp}.{dataview_set_method}(ptr{tmp} + offset, v, true);
+                                offset += {size};
+                            }}
+                        }} else {{
+                            // TypedArray / ArrayBuffer-like, direct copy
+                            valData{tmp} = new Uint8Array(val{tmp}.buffer || val{tmp}, val{tmp}.byteOffset, valLenBytes{tmp});
+                            const out{tmp} = new Uint8Array({memory}.buffer, ptr{tmp},valLenBytes{tmp});
+                            out{tmp}.set(valData{tmp});
+                        }}
+                    "#,
                 );
+
                 results.push(format!("ptr{tmp}"));
                 results.push(format!("len{tmp}"));
             }
@@ -1265,8 +1295,8 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallWasm { name, sig } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let global_async_param_lower_class =
-                    self.intrinsic(Intrinsic::GlobalAsyncParamLowersClass);
+                // let global_async_param_lower_class =
+                //     self.intrinsic(Intrinsic::GlobalAsyncParamLowersClass);
                 let has_post_return = self.post_return.is_some();
                 let is_async = self.is_async;
                 uwriteln!(
@@ -1313,37 +1343,40 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 // If we're async w/ params that have been lowered, we must lower the params
-                // let requires_lowering = sig.params.len() >
-                if self.is_async {
-                    let memory = self.memory.map(|v| v.as_str()).unwrap_or_else(|| "null");
-                    let component_idx = self.canon_opts.instance.as_u32();
-                    uwriteln!(
-                        self.src,
-                        r#"
-                        {{
-                            const paramLowerFn = {global_async_param_lower_class}.lookup({{
-                                componentIdx: {component_idx},
-                                iface: '{iface_name}',
-                                fnName: '{callee}',
-                            }});
-                            if (!paramLowerFn) {{
-                                throw new Error(`missing async param lower function for generated export fn [{callee}]`);
-                            }}
-                            paramLowerFn({{
-                                memory: {memory},
-                                vals: [{params}],
-                                indirect: {indirect},
-                                loweringParams: [{operands}],
-                            }});
-                        }}
-                        "#,
-                        operands = operands.join(","),
-                        params = self.params.join(","),
-                        indirect = sig.indirect_params,
-                        callee = self.callee,
-                        iface_name = self.iface_name.unwrap_or("$root"),
-                    );
-                }
+                //
+                // TODO(fix): this isn't how to tell whether we need to do async lower...
+                // this seems to only be the case when doing a ListCanonLower
+                // if self.is_async
+                //     && let Some(memory) = self.memory
+                // {
+                //     let component_idx = self.canon_opts.instance.as_u32();
+                //     uwriteln!(
+                //         self.src,
+                //         r#"
+                //         {{
+                //             const paramLowerFn = {global_async_param_lower_class}.lookup({{
+                //                 componentIdx: {component_idx},
+                //                 iface: '{iface_name}',
+                //                 fnName: '{callee}',
+                //             }});
+                //             if (!paramLowerFn) {{
+                //                 throw new Error(`missing async param lower function for generated export fn [{callee}]`);
+                //             }}
+                //             paramLowerFn({{
+                //                 memory: {memory},
+                //                 vals: [{params}],
+                //                 indirect: {indirect},
+                //                 loweringParams: [{operands}],
+                //             }});
+                //         }}
+                //         "#,
+                //         operands = operands.join(","),
+                //         params = self.params.join(","),
+                //         indirect = sig.indirect_params,
+                //         callee = self.callee,
+                //         iface_name = self.iface_name.unwrap_or("$root"),
+                //     );
+                // }
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
