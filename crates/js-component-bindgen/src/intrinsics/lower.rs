@@ -322,15 +322,25 @@ impl LowerIntrinsic {
 
             Self::LowerFlatS32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_flat_s32_fn = self.name();
                 output.push_str(&format!("
-                    function _lowerFlatS32(memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatS32()] args', {{ memory, vals, storagePtr, storageLen }});
+                    function {lower_flat_s32_fn}(ctx) {{
+                        {debug_log_fn}('[{lower_flat_s32_fn}()] args', {{ ctx }});
+                        const {{ memory, realloc, vals, storagePtr, storageLen }} = ctx;
+
                         if (vals.length !== 1) {{
                             throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
                         }}
                         if (vals[0] > 2_147_483_647 || vals[0] < -2_147_483_648) {{ throw new Error('invalid value for core value representing s32'); }}
+
+                        // TODO(refactor): fail loudly on misaligned flat lowers?
+                        const rem = ctx.storagePtr % 4;
+                        if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
+
                         new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
                         return 4;
+
+
                     }}
                 "));
             }
@@ -342,7 +352,7 @@ impl LowerIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!(r#"
                     function _lowerFlatU32(ctx) {{
-                        {debug_log_fn}('[_lowerFlatU32()] args', ctx);
+                        {debug_log_fn}('[_lowerFlatU32()] args', {{ ctx }});
                         const {{ memory, realloc, vals, storagePtr, storageLen }} = ctx;
                         if (vals.length !== 1) {{ throw new Error('expected single value to lower, got (' + vals.length + ')'); }}
                         if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
