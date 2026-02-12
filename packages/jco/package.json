@@ -89,6 +89,7 @@
     "conventional-changelog-conventionalcommits": "^9.1.0",
     "eslint": "^9.39.1",
     "mime": "^4.0.7",
+    "oxfmt": "^0.28.0",
     "puppeteer": "^24.16.2",
     "semver": "^7.7.1",
     "smol-toml": "^1.4.2",
