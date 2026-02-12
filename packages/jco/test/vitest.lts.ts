@@ -1,4 +1,4 @@
-import { availableParallelism, platform } from "node:os";
+import { availableParallelism } from "node:os";
 
 import { defineConfig } from "vitest/config";
 

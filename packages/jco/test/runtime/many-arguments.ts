@@ -6,11 +6,7 @@ import { instantiate } from '../output/many-arguments/many-arguments.js';
 import * as helpers from './helpers.js';
 
 function assertEq(x: any, y: any) {
-    if (x !== y) throw new Error(`${x} != ${y}`);
-}
-
-function assert(x: boolean) {
-    if (!x) throw new Error('assert failed');
+    if (x !== y) {throw new Error(`${x} != ${y}`);}
 }
 
 async function run() {

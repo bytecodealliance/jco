@@ -4,7 +4,7 @@
 import { $init, thunk as importedThunk } from '../output/smoke/smoke.js';
 
 function assert(x: boolean, msg: string) {
-    if (!x) throw new Error(msg);
+    if (!x) {throw new Error(msg);}
 }
 
 let hit = false;

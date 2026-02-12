@@ -37,7 +37,7 @@ async function run() {
             variantZeros(x) {
                 return x;
             },
-            variantTypedefs(x, y, z) {},
+            variantTypedefs(_x, _y, _z) {},
             variantEnums(a, b, c) {
                 assert.deepStrictEqual(a, true);
                 assert.deepStrictEqual(b, { tag: 'ok', val: undefined });

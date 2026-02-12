@@ -23,7 +23,7 @@ world root {
 
 // Imports
 let firstErr = true;
-export function fListInRecord1(x: any) {}
+export function fListInRecord1(_x: any) {}
 export function fListInRecord2() {
     return { a: 'list_in_record2' };
 }
