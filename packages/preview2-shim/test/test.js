@@ -4,7 +4,7 @@ import {
 } from "node:assert";
 import { fileURLToPath } from "node:url";
 
-import { suite, test, assert, vi, beforeEach, afterEach } from "vitest";
+import { suite, test, assert, beforeEach, afterEach } from "vitest";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
@@ -112,7 +112,7 @@ suite("Node.js Preview2", () => {
       const poll = stream.subscribe();
       poll.block();
       let buf = stream.read(10000n);
-      while (buf.byteLength === 0) buf = stream.read(10000n);
+      while (buf.byteLength === 0) {buf = stream.read(10000n);}
       const source = new TextDecoder().decode(buf);
       assert.ok(source.includes("UNIQUE STRING"));
       toDispose.push(stream);
@@ -174,7 +174,7 @@ suite("Node.js Preview2", () => {
           try {
             buf = bodyStream.read(5000n);
           } catch (e) {
-            if (e.tag === "closed") break;
+            if (e.tag === "closed") {break;}
             throw e.val || e;
           }
         }
@@ -372,7 +372,7 @@ suite("Node.js Preview2", () => {
             try {
               buf = input.read(5000n);
             } catch (e) {
-              if (e.tag === "closed") break;
+              if (e.tag === "closed") {break;}
               throw e.val || e;
             }
           }
@@ -574,7 +574,7 @@ suite("Sandboxing", () => {
   let originalArgs;
 
   beforeEach(async () => {
-    const { cli, filesystem } = await import("@bytecodealliance/preview2-shim");
+    const { cli } = await import("@bytecodealliance/preview2-shim");
     // Save original state
     originalEnv = cli.environment.getEnvironment();
     originalArgs = cli.environment.getArguments();
@@ -847,7 +847,7 @@ suite("Sandboxing", () => {
     const poll = stream.subscribe();
     poll.block();
     let buf = stream.read(10000n);
-    while (buf.byteLength === 0) buf = stream.read(10000n);
+    while (buf.byteLength === 0) {buf = stream.read(10000n);}
     const source = new TextDecoder().decode(buf);
 
     // Verify we read the actual test file content

@@ -51,7 +51,8 @@
   "scripts": {
     "types:check": "tsc --noEmit",
     "fmt": "oxfmt",
-    "lint": "eslint -c ../../eslint.config.mjs ./lib/**/*.js",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts"
   },
