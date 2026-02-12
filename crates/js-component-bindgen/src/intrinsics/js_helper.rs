@@ -6,7 +6,7 @@ use crate::{intrinsics::Intrinsic, source::Source};
 ///
 /// For example, intrinsics in this enum may create global JS variables,
 /// polyfills, or perform commonly used JS functionality.
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum JsHelperIntrinsic {
     /// A Helper function that is simply an empty function
     EmptyFunc,

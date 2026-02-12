@@ -3,7 +3,7 @@
 use crate::{intrinsics::Intrinsic, source::Source};
 
 /// This enum contains intrinsics that help perform type conversions
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ConversionIntrinsic {
     I32ToF32,
     I64ToF64,

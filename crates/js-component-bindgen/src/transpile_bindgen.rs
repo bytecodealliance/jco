@@ -31,7 +31,7 @@ use wit_parser::{
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{
-    ErrHandling, FunctionBindgen, RemoteResourceMap, ResourceData, ResourceMap, ResourceTable,
+    ErrHandling, FunctionBindgen, ResourceData, ResourceExtraData, ResourceMap, ResourceTable,
 };
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::lift::LiftIntrinsic;
@@ -186,7 +186,6 @@ struct JsFunctionBindgenArgs<'a> {
     /// Parsed function metadata
     func: &'a Function,
     resource_map: &'a ResourceMap,
-    remote_resource_map: &'a RemoteResourceMap,
     /// ABI variant of the function
     abi: AbiVariant,
     /// Whether the function in question is a host async function (i.e. JSPI)
@@ -384,7 +383,7 @@ impl JsBindgen<'_> {
         }
 
         // Render the telemery directive
-        uwrite!(output, r#""use jco";"#);
+        uwriteln!(output, r#""use jco";"#);
 
         let js_intrinsics = render_intrinsics(RenderIntrinsicsArgs {
             intrinsics: &mut self.all_intrinsics,
@@ -1039,6 +1038,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::StreamDropWritable { .. }
                 | Trampoline::StreamNew { .. }
                 | Trampoline::StreamRead { .. }
+                | Trampoline::StreamTransfer
                 | Trampoline::StreamWrite { .. }
                 | Trampoline::SubtaskCancel { .. }
                 | Trampoline::SubtaskDrop { .. }
@@ -1048,6 +1048,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::WaitableJoin { .. }
                 | Trampoline::WaitableSetDrop { .. }
                 | Trampoline::WaitableSetPoll { .. }
+                | Trampoline::WaitableSetWait { .. }
                 | Trampoline::WaitableSetNew { .. }
         )
     }
@@ -1113,32 +1114,47 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::WaitableSetWait { options, .. } => {
+            Trampoline::WaitableSetWait { instance, options } => {
+                let options = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options");
+                assert_eq!(
+                    instance.as_u32(),
+                    options.instance.as_u32(),
+                    "options index instance must match trampoline"
+                );
+
                 let CanonicalOptions {
                     instance,
                     async_,
                     data_model:
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
                     ..
-                } = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options")
+                } = options
                 else {
                     panic!("unexpected/missing memory data model during waitable-set.wait");
                 };
 
+                let instance_idx = instance.as_u32();
+                let memory_idx = memory
+                    .expect("missing memory idx for waitable-set.wait")
+                    .as_u32();
                 let waitable_set_wait_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {waitable_set_wait_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
-                    instance_idx = instance.as_u32(),
-                    memory_idx = memory
-                        .expect("missing memory idx for waitable-set.wait")
-                        .as_u32(),
+                    r#"
+                    const trampoline{i} = {waitable_set_wait_fn}.bind(null, {{
+                        componentIdx: {instance_idx},
+                        isAsync: {async_},
+                        memoryIdx: {memory_idx},
+                        getMemoryFn: () => memory{memory_idx},
+                    }});
+                    "#,
                 );
             }
 
@@ -1206,25 +1222,122 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamNew { ty, .. } => {
+            Trampoline::StreamNew { ty, instance } => {
                 let stream_new_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
+                let instance_idx = instance.as_u32();
+                let stream_table_idx = ty.as_u32();
+
+                // Get to the payload type for the given stream table idx
+                let table_ty = &self.types[*ty];
+                let stream_ty_idx = table_ty.ty;
+                let stream_ty_idx_js = stream_ty_idx.as_u32();
+                let stream_ty = &self.types[stream_ty_idx];
+
+                // Gather type metadata
+                let (
+                    align_32_js,
+                    size_32_js,
+                    flat_count_js,
+                    lift_fn_js,
+                    lower_fn_js,
+                    is_none_or_numeric_type_js,
+                    is_borrow_js,
+                    is_async_value_js,
+                ) = match stream_ty.payload {
+                    // If there is no payload for the stream, we know the values
+                    None => (
+                        "0".into(),
+                        "0".into(),
+                        "0".into(),
+                        "null".into(),
+                        "null".into(),
+                        "true".into(),
+                        "false".into(),
+                        "false".into(),
+                    ),
+                    // If there is a payload, generate relevant lift/lower and other metadata
+                    Some(ty) => (
+                        self.types.canonical_abi(&ty).align32.to_string(),
+                        self.types.canonical_abi(&ty).size32.to_string(),
+                        self.types
+                            .canonical_abi(&ty)
+                            .flat_count
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| "null".into()),
+                        gen_flat_lift_fn_js_expr(
+                            self,
+                            self.types,
+                            &ty,
+                            &wasmtime_environ::component::StringEncoding::Utf8,
+                        ),
+                        gen_flat_lower_fn_js_expr(
+                            self,
+                            self.types,
+                            &ty,
+                            &wasmtime_environ::component::StringEncoding::Utf8,
+                        ),
+                        format!(
+                            "{}",
+                            matches!(
+                                ty,
+                                InterfaceType::U8
+                                    | InterfaceType::U16
+                                    | InterfaceType::U32
+                                    | InterfaceType::U64
+                                    | InterfaceType::S8
+                                    | InterfaceType::S16
+                                    | InterfaceType::S32
+                                    | InterfaceType::S64
+                                    | InterfaceType::Float32
+                                    | InterfaceType::Float64
+                            )
+                        ),
+                        format!("{}", matches!(ty, InterfaceType::Borrow(_))),
+                        format!(
+                            "{}",
+                            matches!(ty, InterfaceType::Stream(_) | InterfaceType::Future(_))
+                        ),
+                    ),
+                };
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_new_fn}.bind(null, {{ streamTypeRep: {} }});\n",
-                    ty.as_u32(),
+                    "const trampoline{i} = {stream_new_fn}.bind(null, {{
+                        streamTableIdx: {stream_table_idx},
+                        callerComponentIdx: {instance_idx},
+                        elemMeta: {{
+                            liftFn: {lift_fn_js},
+                            lowerFn: {lower_fn_js},
+                            typeIdx: {stream_ty_idx_js},
+                            isNoneOrNumeric: {is_none_or_numeric_type_js},
+                            isBorrowed: {is_borrow_js},
+                            isAsyncValue: {is_async_value_js},
+                            flatCount: {flat_count_js},
+                            align32: {align_32_js},
+                            size32: {size_32_js},
+                        }},
+                    }});\n",
                 );
             }
 
-            Trampoline::StreamRead { ty, options, .. } => {
+            Trampoline::StreamRead {
+                instance,
+                ty,
+                options,
+            } => {
                 let options = self
                     .component
                     .options
                     .get(*options)
                     .expect("failed to find options");
+                assert_eq!(
+                    instance.as_u32(),
+                    options.instance.as_u32(),
+                    "options index instance must match trampoline"
+                );
 
-                let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
                     string_encoding,
@@ -1236,39 +1349,53 @@ impl<'a> Instantiator<'a, '_> {
                 else {
                     unreachable!("missing/invalid data model for options during stream.read")
                 };
-                let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
                 let realloc_idx = realloc
                     .map(|v| v.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
-                let string_encoding = string_encoding_js_literal(string_encoding);
 
+                let component_instance_id = instance.as_u32();
+                let string_encoding = string_encoding_js_literal(string_encoding);
+                let stream_table_idx = ty.as_u32();
                 let stream_read_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead));
+
                 uwriteln!(
                     self.src.js,
                     r#"const trampoline{i} = {stream_read_fn}.bind(
                          null,
-                         {component_instance_id},
-                         {memory_idx},
-                         {realloc_idx},
-                         {string_encoding},
-                         {async_},
-                         {stream_idx},
+                         {{
+                             componentIdx: {component_instance_id},
+                             memoryIdx: {memory_idx},
+                             getMemoryFn: () => memory{memory_idx},
+                             reallocIdx: {realloc_idx},
+                             getReallocFn: () => realloc{realloc_idx},
+                             stringEncoding: {string_encoding},
+                             isAsync: {async_},
+                             streamTableIdx: {stream_table_idx},
+                         }}
                      );
                     "#,
                 );
             }
 
-            Trampoline::StreamWrite { ty, options, .. } => {
+            Trampoline::StreamWrite {
+                instance,
+                ty,
+                options,
+            } => {
                 let options = self
                     .component
                     .options
                     .get(*options)
                     .expect("failed to find options");
+                assert_eq!(
+                    instance.as_u32(),
+                    options.instance.as_u32(),
+                    "options index instance must match trampoline"
+                );
 
-                let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
                     string_encoding,
@@ -1284,25 +1411,36 @@ impl<'a> Instantiator<'a, '_> {
                 let memory_idx = memory
                     .expect("missing memory idx for stream.write")
                     .as_u32();
-                let realloc_idx = realloc
-                    .map(|v| v.as_u32().to_string())
-                    .unwrap_or_else(|| "null".into());
-                let string_encoding = string_encoding_js_literal(string_encoding);
+                let (realloc_idx, get_realloc_fn_js) = match realloc {
+                    Some(v) => {
+                        let v = v.as_u32().to_string();
+                        (v.to_string(), format!("() => realloc{v}"))
+                    }
+                    None => ("null".into(), "null".into()),
+                };
 
+                let string_encoding = string_encoding_js_literal(string_encoding);
+                let stream_table_idx = ty.as_u32();
                 let stream_write_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite));
+
                 uwriteln!(
                     self.src.js,
-                    r#"const trampoline{i} = {stream_write_fn}.bind(
+                    r#"
+                     const trampoline{i} = new WebAssembly.Suspending({stream_write_fn}.bind(
                          null,
-                         {component_instance_id},
-                         {memory_idx},
-                         {realloc_idx},
-                         {string_encoding},
-                         {async_},
-                         {stream_idx},
-                     );
+                         {{
+                             componentIdx: {component_instance_id},
+                             memoryIdx: {memory_idx},
+                             getMemoryFn: () => memory{memory_idx},
+                             reallocIdx: {realloc_idx},
+                             getReallocFn: {get_realloc_fn_js},
+                             stringEncoding: {string_encoding},
+                             isAsync: {async_},
+                             streamTableIdx: {stream_table_idx},
+                         }}
+                     ));
                     "#,
                 );
             }
@@ -1329,29 +1467,42 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamDropReadable { ty, .. } => {
+            Trampoline::StreamDropReadable { ty, instance } => {
                 let stream_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropReadable,
                 ));
+                let stream_idx = ty.as_u32();
+                let instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_drop_readable_fn}.bind(null, {stream_idx});\n",
-                    stream_idx = ty.as_u32(),
+                    "const trampoline{i} = {stream_drop_readable_fn}.bind(null, {{
+                        streamTableIdx: {stream_idx},
+                        componentIdx: {instance_idx},
+                    }});\n",
                 );
             }
 
-            Trampoline::StreamDropWritable { ty, .. } => {
+            Trampoline::StreamDropWritable { ty, instance } => {
                 let stream_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropWritable,
                 ));
+                let stream_idx = ty.as_u32();
+                let instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_drop_writable_fn}.bind(null, {stream_idx});\n",
-                    stream_idx = ty.as_u32(),
+                    "const trampoline{i} = {stream_drop_writable_fn}.bind(null, {{
+                        streamTableIdx: {stream_idx},
+                        componentIdx: {instance_idx},
+                    }});\n",
                 );
             }
 
-            Trampoline::StreamTransfer => todo!("Trampoline::StreamTransfer"),
+            Trampoline::StreamTransfer => {
+                let stream_transfer_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamTransfer));
+                uwriteln!(self.src.js, "const trampoline{i} = {stream_transfer_fn};\n",);
+            }
 
             Trampoline::FutureNew { ty, .. } => {
                 let future_new_fn = self
@@ -2393,12 +2544,10 @@ impl<'a> Instantiator<'a, '_> {
                     ..
                 })) = arg
             {
+                let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
                 let key = name
                     .trim_start_matches("[async-lower]")
                     .trim_start_matches("[async]");
-
-                let mut exec_fn = self.augmented_import_def(&arg);
-                let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
 
                 // For host imports that are asynchronous, we must wrap with WebAssembly.promising,
                 // as the callee will be a host function (that will suspend).
@@ -2408,7 +2557,24 @@ impl<'a> Instantiator<'a, '_> {
                 // and follow the normal p3 async component call pattern.
                 //
                 let full_async_import_key = format!("{module}#{key}");
+
+                let mut exec_fn = self.augmented_import_def(&arg);
+
+                // NOTE: Regardless of whether we're using a host import or not, we are likely *not*
+                // actually wrapping a host javascript function below -- rather, the host import is
+                // called via a trip a trip *through* an exporting component table.
+                //
+                // The host import is imported, passed through an indirect call in a component,
+                // (see $wit-component.shims, $wit-component.fixups modules in generated transpile output)
+                // then it is called from the component that is actually performing the call..
+                //
+                let mut import_value_js = format!(
+                    "{global_lowers_class}.lookup({}, '{full_async_import_key}')?.bind(null, {exec_fn})",
+                    module_idx.as_u32(),
+                );
+
                 if self.async_imports.contains(&full_async_import_key)
+                    // Top level imports have '$root#' prepended
                     || self
                         .async_imports
                         .contains(full_async_import_key.trim_start_matches("$root#"))
@@ -2419,18 +2585,27 @@ impl<'a> Instantiator<'a, '_> {
                     exec_fn = format!("WebAssembly.promising({exec_fn})");
                 }
 
-                // NOTE: Regardless of whether we're using a host import or not, we are likely *not*
-                // actually wrapping a host javascript function below -- rather, the host import is
-                // called via a trip a trip *through* an exporting component table.
+                // stream.{write,read} are always handled by async functions when patched
                 //
-                // The host import is imported, passed through an indirect call in a component,
-                // (see $wit-component.shims, $wit-component.fixups modules in generated transpile output)
-                // then it is called from the component that is actually performing the call..
+                // We must treat them like functions that call host async imports because
+                // the call that will do the stream operation is piped through a patchup component
                 //
-                format!(
-                    "{global_lowers_class}.lookup({}, '{full_async_import_key}')?.bind(null, {exec_fn})",
-                    module_idx.as_u32(),
-                )
+                // wasm export -> wasm import -> host-provided trampoline
+                //
+                // In this case, we know that the trampoline that eventually gets called
+                // will be an async host function (`streamWrite`/`streamRead`), which will
+                // be wrapped in `WebAssembly.Suspending`.
+                if full_async_import_key.contains("[stream-write-")
+                    || full_async_import_key.contains("[stream-read-")
+                {
+                    exec_fn = format!("WebAssembly.promising({exec_fn})");
+                    import_value_js = format!(
+                        "new WebAssembly.Suspending({global_lowers_class}.lookup({}, '{full_async_import_key}').bind(null, {exec_fn}))",
+                        module_idx.as_u32(),
+                    );
+                }
+
+                import_value_js
             } else {
                 // All other imports can be connected directly to the relevant export
                 self.augmented_import_def(&arg)
@@ -2492,26 +2667,23 @@ impl<'a> Instantiator<'a, '_> {
     /// * `func` - The function in question
     /// * `ty_func_idx` - Type index of the function
     /// * `resource_map` - resource map of locally resolved types
-    /// * `remote_resource_map` - resource map of types only known to the remote (ex. an `error-context` for which we only hold the relevant rep)
-    ///
     fn create_resource_fn_map(
         &mut self,
         func: &Function,
         ty_func_idx: TypeFuncIndex,
         resource_map: &mut ResourceMap,
-        remote_resource_map: &mut RemoteResourceMap,
     ) {
         // Connect resources used in parameters
         let params_ty = &self.types[self.types[ty_func_idx].params];
         for ((_, ty), iface_ty) in func.params.iter().zip(params_ty.types.iter()) {
             if let Type::Id(id) = ty {
-                self.connect_resource_types(*id, iface_ty, resource_map, remote_resource_map);
+                self.connect_resource_types(*id, iface_ty, resource_map);
             }
         }
         // Connect resources used in results
         let results_ty = &self.types[self.types[ty_func_idx].results];
         if let (Some(Type::Id(id)), Some(iface_ty)) = (func.result, results_ty.types.first()) {
-            self.connect_resource_types(id, iface_ty, resource_map, remote_resource_map);
+            self.connect_resource_types(id, iface_ty, resource_map);
         }
     }
 
@@ -2611,13 +2783,7 @@ impl<'a> Instantiator<'a, '_> {
 
         // Create mappings for resources
         let mut import_resource_map = ResourceMap::new();
-        let mut import_remote_resource_map = RemoteResourceMap::new();
-        self.create_resource_fn_map(
-            func,
-            func_ty,
-            &mut import_resource_map,
-            &mut import_remote_resource_map,
-        );
+        self.create_resource_fn_map(func, func_ty, &mut import_resource_map);
 
         let (callee_name, call_type) = match func.kind {
             FunctionKind::Freestanding => (
@@ -2743,7 +2909,6 @@ impl<'a> Instantiator<'a, '_> {
                     opts: options,
                     func,
                     resource_map: &import_resource_map,
-                    remote_resource_map: &import_remote_resource_map,
                     abi: AbiVariant::GuestImport,
                     requires_async_porcelain,
                     is_async,
@@ -2986,48 +3151,48 @@ impl<'a> Instantiator<'a, '_> {
     ///
     fn connect_remote_resources(
         &mut self,
+        id: &TypeId,
+        maybe_elem_ty: &Option<Type>,
         iface_ty: &InterfaceType,
-        remote_resource_map: &mut RemoteResourceMap,
+        resource_map: &mut ResourceMap,
     ) {
-        // TODO: finish implementing resource table creation for this data
-        let (idx, entry) = match iface_ty {
-            InterfaceType::Future(idx) => {
-                // Create an entry to represent this future
-                (
-                    idx.as_u32(),
-                    ResourceTable {
-                        imported: true,
-                        data: ResourceData::Guest {
-                            resource_name: "Future".into(),
-                            prefix: Some(format!("${}", idx.as_u32())),
-                        },
-                    },
-                )
-            }
-            InterfaceType::Stream(idx) => (
-                idx.as_u32(),
-                ResourceTable {
-                    imported: true,
-                    data: ResourceData::Guest {
-                        resource_name: "Stream".into(),
-                        prefix: Some(format!("${}", idx.as_u32())),
-                    },
+        let remote_resource = match iface_ty {
+            InterfaceType::Future(table_idx) => ResourceTable {
+                imported: true,
+                data: ResourceData::Guest {
+                    resource_name: "Future".into(),
+                    prefix: Some(format!("${}", table_idx.as_u32())),
+                    extra: Some(ResourceExtraData::Future {
+                        table_idx: *table_idx,
+                        elem_ty: *maybe_elem_ty,
+                    }),
                 },
-            ),
-            InterfaceType::ErrorContext(idx) => (
-                idx.as_u32(),
-                ResourceTable {
-                    imported: true,
-                    data: ResourceData::Guest {
-                        resource_name: "ErrorContext".into(),
-                        prefix: Some(format!("${}", idx.as_u32())),
-                    },
+            },
+            InterfaceType::Stream(table_idx) => ResourceTable {
+                imported: true,
+                data: ResourceData::Guest {
+                    resource_name: "Stream".into(),
+                    prefix: Some(format!("${}", table_idx.as_u32())),
+                    extra: Some(ResourceExtraData::Stream {
+                        table_idx: *table_idx,
+                        elem_ty: *maybe_elem_ty,
+                    }),
                 },
-            ),
+            },
+            InterfaceType::ErrorContext(table_idx) => ResourceTable {
+                imported: true,
+                data: ResourceData::Guest {
+                    resource_name: "ErrorContext".into(),
+                    prefix: Some(format!("${}", table_idx.as_u32())),
+                    extra: Some(ResourceExtraData::ErrorContext {
+                        table_idx: *table_idx,
+                    }),
+                },
+            },
             _ => unreachable!("unexpected interface type [{iface_ty:?}] with no type"),
         };
 
-        remote_resource_map.insert(idx, entry);
+        resource_map.insert(*id, remote_resource);
     }
 
     /// Connect two types as host resources
@@ -3187,7 +3352,6 @@ impl<'a> Instantiator<'a, '_> {
         id: TypeId,
         iface_ty: &InterfaceType,
         resource_map: &mut ResourceMap,
-        remote_resource_map: &mut RemoteResourceMap,
     ) {
         match (&self.resolve.types[id].kind, iface_ty) {
             // For flags and enums we can do nothing -- they're global (?)
@@ -3199,7 +3363,7 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.fields.iter().zip(t2.fields.iter()) {
                     if let Type::Id(id) = f1.ty {
-                        self.connect_resource_types(id, &f2.ty, resource_map, remote_resource_map);
+                        self.connect_resource_types(id, &f2.ty, resource_map);
                     }
                 }
             }
@@ -3217,7 +3381,7 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.types.iter().zip(t2.types.iter()) {
                     if let Type::Id(id) = f1 {
-                        self.connect_resource_types(*id, f2, resource_map, remote_resource_map);
+                        self.connect_resource_types(*id, f2, resource_map);
                     }
                 }
             }
@@ -3227,12 +3391,7 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.cases.iter().zip(t2.cases.iter()) {
                     if let Some(Type::Id(id)) = &f1.ty {
-                        self.connect_resource_types(
-                            *id,
-                            f2.1.as_ref().unwrap(),
-                            resource_map,
-                            remote_resource_map,
-                        );
+                        self.connect_resource_types(*id, f2.1.as_ref().unwrap(), resource_map);
                     }
                 }
             }
@@ -3241,7 +3400,7 @@ impl<'a> Instantiator<'a, '_> {
             (TypeDefKind::Option(t1), InterfaceType::Option(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
-                    self.connect_resource_types(*id, &t2.ty, resource_map, remote_resource_map);
+                    self.connect_resource_types(*id, &t2.ty, resource_map);
                 }
             }
 
@@ -3249,20 +3408,10 @@ impl<'a> Instantiator<'a, '_> {
             (TypeDefKind::Result(t1), InterfaceType::Result(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Some(Type::Id(id)) = &t1.ok {
-                    self.connect_resource_types(
-                        *id,
-                        &t2.ok.unwrap(),
-                        resource_map,
-                        remote_resource_map,
-                    );
+                    self.connect_resource_types(*id, &t2.ok.unwrap(), resource_map);
                 }
                 if let Some(Type::Id(id)) = &t1.err {
-                    self.connect_resource_types(
-                        *id,
-                        &t2.err.unwrap(),
-                        resource_map,
-                        remote_resource_map,
-                    );
+                    self.connect_resource_types(*id, &t2.err.unwrap(), resource_map);
                 }
             }
 
@@ -3270,38 +3419,33 @@ impl<'a> Instantiator<'a, '_> {
             (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
-                    self.connect_resource_types(
-                        *id,
-                        &t2.element,
-                        resource_map,
-                        remote_resource_map,
-                    );
+                    self.connect_resource_types(*id, &t2.element, resource_map);
                 }
             }
 
             // Connect named types
             (TypeDefKind::Type(ty), _) => {
                 if let Type::Id(id) = ty {
-                    self.connect_resource_types(*id, iface_ty, resource_map, remote_resource_map);
+                    self.connect_resource_types(*id, iface_ty, resource_map);
                 }
             }
 
             // Connect futures & stream types
-            (TypeDefKind::Future(maybe_ty), InterfaceType::Future(_))
-            | (TypeDefKind::Stream(maybe_ty), InterfaceType::Stream(_)) => {
-                match maybe_ty {
+            (TypeDefKind::Future(maybe_elem_ty), _iface_ty)
+            | (TypeDefKind::Stream(maybe_elem_ty), _iface_ty) => {
+                match maybe_elem_ty {
                     // The case of an empty future is the propagation of a `null`-like value, usually a simple signal
                     // which we'll connect with the *normally invalid* type value 0 as an indicator
                     None => {
-                        self.connect_remote_resources(iface_ty, remote_resource_map);
+                        self.connect_remote_resources(&id, maybe_elem_ty, iface_ty, resource_map);
                     }
-                    // For custom types we can connect the inner type
+                    // For custom types we must recur to properly connect the inner type
                     Some(Type::Id(t)) => {
-                        self.connect_resource_types(*t, iface_ty, resource_map, remote_resource_map)
+                        self.connect_resource_types(*t, iface_ty, resource_map);
                     }
                     // For basic types that are connected (non inner types) we can do a generic connect
                     Some(_) => {
-                        self.connect_remote_resources(iface_ty, remote_resource_map);
+                        self.connect_remote_resources(&id, maybe_elem_ty, iface_ty, resource_map);
                     }
                 }
             }
@@ -3312,10 +3456,10 @@ impl<'a> Instantiator<'a, '_> {
                 tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
             ) => {
                 if let Some(Type::Id(ok_t)) = ok {
-                    self.connect_resource_types(*ok_t, tk2, resource_map, remote_resource_map)
+                    self.connect_resource_types(*ok_t, tk2, resource_map)
                 }
                 if let Some(Type::Id(err_t)) = err {
-                    self.connect_resource_types(*err_t, tk2, resource_map, remote_resource_map)
+                    self.connect_resource_types(*err_t, tk2, resource_map)
                 }
             }
 
@@ -3325,7 +3469,7 @@ impl<'a> Instantiator<'a, '_> {
                 tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
             ) => {
                 if let Type::Id(some_t) = ty {
-                    self.connect_resource_types(*some_t, tk2, resource_map, remote_resource_map)
+                    self.connect_resource_types(*some_t, tk2, resource_map)
                 }
             }
 
@@ -3333,7 +3477,7 @@ impl<'a> Instantiator<'a, '_> {
             (
                 TypeDefKind::Handle(Handle::Own(t1) | Handle::Borrow(t1)),
                 tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
-            ) => self.connect_resource_types(*t1, tk2, resource_map, remote_resource_map),
+            ) => self.connect_resource_types(*t1, tk2, resource_map),
 
             (TypeDefKind::Resource, InterfaceType::Future(_) | InterfaceType::Stream(_)) => {}
 
@@ -3344,7 +3488,7 @@ impl<'a> Instantiator<'a, '_> {
             ) => {
                 for f1 in variant.cases.iter() {
                     if let Some(Type::Id(id)) = &f1.ty {
-                        self.connect_resource_types(*id, tk2, resource_map, remote_resource_map);
+                        self.connect_resource_types(*id, tk2, resource_map);
                     }
                 }
             }
@@ -3356,7 +3500,7 @@ impl<'a> Instantiator<'a, '_> {
             ) => {
                 for f1 in record.fields.iter() {
                     if let Type::Id(id) = f1.ty {
-                        self.connect_resource_types(id, tk2, resource_map, remote_resource_map);
+                        self.connect_resource_types(id, tk2, resource_map);
                     }
                 }
             }
@@ -3391,7 +3535,6 @@ impl<'a> Instantiator<'a, '_> {
             opts,
             func,
             resource_map,
-            remote_resource_map,
             abi,
             requires_async_porcelain,
             is_async,
@@ -3480,7 +3623,6 @@ impl<'a> Instantiator<'a, '_> {
         // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
-            remote_resource_map,
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
             valid_lifting_optimization: self.bindgen.opts.valid_lifting_optimization,
@@ -3692,7 +3834,6 @@ impl<'a> Instantiator<'a, '_> {
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut export_resource_map = ResourceMap::new();
-            let mut export_remote_resource_map = RemoteResourceMap::new();
             match export {
                 Export::LiftedFunction {
                     func: def,
@@ -3705,12 +3846,7 @@ impl<'a> Instantiator<'a, '_> {
                             unreachable!("unexpectedly non-function lifted function export")
                         }
                     };
-                    self.create_resource_fn_map(
-                        func,
-                        *func_ty,
-                        &mut export_resource_map,
-                        &mut export_remote_resource_map,
-                    );
+                    self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
                     let local_name = if let FunctionKind::Constructor(resource_id)
                     | FunctionKind::Method(resource_id)
@@ -3738,9 +3874,9 @@ impl<'a> Instantiator<'a, '_> {
                         def,
                         options,
                         func,
+                        func_ty,
                         export_name,
                         &export_resource_map,
-                        &export_remote_resource_map,
                     );
 
                     // Determine the correct export func name
@@ -3767,28 +3903,27 @@ impl<'a> Instantiator<'a, '_> {
                 }
 
                 Export::Instance { exports, .. } => {
-                    let id = match item {
+                    let iface_id = match item {
                         WorldItem::Interface { id, stability: _ } => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => {
                             unreachable!("unexpectedly non-interface export instance")
                         }
                     };
+
+                    // Process exported instances
                     for (func_name, export_idx) in exports.raw_iter() {
                         let export = &self.component.export_items[*export_idx];
+
+                        // Gather function information for all lifted functions in the isntance export
                         let (def, options, func_ty) = match export {
                             Export::LiftedFunction { func, options, ty } => (func, options, ty),
                             Export::Type(_) => continue, // ignored
                             _ => unreachable!("unexpected non-lifted function export"),
                         };
 
-                        let func = &self.resolve.interfaces[id].functions[func_name];
+                        let func = &self.resolve.interfaces[iface_id].functions[func_name];
 
-                        self.create_resource_fn_map(
-                            func,
-                            *func_ty,
-                            &mut export_resource_map,
-                            &mut export_remote_resource_map,
-                        );
+                        self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
                         let local_name = if let FunctionKind::Constructor(resource_id)
                         | FunctionKind::Method(resource_id)
@@ -3816,9 +3951,9 @@ impl<'a> Instantiator<'a, '_> {
                             def,
                             options,
                             func,
+                            func_ty,
                             export_name,
                             &export_resource_map,
-                            &export_remote_resource_map,
                         );
 
                         // Determine the export func name
@@ -3862,9 +3997,9 @@ impl<'a> Instantiator<'a, '_> {
         def: &CoreDef,
         options: &CanonicalOptions,
         func: &Function,
+        func_ty_idx: &TypeFuncIndex,
         export_name: &String,
         export_resource_map: &ResourceMap,
-        export_remote_resource_map: &RemoteResourceMap,
     ) {
         // Determine whether the function should be generated as async
         let requires_async_porcelain = requires_async_porcelain(
@@ -3912,6 +4047,77 @@ impl<'a> Instantiator<'a, '_> {
             }
         };
 
+        let iface_name = if export_name.is_empty() {
+            None
+        } else {
+            Some(export_name)
+        };
+
+        // Output the lift and lowering functions for the fn
+        //
+        // We do this here mostly to avoid introducing a breaking change at the FunctionBindgen
+        // level, and to encourage re-use of param lowering.
+        //
+        // TODO(breaking): pass `Function` reference along to `FunctionBindgen` and generate *and* lookup lower there
+        //
+        // This function will be called early in execution of generated functions that correspond
+        // to an async export, to lower parameters that were passed by JS into the component's memory.
+        //
+        if is_async {
+            let component_idx = options.instance.as_u32();
+            let global_async_param_lower_class = {
+                self.add_intrinsic(Intrinsic::GlobalAsyncParamLowersClass);
+                Intrinsic::GlobalAsyncParamLowersClass.name()
+            };
+
+            // Get the interface-level types for the parameters to the function
+            // in case we need to do async lowering
+            let func_ty = &self.types[*func_ty_idx];
+            let param_types = func_ty.params;
+            let func_param_iface_types = &self.types[param_types].types;
+
+            // Generate lowering functions for params
+            let lower_fns_list_js = gen_flat_lower_fn_list_js_expr(
+                self,
+                self.types,
+                func_param_iface_types,
+                &options.string_encoding,
+            );
+
+            // TODO(fix): add tests for indirect param (> 16 args)
+            //
+            // We *should* be able to just jump to the memory location in question and then
+            // start doing the reading.
+            self.src.js(&format!(
+                r#"
+                {global_async_param_lower_class}.define({{
+                    componentIdx: '{component_idx}',
+                    iface: '{iface}',
+                    fnName: '{callee}',
+                    fn: (args) => {{
+                        const {{ loweringParams, vals, memory, indirect }} = args;
+                        if (!memory) {{ throw new TypeError("missing memory for async param lower"); }}
+                        if (indirect === undefined) {{ throw new TypeError("missing memory for async param lower"); }}
+                        if (indirect) {{ throw new Error("indirect aysnc param lowers not yet supported"); }}
+
+                        const lowerFns = {lower_fns_list_js};
+                        const lowerCtx = {{
+                            params: loweringParams,
+                            vals,
+                            memory,
+                            componentIdx: {component_idx},
+                            useDirectParams: !indirect,
+                        }};
+
+                        for (const lowerFn of lowerFns) {{ lowerFn(lowerCtx); }}
+                    }},
+                }});
+                "#,
+                iface = iface_name.map(|v| v.as_str()).unwrap_or( "$root"),
+            ));
+        }
+
+        // Write function preamble (everything up to the `(` in `function (...`)
         match func.kind {
             FunctionKind::Freestanding => {
                 uwrite!(self.src.js, "\n{maybe_async}function {local_name}")
@@ -3986,7 +4192,7 @@ impl<'a> Instantiator<'a, '_> {
                     "\n{local_name}.{method_name} = async function {fn_name}",
                 );
             }
-        }
+        };
 
         // Perform bindgen
         self.bindgen(JsFunctionBindgenArgs {
@@ -4001,16 +4207,11 @@ impl<'a> Instantiator<'a, '_> {
                     CallType::AsyncStandard
                 }
             },
-            iface_name: if export_name.is_empty() {
-                None
-            } else {
-                Some(export_name)
-            },
+            iface_name: iface_name.map(|v| v.as_str()),
             callee: &callee,
             opts: options,
             func,
             resource_map: export_resource_map,
-            remote_resource_map: export_remote_resource_map,
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
             is_async,
@@ -4692,9 +4893,16 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::List(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
-            let ty_idx = ty_idx.as_u32();
+            let list_ty = &component_types[*ty_idx];
+            let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(
+                intrinsic_mgr,
+                component_types,
+                &list_ty.element,
+                string_encoding,
+            );
             let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let ty_idx = ty_idx.as_u32();
+            format!("{f}({{ elemLowerFn: {elem_ty_lower_expr}, typeIdx: {ty_idx} }})")
         }
 
         InterfaceType::Tuple(ty_idx) => {

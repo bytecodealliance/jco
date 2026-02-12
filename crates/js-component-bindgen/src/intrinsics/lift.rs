@@ -1,6 +1,8 @@
 //! Intrinsics that represent helpers that enable Lift integration
 
 use crate::intrinsics::Intrinsic;
+use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::source::Source;
@@ -8,7 +10,7 @@ use crate::source::Source;
 use super::conversion::ConversionIntrinsic;
 
 /// This enum contains intrinsics that enable Lift
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum LiftIntrinsic {
     /// Lift a boolean into provided storage, given a core type
     ///
@@ -244,21 +246,25 @@ impl LiftIntrinsic {
         match self {
             Self::LiftFlatBool => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_bool_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatBool(ctx) {{
-                        {debug_log_fn}('[_liftFlatBool()] args', {{ ctx }});
-
+                    function {lift_flat_bool_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_bool_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
                             val = ctx.params[0] === 1;
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 1) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr) === 1;
-                            ctx.storagePtr += 1;
-                            ctx.storageLen -= 1;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr, true) === 1;
+                        ctx.storagePtr += 1;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 1; }}
 
                         return [val, ctx];
                     }}
@@ -267,21 +273,25 @@ impl LiftIntrinsic {
 
             Self::LiftFlatS8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_s8_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatS8(ctx) {{
-                        {debug_log_fn}('[_liftFlatS8()] args', {{ ctx }});
-
+                    function {lift_flat_s8_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_s8_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 1) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getInt8(ctx.storagePtr);
-                            ctx.storagePtr += 1;
-                            ctx.storageLen -= 1;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getInt8(ctx.storagePtr, true);
+                        ctx.storagePtr += 1;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 1; }}
 
                         return [val, ctx];
                     }}
@@ -290,21 +300,25 @@ impl LiftIntrinsic {
 
             Self::LiftFlatU8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_u8_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatU8(ctx) {{
-                        {debug_log_fn}('[_liftFlatU8()] args', {{ ctx }});
-
+                    function {lift_flat_u8_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_u8_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 1) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr);
-                            ctx.storagePtr += 1;
-                            ctx.storageLen -= 1;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr, true);
+                        ctx.storagePtr += 1;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 1; }}
 
                         return [val, ctx];
                     }}
@@ -313,20 +327,23 @@ impl LiftIntrinsic {
 
             Self::LiftFlatS16 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_s16_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatS16(ctx) {{
-                        {debug_log_fn}('[_liftFlatS16()] args', {{ ctx }});
-
+                    function {lift_flat_s16_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_s16_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
                         }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 2) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getInt16(ctx.storagePtr);
+                            if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 2) {{
+                                throw new Error('not enough storage remaining for lift');
+                            }}
+                            val = new DataView(ctx.memory.buffer).getInt16(ctx.storagePtr, true);
                             ctx.storagePtr += 2;
-                            ctx.storageLen -= 2;
+                            if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 2; }}
                         }}
 
                         return [val, ctx];
@@ -336,21 +353,25 @@ impl LiftIntrinsic {
 
             Self::LiftFlatU16 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_u16_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatU16(ctx) {{
-                        {debug_log_fn}('[_liftFlatU16()] args', {{ ctx }});
-
+                    function {lift_flat_u16_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_u16_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 2) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getUint16(ctx.storagePtr);
-                            ctx.storagePtr += 2;
-                            ctx.storageLen -= 2;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 2) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getUint16(ctx.storagePtr, true);
+                        ctx.storagePtr += 2;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 2; }}
 
                         return [val, ctx];
                     }}
@@ -359,21 +380,25 @@ impl LiftIntrinsic {
 
             Self::LiftFlatS32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_s32_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatS32(ctx) {{
-                        {debug_log_fn}('[_liftFlatS32()] args', {{ ctx }});
-
+                    function {lift_flat_s32_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_s32_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least a single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 4) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getInt32(ctx.storagePtr);
-                            ctx.storagePtr += 4;
-                            ctx.storageLen -= 4;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getInt32(ctx.storagePtr, true);
+                        ctx.storagePtr += 4;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 4; }}
 
                         return [val, ctx];
                     }}
@@ -382,45 +407,53 @@ impl LiftIntrinsic {
 
             Self::LiftFlatU32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _liftFlatU32(ctx) {{
-                        {debug_log_fn}('[_liftFlatU32()] args', {{ ctx }});
-
+                let lift_flat_u32_fn = self.name();
+                output.push_str(&format!(r#"
+                    function {lift_flat_u32_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_u32_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least a single i34 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 4) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr);
-                            ctx.storagePtr += 4;
-                            ctx.storageLen -= 4;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true);
+                        ctx.storagePtr += 4;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 4; }}
 
                         return [val, ctx];
                     }}
-                "));
+                "#));
             }
 
             Self::LiftFlatS64 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_s64_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatS64(ctx) {{
-                        {debug_log_fn}('[_liftFlatS64()] args', {{ ctx }});
-
+                    function {lift_flat_s64_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_s64_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single i64 argument'); }}
                             if (typeof ctx.params[0] !== 'bigint') {{ throw new Error('expected bigint'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 8) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getInt64(ctx.storagePtr);
-                            ctx.storagePtr += 8;
-                            ctx.storageLen -= 8;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getInt64(ctx.storagePtr, true);
+                        ctx.storagePtr += 8;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
 
                         return [val, ctx];
                     }}
@@ -429,22 +462,26 @@ impl LiftIntrinsic {
 
             Self::LiftFlatU64 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_u64_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatU64(ctx) {{
-                        {debug_log_fn}('[_liftFlatU64()] args', {{ ctx }});
-
+                    function {lift_flat_u64_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_u64_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single i64 argument'); }}
                             if (typeof ctx.params[0] !== 'bigint') {{ throw new Error('expected bigint'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 8) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getUint64(ctx.storagePtr);
-                            ctx.storagePtr += 8;
-                            ctx.storageLen -= 8;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getUint64(ctx.storagePtr, true);
+                        ctx.storagePtr += 8;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
 
                         return [val, ctx];
                     }}
@@ -453,21 +490,25 @@ impl LiftIntrinsic {
 
             Self::LiftFlatFloat32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_u32_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatFloat32(ctx) {{
-                        {debug_log_fn}('[_liftFlatFloat32()] args', {{ ctx }});
-
+                    function {lift_flat_u32_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_u32_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single f32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 4) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getFloat32(ctx.storagePtr);
-                            ctx.storagePtr += 4;
-                            ctx.storageLen -= 4;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getFloat32(ctx.storagePtr, true);
+                        ctx.storagePtr += 4;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 4; }}
 
                         return [val, ctx];
                     }}
@@ -476,21 +517,25 @@ impl LiftIntrinsic {
 
             Self::LiftFlatFloat64 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_f64_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatFloat64(ctx) {{
-                        {debug_log_fn}('[_liftFlatFloat64()] args', {{ ctx }});
-
+                    function {lift_flat_f64_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_f64_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single f64 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 8) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = new DataView(ctx.memory.buffer).getFloat64(ctx.storagePtr);
-                            ctx.storagePtr += 8;
-                            ctx.storageLen -= 8;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = new DataView(ctx.memory.buffer).getFloat64(ctx.storagePtr, true);
+                        ctx.storagePtr += 8;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
 
                         return [val, ctx];
                     }}
@@ -498,23 +543,27 @@ impl LiftIntrinsic {
             }
 
             Self::LiftFlatChar => {
-                let i32_to_char_fn = Intrinsic::Conversion(ConversionIntrinsic::I32ToChar).name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let i32_to_char_fn = Intrinsic::Conversion(ConversionIntrinsic::I32ToChar).name();
+                let lift_flat_char_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatChar(ctx) {{
-                        {debug_log_fn}('[_liftFlatChar()] args', {{ ctx }});
-
+                    function {lift_flat_char_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_char_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single i32 argument'); }}
                             val = {i32_to_char_fn}(ctx.params[0]);
                             ctx.params = ctx.params.slice(1);
-                        }} else {{
-                            if (ctx.storageLen < ctx.storagePtr + 4) {{ throw new Error('not enough storage remaining for lift'); }}
-                            val = {i32_to_char_fn}(new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr));
-                            ctx.storagePtr += 4;
-                            ctx.storageLen -= 4;
+                            return [val, ctx];
                         }}
+
+                        if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {{
+                            throw new Error('not enough storage remaining for lift');
+                        }}
+                        val = {i32_to_char_fn}(new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true));
+                        ctx.storagePtr += 4;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 4; }}
 
                         return [val, ctx];
                     }}
@@ -524,11 +573,12 @@ impl LiftIntrinsic {
             Self::LiftFlatStringUtf8 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let decoder = Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8).name();
+                let lift_flat_string_utf8_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatStringUTF8(ctx) {{
-                        {debug_log_fn}('[_liftFlatStringUTF8()] args', {{ ctx }});
-
+                    function {lift_flat_string_utf8_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_string_utf8_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length < 2) {{ throw new Error('expected at least two u32 arguments'); }}
                             const offset = ctx.params[0];
@@ -537,13 +587,14 @@ impl LiftIntrinsic {
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
                             val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len));
                             ctx.params = ctx.params.slice(2);
-                        }} else {{
-                            const start = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, params[0], true);
-                            const codeUnits = new DataView(memory.buffer).getUint32(ctx.storagePtr, params[0] + 4, true);
-                            val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
-                            ctx.storagePtr += codeUnits;
-                            ctx.storageLen -= codeUnits;
+                            return [val, ctx];
                         }}
+
+                        const start = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, params[0], true);
+                        const codeUnits = new DataView(memory.buffer).getUint32(ctx.storagePtr, params[0] + 4, true);
+                        val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
+                        ctx.storagePtr += codeUnits;
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= codeUnits; }}
 
                         return [val, ctx];
                     }}
@@ -553,11 +604,12 @@ impl LiftIntrinsic {
             Self::LiftFlatStringUtf16 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let decoder = Intrinsic::String(StringIntrinsic::Utf16Decoder).name();
+                let lift_flat_string_utf16_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatStringUTF16(ctx) {{
-                        {debug_log_fn}('[_liftFlatStringUTF16()] args', {{ ctx }});
-
+                    function {lift_flat_string_utf16_fn}(ctx) {{
+                        {debug_log_fn}('[{lift_flat_string_utf16_fn}()] ctx', {{ ctx }});
                         let val;
+
                         if (ctx.useDirectParams) {{
                             if (ctx.params.length < 2) {{ throw new Error('expected at least two u32 arguments'); }}
                             const offset = ctx.params[0];
@@ -566,14 +618,15 @@ impl LiftIntrinsic {
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
                             val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len));
                             ctx.params = ctx.params.slice(2);
-                        }} else {{
-                            const data = new DataView(ctx.memory.buffer)
-                            const start = data.getUint32(ctx.storagePtr, vals[0], true);
-                            const codeUnits = data.getUint32(ctx.storagePtr, vals[0] + 4, true);
-                            val = {decoder}.decode(new Uint16Array(ctx.memory.buffer, start, codeUnits));
-                            ctx.storagePtr = ctx.storagePtr + 2 * codeUnits,
-                            ctx.storageLen = ctx.storageLen - 2 * codeUnits
+                            return [val, ctx];
                         }}
+
+                        const data = new DataView(ctx.memory.buffer)
+                        const start = data.getUint32(ctx.storagePtr, vals[0], true);
+                        const codeUnits = data.getUint32(ctx.storagePtr, vals[0] + 4, true);
+                        val = {decoder}.decode(new Uint16Array(ctx.memory.buffer, start, codeUnits));
+                        ctx.storagePtr = ctx.storagePtr + 2 * codeUnits,
+                        if (ctx.storageLen !== undefined) {{ ctx.storageLen = ctx.storageLen - 2 * codeUnits }}
 
                         return [val, ctx];
                     }}
@@ -587,11 +640,11 @@ impl LiftIntrinsic {
             // then do the logic of actually lifting.
             Self::LiftFlatRecord => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-
+                let lift_flat_record_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatRecord(keysAndLiftFns) {{
-                        return function _liftFlatRecordInner(ctx) {{
-                            {debug_log_fn}('[_liftFlatRecord()] args', {{ ctx }});
+                    function {lift_flat_record_fn}(keysAndLiftFns) {{
+                        return function {lift_flat_record_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_record_fn}()] ctx', {{ ctx }});
                             const {{ memory, useDirectParams, storagePtr, storageLen, params }} = ctx;
 
                             if (useDirectParams) {{
@@ -614,13 +667,14 @@ impl LiftIntrinsic {
 
             Self::LiftFlatVariant => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_variant_fn = self.name();
                 let lift_u8 = Self::LiftFlatU8.name();
                 let lift_u16 = Self::LiftFlatU16.name();
                 let lift_u32 = Self::LiftFlatU32.name();
                 output.push_str(&format!("
-                    function _liftFlatVariant(casesAndLiftFns) {{
-                        return function _liftFlatVariantInner(ctx) {{
-                            {debug_log_fn}('[_liftFlatVariant()] args', {{ ctx }});
+                    function {lift_flat_variant_fn}(casesAndLiftFns) {{
+                        return function {lift_flat_variant_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_variant_fn}()] ctx', {{ ctx }});
 
                             const origUseParams = ctx.useDirectParams;
 
@@ -664,11 +718,12 @@ impl LiftIntrinsic {
 
             Self::LiftFlatList => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_list_fn = self.name();
                 let lift_u32 = Self::LiftFlatU32.name();
                 output.push_str(&format!("
-                    function _liftFlatList(elemLiftFn, alignment32, knownLen) {{
-                        function _liftFlatListInner(ctx) {{
-                            {debug_log_fn}('[_liftFlatList()] args', {{ ctx }});
+                    function {lift_flat_list_fn}(elemLiftFn, alignment32, knownLen) {{
+                        function {lift_flat_list_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_list_fn}()] ctx', {{ ctx }});
 
                             let metaPtr;
                             let dataPtr;
@@ -724,11 +779,12 @@ impl LiftIntrinsic {
             Self::LiftFlatTuple => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_record = Self::LiftFlatRecord.name();
+                let lift_flat_tuple_fn = self.name();
                 output.push_str(&format!(
                     "
-                    function _liftFlatTuple(numberedLiftFns) {{
-                        return function _liftFlatTupleInner(ctx) {{
-                            {debug_log_fn}('[_liftFlatTuple()] args', {{ ctx }});
+                    function {lift_flat_tuple_fn}(numberedLiftFns) {{
+                        return function {lift_flat_tuple_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_tuple_fn}()] args', {{ ctx }});
 
                             const obj = {lift_record}(numberedLiftFns)(ctx);
                             const val = [];
@@ -746,41 +802,28 @@ impl LiftIntrinsic {
             Self::LiftFlatEnum => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_variant = Self::LiftFlatVariant.name();
+                let lift_flat_enum_fn = self.name();
                 output.push_str(&format!(
-                    "
-                    function _liftFlatEnum(casesAndLiftFns) {{
-                        return function _liftFlatEnumInner(ctx) {{
-                            {debug_log_fn}('[_liftFlatEnum()] args', {{ ctx }});
+                    r#"
+                    function {lift_flat_enum_fn}(casesAndLiftFns) {{
+                        return function {lift_flat_enum_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_enum_fn}()] args', {{ ctx }});
                             return {lift_variant}(casesAndLiftFns)(ctx);
                         }}
                     }}
-                "
+                    "#
                 ));
             }
 
             Self::LiftFlatOption => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lift_variant = Self::LiftFlatVariant.name();
-                output.push_str(&format!(
-                    "
-                    function _liftFlatOption(casesAndLiftFns) {{
-                        return function _liftFlatOptionInner(ctx) {{
-                            {debug_log_fn}('[_liftFlatOption()] args', {{ ctx }});
-                            return {lift_variant}(casesAndLiftFns)(ctx);
-                        }}
-                    }}
-                "
-                ));
-            }
-
-            Self::LiftFlatResult => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let lift_variant = Self::LiftFlatVariant.name();
+                let lift_flat_option_fn = self.name();
                 output.push_str(&format!(
                     r#"
-                    function _liftFlatResult(casesAndLiftFns) {{
-                        return function _liftFlatResultInner(ctx) {{
-                            {debug_log_fn}('[_liftFlatResult()] args', {{ ctx }});
+                    function {lift_flat_option_fn}(casesAndLiftFns) {{
+                        return function {lift_flat_option_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_option_fn}()] args', {{ ctx }});
                             return {lift_variant}(casesAndLiftFns)(ctx);
                         }}
                     }}
@@ -788,35 +831,55 @@ impl LiftIntrinsic {
                 ));
             }
 
+            Self::LiftFlatResult => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_variant = Self::LiftFlatVariant.name();
+                let lift_flat_result_fn = self.name();
+                output.push_str(&format!(
+                    r#"
+                    function {lift_flat_result_fn}(casesAndLiftFns) {{
+                        return function {lift_flat_result_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_result_fn}()] args', {{ ctx }});
+                            return {lift_variant}(casesAndLiftFns)(ctx);
+                        }}
+                    }}
+                    "#
+                ));
+            }
+
             Self::LiftFlatFlags => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_flags_fn = self.name();
                 output.push_str(&format!(
-                    "
-                    function _liftFlatFlags(cases) {{
-                        return function _liftFlatFlagsInner(ctx) {{
-                            {debug_log_fn}('[_liftFlatFlags()] args', {{ ctx }});
+                    r#"
+                    function {lift_flat_flags_fn}(cases) {{
+                        return function {lift_flat_flags_fn}Inner(ctx) {{
+                            {debug_log_fn}('[{lift_flat_flags_fn}()] args', {{ ctx }});
                             throw new Error('flat lift for flags not yet implemented!');
                         }}
                     }}
-                "
+                    "#
                 ));
             }
 
             Self::LiftFlatOwn => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _liftFlatOwn(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_liftFlatOwn()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                let lift_flat_own_fn = self.name();
+                output.push_str(&format!(r#"
+                    function {lift_flat_own_fn}(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[{lift_flat_own_fn}()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         throw new Error('flat lift for owned resources not yet implemented!');
                     }}
-                "));
+                "#
+                ));
             }
 
             Self::LiftFlatBorrow => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_borrow_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatBorrow(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_liftFlatBorrow()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                    function {lift_flat_borrow_fn}(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[{lift_flat_borrow_fn}()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         throw new Error('flat lift for borrowed resources not yet implemented!');
                     }}
                 "));
@@ -824,9 +887,10 @@ impl LiftIntrinsic {
 
             Self::LiftFlatFuture => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let lift_flat_future_fn = self.name();
                 output.push_str(&format!("
-                    function _liftFlatFuture(componentTableIdx, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_liftFlatFuture()] args', {{ size, memory, vals, storagePtr, storageLen }});
+                    function {lift_flat_future_fn}(componentTableIdx, memory, vals, storagePtr, storageLen) {{
+                        {debug_log_fn}('[{lift_flat_future_fn}()] args', {{ size, memory, vals, storagePtr, storageLen }});
                         throw new Error('flat lift for futures not yet implemented!');
                     }}
                 "));
@@ -834,12 +898,38 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStream => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _liftFlatStream(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_liftFlatStream()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        throw new Error('flat lift for streams not yet implemented!');
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let external_stream_class =
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass).name();
+                let lift_flat_stream_fn = self.name();
+                output.push_str(&format!(r#"
+                    function {lift_flat_stream_fn}(componentTableIdx, ctx) {{
+                        {debug_log_fn}('[{lift_flat_stream_fn}()] args', {{ componentTableIdx, ctx }});
+                        const {{ memory, useDirectParams, params, componentIdx }} = ctx;
+
+                        const streamIdx = params[0];
+                        if (!streamIdx) {{ throw new Error('missing stream idx'); }}
+
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
+
+                        const streamEnd = cstate.getStreamEnd({{ tableIdx: componentTableIdx, streamIdx }});
+                        if (!streamEnd) {{
+                            throw new Error(`missing stream [${{streamIdx}}] (table [${{componentTableIdx}}]) in component [${{componentIdx}}] during lift`);
+                        }}
+
+                        const stream = new {external_stream_class}({{
+                            hostStreamRep: streamEnd.getStreamRep(),
+                            isReadable: streamEnd.isReadable(),
+                            isWritable: streamEnd.isWritable(),
+                            writeFn: (v) => {{ return streamEnd.write(v); }},
+                            readFn: () => {{ return streamEnd.read(); }},
+                        }});
+
+                        return [ stream, ctx ];
                     }}
-                "));
+                "#));
             }
 
             // Since error contexts are reference counted, when one is lifted from a component to a
@@ -857,10 +947,11 @@ impl LiftIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let get_err_ctx_local_table_fn = ErrCtxIntrinsic::GetLocalTable.name();
                 let err_ctx_ref_count_add_fn = ErrCtxIntrinsic::GlobalRefCountAdd.name();
+                let lift_flat_error_fn = self.name();
 
                 output.push_str(&format!(r#"
-                    function _liftFlatErrorContext(componentTableIdx, ctx) {{
-                        {debug_log_fn}('[_liftFlatErrorContext()] args', ctx);
+                    function {lift_flat_error_fn}(componentTableIdx, ctx) {{
+                        {debug_log_fn}('[{lift_flat_error_fn}()] ctx', ctx);
                         const {{ useDirectParams, params, componentIdx }} = ctx;
 
                         let val;

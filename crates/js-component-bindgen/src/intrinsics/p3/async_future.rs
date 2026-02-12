@@ -7,7 +7,7 @@ use crate::source::Source;
 use super::async_task::AsyncTaskIntrinsic;
 
 /// This enum contains intrinsics that enable Stream
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum AsyncFutureIntrinsic {
     /// The definition of the `FutureWritableEnd` JS class
     ///
@@ -59,7 +59,7 @@ pub enum AsyncFutureIntrinsic {
     /// type StringEncoding = 'utf8' | 'utf16' | 'compact-utf16'; // see wasmtime_environ::StringEncoding
     ///
     /// function futureRead(
-    ///     componentInstanceID: i32,
+    ///     componentIdx: i32,
     ///     memory: i32,
     ///     realloc: i32,
     ///     encoding: StringEncoding,
@@ -87,7 +87,7 @@ pub enum AsyncFutureIntrinsic {
     /// type StringEncoding = 'utf8' | 'utf16' | 'compact-utf16'; // see wasmtime_environ::StringEncoding
     ///
     /// function futureWrite(
-    ///     componentInstanceID: i32,
+    ///     componentIdx: i32,
     ///     memory: i32,
     ///     realloc: i32,
     ///     encoding: StringEncoding,
@@ -210,7 +210,7 @@ impl AsyncFutureIntrinsic {
                 output.push_str(&format!("
                     class {future_end_class} {{
                         #elementTypeRep = null;
-                        #componentInstanceID = null;
+                        #componentIdx = null;
 
                         constructor(args) {{
                             {debug_log_fn}('[{future_end_class}#constructor()] args', args);
@@ -221,11 +221,11 @@ impl AsyncFutureIntrinsic {
                                 throw new TypeError('invalid  elementTypeRep [' + args.elementTypeRep + ']');
                             }}
                             this.#elementTypeRep = args.elementTypeRep;
-                            this.#componentInstanceID = args.componentInstanceID ??= null;
+                            this.#componentIdx = args.componentIdx ??= null;
                         }}
 
                         elementTypeRep() {{ return this.#elementTypeRep; }}
-                        isHostOwned() {{ return this.#componentInstanceID === null; }}
+                        isHostOwned() {{ return this.#componentIdx === null; }}
                     }}
                 "));
             }
@@ -281,26 +281,26 @@ impl AsyncFutureIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
-                    function {future_new_fn}(componentInstanceID, elementTypeRep) {{
-                        {debug_log_fn}('[{future_new_fn}()] args', {{ componentInstanceID, elementTypeRep }});
+                    function {future_new_fn}(componentIdx, elementTypeRep) {{
+                        {debug_log_fn}('[{future_new_fn}()] args', {{ componentIdx, elementTypeRep }});
 
-                        const task = {current_task_get_fn}(componentInstanceID);
+                        const task = {current_task_get_fn}(componentIdx);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         let future = new Promise();
-                        let writableIdx = {global_future_map}.insert(new {future_writable_end_class}({{
+                        let writeEndIdx = {global_future_map}.insert(new {future_writable_end_class}({{
                             isFuture: true,
                             elementTypeRep,
                         }}));
-                        let readableIdx = {global_future_map}.insert(new {future_readable_end_class}({{
+                        let readEndIdx = {global_future_map}.insert(new {future_readable_end_class}({{
                             isFuture: true,
                             elementTypeRep,
                         }}));
 
-                        return BigInt(writableIdx) << 32n | BigInt(readableIdx);
+                        return BigInt(writeEndIdx) << 32n | BigInt(readEndIdx);
                     }}
                 "));
             }
@@ -324,7 +324,7 @@ impl AsyncFutureIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant).name();
                 output.push_str(&format!("
                     function {future_write_fn}(
-                        componentInstanceID,
+                        componentIdx,
                         memoryIdx,
                         reallocIdx,
                         stringEncoding,
@@ -336,7 +336,7 @@ impl AsyncFutureIntrinsic {
                         count,
                     ) {{
                         {debug_log_fn}('[{future_write_fn}()] args', {{
-                            componentInstanceID,
+                            componentIdx,
                             memoryIdx,
                             reallocIdx,
                             stringEncoding,
@@ -348,7 +348,7 @@ impl AsyncFutureIntrinsic {
                             count,
                         }});
 
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const future = {global_future_map}.get(futureIdx);
@@ -365,16 +365,16 @@ impl AsyncFutureIntrinsic {
                         if (futureEnd.isCopying()) {{ throw new Error('future end is copying'); }}
                         if (futureEnd.isDone()) {{ throw new Error('future end is done'); }}
 
-                        if ({is_borrowed_type}(componentInstanceID, future.elementTypeRep())) {{ throw new Error('borrowed types not supported'); }}
+                        if ({is_borrowed_type}(componentIdx, future.elementTypeRep())) {{ throw new Error('borrowed types not supported'); }}
 
-                        const bufID = {global_buffer_mgr}.createBuffer({{ componentInstanceID, start, len, typeIdx, writable, readable }});
+                        const {{ id: bufferID }} = {global_buffer_mgr}.createBuffer({{ componentIdx, start, len, typeIdx, writable, readable }});
 
                         const processFn = (result) => {{
-                          if (.remaining(bufID) !== 0) {{
-                          if ({global_buffer_mgr}.remaining(bufID) === 0 && result != CopyResult.COMPLETED) {{
+                          if (.remaining(bufferID) !== 0) {{
+                          if ({global_buffer_mgr}.remaining(bufferID) === 0 && result != CopyResult.COMPLETED) {{
                             throw new Error('incomplete copy with future data remanining');
                           }}
-                          if ({global_buffer_mgr}.remaining(bufID) !== 0 && result === CopyResult.COMPLETED) {{
+                          if ({global_buffer_mgr}.remaining(bufferID) !== 0 && result === CopyResult.COMPLETED) {{
                             throw new Error('remaining data with completed copy');
                           }}
 
@@ -388,7 +388,7 @@ impl AsyncFutureIntrinsic {
                         }};
 
                         futureEnd.copy({{
-                            bufID,
+                            bufferID,
                             onCopyDone: (result) => {{
                               if (result === CopyResult.DROPPED && eventCode === Eventcode.FUTURE_WRITE) {{
                                 throw new Error('cannot have a future write when the future is dropped');
@@ -443,7 +443,7 @@ impl AsyncFutureIntrinsic {
                             futureEndIdx,
                         }});
 
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const futureEnd = {global_future_map}.get(futureEndIdx);
@@ -502,7 +502,7 @@ impl AsyncFutureIntrinsic {
                             futureEndIdx,
                         }});
 
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const future = {global_future_map}.remove(futureIdx);
