@@ -8,7 +8,7 @@ use crate::{
 use super::conversion::ConversionIntrinsic;
 
 /// This enum contains intrinsics that enable Lower
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum LowerIntrinsic {
     /// Lower a boolean into provided storage, given a core type
     ///
@@ -335,23 +335,27 @@ impl LowerIntrinsic {
                 "));
             }
 
+            // TODO(fix) can u32s be lowered indirectly? maybe never?
+            // discrepancy of indirect values and indirect params (where to get storagePtr/len)
+            // to the function versus params that actually indicate where to write!
             Self::LowerFlatU32 => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function _lowerFlatU32(ctx) {{
                         {debug_log_fn}('[_lowerFlatU32()] args', ctx);
                         const {{ memory, realloc, vals, storagePtr, storageLen }} = ctx;
                         if (vals.length !== 1) {{ throw new Error('expected single value to lower, got (' + vals.length + ')'); }}
                         if (vals[0] > 4_294_967_295 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u32'); }}
 
-                        // TODO(fix): fix misaligned writes properly
+                        // TODO(refactor): fail loudly on misaligned flat lowers?
                         const rem = ctx.storagePtr % 4;
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
+
                         return 4;
                     }}
-                "));
+                "#));
             }
 
             Self::LowerFlatS64 => {
@@ -534,19 +538,52 @@ impl LowerIntrinsic {
 
             Self::LowerFlatList => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _lowerFlatList(size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatList()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        let [start, len] = vals;
-                        const totalSizeBytes = len * size;
-                        if (storageLen !== undefined && totalSizeBytes > storageLen) {{
-                            throw new Error('not enough storage remaining for list flat lower');
+                let lower_flat_list_fn = self.name();
+                output.push_str(&format!(r#"
+                    function {lower_flat_list_fn}(args) {{
+                        const {{ elemLowerFn }} = args;
+                        if (!elemLowerFn) {{ throw new TypeError("missing/invalid element lower fn for list"); }}
+
+                        return function {lower_flat_list_fn}Inner(ctx) {{
+                            {debug_log_fn}('[_lowerFlatList()] args', {{ ctx }});
+
+                            if (ctx.params.length < 2) {{ throw new Error('insufficient params left to lower list'); }}
+                            const storagePtr = ctx.params[0];
+                            const elemCount = ctx.params[1];
+                            ctx.params = ctx.params.slice(2);
+
+                            if (ctx.useDirectParams) {{
+                                const list = ctx.vals[0];
+                                if (!list) {{ throw new Error("missing direct param value"); }}
+
+                                const elemLowerCtx = {{ storagePtr, memory: ctx.memory }};
+                                for (let idx = 0; idx < list.length; idx++) {{
+                                    elemLowerCtx.vals = list.slice(idx, idx+1);
+                                    elemLowerCtx.storagePtr += elemLowerFn(elemLowerCtx);
+                                }}
+
+                                const bytesLowered = elemLowerCtx.storagePtr - ctx.storagePtr;
+                                ctx.storagePtr = elemLowerCtx.storagePtr;
+                                return bytesLowered;
+                            }}
+
+
+                            if (ctx.vals.length !== 2) {{
+                                throw new Error('indirect parameter loading must have a pointer and length as vals');
+                            }}
+                            let [valStartPtr, valLen] = ctx.vals;
+                            const totalSizeBytes = valLen * size;
+                            if (ctx.storageLen !== undefined && totalSizeBytes > ctx.storageLen) {{
+                                throw new Error('not enough storage remaining for list flat lower');
+                            }}
+
+                            const data = new Uint8Array(memory.buffer, valStartPtr, totalSizeBytes);
+                            new Uint8Array(memory.buffer, storagePtr, totalSizeBytes).set(data);
+
+                            return totalSizeBytes;
                         }}
-                        const data = new Uint8Array(memory.buffer, start, totalSizeBytes);
-                        new Uint8Array(memory.buffer, storagePtr, totalSizeBytes).set(data);
-                        return data.byteLength;
                     }}
-                "));
+                "#));
             }
 
             Self::LowerFlatTuple => {

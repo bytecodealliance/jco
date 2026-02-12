@@ -3,7 +3,10 @@ use std::fmt::Write;
 use std::mem;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
-use wasmtime_environ::component::{CanonicalOptions, ResourceIndex, TypeResourceTableIndex};
+use wasmtime_environ::component::{
+    CanonicalOptions, ResourceIndex, TypeComponentLocalErrorContextTableIndex,
+    TypeFutureTableIndex, TypeResourceTableIndex, TypeStreamTableIndex,
+};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
@@ -57,6 +60,23 @@ pub enum ResourceData {
     Guest {
         resource_name: String,
         prefix: Option<String>,
+        extra: Option<ResourceExtraData>,
+    },
+}
+
+/// Supplemental data kept along with [`ResourceData`]
+#[derive(Clone, Debug, PartialEq)]
+pub enum ResourceExtraData {
+    Stream {
+        table_idx: TypeStreamTableIndex,
+        elem_ty: Option<Type>,
+    },
+    Future {
+        table_idx: TypeFutureTableIndex,
+        elem_ty: Option<Type>,
+    },
+    ErrorContext {
+        table_idx: TypeComponentLocalErrorContextTableIndex,
     },
 }
 
@@ -98,16 +118,9 @@ pub struct ResourceTable {
 /// A mapping of type IDs to the resources that they represent
 pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
-/// A mapping of remote reps that represent imported resources
-pub type RemoteResourceMap = BTreeMap<u32, ResourceTable>;
-
 pub struct FunctionBindgen<'a> {
     /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
-
-    /// Mapping of resources for types that are defined only in the remote component
-    /// and must be auto-vivicated locally.
-    pub remote_resource_map: &'a RemoteResourceMap,
 
     /// Whether current resource borrows need to be deactivated
     pub clear_resource_borrows: bool,
@@ -1074,6 +1087,13 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(format!("enum{tmp}"));
             }
 
+            // The ListCanonLower instruction is called on async function parameter lowers
+            //
+            // We ignore `realloc` in the instruction because it's the name of the *import* from the
+            // component's side (i.e. `"cabi_realloc"`). Bindings have already set up the appropriate
+            // realloc for the current component (e.g. `realloc0`) and it is available in the bindgen
+            // object @ `self.realloc`
+            //
             Instruction::ListCanonLower { element, .. } => {
                 let tmp = self.tmp();
                 let memory = self.memory.as_ref().unwrap();
@@ -1245,6 +1265,10 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallWasm { name, sig } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let global_async_param_lower_class =
+                    self.intrinsic(Intrinsic::GlobalAsyncParamLowersClass);
+                let has_post_return = self.post_return.is_some();
+                let is_async = self.is_async;
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::CallWasm] enter', {{
@@ -1255,8 +1279,6 @@ impl Bindgen for FunctionBindgen<'_> {
                       }});",
                     param_count = sig.params.len(),
                     prefix = self.tracing_prefix,
-                    is_async = self.is_async,
-                    has_post_return = self.post_return.is_some(),
                 );
 
                 // Write out whether the caller was host provided
@@ -1290,6 +1312,39 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
 
+                // If we're async w/ params that have been lowered, we must lower the params
+                // let requires_lowering = sig.params.len() >
+                if self.is_async {
+                    let memory = self.memory.map(|v| v.as_str()).unwrap_or_else(|| "null");
+                    let component_idx = self.canon_opts.instance.as_u32();
+                    uwriteln!(
+                        self.src,
+                        r#"
+                        {{
+                            const paramLowerFn = {global_async_param_lower_class}.lookup({{
+                                componentIdx: {component_idx},
+                                iface: '{iface_name}',
+                                fnName: '{callee}',
+                            }});
+                            if (!paramLowerFn) {{
+                                throw new Error(`missing async param lower function for generated export fn [{callee}]`);
+                            }}
+                            paramLowerFn({{
+                                memory: {memory},
+                                vals: [{params}],
+                                indirect: {indirect},
+                                loweringParams: [{operands}],
+                            }});
+                        }}
+                        "#,
+                        operands = operands.join(","),
+                        params = self.params.join(","),
+                        indirect = sig.indirect_params,
+                        callee = self.callee,
+                        iface_name = self.iface_name.unwrap_or("$root"),
+                    );
+                }
+
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
                 self.write_result_assignment(sig_results_length, results);
@@ -1307,7 +1362,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 );
 
-                // Print post-return if tracing is enabled
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
                     let to_result_string =
@@ -1338,6 +1392,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
                 let current_task_get_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let component_instance_idx = self.canon_opts.instance.as_u32();
 
                 uwriteln!(
                     self.src,
@@ -1356,13 +1411,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     (self.callee.into(), operands.join(", "))
                 };
 
+                uwriteln!(self.src, "let hostProvided = false;");
                 match func.kind {
                     wit_parser::FunctionKind::Constructor(_) => {
-                        uwriteln!(
-                            self.src,
-                            "const hostProvided = {}._isHostProvided;",
-                            fn_js.trim_start_matches("new ")
-                        )
+                        let cls = fn_js.trim_start_matches("new ");
+                        uwriteln!(self.src, "hostProvided = {cls}?._isHostProvided;");
                     }
                     wit_parser::FunctionKind::Freestanding
                     | wit_parser::FunctionKind::AsyncFreestanding
@@ -1370,10 +1423,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     | wit_parser::FunctionKind::AsyncMethod(_)
                     | wit_parser::FunctionKind::Static(_)
                     | wit_parser::FunctionKind::AsyncStatic(_) => {
-                        uwriteln!(self.src, "const hostProvided = {fn_js}._isHostProvided;")
+                        uwriteln!(self.src, "hostProvided = {fn_js}?._isHostProvided;");
                     }
                 }
-                let component_instance_idx = self.canon_opts.instance.as_u32();
 
                 // Start the necessary subtasks and/or host task
                 //
@@ -1838,7 +1890,13 @@ impl Bindgen for FunctionBindgen<'_> {
                     ResourceData::Guest {
                         resource_name,
                         prefix,
+                        extra,
                     } => {
+                        assert!(
+                            extra.is_none(),
+                            "plain resource handles do not carry extra data"
+                        );
+
                         let symbol_resource_handle =
                             self.intrinsic(Intrinsic::SymbolResourceHandle);
                         let prefix = prefix.as_deref().unwrap_or("");
@@ -1958,22 +2016,29 @@ impl Bindgen for FunctionBindgen<'_> {
                             // Fall back to assign a new rep in the capture table, when the imported
                             // resource was constructed externally.
                             let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
-                            let rsc_table_create = if is_own {
-                                self.intrinsic(Intrinsic::Resource(
+
+                            // Build the code to initialize the owned/borrowed resource handle
+                            let handle_init_js = if is_own {
+                                let create_own_fn = self.intrinsic(Intrinsic::Resource(
                                     ResourceIntrinsic::ResourceTableCreateOwn,
-                                ))
+                                ));
+                                format!("{handle} = {create_own_fn}(handleTable{tid}, rep);")
                             } else {
-                                self.intrinsic(Intrinsic::ScopeId);
-                                self.intrinsic(Intrinsic::Resource(
+                                let scope_id = self.intrinsic(Intrinsic::ScopeId);
+                                let create_borrow_fn = self.intrinsic(Intrinsic::Resource(
                                     ResourceIntrinsic::ResourceTableCreateBorrow,
-                                ))
+                                ));
+                                format!(
+                                    "{handle} = {create_borrow_fn}(handleTable{tid}, rep, {scope_id});"
+                                )
                             };
+
                             uwriteln!(
                                 self.src,
                                 "if (!{handle}) {{
                                     const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
                                     captureTable{rid}.set(rep, {op});
-                                    {handle} = {rsc_table_create}(handleTable{tid}, rep);
+                                    {handle_init_js}
                                 }}"
                             );
                         }
@@ -1982,7 +2047,13 @@ impl Bindgen for FunctionBindgen<'_> {
                     ResourceData::Guest {
                         resource_name,
                         prefix,
+                        extra,
                     } => {
+                        assert!(
+                            extra.is_none(),
+                            "plain resource handles do not carry extra data"
+                        );
+
                         let upper_camel = resource_name.to_upper_camel_case();
                         let lower_camel = resource_name.to_lower_camel_case();
                         let prefix = prefix.as_deref().unwrap_or("");
@@ -2064,7 +2135,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 // TODO: convert this return of the lifted Future:
                 //
                 // ```
-                //     return BigInt(writableIdx) << 32n | BigInt(readableIdx);
+                //     return BigInt(writeEndIdx) << 32n | BigInt(readEndIdx);
                 // ```
                 //
                 // Into a component-local Future instance
@@ -2154,26 +2225,55 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::StreamLower { .. } => {
                 // TODO: convert this return of the lifted Future:
                 // ```
-                //     return BigInt(writableIdx) << 32n | BigInt(readableIdx);
+                //     return BigInt(writeEndIdx) << 32n | BigInt(readEndIdx);
                 // ```
                 //
                 // Into a component-local Future instance
                 //
                 let stream_arg = operands
                     .first()
-                    .expect("unexpectedly missing ErrorContextLower arg");
+                    .expect("unexpectedly missing StreamLower arg");
                 results.push(stream_arg.clone());
             }
 
             Instruction::StreamLift { payload, ty } => {
-                let stream_ty = &crate::dealias(self.resolve, *ty);
                 let component_idx = self.canon_opts.instance.as_u32();
-                let stream_new_fn =
-                    self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
+                let stream_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::StreamNewFromLift,
+                ));
 
-                // TODO: save payload information in lifted stream
+                // We must look up the type idx to find the stream
+                let type_id = &crate::dealias(self.resolve, *ty);
+                let ResourceTable {
+                    imported: true,
+                    data:
+                        ResourceData::Guest {
+                            extra:
+                                Some(ResourceExtraData::Stream {
+                                    table_idx: stream_table_idx_ty,
+                                    elem_ty: stream_element_ty,
+                                }),
+                            ..
+                        },
+                } = self
+                    .resource_map
+                    .get(type_id)
+                    .expect("missing resource mapping for stream lift")
+                else {
+                    unreachable!("invalid resource table observed during stream lift");
+                };
+
+                assert_eq!(
+                    *stream_element_ty, **payload,
+                    "stream element type mismatch"
+                );
+
+                let arg_stream_idx = operands
+                    .first()
+                    .expect("unexpectedly missing stream table idx arg in StreamLift");
+
                 let (payload_lift_fn, payload_lower_fn) = match payload {
-                    None => ("".into(), "".into()),
+                    None => ("null".into(), "null".into()),
                     Some(payload_ty) => {
                         match payload_ty {
                             // TODO: reuse existing lifts
@@ -2233,14 +2333,15 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 };
 
-                // // TODO: save payload type size below and more information about the type w/ the stream?
-                // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
+                let payload_ty_size_js = if let Some(payload_ty) = payload {
+                    self.sizes.size(payload_ty).size_wasm32().to_string()
+                } else {
+                    "null".into()
+                };
 
-                // NOTE: here, rather than create a new `Stream` "resource" using the saved
-                // ResourceData, we use the stream.new intrinsic directly.
-                //
-                // TODO: differentiate "locally" created streams and streams that are lifted in?
-                //
+                let stream_table_idx = stream_table_idx_ty.as_u32();
+                let is_unit_stream = payload.is_none();
+
                 let tmp = self.tmp();
                 let result_var = format!("streamResult{tmp}");
                 uwriteln!(
@@ -2248,9 +2349,15 @@ impl Bindgen for FunctionBindgen<'_> {
                     "
                     {payload_lift_fn}
                     {payload_lower_fn}
-                     const {result_var} = {stream_new_fn}({{ componentIdx: {component_idx}, streamTypeRep: {}, payloadLiftFn, payloadLowerFn, isUnitStream: {} }});",
-                    stream_ty.index(),
-                    payload.is_none(),
+                    const {result_var} = {stream_new_from_lift_fn}({{
+                        componentIdx: {component_idx},
+                        streamTableIdx: {stream_table_idx},
+                        streamIdx: {arg_stream_idx},
+                        payloadLiftFn,
+                        payloadTypeSize32: {payload_ty_size_js},
+                        payloadLowerFn,
+                        isUnitStream: {is_unit_stream},
+                    }});",
                 );
                 results.push(result_var.clone());
             }

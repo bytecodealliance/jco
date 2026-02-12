@@ -1,9 +1,12 @@
 //! Intrinsics that represent helpers that manage per-component state
 
-use crate::{intrinsics::Intrinsic, source::Source};
+use crate::{
+    intrinsics::{Intrinsic, p3::async_stream::AsyncStreamIntrinsic},
+    source::Source,
+};
 
 /// This enum contains intrinsics that manage per-component state
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ComponentIntrinsic {
     /// Global that stores async state by component instance
     ///
@@ -98,10 +101,10 @@ impl ComponentIntrinsic {
                 let backpressure_set_fn = Self::BackpressureSet.name();
                 let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
-                    function {backpressure_set_fn}(componentInstanceID, value) {{
-                        {debug_log_fn}('[{backpressure_set_fn}()] args', {{ componentInstanceID, value }});
+                    function {backpressure_set_fn}(componentIdx, value) {{
+                        {debug_log_fn}('[{backpressure_set_fn}()] args', {{ componentIdx, value }});
                         if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         state.setBackpressure(value);
                     }}
                 "));
@@ -113,9 +116,9 @@ impl ComponentIntrinsic {
                 let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
                 output.push_str(&format!(
                     "
-                    function {backpressure_inc_fn}(componentInstanceID) {{
-                        {debug_log_fn}('[{backpressure_inc_fn}()] args', {{ componentInstanceID }});
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                    function {backpressure_inc_fn}(componentIdx) {{
+                        {debug_log_fn}('[{backpressure_inc_fn}()] args', {{ componentIdx }});
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         state.incrementBackpressure();
                     }}
                 "
@@ -128,9 +131,9 @@ impl ComponentIntrinsic {
                 let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
                 output.push_str(&format!(
                     "
-                    function {backpressure_dec_fn}(componentInstanceID) {{
-                        {debug_log_fn}('[{backpressure_dec_fn}()] args', {{ componentInstanceID }});
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                    function {backpressure_dec_fn}(componentIdx) {{
+                        {debug_log_fn}('[{backpressure_dec_fn}()] args', {{ componentIdx }});
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         state.decrementBackpressure();
                     }}
                 "
@@ -138,8 +141,11 @@ impl ComponentIntrinsic {
             }
 
             Self::ComponentAsyncStateClass => {
-                let rep_table_class = Intrinsic::RepTableClass.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
+                let global_stream_map = AsyncStreamIntrinsic::GlobalStreamMap.name();
+
                 output.push_str(&format!(
                     r#"
                     class {class_name} {{
@@ -163,6 +169,8 @@ impl ComponentIntrinsic {
 
                         mayLeave = true;
 
+                        #streams;
+
                         waitableSets;
                         waitables;
                         subtasks;
@@ -172,9 +180,11 @@ impl ComponentIntrinsic {
                             this.waitableSets = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitable sets` }});
                             this.waitables = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitables` }});
                             this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
+                            this.#streams = new Map();
                         }};
 
                         componentIdx() {{ return this.#componentIdx; }}
+                        streams() {{ return this.#streams; }}
 
                         errored() {{ return this.#errored !== null; }}
                         setErrored(err) {{
@@ -387,21 +397,103 @@ impl ComponentIntrinsic {
 
                         tick() {{
                             {debug_log_fn}('[{class_name}#tick()]', {{ suspendedTaskIDs: this.#suspendedTaskIDs }});
-                            let resumedTask = false;
-                            for (const taskID of this.#suspendedTaskIDs.filter(t => t !== null)) {{
+                            const resumableTasks = this.#suspendedTaskIDs.filter(t => t !== null);
+                            for (const taskID of resumableTasks) {{
                                 const meta = this.#suspendedTasksByTaskID.get(taskID);
                                 if (!meta || !meta.readyFn) {{
-                                    throw new Error('missing/invalid task despite ID [' + taskID + '] being present');
+                                    throw new Error(`missing/invalid task despite ID [${{taskID}}] being present`);
                                 }}
-                                if (!meta.readyFn()) {{ continue; }}
-                                resumedTask = true;
+
+                                const isReady = meta.readyFn();
+                                if (!isReady) {{ continue; }}
+
                                 this.resumeTaskByID(taskID);
                             }}
-                            return resumedTask;
+
+                            return this.#suspendedTaskIDs.filter(t => t !== null).length === 0;
                         }}
 
                         addPendingTask(task) {{
                             this.#pendingTasks.push(task);
+                        }}
+
+                        addStreamEnd(args) {{
+                            {debug_log_fn}('[{class_name}#addStreamEnd()] args', args);
+                            const {{ tableIdx, streamEnd }} = args;
+
+                            let tbl = this.#streams.get(tableIdx);
+                            if (!tbl) {{
+                                tbl = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] streams` }});
+                                this.#streams.set(tableIdx, tbl);
+                            }}
+
+                            const streamIdx = tbl.insert(streamEnd);
+                            return streamIdx;
+                        }}
+
+                        createStream(args) {{
+                            {debug_log_fn}('[{class_name}#createStream()] args', args);
+                            const {{ tableIdx, elemMeta }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while adding stream"); }}
+                            if (elemMeta === undefined) {{ throw new Error("missing element metadata while adding stream"); }}
+
+                            let tbl = this.#streams.get(tableIdx);
+                            if (!tbl) {{
+                                tbl = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] streams` }});
+                                this.#streams.set(tableIdx, tbl);
+                            }}
+
+                            const stream = new {internal_stream_class}({{
+                                tableIdx,
+                                componentIdx: this.#componentIdx,
+                                elemMeta,
+                            }});
+                            const writeEndIdx = tbl.insert(stream.getWriteEnd());
+                            stream.setWriteEndIdx(writeEndIdx);
+                            const readEndIdx = tbl.insert(stream.getReadEnd());
+                            stream.setReadEndIdx(readEndIdx);
+
+                            const rep = {global_stream_map}.insert(stream);
+                            stream.setRep(rep);
+
+                            return {{ writeEndIdx, readEndIdx }};
+                        }}
+
+                        getStreamEnd(args) {{
+                            {debug_log_fn}('[{class_name}#getStreamEnd()] args', args);
+                            const {{ tableIdx, streamIdx }} = args;
+                            if (tableIdx === undefined) {{ throw new Error('missing table idx while retrieveing stream end'); }}
+                            if (streamIdx === undefined) {{ throw new Error('missing stream idx while retrieveing stream end'); }}
+
+                            const tbl = this.#streams.get(tableIdx);
+                            if (!tbl) {{
+                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while getting stream`);
+                            }}
+
+                            const stream = tbl.get(streamIdx);
+                            return stream;
+                        }}
+
+                        removeStreamEnd(args) {{
+                            {debug_log_fn}('[{class_name}#removeStreamEnd()] args', args);
+                            const {{ tableIdx, streamIdx }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
+                            if (streamIdx === undefined) {{ throw new Error("missing stream idx while removing stream end"); }}
+
+                            const tbl = this.#streams.get(tableIdx);
+                            if (!tbl) {{
+                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while removing stream end`);
+                            }}
+
+                            const stream = tbl.get(streamIdx);
+                            if (!stream) {{ throw new Error(`component [${{this.#componentIdx}}] missing stream [${{streamIdx}}]`); }}
+
+                            const removed = tbl.remove(streamIdx);
+                            if (!removed) {{
+                                 throw new Error(`missing stream [${{streamIdx}}] (table [${{tableIdx}}]) in component [${{this.#componentIdx}}] while removing stream end`);
+                            }}
+
+                            return stream;
                         }}
                     }}
                     "#,

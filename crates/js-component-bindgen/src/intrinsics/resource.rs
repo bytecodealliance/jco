@@ -4,7 +4,7 @@ use crate::intrinsics::Intrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics for supporting Component Model resources
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ResourceIntrinsic {
     /// # Resource table slab implementation
     ///
@@ -119,15 +119,15 @@ impl ResourceIntrinsic {
 
             Self::ResourceTableCreateBorrow => output.push_str(
                 "
-                function rscTableCreateBorrow (table, rep) {
+                function rscTableCreateBorrow(table, rep, scopeId) {
                     const free = table[0] & ~T_FLAG;
                     if (free === 0) {
-                        table.push(scopeId);
+                        table.push(scopeId ?? 0);
                         table.push(rep);
                         return (table.length >> 1) - 1;
                     }
                     table[0] = table[free];
-                    table[free << 1] = scopeId;
+                    table[free << 1] = scopeId ?? 0;
                     table[(free << 1) + 1] = rep;
                     return free;
                 }
@@ -136,7 +136,7 @@ impl ResourceIntrinsic {
 
             Self::ResourceTableCreateOwn => output.push_str(
                 "
-                function rscTableCreateOwn (table, rep) {
+                function rscTableCreateOwn(table, rep) {
                     const free = table[0] & ~T_FLAG;
                     if (free === 0) {
                         table.push(0);
@@ -153,12 +153,14 @@ impl ResourceIntrinsic {
 
             Self::ResourceTableGet => output.push_str(
                 "
-                function rscTableGet (table, handle) {
+                function rscTableGet(table, handle) {
                     const scope = table[handle << 1];
                     const val = table[(handle << 1) + 1];
                     const own = (val & T_FLAG) !== 0;
                     const rep = val & ~T_FLAG;
-                    if (rep === 0 || (scope & T_FLAG) !== 0) throw new TypeError('Invalid handle');
+                    if (rep === 0 || (scope & T_FLAG) !== 0) {
+                        throw new TypeError('Invalid handle');
+                    }
                     return { rep, scope, own };
                 }
             ",
@@ -166,26 +168,29 @@ impl ResourceIntrinsic {
 
             Self::ResourceTableEnsureBorrowDrop => output.push_str(
                 "
-                function rscTableEnsureBorrowDrop (table, handle, scope) {
-                    if (table[handle << 1] === scope)
+                function rscTableEnsureBorrowDrop(table, handle, scope) {
+                    if (table[handle << 1] === scope) {
                         throw new TypeError('Resource borrow was not dropped at end of call');
+                    }
                 }
             ",
             ),
 
             Self::ResourceTableRemove => output.push_str(
-                "
-                function rscTableRemove (table, handle) {
+                r#"
+                function rscTableRemove(table, handle) {
                     const scope = table[handle << 1];
                     const val = table[(handle << 1) + 1];
                     const own = (val & T_FLAG) !== 0;
                     const rep = val & ~T_FLAG;
-                    if (val === 0 || (scope & T_FLAG) !== 0) throw new TypeError('Invalid handle');
+                    if (val === 0 || (scope & T_FLAG) !== 0) {
+                        throw new TypeError("Invalid handle");
+                    }
                     table[handle << 1] = table[0] | T_FLAG;
                     table[0] = handle | T_FLAG;
                     return { rep, scope, own };
                 }
-            ",
+            "#,
             ),
 
             Self::ResourceTransferBorrow => {

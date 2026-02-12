@@ -3,7 +3,7 @@
 use crate::{intrinsics::Intrinsic, source::Source};
 
 /// This enum contains intrinsics that enable WebIDL
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum WebIdlIntrinsic {
     GlobalThisIdlProxy,
 }

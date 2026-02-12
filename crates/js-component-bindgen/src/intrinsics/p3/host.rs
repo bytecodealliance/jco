@@ -6,7 +6,7 @@ use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement async calls
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[allow(clippy::enum_variant_names)]
 pub enum HostIntrinsic {
     /// Intrinsic used by the host to prepare trampoline calls
@@ -113,7 +113,16 @@ impl HostIntrinsic {
             // NOTE: it's possible for PrepareCall to be combined with AsyncStartCall
             // in a future component model release.
             //
-            // TODO: document startFn & returnFn for fused components (note callee in AsyncPrepareCall too)
+            // For toolchains that implement `PrepareCall` and `AsyncStartCall`/`AsyncCall`,
+            // `startFn` and `returnFn` are functions that *perform* the relevant lifting and lowering
+            // when a call is entered or exited.
+            //
+            // For example, Fused components produced by `wasm-tools compose` will have generated start and
+            // return functions that perform the inter-component lifting and lowering that needs to happen.
+            //
+            // While lifting and lowering is still performed by this crate, we often do so to make handling
+            // consistent and make results available to functions like `AsyncTask#onResolve` for any other machinery
+            // that expects to have that information.
             //
             Self::PrepareCall => {
                 let debug_log_fn = Intrinsic::DebugLog.name();

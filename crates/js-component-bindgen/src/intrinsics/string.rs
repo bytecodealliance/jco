@@ -5,7 +5,7 @@ use crate::uwriteln;
 use crate::{intrinsics::Intrinsic, source::Source};
 
 /// This enum contains intrinsics for manipulating strings
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum StringIntrinsic {
     Utf16Decoder,
     Utf16Encode,

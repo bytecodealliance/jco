@@ -5,7 +5,7 @@ use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement error contexts
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ErrCtxIntrinsic {
     /// Storage of component-wide "global" `error-context` metadata
     ///
@@ -328,7 +328,7 @@ impl ErrCtxIntrinsic {
                         {debug_log_fn}('[{err_ctx_transfer_fn}()] args', {{ handle, srcTable, destTable }});
 
                         const componentIdx = {current_component_idx_globals}.at(-1);
-                        if (!componentIdx) {{
+                        if (componentIdx === undefined) {{
                             throw new Error("missing current component idx");
                         }}
 

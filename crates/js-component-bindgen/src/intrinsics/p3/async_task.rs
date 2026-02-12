@@ -7,7 +7,7 @@ use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement async tasks
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum AsyncTaskIntrinsic {
     /// Set the value of a context local storage for the current task/thread
     ///
@@ -469,9 +469,9 @@ impl AsyncTaskIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
-                    function {subtask_drop_fn}(componentInstanceID, subtaskID) {{
-                        {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentInstanceID, subtaskID }});
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                    function {subtask_drop_fn}(componentIdx, subtaskID) {{
+                        {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentIdx, subtaskID }});
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component is not marked as may leave, cannot be cancelled'); }}
 
                         const subtask =  state.subtasks.remove(subtaskID);
@@ -505,13 +505,13 @@ impl AsyncTaskIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
-                    function {task_cancel_fn}(componentInstanceID, isAsync) {{
-                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentInstanceID, isAsync }});
+                    function {task_cancel_fn}(componentIdx, isAsync) {{
+                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx, isAsync }});
 
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
-                        const task = {current_task_get_fn}(componentInstanceID);
+                        const task = {current_task_get_fn}(componentIdx);
                         if (task.sync && !task.alwaysTaskReturn) {{
                             throw new Error('cannot cancel sync tasks without always task return set');
                         }}
@@ -532,13 +532,13 @@ impl AsyncTaskIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
-                    function {task_cancel_fn}(componentInstanceID) {{
-                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentInstanceID, isAsync }});
+                    function {task_cancel_fn}(componentIdx) {{
+                        {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx, isAsync }});
 
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
-                        const task = {current_task_get_fn}(componentInstanceID);
+                        const task = {current_task_get_fn}(componentIdx);
                         if (task.sync && !task.alwaysTaskReturn) {{
                             throw new Error('cannot cancel sync tasks without always task return set');
                         }}
@@ -984,7 +984,7 @@ impl AsyncTaskIntrinsic {
 
                         async yieldUntil(opts) {{
                             const {{ readyFn, cancellable }} = opts;
-                            {debug_log_fn}('[{task_class}#yield()] args', {{ taskID: this.#id, cancellable }});
+                            {debug_log_fn}('[{task_class}#yieldUntil()] args', {{ taskID: this.#id, cancellable }});
 
                             const keepGoing = await this.suspendUntil({{ readyFn, cancellable }});
                             if (!keepGoing) {{
@@ -1040,7 +1040,9 @@ impl AsyncTaskIntrinsic {
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
 
+                            // TODO(fix): update this to tick until there is no more action to take.
                             setTimeout(() => cstate.tick(), 0);
+
                             const taskWait = await cstate.suspendTask({{ task: this, readyFn }});
                             const keepGoing = await taskWait;
                             return keepGoing;
@@ -1264,10 +1266,10 @@ impl AsyncTaskIntrinsic {
 
                                 const state = {get_or_create_async_state_fn}(this.#componentIdx);
                                 if (!state) {{
-                                    throw new Error('invalid/missing async state for component instance [' + componentInstanceID + ']');
+                                    throw new Error('invalid/missing async state for component instance [' + componentIdx + ']');
                                 }}
 
-                                this.#waitable = new {waitable_class}({{ promise,  componentInstanceID: this.#componentIdx }});
+                                this.#waitable = new {waitable_class}({{ promise,  componentIdx: this.#componentIdx }});
                                 this.#waitableRep = state.waitables.insert(this.#waitable);
                             }}
 
@@ -1485,7 +1487,7 @@ impl AsyncTaskIntrinsic {
                         #getComponentState() {{
                             const state = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (!state) {{
-                                throw new Error('invalid/missing async state for component [' + componentInstanceID + ']');
+                                throw new Error('invalid/missing async state for component [' + componentIdx + ']');
                             }}
                             return state;
                         }}
@@ -1638,7 +1640,7 @@ impl AsyncTaskIntrinsic {
                                         }});
                                         asyncRes = await task.yieldUntil({{
                                             cancellable: true,
-                                            readyFn: () => !componentState.isExclusivelyLocked()
+                                            readyFn: () => !componentState.isExclusivelyLocked(),
                                         }});
                                         break;
 
@@ -1780,6 +1782,7 @@ impl AsyncTaskIntrinsic {
                         subtask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{lower_import_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
                             const {{ memory, resultPtr, realloc }} = subtask.getCallMetadata();
+                            if (resultLowerFns.length === 0) {{ return; }}
                             resultLowerFns[0]({{ componentIdx, memory, realloc, vals: [res], storagePtr: resultPtr }});
                         }});
 

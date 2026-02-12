@@ -1,6 +1,6 @@
 //! Intrinsics used from JS
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 
 use crate::source::Source;
@@ -43,7 +43,7 @@ use p3::waitable::WaitableIntrinsic;
 /// These intrinsics refer to JS code that is included in order to make
 /// transpiled WebAssembly components and their imports/exports functional
 /// in the relevant JS context.
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Intrinsic {
     JsHelper(JsHelperIntrinsic),
     WebIdl(WebIdlIntrinsic),
@@ -143,8 +143,772 @@ pub enum Intrinsic {
     /// Async lower functions that are saved by component instance
     GlobalComponentAsyncLowersClass,
 
+    /// Param lowering functions saved by a component instance, interface and function
+    ///
+    /// This lookup is keyed by a combination of the component instance, interface
+    /// and generated JS function name where the lowering should be performed.
+    GlobalAsyncParamLowersClass,
+
     /// Tracking of component memories
     GlobalComponentMemoriesClass,
+}
+
+impl Intrinsic {
+    pub fn render(&self, output: &mut Source, args: &RenderIntrinsicsArgs) {
+        match self {
+            Intrinsic::JsHelper(i) => i.render(output),
+            Intrinsic::Conversion(i) => i.render(output),
+            Intrinsic::String(i) => i.render(output),
+            Intrinsic::ErrCtx(i) => i.render(output),
+            Intrinsic::Resource(i) => i.render(output),
+            Intrinsic::AsyncTask(i) => i.render(output),
+            Intrinsic::Waitable(i) => i.render(output, args),
+            Intrinsic::Lift(i) => i.render(output),
+            Intrinsic::Lower(i) => i.render(output),
+            Intrinsic::AsyncStream(i) => i.render(output),
+            Intrinsic::AsyncFuture(i) => i.render(output),
+            Intrinsic::Component(i) => i.render(output),
+            Intrinsic::Host(i) => i.render(output),
+
+            Intrinsic::GlobalAsyncDeterminism => {
+                output.push_str(&format!(
+                    "const {var_name} = '{determinism}';\n",
+                    var_name = self.name(),
+                    determinism = args.determinism,
+                ));
+            }
+
+            Intrinsic::CoinFlip => {
+                output.push_str(&format!(
+                    "const {var_name} = () => {{ return Math.random() > 0.5; }};\n",
+                    var_name = self.name(),
+                ));
+            }
+
+            Intrinsic::AwaitableClass => {
+                output.push_str(&format!(
+                    "
+                    class {class_name} {{
+                        static _ID = 0n;
+
+                        #id;
+                        #promise;
+                        #resolved = false;
+
+                        constructor(promise) {{
+                            if (!promise) {{
+                                throw new TypeError('Awaitable must have an interior promise');
+                            }}
+
+                            if (!('then' in promise) || typeof promise.then !== 'function') {{
+                                throw new Error('missing/invalid promise');
+                            }}
+                            promise.then(() => this.#resolved  = true);
+                            this.#promise = promise;
+                            this.#id = ++{class_name}._ID;
+                        }}
+
+                        id() {{ return this.#id; }}
+
+                        resolved() {{ return this.#resolved; }}
+
+                        then() {{ return this.#promise.then(...arguments); }}
+                    }}
+                ",
+                    class_name = self.name(),
+                ));
+            }
+
+            Intrinsic::ConstantI32Min => output.push_str(&format!(
+                "const {const_name} = -2_147_483_648;\n",
+                const_name = self.name()
+            )),
+            Intrinsic::ConstantI32Max => output.push_str(&format!(
+                "const {const_name} = 2_147_483_647;\n",
+                const_name = self.name()
+            )),
+            Intrinsic::TypeCheckValidI32 => {
+                let i32_const_min = Intrinsic::ConstantI32Min.name();
+                let i32_const_max = Intrinsic::ConstantI32Max.name();
+                output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = self.name()))
+            }
+
+            Intrinsic::AsyncFunctionCtor => {
+                let async_fn_type = Intrinsic::AsyncFunctionCtor.name();
+                uwriteln!(
+                    output,
+                    "const {async_fn_type} = (async () => {{}}).constructor;"
+                );
+            }
+
+            Intrinsic::TypeCheckAsyncFn => {
+                let async_fn_check = Intrinsic::TypeCheckAsyncFn.name();
+                let async_fn_ctor = Intrinsic::AsyncFunctionCtor.name();
+                uwriteln!(
+                    output,
+                    r#"
+                    const {async_fn_check} = (f) => {{
+                        return f instanceof {async_fn_ctor};
+                    }};
+                    "#,
+                );
+            }
+
+            Intrinsic::Base64Compile => {
+                if !args.no_nodejs_compat {
+                    output.push_str("
+                    const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
+                ")
+                } else {
+                    output.push_str("
+                    const base64Compile = str => WebAssembly.compile(Uint8Array.from(atob(str), b => b.charCodeAt(0)));
+                ")
+                }
+            }
+
+            Intrinsic::ClampGuest => output.push_str(
+                "
+                function clampGuest(i, min, max) {
+                    if (i < min || i > max) \
+                    throw new TypeError(`must be between ${min} and ${max}`);
+                    return i;
+                }
+            ",
+            ),
+
+            Intrinsic::ComponentError => output.push_str(
+                "
+                class ComponentError extends Error {
+                    constructor (value) {
+                        const enumerable = typeof value !== 'string';
+                        super(enumerable ? `${String(value)} (see error.payload)` : value);
+                        Object.defineProperty(this, 'payload', { value, enumerable });
+                    }
+                }
+            ",
+            ),
+
+            Intrinsic::DefinedResourceTables => {}
+
+            Intrinsic::FinalizationRegistryCreate => output.push_str(
+                "
+                function finalizationRegistryCreate (unregister) {
+                    if (typeof FinalizationRegistry === 'undefined') {
+                        return { unregister () {} };
+                    }
+                    return new FinalizationRegistry(unregister);
+                }
+            ",
+            ),
+
+            Intrinsic::FetchCompile => {
+                if !args.no_nodejs_compat {
+                    output.push_str("
+                    const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
+                    let _fs;
+                    async function fetchCompile (url) {
+                        if (isNode) {
+                            _fs = _fs || await import('node:fs/promises');
+                            return WebAssembly.compile(await _fs.readFile(url));
+                        }
+                        return fetch(url).then(WebAssembly.compileStreaming);
+                    }
+                ")
+                } else {
+                    output.push_str(
+                        "
+                    const fetchCompile = url => fetch(url).then(WebAssembly.compileStreaming);
+                ",
+                    )
+                }
+            }
+
+            Intrinsic::GetErrorPayload => {
+                let hop = Intrinsic::HasOwnProperty.name();
+                uwrite!(
+                    output,
+                    "
+                    function getErrorPayload(e) {{
+                        if (e && {hop}.call(e, 'payload')) return e.payload;
+                        if (e instanceof Error) throw e;
+                        return e;
+                    }}
+                "
+                )
+            }
+
+            Intrinsic::GetErrorPayloadString => {
+                let hop = Intrinsic::HasOwnProperty.name();
+                uwrite!(
+                    output,
+                    "
+                    function getErrorPayloadString(e) {{
+                        if (e && {hop}.call(e, 'payload')) return e.payload;
+                        if (e instanceof Error) return e.message;
+                        return e;
+                    }}
+                "
+                )
+            }
+
+            Intrinsic::WebIdl(w) => w.render(output),
+
+            Intrinsic::HandleTables => output.push_str(
+                "
+                const handleTables = [];
+            ",
+            ),
+
+            Intrinsic::HasOwnProperty => output.push_str(
+                "
+                const hasOwnProperty = Object.prototype.hasOwnProperty;
+            ",
+            ),
+
+            Intrinsic::InstantiateCore => {
+                if !args.instantiation {
+                    output.push_str(
+                        "
+                    const instantiateCore = WebAssembly.instantiate;
+                ",
+                    )
+                }
+            }
+
+            Intrinsic::IsLE => output.push_str(
+                "
+                const isLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+            ",
+            ),
+
+            Intrinsic::SymbolCabiDispose => output.push_str(
+                "
+                const symbolCabiDispose = Symbol.for('cabiDispose');
+            ",
+            ),
+
+            Intrinsic::SymbolCabiLower => output.push_str(
+                "
+                const symbolCabiLower = Symbol.for('cabiLower');
+            ",
+            ),
+
+            Intrinsic::ScopeId => output.push_str(
+                "
+                let scopeId = 0;
+            ",
+            ),
+
+            Intrinsic::SymbolResourceHandle => output.push_str(
+                "
+                const symbolRscHandle = Symbol('handle');
+            ",
+            ),
+
+            Intrinsic::SymbolResourceRep => output.push_str(
+                "
+                const symbolRscRep = Symbol.for('cabiRep');
+            ",
+            ),
+
+            Intrinsic::SymbolDispose => output.push_str(
+                "
+                const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+            ",
+            ),
+
+            Intrinsic::ThrowInvalidBool => output.push_str(
+                "
+                function throwInvalidBool() {
+                    throw new TypeError('invalid variant discriminant for bool');
+                }
+            ",
+            ),
+
+            Intrinsic::ThrowUninitialized => output.push_str(
+                "
+                function throwUninitialized() {
+                    throw new TypeError('Wasm uninitialized use `await $init` first');
+                }
+            ",
+            ),
+
+            Intrinsic::DebugLog => {
+                let fn_name = Intrinsic::DebugLog.name();
+                output.push_str(&format!(
+                    "
+                    const {fn_name} = (...args) => {{
+                        if (!globalThis?.process?.env?.JCO_DEBUG) {{ return; }}
+                        console.debug(...args);
+                    }}
+                "
+                ));
+            }
+
+            Intrinsic::PromiseWithResolversPonyfill => {
+                let fn_name = self.name();
+                output.push_str(&format!(
+                    r#"
+                    function {fn_name}() {{
+                        if (Promise.withResolvers) {{
+                            return Promise.withResolvers();
+                        }} else {{
+                            let resolve;
+                            let reject;
+                            const promise = new Promise((res, rej) => {{
+                                resolve = res;
+                                reject = rej;
+                            }});
+                            return {{ promise, resolve, reject }};
+                        }}
+                    }}
+                "#
+                ));
+            }
+
+            Intrinsic::AsyncEventCodeEnum => {
+                let name = Intrinsic::AsyncEventCodeEnum.name();
+                output.push_str(&format!(
+                    "
+                    const {name} = {{
+                        NONE: 0,
+                        SUBTASK: 1,
+                        STREAM_READ: 2,
+                        STREAM_WRITE: 3,
+                        FUTURE_READ: 4,
+                        FUTURE_WRITE: 5,
+                        TASK_CANCELLED: 6,
+                    }};
+                "
+                ));
+            }
+
+            Intrinsic::IsBorrowedType => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let is_borrowed_type_fn = Intrinsic::IsBorrowedType.name();
+                let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
+                output.push_str(&format!("
+                    function {is_borrowed_type_fn}(componentIdx, typeIdx) {{
+                        {debug_log_fn}('[{is_borrowed_type_fn}()] args', {{ componentIdx, typeIdx }});
+                        const table = {defined_resource_tables}[componentIdx];
+                        if (!table) {{ return false; }}
+                        const handle = table[(typeIdx << 1) + 1];
+                        if (!handle) {{ return false; }}
+                        const isOwned = (handle & T_FLAG) !== 0;
+                        return !isOwned;
+                    }}
+                "));
+            }
+
+            Intrinsic::ManagedBufferClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
+                output.push_str(&format!(
+                    r#"
+                    class {managed_buffer_class} {{
+                        static MAX_LENGTH = 2**28 - 1;
+                        #componentIdx;
+                        #memory;
+
+                        #elemMeta = null;
+
+                        #start;
+                        #ptr;
+                        #capacity;
+                        #copied = 0;
+
+                        #data; // initial data (only filled out for host-owned)
+
+                        constructor(args) {{
+                            if (args.capacity >= {managed_buffer_class}.MAX_LENGTH) {{
+                                 throw new Error(`buffer size [${{args.capacity}}] greater than max length`);
+                            }}
+                            if (args.componentIdx === undefined) {{ throw new TypeError('missing/invalid component idx'); }}
+                            if (args.capacity === undefined) {{ throw new TypeError('missing/invalid capacity'); }}
+                            if (args.elemMeta === undefined || typeof args.elemMeta.align32 !== 'number') {{
+                                throw new TypeError('missing/invalid element metadata');
+                            }}
+
+                            if (!args.memory && args.start === undefined && args.data === undefined) {{
+                                throw new TypeError('either memory and start ptr or data must be provided for managed buffers');
+                            }}
+
+                            if (args.memory && args.start == undefined) {{
+                                throw new TypeError('missing/invalid start ptr, depsite memory being present');
+                            }}
+
+                            if (args.start && args.start % args.elemMeta.align32 !== 0) {{
+                                throw new Error(`invalid alignment: type with 32bit alignment [${{this.#elemMeta.align32}}] at starting pointer [${{start}}]`);
+                            }}
+
+                            this.#componentIdx = args.componentIdx;
+                            this.#memory = args.memory;
+                            this.#start = args.start;
+                            this.#ptr = this.#start;
+                            this.#capacity = args.capacity;
+                            this.#elemMeta = args.elemMeta;
+                            this.#data = args.data;
+                        }}
+
+                        capacity() {{ return this.#capacity; }}
+                        remainingCapacity() {{ return this.#capacity - this.#copied; }}
+                        copied() {{ return this.#copied; }}
+
+                        getElemMeta() {{ return this.#elemMeta; }}
+
+                        isHostOwned() {{ return !this.#memory; }}
+
+                        read(count) {{
+                            {debug_log_fn}('[{managed_buffer_class}#read()] args', {{ count }});
+                            const rc = this.remainingCapacity();
+                            if (count > rc) {{
+                                throw new Error(`cannot read [${{count}}] elements from [${{rc}}] managed buffer`);
+                            }}
+
+                            let values = [];
+                            if (this.#elemMeta.typeIdx === null) {{
+                                values = [...new Array(count)].map(() => null);
+                            }} else {{
+                                if (this.isHostOwned()) {{
+                                    const remainingItems = this.#data.slice(count);
+                                    values.push(...this.#data.slice(0, count));
+                                    this.#data = remainingItems;
+                                }} else {{
+                                    let currentCount = count;
+                                    let startPtr = this.#ptr;
+                                    let liftCtx = {{ storagePtr: startPtr, memory: this.#memory }};
+                                    if (currentCount < 0) {{ throw new Error('unexpectedly invalid count'); }}
+                                    while (currentCount > 0) {{
+                                        const [ value, _ctx ] = this.#elemMeta.liftFn(liftCtx)
+                                        values.push(value);
+                                        currentCount -= 1;
+                                    }}
+                                    this.#ptr = liftCtx.storagePtr;
+                                }}
+                            }}
+
+                            this.#copied += count;
+                            return values;
+                        }}
+
+                        write(values) {{
+                            {debug_log_fn}('[{managed_buffer_class}#write()] args', {{ values }});
+
+                            if (!Array.isArray(values)) {{ throw new TypeError('values input to write() must be an array'); }}
+                            let rc = this.remainingCapacity();
+                            if (values.length > rc) {{
+                                throw new Error(`cannot write [${{values.length}}] elements to managed buffer with remaining capacity [${{rc}}]`);
+                            }}
+
+                            if (this.#elemMeta.typeIdx === null) {{
+                                if (!values.every(v => v === null)) {{
+                                    throw new Error('non-null values in write() to unit managed buffer');
+                                }}
+                            }} else {{
+                                if (this.isHostOwned()) {{
+                                    this.#data.push(...values);
+                                }} else {{
+                                    let startPtr = this.#ptr;
+                                    for (const v of values) {{
+                                        startPtr += this.#elemMeta.lowerFn({{
+                                            memory: this.#memory,
+                                            storagePtr: startPtr,
+                                            vals: [v],
+                                        }});
+                                    }}
+                                    this.#ptr = startPtr;
+                                }}
+                            }}
+
+                            this.#copied += values.length;
+                        }}
+
+                    }}
+                "#
+                ));
+            }
+
+            Intrinsic::BufferManagerClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let buffer_manager_class = Intrinsic::BufferManagerClass.name();
+                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
+                output.push_str(&format!(r#"
+                    class {buffer_manager_class} {{
+                        #buffers = new Map();
+                        #bufferIDs = new Map();
+
+                        getNextBufferID(componentIdx) {{
+                            const current = this.#bufferIDs.get(componentIdx);
+                            if (current === undefined) {{
+                                this.#bufferIDs.set(componentIdx, 1n);
+                                return 1n;
+                            }}
+                            const next = current + 1n;
+                            this.#bufferIDs.set(componentIdx, next);
+                            return next;
+                        }}
+
+                        getBuffer(componentIdx, bufferID) {{
+                            {debug_log_fn}('[{buffer_manager_class}#getBuffer()] args', {{ componentIdx, bufferID }});
+                            return this.#buffers.get(componentIdx)?.get(bufferID);
+                        }}
+
+                        createBuffer(args) {{
+                            {debug_log_fn}('[{buffer_manager_class}#createBuffer()] args', args);
+                            if (!args || typeof args !== 'object') {{ throw new TypeError('missing/invalid argument object'); }}
+
+                            if (args.start === undefined && args.data === undefined) {{
+                                throw new  TypeError('either a starting pointer or initial values must be provided');
+                            }}
+
+                            if (args.start !== undefined && args.componentIdx === undefined) {{ throw new TypeError('missing/invalid component idx'); }}
+                            if (args.count === undefined) {{ throw new TypeError('missing/invalid obj count'); }}
+                            if (args.elemMeta === undefined) {{ throw new TypeError('missing/invalid element metadata for use with managed buffer'); }}
+
+                            const {{ componentIdx, data, start, count }} = args;
+
+                            if (!this.#buffers.has(componentIdx)) {{ this.#buffers.set(componentIdx, new Map()); }}
+                            const instanceBuffers = this.#buffers.get(componentIdx);
+
+                            const nextBufID = this.getNextBufferID(componentIdx);
+
+                            const buffer = new {managed_buffer_class}({{
+                                componentIdx,
+                                memory: args.memory,
+                                start: args.start,
+                                capacity: args.count,
+                                elemMeta: args.elemMeta,
+                                data: args.data,
+                            }});
+
+                            if (instanceBuffers.has(nextBufID)) {{
+                                throw new Error(`managed buffer with ID [${{nextBufID}}] already exists`);
+                            }}
+                            instanceBuffers.set(nextBufID, buffer);
+
+                            return {{ id: nextBufID, buffer }};
+                        }}
+
+                        deleteBuffer(componentIdx, bufferID) {{
+                            {debug_log_fn}('[{buffer_manager_class}#deleteBuffer()] args', {{ componentIdx, bufferID }});
+                            return this.#buffers.get(componentIdx)?.delete(bufferID);
+                        }}
+
+                    }}
+                "#));
+            }
+
+            Intrinsic::GlobalBufferManager => {
+                let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
+                let buffer_manager_class = Intrinsic::BufferManagerClass.name();
+                output.push_str(&format!(
+                    "const {global_buffer_manager} = new {buffer_manager_class}();"
+                ));
+            }
+
+            Intrinsic::WriteAsyncEventToMemory => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
+                output.push_str(&format!(r#"
+                    function {write_async_event_to_memory_fn}(memory, task, event, ptr) {{
+                        {debug_log_fn}('[{write_async_event_to_memory_fn}()] args', {{ memory, task, event, ptr }});
+                        throw new Error('{write_async_event_to_memory_fn}() not implemented');
+                    }}
+                "#));
+            }
+
+            Intrinsic::RepTableClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                output.push_str(&format!(r#"
+                    class {rep_table_class} {{
+                        #data = [0, null];
+                        #target;
+
+                        constructor(args) {{
+                            this.target = args?.target;
+                        }}
+
+                        insert(val) {{
+                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val, target: this.target }});
+                            const freeIdx = this.#data[0];
+                            if (freeIdx === 0) {{
+                                this.#data.push(val);
+                                this.#data.push(null);
+                                return (this.#data.length >> 1) - 1;
+                            }}
+                            this.#data[0] = this.#data[freeIdx << 1];
+                            const placementIdx = freeIdx << 1;
+                            this.#data[placementIdx] = val;
+                            this.#data[placementIdx + 1] = null;
+                            return freeIdx;
+                        }}
+
+                        get(rep) {{
+                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
+                            const baseIdx = rep << 1;
+                            const val = this.#data[baseIdx];
+                            return val;
+                        }}
+
+                        contains(rep) {{
+                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
+                            const baseIdx = rep << 1;
+                            return !!this.#data[baseIdx];
+                        }}
+
+                        remove(rep) {{
+                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
+                            if (this.#data.length === 2) {{ throw new Error('invalid'); }}
+
+                            const baseIdx = rep << 1;
+                            const val = this.#data[baseIdx];
+                            if (val === 0) {{ throw new Error('invalid resource rep (cannot be 0)'); }}
+
+                            this.#data[baseIdx] = this.#data[0];
+                            this.#data[0] = rep;
+
+                            return val;
+                        }}
+
+                        clear() {{
+                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep, target: this.target }});
+                            this.#data = [0, null];
+                        }}
+                    }}
+                "#));
+            }
+
+            Intrinsic::GlobalAsyncParamLowersClass => {
+                let global_async_param_lowers_class = self.name();
+                output.push_str(&format!(
+                    r#"
+                    class {global_async_param_lowers_class} {{
+                        static map = new Map();
+
+                        static generateKey(args) {{
+                            const {{ componentIdx, iface, fnName }} = args;
+                            if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                            if (iface === undefined) {{ throw new TypeError("missing iface name"); }}
+                            if (fnName === undefined) {{ throw new TypeError("missing function name"); }}
+                            return `${{componentIdx}}-${{iface}}-${{fnName}}`;
+                        }}
+
+                        static define(args) {{
+                            const {{ componentIdx, iface, fnName, fn }} = args;
+                            if (!fn) {{ throw new TypeError('missing function'); }}
+                            const key = {global_async_param_lowers_class}.generateKey(args);
+                            {global_async_param_lowers_class}.map.set(key, fn);
+                        }}
+
+                        static lookup(args) {{
+                            const {{ componentIdx, iface, fnName }} = args;
+                            const key = {global_async_param_lowers_class}.generateKey(args);
+                            return {global_async_param_lowers_class}.map.get(key);
+                        }}
+                    }}
+                    "#
+                ));
+            }
+
+            Intrinsic::GlobalComponentAsyncLowersClass => {
+                let global_component_lowers_class =
+                    Intrinsic::GlobalComponentAsyncLowersClass.name();
+                output.push_str(&format!(
+                    r#"
+                    class {global_component_lowers_class} {{
+                        static map = new Map();
+
+                        constructor() {{ throw new Error('{global_component_lowers_class} should not be constructed'); }}
+
+                        static define(args) {{
+                            const {{ componentIdx, qualifiedImportFn, fn }} = args;
+                            let inner = {global_component_lowers_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                inner = new Map();
+                                {global_component_lowers_class}.map.set(componentIdx, inner);
+                            }}
+
+                            inner.set(qualifiedImportFn, fn);
+                        }}
+
+                        static lookup(componentIdx, qualifiedImportFn) {{
+                            let inner = {global_component_lowers_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                inner = new Map();
+                                {global_component_lowers_class}.map.set(componentIdx, inner);
+                            }}
+
+                            const found = inner.get(qualifiedImportFn);
+                            if (found) {{ return found; }}
+
+                            // In some cases, async lowers are *not* host provided, and
+                            // but contain/will call an async function in the host.
+                            //
+                            // One such case is `stream.write`/`stream.read` trampolines which are
+                            // actually re-exported through a patch up container *before*
+                            // they call the relevant async host trampoline.
+                            //
+                            // So the path of execution from a component export would be:
+                            //
+                            // async guest export --> stream.write import (host wired) -> guest export (patch component) -> async host trampoline
+                            //
+                            // On top of all this, the trampoline that is eventually called is async,
+                            // so we must await the patched guest export call.
+                            //
+                            if (qualifiedImportFn.includes("[stream-write-") || qualifiedImportFn.includes("[stream-read-")) {{
+                                return async (...args) => {{
+                                    const [originalFn, ...params] = args;
+                                    return await originalFn(...params);
+                                }};
+                            }}
+
+                            // All other cases can call the registered function directly
+                            return (...args) => {{
+                                const [originalFn, ...params] = args;
+                                return originalFn(...params);
+                            }};
+                        }}
+                    }}
+                "#
+                ));
+            }
+
+            Intrinsic::GlobalComponentMemoriesClass => {
+                let global_component_memories_class =
+                    Intrinsic::GlobalComponentMemoriesClass.name();
+                output.push_str(&format!(
+                    r#"
+                    class {global_component_memories_class} {{
+                        static map = new Map();
+
+                        constructor() {{ throw new Error('{global_component_memories_class} should not be constructed'); }}
+
+                        static save(args) {{
+                            const {{ idx, componentIdx, memory }} = args;
+                            let inner = {global_component_memories_class}.map.get(componentIdx);
+                            if (!inner) {{
+                                inner = [];
+                                {global_component_memories_class}.map.set(componentIdx, inner);
+                            }}
+                            inner.push({{ memory, idx }});
+                        }}
+
+                        static getMemoriesForComponentIdx(componentIdx) {{
+                            const metas = {global_component_memories_class}.map.get(componentIdx);
+                            return metas.map(meta => meta.memory);
+                        }}
+
+                        static getMemory(componentIdx, idx) {{
+                            const metas = {global_component_memories_class}.map.get(componentIdx);
+                            return metas.find(meta => meta.idx === idx)?.memory;
+                        }}
+                    }}
+                "#
+                ));
+            }
+        }
+    }
 }
 
 /// Profile for determinism to be used by async implementation
@@ -184,43 +948,42 @@ pub struct RenderIntrinsicsArgs<'a> {
     pub(crate) determinism: AsyncDeterminismProfile,
 }
 
+/// Intrinsics that should be rendered as early as possible
+const EARLY_INTRINSICS: [Intrinsic; 19] = [
+    Intrinsic::DebugLog,
+    Intrinsic::GlobalAsyncDeterminism,
+    Intrinsic::GlobalComponentAsyncLowersClass,
+    Intrinsic::GlobalAsyncParamLowersClass,
+    Intrinsic::GlobalComponentMemoriesClass,
+    Intrinsic::RepTableClass,
+    Intrinsic::CoinFlip,
+    Intrinsic::ConstantI32Min,
+    Intrinsic::ConstantI32Max,
+    Intrinsic::TypeCheckValidI32,
+    Intrinsic::TypeCheckAsyncFn,
+    Intrinsic::AsyncFunctionCtor,
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult),
+    Intrinsic::PromiseWithResolversPonyfill,
+    Intrinsic::Host(HostIntrinsic::PrepareCall),
+    Intrinsic::Host(HostIntrinsic::AsyncStartCall),
+    Intrinsic::Host(HostIntrinsic::SyncStartCall),
+];
+
 /// Emits the intrinsic `i` to this file and then returns the name of the
 /// intrinsic.
 pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     let mut output = Source::default();
+    let mut rendered_intrinsics = HashSet::new();
 
-    // Intrinsics that should just always be present
-    args.intrinsics.insert(Intrinsic::DebugLog);
-    args.intrinsics.insert(Intrinsic::GlobalAsyncDeterminism);
-    args.intrinsics
-        .insert(Intrinsic::GlobalComponentAsyncLowersClass);
-    args.intrinsics
-        .insert(Intrinsic::GlobalComponentMemoriesClass);
-    args.intrinsics.insert(Intrinsic::RepTableClass);
-    args.intrinsics.insert(Intrinsic::CoinFlip);
-    args.intrinsics.insert(Intrinsic::ConstantI32Min);
-    args.intrinsics.insert(Intrinsic::ConstantI32Max);
-    args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
-    args.intrinsics.insert(Intrinsic::TypeCheckAsyncFn);
-    args.intrinsics.insert(Intrinsic::AsyncFunctionCtor);
-    args.intrinsics.insert(Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds,
-    ));
-    args.intrinsics.insert(Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs,
-    ));
-    args.intrinsics.insert(Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::UnpackCallbackResult,
-    ));
-    args.intrinsics
-        .insert(Intrinsic::PromiseWithResolversPonyfill);
-    args.intrinsics.extend([
-        &Intrinsic::Host(HostIntrinsic::PrepareCall),
-        &Intrinsic::Host(HostIntrinsic::AsyncStartCall),
-        &Intrinsic::Host(HostIntrinsic::SyncStartCall),
-    ]);
+    // Render some early intrinsics
+    for intrinsic in EARLY_INTRINSICS {
+        intrinsic.render(&mut output, &args);
+        rendered_intrinsics.insert(intrinsic.name());
+    }
 
-    // Handle specific intrinsic inter-dependencies
+    // Add intrinsics to the list we must render
     if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
         || args.intrinsics.contains(&Intrinsic::GetErrorPayloadString)
     {
@@ -455,6 +1218,15 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
     }
 
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStream))
+    {
+        args.intrinsics.insert(Intrinsic::AsyncStream(
+            AsyncStreamIntrinsic::ExternalStreamClass,
+        ));
+    }
+
     if args.intrinsics.contains(&Intrinsic::AsyncTask(
         AsyncTaskIntrinsic::CreateNewCurrentTask,
     )) || args
@@ -470,567 +1242,63 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ]);
     }
 
-    // Render all provided intrinsics
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWritableEndClass),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass),
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::StreamWritableEndClass,
+    )) || args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::StreamReadableEndClass,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamEndClass),
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::StreamNewFromLift,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::GlobalBufferManager,
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant),
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::GlobalBufferManager) {
+        args.intrinsics.extend([&Intrinsic::BufferManagerClass]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::BufferManagerClass) {
+        args.intrinsics.extend([&Intrinsic::ManagedBufferClass]);
+    }
+
     for current_intrinsic in args.intrinsics.iter() {
-        match current_intrinsic {
-            Intrinsic::JsHelper(i) => i.render(&mut output),
-            Intrinsic::Conversion(i) => i.render(&mut output),
-            Intrinsic::String(i) => i.render(&mut output),
-            Intrinsic::ErrCtx(i) => i.render(&mut output),
-            Intrinsic::Resource(i) => i.render(&mut output),
-            Intrinsic::AsyncTask(i) => i.render(&mut output),
-            Intrinsic::Waitable(i) => i.render(&mut output, &args),
-            Intrinsic::Lift(i) => i.render(&mut output),
-            Intrinsic::Lower(i) => i.render(&mut output),
-            Intrinsic::AsyncStream(i) => i.render(&mut output),
-            Intrinsic::AsyncFuture(i) => i.render(&mut output),
-            Intrinsic::Component(i) => i.render(&mut output),
-            Intrinsic::Host(i) => i.render(&mut output),
-
-            Intrinsic::GlobalAsyncDeterminism => {
-                output.push_str(&format!(
-                    "const {var_name} = '{determinism}';\n",
-                    var_name = current_intrinsic.name(),
-                    determinism = args.determinism,
-                ));
-            }
-
-            Intrinsic::CoinFlip => {
-                output.push_str(&format!(
-                    "const {var_name} = () => {{ return Math.random() > 0.5; }};\n",
-                    var_name = current_intrinsic.name(),
-                ));
-            }
-
-            Intrinsic::AwaitableClass => {
-                output.push_str(&format!(
-                    "
-                    class {class_name} {{
-                        static _ID = 0n;
-
-                        #id;
-                        #promise;
-                        #resolved = false;
-
-                        constructor(promise) {{
-                            if (!promise) {{
-                                throw new TypeError('Awaitable must have an interior promise');
-                            }}
-
-                            if (!('then' in promise) || typeof promise.then !== 'function') {{
-                                throw new Error('missing/invalid promise');
-                            }}
-                            promise.then(() => this.#resolved  = true);
-                            this.#promise = promise;
-                            this.#id = ++{class_name}._ID;
-                        }}
-
-                        id() {{ return this.#id; }}
-
-                        resolved() {{ return this.#resolved; }}
-
-                        then() {{ return this.#promise.then(...arguments); }}
-                    }}
-                ",
-                    class_name = current_intrinsic.name(),
-                ));
-            }
-
-            Intrinsic::ConstantI32Min => output.push_str(&format!(
-                "const {const_name} = -2_147_483_648;\n",
-                const_name = current_intrinsic.name()
-            )),
-            Intrinsic::ConstantI32Max => output.push_str(&format!(
-                "const {const_name} = 2_147_483_647;\n",
-                const_name = current_intrinsic.name()
-            )),
-            Intrinsic::TypeCheckValidI32 => {
-                let i32_const_min = Intrinsic::ConstantI32Min.name();
-                let i32_const_max = Intrinsic::ConstantI32Max.name();
-                output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = current_intrinsic.name()))
-            }
-
-            Intrinsic::AsyncFunctionCtor => {
-                let async_fn_type = Intrinsic::AsyncFunctionCtor.name();
-                uwriteln!(
-                    output,
-                    "const {async_fn_type} = (async () => {{}}).constructor;"
-                );
-            }
-
-            Intrinsic::TypeCheckAsyncFn => {
-                let async_fn_check = Intrinsic::TypeCheckAsyncFn.name();
-                let async_fn_ctor = Intrinsic::AsyncFunctionCtor.name();
-                uwriteln!(
-                    output,
-                    r#"
-                    const {async_fn_check} = (f) => {{
-                        return f instanceof {async_fn_ctor};
-                    }};
-                    "#,
-                );
-            }
-
-            Intrinsic::Base64Compile => {
-                if !args.no_nodejs_compat {
-                    output.push_str("
-                    const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
-                ")
-                } else {
-                    output.push_str("
-                    const base64Compile = str => WebAssembly.compile(Uint8Array.from(atob(str), b => b.charCodeAt(0)));
-                ")
-                }
-            }
-
-            Intrinsic::ClampGuest => output.push_str(
-                "
-                function clampGuest(i, min, max) {
-                    if (i < min || i > max) \
-                    throw new TypeError(`must be between ${min} and ${max}`);
-                    return i;
-                }
-            ",
-            ),
-
-            Intrinsic::ComponentError => output.push_str(
-                "
-                class ComponentError extends Error {
-                    constructor (value) {
-                        const enumerable = typeof value !== 'string';
-                        super(enumerable ? `${String(value)} (see error.payload)` : value);
-                        Object.defineProperty(this, 'payload', { value, enumerable });
-                    }
-                }
-            ",
-            ),
-
-            Intrinsic::DefinedResourceTables => {}
-
-            Intrinsic::FinalizationRegistryCreate => output.push_str(
-                "
-                function finalizationRegistryCreate (unregister) {
-                    if (typeof FinalizationRegistry === 'undefined') {
-                        return { unregister () {} };
-                    }
-                    return new FinalizationRegistry(unregister);
-                }
-            ",
-            ),
-
-            Intrinsic::FetchCompile => {
-                if !args.no_nodejs_compat {
-                    output.push_str("
-                    const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
-                    let _fs;
-                    async function fetchCompile (url) {
-                        if (isNode) {
-                            _fs = _fs || await import('node:fs/promises');
-                            return WebAssembly.compile(await _fs.readFile(url));
-                        }
-                        return fetch(url).then(WebAssembly.compileStreaming);
-                    }
-                ")
-                } else {
-                    output.push_str(
-                        "
-                    const fetchCompile = url => fetch(url).then(WebAssembly.compileStreaming);
-                ",
-                    )
-                }
-            }
-
-            Intrinsic::GetErrorPayload => {
-                let hop = Intrinsic::HasOwnProperty.name();
-                uwrite!(
-                    output,
-                    "
-                    function getErrorPayload(e) {{
-                        if (e && {hop}.call(e, 'payload')) return e.payload;
-                        if (e instanceof Error) throw e;
-                        return e;
-                    }}
-                "
-                )
-            }
-
-            Intrinsic::GetErrorPayloadString => {
-                let hop = Intrinsic::HasOwnProperty.name();
-                uwrite!(
-                    output,
-                    "
-                    function getErrorPayloadString(e) {{
-                        if (e && {hop}.call(e, 'payload')) return e.payload;
-                        if (e instanceof Error) return e.message;
-                        return e;
-                    }}
-                "
-                )
-            }
-
-            Intrinsic::WebIdl(w) => w.render(&mut output),
-
-            Intrinsic::HandleTables => output.push_str(
-                "
-                const handleTables = [];
-            ",
-            ),
-
-            Intrinsic::HasOwnProperty => output.push_str(
-                "
-                const hasOwnProperty = Object.prototype.hasOwnProperty;
-            ",
-            ),
-
-            Intrinsic::InstantiateCore => {
-                if !args.instantiation {
-                    output.push_str(
-                        "
-                    const instantiateCore = WebAssembly.instantiate;
-                ",
-                    )
-                }
-            }
-
-            Intrinsic::IsLE => output.push_str(
-                "
-                const isLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
-            ",
-            ),
-
-            Intrinsic::SymbolCabiDispose => output.push_str(
-                "
-                const symbolCabiDispose = Symbol.for('cabiDispose');
-            ",
-            ),
-
-            Intrinsic::SymbolCabiLower => output.push_str(
-                "
-                const symbolCabiLower = Symbol.for('cabiLower');
-            ",
-            ),
-
-            Intrinsic::ScopeId => output.push_str(
-                "
-                let scopeId = 0;
-            ",
-            ),
-
-            Intrinsic::SymbolResourceHandle => output.push_str(
-                "
-                const symbolRscHandle = Symbol('handle');
-            ",
-            ),
-
-            Intrinsic::SymbolResourceRep => output.push_str(
-                "
-                const symbolRscRep = Symbol.for('cabiRep');
-            ",
-            ),
-
-            Intrinsic::SymbolDispose => output.push_str(
-                "
-                const symbolDispose = Symbol.dispose || Symbol.for('dispose');
-            ",
-            ),
-
-            Intrinsic::ThrowInvalidBool => output.push_str(
-                "
-                function throwInvalidBool() {
-                    throw new TypeError('invalid variant discriminant for bool');
-                }
-            ",
-            ),
-
-            Intrinsic::ThrowUninitialized => output.push_str(
-                "
-                function throwUninitialized() {
-                    throw new TypeError('Wasm uninitialized use `await $init` first');
-                }
-            ",
-            ),
-
-            Intrinsic::DebugLog => {
-                let fn_name = Intrinsic::DebugLog.name();
-                output.push_str(&format!(
-                    "
-                    const {fn_name} = (...args) => {{
-                        if (!globalThis?.process?.env?.JCO_DEBUG) {{ return; }}
-                        console.debug(...args);
-                    }}
-                "
-                ));
-            }
-
-            Intrinsic::PromiseWithResolversPonyfill => {
-                output.push_str(
-                    r#"
-                    function promiseWithResolvers() {
-                        if (Promise.withResolvers) {
-                            return Promise.withResolvers();
-                        } else {
-                            let resolve;
-                            let reject;
-                            const promise = new Promise((res, rej) => {
-                                resolve = res;
-                                reject = rej;
-                            });
-                            return { promise, resolve, reject };
-                        }
-                    }
-                "#,
-                );
-            }
-
-            Intrinsic::AsyncEventCodeEnum => {
-                let name = Intrinsic::AsyncEventCodeEnum.name();
-                output.push_str(&format!(
-                    "
-                    const {name} = {{
-                        NONE: 0,
-                        SUBTASK: 1,
-                        STREAM_READ: 2,
-                        STREAM_WRITE: 3,
-                        FUTURE_READ: 4,
-                        FUTURE_WRITE: 5,
-                        TASK_CANCELLED: 6,
-                    }};
-                "
-                ));
-            }
-
-            Intrinsic::IsBorrowedType => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let is_borrowed_type_fn = Intrinsic::IsBorrowedType.name();
-                let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
-                output.push_str(&format!("
-                    function {is_borrowed_type_fn}(componentInstanceID, typeIdx) {{
-                        {debug_log_fn}('[{is_borrowed_type_fn}()] args', {{ componentInstanceID, typeIdx }});
-                        const table = {defined_resource_tables}[componentInstanceID];
-                        if (!table) {{ return false; }}
-                        const handle = table[(typeIdx << 1) + 1];
-                        if (!handle) {{ return false; }}
-                        const isOwned = (handle & T_FLAG) !== 0;
-                        return !isOwned;
-                    }}
-                "));
-            }
-
-            Intrinsic::ManagedBufferClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
-                output.push_str(&format!(
-                    "
-                    class {managed_buffer_class} {{
-                        constructor(args) {{
-                            {debug_log_fn}('[{managed_buffer_class}#constructor()] args', args);
-                        }}
-                    }}
-                "
-                ));
-            }
-
-            Intrinsic::BufferManagerClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let buffer_manager_class = Intrinsic::BufferManagerClass.name();
-                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
-                output.push_str(&format!("
-                    class {buffer_manager_class} {{
-                        #buffers = new Map();
-                        #bufferIDs = new Map();
-
-                        private constructor() {{ }}
-
-                        getNextBufferID(componentInstanceID) {{
-                            const current = this.#bufferIDs.get(args.componentInstanceID, 0);
-                            if (typeof current === 'undefined') {{
-                                this.#bufferIDs.set(args.componentInstanceID, 1);
-                                return 0;
-                            }}
-                            this.#bufferIDs.set(args.componentInstanceID, current + 1);
-                            return current;
-                        }}
-
-                        createBuffer(args) {{
-                            {debug_log_fn}('[{buffer_manager_class}#create()] args', args);
-                            if (!args || typeof args !== 'object') {{ throw new TypeError('missing/invalid argument object'); }}
-                            if (!args.componentInstanceID) {{ throw new TypeError('missing/invalid component instance ID'); }}
-                            if (!args.start) {{ throw new TypeError('missing/invalid start pointer'); }}
-                            if (!args.len) {{ throw new TypeError('missing/invalid buffer length'); }}
-                            const {{ componentInstanceID, start, len, typeIdx }} = args;
-
-                            if (!this.#buffers.has(componentInstanceID)) {{
-                                this.#buffers.set(componentInstanceID, new Map());
-                            }}
-                            const instanceBuffers = this.#buffers.get(componentInstanceID);
-
-                            const nextBufID = this.getNextBufferID(args.componentInstanceID);
-
-                            // TODO: check alignment and bounds, if typeIdx is present
-                            instanceBuffers.set(nextBufID, new {managed_buffer_class}());
-
-                            return nextBufID;
-                        }}
-                    }}
-                "));
-            }
-
-            Intrinsic::GlobalBufferManager => {
-                let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
-                let buffer_manager_class = Intrinsic::BufferManagerClass.name();
-                output.push_str(&format!(
-                    "const {global_buffer_manager} = new {buffer_manager_class}();"
-                ));
-            }
-
-            Intrinsic::WriteAsyncEventToMemory => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
-                output.push_str(&format!("
-                    function {write_async_event_to_memory_fn}(memory, task, event, ptr) {{
-                        {debug_log_fn}('[{write_async_event_to_memory_fn}()] args', {{ memory, task, event, ptr }});
-                        throw new Error('{write_async_event_to_memory_fn}() not implemented');
-                    }}
-                "));
-            }
-
-            Intrinsic::RepTableClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let rep_table_class = Intrinsic::RepTableClass.name();
-                output.push_str(&format!("
-                    class {rep_table_class} {{
-                        #data = [0, null];
-                        #target;
-
-                        constructor(args) {{
-                            if (args?.target) {{ this.target = args.target }}
-                        }}
-
-                        insert(val) {{
-                            {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val, target: this.target }});
-                            const freeIdx = this.#data[0];
-                            if (freeIdx === 0) {{
-                                this.#data.push(val);
-                                this.#data.push(null);
-                                return (this.#data.length >> 1) - 1;
-                            }}
-                            this.#data[0] = this.#data[freeIdx << 1];
-                            const placementIdx = freeIdx << 1;
-                            this.#data[placementIdx] = val;
-                            this.#data[placementIdx + 1] = null;
-                            return freeIdx;
-                        }}
-
-                        get(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
-                            const baseIdx = rep << 1;
-                            const val = this.#data[baseIdx];
-                            return val;
-                        }}
-
-                        contains(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
-                            const baseIdx = rep << 1;
-                            return !!this.#data[baseIdx];
-                        }}
-
-                        remove(rep) {{
-                            {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
-                            if (this.#data.length === 2) {{ throw new Error('invalid'); }}
-
-                            const baseIdx = rep << 1;
-                            const val = this.#data[baseIdx];
-                            if (val === 0) {{ throw new Error('invalid resource rep (cannot be 0)'); }}
-
-                            this.#data[baseIdx] = this.#data[0];
-                            this.#data[0] = rep;
-
-                            return val;
-                        }}
-
-                        clear() {{
-                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep, target: this.target }});
-                            this.#data = [0, null];
-                        }}
-                    }}
-                "));
-            }
-
-            Intrinsic::GlobalComponentAsyncLowersClass => {
-                let global_component_lowers_class =
-                    Intrinsic::GlobalComponentAsyncLowersClass.name();
-                output.push_str(&format!(
-                    r#"
-                    class {global_component_lowers_class} {{
-                        static map = new Map();
-
-                        constructor() {{ throw new Error('{global_component_lowers_class} should not be constructed'); }}
-
-                        static define(args) {{
-                            const {{ componentIdx, qualifiedImportFn, fn }} = args;
-                            let inner = {global_component_lowers_class}.map.get(componentIdx);
-                            if (!inner) {{
-                                inner = new Map();
-                                {global_component_lowers_class}.map.set(componentIdx, inner);
-                            }}
-
-                            inner.set(qualifiedImportFn, fn);
-                        }}
-
-                        static lookup(componentIdx, qualifiedImportFn) {{
-                            let inner = {global_component_lowers_class}.map.get(componentIdx);
-                            if (!inner) {{
-                                inner = new Map();
-                                {global_component_lowers_class}.map.set(componentIdx, inner);
-                            }}
-
-                            const found = inner.get(qualifiedImportFn);
-                            if (found) {{ return found; }}
-
-                            return (...args) => {{
-                                const [originalFn, ...params] = args;
-                                return originalFn(...params);
-                            }};
-                        }}
-                    }}
-                "#
-                ));
-            }
-
-            Intrinsic::GlobalComponentMemoriesClass => {
-                let global_component_memories_class =
-                    Intrinsic::GlobalComponentMemoriesClass.name();
-                output.push_str(&format!(
-                    r#"
-                    class {global_component_memories_class} {{
-                        static map = new Map();
-
-                        constructor() {{ throw new Error('{global_component_memories_class} should not be constructed'); }}
-
-                        static save(args) {{
-                            const {{ idx, componentIdx, memory }} = args;
-                            let inner = {global_component_memories_class}.map.get(componentIdx);
-                            if (!inner) {{
-                                inner = [];
-                                {global_component_memories_class}.map.set(componentIdx, inner);
-                            }}
-                            inner.push({{ memory, idx }});
-                        }}
-
-                        static getMemoriesForComponentIdx(componentIdx) {{
-                            const metas = {global_component_memories_class}.map.get(componentIdx);
-                            return metas.map(meta => meta.memory);
-                        }}
-
-                        static getMemory(componentIdx, idx) {{
-                            const metas = {global_component_memories_class}.map.get(componentIdx);
-                            return metas.find(meta => meta.idx === idx)?.memory;
-                        }}
-                    }}
-                "#
-                ));
-            }
+        // Skip already rendered intrinsics (i.e. the early intrinsics)
+        if rendered_intrinsics.contains(current_intrinsic.name()) {
+            continue;
         }
+
+        current_intrinsic.render(&mut output, &args);
     }
 
     output
@@ -1130,7 +1398,7 @@ impl Intrinsic {
 
             // Debugging
             Intrinsic::DebugLog => "_debugLog",
-            Intrinsic::PromiseWithResolversPonyfill => unreachable!("always global"),
+            Intrinsic::PromiseWithResolversPonyfill => "promiseWithResolvers",
 
             // Types
             Intrinsic::ConstantI32Min => "I32_MIN",
@@ -1145,6 +1413,7 @@ impl Intrinsic {
             Intrinsic::AwaitableClass => "Awaitable",
             Intrinsic::CoinFlip => "_coinFlip",
             Intrinsic::GlobalComponentAsyncLowersClass => "GlobalComponentAsyncLowers",
+            Intrinsic::GlobalAsyncParamLowersClass => "GlobalAsyncParamLowers",
             Intrinsic::GlobalComponentMemoriesClass => "GlobalComponentMemories",
 
             // Data structures
