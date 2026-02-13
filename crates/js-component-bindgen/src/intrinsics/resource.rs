@@ -221,6 +221,7 @@ impl ResourceIntrinsic {
                 let rsc_table_remove = Self::ResourceTableRemove.name();
                 let rsc_table_create_borrow = Self::ResourceTableCreateBorrow.name();
                 let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
+                let scope_id = Intrinsic::ScopeId.name();
                 output.push_str(&format!("
                     function resourceTransferBorrowValidLifting(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
@@ -228,7 +229,7 @@ impl ResourceIntrinsic {
                         const rep = isOwn ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
                         if ({defined_resource_tables}[toTid]) return rep;
                         const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
-                        return {rsc_table_create_borrow}(toTable, rep);
+                        return {rsc_table_create_borrow}(toTable, rep, {scope_id});
                     }}
                 "));
             }
