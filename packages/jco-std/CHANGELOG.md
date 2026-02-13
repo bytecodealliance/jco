@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2] - 2026-02-13
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ lint by @vados-cosmonic
+
+- _(std)_ swap eslint for oxlint by @vados-cosmonic
+
 ## [0.1.1] - 2026-02-02
 
 ### 🐛 Bug Fixes
