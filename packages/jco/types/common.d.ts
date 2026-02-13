@@ -34,7 +34,11 @@ export function getTmpDir(): Promise<string>;
  * @param {string[]} args - arguments to pass to the command (after the input file and before the output file)
  * @returns {Promise<Buffer<ArrayBufferLike>>} A `Promise` that resolves when the command has exited
  */
-export function spawnIOTmp(cmd: string, inputWasmBytes: Buffer<ArrayBufferLike>, args: string[]): Promise<Buffer<ArrayBufferLike>>;
+export function spawnIOTmp(
+    cmd: string,
+    inputWasmBytes: Buffer<ArrayBufferLike>,
+    args: string[],
+): Promise<Buffer<ArrayBufferLike>>;
 /**
  * Given an object that has file names as keys and file contents as values,
  * write out the files to a their locations.

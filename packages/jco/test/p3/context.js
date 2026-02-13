@@ -1,21 +1,19 @@
-import { join } from 'node:path';
+import { join } from "node:path";
 
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath } from "node:url";
 
-import { suite, test, assert, expect } from 'vitest';
+import { suite, test, assert, expect } from "vitest";
 
-import { setupAsyncTest } from '../helpers.js';
-import { AsyncFunction } from '../common.js';
+import { setupAsyncTest } from "../helpers.js";
+import { AsyncFunction } from "../common.js";
 
-const COMPONENT_FIXTURES_DIR = fileURLToPath(
-    new URL('../fixtures/components', import.meta.url)
-);
+const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL("../fixtures/components", import.meta.url));
 
-const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
+const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, "p3");
 
-suite('Context (WASI P3)', () => {
-    test('context.get/set (sync export, sync call)', async () => {
-        const name = 'context-sync';
+suite("Context (WASI P3)", () => {
+    test("context.get/set (sync export, sync call)", async () => {
+        const name = "context-sync";
 
         // NOTE: Despite not specifying the export as async (via jco transpile options in setupAsyncTest),
         // the export is async -- since the component lifted the function in an async manner.
@@ -24,11 +22,7 @@ suite('Context (WASI P3)', () => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 name,
-                path: join(
-                    P3_COMPONENT_FIXTURES_DIR,
-                    name,
-                    'component.wasm'
-                ),
+                path: join(P3_COMPONENT_FIXTURES_DIR, name, "component.wasm"),
             },
         });
 
@@ -41,23 +35,19 @@ suite('Context (WASI P3)', () => {
         await cleanup();
     });
 
-    test('context.get/set (async export, async porcelain)', async () => {
-        const name = 'context-async';
+    test("context.get/set (async export, async porcelain)", async () => {
+        const name = "context-async";
         const { instance, cleanup } = await setupAsyncTest({
-            asyncMode: 'jspi',
+            asyncMode: "jspi",
             component: {
                 name,
-                path: join(
-                    P3_COMPONENT_FIXTURES_DIR,
-                    name,
-                    'component.wasm'
-                ),
+                path: join(P3_COMPONENT_FIXTURES_DIR, name, "component.wasm"),
             },
             jco: {
                 transpile: {
                     extraArgs: {
                         // minify: false,
-                        asyncExports: ['pull-context', 'push-context'],
+                        asyncExports: ["pull-context", "push-context"],
                     },
                 },
             },
@@ -90,23 +80,19 @@ suite('Context (WASI P3)', () => {
     // TODO(fix): we need a nother way to detect this case, as
     // imports that are called deep in guest->guest call chains
     // will trip this check if we do as simple other-tasks-exist check
-    test.skip('forgotten await on existing export call', async () => {
-        const name = 'context-async';
+    test.skip("forgotten await on existing export call", async () => {
+        const name = "context-async";
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 name,
-                path: join(
-                    P3_COMPONENT_FIXTURES_DIR,
-                    name,
-                    'component.wasm'
-                ),
+                path: join(P3_COMPONENT_FIXTURES_DIR, name, "component.wasm"),
             },
             jco: {
                 transpile: {
                     extraArgs: {
                         // minify: false,
                         asyncMode: "jspi",
-                        asyncExports: ['push-context', 'pull-context'],
+                        asyncExports: ["push-context", "pull-context"],
                     },
                 },
             },
@@ -116,11 +102,10 @@ suite('Context (WASI P3)', () => {
             instance.pushContext(42); // await should have been here
             await instance.pullContext();
             assert.fail("should have thrown");
-        } catch(err) {
+        } catch (err) {
             expect(err.message).toContain("task is already running");
         }
 
         await cleanup();
     });
-
 });

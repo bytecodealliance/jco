@@ -1,14 +1,16 @@
 // Flags: --instantiation
 
 // @ts-ignore
-import * as helpers from './helpers.js';
+import * as helpers from "./helpers.js";
 // @ts-ignore
-import { instantiate } from '../output/numbers/numbers.js';
+import { instantiate } from "../output/numbers/numbers.js";
 // @ts-ignore
-import { strictEqual } from 'node:assert';
+import { strictEqual } from "node:assert";
 
 function assert(x: boolean) {
-    if (!x) {throw new Error('assert failed');}
+    if (!x) {
+        throw new Error("assert failed");
+    }
 }
 
 /*
@@ -35,7 +37,7 @@ async function run() {
     // @ts-ignore
     const wasm = await instantiate(helpers.loadWasm, {
         ...helpers.wasi,
-        'test:numbers/test': {
+        "test:numbers/test": {
             roundtripU8(x) {
                 return x;
             },
@@ -80,7 +82,7 @@ async function run() {
 
     wasm.testImports();
 
-    strictEqual(wasm['test:numbers/test'], wasm.test);
+    strictEqual(wasm["test:numbers/test"], wasm.test);
 
     strictEqual(wasm.test.roundtripU8(1), 1);
     strictEqual(wasm.test.roundtripU8((1 << 8) - 1), (1 << 8) - 1);
@@ -100,10 +102,7 @@ async function run() {
     strictEqual(wasm.test.roundtripU32(~0 >>> 0), ~0 >>> 0);
 
     strictEqual(wasm.test.roundtripS32(1), 1);
-    strictEqual(
-        wasm.test.roundtripS32(((1 << 31) - 1) >>> 0),
-        ((1 << 31) - 1) >>> 0
-    );
+    strictEqual(wasm.test.roundtripS32(((1 << 31) - 1) >>> 0), ((1 << 31) - 1) >>> 0);
     strictEqual(wasm.test.roundtripS32(1 << 31), 1 << 31);
 
     strictEqual(wasm.test.roundtripU64(1n), 1n);
@@ -123,9 +122,9 @@ async function run() {
     strictEqual(wasm.test.roundtripF64(-Infinity), -Infinity);
     assert(Number.isNaN(wasm.test.roundtripF64(NaN)));
 
-    strictEqual(wasm.test.roundtripChar('a'), 'a');
-    strictEqual(wasm.test.roundtripChar(' '), ' ');
-    strictEqual(wasm.test.roundtripChar('🚩'), '🚩');
+    strictEqual(wasm.test.roundtripChar("a"), "a");
+    strictEqual(wasm.test.roundtripChar(" "), " ");
+    strictEqual(wasm.test.roundtripChar("🚩"), "🚩");
 
     wasm.test.setScalar(2);
     strictEqual(wasm.test.getScalar(), 2);

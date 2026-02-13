@@ -1,17 +1,17 @@
 // Flags: --instantiation
 
 // @ts-ignore
-import * as helpers from './helpers.js';
+import * as helpers from "./helpers.js";
 // @ts-ignore
-import { instantiate } from '../output/records/records.js';
+import { instantiate } from "../output/records/records.js";
 // @ts-ignore
-import * as assert from 'node:assert';
+import * as assert from "node:assert";
 
 async function run() {
     // @ts-ignore
     const wasm = await instantiate(helpers.loadWasm, {
         ...helpers.wasi,
-        'test:records/test': {
+        "test:records/test": {
             multipleResults() {
                 return [4, 5];
             },
@@ -37,7 +37,7 @@ async function run() {
     });
 
     wasm.testImports();
-    assert.deepStrictEqual(wasm.test, wasm['test:records/test']);
+    assert.deepStrictEqual(wasm.test, wasm["test:records/test"]);
     assert.deepEqual(wasm.test.multipleResults(), [100, 200]);
     assert.deepStrictEqual(wasm.test.swapTuple([1, 2]), [2, 1]);
     assert.deepEqual(wasm.test.roundtripFlags1({ a: true }), {

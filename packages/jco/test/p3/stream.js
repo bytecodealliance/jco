@@ -1,15 +1,15 @@
-import { join } from 'node:path';
+import { join } from "node:path";
 
-import { suite, test, assert } from 'vitest';
+import { suite, test, assert } from "vitest";
 
-import { setupAsyncTest } from '../helpers.js';
-import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
+import { setupAsyncTest } from "../helpers.js";
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
 
-suite('Stream (WASI P3)', () => {
-    test('stream<u32> (tx)', async () => {
-        const name = 'stream-tx';
+suite("Stream (WASI P3)", () => {
+    test("stream<u32> (tx)", async () => {
+        const name = "stream-tx";
         const { esModule, cleanup } = await setupAsyncTest({
-            asyncMode: 'jspi',
+            asyncMode: "jspi",
             component: {
                 name,
                 path: join(LOCAL_TEST_COMPONENTS_DIR, `${name}.wasm`),
@@ -20,30 +20,25 @@ suite('Stream (WASI P3)', () => {
                     extraArgs: {
                         minify: false,
                         asyncExports: [
-                            'jco:test-components/get-stream-async#get-stream-u32',
-                            'jco:test-components/get-stream-async#get-stream-s32',
+                            "jco:test-components/get-stream-async#get-stream-u32",
+                            "jco:test-components/get-stream-async#get-stream-s32",
                         ],
                     },
                 },
             },
         });
 
-        const { WASIShim } = await import(
-            '@bytecodealliance/preview2-shim/instantiation'
-        );
-        const instance = await esModule.instantiate(
-            undefined,
-            new WASIShim().getImportObject()
-        );
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        const instance = await esModule.instantiate(undefined, new WASIShim().getImportObject());
 
         let vals;
         let stream;
 
-        assert.instanceOf(instance['jco:test-components/get-stream-async'].getStreamU32, AsyncFunction);
-        assert.instanceOf(instance['jco:test-components/get-stream-async'].getStreamS32, AsyncFunction);
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamU32, AsyncFunction);
+        assert.instanceOf(instance["jco:test-components/get-stream-async"].getStreamS32, AsyncFunction);
 
-        vals = [11,22,33];
-        stream = await instance['jco:test-components/get-stream-async'].getStreamU32(vals);
+        vals = [11, 22, 33];
+        stream = await instance["jco:test-components/get-stream-async"].getStreamU32(vals);
         assert.equal(vals[0], await stream.next(), "first u32 read is incorrect");
         assert.equal(vals[1], await stream.next(), "second u32 read is incorrect");
         assert.equal(vals[2], await stream.next(), "third u32 read is incorrect");

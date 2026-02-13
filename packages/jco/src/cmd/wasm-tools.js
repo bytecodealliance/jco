@@ -1,8 +1,8 @@
-import { resolve, basename, extname } from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { resolve, basename, extname } from "node:path";
+import { writeFile } from "node:fs/promises";
 
-import { readFile, isWindows, styleText } from '../common.js';
-import { $init, tools } from '../../obj/wasm-tools.js';
+import { readFile, isWindows, styleText } from "../common.js";
+import { $init, tools } from "../../obj/wasm-tools.js";
 const {
     print: printFn,
     parse: parseFn,
@@ -47,34 +47,20 @@ export async function componentNew(file, opts) {
     const source = file ? await readFile(file) : null;
     let adapters = [];
     if (opts.wasiReactor && opts.wasiCommand) {
-        throw new Error('Must select one of --wasi-command or --wasi-reactor');
+        throw new Error("Must select one of --wasi-command or --wasi-reactor");
     }
     if (opts.wasiReactor) {
         adapters = [
             [
-                'wasi_snapshot_preview1',
-                (
-                    await readFile(
-                        new URL(
-                            '../../lib/wasi_snapshot_preview1.reactor.wasm',
-                            import.meta.url
-                        )
-                    )
-                ).buffer,
+                "wasi_snapshot_preview1",
+                (await readFile(new URL("../../lib/wasi_snapshot_preview1.reactor.wasm", import.meta.url))).buffer,
             ],
         ];
     } else if (opts.wasiCommand) {
         adapters = [
             [
-                'wasi_snapshot_preview1',
-                (
-                    await readFile(
-                        new URL(
-                            '../../lib/wasi_snapshot_preview1.command.wasm',
-                            import.meta.url
-                        )
-                    )
-                ).buffer,
+                "wasi_snapshot_preview1",
+                (await readFile(new URL("../../lib/wasi_snapshot_preview1.command.wasm", import.meta.url))).buffer,
             ],
         ];
     }
@@ -83,18 +69,15 @@ export async function componentNew(file, opts) {
             await Promise.all(
                 opts.adapt.map(async (adapt) => {
                     let adapter;
-                    if (adapt.includes('=')) {
-                        adapter = adapt.split('=');
+                    if (adapt.includes("=")) {
+                        adapter = adapt.split("=");
                     } else {
-                        adapter = [
-                            basename(adapt).slice(0, -extname(adapt).length),
-                            adapt,
-                        ];
+                        adapter = [basename(adapt).slice(0, -extname(adapt).length), adapt];
                     }
                     adapter[1] = await readFile(adapter[1]);
                     return adapter;
-                })
-            )
+                }),
+            ),
         );
     }
     const output = componentNewFn(source, adapters);
@@ -105,14 +88,14 @@ export async function componentEmbed(file, opts) {
     await $init;
     if (opts.metadata) {
         opts.metadata = opts.metadata.map((meta) => {
-            const [field, data = ''] = meta.split('=');
-            const [name, version = ''] = data.split('@');
+            const [field, data = ""] = meta.split("=");
+            const [name, version = ""] = data.split("@");
             return [field, [[name, version]]];
         });
     }
     const source = file ? await readFile(file) : null;
     opts.binary = source;
-    opts.witPath = (isWindows ? '//?/' : '') + resolve(opts.wit);
+    opts.witPath = (isWindows ? "//?/" : "") + resolve(opts.wit);
     const output = componentEmbedFn(opts);
     await writeFile(opts.output, output);
 }
@@ -120,8 +103,8 @@ export async function componentEmbed(file, opts) {
 export async function metadataAdd(file, opts) {
     await $init;
     const metadata = opts.metadata.map((meta) => {
-        const [field, data = ''] = meta.split('=');
-        const [name, version = ''] = data.split('@');
+        const [field, data = ""] = meta.split("=");
+        const [name, version = ""] = data.split("@");
         return [field, [[name, version]]];
     });
     const source = await readFile(file);
@@ -132,32 +115,32 @@ export async function metadataAdd(file, opts) {
 export async function metadataShow(file, opts) {
     await $init;
     const source = await readFile(file);
-    let output = '',
+    let output = "",
         stack = [1];
     const meta = metadataShowFn(source);
     if (opts.json) {
         console.log(JSON.stringify(meta, null, 2));
     } else {
         for (const { name, metaType, producers } of meta) {
-            output += '  '.repeat(stack.length - 1);
-            const indent = '  '.repeat(stack.length);
-            if (metaType.tag === 'component') {
-                output += `${styleText('bold', `[component${name ? ' ' + name : ''}]`)}\n`;
+            output += "  ".repeat(stack.length - 1);
+            const indent = "  ".repeat(stack.length);
+            if (metaType.tag === "component") {
+                output += `${styleText("bold", `[component${name ? " " + name : ""}]`)}\n`;
                 if (metaType.val > 0) {
                     stack.push(metaType.val);
                 }
             } else {
-                output += `${styleText('bold', `[module${name ? ' ' + name : ''}]`)}\n`;
+                output += `${styleText("bold", `[module${name ? " " + name : ""}]`)}\n`;
             }
             if (producers.length === 0) {
                 output += `${indent}(no metadata)\n`;
             }
             for (const [field, items] of producers) {
                 for (const [name, version] of items) {
-                    output += `${indent}${(field + ':').padEnd(13, ' ')} ${name}${version ? `${styleText('cyan', version)}` : ''}\n`;
+                    output += `${indent}${(field + ":").padEnd(13, " ")} ${name}${version ? `${styleText("cyan", version)}` : ""}\n`;
                 }
             }
-            output += '\n';
+            output += "\n";
             if (stack[stack.length - 1] === 0) {
                 stack.pop();
             }

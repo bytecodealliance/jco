@@ -1,6 +1,6 @@
-import { handle } from 'wasi:http/outgoing-handler@0.2.3';
-import { Fields, OutgoingRequest, OutgoingBody } from 'wasi:http/types@0.2.3';
-import { getArguments } from 'wasi:cli/environment@0.2.3';
+import { handle } from "wasi:http/outgoing-handler@0.2.3";
+import { Fields, OutgoingRequest, OutgoingBody } from "wasi:http/types@0.2.3";
+import { getArguments } from "wasi:cli/environment@0.2.3";
 
 const sendRequest = (method, scheme, authority, pathWithQuery, body) => {
     try {
@@ -10,9 +10,9 @@ const sendRequest = (method, scheme, authority, pathWithQuery, body) => {
 
             const req = new OutgoingRequest(
                 new Fields([
-                    ['User-agent', encoder.encode('WASI-HTTP/0.0.1')],
-                    ['Content-type', encoder.encode('application/json')],
-                ])
+                    ["User-agent", encoder.encode("WASI-HTTP/0.0.1")],
+                    ["Content-type", encoder.encode("application/json")],
+                ]),
             );
             req.setScheme(scheme);
             req.setMethod(method);
@@ -47,8 +47,7 @@ const sendRequest = (method, scheme, authority, pathWithQuery, body) => {
             const bodyStream = incomingBody.stream();
             bodyStream.subscribe().block();
             const buf = bodyStream.read(50n);
-            responseBody =
-                buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
+            responseBody = buf.length > 0 ? new TextDecoder().decode(buf) : undefined;
         }
 
         return JSON.stringify({
@@ -67,43 +66,43 @@ export const commands = {
         // Pull in a dynamic host port via the command line arguments
         const port = parseInt(
             getArguments()
-                .filter((s) => s.startsWith('--test-port='))
-                .map((s) => s.slice(12))[0]
+                .filter((s) => s.startsWith("--test-port="))
+                .map((s) => s.slice(12))[0],
         );
         return sendRequest(
             {
-                tag: 'get',
+                tag: "get",
             },
             {
-                tag: 'HTTP',
+                tag: "HTTP",
             },
             `localhost:${port}`,
-            '/api/examples'
+            "/api/examples",
         );
     },
     postExample: () => {
         // Pull in a dynamic host port via the command line arguments
         const port = parseInt(
             getArguments()
-                .filter((s) => s.startsWith('--test-port='))
-                .map((s) => s.slice(12))[0]
+                .filter((s) => s.startsWith("--test-port="))
+                .map((s) => s.slice(12))[0],
         );
         return sendRequest(
             {
-                tag: 'post',
+                tag: "post",
             },
             {
-                tag: 'HTTP',
+                tag: "HTTP",
             },
             `localhost:${port}`,
-            '/api/examples',
-            JSON.stringify({ key: 'value' })
+            "/api/examples",
+            JSON.stringify({ key: "value" }),
         );
     },
 };
 
 export const incomingHandler = {
     handle(_request, _response) {
-        throw new Error('not implemented');
+        throw new Error("not implemented");
     },
 };

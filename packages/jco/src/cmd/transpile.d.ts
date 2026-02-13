@@ -1,4 +1,4 @@
-import type { Command } from 'commander';
+import type { Command } from "commander";
 
 export function types(witPath: any, opts: any): Promise<void>;
 
@@ -20,21 +20,23 @@ export function guestTypes(witPath: any, opts: any): Promise<void>;
  * }} opts
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
-export function typesComponent(witPath: string, opts: {
-    name?: string;
-    worldName?: string;
-    instantiation?: "async" | "sync";
-    tlaCompat?: boolean;
-    asyncMode?: string;
-    asyncImports?: string[];
-    asyncExports?: string[];
-    outDir?: string;
-    features?: string[] | "all";
-    guest?: boolean;
-}): Promise<{
+export function typesComponent(
+    witPath: string,
+    opts: {
+        name?: string;
+        worldName?: string;
+        instantiation?: "async" | "sync";
+        tlaCompat?: boolean;
+        asyncMode?: string;
+        asyncImports?: string[];
+        asyncExports?: string[];
+        outDir?: string;
+        features?: string[] | "all";
+        guest?: boolean;
+    },
+): Promise<{
     [filename: string]: Uint8Array;
 }>;
-
 
 export function transpile(
     componentPath: string,
@@ -44,8 +46,8 @@ export function transpile(
 
 type TranspilationOptions = {
     name: string;
-    instantiation?: 'async' | 'sync';
-    importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized';
+    instantiation?: "async" | "sync";
+    importBindings?: "js" | "optimized" | "hybrid" | "direct-optimized";
     map?: Record<string, string>;
     asyncMode?: string;
     asyncImports?: string[];
@@ -70,7 +72,7 @@ type TranspilationOptions = {
 type TranspilationResult = {
     files: FileBytes;
     imports: string[];
-    exports: [string, 'function' | 'instance'][];
+    exports: [string, "function" | "instance"][];
 };
 
 /**
@@ -100,28 +102,31 @@ type TranspilationResult = {
  * }} opts
  * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
  */
-export function transpileComponent(component: Uint8Array, opts?: {
-    name: string;
-    instantiation?: "async" | "sync";
-    importBindings?: "js" | "optimized" | "hybrid" | "direct-optimized";
-    map?: Record<string, string>;
-    asyncMode?: string;
-    asyncImports?: string[];
-    asyncExports?: string[];
-    validLiftingOptimization?: boolean;
-    tracing?: boolean;
-    nodejsCompat?: boolean;
-    tlaCompat?: boolean;
-    base64Cutoff?: boolean;
-    js?: boolean;
-    minify?: boolean;
-    optimize?: boolean;
-    namespacedExports?: boolean;
-    outDir?: string;
-    multiMemory?: boolean;
-    experimentalIdlImports?: boolean;
-    optArgs?: string[];
-}): Promise<{
+export function transpileComponent(
+    component: Uint8Array,
+    opts?: {
+        name: string;
+        instantiation?: "async" | "sync";
+        importBindings?: "js" | "optimized" | "hybrid" | "direct-optimized";
+        map?: Record<string, string>;
+        asyncMode?: string;
+        asyncImports?: string[];
+        asyncExports?: string[];
+        validLiftingOptimization?: boolean;
+        tracing?: boolean;
+        nodejsCompat?: boolean;
+        tlaCompat?: boolean;
+        base64Cutoff?: boolean;
+        js?: boolean;
+        minify?: boolean;
+        optimize?: boolean;
+        namespacedExports?: boolean;
+        outDir?: string;
+        multiMemory?: boolean;
+        experimentalIdlImports?: boolean;
+        optArgs?: string[];
+    },
+): Promise<{
     files: {
         [filename: string]: Uint8Array;
     };

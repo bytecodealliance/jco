@@ -1,14 +1,14 @@
 /* global TextDecoder */
-import { readFile } from 'node:fs/promises';
+import { readFile } from "node:fs/promises";
 
-import { fileURLToPath, URL } from 'node:url';
+import { fileURLToPath, URL } from "node:url";
 
-import { transpile, componentNew, componentEmbed } from '../src/api.js';
-import { typesComponent } from '../src/cmd/types.js';
+import { transpile, componentNew, componentEmbed } from "../src/api.js";
+import { typesComponent } from "../src/cmd/types.js";
 
-import { suite, test, beforeAll, assert } from 'vitest';
+import { suite, test, beforeAll, assert } from "vitest";
 
-import { tsGenerationPromise } from './helpers.js';
+import { tsGenerationPromise } from "./helpers.js";
 
 suite(`TypeScript`, async () => {
     beforeAll(async () => {
@@ -17,60 +17,40 @@ suite(`TypeScript`, async () => {
 
     test(`TS aliasing`, async () => {
         const witSource = await readFile(
-            fileURLToPath(
-                new URL(
-                    `./fixtures/wits/issue-365/issue-365.wit`,
-                    import.meta.url
-                )
-            ),
-            'utf8'
+            fileURLToPath(new URL(`./fixtures/wits/issue-365/issue-365.wit`, import.meta.url)),
+            "utf8",
         );
         const component = await componentNew(
             await componentEmbed({
                 witSource,
                 dummy: true,
-            })
+            }),
         );
 
-        const { files } = await transpile(component, { name: 'issue' });
+        const { files } = await transpile(component, { name: "issue" });
 
-        const dtsSource = new TextDecoder().decode(files['issue.d.ts']);
+        const dtsSource = new TextDecoder().decode(files["issue.d.ts"]);
 
-        assert.ok(
-            dtsSource.includes(
-                `export type Bar = import('./interfaces/test-issue-types.js').Bar;`
-            )
-        );
+        assert.ok(dtsSource.includes(`export type Bar = import('./interfaces/test-issue-types.js').Bar;`));
     });
 
     test(`TS types`, async () => {
         const witSource = await readFile(
-            fileURLToPath(
-                new URL(
-                    `./fixtures/wits/issue-480/issue-480.wit`,
-                    import.meta.url
-                )
-            ),
-            'utf8'
+            fileURLToPath(new URL(`./fixtures/wits/issue-480/issue-480.wit`, import.meta.url)),
+            "utf8",
         );
         const component = await componentNew(
             await componentEmbed({
                 witSource,
                 dummy: true,
-            })
+            }),
         );
 
-        const { files } = await transpile(component, { name: 'issue' });
+        const { files } = await transpile(component, { name: "issue" });
 
-        const dtsSource = new TextDecoder().decode(
-            files['interfaces/test-issue-types.d.ts']
-        );
+        const dtsSource = new TextDecoder().decode(files["interfaces/test-issue-types.d.ts"]);
 
-        assert.ok(
-            dtsSource.includes(
-                `export function foobarbaz(): Array<Value | undefined>;`
-            )
-        );
+        assert.ok(dtsSource.includes(`export function foobarbaz(): Array<Value | undefined>;`));
     });
 
     // NOTE: somewhat confusingly, host generation of resources should *not*
@@ -79,36 +59,28 @@ suite(`TypeScript`, async () => {
     //
     test(`Disposable interface generation (host-types, import) `, async () => {
         const witSource = await readFile(
-            fileURLToPath(
-                new URL(
-                    `./fixtures/wits/disposable-resources/disposable-resources.wit`,
-                    import.meta.url
-                )
-            ),
-            'utf8'
+            fileURLToPath(new URL(`./fixtures/wits/disposable-resources/disposable-resources.wit`, import.meta.url)),
+            "utf8",
         );
         const component = await componentNew(
             await componentEmbed({
                 witSource,
                 dummy: true,
-            })
+            }),
         );
 
-        const { files } = await transpile(component, { name: 'disposable' });
+        const { files } = await transpile(component, { name: "disposable" });
 
-        const mainDtsSource = new TextDecoder().decode(
-            files['disposable.d.ts']
-        );
+        const mainDtsSource = new TextDecoder().decode(files["disposable.d.ts"]);
         assert(
-            [
-                `export class Database implements Disposable {`,
-                `[Symbol.dispose](): void;`,
-            ].every((s) => !mainDtsSource.includes(s)),
-            'Database resource should not implement Disposable interface'
+            [`export class Database implements Disposable {`, `[Symbol.dispose](): void;`].every(
+                (s) => !mainDtsSource.includes(s),
+            ),
+            "Database resource should not implement Disposable interface",
         );
 
         const interfaceDtsSource = new TextDecoder().decode(
-            files['interfaces/test-disposable-resources-resources.d.ts']
+            files["interfaces/test-disposable-resources-resources.d.ts"],
         );
         assert(
             [
@@ -116,7 +88,7 @@ suite(`TypeScript`, async () => {
                 `export class Connection implements Disposable {`,
                 `[Symbol.dispose](): void;`,
             ].every((s) => !interfaceDtsSource.includes(s)),
-            'FileHandle/Connection resources should not implement Disposable interface'
+            "FileHandle/Connection resources should not implement Disposable interface",
         );
     });
 
@@ -124,27 +96,21 @@ suite(`TypeScript`, async () => {
     // have automatically generated disposal code, and thus we should have Disposable implementations
     test(`Disposable interface generation (guest-types, import) `, async () => {
         const witPath = fileURLToPath(
-            new URL(
-                `./fixtures/wits/disposable-resources/disposable-resources.wit`,
-                import.meta.url
-            )
+            new URL(`./fixtures/wits/disposable-resources/disposable-resources.wit`, import.meta.url),
         );
 
         const files = await typesComponent(witPath, { guest: true });
 
-        const mainDtsSource = new TextDecoder().decode(
-            files['disposable.d.ts']
-        );
+        const mainDtsSource = new TextDecoder().decode(files["disposable.d.ts"]);
         assert.isFalse(
-            [
-                `export class Database implements Disposable {`,
-                `[Symbol.dispose](): void;`,
-            ].every((s) => mainDtsSource.includes(s)),
-            'Database resource should implement Disposable interface'
+            [`export class Database implements Disposable {`, `[Symbol.dispose](): void;`].every((s) =>
+                mainDtsSource.includes(s),
+            ),
+            "Database resource should implement Disposable interface",
         );
 
         const interfaceDtsSource = new TextDecoder().decode(
-            files['interfaces/test-disposable-resources-resources.d.ts']
+            files["interfaces/test-disposable-resources-resources.d.ts"],
         );
         assert(
             [
@@ -152,27 +118,16 @@ suite(`TypeScript`, async () => {
                 `export class Connection implements Disposable {`,
                 `[Symbol.dispose](): void;`,
             ].every((s) => interfaceDtsSource.includes(s)),
-            'FileHandle/Connection resources should implement Disposable interface'
+            "FileHandle/Connection resources should implement Disposable interface",
         );
     });
 
     // Async-lifted functions that are sync lowered must return promises
     // that callers can resolve however they choose to.
     test(`sync lowered async fn returns Promse<T> (guest-types)`, async () => {
-        const witPath = fileURLToPath(
-            new URL(
-                `./fixtures/wits/async-flat-param-adder/test.wit`,
-                import.meta.url
-            )
-        );
+        const witPath = fileURLToPath(new URL(`./fixtures/wits/async-flat-param-adder/test.wit`, import.meta.url));
         const files = await typesComponent(witPath, { guest: true });
-        const interfaceDtsSource = new TextDecoder().decode(
-            files['interfaces/test1-test2-test3.d.ts']
-        );
-        assert(
-            interfaceDtsSource.includes("test4(a: number, b: number): Promise<number>"),
-            "test4 returns a Promise",
-        );
+        const interfaceDtsSource = new TextDecoder().decode(files["interfaces/test1-test2-test3.d.ts"]);
+        assert(interfaceDtsSource.includes("test4(a: number, b: number): Promise<number>"), "test4 returns a Promise");
     });
-
 });

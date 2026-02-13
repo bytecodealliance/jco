@@ -1,21 +1,19 @@
-import { stat, readFile, writeFile } from 'node:fs/promises';
-import { resolve, basename } from 'node:path';
-import { styleText } from '../common.js';
+import { stat, readFile, writeFile } from "node:fs/promises";
+import { resolve, basename } from "node:path";
+import { styleText } from "../common.js";
 
 /** All features that can be enabled/disabled */
-const ALL_FEATURES = ['clocks', 'http', 'random', 'stdio', 'fetch-event'];
+const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
 
 /** Features that should be used for --debug mode */
-const DEBUG_FEATURES = ['stdio'];
+const DEBUG_FEATURES = ["stdio"];
 
 export async function componentize(jsSource, opts) {
-    const { componentize: componentizeFn } = await eval(
-        'import("@bytecodealliance/componentize-js")'
-    );
+    const { componentize: componentizeFn } = await eval('import("@bytecodealliance/componentize-js")');
 
     const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
 
-    const source = await readFile(jsSource, 'utf8');
+    const source = await readFile(jsSource, "utf8");
 
     const witPath = resolve(opts.wit);
     const sourceName = basename(jsSource);
@@ -43,15 +41,13 @@ export async function componentize(jsSource, opts) {
             },
         });
         if (result.debug) {
-            console.error(
-                `${styleText('cyan', 'DEBUG')} Debug output\n${JSON.stringify(debug, null, 2)}\n`
-            );
+            console.error(`${styleText("cyan", "DEBUG")} Debug output\n${JSON.stringify(debug, null, 2)}\n`);
         }
 
         component = result.component;
     } catch (err) {
         // Detect package resolution issues that usually mean a misconfigured "witPath"
-        if (err.toString().includes('no known packages')) {
+        if (err.toString().includes("no known packages")) {
             const isFile = await stat(witPath).then((s) => s.isFile());
             if (isFile) {
                 const hint = await printWITPathHint(witPath);
@@ -65,7 +61,7 @@ export async function componentize(jsSource, opts) {
 
     await writeFile(opts.out, component);
 
-    console.log(`${styleText('green', 'OK')} Successfully written ${styleText('bold', opts.out)}.`);
+    console.log(`${styleText("green", "OK")} Successfully written ${styleText("bold", opts.out)}.`);
 }
 
 /**
@@ -75,9 +71,9 @@ export async function componentize(jsSource, opts) {
  * @returns {string} user-visible, highlighted output that can be printed
  */
 async function printWITPathHint(witPath) {
-    const warningPrefix = styleText(['yellow', 'bold'], 'warning');
+    const warningPrefix = styleText(["yellow", "bold"], "warning");
     const pathMeta = await stat(witPath);
-    let output = '\n';
+    let output = "\n";
     if (!pathMeta.isFile() && !pathMeta.isDirectory()) {
         output += `${warningPrefix} The supplited WIT path [${witPath}] is neither a file or directory.\n`;
         return output;
@@ -103,14 +99,14 @@ function calculateFeatureSet(opts) {
     const enable = opts?.enable ?? [];
 
     // Process disabled features
-    if (disable.includes('all')) {
+    if (disable.includes("all")) {
         ALL_FEATURES.forEach((v) => disableFeatures.add(v));
     } else {
         disable.forEach((v) => disableFeatures.add(v));
     }
 
     // Process enabled features
-    if (enable.includes('all')) {
+    if (enable.includes("all")) {
         ALL_FEATURES.forEach((v) => disableFeatures.delete(v));
     } else {
         enable.forEach((v) => disableFeatures.delete(v));

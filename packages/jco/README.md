@@ -5,7 +5,7 @@
     <strong>JavaScript toolchain for working with <a href="https://github.com/WebAssembly/component-model">WebAssembly Components</a></strong>
   </p>
 
-  <strong>A <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project</strong>
+<strong>A <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project</strong>
 
   <p>
     <a href="https://github.com/bytecodealliance/jco/actions?query=workflow%3ACI"><img src="https://github.com/bytecodealliance/jco/workflows/CI/badge.svg" alt="build status" /></a>
@@ -24,11 +24,11 @@ Jco provides a fully native JS toolchain for working with [WebAssembly Component
 
 Features include:
 
-* "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
-* WASI Preview2 support in Node.js & browsers (experimental).
-* Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments, as well as optimization helper for Components via Binaryen.
-* Run and serve commands like Wasmtime, as JS implementations of the Command and HTTP Proxy worlds.
-* "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
+- "Transpiling" Wasm Component binaries into ES modules that can run in any JS environment.
+- WASI Preview2 support in Node.js & browsers (experimental).
+- Component builds of [Wasm Tools](https://github.com/bytecodealliance/wasm-tools) helpers, available for use as a library or CLI commands for use in native JS environments, as well as optimization helper for Components via Binaryen.
+- Run and serve commands like Wasmtime, as JS implementations of the Command and HTTP Proxy worlds.
+- "Componentize" command to easily create components written in JavaScript (wrapper of [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS)).
 
 For creating components in other languages, see the [Component Model Book](https://component-model.bytecodealliance.org/language-support.html) and [Wit Bindgen](https://github.com/bytecodealliance/wit-bindgen) for various guest bindgen helpers.
 

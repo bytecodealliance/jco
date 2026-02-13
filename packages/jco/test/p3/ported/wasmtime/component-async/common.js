@@ -1,4 +1,4 @@
-import { fileURLToPath, URL } from 'node:url';
+import { fileURLToPath, URL } from "node:url";
 import { exec as syncExec } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve, basename } from "node:path";
@@ -6,17 +6,17 @@ import { stat } from "node:fs/promises";
 
 import which from "which";
 
-import { setupAsyncTest, getTmpDir } from '../../../../helpers.js';
+import { setupAsyncTest, getTmpDir } from "../../../../helpers.js";
 
 const exec = promisify(syncExec);
 
-export const COMPONENT_FIXTURES_DIR = fileURLToPath(
-    new URL('../../../../fixtures/components', import.meta.url)
-);
+export const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL("../../../../fixtures/components", import.meta.url));
 
 /** Ensure that the given file path exists */
 async function ensureFile(filePath) {
-    if (!filePath) { throw new Error("missing componentPath"); }
+    if (!filePath) {
+        throw new Error("missing componentPath");
+    }
     const meta = await stat(filePath);
     if (!meta.isFile()) {
         throw new Error(`non-file at [${filePath}]`);
@@ -37,32 +37,27 @@ async function ensureFile(filePath) {
 export async function buildAndTranspile(args) {
     const componentPath = await ensureFile(args.componentPath);
     const { esModule, cleanup, outputDir } = await setupAsyncTest({
-        asyncMode: 'jspi',
+        asyncMode: "jspi",
         component: {
-            name: basename(args.componentPath, '.wasm'),
+            name: basename(args.componentPath, ".wasm"),
             path: componentPath,
             skipInstantiation: true,
         },
         jco: {
             transpile: {
                 extraArgs: {
-                    asyncExports: ['local:local/run#run'] ,
+                    asyncExports: ["local:local/run#run"],
                     ...(args.transpile?.extraArgs || {}),
                 },
             },
         },
     });
 
-    const { WASIShim } = await import(
-        '@bytecodealliance/preview2-shim/instantiation'
-    );
-    const instance = await esModule.instantiate(
-        undefined,
-        {
-            ...new WASIShim().getImportObject(),
-            ...(args.instantiation?.imports ?? {}),
-        }
-    );
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+    const instance = await esModule.instantiate(undefined, {
+        ...new WASIShim().getImportObject(),
+        ...(args.instantiation?.imports ?? {}),
+    });
 
     return {
         instance,
@@ -92,10 +87,10 @@ export async function composeCallerCallee(args) {
     let outputComponentPath = args.outputPath;
     if (!outputComponentPath) {
         const tmpDir = await getTmpDir();
-        outputComponentPath = resolve(tmpDir, 'composed.wasm');
+        outputComponentPath = resolve(tmpDir, "composed.wasm");
     }
 
-    const wasmToolsBinPath = args.wasmToolsBinPath ?? await which('wasm-tools');
+    const wasmToolsBinPath = args.wasmToolsBinPath ?? (await which("wasm-tools"));
     await ensureFile(wasmToolsBinPath);
 
     const cmd = [

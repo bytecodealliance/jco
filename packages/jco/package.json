@@ -1,99 +1,99 @@
 {
-  "name": "@bytecodealliance/jco",
-  "version": "1.16.1",
-  "description": "JavaScript tooling for working with WebAssembly Components",
-  "homepage": "https://github.com/bytecodealliance/jco#readme",
-  "author": "Guy Bedford",
-  "contributors": [
-    {
-      "name": "Guy Bedford"
+    "name": "@bytecodealliance/jco",
+    "version": "1.16.1",
+    "description": "JavaScript tooling for working with WebAssembly Components",
+    "keywords": [
+        "Component",
+        "Wasm",
+        "WebAssembly"
+    ],
+    "homepage": "https://github.com/bytecodealliance/jco#readme",
+    "bugs": {
+        "url": "https://github.com/bytecodealliance/jco/issues"
     },
-    {
-      "name": "Victor Adossi",
-      "email": "vadossi@cosmonic.com"
-    }
-  ],
-  "type": "module",
-  "license": "(Apache-2.0 WITH LLVM-exception)",
-  "bugs": {
-    "url": "https://github.com/bytecodealliance/jco/issues"
-  },
-  "keywords": [
-    "Wasm",
-    "WebAssembly",
-    "Component"
-  ],
-  "main": "src/jco.js",
-  "types": "types/jco.d.ts",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/bytecodealliance/jco.git"
-  },
-  "imports": {
-    "#ora": {
-      "types": "./src/ora-shim.d.ts",
-      "browser": "./src/ora-shim.js",
-      "default": "ora"
-    }
-  },
-  "exports": {
-    ".": {
-      "types": "./types/api.d.ts",
-      "browser": "./src/browser.js",
-      "default": "./src/api.js"
+    "license": "(Apache-2.0 WITH LLVM-exception)",
+    "author": "Guy Bedford",
+    "contributors": [
+        {
+            "name": "Guy Bedford"
+        },
+        {
+            "name": "Victor Adossi",
+            "email": "vadossi@cosmonic.com"
+        }
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/bytecodealliance/jco.git"
     },
-    "./component": {
-      "types": "./obj/js-component-bindgen-component.d.ts",
-      "default": "./src/browser.js"
+    "bin": {
+        "jco": "src/jco.js"
+    },
+    "files": [
+        "lib",
+        "src",
+        "types",
+        "obj/*.core*.wasm",
+        "obj/*.js",
+        "obj/*.ts",
+        "obj/interfaces"
+    ],
+    "type": "module",
+    "main": "src/jco.js",
+    "types": "types/jco.d.ts",
+    "imports": {
+        "#ora": {
+            "types": "./src/ora-shim.d.ts",
+            "browser": "./src/ora-shim.js",
+            "default": "ora"
+        }
+    },
+    "exports": {
+        ".": {
+            "types": "./types/api.d.ts",
+            "browser": "./src/browser.js",
+            "default": "./src/api.js"
+        },
+        "./component": {
+            "types": "./obj/js-component-bindgen-component.d.ts",
+            "default": "./src/browser.js"
+        }
+    },
+    "scripts": {
+        "build": "cargo xtask build debug",
+        "build:release": "cargo xtask build release",
+        "build:types:preview2-shim": "npm run build:types:preview2-shim --include-workspace-root",
+        "build:test:components": "cargo xtask build-test-components",
+        "fmt": "oxfmt",
+        "fmt:check": "oxfmt --check",
+        "lint": "oxlint",
+        "lint:fix": "npm run lint -- --fix",
+        "test": "vitest run -c test/vitest.ts",
+        "test:lts": "vitest run -c test/vitest.lts.ts",
+        "prepack": "cargo xtask build release"
+    },
+    "dependencies": {
+        "@bytecodealliance/componentize-js": "^0.19.3",
+        "@bytecodealliance/preview2-shim": "^0.17.3",
+        "binaryen": "^123.0.0",
+        "commander": "^14",
+        "mkdirp": "^3",
+        "ora": "^8",
+        "terser": "^5"
+    },
+    "devDependencies": {
+        "@commitlint/config-conventional": "^19.8.1",
+        "@types/node": "^24.3.0",
+        "commitlint": "^19.8.1",
+        "conventional-changelog-conventionalcommits": "^9.1.0",
+        "mime": "^4.0.7",
+        "oxfmt": "^0.28.0",
+        "puppeteer": "^24.16.2",
+        "semver": "^7.7.1",
+        "smol-toml": "^1.4.2",
+        "typescript": "^5.9.2",
+        "vite": "^7.1.5",
+        "vitest": "^3.2.4",
+        "which": "^2.0.2"
     }
-  },
-  "bin": {
-    "jco": "src/jco.js"
-  },
-  "files": [
-    "lib",
-    "src",
-    "types",
-    "obj/*.core*.wasm",
-    "obj/*.js",
-    "obj/*.ts",
-    "obj/interfaces"
-  ],
-  "scripts": {
-    "build": "cargo xtask build debug",
-    "build:release": "cargo xtask build release",
-    "build:types:preview2-shim": "npm run build:types:preview2-shim --include-workspace-root",
-    "build:test:components": "cargo xtask build-test-components",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check",
-    "lint": "oxlint",
-    "lint:fix": "npm run lint -- --fix",
-    "test": "vitest run -c test/vitest.ts",
-    "test:lts": "vitest run -c test/vitest.lts.ts",
-    "prepack": "cargo xtask build release"
-  },
-  "dependencies": {
-    "@bytecodealliance/componentize-js": "^0.19.3",
-    "@bytecodealliance/preview2-shim": "^0.17.3",
-    "binaryen": "^123.0.0",
-    "commander": "^14",
-    "mkdirp": "^3",
-    "ora": "^8",
-    "terser": "^5"
-  },
-  "devDependencies": {
-    "@commitlint/config-conventional": "^19.8.1",
-    "@types/node": "^24.3.0",
-    "commitlint": "^19.8.1",
-    "conventional-changelog-conventionalcommits": "^9.1.0",
-    "mime": "^4.0.7",
-    "oxfmt": "^0.28.0",
-    "puppeteer": "^24.16.2",
-    "semver": "^7.7.1",
-    "smol-toml": "^1.4.2",
-    "typescript": "^5.9.2",
-    "vite": "^7.1.5",
-    "vitest": "^3.2.4",
-    "which": "^2.0.2"
-  }
 }

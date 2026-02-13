@@ -1,11 +1,11 @@
 // @ts-ignore
-import { readFile } from 'node:fs/promises';
+import { readFile } from "node:fs/promises";
 // @ts-ignore
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
 // @ts-ignore
-import { stdout, stderr } from 'node:process';
+import { stdout, stderr } from "node:process";
 // @ts-ignore
-import { basename } from 'node:path';
+import { basename } from "node:path";
 
 // This is a helper function used from `host.ts` test in the `tests/runtime/*`
 // directory to pass as the `instantiateCore` argument to the `instantiate`
@@ -15,14 +15,14 @@ import { basename } from 'node:path';
 // `imports` object provided. The `path` is a relative path to a wasm file
 // within the generated directory.
 export async function loadWasm(path: string) {
-    const name = basename(path).replace(/\.core\d*\.wasm$/, '');
+    const name = basename(path).replace(/\.core\d*\.wasm$/, "");
     const buf = await readFile(new URL(`./${name}/${path}`, import.meta.url));
     return await WebAssembly.compile(buf.buffer as ArrayBuffer);
 }
 
 // Just like `loadWasm`, but not async :-).
 export function loadWasmSync(path: string) {
-    const name = basename(path).replace(/\.core\d*\.wasm$/, '');
+    const name = basename(path).replace(/\.core\d*\.wasm$/, "");
     const buf = readFileSync(new URL(`./${name}/${path}`, import.meta.url));
     return new WebAssembly.Module(buf.buffer as ArrayBuffer);
 }
@@ -36,28 +36,28 @@ export function logErr(bytes: Uint8Array) {
 }
 
 export const wasi = {
-    'wasi:cli/stderr': {
+    "wasi:cli/stderr": {
         getStderr() {},
     },
-    'wasi:cli/stdin': {
+    "wasi:cli/stdin": {
         getStdin() {},
     },
-    'wasi:cli/stdout': {
+    "wasi:cli/stdout": {
         getStdout() {},
     },
-    'wasi:filesystem/preopens': {
+    "wasi:filesystem/preopens": {
         getDirectories() {},
     },
-    'wasi:filesystem/types': {
+    "wasi:filesystem/types": {
         Descriptor: class Descriptor {},
         filesystemErrorCode() {
             return 0;
         },
     },
-    'wasi:io/error': {
+    "wasi:io/error": {
         Error: class WasiError {},
     },
-    'wasi:io/streams': {
+    "wasi:io/streams": {
         InputStream: class InputStream {},
         OutputStream: class OutputStream {},
     },

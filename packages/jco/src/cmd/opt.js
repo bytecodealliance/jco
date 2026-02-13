@@ -1,24 +1,16 @@
-import { writeFile } from 'node:fs/promises';
+import { writeFile } from "node:fs/promises";
 
-import { $init, tools } from '../../obj/wasm-tools.js';
+import { $init, tools } from "../../obj/wasm-tools.js";
 const { metadataShow, print } = tools;
-import { fileURLToPath } from 'node:url';
-import {
-    readFile,
-    sizeStr,
-    fixedDigitDisplay,
-    table,
-    spawnIOTmp,
-    setShowSpinner,
-    getShowSpinner,
-} from '../common.js';
-import ora from '#ora';
+import { fileURLToPath } from "node:url";
+import { readFile, sizeStr, fixedDigitDisplay, table, spawnIOTmp, setShowSpinner, getShowSpinner } from "../common.js";
+import ora from "#ora";
 
-import { styleText } from '../common.js';
+import { styleText } from "../common.js";
 
 export async function opt(componentPath, opts, program) {
     await $init;
-    const varIdx = program.parent.rawArgs.indexOf('--');
+    const varIdx = program.parent.rawArgs.indexOf("--");
     if (varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
     }
@@ -36,7 +28,7 @@ export async function opt(componentPath, opts, program) {
         totalAfterBytes = 0;
 
     if (!opts.quiet) {
-        const tableContent =  table(
+        const tableContent = table(
             [
                 ...compressionInfo.map(({ beforeBytes, afterBytes }, i) => {
                     totalBeforeBytes += beforeBytes;
@@ -44,25 +36,25 @@ export async function opt(componentPath, opts, program) {
                     return [
                         ` - Core Module ${i + 1}:  `,
                         sizeStr(beforeBytes),
-                        ' -> ',
-                        `${styleText('cyan', sizeStr(afterBytes))} `,
+                        " -> ",
+                        `${styleText("cyan", sizeStr(afterBytes))} `,
                         `(${fixedDigitDisplay((afterBytes / beforeBytes) * 100, 2)}%)`,
                     ];
                 }),
-                ['', '', '', '', ''],
+                ["", "", "", "", ""],
                 [
                     ` = Total:  `,
                     `${sizeStr(totalBeforeBytes)}`,
                     ` => `,
-                    `${styleText('cyan', sizeStr(totalAfterBytes))} `,
+                    `${styleText("cyan", sizeStr(totalAfterBytes))} `,
                     `(${fixedDigitDisplay((totalAfterBytes / totalBeforeBytes) * 100, 2)}%)`,
                 ],
             ],
-            [, , , , 'right']
+            [, , , , "right"],
         );
 
         console.log(`
-${styleText('bold', "Optimized WebAssembly Component Internal Core Modules:")}
+${styleText("bold", "Optimized WebAssembly Component Internal Core Modules:")}
 
 ${tableContent}`);
     }
@@ -101,18 +93,16 @@ export async function optimizeComponent(componentBytes, opts) {
             // compute previous LEB128 encoding length
             metadata.prevLEBLen = byteLengthLEB128(size);
         });
-        const coreModules = componentMetadata.filter(
-            ({ metaType }) => metaType.tag === 'module'
-        );
+        const coreModules = componentMetadata.filter(({ metaType }) => metaType.tag === "module");
 
         // log number of core Wasm modules to be run with wasm-opt
         let completed = 0;
         const spinnerText = () =>
-            `${styleText('cyan', `${completed} / ${coreModules.length}`)} Running Binaryen on WebAssembly Component Internal Core Modules \n`;
+            `${styleText("cyan", `${completed} / ${coreModules.length}`)} Running Binaryen on WebAssembly Component Internal Core Modules \n`;
         if (showSpinner) {
             spinner = ora({
-                color: 'cyan',
-                spinner: 'bouncingBar',
+                color: "cyan",
+                spinner: "bouncingBar",
             }).start();
             spinner.text = spinnerText();
         }
@@ -120,34 +110,25 @@ export async function optimizeComponent(componentBytes, opts) {
         // gather the options for wasm-opt. optionally, adding the asyncify flag
         const args = opts?.optArgs
             ? [...opts.optArgs]
-            : [
-                '-Oz',
-                '--low-memory-unused',
-                '--enable-bulk-memory',
-                '--strip-debug',
-            ];
+            : ["-Oz", "--low-memory-unused", "--enable-bulk-memory", "--strip-debug"];
         if (opts?.asyncify) {
-            args.push('--asyncify');
+            args.push("--asyncify");
         }
 
         // process core Wasm modules with wasm-opt
         await Promise.all(
             coreModules.map(async (metadata) => {
-                if (metadata.metaType.tag === 'module') {
+                if (metadata.metaType.tag === "module") {
                     // store the wasm-opt processed module in the metadata
                     metadata.optimized = await wasmOpt(
-                        componentBytes.subarray(
-                            metadata.range[0],
-                            metadata.range[1]
-                        ),
+                        componentBytes.subarray(metadata.range[0], metadata.range[1]),
                         args,
-                        opts
+                        opts,
                     );
 
                     // compute the size change, including the change to
                     // the LEB128 encoding of the size change
-                    const prevModuleSize =
-                        metadata.range[1] - metadata.range[0];
+                    const prevModuleSize = metadata.range[1] - metadata.range[0];
                     const newModuleSize = metadata.optimized.byteLength;
                     metadata.newLEBLen = byteLengthLEB128(newModuleSize);
                     metadata.sizeChange = newModuleSize - prevModuleSize;
@@ -157,7 +138,7 @@ export async function optimizeComponent(componentBytes, opts) {
                         spinner.text = spinnerText();
                     }
                 }
-            })
+            }),
         );
 
         // organize components in modules into tree parent and children
@@ -170,18 +151,11 @@ export async function optimizeComponent(componentBytes, opts) {
                     nodes.splice(i, 1); // remove from nodes
                     i--;
                     metadata.children = getChildren(metadata.index);
-                    metadata.sizeChange = metadata.children.reduce(
-                        (total, { prevLEBLen, newLEBLen, sizeChange }) => {
-                            return sizeChange
-                                ? total + sizeChange + newLEBLen - prevLEBLen
-                                : total;
-                        },
-                        metadata.sizeChange || 0
-                    );
+                    metadata.sizeChange = metadata.children.reduce((total, { prevLEBLen, newLEBLen, sizeChange }) => {
+                        return sizeChange ? total + sizeChange + newLEBLen - prevLEBLen : total;
+                    }, metadata.sizeChange || 0);
                     const prevSize = metadata.range[1] - metadata.range[0];
-                    metadata.newLEBLen = byteLengthLEB128(
-                        prevSize + metadata.sizeChange
-                    );
+                    metadata.newLEBLen = byteLengthLEB128(prevSize + metadata.sizeChange);
                     children.push(metadata);
                 }
             }
@@ -190,31 +164,17 @@ export async function optimizeComponent(componentBytes, opts) {
         const componentTree = getChildren(0);
 
         // compute the total size change in the component binary
-        const sizeChange = componentTree.reduce(
-            (total, { prevLEBLen, newLEBLen, sizeChange }) => {
-                return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
-            },
-            0
-        );
+        const sizeChange = componentTree.reduce((total, { prevLEBLen, newLEBLen, sizeChange }) => {
+            return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
+        }, 0);
 
-        let outComponentBytes = new Uint8Array(
-            componentBytes.byteLength + sizeChange
-        );
+        let outComponentBytes = new Uint8Array(componentBytes.byteLength + sizeChange);
         let nextReadPos = 0,
             nextWritePos = 0;
 
-        const write = ({
-            prevLEBLen,
-            range,
-            optimized,
-            children,
-            sizeChange,
-        }) => {
+        const write = ({ prevLEBLen, range, optimized, children, sizeChange }) => {
             // write from the last read to the LEB byte start
-            outComponentBytes.set(
-                componentBytes.subarray(nextReadPos, range[0] - prevLEBLen),
-                nextWritePos
-            );
+            outComponentBytes.set(componentBytes.subarray(nextReadPos, range[0] - prevLEBLen), nextWritePos);
             nextWritePos += range[0] - prevLEBLen - nextReadPos;
 
             // write the new LEB bytes
@@ -222,8 +182,7 @@ export async function optimizeComponent(componentBytes, opts) {
             do {
                 const byte = val & 0x7f;
                 val >>>= 7;
-                outComponentBytes[nextWritePos++] =
-                    val === 0 ? byte : byte | 0x80;
+                outComponentBytes[nextWritePos++] = val === 0 ? byte : byte | 0x80;
             } while (val !== 0);
 
             if (optimized) {
@@ -237,10 +196,7 @@ export async function optimizeComponent(componentBytes, opts) {
                 children.forEach(write);
             } else {
                 // write component
-                outComponentBytes.set(
-                    componentBytes.subarray(range[0], range[1]),
-                    nextWritePos
-                );
+                outComponentBytes.set(componentBytes.subarray(range[0], range[1]), nextWritePos);
                 nextReadPos = range[1];
                 nextWritePos += range[1] - range[0];
             }
@@ -250,19 +206,14 @@ export async function optimizeComponent(componentBytes, opts) {
         componentTree.forEach(write);
 
         // write remaining
-        outComponentBytes.set(
-            componentBytes.subarray(nextReadPos),
-            nextWritePos
-        );
+        outComponentBytes.set(componentBytes.subarray(nextReadPos), nextWritePos);
 
         // verify it still parses ok
         if (!opts?.noVerify) {
             try {
                 print(outComponentBytes);
             } catch (e) {
-                throw new Error(
-                    `Internal error performing optimization.\n${e.message}`
-                );
+                throw new Error(`Internal error performing optimization.\n${e.message}`);
             }
         }
 
@@ -286,14 +237,12 @@ export async function optimizeComponent(componentBytes, opts) {
  * @returns {Promise<Uint8Array>}
  */
 async function wasmOpt(source, args, transpileOpts) {
-    const wasmOptBin =
-        transpileOpts?.wasmOptBin ??
-        fileURLToPath(import.meta.resolve('binaryen/bin/wasm-opt'));
+    const wasmOptBin = transpileOpts?.wasmOptBin ?? fileURLToPath(import.meta.resolve("binaryen/bin/wasm-opt"));
 
     try {
-        return await spawnIOTmp(wasmOptBin, source, [...args, '-o']);
+        return await spawnIOTmp(wasmOptBin, source, [...args, "-o"]);
     } catch (e) {
-        if (e.toString().includes('BasicBlock requested')) {
+        if (e.toString().includes("BasicBlock requested")) {
             return wasmOpt(source, args);
         }
         throw e;
@@ -301,7 +250,6 @@ async function wasmOpt(source, args, transpileOpts) {
 }
 
 // see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
-if (typeof __vite_ssr_import_meta__ !== 'undefined') {
-    __vite_ssr_import_meta__.resolve = (path) =>
-        'file://' + globalCreateRequire(import.meta.url).resolve(path);
+if (typeof __vite_ssr_import_meta__ !== "undefined") {
+    __vite_ssr_import_meta__.resolve = (path) => "file://" + globalCreateRequire(import.meta.url).resolve(path);
 }

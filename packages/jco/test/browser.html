@@ -1,101 +1,101 @@
 <!doctype html>
 <script type="importmap">
-{
-  "imports": {
-    "@bytecodealliance/preview2-shim/cli": "../../preview2-shim/lib/browser/cli.js",
-    "@bytecodealliance/preview2-shim/clocks": "../../preview2-shim/lib/browser/clocks.js",
-    "@bytecodealliance/preview2-shim/filesystem": "../../preview2-shim/lib/browser/filesystem.js",
-    "@bytecodealliance/preview2-shim/http": "../../preview2-shim/lib/browser/http.js",
-    "@bytecodealliance/preview2-shim/io": "../../preview2-shim/lib/browser/io.js",
-    "@bytecodealliance/preview2-shim/random": "../../preview2-shim/lib/browser/random.js",
-    "@bytecodealliance/preview2-shim/sockets": "../../preview2-shim/lib/browser/sockets.js",
-    "jco": "../src/browser.js"
-  }
-}
+    {
+        "imports": {
+            "@bytecodealliance/preview2-shim/cli": "../../preview2-shim/lib/browser/cli.js",
+            "@bytecodealliance/preview2-shim/clocks": "../../preview2-shim/lib/browser/clocks.js",
+            "@bytecodealliance/preview2-shim/filesystem": "../../preview2-shim/lib/browser/filesystem.js",
+            "@bytecodealliance/preview2-shim/http": "../../preview2-shim/lib/browser/http.js",
+            "@bytecodealliance/preview2-shim/io": "../../preview2-shim/lib/browser/io.js",
+            "@bytecodealliance/preview2-shim/random": "../../preview2-shim/lib/browser/random.js",
+            "@bytecodealliance/preview2-shim/sockets": "../../preview2-shim/lib/browser/sockets.js",
+            "jco": "../src/browser.js"
+        }
+    }
 </script>
 <script type="module">
- document.body.innerHTML = 'INIT';
+    document.body.innerHTML = "INIT";
 
- // verify preview2
- import "@bytecodealliance/preview2-shim/cli";
- import "@bytecodealliance/preview2-shim/clocks";
- import "@bytecodealliance/preview2-shim/filesystem";
- import "@bytecodealliance/preview2-shim/http";
- import "@bytecodealliance/preview2-shim/io";
- import "@bytecodealliance/preview2-shim/random";
- import "@bytecodealliance/preview2-shim/sockets";
+    // verify preview2
+    import "@bytecodealliance/preview2-shim/cli";
+    import "@bytecodealliance/preview2-shim/clocks";
+    import "@bytecodealliance/preview2-shim/filesystem";
+    import "@bytecodealliance/preview2-shim/http";
+    import "@bytecodealliance/preview2-shim/io";
+    import "@bytecodealliance/preview2-shim/random";
+    import "@bytecodealliance/preview2-shim/sockets";
 
- import { transpile } from 'jco';
- const testName = window.location.hash.slice(1);
+    import { transpile } from "jco";
+    const testName = window.location.hash.slice(1);
 
- async function main() {
-   document.body.innerHTML = '<h1>Running</h1>';
+    async function main() {
+        document.body.innerHTML = "<h1>Running</h1>";
 
-   switch (testName) {
-     case 'transpile': {
-       const componentUrl = new URL('./fixtures/components/lists.component.wasm', import.meta.url);
-       const component = await (await fetch(componentUrl)).arrayBuffer();
+        switch (testName) {
+            case "transpile": {
+                const componentUrl = new URL("./fixtures/components/lists.component.wasm", import.meta.url);
+                const component = await (await fetch(componentUrl)).arrayBuffer();
 
-       // Perform the transpiliation
-       let output;
-       try {
-         output = await transpile(component, {
-           name: 'test',
-           noTypescript: true,
-           noNodejsCompat: true,
-           instantiation: { tag: 'async' },
-           // force baseurls
-           // todo: support a hook for inline blob url construction
-           base64Cutoff: 1000000,
-           map: [
-             ['wasi:cli/*', '@bytecodealliance/preview2-shim/cli#*'],
-             ['wasi:clocks/*', '@bytecodealliance/preview2-shim/clocks#*'],
-             ['wasi:filesystem/*', '@bytecodealliance/preview2-shim/filesystem#*'],
-             ['wasi:http/*', '@bytecodealliance/preview2-shim/http#*'],
-             ['wasi:io/*', '@bytecodealliance/preview2-shim/io#*'],
-             ['wasi:random/*', '@bytecodealliance/preview2-shim/random#*'],
-             ['wasi:sockets/*', '@bytecodealliance/preview2-shim/sockets#*']
-           ]
-         });
-       } catch(err) {
-         err(err);
-         console.error(err);
-         break;
-       }
+                // Perform the transpiliation
+                let output;
+                try {
+                    output = await transpile(component, {
+                        name: "test",
+                        noTypescript: true,
+                        noNodejsCompat: true,
+                        instantiation: { tag: "async" },
+                        // force baseurls
+                        // todo: support a hook for inline blob url construction
+                        base64Cutoff: 1000000,
+                        map: [
+                            ["wasi:cli/*", "@bytecodealliance/preview2-shim/cli#*"],
+                            ["wasi:clocks/*", "@bytecodealliance/preview2-shim/clocks#*"],
+                            ["wasi:filesystem/*", "@bytecodealliance/preview2-shim/filesystem#*"],
+                            ["wasi:http/*", "@bytecodealliance/preview2-shim/http#*"],
+                            ["wasi:io/*", "@bytecodealliance/preview2-shim/io#*"],
+                            ["wasi:random/*", "@bytecodealliance/preview2-shim/random#*"],
+                            ["wasi:sockets/*", "@bytecodealliance/preview2-shim/sockets#*"],
+                        ],
+                    });
+                } catch (err) {
+                    err(err);
+                    console.error(err);
+                    break;
+                }
 
-       const source = output.files[5][1];
-       const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
-       const mod = await import(url);
-       ok();
+                const source = output.files[5][1];
+                const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+                const mod = await import(url);
+                ok();
 
-       break;
-     }
+                break;
+            }
 
-     default: {
-       if (testName.startsWith('test:')) {
-         const testModule = `/tmpdir/${testName.slice(5)}`;
-         try {
-           const mod = await import(testModule);
-           if (!mod.test)
-             throw new Error(`Expected test module "${testModule}" to export a "test" function`);
-           mod.test();
-           ok();
-         } catch (e) {
-           err(e);
-         }
-       } else {
-         err(`Unknown test case "${testName}"`);
-       }
-     }
-   }
- }
+            default: {
+                if (testName.startsWith("test:")) {
+                    const testModule = `/tmpdir/${testName.slice(5)}`;
+                    try {
+                        const mod = await import(testModule);
+                        if (!mod.test)
+                            throw new Error(`Expected test module "${testModule}" to export a "test" function`);
+                        mod.test();
+                        ok();
+                    } catch (e) {
+                        err(e);
+                    }
+                } else {
+                    err(`Unknown test case "${testName}"`);
+                }
+            }
+        }
+    }
 
- function ok () {
-   document.body.innerHTML = '<h1>OK</h1>';
- }
- function err (e) {
-   document.body.innerHTML = `<h1>Error: ${e}\n${e.stack}`;
- }
+    function ok() {
+        document.body.innerHTML = "<h1>OK</h1>";
+    }
+    function err(e) {
+        document.body.innerHTML = `<h1>Error: ${e}\n${e.stack}`;
+    }
 
- await main()
+    await main();
 </script>
