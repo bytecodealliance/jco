@@ -2564,44 +2564,50 @@ impl<'a> Instantiator<'a, '_> {
                 // (see $wit-component.shims, $wit-component.fixups modules in generated transpile output)
                 // then it is called from the component that is actually performing the call..
                 //
-                let mut import_value_js = format!(
+                let mut import_js = format!(
                     "{global_lowers_class}.lookup({}, '{full_async_import_key}')?.bind(null, {exec_fn})",
                     module_idx.as_u32(),
                 );
 
-                if self.async_imports.contains(&full_async_import_key)
-                    // Top level imports have '$root#' prepended
-                    || self
-                        .async_imports
-                        .contains(full_async_import_key.trim_start_matches("$root#"))
-                {
+                let is_known_iface_import = self.async_imports.contains(&full_async_import_key);
+                let is_known_root_import = self
+                    .async_imports
+                    .contains(full_async_import_key.trim_start_matches("$root#"));
+                let is_known_import = is_known_iface_import || is_known_root_import;
+                let is_stream_op = full_async_import_key.contains("[stream-write-")
+                    || full_async_import_key.contains("[stream-read-");
+
+                if is_known_import {
+                    // For root imports or imports that don't need any special handling,
+                    // we can look up and use the async import function after saving the import key for later
+
                     // Save the import for later to match it with it's lower import initializer
                     self.init_host_async_import_lookup
                         .insert(full_async_import_key.clone(), module_idx);
                     exec_fn = format!("WebAssembly.promising({exec_fn})");
-                }
-
-                // stream.{write,read} are always handled by async functions when patched
-                //
-                // We must treat them like functions that call host async imports because
-                // the call that will do the stream operation is piped through a patchup component
-                //
-                // wasm export -> wasm import -> host-provided trampoline
-                //
-                // In this case, we know that the trampoline that eventually gets called
-                // will be an async host function (`streamWrite`/`streamRead`), which will
-                // be wrapped in `WebAssembly.Suspending`.
-                if full_async_import_key.contains("[stream-write-")
-                    || full_async_import_key.contains("[stream-read-")
-                {
+                    import_js = format!(
+                        "{global_lowers_class}.lookup({}, '{full_async_import_key}')?.bind(null, {exec_fn})",
+                        module_idx.as_u32(),
+                    );
+                } else if is_stream_op {
+                    // stream.{write,read} are always handled by async functions when patched
+                    //
+                    // We must treat them like functions that call host async imports because
+                    // the call that will do the stream operation is piped through a patchup component
+                    //
+                    // wasm export -> wasm import -> host-provided trampoline
+                    //
+                    // In this case, we know that the trampoline that eventually gets called
+                    // will be an async host function (`streamWrite`/`streamRead`), which will
+                    // be wrapped in `WebAssembly.Suspending` (as the terminal fn is known, no need to save it)
                     exec_fn = format!("WebAssembly.promising({exec_fn})");
-                    import_value_js = format!(
+                    import_js = format!(
                         "new WebAssembly.Suspending({global_lowers_class}.lookup({}, '{full_async_import_key}').bind(null, {exec_fn}))",
                         module_idx.as_u32(),
                     );
                 }
 
-                import_value_js
+                import_js
             } else {
                 // All other imports can be connected directly to the relevant export
                 self.augmented_import_def(&arg)
