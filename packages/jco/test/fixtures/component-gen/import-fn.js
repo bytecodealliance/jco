@@ -1,5 +1,5 @@
-import print from 'print';
-import importPoint from 'import-point';
+import print from "print";
+import importPoint from "import-point";
 
 export function run() {}
 

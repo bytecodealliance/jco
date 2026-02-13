@@ -1,13 +1,13 @@
-import { rm, mkdir, writeFile, symlink } from 'node:fs/promises';
-import { basename, resolve, extname } from 'node:path';
-import { spawn } from 'node:child_process';
-import process from 'node:process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { rm, mkdir, writeFile, symlink } from "node:fs/promises";
+import { basename, resolve, extname } from "node:path";
+import { spawn } from "node:child_process";
+import process from "node:process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { getTmpDir, styleText } from '../common.js';
-import { transpile } from './transpile.js';
+import { getTmpDir, styleText } from "../common.js";
+import { transpile } from "./transpile.js";
 
-const DEFAULT_SERVE_HOST = 'localhost';
+const DEFAULT_SERVE_HOST = "localhost";
 
 export async function run(componentPath, args, opts) {
     // Ensure that `args` is an array
@@ -31,7 +31,7 @@ export async function run(componentPath, args, opts) {
       console.error(e);
       process.exit(1);
     }
-  `
+  `,
     );
 }
 
@@ -40,7 +40,7 @@ export async function serve(componentPath, args, opts) {
     let { port, host } = opts;
     if (port === undefined) {
         tryFindPort = true;
-        port = '8000';
+        port = "8000";
     }
     // Ensure that `args` is an array
     args = [...args];
@@ -54,8 +54,8 @@ export async function serve(componentPath, args, opts) {
     const server = new HTTPServer(mod.incomingHandler);
     let port = ${port};
     ${
-    tryFindPort
-        ? `
+        tryFindPort
+            ? `
     while (true) {
       try {
         server.listen(port, ${JSON.stringify(host)});
@@ -67,19 +67,17 @@ export async function serve(componentPath, args, opts) {
       port++;
     }
     `
-        : `server.listen(port, ${JSON.stringify(host)})`
-}
+            : `server.listen(port, ${JSON.stringify(host)})`
+    }
     console.error(\`Server listening @ ${host}:${port}...\`);
-  `
+  `,
     );
 }
 
 async function runComponent(componentPath, args, opts, executor) {
     const jcoImport = opts.jcoImport ? resolve(opts.jcoImport) : null;
 
-    const name = basename(
-        componentPath.slice(0, -extname(componentPath).length || Infinity)
-    );
+    const name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
     const outDir = opts.jcoDir || (await getTmpDir());
     if (opts.jcoDir) {
         await mkdir(outDir, { recursive: true });
@@ -98,57 +96,48 @@ async function runComponent(componentPath, args, opts, executor) {
                 importBindings: opts.jcoImportBindings,
             });
         } catch (e) {
-            throw new Error('Unable to transpile command for execution', {
+            throw new Error("Unable to transpile command for execution", {
                 cause: e,
             });
         }
 
-        await writeFile(
-            resolve(outDir, 'package.json'),
-            JSON.stringify({ type: 'module' })
-        );
+        await writeFile(resolve(outDir, "package.json"), JSON.stringify({ type: "module" }));
 
         let preview2ShimPath;
         try {
             preview2ShimPath = resolve(
-                fileURLToPath(
-                    import.meta.resolve('@bytecodealliance/preview2-shim')
-                ),
-                '../../../'
+                fileURLToPath(import.meta.resolve("@bytecodealliance/preview2-shim")),
+                "../../../",
             );
         } catch (err) {
-            let msg = `${styleText(['red', 'bold'], 'error')} Failed to resolve ${styleText('bold', '@bytecodealliance/preview2-shim')}, ensure it is installed.`;
+            let msg = `${styleText(["red", "bold"], "error")} Failed to resolve ${styleText("bold", "@bytecodealliance/preview2-shim")}, ensure it is installed.`;
             msg += `\nERROR:\n${err.toString()}`;
             throw new Error(msg);
         }
 
-        const modulesDir = resolve(outDir, 'node_modules', '@bytecodealliance');
+        const modulesDir = resolve(outDir, "node_modules", "@bytecodealliance");
         await mkdir(modulesDir, { recursive: true });
 
         try {
-            await symlink(
-                preview2ShimPath,
-                resolve(modulesDir, 'preview2-shim'),
-                'dir'
-            );
+            await symlink(preview2ShimPath, resolve(modulesDir, "preview2-shim"), "dir");
         } catch (e) {
-            if (e.code !== 'EEXIST') {
+            if (e.code !== "EEXIST") {
                 throw e;
             }
         }
 
-        const runPath = resolve(outDir, '_run.js');
+        const runPath = resolve(outDir, "_run.js");
         await writeFile(
             runPath,
             `
-      ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ''}
+      ${jcoImport ? `import ${JSON.stringify(pathToFileURL(jcoImport))}` : ""}
       import process from 'node:process';
       try {
         process.argv[1] = "${name}";
       } catch {}
       const mod = await import('./${name}.js');
       ${executor}
-    `
+    `,
         );
 
         const nodePath = process.env.JCO_RUN_PATH || process.argv[0];
@@ -156,18 +145,12 @@ async function runComponent(componentPath, args, opts, executor) {
         process.exitCode = await new Promise((resolve, reject) => {
             const cp = spawn(
                 nodePath,
-                [
-                    ...(process.env.JCO_RUN_ARGS
-                        ? process.env.JCO_RUN_ARGS.split(' ')
-                        : []),
-                    runPath,
-                    ...args,
-                ],
-                { stdio: 'inherit' }
+                [...(process.env.JCO_RUN_ARGS ? process.env.JCO_RUN_ARGS.split(" ") : []), runPath, ...args],
+                { stdio: "inherit" },
             );
 
-            cp.on('error', reject);
-            cp.on('exit', resolve);
+            cp.on("error", reject);
+            cp.on("exit", resolve);
         });
     } finally {
         try {

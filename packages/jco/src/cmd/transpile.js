@@ -1,13 +1,13 @@
 /* global Buffer */
 
-import { extname, basename, resolve } from 'node:path';
+import { extname, basename, resolve } from "node:path";
 
-import { minify } from 'terser';
-import { fileURLToPath } from 'node:url';
+import { minify } from "terser";
+import { fileURLToPath } from "node:url";
 
-import { optimizeComponent } from './opt.js';
+import { optimizeComponent } from "./opt.js";
 
-import { $init, generate } from '../../obj/js-component-bindgen-component.js';
+import { $init, generate } from "../../obj/js-component-bindgen-component.js";
 import {
     readFile,
     spawnIOTmp,
@@ -18,19 +18,19 @@ import {
     ASYNC_WASI_IMPORTS,
     ASYNC_WASI_EXPORTS,
     DEFAULT_ASYNC_MODE,
-} from '../common.js';
-import { $init as wasmToolsInit, tools } from '../../obj/wasm-tools.js';
+} from "../common.js";
+import { $init as wasmToolsInit, tools } from "../../obj/wasm-tools.js";
 const { componentEmbed, componentNew } = tools;
 
-import ora from '#ora';
+import ora from "#ora";
 
-import { isWindows } from '../common.js';
+import { isWindows } from "../common.js";
 
 // These re-exports exist to avoid breaking backwards compatibility
-export { types, guestTypes, typesComponent } from './types.js';
+export { types, guestTypes, typesComponent } from "./types.js";
 
 export async function transpile(witPath, opts, program) {
-    const varIdx = program?.parent.rawArgs.indexOf('--');
+    const varIdx = program?.parent.rawArgs.indexOf("--");
     if (varIdx !== undefined && varIdx !== -1) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
     }
@@ -43,9 +43,9 @@ export async function transpile(witPath, opts, program) {
         component = componentNew(
             componentEmbed({
                 dummy: true,
-                witPath: (isWindows ? '//?/' : '') + resolve(witPath),
+                witPath: (isWindows ? "//?/" : "") + resolve(witPath),
             }),
-            []
+            [],
         );
     }
 
@@ -53,14 +53,10 @@ export async function transpile(witPath, opts, program) {
         setShowSpinner(true);
     }
     if (!opts.name) {
-        opts.name = basename(
-            witPath.slice(0, -extname(witPath).length || Infinity)
-        );
+        opts.name = basename(witPath.slice(0, -extname(witPath).length || Infinity));
     }
     if (opts.map) {
-        opts.map = Object.fromEntries(
-            opts.map.map((mapping) => mapping.split('='))
-        );
+        opts.map = Object.fromEntries(opts.map.map((mapping) => mapping.split("=")));
     }
 
     if (opts.asyncWasiImports) {
@@ -71,10 +67,7 @@ export async function transpile(witPath, opts, program) {
     }
 
     const { files } = await transpileComponent(component, opts);
-    await writeFiles(
-        files,
-        opts.quiet ? false : 'Transpiled JS Component Files'
-    );
+    await writeFiles(files, opts.quiet ? false : "Transpiled JS Component Files");
 }
 
 /**
@@ -82,14 +75,12 @@ export async function transpile(witPath, opts, program) {
  * @returns {Promise<Uint8Array>}
  */
 async function wasm2Js(source) {
-    const wasm2jsPath = fileURLToPath(
-        import.meta.resolve('binaryen/bin/wasm2js')
-    );
+    const wasm2jsPath = fileURLToPath(import.meta.resolve("binaryen/bin/wasm2js"));
 
     try {
-        return await spawnIOTmp(wasm2jsPath, source, ['-Oz', '-o']);
+        return await spawnIOTmp(wasm2jsPath, source, ["-Oz", "-o"]);
     } catch (e) {
-        if (e.toString().includes('BasicBlock requested')) {
+        if (e.toString().includes("BasicBlock requested")) {
             return wasm2Js(source);
         }
         throw e;
@@ -145,16 +136,15 @@ export async function transpileComponent(component, opts = {}) {
     if (opts.wasiShim !== false) {
         opts.map = Object.assign(
             {
-                'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
-                'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
-                'wasi:filesystem/*':
-                    '@bytecodealliance/preview2-shim/filesystem#*',
-                'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
-                'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
-                'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
-                'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
+                "wasi:cli/*": "@bytecodealliance/preview2-shim/cli#*",
+                "wasi:clocks/*": "@bytecodealliance/preview2-shim/clocks#*",
+                "wasi:filesystem/*": "@bytecodealliance/preview2-shim/filesystem#*",
+                "wasi:http/*": "@bytecodealliance/preview2-shim/http#*",
+                "wasi:io/*": "@bytecodealliance/preview2-shim/io#*",
+                "wasi:random/*": "@bytecodealliance/preview2-shim/random#*",
+                "wasi:sockets/*": "@bytecodealliance/preview2-shim/sockets#*",
             },
-            opts.map || {}
+            opts.map || {},
         );
     }
 
@@ -166,7 +156,7 @@ export async function transpileComponent(component, opts = {}) {
     }
     // Otherwise, if `--js` is present, an `instantiate` function is required.
     else if (opts.js) {
-        instantiation = { tag: 'async' };
+        instantiation = { tag: "async" };
     }
 
     // Get the configured async mode then transform it into what the types component expects
@@ -174,22 +164,18 @@ export async function transpileComponent(component, opts = {}) {
     let asyncImports = new Set([...(opts.asyncImports ?? [])]);
     let asyncExports = new Set([...(opts.asyncExports ?? [])]);
     let asyncMode = opts.asyncMode ?? DEFAULT_ASYNC_MODE;
-    if (asyncMode === 'sync' && asyncExports.size > 0) {
-        throw new Error(
-            'async exports cannot be specified in sync mode (consider adding --async-mode=jspi)'
-        );
+    if (asyncMode === "sync" && asyncExports.size > 0) {
+        throw new Error("async exports cannot be specified in sync mode (consider adding --async-mode=jspi)");
     }
-    if (asyncMode === 'sync' && asyncImports.size > 0) {
-        throw new Error(
-            'async imports cannot be specified in sync mode (consider adding --async-mode=jspi)'
-        );
+    if (asyncMode === "sync" && asyncImports.size > 0) {
+        throw new Error("async imports cannot be specified in sync mode (consider adding --async-mode=jspi)");
     }
     let asyncModeObj;
-    if (asyncMode === 'sync') {
+    if (asyncMode === "sync") {
         asyncModeObj = null;
-    } else if (asyncMode === 'jspi') {
+    } else if (asyncMode === "jspi") {
         asyncModeObj = {
-            tag: 'jspi',
+            tag: "jspi",
             val: {
                 imports: [...asyncImports],
                 exports: [...asyncExports],
@@ -200,13 +186,11 @@ export async function transpileComponent(component, opts = {}) {
     }
 
     let { files, imports, exports } = generate(component, {
-        name: opts.name ?? 'component',
+        name: opts.name ?? "component",
         map: Object.entries(opts.map ?? {}),
         instantiation,
         asyncMode: asyncModeObj,
-        importBindings: opts.importBindings
-            ? { tag: opts.importBindings }
-            : null,
+        importBindings: opts.importBindings ? { tag: opts.importBindings } : null,
         validLiftingOptimization: opts.validLiftingOptimization ?? false,
         tracing: opts.tracing ?? false,
         noNodejsCompat: opts.nodejsCompat === false,
@@ -218,13 +202,13 @@ export async function transpileComponent(component, opts = {}) {
         idlImports: opts.experimentalIdlImports === true,
     });
 
-    let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
-    if (!outDir.endsWith('/') && outDir !== '') {
-        outDir += '/';
+    let outDir = (opts.outDir ?? "").replace(/\\/g, "/");
+    if (!outDir.endsWith("/") && outDir !== "") {
+        outDir += "/";
     }
     files = files.map(([name, source]) => [`${outDir}${name}`, source]);
 
-    const jsFile = files.find(([name]) => name.endsWith('.js'));
+    const jsFile = files.find(([name]) => name.endsWith(".js"));
 
     // Generate code for the `--js` option.
     //
@@ -273,25 +257,19 @@ export async function transpileComponent(component, opts = {}) {
     // non-async.
     if (opts.js) {
         const withInstantiation = opts.instantiation !== undefined;
-        const async_ = instantiation.tag == 'async' ? 'async ' : '';
-        const await_ = instantiation.tag == 'async' ? 'await ' : '';
+        const async_ = instantiation.tag == "async" ? "async " : "";
+        const await_ = instantiation.tag == "async" ? "await " : "";
 
         // Format the previously generated code.
         const source = Buffer.from(jsFile[1])
-            .toString('utf8')
+            .toString("utf8")
             // update imports manging to match emscripten asm
-            .replace(
-                /exports(\d+)\['([^']+)']/g,
-                (_, i, s) => `exports${i}['${asmMangle(s)}']`
-            )
-            .replace(
-                /export (async )?function instantiate/,
-                '$1function _instantiate'
-            );
+            .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`)
+            .replace(/export (async )?function instantiate/, "$1function _instantiate");
 
         // Collect all Wasm files.
-        const wasmFiles = files.filter(([name]) => name.endsWith('.wasm'));
-        files = files.filter(([name]) => !name.endsWith('.wasm'));
+        const wasmFiles = files.filter(([name]) => name.endsWith(".wasm"));
+        files = files.filter(([name]) => !name.endsWith(".wasm"));
 
         // Configure the spinner.
         let completed = 0;
@@ -299,8 +277,8 @@ export async function transpileComponent(component, opts = {}) {
             `${styleText("cyan", `${completed} / ${wasmFiles.length}`)} Running Binaryen wasm2js on Wasm core modules (this takes a while)...\n`;
         if (showSpinner) {
             spinner = ora({
-                color: 'cyan',
-                spinner: 'bouncingBar',
+                color: "cyan",
+                spinner: "bouncingBar",
             }).start();
             spinner.text = spinnerText();
         }
@@ -309,40 +287,36 @@ export async function transpileComponent(component, opts = {}) {
         try {
             const asmFiles = await Promise.all(
                 wasmFiles.map(async ([, source]) => {
-                    const output = (await wasm2Js(source)).toString('utf8');
+                    const output = (await wasm2Js(source)).toString("utf8");
                     if (spinner) {
                         completed++;
                         spinner.text = spinnerText();
                     }
                     return output;
-                })
+                }),
             );
 
             const asms = asmFiles
                 .map(
                     (asm, nth) => `function asm${nth}(imports) {
   ${
-    // strip and replace the asm instantiation wrapper
-    asm
-        .replace(/import \* as [^ ]+ from '[^']*';/g, '')
-        .replace('function asmFunc(imports) {', '')
-        .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, '')
-        .replace(/var retasmFunc = [\s\S]*$/, '')
-        .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, '')
-        .replace('memory.grow = __wasm_memory_grow;', '')
-        .trim()
-}`
+      // strip and replace the asm instantiation wrapper
+      asm
+          .replace(/import \* as [^ ]+ from '[^']*';/g, "")
+          .replace("function asmFunc(imports) {", "")
+          .replace(/export var ([^ ]+) = ([^. ]+)\.([^ ]+);/g, "")
+          .replace(/var retasmFunc = [\s\S]*$/, "")
+          .replace(/var memasmFunc = new ArrayBuffer\(0\);/g, "")
+          .replace("memory.grow = __wasm_memory_grow;", "")
+          .trim()
+  }`,
                 )
-                .join(',\n');
+                .join(",\n");
 
             // The `instantiate` function.
-            const instantiateFunction = `${
-                withInstantiation ? 'export ' : ''
-            }${async_}function instantiate(imports) {
+            const instantiateFunction = `${withInstantiation ? "export " : ""}${async_}function instantiate(imports) {
   const wasm_file_to_asm_index = {
-    ${wasmFiles
-        .map(([path], nth) => `'${basename(path)}': ${nth}`)
-        .join(',\n    ')}
+    ${wasmFiles.map(([path], nth) => `'${basename(path)}': ${nth}`).join(",\n    ")}
   };
 
   return ${await_}_instantiate(
@@ -353,75 +327,70 @@ export async function transpileComponent(component, opts = {}) {
 }`;
 
             // If `--js` is used without `--instantiation`.
-            let importDirectives = '';
-            let exportDirectives = '';
-            let exportTrampolines = '';
-            let autoInstantiate = '';
+            let importDirectives = "";
+            let exportDirectives = "";
+            let exportTrampolines = "";
+            let autoInstantiate = "";
 
             if (!withInstantiation) {
                 importDirectives = imports
-                    .map(
-                        (import_file, nth) =>
-                            `import * as import${nth} from '${import_file}';`
-                    )
-                    .join('\n');
+                    .map((import_file, nth) => `import * as import${nth} from '${import_file}';`)
+                    .join("\n");
 
                 if (exports.length > 0 || opts.tlaCompat) {
                     exportDirectives = `export {
 ${
     // Exporting `$init` must come first to not break the transpiling tests.
-    opts.tlaCompat ? '  $init,\n' : ''
+    opts.tlaCompat ? "  $init,\n" : ""
 }${exports
-    .map(([name]) => {
-        if (name === asmMangle(name)) {
-            return `  ${name},`;
-        } else {
-            return `  ${asmMangle(name)} as '${name}',`;
-        }
-    })
-    .join('\n')}
+                        .map(([name]) => {
+                            if (name === asmMangle(name)) {
+                                return `  ${name},`;
+                            } else {
+                                return `  ${asmMangle(name)} as '${name}',`;
+                            }
+                        })
+                        .join("\n")}
 }`;
                 }
 
                 exportTrampolines = `let ${exports
-                    .filter(([, ty]) => ty === 'function')
+                    .filter(([, ty]) => ty === "function")
                     .map(([name]) => `_${asmMangle(name)}`)
-                    .join(', ')};
+                    .join(", ")};
 ${exports
-        .map(([name, ty]) => {
-            if (ty === 'function') {
-                return `\nfunction ${asmMangle(name)} () {
+    .map(([name, ty]) => {
+        if (ty === "function") {
+            return `\nfunction ${asmMangle(name)} () {
   return _${asmMangle(name)}.apply(this, arguments);
 }`;
-            } else {
-                return `\nlet ${asmMangle(name)};`;
-            }
-        })
-        .join('\n')}`;
+        } else {
+            return `\nlet ${asmMangle(name)};`;
+        }
+    })
+    .join("\n")}`;
 
                 autoInstantiate = `${async_}function $init() {
   ( {
 ${exports
-        .map(([name, ty]) => {
-            if (ty === 'function') {
-                return `    '${name}': _${asmMangle(name)},`;
-            } else if (asmMangle(name) === name) {
-                return `    ${name},`;
-            } else {
-                return `    '${name}': ${asmMangle(name)},`;
-            }
-        })
-        .join('\n')}
+    .map(([name, ty]) => {
+        if (ty === "function") {
+            return `    '${name}': _${asmMangle(name)},`;
+        } else if (asmMangle(name) === name) {
+            return `    ${name},`;
+        } else {
+            return `    '${name}': ${asmMangle(name)},`;
+        }
+    })
+    .join("\n")}
   } = ${await_}instantiate(
     {
-${imports
-        .map((import_file, nth) => `      '${import_file}': import${nth},`)
-        .join('\n')}
+${imports.map((import_file, nth) => `      '${import_file}': import${nth},`).join("\n")}
     }
   ) )
 }
 
-${opts.tlaCompat ? '' : `${await_}$init();`}`;
+${opts.tlaCompat ? "" : `${await_}$init();`}`;
             }
 
             // Prepare the final generated code.
@@ -450,19 +419,16 @@ ${autoInstantiate}`;
 
     if (opts.minify) {
         try {
-            ({ code: jsFile[1] } = await minify(
-                Buffer.from(jsFile[1]).toString('utf8'),
-                {
-                    module: true,
-                    compress: {
-                        ecma: 9,
-                        unsafe: true,
-                    },
-                    mangle: {
-                        keep_classnames: true,
-                    },
-                }
-            ));
+            ({ code: jsFile[1] } = await minify(Buffer.from(jsFile[1]).toString("utf8"), {
+                module: true,
+                compress: {
+                    ecma: 9,
+                    unsafe: true,
+                },
+                mangle: {
+                    keep_classnames: true,
+                },
+            }));
         } catch (err) {
             console.error(`error while minifying JS: ${err}`);
             throw err;
@@ -476,8 +442,8 @@ ${autoInstantiate}`;
 // for imports to match up we must do the same
 // See https://github.com/WebAssembly/binaryen/blob/main/src/asmjs/asmangle.cpp
 function asmMangle(name) {
-    if (name === '') {
-        return '$';
+    if (name === "") {
+        return "$";
     }
 
     let mightBeKeyword = true;
@@ -485,210 +451,181 @@ function asmMangle(name) {
 
     // Names must start with a character, $ or _
     switch (name[0]) {
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9': {
-        name = '$' + name;
-        i = 2;
-        // fallthrough
-    }
-    case '$':
-    case '_': {
-        mightBeKeyword = false;
-        break;
-    }
-    default: {
-        let chNum = name.charCodeAt(0);
-        if (
-            !(chNum >= 97 && chNum <= 122) &&
-                !(chNum >= 65 && chNum <= 90)
-        ) {
-            name = '$' + name.substr(1);
-            mightBeKeyword = false;
+        case "0":
+        case "1":
+        case "2":
+        case "3":
+        case "4":
+        case "5":
+        case "6":
+        case "7":
+        case "8":
+        case "9": {
+            name = "$" + name;
+            i = 2;
+            // fallthrough
         }
-    }
+        case "$":
+        case "_": {
+            mightBeKeyword = false;
+            break;
+        }
+        default: {
+            let chNum = name.charCodeAt(0);
+            if (!(chNum >= 97 && chNum <= 122) && !(chNum >= 65 && chNum <= 90)) {
+                name = "$" + name.substr(1);
+                mightBeKeyword = false;
+            }
+        }
     }
 
     // Names must contain only characters, digits, $ or _
     let len = name.length;
     for (; i < len; ++i) {
         switch (name[i]) {
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7':
-        case '8':
-        case '9':
-        case '$':
-        case '_': {
-            mightBeKeyword = false;
-            break;
-        }
-        default: {
-            let chNum = name.charCodeAt(i);
-            if (
-                !(chNum >= 97 && chNum <= 122) &&
-                    !(chNum >= 65 && chNum <= 90)
-            ) {
-                name = name.substr(0, i) + '_' + name.substr(i + 1);
+            case "0":
+            case "1":
+            case "2":
+            case "3":
+            case "4":
+            case "5":
+            case "6":
+            case "7":
+            case "8":
+            case "9":
+            case "$":
+            case "_": {
                 mightBeKeyword = false;
+                break;
             }
-        }
+            default: {
+                let chNum = name.charCodeAt(i);
+                if (!(chNum >= 97 && chNum <= 122) && !(chNum >= 65 && chNum <= 90)) {
+                    name = name.substr(0, i) + "_" + name.substr(i + 1);
+                    mightBeKeyword = false;
+                }
+            }
         }
     }
 
     // Names must not collide with keywords
     if (mightBeKeyword && len >= 2 && len <= 10) {
         switch (name[0]) {
-        case 'a': {
-            if (name == 'arguments') {
-                return name + '_';
+            case "a": {
+                if (name == "arguments") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'b': {
-            if (name == 'break') {
-                return name + '_';
+            case "b": {
+                if (name == "break") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'c': {
-            if (
-                name == 'case' ||
-                    name == 'continue' ||
-                    name == 'catch' ||
-                    name == 'const' ||
-                    name == 'class'
-            ) {
-                return name + '_';
+            case "c": {
+                if (name == "case" || name == "continue" || name == "catch" || name == "const" || name == "class") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'd': {
-            if (name == 'do' || name == 'default' || name == 'debugger') {
-                return name + '_';
+            case "d": {
+                if (name == "do" || name == "default" || name == "debugger") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'e': {
-            if (
-                name == 'else' ||
-                    name == 'enum' ||
-                    name == 'eval' || // to be sure
-                    name == 'export' ||
-                    name == 'extends'
-            ) {
-                return name + '_';
+            case "e": {
+                if (
+                    name == "else" ||
+                    name == "enum" ||
+                    name == "eval" || // to be sure
+                    name == "export" ||
+                    name == "extends"
+                ) {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'f': {
-            if (
-                name == 'for' ||
-                    name == 'false' ||
-                    name == 'finally' ||
-                    name == 'function'
-            ) {
-                return name + '_';
+            case "f": {
+                if (name == "for" || name == "false" || name == "finally" || name == "function") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'i': {
-            if (
-                name == 'if' ||
-                    name == 'in' ||
-                    name == 'import' ||
-                    name == 'interface' ||
-                    name == 'implements' ||
-                    name == 'instanceof'
-            ) {
-                return name + '_';
+            case "i": {
+                if (
+                    name == "if" ||
+                    name == "in" ||
+                    name == "import" ||
+                    name == "interface" ||
+                    name == "implements" ||
+                    name == "instanceof"
+                ) {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'l': {
-            if (name == 'let') {
-                return name + '_';
+            case "l": {
+                if (name == "let") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'n': {
-            if (name == 'new' || name == 'null') {
-                return name + '_';
+            case "n": {
+                if (name == "new" || name == "null") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'p': {
-            if (
-                name == 'public' ||
-                    name == 'package' ||
-                    name == 'private' ||
-                    name == 'protected'
-            ) {
-                return name + '_';
+            case "p": {
+                if (name == "public" || name == "package" || name == "private" || name == "protected") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'r': {
-            if (name == 'return') {
-                return name + '_';
+            case "r": {
+                if (name == "return") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 's': {
-            if (name == 'super' || name == 'static' || name == 'switch') {
-                return name + '_';
+            case "s": {
+                if (name == "super" || name == "static" || name == "switch") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 't': {
-            if (
-                name == 'try' ||
-                    name == 'this' ||
-                    name == 'true' ||
-                    name == 'throw' ||
-                    name == 'typeof'
-            ) {
-                return name + '_';
+            case "t": {
+                if (name == "try" || name == "this" || name == "true" || name == "throw" || name == "typeof") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'v': {
-            if (name == 'var' || name == 'void') {
-                return name + '_';
+            case "v": {
+                if (name == "var" || name == "void") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'w': {
-            if (name == 'with' || name == 'while') {
-                return name + '_';
+            case "w": {
+                if (name == "with" || name == "while") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
-        case 'y': {
-            if (name == 'yield') {
-                return name + '_';
+            case "y": {
+                if (name == "yield") {
+                    return name + "_";
+                }
+                break;
             }
-            break;
-        }
         }
     }
     return name;
 }
 
 // see: https://github.com/vitest-dev/vitest/issues/6953#issuecomment-2505310022
-if (typeof __vite_ssr_import_meta__ !== 'undefined') {
-    __vite_ssr_import_meta__.resolve = (path) =>
-        'file://' + globalCreateRequire(import.meta.url).resolve(path);
+if (typeof __vite_ssr_import_meta__ !== "undefined") {
+    __vite_ssr_import_meta__.resolve = (path) => "file://" + globalCreateRequire(import.meta.url).resolve(path);
 }

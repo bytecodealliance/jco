@@ -1,40 +1,30 @@
-import { normalize, resolve, sep, dirname } from 'node:path';
-import { tmpdir } from 'node:os';
-import {
-    readFile,
-    writeFile,
-    rm,
-    mkdtemp,
-    mkdir,
-    stat,
-} from 'node:fs/promises';
-import { spawn } from 'node:child_process';
-import { argv0 } from 'node:process';
-import { platform } from 'node:process';
-import * as nodeUtils from 'node:util';
+import { normalize, resolve, sep, dirname } from "node:path";
+import { tmpdir } from "node:os";
+import { readFile, writeFile, rm, mkdtemp, mkdir, stat } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { argv0 } from "node:process";
+import { platform } from "node:process";
+import * as nodeUtils from "node:util";
 
-export const isWindows = platform === 'win32';
+export const isWindows = platform === "win32";
 
 export const ASYNC_WASI_IMPORTS = [
-    'wasi:io/poll#poll',
-    'wasi:io/poll#[method]pollable.block',
-    'wasi:io/streams#[method]input-stream.blocking-read',
-    'wasi:io/streams#[method]input-stream.blocking-skip',
-    'wasi:io/streams#[method]output-stream.blocking-flush',
-    'wasi:io/streams#[method]output-stream.blocking-write-and-flush',
-    'wasi:io/streams#[method]output-stream.blocking-write-zeroes-and-flush',
-    'wasi:io/streams#[method]output-stream.blocking-splice',
+    "wasi:io/poll#poll",
+    "wasi:io/poll#[method]pollable.block",
+    "wasi:io/streams#[method]input-stream.blocking-read",
+    "wasi:io/streams#[method]input-stream.blocking-skip",
+    "wasi:io/streams#[method]output-stream.blocking-flush",
+    "wasi:io/streams#[method]output-stream.blocking-write-and-flush",
+    "wasi:io/streams#[method]output-stream.blocking-write-zeroes-and-flush",
+    "wasi:io/streams#[method]output-stream.blocking-splice",
 ];
 
-export const ASYNC_WASI_EXPORTS = [
-    'wasi:cli/run#run',
-    'wasi:http/incoming-handler#handle',
-];
+export const ASYNC_WASI_EXPORTS = ["wasi:cli/run#run", "wasi:http/incoming-handler#handle"];
 
-export const DEFAULT_ASYNC_MODE = 'sync';
+export const DEFAULT_ASYNC_MODE = "sync";
 
 /** Path of WIT files by default when one is not specified */
-export const DEFAULT_WIT_PATH = './wit';
+export const DEFAULT_WIT_PATH = "./wit";
 
 let _showSpinner = false;
 export function setShowSpinner(val) {
@@ -58,7 +48,7 @@ export function sizeStr(num) {
 }
 
 export function fixedDigitDisplay(num, maxChars) {
-    const significantDigits = String(num).split('.')[0].length;
+    const significantDigits = String(num).split(".")[0].length;
     let str;
     if (significantDigits >= maxChars - 1) {
         str = String(Math.round(num));
@@ -70,7 +60,7 @@ export function fixedDigitDisplay(num, maxChars) {
     if (maxChars - str.length < 0) {
         return str;
     }
-    return ' '.repeat(maxChars - str.length) + str;
+    return " ".repeat(maxChars - str.length) + str;
 }
 
 /**
@@ -82,22 +72,22 @@ export function fixedDigitDisplay(num, maxChars) {
  */
 export function table(rows, align = []) {
     if (rows.length === 0) {
-        return '';
+        return "";
     }
     const colLens = rows.reduce(
         (maxLens, cur) => maxLens.map((len, i) => Math.max(len, cur[i].length)),
-        rows[0].map((cell) => cell.length)
+        rows[0].map((cell) => cell.length),
     );
-    let outTable = '';
+    let outTable = "";
     for (const row of rows) {
         for (const [i, cell] of row.entries()) {
-            if (align[i] === 'right') {
-                outTable += ' '.repeat(colLens[i] - cell.length) + cell;
+            if (align[i] === "right") {
+                outTable += " ".repeat(colLens[i] - cell.length) + cell;
             } else {
-                outTable += cell + ' '.repeat(colLens[i] - cell.length);
+                outTable += cell + " ".repeat(colLens[i] - cell.length);
             }
         }
-        outTable += '\n';
+        outTable += "\n";
     }
     return outTable;
 }
@@ -124,7 +114,7 @@ async function readFileCli(filePath, encoding) {
     try {
         return await readFile(filePath, encoding);
     } catch {
-        throw `Unable to read file ${styleText('bold', filePath)}`;
+        throw `Unable to read file ${styleText("bold", filePath)}`;
     }
 }
 export { readFileCli as readFile };
@@ -148,22 +138,22 @@ export { readFileCli as readFile };
 export async function spawnIOTmp(cmd, inputWasmBytes, args) {
     const tmpDir = await getTmpDir();
     try {
-        const inFile = resolve(tmpDir, 'in.wasm');
-        let outFile = resolve(tmpDir, 'out.wasm');
+        const inFile = resolve(tmpDir, "in.wasm");
+        let outFile = resolve(tmpDir, "out.wasm");
 
         await writeFile(inFile, inputWasmBytes);
 
         const cp = spawn(argv0, [cmd, inFile, ...args, outFile], {
-            stdio: 'pipe',
+            stdio: "pipe",
         });
 
-        let stderr = '';
+        let stderr = "";
         const p = new Promise((resolve, reject) => {
-            cp.stderr.on('data', (data) => (stderr += data.toString()));
-            cp.on('error', (e) => {
+            cp.stderr.on("data", (data) => (stderr += data.toString()));
+            cp.on("error", (e) => {
                 reject(e);
             });
-            cp.on('exit', (code) => {
+            cp.on("exit", (code) => {
                 if (code === 0) {
                     resolve();
                 } else {
@@ -196,18 +186,18 @@ export async function writeFiles(files, summaryTitle) {
         Object.entries(files).map(async ([filePath, contents]) => {
             await mkdir(dirname(filePath), { recursive: true });
             await writeFile(filePath, contents);
-        })
+        }),
     );
     if (!summaryTitle) {
         return;
     }
 
     let rows = Object.entries(files).map(([name, source]) => [
-        ` - ${styleText('italic', name)}  `,
-        `${styleText(['black', 'italic'], sizeStr(source.length))}`,
+        ` - ${styleText("italic", name)}  `,
+        `${styleText(["black", "italic"], sizeStr(source.length))}`,
     ]);
     console.log(`
-  ${styleText('bold', summaryTitle + ":")}
+  ${styleText("bold", summaryTitle + ":")}
 
 ${table(rows)}`);
 }
@@ -228,14 +218,10 @@ export async function resolveDefaultWITPath(witPath) {
         .then((p) => p.isDirectory())
         .catch(() => false);
     if (!witDirExists) {
-        throw new Error(
-            'Failed to determine WIT directory, please specify WIT directory argument'
-        );
+        throw new Error("Failed to determine WIT directory, please specify WIT directory argument");
     }
     witPath = resolve(DEFAULT_WIT_PATH);
-    console.error(
-        `no WIT directory specified, using detected WIT directory @ [${DEFAULT_WIT_PATH}]`
-    );
+    console.error(`no WIT directory specified, using detected WIT directory @ [${DEFAULT_WIT_PATH}]`);
     return witPath;
 }
 

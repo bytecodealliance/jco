@@ -1,6 +1,6 @@
-import { join } from 'node:path';
+import { join } from "node:path";
 
-import { suite, test } from 'vitest';
+import { suite, test } from "vitest";
 
 import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
 
@@ -9,16 +9,10 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "
 // In the upstream wasmtime repo, see:
 // wasmtime/crates/misc/component-async-tests/tests/scenario/backpressure.rs
 //
-suite('backpressure scenario', () => {
-    test('caller & callee', async () => {
-        const callerPath = join(
-            COMPONENT_FIXTURES_DIR,
-            "p3/backpressure/async-backpressure-caller.wasm"
-        );
-        const calleePath = join(
-            COMPONENT_FIXTURES_DIR,
-            "p3/backpressure/async-backpressure-callee.wasm"
-        );
+suite("backpressure scenario", () => {
+    test("caller & callee", async () => {
+        const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/backpressure/async-backpressure-caller.wasm");
+        const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/backpressure/async-backpressure-callee.wasm");
         const componentPath = await composeCallerCallee({
             callerPath,
             calleePath,
@@ -31,14 +25,16 @@ suite('backpressure scenario', () => {
                 transpile: {
                     extraArgs: {
                         minify: false,
-                    }
-                }
+                    },
+                },
             });
             const instance = res.instance;
             cleanup = res.cleanup;
-            await instance['local:local/run'].run();
+            await instance["local:local/run"].run();
         } finally {
-            if (cleanup) { await cleanup(); }
+            if (cleanup) {
+                await cleanup();
+            }
         }
     });
 });

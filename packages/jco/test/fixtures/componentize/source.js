@@ -11,7 +11,7 @@ export const foo = {
 let idx = 1;
 
 export function createBar() {
-    return new Bar('bar' + idx++);
+    return new Bar("bar" + idx++);
 }
 
 export function consumeBar(bar) {
@@ -19,5 +19,5 @@ export function consumeBar(bar) {
 }
 
 export function hello() {
-    return 'world';
+    return "world";
 }

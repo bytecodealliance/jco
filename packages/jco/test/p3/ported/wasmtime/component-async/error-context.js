@@ -1,6 +1,6 @@
-import { join } from 'node:path';
+import { join } from "node:path";
 
-import { suite, test } from 'vitest';
+import { suite, test } from "vitest";
 
 import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
 
@@ -9,12 +9,9 @@ import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "
 // In the upstream wasmtime repo, see:
 // wasmtime/crates/misc/component-async-tests/tests/scenario/error_context.rs
 //
-suite('error-context scenario', () => {
-    test('single-component', async () => {
-        const componentPath = join(
-            COMPONENT_FIXTURES_DIR,
-            'p3/error-context/async-error-context.wasm'
-        );
+suite("error-context scenario", () => {
+    test("single-component", async () => {
+        const componentPath = join(COMPONENT_FIXTURES_DIR, "p3/error-context/async-error-context.wasm");
 
         let cleanup;
         try {
@@ -28,21 +25,17 @@ suite('error-context scenario', () => {
             });
             const instance = res.instance;
             cleanup = res.cleanup;
-            await instance['local:local/run'].run();
+            await instance["local:local/run"].run();
         } finally {
-            if (cleanup) { await cleanup(); }
+            if (cleanup) {
+                await cleanup();
+            }
         }
     });
 
-    test('caller & callee', async () => {
-        const callerPath = join(
-            COMPONENT_FIXTURES_DIR,
-            "p3/error-context/async-error-context-caller.wasm"
-        );
-        const calleePath = join(
-            COMPONENT_FIXTURES_DIR,
-            "p3/error-context/async-error-context-callee.wasm"
-        );
+    test("caller & callee", async () => {
+        const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/error-context/async-error-context-caller.wasm");
+        const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/error-context/async-error-context-callee.wasm");
         const componentPath = await composeCallerCallee({
             callerPath,
             calleePath,
@@ -61,9 +54,11 @@ suite('error-context scenario', () => {
             cleanup = res.cleanup;
             const instance = res.instance;
 
-            await instance['local:local/run'].run();
+            await instance["local:local/run"].run();
         } finally {
-            if (cleanup) { await cleanup(); }
+            if (cleanup) {
+                await cleanup();
+            }
         }
     });
 });

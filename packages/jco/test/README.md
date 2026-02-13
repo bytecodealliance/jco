@@ -7,7 +7,7 @@ This folder contains tests for Jco.
 You'll need the following binaries installed in your path or specificed explicitly:
 
 | Tool               | Description                                                         |
-|--------------------|---------------------------------------------------------------------|
+| ------------------ | ------------------------------------------------------------------- |
 | [`wasm-tools`][wt] | Used for composing components during tests (in particular P3 tests) |
 
 ## Quickstart
@@ -21,7 +21,7 @@ npm run test
 If you find that tests are not taking into account changes you've made to projects like `js-component-bindgen`,
 this is likely because the new crate has not been built (thus Jco cannot use it's output).
 
-In this case, build the project *then* run the test suite:
+In this case, build the project _then_ run the test suite:
 
 ```
 npm run build && npm run test

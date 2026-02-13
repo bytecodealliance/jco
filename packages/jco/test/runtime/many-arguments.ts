@@ -1,12 +1,14 @@
 // Flags: --instantiation
 
 // @ts-ignore
-import { instantiate } from '../output/many-arguments/many-arguments.js';
+import { instantiate } from "../output/many-arguments/many-arguments.js";
 // @ts-ignore
-import * as helpers from './helpers.js';
+import * as helpers from "./helpers.js";
 
 function assertEq(x: any, y: any) {
-    if (x !== y) {throw new Error(`${x} != ${y}`);}
+    if (x !== y) {
+        throw new Error(`${x} != ${y}`);
+    }
 }
 
 async function run() {
@@ -14,24 +16,7 @@ async function run() {
     const wasm = await instantiate(helpers.loadWasm, {
         ...helpers.wasi,
         imports: {
-            manyArguments(
-                a1,
-                a2,
-                a3,
-                a4,
-                a5,
-                a6,
-                a7,
-                a8,
-                a9,
-                a10,
-                a11,
-                a12,
-                a13,
-                a14,
-                a15,
-                a16
-            ) {
+            manyArguments(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) {
                 assertEq(a1, 1n);
                 assertEq(a2, 2n);
                 assertEq(a3, 3n);
@@ -52,24 +37,7 @@ async function run() {
         },
     });
 
-    wasm.manyArguments(
-        1n,
-        2n,
-        3n,
-        4n,
-        5n,
-        6n,
-        7n,
-        8n,
-        9n,
-        10n,
-        11n,
-        12n,
-        13n,
-        14n,
-        15n,
-        16n
-    );
+    wasm.manyArguments(1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, 10n, 11n, 12n, 13n, 14n, 15n, 16n);
 }
 
 await run();

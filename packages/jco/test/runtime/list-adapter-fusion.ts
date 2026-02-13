@@ -1,9 +1,9 @@
 // Flags: --tla-compat --map test=../list-adapter-fusion.js
 
-import * as assert from 'assert';
+import * as assert from "assert";
 
 // @ts-ignore
-import * as wasm from '../output/list-adapter-fusion/list-adapter-fusion.js';
+import * as wasm from "../output/list-adapter-fusion/list-adapter-fusion.js";
 
 let expected: any = null;
 

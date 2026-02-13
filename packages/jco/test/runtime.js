@@ -1,11 +1,11 @@
-import { stat } from 'node:fs/promises';
-import { join } from 'node:path';
-import { URL, fileURLToPath } from 'node:url';
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
+import { URL, fileURLToPath } from "node:url";
 
-import { suite, test, assert } from 'vitest';
+import { suite, test, assert } from "vitest";
 
-import { getDefaultComponentFixtures } from './common.js';
-import { jcoPath, exec, readFixtureFlags, tsGenerationPromise } from './helpers.js';
+import { getDefaultComponentFixtures } from "./common.js";
+import { jcoPath, exec, readFixtureFlags, tsGenerationPromise } from "./helpers.js";
 
 /**
  * To run the runtime tests specified below, transpilation must be performed
@@ -15,58 +15,50 @@ import { jcoPath, exec, readFixtureFlags, tsGenerationPromise } from './helpers.
  * which tests run first.
  */
 const CODEGEN_TRANSPILE_DEPS = {
-    dummy_proxy: ['dummy_proxy/dummy_proxy.js'],
-    example_guest_export: ['example_guest_export/example_guest_export.js'],
-    example_guest_import: ['example_guest_import/example_guest_import.js'],
-    flavorful: ['flavorful/flavorful.js'],
-    'list-adapter-fusion': ['list-adapter-fusion/list-adapter-fusion.js'],
-    lists: ['lists/lists.js'],
-    'many-arguments': ['many-arguments/many-arguments.js'],
-    'multi-version': ['multi-version/multi-version.js'],
-    numbers: ['numbers/numbers.js'],
-    records: ['records/records.js'],
-    'strings.async+js': ['strings.async+js/strings.async+js.js'],
-    'strings.sync+js': ['strings.sync+js/strings.sync+js.js'],
-    'strings.sync': ['strings.sync/strings.sync.js'],
-    smoke: ['smoke/smoke.js'],
-    strings: ['strings/strings.js'],
-    variants: ['variants/variants.js', 'helpers.js'],
-    resource_borrow_simple: [
-        'resource_borrow_simple/resource_borrow_simple.js',
-    ],
+    dummy_proxy: ["dummy_proxy/dummy_proxy.js"],
+    example_guest_export: ["example_guest_export/example_guest_export.js"],
+    example_guest_import: ["example_guest_import/example_guest_import.js"],
+    flavorful: ["flavorful/flavorful.js"],
+    "list-adapter-fusion": ["list-adapter-fusion/list-adapter-fusion.js"],
+    lists: ["lists/lists.js"],
+    "many-arguments": ["many-arguments/many-arguments.js"],
+    "multi-version": ["multi-version/multi-version.js"],
+    numbers: ["numbers/numbers.js"],
+    records: ["records/records.js"],
+    "strings.async+js": ["strings.async+js/strings.async+js.js"],
+    "strings.sync+js": ["strings.sync+js/strings.sync+js.js"],
+    "strings.sync": ["strings.sync/strings.sync.js"],
+    smoke: ["smoke/smoke.js"],
+    strings: ["strings/strings.js"],
+    variants: ["variants/variants.js", "helpers.js"],
+    resource_borrow_simple: ["resource_borrow_simple/resource_borrow_simple.js"],
 };
 
-suite('Runtime', async () => {
+suite("Runtime", async () => {
     await tsGenerationPromise();
 
-    const runtimeFolderPath = fileURLToPath(
-        new URL('./runtime', import.meta.url)
-    );
+    const runtimeFolderPath = fileURLToPath(new URL("./runtime", import.meta.url));
 
     // Pre-process the list of fixtures to get the runtime specific tests
     const rawFixtures = await getDefaultComponentFixtures();
     const runtimes = (
         await Promise.all(
             rawFixtures
-                .filter((f) => !f.startsWith('dummy_'))
-                .filter((f) => !f.startsWith('wasi-http-proxy'))
+                .filter((f) => !f.startsWith("dummy_"))
+                .filter((f) => !f.startsWith("wasi-http-proxy"))
                 // Get the fixture, along with a runtime test name
-                .map((f) => [f, f.replace(/(\.component)?\.(wat|wasm)$/, '')])
+                .map((f) => [f, f.replace(/(\.component)?\.(wat|wasm)$/, "")])
                 .map(([f, r]) =>
                     stat(join(runtimeFolderPath, `${r}.ts`))
                         .then(() => [f, r])
-                        .catch(() => null)
-                )
+                        .catch(() => null),
+                ),
         )
     ).filter((v) => v !== null);
 
     // Create all runtime tests
-    const outputFolderPath = fileURLToPath(
-        new URL('./output', import.meta.url)
-    );
-    const componentFixturesFolderPath = fileURLToPath(
-        new URL('./fixtures/components', import.meta.url)
-    );
+    const outputFolderPath = fileURLToPath(new URL("./output", import.meta.url));
+    const componentFixturesFolderPath = fileURLToPath(new URL("./fixtures/components", import.meta.url));
     for (const [fixtureName, testName] of runtimes) {
         test.concurrent(testName, async () => {
             // Perform transpilation on deps where necessary
@@ -92,23 +84,20 @@ suite('Runtime', async () => {
                     const flags = await readFixtureFlags(runtimeTestPath);
 
                     // Perform transpilation
-                    let componentFixturePath = join(
-                        componentFixturesFolderPath,
-                        fixtureName
-                    );
+                    let componentFixturePath = join(componentFixturesFolderPath, fixtureName);
                     const outputDirPath = join(outputFolderPath, testName);
                     const transpileOutput = await exec(
                         jcoPath,
-                        'transpile',
+                        "transpile",
                         componentFixturePath,
-                        '--name',
+                        "--name",
                         testName,
                         ...flags,
-                        '-o',
-                        outputDirPath
+                        "-o",
+                        outputDirPath,
                     );
 
-                    assert.strictEqual(transpileOutput.stderr, '');
+                    assert.strictEqual(transpileOutput.stderr, "");
                     assert.ok((await stat(requiredOutputPath)).isFile());
                 }
             }
@@ -116,7 +105,7 @@ suite('Runtime', async () => {
             // Run the post-TS compilation test file (now that deps have been resolved)
             const testFilePath = join(outputFolderPath, `${testName}.js`);
             const { stderr } = await exec(testFilePath);
-            assert.strictEqual(stderr, '');
+            assert.strictEqual(stderr, "");
         });
     }
 });

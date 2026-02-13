@@ -1,9 +1,6 @@
-export { optimizeComponent as opt } from './cmd/opt.js';
-export {
-    transpileComponent as transpile,
-    typesComponent as types,
-} from './cmd/transpile.js';
-import { $init, tools } from '../obj/wasm-tools.js';
+export { optimizeComponent as opt } from "./cmd/opt.js";
+export { transpileComponent as transpile, typesComponent as types } from "./cmd/transpile.js";
+import { $init, tools } from "../obj/wasm-tools.js";
 const {
     print: printFn,
     parse: parseFn,
@@ -73,14 +70,8 @@ export async function metadataShow(binary) {
     return metadataShowFn(binary);
 }
 export function preview1AdapterCommandPath() {
-    return new URL(
-        '../lib/wasi_snapshot_preview1.command.wasm',
-        import.meta.url
-    );
+    return new URL("../lib/wasi_snapshot_preview1.command.wasm", import.meta.url);
 }
 export function preview1AdapterReactorPath() {
-    return new URL(
-        '../lib/wasi_snapshot_preview1.reactor.wasm',
-        import.meta.url
-    );
+    return new URL("../lib/wasi_snapshot_preview1.reactor.wasm", import.meta.url);
 }
