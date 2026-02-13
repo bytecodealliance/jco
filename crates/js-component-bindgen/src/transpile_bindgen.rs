@@ -2231,10 +2231,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ResourceEnterCall => {
                 let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
-                uwrite!(
-                    self.src.js,
-                    "function trampoline{i}() {{ {scope_id}++; }}"
-                );
+                uwrite!(self.src.js, "function trampoline{i}() {{ {scope_id}++; }}");
             }
 
             Trampoline::ResourceExitCall => {
@@ -3148,7 +3145,7 @@ impl<'a> Instantiator<'a, '_> {
     /// - `future<_>`
     /// - `stream<_>`
     ///
-    fn connect_remote_resources(
+    fn connect_p3_resources(
         &mut self,
         id: &TypeId,
         maybe_elem_ty: &Option<Type>,
@@ -3352,8 +3349,9 @@ impl<'a> Instantiator<'a, '_> {
         iface_ty: &InterfaceType,
         resource_map: &mut ResourceMap,
     ) {
-        match (&self.resolve.types[id].kind, iface_ty) {
-            // For flags and enums we can do nothing -- they're global (?)
+        let kind = &self.resolve.types[id].kind;
+        match (kind, iface_ty) {
+            // For flags and enums we can do nothing -- they're simple values (string/number)
             (TypeDefKind::Flags(_), InterfaceType::Flags(_))
             | (TypeDefKind::Enum(_), InterfaceType::Enum(_)) => {}
 
@@ -3436,15 +3434,20 @@ impl<'a> Instantiator<'a, '_> {
                     // The case of an empty future is the propagation of a `null`-like value, usually a simple signal
                     // which we'll connect with the *normally invalid* type value 0 as an indicator
                     None => {
-                        self.connect_remote_resources(&id, maybe_elem_ty, iface_ty, resource_map);
+                        self.connect_p3_resources(&id, maybe_elem_ty, iface_ty, resource_map);
                     }
                     // For custom types we must recur to properly connect the inner type
-                    Some(Type::Id(t)) => {
-                        self.connect_resource_types(*t, iface_ty, resource_map);
+                    Some(elem_ty @ Type::Id(_t)) => {
+                        self.connect_p3_resources(
+                            &id,
+                            &Some(elem_ty.clone()),
+                            iface_ty,
+                            resource_map,
+                        );
                     }
                     // For basic types that are connected (non inner types) we can do a generic connect
                     Some(_) => {
-                        self.connect_remote_resources(&id, maybe_elem_ty, iface_ty, resource_map);
+                        self.connect_p3_resources(&id, maybe_elem_ty, iface_ty, resource_map);
                     }
                 }
             }
@@ -4679,9 +4682,9 @@ pub fn gen_flat_lift_fn_js_expr(
         }
 
         InterfaceType::Borrow(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBorrow));
             let table_idx = ty_idx.as_u32();
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatBorrow).name();
             format!("{f}.bind(null, {table_idx})")
         }
 
@@ -4992,9 +4995,9 @@ pub fn gen_flat_lower_fn_js_expr(
         }
 
         InterfaceType::Borrow(ty_idx) => {
-            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBorrow));
             let table_idx = ty_idx.as_u32();
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name();
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatBorrow).name();
             format!("{f}.bind(null, {table_idx})")
         }
 

@@ -2182,7 +2182,14 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::FutureLift { payload, ty } => {
                 let future_ty = &crate::dealias(self.resolve, *ty);
 
-                // TODO: save payload information in lifted future
+                // TODO: we must generate the lifting function *before* function bindgen happens
+                // (see commented async param lift code generation), because inside here
+                // we do not have access to the interface types required to generate
+                //
+                // Alternatively, we can implement gen_flat_{lift,lower}_fn_js_expr for
+                // TypeDefs with a resolve as well (and make sure the code works with either)
+                //
+                // TODO(breaking): consider adding more information to bindgen (pointer to component types?)
                 match payload {
                     Some(payload_ty) => {
                         match payload_ty {
@@ -2219,11 +2226,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                         }
                                     );
                                 } else {
+                                    // TODO: generate lift fns (see TODO above)
                                     // NOTE: the missing type here is normally a result with nested types...
                                     // the resource_map may not be indexing these properly
-                                    //
-                                    // TODO: fix resource_map population for results that are passed through,
-                                    // Right now we associate the ok and err type, but the result *itself* should be associated?
                                     //
                                     // eprintln!("warning: missing resource map def {:#?}", self.resolve.types[*payload_ty_id]);
                                 }
