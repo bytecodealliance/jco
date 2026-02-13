@@ -12,7 +12,7 @@ export interface OptimizeOptions {
     optArgs?: string[];
     noVerify?: boolean;
     wasmOptBin?: string;
-};
+}
 
 interface CompressionInfo {
     beforeBytes: number;
@@ -29,9 +29,9 @@ interface EnhancedModuleMetadata extends ModuleMetadata {
     prevLEBLen?: number;
     newLEBLen?: number;
     optimized?: Uint8Array;
-    children?: EnhancedModuleMetadata[],
-    sizeChange?: number,
-};
+    children?: EnhancedModuleMetadata[];
+    sizeChange?: number;
+}
 
 /**
  * Perform optimization for a given component
@@ -42,7 +42,7 @@ interface EnhancedModuleMetadata extends ModuleMetadata {
  */
 export async function runOptimizeComponent(
     componentBytes: Uint8Array,
-    opts?: OptimizeOptions
+    opts?: OptimizeOptions,
 ): Promise<OptimizeResult> {
     await $init;
 
@@ -53,19 +53,12 @@ export async function runOptimizeComponent(
         (metadata as EnhancedModuleMetadata).prevLEBLen = byteLengthLEB128(size);
     });
 
-    const coreModules = componentMetadata.filter(
-        ({ metaType }) => metaType.tag === 'module'
-    );
+    const coreModules = componentMetadata.filter(({ metaType }) => metaType.tag === 'module');
 
     // Gather the options for wasm-opt. optionally, adding the asyncify flag
     const args = opts?.optArgs
         ? [...opts.optArgs]
-        : [
-            '-Oz',
-            '--low-memory-unused',
-            '--enable-bulk-memory',
-            '--strip-debug',
-        ];
+        : ['-Oz', '--low-memory-unused', '--enable-bulk-memory', '--strip-debug'];
     if (opts?.asyncify) {
         args.push('--asyncify');
     }
@@ -76,14 +69,13 @@ export async function runOptimizeComponent(
             if (metadata.metaType.tag === 'module') {
                 // store the wasm-opt processed module in the metadata
                 const optimized = await runWasmOptCLI(
-                    componentBytes.subarray(
-                        metadata.range[0],
-                        metadata.range[1]
-                    ),
+                    componentBytes.subarray(metadata.range[0], metadata.range[1]),
                     args,
-                    opts
+                    opts,
                 );
-                if (optimized === null) { throw new Error('failed to optimize binary with wasm-opt'); }
+                if (optimized === null) {
+                    throw new Error('failed to optimize binary with wasm-opt');
+                }
 
                 // compute the size change, including the change to
                 // the LEB128 encoding of the size change
@@ -93,7 +85,7 @@ export async function runOptimizeComponent(
                 (metadata as EnhancedModuleMetadata).sizeChange = newModuleSize - prevModuleSize;
                 (metadata as EnhancedModuleMetadata).optimized = optimized;
             }
-        })
+        }),
     );
 
     // organize components in modules into tree parent and children
@@ -107,24 +99,30 @@ export async function runOptimizeComponent(
                 i--;
                 const idx = (metadata as EnhancedModuleMetadata).index;
 
-                if (idx === undefined) { throw new Error('unexpectedly missing index on module metadata'); }
+                if (idx === undefined) {
+                    throw new Error('unexpectedly missing index on module metadata');
+                }
                 (metadata as EnhancedModuleMetadata).children = getChildren(idx);
 
-                (metadata as EnhancedModuleMetadata).sizeChange = ((metadata as EnhancedModuleMetadata).children ?? []).reduce(
+                (metadata as EnhancedModuleMetadata).sizeChange = (
+                    (metadata as EnhancedModuleMetadata).children ?? []
+                ).reduce(
                     (total, childMetadata) => {
                         const { prevLEBLen, newLEBLen, sizeChange } = childMetadata;
-                        if (newLEBLen === undefined) { throw new Error("unexpectedly undefined new LEB len"); }
-                        if (prevLEBLen === undefined) { throw new Error("unexpectedly undefined new LEB len"); }
-                        return sizeChange
-                            ? total + sizeChange + newLEBLen - prevLEBLen
-                            : total;
+                        if (newLEBLen === undefined) {
+                            throw new Error('unexpectedly undefined new LEB len');
+                        }
+                        if (prevLEBLen === undefined) {
+                            throw new Error('unexpectedly undefined new LEB len');
+                        }
+                        return sizeChange ? total + sizeChange + newLEBLen - prevLEBLen : total;
                     },
-                    (metadata as EnhancedModuleMetadata).sizeChange || 0
+                    (metadata as EnhancedModuleMetadata).sizeChange || 0,
                 );
                 const prevSize = metadata.range[1] - metadata.range[0];
 
                 (metadata as EnhancedModuleMetadata).newLEBLen = byteLengthLEB128(
-                    prevSize + ((metadata as EnhancedModuleMetadata).sizeChange ?? 0)
+                    prevSize + ((metadata as EnhancedModuleMetadata).sizeChange ?? 0),
                 );
                 children.push(metadata);
             }
@@ -134,32 +132,32 @@ export async function runOptimizeComponent(
     const componentTree = getChildren(0);
 
     // compute the total size change in the component binary
-    const sizeChange = componentTree.reduce(
-        (total, metadata) => {
-            const { prevLEBLen, newLEBLen, sizeChange } = metadata as EnhancedModuleMetadata;
-            if (newLEBLen === undefined) { throw new Error("unexpectedly undefined new LEB len"); }
-            if (prevLEBLen === undefined) { throw new Error("unexpectedly undefined new LEB len"); }
-            return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
-        },
-        0
-    );
+    const sizeChange = componentTree.reduce((total, metadata) => {
+        const { prevLEBLen, newLEBLen, sizeChange } = metadata as EnhancedModuleMetadata;
+        if (newLEBLen === undefined) {
+            throw new Error('unexpectedly undefined new LEB len');
+        }
+        if (prevLEBLen === undefined) {
+            throw new Error('unexpectedly undefined new LEB len');
+        }
+        return total + (sizeChange || 0) + newLEBLen - prevLEBLen;
+    }, 0);
 
-    const outComponentBytes = new Uint8Array(
-        componentBytes.byteLength + sizeChange
-    );
+    const outComponentBytes = new Uint8Array(componentBytes.byteLength + sizeChange);
     let nextReadPos = 0,
         nextWritePos = 0;
 
     const write = (metadata: EnhancedModuleMetadata) => {
         const { prevLEBLen, range, optimized, children, sizeChange } = metadata as EnhancedModuleMetadata;
-        if (prevLEBLen === undefined) { throw new Error("unexpectedly undefined prev LEB len"); }
-        if (sizeChange === undefined) { throw new Error("unexpectedly undefined sizeChange"); }
+        if (prevLEBLen === undefined) {
+            throw new Error('unexpectedly undefined prev LEB len');
+        }
+        if (sizeChange === undefined) {
+            throw new Error('unexpectedly undefined sizeChange');
+        }
 
         // write from the last read to the LEB byte start
-        outComponentBytes.set(
-            componentBytes.subarray(nextReadPos, range[0] - prevLEBLen),
-            nextWritePos
-        );
+        outComponentBytes.set(componentBytes.subarray(nextReadPos, range[0] - prevLEBLen), nextWritePos);
         nextWritePos += range[0] - prevLEBLen - nextReadPos;
 
         // write the new LEB bytes
@@ -181,17 +179,14 @@ export async function runOptimizeComponent(
             children.forEach(write);
         } else {
             // write component
-            outComponentBytes.set(
-                componentBytes.subarray(range[0], range[1]),
-                nextWritePos
-            );
+            outComponentBytes.set(componentBytes.subarray(range[0], range[1]), nextWritePos);
             nextReadPos = range[1];
             nextWritePos += range[1] - range[0];
         }
     };
 
     // write each top-level component / module
-    componentTree.forEach(metadata => write(metadata as EnhancedModuleMetadata));
+    componentTree.forEach((metadata) => write(metadata as EnhancedModuleMetadata));
 
     // write remaining
     outComponentBytes.set(componentBytes.subarray(nextReadPos), nextWritePos);
@@ -201,9 +196,7 @@ export async function runOptimizeComponent(
         try {
             print(outComponentBytes);
         } catch (e) {
-            throw new Error(
-                `Internal error performing optimization.\n${e instanceof Error ? e.message : ""}`
-            );
+            throw new Error(`Internal error performing optimization.\n${e instanceof Error ? e.message : ''}`);
         }
     }
 
@@ -211,7 +204,9 @@ export async function runOptimizeComponent(
         component: outComponentBytes,
         compressionInfo: coreModules.map((metadata) => {
             const optimized = (metadata as EnhancedModuleMetadata).optimized;
-            if (!optimized) { throw new Error('unexpectedly missing optimized chunk'); }
+            if (!optimized) {
+                throw new Error('unexpectedly missing optimized chunk');
+            }
             return {
                 beforeBytes: metadata.range[1] - metadata.range[0],
                 afterBytes: optimized.byteLength,
@@ -235,18 +230,13 @@ interface RunWasmOptCLIOptions {
  */
 async function runWasmOptCLI(
     source: Uint8Array,
-    args: string[] ,
+    args: string[],
     opts?: RunWasmOptCLIOptions,
 ): Promise<Uint8Array | null> {
-    const wasmOptBin =
-        opts?.wasmOptBin ??
-        fileURLToPath(import.meta.resolve('binaryen/bin/wasm-opt'));
+    const wasmOptBin = opts?.wasmOptBin ?? fileURLToPath(import.meta.resolve('binaryen/bin/wasm-opt'));
 
     try {
-        return await runWASMTransformProgram(wasmOptBin, source, [
-            ...args,
-            '-o',
-        ]);
+        return await runWASMTransformProgram(wasmOptBin, source, [...args, '-o']);
     } catch (e) {
         if ((typeof e === 'string' || e instanceof Error) && e.toString().includes('BasicBlock requested')) {
             return runWasmOptCLI(source, args, opts);

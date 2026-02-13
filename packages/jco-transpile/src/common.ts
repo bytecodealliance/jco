@@ -1,12 +1,6 @@
 import { join, normalize, resolve, sep, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
-import {
-    readFile as fsReadFile,
-    writeFile,
-    rm,
-    mkdtemp,
-    mkdir,
-} from 'node:fs/promises';
+import { readFile as fsReadFile, writeFile, rm, mkdtemp, mkdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { platform, argv0 } from 'node:process';
 import * as nodeUtils from 'node:util';
@@ -37,8 +31,7 @@ interface SizeStrOptions {
  * @param opts - Options for printing
  */
 export function sizeStr(num: number, opts: SizeStrOptions): string {
-    const significantDigits =
-        opts?.significantDigits ?? DEFAULT_SIGNIFICANT_DIGITS;
+    const significantDigits = opts?.significantDigits ?? DEFAULT_SIGNIFICANT_DIGITS;
     num /= BYTES_MAGNITUDE;
     if (num < 1000) {
         return `${fixedDigitDisplay(num, significantDigits)} KiB`;
@@ -51,9 +44,7 @@ export function sizeStr(num: number, opts: SizeStrOptions): string {
     if (num < 1000) {
         return `${fixedDigitDisplay(num, significantDigits)} GiB`;
     }
-    throw new Error(
-        'unexpected magnitude while sizing string, greater than 1000 GiB'
-    );
+    throw new Error('unexpected magnitude while sizing string, greater than 1000 GiB');
 }
 
 /**
@@ -92,7 +83,7 @@ export function table(data: string[][], cellAlignment: string[] = []) {
     }
     const colLens = data.reduce(
         (maxLens, cur) => maxLens.map((len, i) => Math.max(len, cur[i].length)),
-        data[0].map((cell) => cell.length)
+        data[0].map((cell) => cell.length),
     );
     let outTable = '';
     for (const row of data) {
@@ -143,7 +134,11 @@ export async function readFile(file: string, encoding?: BufferEncoding): Promise
  * @param args
  * @returns {Promise<Buffer>} A `Promise` that resolves to the wasm binary contents
  */
-export async function runWASMTransformProgram(cmd: string, input: Uint8Array, args: string[]): Promise<Uint8Array | null> {
+export async function runWASMTransformProgram(
+    cmd: string,
+    input: Uint8Array,
+    args: string[],
+): Promise<Uint8Array | null> {
     const tmpDir = await getTmpDir();
     try {
         const inFile = resolve(tmpDir, 'in.wasm');
@@ -236,6 +231,6 @@ export async function writeFiles(files: FileBytes, opts?: WriteFileOpts): Promis
             }
             await mkdir(dirname(filePath), { recursive: true });
             await writeFile(filePath, contents);
-        })
+        }),
     );
 }

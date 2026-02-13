@@ -11,7 +11,4 @@ export const ASYNC_WASI_IMPORTS = [
 ];
 
 /** WASI exports that should be considered asynchronous when present */
-export const ASYNC_WASI_EXPORTS = [
-    'wasi:cli/run#run',
-    'wasi:http/incoming-handler#handle',
-];
+export const ASYNC_WASI_EXPORTS = ['wasi:cli/run#run', 'wasi:http/incoming-handler#handle'];
