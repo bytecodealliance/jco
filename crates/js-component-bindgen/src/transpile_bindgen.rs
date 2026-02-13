@@ -2233,10 +2233,7 @@ impl<'a> Instantiator<'a, '_> {
                 let scope_id = self.bindgen.intrinsic(Intrinsic::ScopeId);
                 uwrite!(
                     self.src.js,
-                    "function trampoline{i}() {{
-                        {scope_id}++;
-                    }}
-                    ",
+                    "function trampoline{i}() {{ {scope_id}++; }}"
                 );
             }
 
@@ -2251,15 +2248,17 @@ impl<'a> Instantiator<'a, '_> {
                 // the enter call closed off the ability to create new handles in the parent scope
                 uwrite!(
                     self.src.js,
-                    "function trampoline{i}() {{
+                    r#"function trampoline{i}() {{
                         {scope_id}--;
                         for (const {{ rid, handle }} of {resource_borrows}) {{
-                            if ({handle_tables}[rid][handle << 1] === {scope_id})
+                            const storedScopeId = {handle_tables}[rid][handle << 1]
+                            if (storedScopeId === {scope_id}) {{
                                 throw new TypeError('borrows not dropped for resource call');
+                            }}
                         }}
                         {resource_borrows} = [];
                     }}
-                    ",
+                    "#,
                 );
             }
 

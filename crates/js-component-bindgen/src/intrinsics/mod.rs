@@ -393,11 +393,10 @@ impl Intrinsic {
             ",
             ),
 
-            Intrinsic::ScopeId => output.push_str(
-                "
-                let scopeId = 0;
-            ",
-            ),
+            Intrinsic::ScopeId => {
+                let name = self.name();
+                uwriteln!(output, "let {name} = 0;");
+            }
 
             Intrinsic::SymbolResourceHandle => output.push_str(
                 "
@@ -949,7 +948,7 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 19] = [
+const EARLY_INTRINSICS: [Intrinsic; 20] = [
     Intrinsic::DebugLog,
     Intrinsic::GlobalAsyncDeterminism,
     Intrinsic::GlobalComponentAsyncLowersClass,
@@ -957,6 +956,7 @@ const EARLY_INTRINSICS: [Intrinsic; 19] = [
     Intrinsic::GlobalComponentMemoriesClass,
     Intrinsic::RepTableClass,
     Intrinsic::CoinFlip,
+    Intrinsic::ScopeId,
     Intrinsic::ConstantI32Min,
     Intrinsic::ConstantI32Max,
     Intrinsic::TypeCheckValidI32,
@@ -1387,7 +1387,7 @@ impl Intrinsic {
             Intrinsic::HasOwnProperty => "hasOwnProperty",
             Intrinsic::InstantiateCore => "instantiateCore",
             Intrinsic::IsLE => "isLE",
-            Intrinsic::ScopeId => "scopeId",
+            Intrinsic::ScopeId => "SCOPE_ID",
             Intrinsic::SymbolCabiDispose => "symbolCabiDispose",
             Intrinsic::SymbolCabiLower => "symbolCabiLower",
             Intrinsic::SymbolDispose => "symbolDispose",

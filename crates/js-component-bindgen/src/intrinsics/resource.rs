@@ -118,20 +118,21 @@ impl ResourceIntrinsic {
             ),
 
             Self::ResourceTableCreateBorrow => output.push_str(
-                "
+                r#"
                 function rscTableCreateBorrow(table, rep, scopeId) {
+                    if (scopeId === undefined) {{ throw new Error("missing scopeId"); }}
                     const free = table[0] & ~T_FLAG;
                     if (free === 0) {
-                        table.push(scopeId ?? 0);
+                        table.push(scopeId);
                         table.push(rep);
                         return (table.length >> 1) - 1;
                     }
                     table[0] = table[free];
-                    table[free << 1] = scopeId ?? 0;
+                    table[free << 1] = scopeId;
                     table[(free << 1) + 1] = rep;
                     return free;
                 }
-            ",
+            "#,
             ),
 
             Self::ResourceTableCreateOwn => output.push_str(
@@ -199,6 +200,7 @@ impl ResourceIntrinsic {
                 let rsc_table_remove = Self::ResourceTableRemove.name();
                 let rsc_table_create_borrow = Self::ResourceTableCreateBorrow.name();
                 let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
+                let scope_id = Intrinsic::ScopeId.name();
                 output.push_str(&format!("
                     function resourceTransferBorrow(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
@@ -207,7 +209,7 @@ impl ResourceIntrinsic {
                         const rep = isOwn ? fromHandle & ~T_FLAG : {rsc_table_remove}(fromTable, fromHandle).rep;
                         if ({defined_resource_tables}[toTid]) return rep;
                         const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
-                        const newHandle = {rsc_table_create_borrow}(toTable, rep);
+                        const newHandle = {rsc_table_create_borrow}(toTable, rep, {scope_id});
                         {resource_borrows}.push({{ rid: toTid, handle: newHandle }});
                         return newHandle;
                     }}
