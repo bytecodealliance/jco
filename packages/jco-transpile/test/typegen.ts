@@ -13,20 +13,13 @@ suite('Type Generation', () => {
         });
         assert.strictEqual(Object.keys(files).length, 2);
         assert.strictEqual(Object.keys(files)[0], 'flavorful.d.ts');
-        assert.strictEqual(
-            Object.keys(files)[1],
-            'interfaces/test-flavorful-test.d.ts'
-        );
+        assert.strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
         assert.ok(
             Buffer.from(files[Object.keys(files)[0]]).includes(
-                "export * as test from './interfaces/test-flavorful-test.js'"
-            )
+                "export * as test from './interfaces/test-flavorful-test.js'",
+            ),
         );
-        assert.ok(
-            Buffer.from(files[Object.keys(files)[1]]).includes(
-                'export type ListInAlias = '
-            )
-        );
+        assert.ok(Buffer.from(files[Object.keys(files)[1]]).includes('export type ListInAlias = '));
     });
 
     test('type generation (guest)', async () => {
@@ -35,20 +28,9 @@ suite('Type Generation', () => {
             guest: true,
         });
         assert.strictEqual(Object.keys(files).length, 2);
-        assert.strictEqual(
-            Object.keys(files)[1],
-            'interfaces/test-flavorful-test.d.ts'
-        );
-        assert.ok(
-            Buffer.from(files[Object.keys(files)[0]]).includes(
-                "declare module 'test:flavorful/flavorful' {"
-            )
-        );
-        assert.ok(
-            Buffer.from(files[Object.keys(files)[1]]).includes(
-                "declare module 'test:flavorful/test' {"
-            )
-        );
+        assert.strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
+        assert.ok(Buffer.from(files[Object.keys(files)[0]]).includes("declare module 'test:flavorful/flavorful' {"));
+        assert.ok(Buffer.from(files[Object.keys(files)[1]]).includes("declare module 'test:flavorful/test' {"));
     });
 
     // https://github.com/bytecodealliance/jco/issues/624
@@ -58,28 +40,16 @@ suite('Type Generation', () => {
         });
 
         assert.strictEqual(Object.keys(files).length, 2);
-        assert.strictEqual(
-            Object.keys(files)[1],
-            'interfaces/fixtures-js-reserved-word-example.d.ts'
-        );
+        assert.strictEqual(Object.keys(files)[1], 'interfaces/fixtures-js-reserved-word-example.d.ts');
 
-        const [ worldDeclaration, interfaceDeclaration ] = Object.values(files);
+        const [worldDeclaration, interfaceDeclaration] = Object.values(files);
         const worldDeclarationContent = Buffer.from(worldDeclaration);
         const interfaceDeclarationContent = Buffer.from(interfaceDeclaration);
 
-        assert.ok(
-            worldDeclarationContent.includes(
-                "declare module 'fixtures:js-reserved-word/imports' {"
-            )
-        );
-        assert.ok(
-            interfaceDeclarationContent.includes(
-                "declare module 'fixtures:js-reserved-word/example' {"
-            )
-        );
+        assert.ok(worldDeclarationContent.includes("declare module 'fixtures:js-reserved-word/imports' {"));
+        assert.ok(interfaceDeclarationContent.includes("declare module 'fixtures:js-reserved-word/example' {"));
         assert(interfaceDeclarationContent.includes('export { _delete as delete };'));
         assert(interfaceDeclarationContent.includes('function _delete'));
-
     });
 
     // https://github.com/bytecodealliance/jco/issues/624
@@ -89,28 +59,16 @@ suite('Type Generation', () => {
         });
 
         assert.strictEqual(Object.keys(files).length, 2);
-        assert.strictEqual(
-            Object.keys(files)[1],
-            'interfaces/fixtures-js-reserved-word-example.d.ts'
-        );
+        assert.strictEqual(Object.keys(files)[1], 'interfaces/fixtures-js-reserved-word-example.d.ts');
 
-        const [ worldDeclaration, interfaceDeclaration ] = Object.values(files);
+        const [worldDeclaration, interfaceDeclaration] = Object.values(files);
         const worldDeclarationContent = Buffer.from(worldDeclaration);
         const interfaceDeclarationContent = Buffer.from(interfaceDeclaration);
 
-        assert(
-            worldDeclarationContent.includes(
-                "export type * as FixturesJsReservedWordExample"
-            ), 
-        );
-        assert(
-            interfaceDeclarationContent.includes(
-                "@module Interface fixtures:js-reserved-word/example"
-            ),
-        );
+        assert(worldDeclarationContent.includes('export type * as FixturesJsReservedWordExample'));
+        assert(interfaceDeclarationContent.includes('@module Interface fixtures:js-reserved-word/example'));
 
         assert(interfaceDeclarationContent.includes('export { _delete as delete };'));
         assert(interfaceDeclarationContent.includes('function _delete'));
-
     });
 });

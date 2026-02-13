@@ -16,35 +16,22 @@ suite('Transpile', () => {
 
     beforeAll(async () => {
         flavorfulWasmBytes = await readComponentBytes(
-            fileURLToPath(
-                new URL(
-                    `../../jco/test/fixtures/components/flavorful.component.wasm`,
-                    import.meta.url
-                )
-            )
+            fileURLToPath(new URL(`../../jco/test/fixtures/components/flavorful.component.wasm`, import.meta.url)),
         );
     });
 
     test('transpile (via API)', async () => {
         const { files } = await transpile(
-            fileURLToPath(
-                new URL(
-                    `../../jco/test/fixtures/components/flavorful.component.wasm`,
-                    import.meta.url
-                )
-            )
+            fileURLToPath(new URL(`../../jco/test/fixtures/components/flavorful.component.wasm`, import.meta.url)),
         );
         assert.ok(files['flavorful.component.js']);
     });
 
     test('transpilation', async () => {
         const name = 'flavorful';
-        const { files, imports, exports } = await transpileBytes(
-            flavorfulWasmBytes,
-            {
-                name,
-            }
-        );
+        const { files, imports, exports } = await transpileBytes(flavorfulWasmBytes, {
+            name,
+        });
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(exports.length, 3);
         assert.deepStrictEqual(exports[0], ['test', 'instance']);
@@ -53,19 +40,16 @@ suite('Transpile', () => {
 
     test('transpile to JS', async () => {
         const name = 'flavorful';
-        const { files, imports, exports } = await transpileBytes(
-            flavorfulWasmBytes,
-            {
-                map: {
-                    'test:flavorful/*': './*.js',
-                },
-                name,
-                validLiftingOptimization: true,
-                tlaCompat: true,
-                base64Cutoff: 0,
-                js: true,
-            }
-        );
+        const { files, imports, exports } = await transpileBytes(flavorfulWasmBytes, {
+            map: {
+                'test:flavorful/*': './*.js',
+            },
+            name,
+            validLiftingOptimization: true,
+            tlaCompat: true,
+            base64Cutoff: 0,
+            js: true,
+        });
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(exports.length, 3);
         assert.deepStrictEqual(exports[0], ['test', 'instance']);
@@ -81,15 +65,12 @@ suite('Transpile', () => {
 
     test('map imports', async () => {
         const name = 'flavorful';
-        const { files, imports } = await transpileBytes(
-            flavorfulWasmBytes,
-            {
-                name,
-                map: {
-                    'test:flavorful/*': '#*import',
-                },
-            }
-        );
+        const { files, imports } = await transpileBytes(flavorfulWasmBytes, {
+            name,
+            map: {
+                'test:flavorful/*': '#*import',
+            },
+        });
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(imports[0], '#testimport');
         const source = Buffer.from(files[name + '.js']).toString();
@@ -98,23 +79,17 @@ suite('Transpile', () => {
 
     test('transpile, optimize, minify', async () => {
         const name = 'flavorful';
-        const { files, imports, exports } = await transpileBytes(
-            flavorfulWasmBytes,
-            {
-                name,
-                minify: true,
-                validLiftingOptimization: true,
-                tlaCompat: true,
-                optimize: true,
-                base64Cutoff: 0,
-            }
-        );
+        const { files, imports, exports } = await transpileBytes(flavorfulWasmBytes, {
+            name,
+            minify: true,
+            validLiftingOptimization: true,
+            tlaCompat: true,
+            optimize: true,
+            base64Cutoff: 0,
+        });
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(exports.length, 3);
         assert.deepStrictEqual(exports[0], ['test', 'instance']);
-        assert.ok(
-            files[name + '.js'].length <
-                FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT
-        );
+        assert.ok(files[name + '.js'].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
     });
 });

@@ -78,9 +78,9 @@ dist
 `dist/transpiled/adder.js` is the entrypoint that can be used from "host" code:
 
 ```js
-import { add } from "./dist/transpiled/adder.js";
+import { add } from './dist/transpiled/adder.js';
 
-console.log("1 + 2 = " + add.add(1, 2));
+console.log('1 + 2 = ' + add.add(1, 2));
 ```
 
 You can try this example for yourself [in GitHub][gh-examples-transpile-adder].
@@ -114,7 +114,7 @@ async function example() {
 Guest types are the implementations of WIT interfaces that are used by JS components -- i.e. JS code that is
 turned into a component (by `jco componentize`/`componentize-js`) and performing useful work.
 
-For a given import in a WIT world, this type generation would enable *calling*/*using* the interface.
+For a given import in a WIT world, this type generation would enable _calling_/_using_ the interface.
 
 ### Guest type generation example
 
@@ -159,10 +159,10 @@ async function example() {
 }
 ```
 
-Host types are the implementations of WIT interfaces that are used by *post-transpilation* JS code,
-i.e. on the "host" (NodeJS + V8 or the browser), to make platform *imports* work.
+Host types are the implementations of WIT interfaces that are used by _post-transpilation_ JS code,
+i.e. on the "host" (NodeJS + V8 or the browser), to make platform _imports_ work.
 
-For a given import in a WIT world, this type generation would enable *implementation* of the imported
+For a given import in a WIT world, this type generation would enable _implementation_ of the imported
 functionality interface.
 
 ### Host type generation example

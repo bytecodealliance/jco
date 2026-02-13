@@ -1,9 +1,9 @@
-import { join } from "node:path";
-import { readFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 
 interface GetCoreModuleHelperArgs {
-    /** 
+    /**
      * Base directory to use for files that are read
      *
      * WARNING: paths are constructed with this base naively,
@@ -11,7 +11,7 @@ interface GetCoreModuleHelperArgs {
      */
     baseDir?: string;
 
-    /** 
+    /**
      * Whether to strip Wasm file suffixes like '.core.d.wasm'
      * this may be useful in web contexts.
      */
@@ -34,7 +34,7 @@ interface GetCoreModuleHelperArgs {
  * - Set the first argument of `instantiate()` to `undefined`.
  *
  * In that case, a loader that uses fetch and `WebAssembly.compile` will be generated for you.
-*/
+ */
 export function getCoreModuleWithBaseDir(args?: GetCoreModuleHelperArgs) {
     const baseDir = args?.baseDir ?? '.';
     const stripWasmSuffix = args?.stripWasmSuffix;

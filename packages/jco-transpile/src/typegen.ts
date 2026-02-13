@@ -95,15 +95,19 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
 
     let name;
     if (opts.name) {
-        name = opts.name
+        name = opts.name;
     } else if (opts.worldName) {
         const ns = opts.worldName.split(':').pop();
-        if (!ns) { throw new Error(`failed to parse out namespace from world name [${opts.worldName}]`); }
-        name = ns.split('/').pop()
+        if (!ns) {
+            throw new Error(`failed to parse out namespace from world name [${opts.worldName}]`);
+        }
+        name = ns.split('/').pop();
     } else {
         name = basename(witPath.slice(0, -extname(witPath).length || Infinity));
     }
-    if (!name) { throw new Error('failed to determine name'); }
+    if (!name) {
+        throw new Error('failed to determine name');
+    }
 
     let instantiation;
     if (opts.instantiation) {

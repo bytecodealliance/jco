@@ -4,15 +4,9 @@ import { extname, basename, resolve } from 'node:path';
 
 import { minify } from 'terser';
 
-import {
-    $init as $initBindgenComponent,
-    generate,
-} from '../vendor/js-component-bindgen-component.js';
+import { $init as $initBindgenComponent, generate } from '../vendor/js-component-bindgen-component.js';
 
-import {
-    $init as $initWasmToolsComponent,
-    tools,
-} from '../vendor/wasm-tools.js';
+import { $init as $initWasmToolsComponent, tools } from '../vendor/wasm-tools.js';
 const { componentEmbed, componentNew } = tools;
 
 import { runOptimizeComponent, type OptimizeOptions } from './opt.js';
@@ -21,7 +15,7 @@ import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 import { generateASMJS } from './asm.js';
 
 /** Representation of WIT enums */
-export type WITVariant<T, V> = { tag: T, val?: V };
+export type WITVariant<T, V> = { tag: T; val?: V };
 
 /** Instantiation mode for a transpiled component */
 export type InstantiationMode = 'async' | 'sync';
@@ -33,7 +27,7 @@ export type WITInstantiationMode = WITVariant<InstantiationMode, undefined>;
 export type AsyncMode = 'sync' | 'jspi';
 
 /** Async mode as a WIT variant */
-export type WITAsyncMode = WITVariant<AsyncMode, { imports: string[], exports: string[] }>;
+export type WITAsyncMode = WITVariant<AsyncMode, { imports: string[]; exports: string[] }>;
 
 /** Options for transpilation */
 export interface TranspilationOptions {
@@ -47,7 +41,7 @@ export interface TranspilationOptions {
      * which influeces whether imports can be supplied dynamically at instantiation
      * time or not.
      */
-    instantiation?: InstantiationMode,
+    instantiation?: InstantiationMode;
 
     /** How to import bindings */
     importBindings?: 'js' | 'optimized' | 'hybrid' | 'direct-optimized';
@@ -125,7 +119,7 @@ export interface TranspilationOptions {
     optimize?: boolean;
 
     /** Arguments to wasm-opt */
-    optimizeOptions?: OptimizeOptions,
+    optimizeOptions?: OptimizeOptions;
 
     /** Whether to use namespaced exports */
     namespacedExports?: boolean;
@@ -140,21 +134,21 @@ export interface TranspilationOptions {
     experimentalIdlImports?: boolean;
 
     /** Whether to shim WASI imports */
-    wasiShim?: boolean
+    wasiShim?: boolean;
 
     /** Whether to emit Typescript declaration files */
-    emitTypescriptDeclarations?: boolean
+    emitTypescriptDeclarations?: boolean;
 
     /** Whether to create a stub */
     stub?: boolean;
 }
 
 interface TranspilationResult {
-  files: {
-    [filename: string]: Uint8Array;
-  };
-  imports: string[];
-  exports: [string, 'function' | 'instance'][];
+    files: {
+        [filename: string]: Uint8Array;
+    };
+    imports: string[];
+    exports: [string, 'function' | 'instance'][];
 }
 
 /**
@@ -179,7 +173,7 @@ export async function transpile(componentPath: string, opts: TranspilationOption
                     dummy: true,
                     witPath: (isWindows ? '//?/' : '') + resolve(componentPath),
                 }),
-                []
+                [],
             );
         } catch (err) {
             console.error('failed to run component new:', err);
@@ -190,11 +184,8 @@ export async function transpile(componentPath: string, opts: TranspilationOption
     }
 
     if (!opts?.name) {
-        opts.name = basename(
-            componentPath.slice(0, -extname(componentPath).length || Infinity)
-        );
+        opts.name = basename(componentPath.slice(0, -extname(componentPath).length || Infinity));
     }
-
 
     if (opts?.asyncWasiImports) {
         opts.asyncImports = ASYNC_WASI_IMPORTS.concat(opts.asyncImports || []);
@@ -229,7 +220,7 @@ export async function transpileBytes(
     // Perform optimization if specified
     if (opts.optimize) {
         const optResult = await runOptimizeComponent(component, opts.optimizeOptions);
-        component =  optResult.component;
+        component = optResult.component;
     }
 
     // If WASI shimming has been enabled, update the map option
@@ -238,14 +229,13 @@ export async function transpileBytes(
             {
                 'wasi:cli/*': '@bytecodealliance/preview2-shim/cli#*',
                 'wasi:clocks/*': '@bytecodealliance/preview2-shim/clocks#*',
-                'wasi:filesystem/*':
-                    '@bytecodealliance/preview2-shim/filesystem#*',
+                'wasi:filesystem/*': '@bytecodealliance/preview2-shim/filesystem#*',
                 'wasi:http/*': '@bytecodealliance/preview2-shim/http#*',
                 'wasi:io/*': '@bytecodealliance/preview2-shim/io#*',
                 'wasi:random/*': '@bytecodealliance/preview2-shim/random#*',
                 'wasi:sockets/*': '@bytecodealliance/preview2-shim/sockets#*',
             },
-            opts.map || {}
+            opts.map || {},
         );
     }
 
@@ -255,7 +245,7 @@ export async function transpileBytes(
     if (opts.instantiation) {
         instantiation = { tag: opts.instantiation };
     } else if (opts.js) {
-    // Otherwise, if `--js` is present, an `instantiate` function is required.
+        // Otherwise, if `--js` is present, an `instantiate` function is required.
         instantiation = { tag: 'async' };
     }
 
@@ -265,13 +255,12 @@ export async function transpileBytes(
         !opts.asyncMode || opts.asyncMode === 'sync'
             ? undefined
             : {
-                tag: opts.asyncMode,
-                val: {
-                    imports: opts.asyncImports || [],
-                    exports: opts.asyncExports || [],
-                },
-            };
-
+                  tag: opts.asyncMode,
+                  val: {
+                      imports: opts.asyncImports || [],
+                      exports: opts.asyncExports || [],
+                  },
+              };
 
     // Build the options for calling into the js-component-bindgen's `generate()` export
     const generateOpts = {
@@ -279,9 +268,7 @@ export async function transpileBytes(
         map: Object.entries(opts.map ?? {}),
         instantiation,
         asyncMode,
-        importBindings: opts.importBindings
-            ? { tag: opts.importBindings }
-            : undefined,
+        importBindings: opts.importBindings ? { tag: opts.importBindings } : undefined,
         validLiftingOptimization: opts.validLiftingOptimization ?? false,
         tracing: opts.tracing ?? false,
         noNodejsCompat: opts.nodejsCompat === false,
@@ -318,26 +305,23 @@ export async function transpileBytes(
                 instantiation,
                 imports,
                 exports,
-            })
+            }),
         );
     }
 
     // Perform minification if configured
     if (opts.minify && jsFiles) {
-        const minified = await minify(
-            Buffer.from(jsFiles[1]).toString('utf8'),
-            {
-                module: true,
-                compress: {
-                    ecma: 2019,
-                    unsafe: true,
-                },
-                mangle: {
-                    keep_classnames: true,
-                },
-            }
-        );
-        jsFiles[1] = (new TextEncoder()).encode(minified.code);
+        const minified = await minify(Buffer.from(jsFiles[1]).toString('utf8'), {
+            module: true,
+            compress: {
+                ecma: 2019,
+                unsafe: true,
+            },
+            mangle: {
+                keep_classnames: true,
+            },
+        });
+        jsFiles[1] = new TextEncoder().encode(minified.code);
     }
 
     return { files: Object.fromEntries(files), imports, exports };
