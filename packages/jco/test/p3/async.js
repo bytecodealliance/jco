@@ -20,13 +20,13 @@ suite('Async (WASI P3)', () => {
                 ),
                 imports: new WASIShim().getImportObject(),
             },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                    },
-                },
-            },
+            // jco: {
+            //     transpile: {
+            //         extraArgs: {
+            //             minify: false,
+            //         },
+            //     },
+            // },
         });
 
         assert(instance.asyncAddS32);
