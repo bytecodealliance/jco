@@ -187,6 +187,10 @@ jobs:
             $OPT_TAG_PATTERN \
             --prepend=${{ steps.project-meta.outputs.project-dir }}/CHANGELOG.md
 
+      # Run fmt before pull request creation
+      - name: format codebase
+        run: npm run fmt
+
       # Create release PR
       - name: Create release prep PR
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
