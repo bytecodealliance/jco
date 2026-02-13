@@ -249,7 +249,7 @@ impl LiftIntrinsic {
                 let lift_flat_bool_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_bool_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_bool_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_bool_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -276,7 +276,7 @@ impl LiftIntrinsic {
                 let lift_flat_s8_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_s8_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_s8_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_s8_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -303,7 +303,7 @@ impl LiftIntrinsic {
                 let lift_flat_u8_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_u8_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_u8_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_u8_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -330,7 +330,7 @@ impl LiftIntrinsic {
                 let lift_flat_s16_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_s16_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_s16_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_s16_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -356,7 +356,7 @@ impl LiftIntrinsic {
                 let lift_flat_u16_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_u16_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_u16_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_u16_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -383,7 +383,7 @@ impl LiftIntrinsic {
                 let lift_flat_s32_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_s32_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_s32_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_s32_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -410,7 +410,7 @@ impl LiftIntrinsic {
                 let lift_flat_u32_fn = self.name();
                 output.push_str(&format!(r#"
                     function {lift_flat_u32_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_u32_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_u32_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -437,7 +437,7 @@ impl LiftIntrinsic {
                 let lift_flat_s64_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_s64_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_s64_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_s64_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -465,7 +465,7 @@ impl LiftIntrinsic {
                 let lift_flat_u64_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_u64_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_u64_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_u64_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -493,7 +493,7 @@ impl LiftIntrinsic {
                 let lift_flat_u32_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_u32_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_u32_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_u32_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -520,7 +520,7 @@ impl LiftIntrinsic {
                 let lift_flat_f64_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_f64_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_f64_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_f64_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -548,7 +548,7 @@ impl LiftIntrinsic {
                 let lift_flat_char_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_char_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_char_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_char_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -576,7 +576,7 @@ impl LiftIntrinsic {
                 let lift_flat_string_utf8_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_string_utf8_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_string_utf8_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_string_utf8_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -607,7 +607,7 @@ impl LiftIntrinsic {
                 let lift_flat_string_utf16_fn = self.name();
                 output.push_str(&format!("
                     function {lift_flat_string_utf16_fn}(ctx) {{
-                        {debug_log_fn}('[{lift_flat_string_utf16_fn}()] ctx', {{ ctx }});
+                        {debug_log_fn}('[{lift_flat_string_utf16_fn}()] args', {{ ctx }});
                         let val;
 
                         if (ctx.useDirectParams) {{
@@ -625,7 +625,7 @@ impl LiftIntrinsic {
                         const start = data.getUint32(ctx.storagePtr, vals[0], true);
                         const codeUnits = data.getUint32(ctx.storagePtr, vals[0] + 4, true);
                         val = {decoder}.decode(new Uint16Array(ctx.memory.buffer, start, codeUnits));
-                        ctx.storagePtr = ctx.storagePtr + 2 * codeUnits,
+                        ctx.storagePtr = ctx.storagePtr + 2 * codeUnits;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen = ctx.storageLen - 2 * codeUnits }}
 
                         return [val, ctx];
@@ -644,7 +644,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function {lift_flat_record_fn}(keysAndLiftFns) {{
                         return function {lift_flat_record_fn}Inner(ctx) {{
-                            {debug_log_fn}('[{lift_flat_record_fn}()] ctx', {{ ctx }});
+                            {debug_log_fn}('[{lift_flat_record_fn}()] args', {{ ctx }});
                             const {{ memory, useDirectParams, storagePtr, storageLen, params }} = ctx;
 
                             if (useDirectParams) {{
@@ -674,7 +674,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function {lift_flat_variant_fn}(casesAndLiftFns) {{
                         return function {lift_flat_variant_fn}Inner(ctx) {{
-                            {debug_log_fn}('[{lift_flat_variant_fn}()] ctx', {{ ctx }});
+                            {debug_log_fn}('[{lift_flat_variant_fn}()] args', {{ ctx }});
 
                             const origUseParams = ctx.useDirectParams;
 
@@ -723,7 +723,7 @@ impl LiftIntrinsic {
                 output.push_str(&format!("
                     function {lift_flat_list_fn}(elemLiftFn, alignment32, knownLen) {{
                         function {lift_flat_list_fn}Inner(ctx) {{
-                            {debug_log_fn}('[{lift_flat_list_fn}()] ctx', {{ ctx }});
+                            {debug_log_fn}('[{lift_flat_list_fn}()] args', {{ ctx }});
 
                             let metaPtr;
                             let dataPtr;
