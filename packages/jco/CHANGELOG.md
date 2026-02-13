@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.17.0] - 2026-02-13
+
+### 🐛 Bug Fixes
+
+- _(jco)_ eslint use in tests, avoid formatting tsc output by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(jco)_ comment out unminify by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ temporarily disable post-codegen lint by @vados-cosmonic in #1255
+
+- _(jco)_ use assert.strictEqual in value check by @vados-cosmonic in #1256
+
+- _(jco)_ temporarily disable s32 stream test by @vados-cosmonic
+
+- _(jco)_ add tests for p3 streams by @vados-cosmonic
+
+- _(jco)_ add regression test for improved mapping semantics by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ oxfmt by @vados-cosmonic
+
+- _(jco)_ swap eslint for oxlint by @vados-cosmonic
+
 ## [1.16.1] - 2026-02-04
 
 ### ⚙️ Miscellaneous Tasks
