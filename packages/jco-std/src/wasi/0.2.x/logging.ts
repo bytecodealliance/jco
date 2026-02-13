@@ -37,18 +37,18 @@
 
 //type LogFn = (s: string) => void;
 
-const DEFAULT_CONTEXT = 'jco-std/http/adapter/hono';
+const DEFAULT_CONTEXT = "jco-std/http/adapter/hono";
 
 const DEFAULT_LOG_FN_BUILDER = (context: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (level: string, msg: string, ...data: any[]) => {
-        console.error(`[${context}] [${level}] ${msg}`, { data });
-    }
-}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (level: string, msg: string, ...data: any[]) => {
+    console.error(`[${context}] [${level}] ${msg}`, { data });
+  };
+};
 
 interface BuildLoggerArgs {
-    logFnBuilder?: (context: string) => (level: string, msg: string) => void;
-    context?: string;
+  logFnBuilder?: (context: string) => (level: string, msg: string) => void;
+  context?: string;
 }
 
 /**
@@ -56,31 +56,31 @@ interface BuildLoggerArgs {
  * for logging at various levels
  */
 export function buildLogger(args?: BuildLoggerArgs) {
-    const context = args?.context ?? DEFAULT_CONTEXT;
-    const logFnBuilder = args?.logFnBuilder ?? DEFAULT_LOG_FN_BUILDER;
-    const logFn = logFnBuilder(context);
+  const context = args?.context ?? DEFAULT_CONTEXT;
+  const logFnBuilder = args?.logFnBuilder ?? DEFAULT_LOG_FN_BUILDER;
+  const logFn = logFnBuilder(context);
 
-    const fn = (msg: string, ...rest: string[]) => {
-        logFn('info', msg, ...rest);
-    };
-    fn.trace = (msg: string, ...rest: string[]) => {
-        logFn('trace', msg, ...rest);
-    };
-    fn.debug = (msg: string, ...rest: string[]) => {
-        logFn('debug', msg, ...rest);
-    };
-    fn.info = (msg: string, ...rest: string[]) => {
-        logFn('info', msg, ...rest);
-    };
-    fn.warn = (msg: string, ...rest: string[]) => {
-        logFn('warn', msg, ...rest);
-    };
-    fn.critical = (msg: string, ...rest: string[]) => {
-        logFn('critical', msg, ...rest);
-    };
-    fn.error = (msg: string, ...rest: string[]) => {
-        logFn('error', msg, ...rest);
-    };
+  const fn = (msg: string, ...rest: string[]) => {
+    logFn("info", msg, ...rest);
+  };
+  fn.trace = (msg: string, ...rest: string[]) => {
+    logFn("trace", msg, ...rest);
+  };
+  fn.debug = (msg: string, ...rest: string[]) => {
+    logFn("debug", msg, ...rest);
+  };
+  fn.info = (msg: string, ...rest: string[]) => {
+    logFn("info", msg, ...rest);
+  };
+  fn.warn = (msg: string, ...rest: string[]) => {
+    logFn("warn", msg, ...rest);
+  };
+  fn.critical = (msg: string, ...rest: string[]) => {
+    logFn("critical", msg, ...rest);
+  };
+  fn.error = (msg: string, ...rest: string[]) => {
+    logFn("error", msg, ...rest);
+  };
 
-    return fn;
+  return fn;
 }

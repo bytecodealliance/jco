@@ -8,9 +8,9 @@ export type WASICLIEnvironmentLike = WasiCliEnvironment02xLike;
 
 /** Similar to `wasi:cli/environment@0.2.x` */
 export interface WasiCliEnvironment02xLike {
-    getEnvironment: () => Array<[string, string]>;
-    getArguments: () => Array<string>;
-    initialCwd: () => string | undefined;
+  getEnvironment: () => Array<[string, string]>;
+  getArguments: () => Array<string>;
+  initialCwd: () => string | undefined;
 }
 
 /**
@@ -20,19 +20,19 @@ export interface WasiCliEnvironment02xLike {
  * or library to interact with environment in a generic way across WASI versions.
  */
 export interface WasiEnvironmentHelper {
-    /**
-     * Get all environment variables, as a list
-     *
-     * @returns {Record<string, string>}  config value
-     */
-    getAll: () => Array<[string, string]>;
+  /**
+   * Get all environment variables, as a list
+   *
+   * @returns {Record<string, string>}  config value
+   */
+  getAll: () => Array<[string, string]>;
 
-    /**
-     * Get all environment variables, as an object
-     *
-     * @returns {Record<string, string>}  config value
-     */
-    getAllObject: () => Record<string, string>;
+  /**
+   * Get all environment variables, as an object
+   *
+   * @returns {Record<string, string>}  config value
+   */
+  getAllObject: () => Record<string, string>;
 }
 
 /**
@@ -42,8 +42,8 @@ export interface WasiEnvironmentHelper {
  * @returns {Record<string, string>}
  */
 export function buildEnvHelperFromWASI(imports: WASICLIEnvironmentLike): WasiEnvironmentHelper {
-    return {
-        getAll: () => imports.getEnvironment(),
-        getAllObject: () => Object.fromEntries(imports.getEnvironment()),
-    };
+  return {
+    getAll: () => imports.getEnvironment(),
+    getAllObject: () => Object.fromEntries(imports.getEnvironment()),
+  };
 }

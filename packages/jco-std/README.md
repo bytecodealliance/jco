@@ -6,7 +6,7 @@ reusable libraries that can be used for building WebAssembly Components in Javas
 [WebAssembly Components][cm-book] are a WebAssembly binaries that use the Component Model,
 an evolving architecture for interoperabl WebAssembly libraries, aplications and environments.
 
-WebAssembly components can be used from server side applications *and* in the browser, and
+WebAssembly components can be used from server side applications _and_ in the browser, and
 `@bytecodealliance/jco-std` contains shared functionality and helpers for both environments.
 
 > [!WARNING]
@@ -26,26 +26,26 @@ To use `@bytecodealliance/jco-std` to make building [Hono][hono] applications ea
 use the `@bytecodealliance/jco-std/http/adapters/hono` export:
 
 ```ts
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
-import { fire } from '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/server';
+import { fire } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/server";
 
 const app = new Hono();
-app.get('/', () => "Hello World!");
+app.get("/", () => "Hello World!");
 
 fire(app);
 
 // Although we've called `fire()` with wasi HTTP configured for use above,
 // we still need to actually export the `wasi:http/incoming-handler` interface object,
 // as componentize-js will be looking for the ES module export.
-export { incomingHandler } from '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/server';
+export { incomingHandler } from "@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono/server";
 ```
 
 > [!NOTE]
 > We use `@bytecodealliance/jco-std/wasi/0.2.x`, but if you'd like to use a specific version, you can
 > use an explicitly versioned export like `@bytecodealliance/jco-std/wasi/0.2.6`.
 >
-> Note that using `0.2.x` is similar to using `latest`, it may change at *any* library update.
+> Note that using `0.2.x` is similar to using `latest`, it may change at _any_ library update.
 
 [hono]: https://hono.dev
 
@@ -56,7 +56,7 @@ Below is a list of utilties provided by `@bytecodealliance/jco-std`:
 ## HTTP
 
 | Export                  | Description                                                                   |
-|-------------------------|-------------------------------------------------------------------------------|
+| ----------------------- | ----------------------------------------------------------------------------- |
 | `http/adapters/hono`    | Enables easier building of [Hono][hono] HTTP servers                          |
 | `http/adapters/express` | Provides a simple [Express][express]-like interface for building HTTP servers |
 

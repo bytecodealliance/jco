@@ -4,91 +4,74 @@
 
 ### 🐛 Bug Fixes
 
-* *(std)* remove incoming request resource disposal by @vados-cosmonic
-
-
-
+- _(std)_ remove incoming request resource disposal by @vados-cosmonic
 
 ## [0.1.0] - 2025-11-08
 
 ### 🚀 Features
 
-* *(std)* introduce 0.2.x export by @vados-cosmonic
+- _(std)_ introduce 0.2.x export by @vados-cosmonic
 
-* *(std)* add 0.2.x export by @vados-cosmonic
+- _(std)_ add 0.2.x export by @vados-cosmonic
 
-* *(std)* separate exports for middlewares, refactor server export by @vados-cosmonic
-
+- _(std)_ separate exports for middlewares, refactor server export by @vados-cosmonic
 
 ### 🚜 Refactor
 
-* *(std)* add comments, make folder for middleware, fix exports by @vados-cosmonic
-
+- _(std)_ add comments, make folder for middleware, fix exports by @vados-cosmonic
 
 ### 🧪 Testing
 
-* *(std)* remove custom resolver config by @vados-cosmonic in #1125
+- _(std)_ remove custom resolver config by @vados-cosmonic in #1125
 
-* *(std)* update tests to new export format by @vados-cosmonic
+- _(std)_ update tests to new export format by @vados-cosmonic
 
-* *(std)* fix node_modules resolution for app fixture tests by @vados-cosmonic
-
-
-
+- _(std)_ fix node_modules resolution for app fixture tests by @vados-cosmonic
 
 ## [0.0.2] - 2025-11-07
 
 ### 🚀 Features
 
-* *(std)* remove star imports, add more docs by @vados-cosmonic in #1117
-
+- _(std)_ remove star imports, add more docs by @vados-cosmonic in #1117
 
 ### 🐛 Bug Fixes
 
-* *(std)* export paths by @vados-cosmonic
-
-
-
+- _(std)_ export paths by @vados-cosmonic
 
 ## [0.0.1] - 2025-11-07
 
 ### 🚀 Features
 
-* *(std)* add jco-std along with hono adapter by @vados-cosmonic
-
+- _(std)_ add jco-std along with hono adapter by @vados-cosmonic
 
 ### 🐛 Bug Fixes
 
-* *(std)* release automation for std by @vados-cosmonic in #1112
+- _(std)_ release automation for std by @vados-cosmonic in #1112
 
-* *(std)* lint by @vados-cosmonic in #1107
+- _(std)_ lint by @vados-cosmonic in #1107
 
-* *(std)* request creation code for hono integration by @vados-cosmonic
+- _(std)_ request creation code for hono integration by @vados-cosmonic
 
-* *(std)* working hacked response by @vados-cosmonic in #1093
+- _(std)_ working hacked response by @vados-cosmonic in #1093
 
-* *(std)* use alias for jco-std test by @vados-cosmonic
-
+- _(std)_ use alias for jco-std test by @vados-cosmonic
 
 ### 🚜 Refactor
 
-* *(std)* reuse request/response parsing impls by @vados-cosmonic
+- _(std)_ reuse request/response parsing impls by @vados-cosmonic
 
-* *(std)* switch to wasi:http as the default method by @vados-cosmonic
-
+- _(std)_ switch to wasi:http as the default method by @vados-cosmonic
 
 ### 🧪 Testing
 
-* *(std)* add retry for e2e app tests by @vados-cosmonic in #1105
+- _(std)_ add retry for e2e app tests by @vados-cosmonic in #1105
 
-* *(std)* fix up hono tests by @vados-cosmonic
+- _(std)_ fix up hono tests by @vados-cosmonic
 
-* *(std)* remove unused config by @vados-cosmonic
-
+- _(std)_ remove unused config by @vados-cosmonic
 
 ### ⚙️ Miscellaneous Tasks
 
-* *(std)* remove unused code, some fixups by @vados-cosmonic
+- _(std)_ remove unused code, some fixups by @vados-cosmonic
 
-* *(std)* improve apps tests, lint, update workflow by @vados-cosmonic
-
+- _(std)_ improve apps tests, lint, update workflow by @vados-cosmonic

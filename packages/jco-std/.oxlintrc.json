@@ -1,8 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "typescript"
-  ],
+  "plugins": ["typescript"],
   "categories": {
     "correctness": "off"
   },
@@ -18,10 +16,7 @@
   ],
   "rules": {
     "no-unused-vars": "error",
-    "curly": [
-      "error",
-      "all"
-    ],
+    "curly": ["error", "all"],
     "@typescript-eslint/ban-ts-comment": "error",
     "no-array-constructor": "error",
     "@typescript-eslint/no-duplicate-enum-values": "error",
@@ -44,12 +39,7 @@
   },
   "overrides": [
     {
-      "files": [
-        "**/*.ts",
-        "**/*.tsx",
-        "**/*.mts",
-        "**/*.cts"
-      ],
+      "files": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
       "rules": {
         "constructor-super": "off",
         "getter-return": "off",

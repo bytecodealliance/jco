@@ -6,14 +6,17 @@ import { createMiddleware } from "hono/factory";
 // Transpilers & bundlers must essentially ignore this component when building.
 import * as wasiEnv from "wasi:cli/environment@0.2.3";
 
-import { buildEnvHelperFromWASI, type WasiEnvironmentHelper } from '../../../../../0.2.x/cli/environment.js';
+import {
+  buildEnvHelperFromWASI,
+  type WasiEnvironmentHelper,
+} from "../../../../../0.2.x/cli/environment.js";
 
-export type { WasiEnvironmentHelper } from '../../../../../0.2.x/cli/environment.js';
+export type { WasiEnvironmentHelper } from "../../../../../0.2.x/cli/environment.js";
 
 export type WASIEnvMiddleware = {
-    Variables: {
-        env: WasiEnvironmentHelper,
-    },
+  Variables: {
+    env: WasiEnvironmentHelper;
+  };
 };
 
 /**
@@ -46,8 +49,8 @@ export type WASIEnvMiddleware = {
  * @see https://github.com/WebAssembly/wasi-cli/blob/main/wit/environment.wit
  */
 export const wasiEnvMiddleware = () => {
-    return createMiddleware<WASIEnvMiddleware>(async (c, next) => {
-        c.set('env', buildEnvHelperFromWASI(wasiEnv));
-        await next();
-    });
+  return createMiddleware<WASIEnvMiddleware>(async (c, next) => {
+    c.set("env", buildEnvHelperFromWASI(wasiEnv));
+    await next();
+  });
 };

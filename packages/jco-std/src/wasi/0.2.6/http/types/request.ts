@@ -20,6 +20,6 @@ import { genReadWASIRequestFn } from "../../../0.2.x/http/types/request.js";
  * @see https://github.com/WebAssembly/wasi-http
  */
 export async function readWASIRequest(wasiIncomingRequest: IncomingRequest): Promise<Request> {
-    const f = genReadWASIRequestFn(IncomingBody)
-    return await f(wasiIncomingRequest);
+  const f = genReadWASIRequestFn(IncomingBody);
+  return await f(wasiIncomingRequest);
 }
