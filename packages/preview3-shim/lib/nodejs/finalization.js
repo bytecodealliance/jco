@@ -1,10 +1,10 @@
 let REGISTRY = null;
 
 function getRegistry() {
-    if (!REGISTRY) {
-        REGISTRY = new FinalizationRegistry((dispose) => dispose());
-    }
-    return REGISTRY;
+  if (!REGISTRY) {
+    REGISTRY = new FinalizationRegistry((dispose) => dispose());
+  }
+  return REGISTRY;
 }
 
 // While strictly speaking all components should handle their disposal,
@@ -14,20 +14,20 @@ function getRegistry() {
 // for various reasons may end up leaning on JS GC inadvertantly.
 
 export function registerDispose(resource, parent = null, id, disposeFn) {
-    const dummySymbol = Symbol();
+  const dummySymbol = Symbol();
 
-    const finalizer = () => {
-        if (parent?.[dummySymbol]) {
-            return;
-        }
-        disposeFn(id);
-    };
+  const finalizer = () => {
+    if (parent?.[dummySymbol]) {
+      return;
+    }
+    disposeFn(id);
+  };
 
-    getRegistry().register(resource, finalizer, finalizer);
-    return finalizer;
+  getRegistry().register(resource, finalizer, finalizer);
+  return finalizer;
 }
 
 export function earlyDispose(finalizer) {
-    getRegistry().unregister(finalizer);
-    finalizer();
+  getRegistry().unregister(finalizer);
+  finalizer();
 }
