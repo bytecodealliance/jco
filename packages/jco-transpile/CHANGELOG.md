@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.2] - 2026-02-13
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ oxfmt by @vados-cosmonic
+
+- _(transpile)_ swap eslint for oxlint by @vados-cosmonic
+
+- _(transpile)_ add script for building jco when necessary by @vados-cosmonic
+
 ## [0.1.1] - 2025-11-06
 
 ### 🚀 Features
