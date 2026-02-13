@@ -19,92 +19,96 @@ import type { InputStream, Pollable } from "wasi:io/streams@0.2.3";
  *
  */
 export function genReadWASIRequestFn(incomingBodyTy: typeof IncomingBody) {
-    return async function readWASIRequest(wasiIncomingRequest: IncomingRequest): Promise<Request> {
-        if (!wasiIncomingRequest) {
-            throw new TypeError('WASI incoming request not provided');
-        }
-        const method = wasiHTTPMethodToString(wasiIncomingRequest.method());
-        const pathWithQuery = wasiIncomingRequest.pathWithQuery();
-
-        const schemeRaw = wasiIncomingRequest.scheme();
-        let scheme;
-        switch (schemeRaw.tag) {
-        case 'HTTP':
-            scheme = 'http'
-            break;
-        case 'HTTPS':
-            scheme = 'https'
-            break;
-        default:
-            throw new Error(`unexpected scheme [${schemeRaw.tag}]`);
-        }
-
-        const authority = wasiIncomingRequest.authority();
-        const decoder = new TextDecoder('utf-8');
-        const headers = Object.fromEntries(
-            wasiIncomingRequest.headers().entries().map(([k,valueBytes]) => {
-                return [k, decoder.decode(valueBytes)];
-            })
-        );
-        const Request = ensureGlobalRequest();
-        const ReadableStream = ensureGlobalReadableStream();
-
-        let incomingBody: IncomingBody;
-        let incomingBodyStream: InputStream;
-        let incomingBodyPollable: Pollable;
-
-        let body: ReadableStream;
-        if (requestShouldHaveBody({ method })) {
-            body = new ReadableStream({
-                start() {
-                    if (!incomingBody) {
-                        incomingBody = wasiIncomingRequest.consume();
-                        incomingBodyStream = incomingBody.stream();
-                        incomingBodyPollable = incomingBodyStream.subscribe();
-                    }
-                },
-
-                pull(controller) {
-                    // Read all information coming from the request
-                    while (true) {
-                        // Wait until the pollable is ready
-                        if (!incomingBodyPollable.ready()) {
-                            incomingBodyPollable.block();
-                        }
-
-                        try {
-                            const bytes = incomingBodyStream.read(DEFAULT_INCOMING_BODY_READ_MAX_BYTES);
-                            if (bytes.length === 0) {
-                                break;
-                            }
-                            controller.enqueue(bytes);
-                        } catch (err) {
-                            if (err.payload.tag === 'closed') { break; }
-                            throw err;
-                        }
-                    }
-
-                    // Once information has all been read we can clean up
-                    incomingBodyPollable[Symbol.dispose]();
-                    incomingBodyStream[Symbol.dispose]();
-
-                    // Here we finish with the appropriate IncomingBody static method
-                    // (this differs by WIT iface version)
-                    incomingBodyTy.finish(incomingBody);
-
-                    controller.close();
-                },
-            });
-
-        }
-
-        const url = `${scheme}://${authority}${pathWithQuery}`;
-        const req = new Request(url, {
-            method,
-            headers,
-            body,
-        });
-
-        return req;
+  return async function readWASIRequest(wasiIncomingRequest: IncomingRequest): Promise<Request> {
+    if (!wasiIncomingRequest) {
+      throw new TypeError("WASI incoming request not provided");
     }
+    const method = wasiHTTPMethodToString(wasiIncomingRequest.method());
+    const pathWithQuery = wasiIncomingRequest.pathWithQuery();
+
+    const schemeRaw = wasiIncomingRequest.scheme();
+    let scheme;
+    switch (schemeRaw.tag) {
+      case "HTTP":
+        scheme = "http";
+        break;
+      case "HTTPS":
+        scheme = "https";
+        break;
+      default:
+        throw new Error(`unexpected scheme [${schemeRaw.tag}]`);
+    }
+
+    const authority = wasiIncomingRequest.authority();
+    const decoder = new TextDecoder("utf-8");
+    const headers = Object.fromEntries(
+      wasiIncomingRequest
+        .headers()
+        .entries()
+        .map(([k, valueBytes]) => {
+          return [k, decoder.decode(valueBytes)];
+        }),
+    );
+    const Request = ensureGlobalRequest();
+    const ReadableStream = ensureGlobalReadableStream();
+
+    let incomingBody: IncomingBody;
+    let incomingBodyStream: InputStream;
+    let incomingBodyPollable: Pollable;
+
+    let body: ReadableStream;
+    if (requestShouldHaveBody({ method })) {
+      body = new ReadableStream({
+        start() {
+          if (!incomingBody) {
+            incomingBody = wasiIncomingRequest.consume();
+            incomingBodyStream = incomingBody.stream();
+            incomingBodyPollable = incomingBodyStream.subscribe();
+          }
+        },
+
+        pull(controller) {
+          // Read all information coming from the request
+          while (true) {
+            // Wait until the pollable is ready
+            if (!incomingBodyPollable.ready()) {
+              incomingBodyPollable.block();
+            }
+
+            try {
+              const bytes = incomingBodyStream.read(DEFAULT_INCOMING_BODY_READ_MAX_BYTES);
+              if (bytes.length === 0) {
+                break;
+              }
+              controller.enqueue(bytes);
+            } catch (err) {
+              if (err.payload.tag === "closed") {
+                break;
+              }
+              throw err;
+            }
+          }
+
+          // Once information has all been read we can clean up
+          incomingBodyPollable[Symbol.dispose]();
+          incomingBodyStream[Symbol.dispose]();
+
+          // Here we finish with the appropriate IncomingBody static method
+          // (this differs by WIT iface version)
+          incomingBodyTy.finish(incomingBody);
+
+          controller.close();
+        },
+      });
+    }
+
+    const url = `${scheme}://${authority}${pathWithQuery}`;
+    const req = new Request(url, {
+      method,
+      headers,
+      body,
+    });
+
+    return req;
+  };
 }

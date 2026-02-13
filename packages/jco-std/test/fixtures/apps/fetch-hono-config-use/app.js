@@ -1,14 +1,12 @@
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
 // NOTE: we must use 0.2.3 here, because StarlingMonkey determines
 // the version of `wasi:http` that is used with the built in fetch-event
 // integration, and as of now that is `wasi:http@0.2.3`
-import {
-    fire,
-} from '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/server';
+import { fire } from "@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/server";
 
-import { wasiEnvMiddleware } from '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/env';
-import { wasiConfigMiddleware } from '@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/config';
+import { wasiEnvMiddleware } from "@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/env";
+import { wasiConfigMiddleware } from "@bytecodealliance/jco-std/wasi/0.2.3/http/adapters/hono/middleware/config";
 
 const app = new Hono();
 
@@ -21,30 +19,34 @@ app.use(wasiEnvMiddleware());
 app.use(wasiConfigMiddleware());
 
 // Use logging middleware, via the custom logger
-app.post('/', async (c) => {
-    const env = c.get('env');
-    const config = c.get('config');
+app.post("/", async (c) => {
+  const env = c.get("env");
+  const config = c.get("config");
 
-    // Ensure the middlewares worked
-    if (!env) { return c.json({ status: 'error', msg: 'missing env helper'}); }
-    if (!config) { return c.json({ status: 'error', msg: 'missing config helper'}); }
+  // Ensure the middlewares worked
+  if (!env) {
+    return c.json({ status: "error", msg: "missing env helper" });
+  }
+  if (!config) {
+    return c.json({ status: "error", msg: "missing config helper" });
+  }
 
-    // Extract keys from JSON post body
-    const reqBody = await c.req.json();
-    const envKey = reqBody?.env?.key;
-    const configKey = reqBody?.config?.key;
+  // Extract keys from JSON post body
+  const reqBody = await c.req.json();
+  const envKey = reqBody?.env?.key;
+  const configKey = reqBody?.config?.key;
 
-    // Retrieve values
-    const envValue = env.getAllObject()[envKey];
-    const configValue = config.get(configKey);
+  // Retrieve values
+  const envValue = env.getAllObject()[envKey];
+  const configValue = config.get(configKey);
 
-    return c.json({
-        status: 'success',
-        data: {
-            env: { key: envKey, value: envValue },
-            config: { key: configKey, value: configValue },
-        },
-    });
+  return c.json({
+    status: "success",
+    data: {
+      env: { key: envKey, value: envValue },
+      config: { key: configKey, value: configValue },
+    },
+  });
 });
 
 fire(app, { useFetchEvent: true });
