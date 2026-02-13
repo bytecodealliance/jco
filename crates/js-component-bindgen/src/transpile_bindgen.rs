@@ -3438,12 +3438,7 @@ impl<'a> Instantiator<'a, '_> {
                     }
                     // For custom types we must recur to properly connect the inner type
                     Some(elem_ty @ Type::Id(_t)) => {
-                        self.connect_p3_resources(
-                            &id,
-                            &Some(elem_ty.clone()),
-                            iface_ty,
-                            resource_map,
-                        );
+                        self.connect_p3_resources(&id, &Some(*elem_ty), iface_ty, resource_map);
                     }
                     // For basic types that are connected (non inner types) we can do a generic connect
                     Some(_) => {
