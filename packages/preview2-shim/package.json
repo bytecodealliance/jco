@@ -2,6 +2,11 @@
   "name": "@bytecodealliance/preview2-shim",
   "version": "0.17.8",
   "description": "WASI Preview2 shim for JS environments",
+  "homepage": "https://github.com/bytecodealliance/jco#readme",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/jco/issues"
+  },
+  "license": "(Apache-2.0 WITH LLVM-exception)",
   "author": "Guy Bedford, Eduardo Rodrigues<16357187+eduardomourar@users.noreply.github.com>",
   "contributors": [
     {
@@ -20,17 +25,12 @@
     "type": "git",
     "url": "git+https://github.com/bytecodealliance/jco.git"
   },
-  "license": "(Apache-2.0 WITH LLVM-exception)",
-  "bugs": {
-    "url": "https://github.com/bytecodealliance/jco/issues"
-  },
-  "homepage": "https://github.com/bytecodealliance/jco#readme",
-  "type": "module",
-  "types": "./types/index.d.ts",
   "files": [
     "types",
     "lib"
   ],
+  "type": "module",
+  "types": "./types/index.d.ts",
   "exports": {
     ".": {
       "types": "./types/index.d.ts",

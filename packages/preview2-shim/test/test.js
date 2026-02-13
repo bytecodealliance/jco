@@ -1,7 +1,5 @@
 import { env } from "node:process";
-import {
-  throws
-} from "node:assert";
+import { throws } from "node:assert";
 import { fileURLToPath } from "node:url";
 
 import { suite, test, assert, beforeEach, afterEach } from "vitest";
@@ -11,12 +9,8 @@ const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 suite("Node.js Preview2", () => {
   test("Stdio", async () => {
     const { cli } = await import("@bytecodealliance/preview2-shim");
-    cli.stdout
-      .getStdout()
-      .blockingWriteAndFlush(new TextEncoder().encode("test stdout"));
-    cli.stderr
-      .getStderr()
-      .blockingWriteAndFlush(new TextEncoder().encode("test stderr"));
+    cli.stdout.getStdout().blockingWriteAndFlush(new TextEncoder().encode("test stdout"));
+    cli.stderr.getStderr().blockingWriteAndFlush(new TextEncoder().encode("test stderr"));
   });
 
   suite("Clocks", () => {
@@ -77,7 +71,9 @@ suite("Node.js Preview2", () => {
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
       assert.ok(nextNow - curNow >= 10e6);
-      if (!env.CI) { assert.ok(nextNow - curNow < 15e6); }
+      if (!env.CI) {
+        assert.ok(nextNow - curNow < 15e6);
+      }
     });
 
     test("Monotonic clock subscribe instant", async () => {
@@ -93,7 +89,9 @@ suite("Node.js Preview2", () => {
       // verify we are at the right time, and within 1ms of the original now
       const nextNow = monotonicClock.now();
       assert.ok(nextNow - curNow >= 10e6);
-      if (!env.CI) { assert.ok(nextNow - curNow < 15e6); }
+      if (!env.CI) {
+        assert.ok(nextNow - curNow < 15e6);
+      }
     });
   });
 
@@ -112,7 +110,9 @@ suite("Node.js Preview2", () => {
       const poll = stream.subscribe();
       poll.block();
       let buf = stream.read(10000n);
-      while (buf.byteLength === 0) {buf = stream.read(10000n);}
+      while (buf.byteLength === 0) {
+        buf = stream.read(10000n);
+      }
       const source = new TextDecoder().decode(buf);
       assert.ok(source.includes("UNIQUE STRING"));
       toDispose.push(stream);
@@ -160,9 +160,7 @@ suite("Node.js Preview2", () => {
       const responseHeaders = incomingResponseResult.val.headers().entries();
 
       const decoder = new TextDecoder();
-      const headers = Object.fromEntries(
-        responseHeaders.map(([k, v]) => [k, decoder.decode(v)]),
-      );
+      const headers = Object.fromEntries(responseHeaders.map(([k, v]) => [k, decoder.decode(v)]));
 
       let responseBody;
       const incomingBody = incomingResponseResult.val.consume();
@@ -174,7 +172,9 @@ suite("Node.js Preview2", () => {
           try {
             buf = bodyStream.read(5000n);
           } catch (e) {
-            if (e.tag === "closed") {break;}
+            if (e.tag === "closed") {
+              break;
+            }
             throw e.val || e;
           }
         }
@@ -328,7 +328,7 @@ suite("Node.js Preview2", () => {
 
     test(
       "tcp.connect(): should connect to a valid ipv4 address and port=0",
-      { retry: env.CI ?  3 : 0 },
+      { retry: env.CI ? 3 : 0 },
       testWithGCWrap(async () => {
         const { lookup } = await import("node:dns");
         const { sockets } = await import("@bytecodealliance/preview2-shim");
@@ -338,9 +338,7 @@ suite("Node.js Preview2", () => {
         const pollable = tcpSocket.subscribe();
 
         const googleIp = await new Promise((resolve, reject) =>
-          lookup("google.com", (err, result) =>
-            err ? reject(err) : resolve(result),
-          ),
+          lookup("google.com", (err, result) => (err ? reject(err) : resolve(result))),
         );
 
         tcpSocket.startConnect(network, {
@@ -372,7 +370,9 @@ suite("Node.js Preview2", () => {
             try {
               buf = input.read(5000n);
             } catch (e) {
-              if (e.tag === "closed") {break;}
+              if (e.tag === "closed") {
+                break;
+              }
               throw e.val || e;
             }
           }
@@ -503,28 +503,29 @@ suite("Node.js Preview2", () => {
 });
 
 suite("HTTPServer", () => {
-    test(
-        "HTTPServer: can retrieve randomized server address",
-        testWithGCWrap(async () => {
-            const { HTTPServer } = await import("@bytecodealliance/preview2-shim/http");
-            const server = new HTTPServer({
-                handle() {
-                    throw new Error("never called");
-                }
-            });
-            server.listen(0);
-            const address = server.address();
-            assert(Number.isSafeInteger(address?.port) && address?.port != 0, "a random port was assigned and retrieved");
-        }),
-    );
+  test(
+    "HTTPServer: can retrieve randomized server address",
+    testWithGCWrap(async () => {
+      const { HTTPServer } = await import("@bytecodealliance/preview2-shim/http");
+      const server = new HTTPServer({
+        handle() {
+          throw new Error("never called");
+        },
+      });
+      server.listen(0);
+      const address = server.address();
+      assert(
+        Number.isSafeInteger(address?.port) && address?.port != 0,
+        "a random port was assigned and retrieved",
+      );
+    }),
+  );
 });
 
 suite("Instantiation", () => {
   test("WASIShim export (random)", async () => {
     const { random } = await import("@bytecodealliance/preview2-shim");
-    const { WASIShim } = await import(
-      "@bytecodealliance/preview2-shim/instantiation"
-    );
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
     const shim = new WASIShim();
     assert.ok(shim);
     assert.deepStrictEqual(
@@ -543,9 +544,7 @@ suite("Instantiation", () => {
 
   test("WASIShim export override", async () => {
     const { random } = await import("@bytecodealliance/preview2-shim");
-    const { WASIShim } = await import(
-      "@bytecodealliance/preview2-shim/instantiation"
-    );
+    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
     const invalidWASIShim = {
       random: {
         random: {
@@ -568,7 +567,6 @@ suite("Instantiation", () => {
   });
 });
 
-
 suite("Sandboxing", () => {
   let originalEnv;
   let originalArgs;
@@ -583,7 +581,7 @@ suite("Sandboxing", () => {
   afterEach(async () => {
     const { cli, filesystem } = await import("@bytecodealliance/preview2-shim");
     // Restore default state
-    filesystem._setPreopens({ '/': '/' });
+    filesystem._setPreopens({ "/": "/" });
     cli._setEnv(Object.fromEntries(originalEnv));
     cli._setArgs(originalArgs);
   });
@@ -603,12 +601,12 @@ suite("Sandboxing", () => {
     const { filesystem } = await import("@bytecodealliance/preview2-shim");
 
     filesystem._setPreopens({
-      '/custom': '/tmp'
+      "/custom": "/tmp",
     });
 
     const preopens = filesystem.preopens.getDirectories();
     assert.strictEqual(preopens.length, 1, "Should have exactly one preopen");
-    assert.strictEqual(preopens[0][1], '/custom', "Virtual path should be /custom");
+    assert.strictEqual(preopens[0][1], "/custom", "Virtual path should be /custom");
   });
 
   test("_getPreopens returns current preopens", async () => {
@@ -617,7 +615,7 @@ suite("Sandboxing", () => {
     const preopens = filesystem._getPreopens();
     assert.ok(Array.isArray(preopens), "Should return an array");
     // The returned array should be a copy
-    preopens.push(['fake', '/fake']);
+    preopens.push(["fake", "/fake"]);
     const preopensAfter = filesystem._getPreopens();
     assert.notStrictEqual(preopens.length, preopensAfter.length, "Should return a copy");
   });
@@ -627,12 +625,12 @@ suite("Sandboxing", () => {
 
     const sandboxedShim = new WASIShim({
       sandbox: {
-        preopens: {}
-      }
+        preopens: {},
+      },
     });
 
     const importObj = sandboxedShim.getImportObject();
-    const dirs = importObj['wasi:filesystem/preopens'].getDirectories();
+    const dirs = importObj["wasi:filesystem/preopens"].getDirectories();
     assert.strictEqual(dirs.length, 0, "Should have no preopens");
   });
 
@@ -641,13 +639,16 @@ suite("Sandboxing", () => {
 
     const customShim = new WASIShim({
       sandbox: {
-        env: { 'CUSTOM_VAR': 'custom_value', 'ANOTHER': 'value2' }
-      }
+        env: { CUSTOM_VAR: "custom_value", ANOTHER: "value2" },
+      },
     });
 
     const importObj = customShim.getImportObject();
-    const env = importObj['wasi:cli/environment'].getEnvironment();
-    assert.deepStrictEqual(env, [['CUSTOM_VAR', 'custom_value'], ['ANOTHER', 'value2']]);
+    const env = importObj["wasi:cli/environment"].getEnvironment();
+    assert.deepStrictEqual(env, [
+      ["CUSTOM_VAR", "custom_value"],
+      ["ANOTHER", "value2"],
+    ]);
   });
 
   test("WASIShim with custom args", async () => {
@@ -655,13 +656,13 @@ suite("Sandboxing", () => {
 
     const customShim = new WASIShim({
       sandbox: {
-        args: ['program', '--flag', 'value']
-      }
+        args: ["program", "--flag", "value"],
+      },
     });
 
     const importObj = customShim.getImportObject();
-    const args = importObj['wasi:cli/environment'].getArguments();
-    assert.deepStrictEqual(args, ['program', '--flag', 'value']);
+    const args = importObj["wasi:cli/environment"].getArguments();
+    assert.deepStrictEqual(args, ["program", "--flag", "value"]);
   });
 
   test("WASIShim with enableNetwork=false denies network", async () => {
@@ -669,27 +670,27 @@ suite("Sandboxing", () => {
 
     const noNetworkShim = new WASIShim({
       sandbox: {
-        enableNetwork: false
-      }
+        enableNetwork: false,
+      },
     });
 
     const importObj = noNetworkShim.getImportObject();
 
     // TCP socket can be created, but operations are denied
-    const tcpSocket = importObj['wasi:sockets/tcp-create-socket'].createTcpSocket('ipv4');
-    const network = importObj['wasi:sockets/instance-network'].instanceNetwork();
+    const tcpSocket = importObj["wasi:sockets/tcp-create-socket"].createTcpSocket("ipv4");
+    const network = importObj["wasi:sockets/instance-network"].instanceNetwork();
 
     // Bind should throw access-denied
     assert.throws(() => {
-      tcpSocket.startBind(network, { tag: 'ipv4', val: { address: [127, 0, 0, 1], port: 0 } });
+      tcpSocket.startBind(network, { tag: "ipv4", val: { address: [127, 0, 0, 1], port: 0 } });
     }, /access-denied/);
 
     // UDP socket can be created, but operations are denied
-    const udpSocket = importObj['wasi:sockets/udp-create-socket'].createUdpSocket('ipv4');
+    const udpSocket = importObj["wasi:sockets/udp-create-socket"].createUdpSocket("ipv4");
 
     // Bind should throw access-denied
     assert.throws(() => {
-      udpSocket.startBind(network, { tag: 'ipv4', val: { address: [127, 0, 0, 1], port: 0 } });
+      udpSocket.startBind(network, { tag: "ipv4", val: { address: [127, 0, 0, 1], port: 0 } });
     }, /access-denied/);
   });
 
@@ -703,12 +704,12 @@ suite("Sandboxing", () => {
 
     // Should have the real implementations
     assert.strictEqual(
-      importObj['wasi:sockets/tcp-create-socket'].createTcpSocket,
-      sockets.tcpCreateSocket.createTcpSocket
+      importObj["wasi:sockets/tcp-create-socket"].createTcpSocket,
+      sockets.tcpCreateSocket.createTcpSocket,
     );
     assert.strictEqual(
-      importObj['wasi:sockets/udp-create-socket'].createUdpSocket,
-      sockets.udpCreateSocket.createUdpSocket
+      importObj["wasi:sockets/udp-create-socket"].createUdpSocket,
+      sockets.udpCreateSocket.createUdpSocket,
     );
   });
 
@@ -719,36 +720,40 @@ suite("Sandboxing", () => {
       sandbox: {
         preopens: {},
         env: {},
-        args: ['sandboxed-program'],
-        enableNetwork: false
-      }
+        args: ["sandboxed-program"],
+        enableNetwork: false,
+      },
     });
 
     const importObj = sandboxed.getImportObject();
 
     // Verify all restrictions
     assert.strictEqual(
-      importObj['wasi:filesystem/preopens'].getDirectories().length,
+      importObj["wasi:filesystem/preopens"].getDirectories().length,
       0,
-      "No filesystem access"
+      "No filesystem access",
     );
     assert.deepStrictEqual(
-      importObj['wasi:cli/environment'].getEnvironment(),
+      importObj["wasi:cli/environment"].getEnvironment(),
       [],
-      "No environment variables"
+      "No environment variables",
     );
     assert.deepStrictEqual(
-      importObj['wasi:cli/environment'].getArguments(),
-      ['sandboxed-program'],
-      "Custom arguments"
+      importObj["wasi:cli/environment"].getArguments(),
+      ["sandboxed-program"],
+      "Custom arguments",
     );
 
     // Network operations should be denied
-    const tcpSocket = importObj['wasi:sockets/tcp-create-socket'].createTcpSocket('ipv4');
-    const network = importObj['wasi:sockets/instance-network'].instanceNetwork();
-    assert.throws(() => {
-      tcpSocket.startBind(network, { tag: 'ipv4', val: { address: [127, 0, 0, 1], port: 0 } });
-    }, /access-denied/, "No network access");
+    const tcpSocket = importObj["wasi:sockets/tcp-create-socket"].createTcpSocket("ipv4");
+    const network = importObj["wasi:sockets/instance-network"].instanceNetwork();
+    assert.throws(
+      () => {
+        tcpSocket.startBind(network, { tag: "ipv4", val: { address: [127, 0, 0, 1], port: 0 } });
+      },
+      /access-denied/,
+      "No network access",
+    );
   });
 
   test("Multiple WASIShim instances have isolated preopens", async () => {
@@ -757,25 +762,25 @@ suite("Sandboxing", () => {
     // Create two shims with different preopens
     const shim1 = new WASIShim({
       sandbox: {
-        preopens: { '/a': '/tmp/a' }
-      }
+        preopens: { "/a": "/tmp/a" },
+      },
     });
     const shim2 = new WASIShim({
       sandbox: {
-        preopens: { '/b': '/tmp/b' }
-      }
+        preopens: { "/b": "/tmp/b" },
+      },
     });
 
     const obj1 = shim1.getImportObject();
     const obj2 = shim2.getImportObject();
 
-    const dirs1 = obj1['wasi:filesystem/preopens'].getDirectories();
-    const dirs2 = obj2['wasi:filesystem/preopens'].getDirectories();
+    const dirs1 = obj1["wasi:filesystem/preopens"].getDirectories();
+    const dirs2 = obj2["wasi:filesystem/preopens"].getDirectories();
 
     assert.strictEqual(dirs1.length, 1, "shim1 should have 1 preopen");
     assert.strictEqual(dirs2.length, 1, "shim2 should have 1 preopen");
-    assert.strictEqual(dirs1[0][1], '/a', "shim1 should have /a");
-    assert.strictEqual(dirs2[0][1], '/b', "shim2 should have /b");
+    assert.strictEqual(dirs1[0][1], "/a", "shim1 should have /a");
+    assert.strictEqual(dirs2[0][1], "/b", "shim2 should have /b");
 
     // They should not affect each other
     assert.notStrictEqual(dirs1, dirs2, "Should be different arrays");
@@ -786,101 +791,108 @@ suite("Sandboxing", () => {
 
     const shim1 = new WASIShim({
       sandbox: {
-        env: { 'VAR': 'value1' },
-        args: ['prog1']
-      }
+        env: { VAR: "value1" },
+        args: ["prog1"],
+      },
     });
     const shim2 = new WASIShim({
       sandbox: {
-        env: { 'VAR': 'value2' },
-        args: ['prog2']
-      }
+        env: { VAR: "value2" },
+        args: ["prog2"],
+      },
     });
 
     const obj1 = shim1.getImportObject();
     const obj2 = shim2.getImportObject();
 
-    const env1 = obj1['wasi:cli/environment'].getEnvironment();
-    const env2 = obj2['wasi:cli/environment'].getEnvironment();
-    const args1 = obj1['wasi:cli/environment'].getArguments();
-    const args2 = obj2['wasi:cli/environment'].getArguments();
+    const env1 = obj1["wasi:cli/environment"].getEnvironment();
+    const env2 = obj2["wasi:cli/environment"].getEnvironment();
+    const args1 = obj1["wasi:cli/environment"].getArguments();
+    const args2 = obj2["wasi:cli/environment"].getArguments();
 
-    assert.deepStrictEqual(env1, [['VAR', 'value1']], "shim1 env");
-    assert.deepStrictEqual(env2, [['VAR', 'value2']], "shim2 env");
-    assert.deepStrictEqual(args1, ['prog1'], "shim1 args");
-    assert.deepStrictEqual(args2, ['prog2'], "shim2 args");
+    assert.deepStrictEqual(env1, [["VAR", "value1"]], "shim1 env");
+    assert.deepStrictEqual(env2, [["VAR", "value2"]], "shim2 env");
+    assert.deepStrictEqual(args1, ["prog1"], "shim1 args");
+    assert.deepStrictEqual(args2, ["prog2"], "shim2 args");
   });
 
-  test("WASIShim isolated preopens can read files", testWithGCWrap(async () => {
-    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
-    const { dirname } = await import("node:path");
+  test(
+    "WASIShim isolated preopens can read files",
+    testWithGCWrap(async () => {
+      const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+      const { dirname } = await import("node:path");
 
-    const testFilePath = fileURLToPath(import.meta.url);
-    const testDir = dirname(testFilePath);
-    const testFileName = "test.js";
+      const testFilePath = fileURLToPath(import.meta.url);
+      const testDir = dirname(testFilePath);
+      const testFileName = "test.js";
 
-    // Create a shim with preopens pointing to the test directory
-    const shim = new WASIShim({
-      sandbox: {
-        preopens: { '/test': testDir }
+      // Create a shim with preopens pointing to the test directory
+      const shim = new WASIShim({
+        sandbox: {
+          preopens: { "/test": testDir },
+        },
+      });
+
+      const importObj = shim.getImportObject();
+      const preopens = importObj["wasi:filesystem/preopens"];
+      const dirs = preopens.getDirectories();
+
+      assert.strictEqual(dirs.length, 1, "Should have one preopen");
+      assert.strictEqual(dirs[0][1], "/test", "Virtual path should be /test");
+
+      const [rootDescriptor] = dirs[0];
+
+      // Open and read the test file
+      const childDescriptor = rootDescriptor.openAt({}, testFileName, {}, { read: true });
+
+      const stream = childDescriptor.readViaStream(0);
+      const poll = stream.subscribe();
+      poll.block();
+      let buf = stream.read(10000n);
+      while (buf.byteLength === 0) {
+        buf = stream.read(10000n);
       }
-    });
+      const source = new TextDecoder().decode(buf);
 
-    const importObj = shim.getImportObject();
-    const preopens = importObj['wasi:filesystem/preopens'];
-    const dirs = preopens.getDirectories();
+      // Verify we read the actual test file content
+      assert.ok(source.includes("UNIQUE STRING"), "Should read file content");
 
-    assert.strictEqual(dirs.length, 1, "Should have one preopen");
-    assert.strictEqual(dirs[0][1], '/test', "Virtual path should be /test");
+      // Dispose in correct order: poll first, then stream, then descriptor
+      poll[symbolDispose]();
+      stream[symbolDispose]();
+      childDescriptor[symbolDispose]();
+    }),
+  );
 
-    const [rootDescriptor] = dirs[0];
+  test(
+    "WASIShim isolated preopens don't access paths outside preopen",
+    testWithGCWrap(async () => {
+      const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+      const { dirname } = await import("node:path");
 
-    // Open and read the test file
-    const childDescriptor = rootDescriptor.openAt(
-      {},
-      testFileName,
-      {},
-      { read: true }
-    );
+      const testFilePath = fileURLToPath(import.meta.url);
+      const testDir = dirname(testFilePath);
 
-    const stream = childDescriptor.readViaStream(0);
-    const poll = stream.subscribe();
-    poll.block();
-    let buf = stream.read(10000n);
-    while (buf.byteLength === 0) {buf = stream.read(10000n);}
-    const source = new TextDecoder().decode(buf);
+      // Create a shim with limited preopens
+      const shim = new WASIShim({
+        sandbox: {
+          preopens: { "/test": testDir },
+        },
+      });
 
-    // Verify we read the actual test file content
-    assert.ok(source.includes("UNIQUE STRING"), "Should read file content");
+      const importObj = shim.getImportObject();
+      const [rootDescriptor] = importObj["wasi:filesystem/preopens"].getDirectories()[0];
 
-    // Dispose in correct order: poll first, then stream, then descriptor
-    poll[symbolDispose]();
-    stream[symbolDispose]();
-    childDescriptor[symbolDispose]();
-  }));
-
-  test("WASIShim isolated preopens don't access paths outside preopen", testWithGCWrap(async () => {
-    const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
-    const { dirname } = await import("node:path");
-
-    const testFilePath = fileURLToPath(import.meta.url);
-    const testDir = dirname(testFilePath);
-
-    // Create a shim with limited preopens
-    const shim = new WASIShim({
-      sandbox: {
-        preopens: { '/test': testDir }
-      }
-    });
-
-    const importObj = shim.getImportObject();
-    const [rootDescriptor] = importObj['wasi:filesystem/preopens'].getDirectories()[0];
-
-    // Attempting to traverse outside the preopen should fail
-    assert.throws(() => {
-      rootDescriptor.openAt({}, '../package.json', {}, { read: true });
-    }, /not-permitted/, "Should not allow traversing outside preopen");
-  }));
+      // Attempting to traverse outside the preopen should fail
+      assert.throws(
+        () => {
+          rootDescriptor.openAt({}, "../package.json", {}, { read: true });
+        },
+        /not-permitted/,
+        "Should not allow traversing outside preopen",
+      );
+    }),
+  );
 });
 suite("Browser shim guards", () => {
   test("pollList throws on empty list", async () => {

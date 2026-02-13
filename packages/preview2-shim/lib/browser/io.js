@@ -1,14 +1,14 @@
 let id = 0;
 
-const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 const IoError = class Error {
-    constructor(msg) {
-        this.msg = msg;
-    }
-    toDebugString() {
-        return this.msg;
-    }
+  constructor(msg) {
+    this.msg = msg;
+  }
+  toDebugString() {
+    return this.msg;
+  }
 };
 
 /**
@@ -40,142 +40,142 @@ const IoError = class Error {
  **/
 
 class InputStream {
-    /**
-     * @param {InputStreamHandler} handler
-     */
-    constructor(handler) {
-        if (!handler) {
-            console.trace('no handler');
-        }
-        this.id = ++id;
-        this.handler = handler;
+  /**
+   * @param {InputStreamHandler} handler
+   */
+  constructor(handler) {
+    if (!handler) {
+      console.trace("no handler");
     }
-    read(len) {
-        if (this.handler.read) {
-            return this.handler.read(len);
-        }
-        return this.handler.blockingRead.call(this, len);
+    this.id = ++id;
+    this.handler = handler;
+  }
+  read(len) {
+    if (this.handler.read) {
+      return this.handler.read(len);
     }
-    blockingRead(len) {
-        return this.handler.blockingRead.call(this, len);
+    return this.handler.blockingRead.call(this, len);
+  }
+  blockingRead(len) {
+    return this.handler.blockingRead.call(this, len);
+  }
+  skip(len) {
+    if (this.handler.skip) {
+      return this.handler.skip.call(this, len);
     }
-    skip(len) {
-        if (this.handler.skip) {
-            return this.handler.skip.call(this, len);
-        }
-        if (this.handler.read) {
-            const bytes = this.handler.read.call(this, len);
-            return BigInt(bytes.byteLength);
-        }
-        return this.blockingSkip.call(this, len);
+    if (this.handler.read) {
+      const bytes = this.handler.read.call(this, len);
+      return BigInt(bytes.byteLength);
     }
-    blockingSkip(len) {
-        if (this.handler.blockingSkip) {
-            return this.handler.blockingSkip.call(this, len);
-        }
-        const bytes = this.handler.blockingRead.call(this, len);
-        return BigInt(bytes.byteLength);
+    return this.blockingSkip.call(this, len);
+  }
+  blockingSkip(len) {
+    if (this.handler.blockingSkip) {
+      return this.handler.blockingSkip.call(this, len);
     }
-    subscribe() {
-        if (this.handler.subscribe) {
-            return this.handler.subscribe();
-        }
-        return new Pollable();
+    const bytes = this.handler.blockingRead.call(this, len);
+    return BigInt(bytes.byteLength);
+  }
+  subscribe() {
+    if (this.handler.subscribe) {
+      return this.handler.subscribe();
     }
-    [symbolDispose]() {
-        if (this.handler.drop) {
-            this.handler.drop.call(this);
-        }
+    return new Pollable();
+  }
+  [symbolDispose]() {
+    if (this.handler.drop) {
+      this.handler.drop.call(this);
     }
+  }
 }
 
 class OutputStream {
-    /**
-     * @param {OutputStreamHandler} handler
-     */
-    constructor(handler) {
-        if (!handler) {
-            console.trace('no handler');
-        }
-        this.id = ++id;
-        this.open = true;
-        this.handler = handler;
+  /**
+   * @param {OutputStreamHandler} handler
+   */
+  constructor(handler) {
+    if (!handler) {
+      console.trace("no handler");
     }
-    checkWrite(len) {
-        if (!this.open) {
-            return 0n;
-        }
-        if (this.handler.checkWrite) {
-            return this.handler.checkWrite.call(this, len);
-        }
-        return 1_000_000n;
+    this.id = ++id;
+    this.open = true;
+    this.handler = handler;
+  }
+  checkWrite(len) {
+    if (!this.open) {
+      return 0n;
     }
-    write(buf) {
-        this.handler.write.call(this, buf);
+    if (this.handler.checkWrite) {
+      return this.handler.checkWrite.call(this, len);
     }
-    blockingWriteAndFlush(buf) {
-        /// Perform a write of up to 4096 bytes, and then flush the stream. Block
-        /// until all of these operations are complete, or an error occurs.
-        ///
-        /// This is a convenience wrapper around the use of `check-write`,
-        /// `subscribe`, `write`, and `flush`, and is implemented with the
-        /// following pseudo-code:
-        ///
-        /// ```text
-        /// let pollable = this.subscribe();
-        /// while !contents.is_empty() {
-        ///     // Wait for the stream to become writable
-        ///     poll-one(pollable);
-        ///     let Ok(n) = this.check-write(); // eliding error handling
-        ///     let len = min(n, contents.len());
-        ///     let (chunk, rest) = contents.split_at(len);
-        ///     this.write(chunk  );            // eliding error handling
-        ///     contents = rest;
-        /// }
-        /// this.flush();
-        /// // Wait for completion of `flush`
-        /// poll-one(pollable);
-        /// // Check for any errors that arose during `flush`
-        /// let _ = this.check-write();         // eliding error handling
-        /// ```
-        this.handler.write.call(this, buf);
+    return 1_000_000n;
+  }
+  write(buf) {
+    this.handler.write.call(this, buf);
+  }
+  blockingWriteAndFlush(buf) {
+    /// Perform a write of up to 4096 bytes, and then flush the stream. Block
+    /// until all of these operations are complete, or an error occurs.
+    ///
+    /// This is a convenience wrapper around the use of `check-write`,
+    /// `subscribe`, `write`, and `flush`, and is implemented with the
+    /// following pseudo-code:
+    ///
+    /// ```text
+    /// let pollable = this.subscribe();
+    /// while !contents.is_empty() {
+    ///     // Wait for the stream to become writable
+    ///     poll-one(pollable);
+    ///     let Ok(n) = this.check-write(); // eliding error handling
+    ///     let len = min(n, contents.len());
+    ///     let (chunk, rest) = contents.split_at(len);
+    ///     this.write(chunk  );            // eliding error handling
+    ///     contents = rest;
+    /// }
+    /// this.flush();
+    /// // Wait for completion of `flush`
+    /// poll-one(pollable);
+    /// // Check for any errors that arose during `flush`
+    /// let _ = this.check-write();         // eliding error handling
+    /// ```
+    this.handler.write.call(this, buf);
+  }
+  flush() {
+    if (this.handler.flush) {
+      this.handler.flush.call(this);
     }
-    flush() {
-        if (this.handler.flush) {
-            this.handler.flush.call(this);
-        }
+  }
+  blockingFlush() {
+    this.open = true;
+  }
+  writeZeroes(len) {
+    this.write.call(this, new Uint8Array(Number(len)));
+  }
+  blockingWriteZeroes(len) {
+    this.blockingWrite.call(this, new Uint8Array(Number(len)));
+  }
+  blockingWriteZeroesAndFlush(len) {
+    this.blockingWriteAndFlush.call(this, new Uint8Array(Number(len)));
+  }
+  splice(src, len) {
+    const spliceLen = Math.min(len, this.checkWrite.call(this));
+    const bytes = src.read(spliceLen);
+    this.write.call(this, bytes);
+    return bytes.byteLength;
+  }
+  blockingSplice(_src, _len) {
+    console.log(`[streams] Blocking splice ${this.id}`);
+  }
+  forward(_src) {
+    console.log(`[streams] Forward ${this.id}`);
+  }
+  subscribe() {
+    if (this.handler.subscribe) {
+      return this.handler.subscribe();
     }
-    blockingFlush() {
-        this.open = true;
-    }
-    writeZeroes(len) {
-        this.write.call(this, new Uint8Array(Number(len)));
-    }
-    blockingWriteZeroes(len) {
-        this.blockingWrite.call(this, new Uint8Array(Number(len)));
-    }
-    blockingWriteZeroesAndFlush(len) {
-        this.blockingWriteAndFlush.call(this, new Uint8Array(Number(len)));
-    }
-    splice(src, len) {
-        const spliceLen = Math.min(len, this.checkWrite.call(this));
-        const bytes = src.read(spliceLen);
-        this.write.call(this, bytes);
-        return bytes.byteLength;
-    }
-    blockingSplice(_src, _len) {
-        console.log(`[streams] Blocking splice ${this.id}`);
-    }
-    forward(_src) {
-        console.log(`[streams] Forward ${this.id}`);
-    }
-    subscribe() {
-        if (this.handler.subscribe) {
-            return this.handler.subscribe();
-        }
-        return new Pollable();
-    }
-    [symbolDispose]() {}
+    return new Pollable();
+  }
+  [symbolDispose]() {}
 }
 
 export const error = { Error: IoError };
@@ -183,74 +183,80 @@ export const error = { Error: IoError };
 export const streams = { InputStream, OutputStream };
 
 class Pollable {
-    #ready = false;
-    #promise = null;
+  #ready = false;
+  #promise = null;
 
-    constructor(promise) {
-        if (!promise) {
-            this.#ready = true;
-        } else {
-            this.#promise = promise.then(
-                () => { this.#ready = true; },
-                () => { this.#ready = true; }
-            );
-        }
+  constructor(promise) {
+    if (!promise) {
+      this.#ready = true;
+    } else {
+      this.#promise = promise.then(
+        () => {
+          this.#ready = true;
+        },
+        () => {
+          this.#ready = true;
+        },
+      );
     }
+  }
 
-    ready() {
-        return this.#ready;
-    }
+  ready() {
+    return this.#ready;
+  }
 
-    block() {
-        if (this.#ready) {
-            return Promise.resolve();
-        }
-        return this.#promise;
+  block() {
+    if (this.#ready) {
+      return Promise.resolve();
     }
+    return this.#promise;
+  }
 
-    [symbolDispose]() {
-        this.#promise = null;
-    }
+  [symbolDispose]() {
+    this.#promise = null;
+  }
 }
 
 function pollList(list) {
-    if (list.length === 0) {
-        throw new Error('poll list must not be empty');
+  if (list.length === 0) {
+    throw new Error("poll list must not be empty");
+  }
+  if (list.length > 0xffffffff) {
+    throw new Error("poll list length exceeds u32 index range");
+  }
+  const ready = [];
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].ready()) {
+      ready.push(i);
     }
-    if (list.length > 0xFFFFFFFF) {
-        throw new Error('poll list length exceeds u32 index range');
-    }
-    const ready = [];
-    for (let i = 0; i < list.length; i++) {
-        if (list[i].ready()) {
-            ready.push(i);
+  }
+  if (ready.length > 0) {
+    return new Uint32Array(ready);
+  }
+  // None ready synchronously. Wait for the first to resolve via Promise.race,
+  // then sweep for any others that became ready concurrently.
+  return Promise.race(
+    list.map((p, i) =>
+      p.block().then(() => {
+        const result = [i];
+        for (let j = 0; j < list.length; j++) {
+          if (j !== i && list[j].ready()) {
+            result.push(j);
+          }
         }
-    }
-    if (ready.length > 0) {
-        return new Uint32Array(ready);
-    }
-    // None ready synchronously. Wait for the first to resolve via Promise.race,
-    // then sweep for any others that became ready concurrently.
-    return Promise.race(
-        list.map((p, i) => p.block().then(() => {
-            const result = [i];
-            for (let j = 0; j < list.length; j++) {
-                if (j !== i && list[j].ready()) {
-                    result.push(j);
-                }
-            }
-            return new Uint32Array(result);
-        }))
-    );
+        return new Uint32Array(result);
+      }),
+    ),
+  );
 }
 
 function pollOne(poll) {
-    return poll.block();
+  return poll.block();
 }
 
 export const poll = {
-    Pollable,
-    pollList,
-    pollOne,
-    poll: pollList,
+  Pollable,
+  pollList,
+  pollOne,
+  poll: pollList,
 };
