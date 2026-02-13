@@ -7,8 +7,5 @@
     "noImplicitAny": false,
     "strictNullChecks": true
   },
-  "include": [
-    "./types",
-    "example.ts"
-  ]
+  "include": ["./types", "example.ts"]
 }

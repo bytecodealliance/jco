@@ -33,8 +33,7 @@ export const OUTPUT_STREAM_BLOCKING_WRITE_AND_FLUSH = ++call_id << CALL_SHIFT;
 export const OUTPUT_STREAM_FLUSH = ++call_id << CALL_SHIFT;
 export const OUTPUT_STREAM_BLOCKING_FLUSH = ++call_id << CALL_SHIFT;
 export const OUTPUT_STREAM_WRITE_ZEROES = ++call_id << CALL_SHIFT;
-export const OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH =
-    ++call_id << CALL_SHIFT;
+export const OUTPUT_STREAM_BLOCKING_WRITE_ZEROES_AND_FLUSH = ++call_id << CALL_SHIFT;
 export const OUTPUT_STREAM_SPLICE = ++call_id << CALL_SHIFT;
 export const OUTPUT_STREAM_BLOCKING_SPLICE = ++call_id << CALL_SHIFT;
 export const OUTPUT_STREAM_SUBSCRIBE = ++call_id << CALL_SHIFT;
@@ -103,8 +102,7 @@ export const SOCKET_UDP_SET_RECEIVE_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_SEND_BUFFER_SIZE = ++call_id << CALL_SHIFT;
 export const SOCKET_UDP_SET_UNICAST_HOP_LIMIT = ++call_id << CALL_SHIFT;
 export const SOCKET_INCOMING_DATAGRAM_STREAM_RECEIVE = ++call_id << CALL_SHIFT;
-export const SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND =
-    ++call_id << CALL_SHIFT;
+export const SOCKET_OUTGOING_DATAGRAM_STREAM_CHECK_SEND = ++call_id << CALL_SHIFT;
 export const SOCKET_OUTGOING_DATAGRAM_STREAM_SEND = ++call_id << CALL_SHIFT;
 export const SOCKET_DATAGRAM_STREAM_SUBSCRIBE = ++call_id << CALL_SHIFT;
 export const SOCKET_DATAGRAM_STREAM_DISPOSE = ++call_id << CALL_SHIFT;
@@ -120,11 +118,11 @@ export const SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST = ++call_id << CALL_SHIFT;
 
 export const reverseMap = {};
 
-import * as calls from './calls.js';
+import * as calls from "./calls.js";
 
 for (const name of Object.getOwnPropertyNames(calls)) {
-    if (name === 'reverseMap') {
-        continue;
-    }
-    reverseMap[calls[name]] = name;
+  if (name === "reverseMap") {
+    continue;
+  }
+  reverseMap[calls[name]] = name;
 }
