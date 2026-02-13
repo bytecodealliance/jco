@@ -3,8 +3,8 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
-/** Path to ESLint as installed by npm-compatible tooling */
-export const ESLINT_PATH = fileURLToPath(new URL("../../../node_modules/eslint/bin/eslint.js", import.meta.url));
+/** Path to a linter as installed by npm-compatible tooling */
+export const LINTER_PATH = fileURLToPath(new URL("../../../node_modules/oxlint/bin/oxlint", import.meta.url));
 
 export const AsyncFunction = (async () => {}).constructor;
 

@@ -17,7 +17,7 @@ import {
     readComponentBytes,
     tsGenerationPromise,
 } from "./helpers.js";
-import { getDefaultComponentFixtures, ESLINT_PATH, COMPONENT_FIXTURES_DIR } from "./common.js";
+import { getDefaultComponentFixtures, LINTER_PATH, COMPONENT_FIXTURES_DIR } from "./common.js";
 
 suite(`Transpiler codegen`, async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
@@ -46,10 +46,8 @@ suite(`Transpiler codegen`, async () => {
                 }
 
                 const eslintOutput = await exec(
-                    ESLINT_PATH,
+                    LINTER_PATH,
                     fileURLToPath(new URL(`./output/${testName}/${testName}.js`, import.meta.url)),
-                    "-c",
-                    fileURLToPath(new URL(`./eslint.config.mjs`, import.meta.url)),
                 );
                 assert.strictEqual(eslintOutput.stderr, "");
             });
