@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.15.0] - 2026-02-13
+
+### 🚀 Features
+
+- _(bindgen)_ add p3 stream implementation by @vados-cosmonic
+
+- _(bindgen)_ add semver-compatible matching by @ricochet
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ enable wasm exceptions proposal support by @rioam2 in #1258
+
+- _(bindgen)_ missing scope_id for resource borrow by @vados-cosmonic
+
+- _(bindgen)_ async host import lookup by @vados-cosmonic
+
+- _(bindgen)_ resource connecting, comments around lifts for futures by @vados-cosmonic
+
+- _(bindgen)_ resource tracking by @vados-cosmonic
+
+- _(bindgen)_ typo in lift code by @vados-cosmonic
+
+- _(bindgen)_ unit stream copy check by @vados-cosmonic
+
+- _(bindgen)_ refactor canon list lower handling by @vados-cosmonic
+
+- _(bindgen)_ s32 flat lower by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ lint by @vados-cosmonic
+
+- _(bindgen)_ fix clippy by @vados-cosmonic in #1252
+
+- _(bindgen)_ cargo fmt by @vados-cosmonic
+
+
+
+## New Contributors
+* @rioam2 made their first contribution in [#1258](https://github.com/bytecodealliance/jco/pull/1258)
+
+
 ## [1.14.1] - 2026-02-04
 
 ### 🐛 Bug Fixes
