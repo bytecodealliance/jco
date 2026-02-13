@@ -24,7 +24,7 @@ interface AppAdapterOpts<Env extends HonoEnv, Schema extends HonoSchema, BasePat
   readWASIRequest: (incomingWasiReq: any) => Promise<Request>;
 
   /** Function that enables writing a wasi response, given  a web `Response` and some WASI implementation */
-  writeWebResponse: (resp: Response, outgoingWasiResp: any) => void;
+  writeWebResponse: (resp: Response, outgoingWasiResp: any) => Promise<void>;
 }
 
 /**
@@ -51,7 +51,7 @@ class WasiHttpAdapter<Env extends HonoEnv, Schema extends HonoSchema, BasePath e
   private readWASIRequest: (incomingWasiReq: any) => Promise<Request>;
 
   /** Function that enables writing a wasi response, given  a web `Response` and some WASI implementation */
-  private writeWebResponse: (resp: Response, outgoingWasiResp: any) => void;
+  private writeWebResponse: (resp: Response, outgoingWasiResp: any) => Promise<void>;
 
   constructor(opts: AppAdapterOpts<Env, Schema, BasePath>) {
     if (!opts.app) {
@@ -88,7 +88,7 @@ class WasiHttpAdapter<Env extends HonoEnv, Schema extends HonoSchema, BasePath e
             ) {
               const request = await readWASIRequest(wasiRequest);
               const resp = await app.fetch(request);
-              writeWebResponse(resp, wasiResponse);
+              await writeWebResponse(resp, wasiResponse);
             },
           },
         };
@@ -114,7 +114,7 @@ let ADAPTER: WasiHttpAdapter<any, any, any>;
  * that implements `fetch`-based HTTP handlers.
  */
 export const incomingHandler = {
-  handle(
+  async handle(
     req: any, // IncomingRequest
     resp: any, // ResponseOutparam
   ) {
@@ -131,7 +131,7 @@ export const incomingHandler = {
     if (!incomingHandler) {
       throw new Error("unexpectedly missing incomingHandler generated ESM export");
     }
-    incomingHandler.handle(req, resp);
+    await incomingHandler.handle(req, resp);
   },
 };
 
