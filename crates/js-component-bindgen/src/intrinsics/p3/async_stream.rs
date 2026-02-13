@@ -778,7 +778,7 @@ impl AsyncStreamIntrinsic {
 
                         {type_getter_impl}
 
-                        isDone() {{ this.getState() === {stream_end_class}.DONE; }}
+                        isDone() {{ this.getCopyState() === {stream_end_class}.CopyState.DONE; }}
 
                         {action_impl}
                         {inner_rw_impl}
@@ -851,7 +851,7 @@ impl AsyncStreamIntrinsic {
                         constructor(args) {{
                             if (typeof args.componentIdx !== 'number') {{ throw new Error('missing/invalid component idx'); }}
                             if (!args.elemMeta) {{ throw new Error('missing/invalid stream element metadata'); }}
-                            if (!args.tableIdx) {{ throw new Error('missing/invalid stream table idx'); }}
+                            if (args.tableIdx === undefined) {{ throw new Error('missing/invalid stream table idx'); }}
                             const {{ tableIdx, componentIdx, elemMeta }} = args;
 
                             this.#elemMeta = elemMeta;
