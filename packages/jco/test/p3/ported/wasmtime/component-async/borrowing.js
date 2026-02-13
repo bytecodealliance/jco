@@ -55,13 +55,12 @@ suite('borrowing scenario', () => {
                 await instance['local:local/run-bool'].run(true);
                 assert.fail("should have failed");
             } catch (err) {
-                assert(err.message === "Invalid handle");
+                assert.strictEqual(err.message, "Invalid handle");
             }
 
             // the line below calls foo() once, via the callee
             await instance['local:local/run-bool'].run(false);
             assert(calls == 3, "XResource#foo() was called 3 times");
-
         } finally {
             if (cleanup) { await cleanup(); }
         }
@@ -102,7 +101,7 @@ suite('borrowing scenario', () => {
                 await instance['local:local/run-bool'].run(true);
                 assert.fail("should have failed");
             } catch (err) {
-                assert(err.message === "Invalid handle");
+                assert.strictEqual(err.message, "Invalid handle");
             }
 
             // the below line calls foo() once
