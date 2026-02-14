@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] - 2026-02-14
+
+### 🐛 Bug Fixes
+
+- _(std)_ await the inner async handler promise by @andreiltd in #1264
+
 ## [0.1.2] - 2026-02-13
 
 ### ⚙️ Miscellaneous Tasks
