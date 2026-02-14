@@ -1,6 +1,6 @@
 {
   "name": "@bytecodealliance/jco-std",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Library of shared functionality for use with the JS WebAssembly components",
   "keywords": [
     "Component",
