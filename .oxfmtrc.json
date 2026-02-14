@@ -3,5 +3,6 @@
     "printWidth": 120,
     "singleQuote": true,
     "trailingComma": "all",
+    "ignorePatterns": ["types/**/*"],
     "tabWidth": 4
 }
