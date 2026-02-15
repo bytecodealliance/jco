@@ -45,12 +45,11 @@ suite("Stream (WASI P3)", () => {
         // TODO(tests): we should check that reading with no values remaining blocks?
         // TODO(tests): we should check that reading when writer is closed throws error?
 
-        // TODO(fix): broken stream leftover task
-        // vals = [-11,-22,-33];
-        // stream = await instance['jco:test-components/get-stream-async'].getStreamS32(vals);
-        // assert.equal(vals[0], await stream.next());
-        // assert.equal(vals[1], await stream.next());
-        // assert.equal(vals[2], await stream.next());
+        vals = [-11, -22, -33];
+        stream = await instance["jco:test-components/get-stream-async"].getStreamS32(vals);
+        assert.equal(vals[0], await stream.next());
+        assert.equal(vals[1], await stream.next());
+        assert.equal(vals[2], await stream.next());
 
         await cleanup();
     });
