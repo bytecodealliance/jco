@@ -9,10 +9,83 @@ interface async-add-s32 {
 }
 
 interface get-stream-async {
+    // variant example-variant {
+    //     num(u32),
+    //     str(string),
+    //     float(f32),
+    // }
+
+    // variant example-enum {
+    //     first,
+    //     second,
+    //     third,
+    // }
+
+    // record example-record {
+    //     id: u32,
+    //     id-str: string,
+    // }
+
+    // resource example-resource {
+    //     constructor(id: u32);
+    //     get-id() -> u32;
+    // }
+
     /// Get a stream that returns the exact same u32s that were passed in
     get-stream-u32: async func(vals: list<u32>) -> result<stream<u32>, string>;
     /// Get a stream that returns the exact same s32s that were passed in
     get-stream-s32: async func(vals: list<s32>) -> result<stream<s32>, string>;
+
+    /// Get stream that returns bools (always `true`, then `false`)
+    //get-stream-bool: async func() -> result<stream<bool>, string>;
+    //get-stream-u8: async func(vals: list<u8>) -> result<stream<u8>, string>;
+    //get-stream-s8: async func(vals: list<s8>) -> result<stream<s8>, string>;
+
+    //get-stream-u16: async func(vals: list<u16>) -> result<stream<u16>, string>;
+    //get-stream-s16: async func(vals: list<s16>) -> result<stream<s16>, string>;
+
+    //get-stream-u64: async func(vals: list<u64>) -> result<stream<u64>, string>;
+    //get-stream-s64: async func(vals: list<s64>) -> result<stream<s64>, string>;
+
+    //get-stream-u64: async func(vals: list<u64>) -> result<stream<u64>, string>;
+    //get-stream-s64: async func(vals: list<s64>) -> result<stream<s64>, string>;
+
+    //get-stream-f32: async func(vals: list<f32>) -> result<stream<f32>, string>;
+
+    //get-stream-f64: async func(vals: list<f64>) -> result<stream<f64>, string>;
+
+    //get-stream-char: async func(vals: list<char>) -> result<stream<char>, string>;
+
+    //get-stream-string: async func(vals: list<string>) -> result<stream<string>, string>;
+
+    //get-stream-record: async func(vals: list<example-record>) -> result<stream<example-record>, string>;
+
+    //get-stream-variant: async func(vals: list<example-variant>) -> result<stream<example-variant>, string>;
+
+    //get-stream-list-u8: async func(vals: list<list<u8>>) -> result<stream<list<u8>>, string>;
+    //get-stream-list-string: async func(vals: list<list<string>>) -> result<stream<list<string>>, string>;
+    //get-stream-list-record: async func(vals: list<list<example-record>>) -> result<stream<list<example-record>>, string>;
+
+    //get-stream-tuple: async func(vals: list<tuple<u32,s32>>) -> result<stream<tuple<u32,s32>>, string>;
+
+    //get-stream-flags: async func(vals: list<flags>) -> result<stream<flags>, string>;
+
+    //get-stream-enum: async func(vals: list<example-enum>) -> result<stream<example-enum>, string>;
+
+    //get-stream-option-string: async func(vals: list<option<string>>) -> result<stream<option<string>>, string>;
+
+    //get-stream-result-string: async func(vals: list<result<string, _>>) -> result<stream<result<string, _>>, string>;
+
+    //get-stream-result-string: async func(vals: list<result<string, _>>) -> result<stream<result<string, _>>, string>;
+
+    //get-stream-example-resource-borrow: async func(vals: list<borrow<example-resource>>) -> result<stream<borrow<example-resource>>, string>;
+
+    //get-stream-example-resource-own: async func(vals: list<example-resource>) -> result<stream<example-resource>, string>;
+
+    //get-stream-stream-string: async func(vals: list<stream<string>>) -> result<stream<stream<string>>, string>;
+    //get-stream-future-string: async func(vals: list<future<string>>) -> result<stream<future<string>>, string>;
+
+    //get-stream-err-ctx: async func(vals: list<error-context>) -> result<stream<error-context>, string>;
 }
 
 world async-simple-import {
