@@ -195,6 +195,8 @@ async function handleRequest({ url, method, headers, trailers, body, timeouts })
     };
     const onTimeout = () => {
       cleanup();
+      req.on("error", () => {});
+      req.destroy();
       reject(new HttpError("connection-timeout"));
     };
     const onClose = () => {
