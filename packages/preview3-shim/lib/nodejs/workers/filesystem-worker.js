@@ -85,6 +85,7 @@ async function handleReadDir({ fullPath, stream, preopens }) {
     throw new TypeError("stream must have a getWriter() method");
   }
 
+  const writer = stream.getWriter();
   const canAccess = preopens.some((p) => fullPath === p || fullPath.startsWith(p + "/"));
 
   if (!canAccess) {
@@ -92,8 +93,6 @@ async function handleReadDir({ fullPath, stream, preopens }) {
     await writer.abort(err);
     throw err;
   }
-
-  const writer = stream.getWriter();
 
   try {
     const walker = await opendir(fullPath);

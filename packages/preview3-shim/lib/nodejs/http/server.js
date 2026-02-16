@@ -2,8 +2,9 @@ import { EventEmitter } from "node:events";
 
 import { ResourceWorker } from "../workers/resource-worker.js";
 import { StreamReader } from "../stream.js";
-import { FutureReader } from "../future.js";
+import { FutureReader, future } from "../future.js";
 import { Request } from "./request.js";
+import { Response } from "./response.js";
 
 import { HttpError } from "./error.js";
 import { _fieldsFromEntriesChecked } from "./fields.js";
@@ -27,7 +28,7 @@ export class HttpServer extends EventEmitter {
     super();
 
     if (typeof handler?.handle !== "function") {
-      throw HttpError("invalid-argument", "Not a valid HTTP server component to execute.");
+      throw new HttpError("invalid-argument", "Not a valid HTTP server component to execute.");
     }
     this.#handler = handler;
   }
@@ -87,7 +88,8 @@ export class HttpServer extends EventEmitter {
 
         if (outcome.tag === "ok") {
           const res = outcome.val;
-          const { body, trailers } = res.body();
+          const { rx: resRx } = future();
+          const [body, trailers] = Response.consumeBody(res, resRx);
           const { port1: tx, port2: rx } = new MessageChannel();
 
           const stream = body.intoReadableStream();
@@ -146,7 +148,7 @@ const requestFromParts = (parts) => {
   const contents = new StreamReader(body);
   const fields = _fieldsFromEntriesChecked(headers);
 
-  const { req } = Request.new(fields, contents, future, null);
+  const [req] = Request.new(fields, contents, future, null);
   req.setMethod(method);
   req.setPathWithQuery(url);
   return req;

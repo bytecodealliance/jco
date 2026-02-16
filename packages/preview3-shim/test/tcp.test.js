@@ -156,7 +156,7 @@ describe("TCP Socket Listen", () => {
     await client.send(rx1);
 
     // Receive and verify the message on server
-    const { stream: srvReader } = conn.receive();
+    const [srvReader] = conn.receive();
     const buf1 = await srvReader.readAll();
     expect(buf1.toString()).toBe(msg1);
 

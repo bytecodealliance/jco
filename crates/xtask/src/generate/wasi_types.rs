@@ -22,7 +22,7 @@ pub(crate) fn run(version: WasiVersion) -> Result<()> {
         WasiVersion::Preview3 => WasiTypes {
             wit_path: "./packages/jco/test/fixtures/p3/wit/",
             target_path: "./packages/preview3-shim/types/",
-            worlds: &["wasi:http/proxy", "wasi:cli/command"],
+            worlds: &["wasi:http/service", "wasi:cli/command"],
         },
     };
 

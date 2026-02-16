@@ -1,4 +1,4 @@
-/** @module Interface wasi:cli/terminal-stdin@0.3.0 **/
+/** @module Interface wasi:cli/terminal-stdin@0.3.0-rc-2026-02-09 **/
 /**
  * If stdin is connected to a terminal, return a `terminal-input` handle
  * allowing further interaction with it.

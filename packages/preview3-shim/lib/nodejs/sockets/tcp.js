@@ -277,7 +277,7 @@ export class TcpSocket {
    * receive: func() -> tuple<stream<u8>, future<result<_, error-code>>>
    * ```
    *
-   * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not CONNECTED
+   * @throws {SocketError} with payload.tag 'invalid-state' if socket is not CONNECTED
    * @throws {SocketError} for other errors, payload.tag maps the system error
    * @returns {{ stream: StreamReader, future: FutureReader }}
    */
@@ -300,10 +300,7 @@ export class TcpSocket {
         throw SocketError.from(err);
       });
 
-    return {
-      stream: new StreamReader(transform.readable),
-      future: new FutureReader(promise),
-    };
+    return [new StreamReader(transform.readable), new FutureReader(promise)];
   }
 
   /**
@@ -314,7 +311,7 @@ export class TcpSocket {
    * ```
    *
    * @returns {Object} The local socket address
-   * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not BOUND
+   * @throws {SocketError} with payload.tag 'invalid-state' if socket is not BOUND
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
   localAddress() {
@@ -340,7 +337,7 @@ export class TcpSocket {
    * ```
    *
    * @returns {Object} The remote socket address
-   * @throws {SocketError} with payload.tag 'invalid-state' if sockt is not CONNECTED
+   * @throws {SocketError} with payload.tag 'invalid-state' if socket is not CONNECTED
    * @throws {SocketError} for other errors, payload.tag maps the system error
    */
   remoteAddress() {

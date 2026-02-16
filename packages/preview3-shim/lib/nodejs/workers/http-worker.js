@@ -199,7 +199,7 @@ async function handleRequest({ url, method, headers, trailers, body, timeouts })
     };
     const onClose = () => {
       cleanup();
-      reject(new HttpError("connecetion-terminated"));
+      reject(new HttpError("connection-terminated"));
     };
 
     const cleanup = () => {

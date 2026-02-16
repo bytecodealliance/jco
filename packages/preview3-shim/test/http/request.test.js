@@ -22,7 +22,7 @@ describe("Request", () => {
   });
 
   test("new() returns Request and FutureReader with defaults", () => {
-    const { req, future } = Request.new(headers, contents, trailers, options);
+    const [req, future] = Request.new(headers, contents, trailers, options);
     expect(req).toBeInstanceOf(Request);
     expect(future).toBeInstanceOf(FutureReader);
     expect(req.method()).toBe("get");
@@ -32,7 +32,7 @@ describe("Request", () => {
   });
 
   test("setMethod accepts standard and custom methods", () => {
-    const { req } = Request.new(headers, contents, trailers, options);
+    const [req] = Request.new(headers, contents, trailers, options);
 
     req.setMethod("POST");
     expect(req.method()).toEqual({ tag: "post" });
@@ -42,7 +42,7 @@ describe("Request", () => {
   });
 
   test("setMethod rejects invalid syntax", () => {
-    const { req } = Request.new(headers, contents, trailers, options);
+    const [req] = Request.new(headers, contents, trailers, options);
     expect(() => req.setMethod("BAD METHOD")).toThrowError(HttpError);
     expect(() => req.setMethod("BAD METHOD")).toThrowError(
       expect.objectContaining({ payload: { tag: "invalid-syntax" } }),
@@ -50,7 +50,7 @@ describe("Request", () => {
   });
 
   test("setScheme handles valid and invalid schemes", () => {
-    const { req } = Request.new(headers, contents, trailers, options);
+    const [req] = Request.new(headers, contents, trailers, options);
 
     req.setScheme("https");
     expect(req.scheme()).toBe("https");
@@ -64,7 +64,7 @@ describe("Request", () => {
   });
 
   test("setAuthority handles valid and invalid authorities", () => {
-    const { req } = Request.new(headers, contents, trailers, options);
+    const [req] = Request.new(headers, contents, trailers, options);
 
     req.setAuthority("example.com:8080");
     expect(req.authority()).toBe("example.com:8080");
@@ -78,7 +78,7 @@ describe("Request", () => {
   });
 
   test("headers() and options() are immutable", () => {
-    const { req } = Request.new(headers, contents, trailers, options);
+    const [req] = Request.new(headers, contents, trailers, options);
 
     expect(() => req.headers().append("x", new Uint8Array([0]))).toThrowError(
       expect.objectContaining({ payload: { tag: "immutable" } }),
@@ -90,15 +90,17 @@ describe("Request", () => {
   });
 });
 
-describe("Request.body single-stream semantics", () => {
-  test("throws if body() called twice without closing", async () => {
+describe("Request.consumeBody single-stream semantics", () => {
+  test("throws if consumeBody() called twice without closing", async () => {
     const headers = new Fields();
     const { tx: bodyTx, rx: bodyRx } = stream();
     const { tx: trailersTx, rx: trailersRx } = future();
-    const { req } = Request.new(headers, bodyRx, trailersRx);
+    const [req] = Request.new(headers, bodyRx, trailersRx);
 
-    req.body();
-    expect(() => req.body()).toThrowError(HttpError);
+    const { rx: resRx2 } = future();
+    Request.consumeBody(req, resRx2);
+    const { rx: resRx3 } = future();
+    expect(() => Request.consumeBody(req, resRx3)).toThrowError(HttpError);
 
     await bodyTx.close();
     await trailersTx.write(null);
@@ -108,14 +110,16 @@ describe("Request.body single-stream semantics", () => {
     const headers = new Fields();
     const { tx: bodyTx, rx: bodyRx } = stream();
     const { tx: trailersTx, rx: trailersRx } = future();
-    const { req } = Request.new(headers, bodyRx, trailersRx);
+    const [req] = Request.new(headers, bodyRx, trailersRx);
 
-    const { body } = req.body();
+    const { rx: resRx2 } = future();
+    const [body] = Request.consumeBody(req, resRx2);
     await bodyTx.write(Buffer.from("data"));
     await bodyTx.close();
     await trailersTx.write(null);
 
     while ((await body.read()) !== null) {}
-    expect(() => req.body()).toThrowError(HttpError);
+    const { rx: resRx3 } = future();
+    expect(() => Request.consumeBody(req, resRx3)).toThrowError(HttpError);
   });
 });

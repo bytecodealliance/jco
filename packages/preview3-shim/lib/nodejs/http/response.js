@@ -66,7 +66,7 @@ export class Response {
     const { tx, rx } = future();
     response.#responseFuture = tx;
 
-    return { res: response, future: rx };
+    return [response, rx];
   }
 
   /**
@@ -117,39 +117,42 @@ export class Response {
   }
 
   /**
-   * Get the body stream and trailers future.
+   * Get body stream and trailers future, consuming the resource.
    *
    * WIT:
    * ```
-   * body: func() -> result<tuple<stream<u8>, future<result<option<trailers>, error-code>>>>;
+   * consume-body: static func(this: response, res: future<result<_, error-code>>)
+   *   -> tuple<stream<u8>, future<result<option<trailers>, error-code>>>;
    * ```
    *
-   * @returns {{ body: StreamReader, trailers: FutureReader }}
+   * @param {Response} response - The response to consume.
+   * @param {FutureReader} res - A future for communicating errors.
+   * @returns {[StreamReader, FutureReader]} A tuple of [body stream, trailers future].
    * @throws {HttpError} with payload.tag 'invalid-state' if body has already been opened or consumed.
    */
-  body() {
-    if (this.#bodyOpen) {
-      throw new HttpError("invalid-state", "body() already opened and not yet closed");
+  static consumeBody(response, _res) {
+    if (response.#bodyOpen) {
+      throw new HttpError("invalid-state", "body already opened and not yet closed");
     }
 
-    if (this.#bodyEnded) {
-      throw new HttpError("invalid-state", "body() has already been consumed");
+    if (response.#bodyEnded) {
+      throw new HttpError("invalid-state", "body has already been consumed");
     }
 
-    if (!this.#contents) {
-      this.#bodyEnded = true;
-      return { body: this.#contents, trailers: this.#trailersFuture };
+    if (!response.#contents) {
+      response.#bodyEnded = true;
+      return [response.#contents, response.#trailersFuture];
     }
 
-    const reader = this.#contents;
-    this.#bodyOpen = true;
+    const reader = response.#contents;
+    response.#bodyOpen = true;
 
     const readFn = reader.read.bind(reader);
     reader.read = () => {
       const chunk = readFn();
       if (chunk === null) {
-        this.#bodyEnded = true;
-        this.#bodyOpen = false;
+        response.#bodyEnded = true;
+        response.#bodyOpen = false;
       }
 
       return chunk;
@@ -158,11 +161,11 @@ export class Response {
     const closedFn = reader.close.bind(reader);
     reader.close = () => {
       closedFn();
-      this.#bodyEnded = true;
-      this.#bodyOpen = false;
+      response.#bodyEnded = true;
+      response.#bodyOpen = false;
     };
 
-    return { body: this.#contents, trailers: this.#trailersFuture };
+    return [response.#contents, response.#trailersFuture];
   }
 
   // Internal: call to complete the response transmission

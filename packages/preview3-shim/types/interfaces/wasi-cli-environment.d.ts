@@ -1,4 +1,4 @@
-/** @module Interface wasi:cli/environment@0.3.0 **/
+/** @module Interface wasi:cli/environment@0.3.0-rc-2026-02-09 **/
 /**
  * Get the POSIX-style environment variables.
  * 
@@ -18,4 +18,4 @@ export function getArguments(): Array<string>;
  * Return a path that programs should use as their initial current working
  * directory, interpreting `.` as shorthand for this.
  */
-export function initialCwd(): string | undefined;
+export function getInitialCwd(): string | undefined;

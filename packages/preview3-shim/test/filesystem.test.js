@@ -38,7 +38,7 @@ describe("Descriptor with os.tmpdir()", () => {
     const subpath = fileURLToPath(import.meta.url).slice(1);
     const child = await rootDescriptor.openAt({}, subpath, {}, {});
 
-    const { stream, future } = child.readViaStream(0n);
+    const [stream, future] = child.readViaStream(0n);
     const buf = await stream.readAll();
     const text = new TextDecoder().decode(buf);
     expect(text).toContain("UNIQUE STRING");
@@ -62,7 +62,7 @@ describe("Descriptor with os.tmpdir()", () => {
     await tx.close();
     await child.writeViaStream(rx, 0);
 
-    const { stream: sr, future: fr } = child.readViaStream(0n);
+    const [sr, fr] = child.readViaStream(0n);
     const buf = await sr.readAll();
     await fr.read();
 
@@ -96,7 +96,7 @@ describe("Descriptor with os.tmpdir()", () => {
       await child.appendViaStream(rx);
     }
 
-    const { stream: sr, future: fr } = child.readViaStream(0n);
+    const [sr, fr] = child.readViaStream(0n);
     const buf = await sr.readAll();
     await fr.read();
 
@@ -108,7 +108,7 @@ describe("Descriptor with os.tmpdir()", () => {
     const dirDesc = await rootDescriptor.openAt({}, relBase, { directory: true }, { read: true });
 
     const readDir = async () => {
-      const { stream, future } = dirDesc.readDirectory();
+      const [stream, future] = dirDesc.readDirectory();
       const entries = [];
       let entry;
       while ((entry = await stream.read()) !== null) {
@@ -140,7 +140,7 @@ describe("Descriptor with os.tmpdir()", () => {
       { read: true, write: true },
     );
 
-    expect(child.isSameObject(child)).toBe(true);
+    expect(await child.isSameObject(child)).toBe(true);
     const h1 = await child.metadataHash();
 
     const h2 = await rootDescriptor.metadataHashAt({ symlinkFollow: true }, sub);
