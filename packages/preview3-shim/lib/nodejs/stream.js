@@ -192,8 +192,9 @@ export class StreamWriter {
    */
   async close() {
     this.#ensureWriter();
-    await this.#writer.close();
+    const writer = this.#writer;
     this.#writer = null;
+    await writer.close();
   }
 
   /**
@@ -204,8 +205,9 @@ export class StreamWriter {
    */
   async closeWithError(error) {
     this.#ensureWriter();
-    await this.#writer.abort(error);
+    const writer = this.#writer;
     this.#writer = null;
+    await writer.abort(error);
   }
 
   /**

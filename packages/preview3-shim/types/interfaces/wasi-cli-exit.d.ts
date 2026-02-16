@@ -1,4 +1,4 @@
-/** @module Interface wasi:cli/exit@0.3.0 **/
+/** @module Interface wasi:cli/exit@0.3.0-rc-2026-02-09 **/
 /**
  * Exit the current instance and any linked instances.
  */

@@ -25,12 +25,24 @@ export const ipv6ToTuple = (ipv6) => {
   const lhsParts = lhs === "" ? [] : lhs.split(":");
   const rhsParts = rhs === "" ? [] : rhs.split(":");
   return [...lhsParts, ...Array(8 - lhsParts.length - rhsParts.length).fill(0), ...rhsParts].map(
-    (segment) => parseInt(segment, 16),
+    (segment) => {
+      const val = parseInt(segment, 16);
+      if (val < 0 || val > 0xffff || Number.isNaN(val)) {
+        throw new Error(`Invalid IPv6 segment: ${segment}`);
+      }
+      return val;
+    },
   );
 };
 
 export const ipv4ToTuple = (ipv4) => {
-  return ipv4.split(".").map((segment) => parseInt(segment, 10));
+  return ipv4.split(".").map((segment) => {
+    const val = parseInt(segment, 10);
+    if (val < 0 || val > 255 || Number.isNaN(val)) {
+      throw new Error(`Invalid IPv4 segment: ${segment}`);
+    }
+    return val;
+  });
 };
 
 export const isMulticastIpAddress = ({ tag, val: { address } }) =>

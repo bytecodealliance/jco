@@ -1,4 +1,4 @@
-/** @module Interface wasi:random/insecure-seed@0.3.0 **/
+/** @module Interface wasi:random/insecure-seed@0.3.0-rc-2026-02-09 **/
 /**
  * Return a 128-bit value that may contain a pseudo-random value.
  * 
@@ -18,4 +18,4 @@
  * called multiple times and potentially used for purposes other than DoS
  * protection.
  */
-export function insecureSeed(): [bigint, bigint];
+export function getInsecureSeed(): [bigint, bigint];

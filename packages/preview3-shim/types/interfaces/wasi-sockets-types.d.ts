@@ -1,5 +1,5 @@
-/** @module Interface wasi:sockets/types@0.3.0 **/
-export type Duration = import('./wasi-clocks-monotonic-clock.js').Duration;
+/** @module Interface wasi:sockets/types@0.3.0-rc-2026-02-09 **/
+export type Duration = import('./wasi-clocks-types.js').Duration;
 /**
  * Error codes.
  * 
@@ -130,6 +130,10 @@ export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 
 export class TcpSocket {
   /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
+  /**
   * Create a new TCP socket.
   * 
   * Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)` in POSIX.
@@ -145,7 +149,7 @@ export class TcpSocket {
   * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
   * - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
   */
-  constructor(addressFamily: IpAddressFamily)
+  static create(addressFamily: IpAddressFamily): TcpSocket;
   /**
   * Bind the socket to the provided IP address and port.
   * 
@@ -213,7 +217,7 @@ export class TcpSocket {
   */
   connect(remoteAddress: IpSocketAddress): Promise<void>;
   /**
-  * Start listening return a stream of new inbound connections.
+  * Start listening and return a stream of new inbound connections.
   * 
   * Transitions the socket into the `listening` state. This can be called
   * at most once per socket.
@@ -268,6 +272,12 @@ export class TcpSocket {
   * In either case, the stream returned by this `listen` method remains
   * operational.
   * 
+  * WASI requires `listen` to perform an implicit bind if the socket
+  * has not already been bound. Not all platforms (notably Windows)
+  * exhibit this behavior out of the box. On platforms that require it,
+  * the WASI implementation can emulate this behavior by performing
+  * the bind itself if the guest hasn't already done so.
+  * 
   * # References
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html>
   * - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/accept.html>
@@ -301,7 +311,7 @@ export class TcpSocket {
   * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
   * - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
   */
-  send(data: ReadableStream<number>): Promise<void>;
+  send(data: ReadableStream<number>): Promise<Result<void, ErrorCode>>;
   /**
   * Read data from peer.
   * 
@@ -343,7 +353,7 @@ export class TcpSocket {
   * > If the socket has not been bound to a local name, the value
   * > stored in the object pointed to by `address` is unspecified.
   * 
-  * WASI is stricter and requires `local-address` to return `invalid-state` when the socket hasn't been bound yet.
+  * WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
   * 
   * # Typical errors
   * - `invalid-state`: The socket is not bound to any local address.
@@ -354,7 +364,7 @@ export class TcpSocket {
   * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
   * - <https://man.freebsd.org/cgi/man.cgi?getsockname>
   */
-  localAddress(): IpSocketAddress;
+  getLocalAddress(): IpSocketAddress;
   /**
   * Get the remote address.
   * 
@@ -367,13 +377,13 @@ export class TcpSocket {
   * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
   * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
   */
-  remoteAddress(): IpSocketAddress;
+  getRemoteAddress(): IpSocketAddress;
   /**
   * Whether the socket is in the `listening` state.
   * 
   * Equivalent to the SO_ACCEPTCONN socket option.
   */
-  isListening(): boolean;
+  getIsListening(): boolean;
   /**
   * Whether this is a IPv4 or IPv6 socket.
   * 
@@ -381,7 +391,7 @@ export class TcpSocket {
   * 
   * Equivalent to the SO_DOMAIN socket option.
   */
-  addressFamily(): IpAddressFamily;
+  getAddressFamily(): IpAddressFamily;
   /**
   * Hints the desired listen queue size. Implementations are free to ignore this.
   * 
@@ -405,7 +415,7 @@ export class TcpSocket {
   * 
   * Equivalent to the SO_KEEPALIVE socket option.
   */
-  keepAliveEnabled(): boolean;
+  getKeepAliveEnabled(): boolean;
   setKeepAliveEnabled(value: boolean): void;
   /**
   * Amount of time the connection has to be idle before TCP starts sending keepalive packets.
@@ -419,7 +429,7 @@ export class TcpSocket {
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
-  keepAliveIdleTime(): Duration;
+  getKeepAliveIdleTime(): Duration;
   setKeepAliveIdleTime(value: Duration): void;
   /**
   * The time between keepalive packets.
@@ -433,7 +443,7 @@ export class TcpSocket {
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
-  keepAliveInterval(): Duration;
+  getKeepAliveInterval(): Duration;
   setKeepAliveInterval(value: Duration): void;
   /**
   * The maximum amount of keepalive packets TCP should send before aborting the connection.
@@ -447,7 +457,7 @@ export class TcpSocket {
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
-  keepAliveCount(): number;
+  getKeepAliveCount(): number;
   setKeepAliveCount(value: number): void;
   /**
   * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
@@ -457,7 +467,7 @@ export class TcpSocket {
   * # Typical errors
   * - `invalid-argument`:     (set) The TTL value must be 1 or higher.
   */
-  hopLimit(): number;
+  getHopLimit(): number;
   setHopLimit(value: number): void;
   /**
   * The kernel buffer space reserved for sends/receives on this socket.
@@ -471,13 +481,17 @@ export class TcpSocket {
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
-  receiveBufferSize(): bigint;
+  getReceiveBufferSize(): bigint;
   setReceiveBufferSize(value: bigint): void;
-  sendBufferSize(): bigint;
+  getSendBufferSize(): bigint;
   setSendBufferSize(value: bigint): void;
 }
 
 export class UdpSocket {
+  /**
+   * This type does not have a public constructor.
+   */
+  private constructor();
   /**
   * Create a new UDP socket.
   * 
@@ -494,7 +508,7 @@ export class UdpSocket {
   * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
   * - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
   */
-  constructor(addressFamily: IpAddressFamily)
+  static create(addressFamily: IpAddressFamily): UdpSocket;
   /**
   * Bind the socket to the provided IP address and port.
   * 
@@ -640,7 +654,7 @@ export class UdpSocket {
   * > If the socket has not been bound to a local name, the value
   * > stored in the object pointed to by `address` is unspecified.
   * 
-  * WASI is stricter and requires `local-address` to return `invalid-state` when the socket hasn't been bound yet.
+  * WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
   * 
   * # Typical errors
   * - `invalid-state`: The socket is not bound to any local address.
@@ -651,7 +665,7 @@ export class UdpSocket {
   * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
   * - <https://man.freebsd.org/cgi/man.cgi?getsockname>
   */
-  localAddress(): IpSocketAddress;
+  getLocalAddress(): IpSocketAddress;
   /**
   * Get the address the socket is currently "connected" to.
   * 
@@ -664,7 +678,7 @@ export class UdpSocket {
   * - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
   * - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
   */
-  remoteAddress(): IpSocketAddress;
+  getRemoteAddress(): IpSocketAddress;
   /**
   * Whether this is a IPv4 or IPv6 socket.
   * 
@@ -672,7 +686,7 @@ export class UdpSocket {
   * 
   * Equivalent to the SO_DOMAIN socket option.
   */
-  addressFamily(): IpAddressFamily;
+  getAddressFamily(): IpAddressFamily;
   /**
   * Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
   * 
@@ -681,7 +695,7 @@ export class UdpSocket {
   * # Typical errors
   * - `invalid-argument`:     (set) The TTL value must be 1 or higher.
   */
-  unicastHopLimit(): number;
+  getUnicastHopLimit(): number;
   setUnicastHopLimit(value: number): void;
   /**
   * The kernel buffer space reserved for sends/receives on this socket.
@@ -695,8 +709,8 @@ export class UdpSocket {
   * # Typical errors
   * - `invalid-argument`:     (set) The provided value was 0.
   */
-  receiveBufferSize(): bigint;
+  getReceiveBufferSize(): bigint;
   setReceiveBufferSize(value: bigint): void;
-  sendBufferSize(): bigint;
+  getSendBufferSize(): bigint;
   setSendBufferSize(value: bigint): void;
 }

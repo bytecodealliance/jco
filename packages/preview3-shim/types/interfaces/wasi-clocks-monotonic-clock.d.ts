@@ -1,31 +1,33 @@
-/** @module Interface wasi:clocks/monotonic-clock@0.3.0 **/
+/** @module Interface wasi:clocks/monotonic-clock@0.3.0-rc-2026-02-09 **/
 /**
  * Read the current value of the clock.
  * 
  * The clock is monotonic, therefore calling this function repeatedly will
  * produce a sequence of non-decreasing values.
+ * 
+ * For completeness, this function traps if it's not possible to represent
+ * the value of the clock in a `mark`. Consequently, implementations
+ * should ensure that the starting time is low enough to avoid the
+ * possibility of overflow in practice.
  */
-export function now(): Instant;
+export function now(): Mark;
 /**
  * Query the resolution of the clock. Returns the duration of time
  * corresponding to a clock tick.
  */
-export function resolution(): Duration;
+export function getResolution(): Duration;
 /**
- * Wait until the specified instant has occurred.
+ * Wait until the specified mark has occurred.
  */
-export function waitUntil(when: Instant): Promise<void>;
+export function waitUntil(when: Mark): Promise<void>;
 /**
- * Wait for the specified duration has elapsed.
+ * Wait for the specified duration to elapse.
  */
 export function waitFor(howLong: Duration): Promise<void>;
+export type Duration = import('./wasi-clocks-types.js').Duration;
 /**
- * An instant in time, in nanoseconds. An instant is relative to an
+ * A mark on a monotonic clock is a number of nanoseconds since an
  * unspecified initial value, and can only be compared to instances from
  * the same monotonic-clock.
  */
-export type Instant = bigint;
-/**
- * A duration of time, in nanoseconds.
- */
-export type Duration = bigint;
+export type Mark = bigint;

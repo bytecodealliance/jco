@@ -9,3 +9,4 @@ export type * as terminalOutput from "./interfaces/wasi-cli-terminal-output.d.ts
 export type * as terminalStderr from "./interfaces/wasi-cli-terminal-stderr.d.ts";
 export type * as terminalStdin from "./interfaces/wasi-cli-terminal-stdin.d.ts";
 export type * as terminalStdout from "./interfaces/wasi-cli-terminal-stdout.d.ts";
+export type * as types from "./interfaces/wasi-cli-types.d.ts";

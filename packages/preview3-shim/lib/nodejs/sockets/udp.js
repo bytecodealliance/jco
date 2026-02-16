@@ -212,11 +212,17 @@ export class UdpSocket {
     }
 
     const addr = remoteAddress ?? this.#remote;
-    if (!addr || addr.val.port === 0n || addr.tag !== this.#family) {
+    if (!addr || addr.val.port === 0 || addr.tag !== this.#family) {
       throw new SocketError("invalid-argument");
     }
 
-    if (this.#state === STATE.CONNECTED && addr !== this.#remote) {
+    if (
+      this.#state === STATE.CONNECTED &&
+      remoteAddress != null &&
+      (addr.tag !== this.#remote.tag ||
+        addr.val.port !== this.#remote.val.port ||
+        addr.val.address.some((v, i) => v !== this.#remote.val.address[i]))
+    ) {
       throw new SocketError("invalid-argument");
     }
 

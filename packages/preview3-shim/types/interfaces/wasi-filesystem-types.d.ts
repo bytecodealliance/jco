@@ -1,5 +1,5 @@
-/** @module Interface wasi:filesystem/types@0.3.0 **/
-export type Datetime = import('./wasi-clocks-wall-clock.js').Datetime;
+/** @module Interface wasi:filesystem/types@0.3.0-rc-2026-02-09 **/
+export type Instant = import('./wasi-clocks-system-clock.js').Instant;
 /**
  * File size or length of a region within a file.
  */
@@ -153,21 +153,21 @@ export interface DescriptorStat {
    * If the `option` is none, the platform doesn't maintain an access
    * timestamp for this file.
    */
-  dataAccessTimestamp?: Datetime,
+  dataAccessTimestamp?: Instant,
   /**
    * Last data modification timestamp.
    * 
    * If the `option` is none, the platform doesn't maintain a
    * modification timestamp for this file.
    */
-  dataModificationTimestamp?: Datetime,
+  dataModificationTimestamp?: Instant,
   /**
    * Last file status-change timestamp.
    * 
    * If the `option` is none, the platform doesn't maintain a
    * status-change timestamp for this file.
    */
-  statusChangeTimestamp?: Datetime,
+  statusChangeTimestamp?: Instant,
 }
 /**
  * When setting a timestamp, this gives the value to set it to.
@@ -191,7 +191,7 @@ export interface NewTimestampNow {
  */
 export interface NewTimestampTimestamp {
   tag: 'timestamp',
-  val: Datetime,
+  val: Instant,
 }
 /**
  * A directory entry.
@@ -380,8 +380,15 @@ export class Descriptor {
   * Multiple read, write, and append streams may be active on the same open
   * file and they do not interfere with each other.
   * 
-  * This function returns a future, which will resolve to an error code if
-  * reading full contents of the file fails.
+  * This function returns a `stream` which provides the data received from the
+  * file, and a `future` providing additional error information in case an
+  * error is encountered.
+  * 
+  * If no error is encountered, `stream.read` on the `stream` will return
+  * `read-status::closed` with no `error-context` and the future resolves to
+  * the value `ok`. If an error is encountered, `stream.read` on the
+  * `stream` returns `read-status::closed` with an `error-context` and the future
+  * resolves to `err` with an `error-code`.
   * 
   * Note: This is similar to `pread` in POSIX.
   */
@@ -400,7 +407,7 @@ export class Descriptor {
   * 
   * Note: This is similar to `pwrite` in POSIX.
   */
-  writeViaStream(data: ReadableStream<number>, offset: Filesize): Promise<void>;
+  writeViaStream(data: ReadableStream<number>, offset: Filesize): Promise<Result<void, ErrorCode>>;
   /**
   * Return a stream for appending to a file, if available.
   * 
@@ -411,7 +418,7 @@ export class Descriptor {
   * 
   * Note: This is similar to `write` with `O_APPEND` in POSIX.
   */
-  appendViaStream(data: ReadableStream<number>): Promise<void>;
+  appendViaStream(data: ReadableStream<number>): Promise<Result<void, ErrorCode>>;
   /**
   * Provide file advisory information on a descriptor.
   * 
@@ -478,7 +485,7 @@ export class Descriptor {
   * This function returns a future, which will resolve to an error code if
   * reading full contents of the directory fails.
   */
-  readDirectory(): Promise<[ReadableStream<DirectoryEntry>, Promise<Result<void, ErrorCode>>]>;
+  readDirectory(): [ReadableStream<DirectoryEntry>, Promise<Result<void, ErrorCode>>];
   /**
   * Synchronize the data and metadata of a file to disk.
   * 

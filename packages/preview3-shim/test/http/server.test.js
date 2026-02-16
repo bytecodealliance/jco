@@ -25,7 +25,7 @@ describe("HttpServer Integration", () => {
         headers.append("content-type", ENCODER.encode("text/plain"));
         headers.append("trailer", ENCODER.encode("content-md5"));
 
-        const { res } = Response.new(headers, bodyRx, trailersRx);
+        const [res] = Response.new(headers, bodyRx, trailersRx);
 
         res.setStatusCode(200);
         await bodyTx.write(Buffer.from("hello world"));

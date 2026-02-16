@@ -3,7 +3,13 @@ import http from "node:http";
 
 import { describe, test, expect, afterAll, beforeAll } from "vitest";
 
-import { Fields, HttpClient, RequestOptions, Request } from "@bytecodealliance/preview3-shim/http";
+import {
+  Fields,
+  client,
+  RequestOptions,
+  Request,
+  Response,
+} from "@bytecodealliance/preview3-shim/http";
 
 import { future } from "@bytecodealliance/preview3-shim/future";
 import { stream } from "@bytecodealliance/preview3-shim/stream";
@@ -64,7 +70,7 @@ describe("HttpClient Integration", () => {
     headers.append("accept", ENCODER.encode("application/json"));
 
     const { tx: trailersTx, rx: trailersRx } = future();
-    const { req } = Request.new(headers, null, trailersRx);
+    const [req] = Request.new(headers, null, trailersRx);
 
     req.setMethod("GET");
     req.setAuthority(authority);
@@ -72,7 +78,7 @@ describe("HttpClient Integration", () => {
 
     trailersTx.write(null);
 
-    const response = await HttpClient.request(req);
+    const response = await client.send(req);
     expect(response.statusCode()).toBe(200);
 
     const responseHeaders = response.headers();
@@ -85,7 +91,8 @@ describe("HttpClient Integration", () => {
     checkHeader("content-type", "application/json");
     checkHeader("x-test-header", "test-value");
 
-    const { body } = response.body();
+    const { rx: resRx2 } = future();
+    const [body] = Response.consumeBody(response, resRx2);
     const stream = body.intoReadableStream();
     const reader = stream.getReader();
     let result = "";
@@ -110,7 +117,7 @@ describe("HttpClient Integration", () => {
     const { tx: bodyTx, rx: bodyRx } = stream();
     const { tx: trailersTx, rx: trailersRx } = future();
 
-    const { req } = Request.new(headers, bodyRx, trailersRx);
+    const [req] = Request.new(headers, bodyRx, trailersRx);
     req.setMethod("POST");
     req.setAuthority(authority);
     req.setPathWithQuery("/submit");
@@ -120,7 +127,7 @@ describe("HttpClient Integration", () => {
       email: "test@example.com",
     });
 
-    const responsePromise = HttpClient.request(req);
+    const responsePromise = client.send(req);
 
     await bodyTx.write(Buffer.from(requestData));
     await bodyTx.close();
@@ -129,7 +136,8 @@ describe("HttpClient Integration", () => {
     const response = await responsePromise;
     expect(response.statusCode()).toBe(200);
 
-    const { body } = response.body();
+    const { rx: resRx2 } = future();
+    const [body] = Response.consumeBody(response, resRx2);
     const reader = body.intoReadableStream().getReader();
     let result = "";
 
@@ -151,17 +159,18 @@ describe("HttpClient Integration", () => {
     const headers = new Fields();
     const { tx: trailersTx, rx: trailersRx } = future();
 
-    const { req } = Request.new(headers, null, trailersRx);
+    const [req] = Request.new(headers, null, trailersRx);
     req.setMethod("GET");
     req.setAuthority(authority);
     req.setPathWithQuery("/error");
 
     await trailersTx.write(null);
 
-    const response = await HttpClient.request(req);
+    const response = await client.send(req);
     expect(response.statusCode()).toBe(500);
 
-    const { body } = response.body();
+    const { rx: resRx2 } = future();
+    const [body] = Response.consumeBody(response, resRx2);
     const stream = body.intoReadableStream();
     const reader = stream.getReader();
     let result = "";
@@ -182,12 +191,12 @@ describe("HttpClient Integration", () => {
     const headers = new Fields();
     const { tx: trailersTx, rx: trailersRx } = future();
 
-    const { req } = Request.new(headers, null, trailersRx);
+    const [req] = Request.new(headers, null, trailersRx);
     req.setMethod("GET");
 
     await trailersTx.write(null);
 
-    await expect(HttpClient.request(req)).rejects.toThrow("Request.authority must be set");
+    await expect(client.send(req)).rejects.toThrow("Request.authority must be set");
   });
 
   test("first-byte timeout triggers HttpError", async () => {
@@ -198,13 +207,13 @@ describe("HttpClient Integration", () => {
     opts.setFirstByteTimeout(1_000_000n); // 1 ms
     opts.setBetweenBytesTimeout(1_000_000n); // 1 ms
 
-    const { req } = Request.new(headers, null, trailersRx, opts);
+    const [req] = Request.new(headers, null, trailersRx, opts);
     req.setMethod("GET");
     req.setAuthority(authority);
     req.setPathWithQuery("/delayed-first-byte");
 
     await trailersTx.write(null);
 
-    await expect(HttpClient.request(req)).rejects.toThrow(/connection-timeout/);
+    await expect(client.send(req)).rejects.toThrow(/connection-timeout/);
   });
 });

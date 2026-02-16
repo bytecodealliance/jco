@@ -31,7 +31,7 @@ describe("Response", () => {
   });
 
   test("new() returns Response and FutureReader", () => {
-    const { res, future } = Response.new(headers, contents, trailers);
+    const [res, future] = Response.new(headers, contents, trailers);
     expect(res).toBeInstanceOf(Response);
     expect(future).toBeInstanceOf(FutureReader);
     expect(res.statusCode()).toBe(200); // Default status code
@@ -55,17 +55,17 @@ describe("Response", () => {
   });
 
   test("contents can be null", () => {
-    const { res } = Response.new(headers, null, trailers);
+    const [res] = Response.new(headers, null, trailers);
     expect(res).toBeInstanceOf(Response);
   });
 
   test("statusCode() returns the current status code", () => {
-    const { res } = Response.new(headers, contents, trailers);
+    const [res] = Response.new(headers, contents, trailers);
     expect(res.statusCode()).toBe(200); // Default
   });
 
   test("setStatusCode() changes the status code", () => {
-    const { res } = Response.new(headers, contents, trailers);
+    const [res] = Response.new(headers, contents, trailers);
     res.setStatusCode(404);
     expect(res.statusCode()).toBe(404);
 
@@ -74,7 +74,7 @@ describe("Response", () => {
   });
 
   test("setStatusCode() validates the status code", () => {
-    const { res } = Response.new(headers, contents, trailers);
+    const [res] = Response.new(headers, contents, trailers);
 
     expect(() => res.setStatusCode("200")).toThrow(HttpError);
     expect(() => res.setStatusCode(200.5)).toThrow(HttpError);
@@ -83,7 +83,7 @@ describe("Response", () => {
   });
 
   test("headers() returns the immutable headers", () => {
-    const { res } = Response.new(headers, contents, trailers);
+    const [res] = Response.new(headers, contents, trailers);
     const respHeaders = res.headers();
 
     expect(respHeaders).toBe(headers);
@@ -92,16 +92,17 @@ describe("Response", () => {
     );
   });
 
-  test("body() returns the contents stream and trailers future", () => {
-    const { res } = Response.new(headers, contents, trailers);
-    const { body, trailers: t } = res.body();
+  test("consumeBody() returns the contents stream and trailers future", () => {
+    const [res] = Response.new(headers, contents, trailers);
+    const { rx: resRx2 } = future();
+    const [body, t] = Response.consumeBody(res, resRx2);
 
     expect(body).toBe(contents);
     expect(t).toBe(trailers);
   });
 
   test("_resolve method completes the response future", async () => {
-    const { res, future } = Response.new(headers, contents, trailers);
+    const [res, future] = Response.new(headers, contents, trailers);
 
     const futurePromise = future.read().then((result) => result);
     res._resolve({ tag: "ok", val: null });
@@ -113,15 +114,17 @@ describe("Response", () => {
   });
 });
 
-describe("Response.body single-stream semantics", () => {
-  test("throws if body() called twice without closing", async () => {
+describe("Response.consumeBody single-stream semantics", () => {
+  test("throws if consumeBody() called twice without closing", async () => {
     const headers = new Fields();
     const { tx: bodyTx, rx: bodyRx } = stream();
     const { tx: trailersTx, rx: trailersRx } = future();
-    const { res } = Response.new(headers, bodyRx, trailersRx);
+    const [res] = Response.new(headers, bodyRx, trailersRx);
 
-    res.body();
-    expect(() => res.body()).toThrowError(HttpError);
+    const { rx: resRx2 } = future();
+    Response.consumeBody(res, resRx2);
+    const { rx: resRx3 } = future();
+    expect(() => Response.consumeBody(res, resRx3)).toThrowError(HttpError);
 
     await bodyTx.close();
     await trailersTx.write(null);
@@ -131,14 +134,16 @@ describe("Response.body single-stream semantics", () => {
     const headers = new Fields();
     const { tx: bodyTx, rx: bodyRx } = stream();
     const { tx: trailersTx, rx: trailersRx } = future();
-    const { res } = Response.new(headers, bodyRx, trailersRx);
+    const [res] = Response.new(headers, bodyRx, trailersRx);
 
-    const { body } = res.body();
+    const { rx: resRx2 } = future();
+    const [body] = Response.consumeBody(res, resRx2);
     await bodyTx.write(Buffer.from("x"));
     await bodyTx.close();
     await trailersTx.write(null);
 
     while ((await body.read()) !== null) {}
-    expect(() => res.body()).toThrowError(HttpError);
+    const { rx: resRx3 } = future();
+    expect(() => Response.consumeBody(res, resRx3)).toThrowError(HttpError);
   });
 });

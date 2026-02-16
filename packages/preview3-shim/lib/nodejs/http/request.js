@@ -197,7 +197,7 @@ export class Request {
    * @param {?StreamReader} contents  optional body stream
    * @param {FutureReader} trailers  future for trailers
    * @param {?RequestOptions} options  optional RequestOptions
-   * @returns {{ req: Request, future: FutureReader }}
+   * @returns {[Request, FutureReader]}
    * @throws {HttpError} with payload.tag 'invalid-argument' for invalid arguments
    *
    */
@@ -233,7 +233,7 @@ export class Request {
     const { tx, rx } = future();
     request.#requestFuture = tx;
 
-    return { req: request, future: rx };
+    return [request, rx];
   }
 
   /**
@@ -395,39 +395,42 @@ export class Request {
   }
 
   /**
-   * Get the body stream and trailers future.
+   * Get body stream and trailers future, consuming the resource.
    *
    * WIT:
    * ```
-   * body: func() -> result<tuple<stream<u8>, future<result<option<trailers>, error-code>>>>;
+   * consume-body: static func(this: request, res: future<result<_, error-code>>)
+   *   -> tuple<stream<u8>, future<result<option<trailers>, error-code>>>;
    * ```
    *
-   * @returns {{ req: StreamReader, trailers: FutureReader }}
+   * @param {Request} request - The request to consume.
+   * @param {FutureReader} res - A future for communicating errors.
+   * @returns {[StreamReader, FutureReader]} A tuple of [body stream, trailers future].
    * @throws {HttpError} with payload.tag 'invalid-state' if body already open or consumed.
    */
-  body() {
-    if (this.#bodyOpen) {
-      throw new HttpError("invalid-state", "body() already called and not yet closed");
+  static consumeBody(request, _res) {
+    if (request.#bodyOpen) {
+      throw new HttpError("invalid-state", "body already called and not yet closed");
     }
 
-    if (this.#bodyEnded) {
-      throw new HttpError("invalid-state", "body() has already been consumed");
+    if (request.#bodyEnded) {
+      throw new HttpError("invalid-state", "body has already been consumed");
     }
 
-    if (!this.#contents) {
-      this.#bodyEnded = true;
-      return { body: this.#contents, trailers: this.#trailersFuture };
+    if (!request.#contents) {
+      request.#bodyEnded = true;
+      return [request.#contents, request.#trailersFuture];
     }
 
-    const reader = this.#contents;
-    this.#bodyOpen = true;
+    const reader = request.#contents;
+    request.#bodyOpen = true;
 
     const readFn = reader.read.bind(reader);
     reader.read = () => {
       const chunk = readFn();
       if (chunk === null) {
-        this.#bodyEnded = true;
-        this.#bodyOpen = false;
+        request.#bodyEnded = true;
+        request.#bodyOpen = false;
       }
 
       return chunk;
@@ -436,11 +439,11 @@ export class Request {
     const closedFn = reader.close.bind(reader);
     reader.close = () => {
       closedFn();
-      this.#bodyEnded = true;
-      this.#bodyOpen = false;
+      request.#bodyEnded = true;
+      request.#bodyOpen = false;
     };
 
-    return { body: this.#contents, trailers: this.#trailersFuture };
+    return [request.#contents, request.#trailersFuture];
   }
 
   // TODO: placeholder

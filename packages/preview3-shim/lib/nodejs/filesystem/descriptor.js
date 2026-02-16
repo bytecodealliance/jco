@@ -36,7 +36,7 @@ class Descriptor {
       write = false,
       fileIntegritySync = false,
       dataIntegritySync = false,
-      requestedIntegritySync = false,
+      requestedWriteSync = false,
       mutateDirectory = false,
     } = mode;
 
@@ -45,7 +45,7 @@ class Descriptor {
       write,
       fileIntegritySync,
       dataIntegritySync,
-      requestedIntegritySync,
+      requestedWriteSync,
       mutateDirectory,
     };
 
@@ -114,10 +114,7 @@ class Descriptor {
         throw FSError.from(err);
       });
 
-    return {
-      stream: new StreamReader(transform.readable),
-      future: new FutureReader(promise),
-    };
+    return [new StreamReader(transform.readable), new FutureReader(promise)];
   }
 
   /**
@@ -334,10 +331,7 @@ class Descriptor {
         throw FSError.from(err);
       });
 
-    return {
-      stream: new StreamReader(transform.readable),
-      future: new FutureReader(promise),
-    };
+    return [new StreamReader(transform.readable), new FutureReader(promise)];
   }
 
   /**
@@ -574,7 +568,7 @@ class Descriptor {
       if (df.fileIntegritySync) {
         fsFlags |= fs.constants.O_SYNC;
       }
-      if (df.requestedIntegritySync) {
+      if (df.requestedWriteSync) {
         fsFlags |= fs.constants.O_SYNC;
       }
       if (df.dataIntegritySync) {
@@ -625,7 +619,7 @@ class Descriptor {
       return desc;
     } catch (err) {
       if (err.code === "ERR_INVALID_ARG_VALUE") {
-        throw process.platform === "win32" ? "no-entry" : "invalid";
+        throw new FSError(process.platform === "win32" ? "no-entry" : "invalid");
       }
       throw FSError.from(err);
     }
@@ -791,7 +785,7 @@ class Descriptor {
    * @param {Descriptor} other Another descriptor.
    * @returns {Promise<boolean>}
    */
-  isSameObject(other) {
+  async isSameObject(other) {
     return other === this;
   }
 

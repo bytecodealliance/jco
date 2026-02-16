@@ -1,5 +1,5 @@
-/** @module Interface wasi:http/types@0.3.0-draft **/
-export type Duration = import('./wasi-clocks-monotonic-clock.js').Duration;
+/** @module Interface wasi:http/types@0.3.0-rc-2026-02-09 **/
+export type Duration = import('./wasi-clocks-types.js').Duration;
 /**
  * This type corresponds to HTTP standard Methods.
  */
@@ -364,10 +364,10 @@ export class Fields {
   * The names and values are always returned in the original casing and in
   * the order in which they will be serialized for transport.
   */
-  entries(): Array<[FieldName, FieldValue]>;
+  copyAll(): Array<[FieldName, FieldValue]>;
   /**
   * Make a deep copy of the Fields. Equivalent in behavior to calling the
-  * `fields` constructor on the return value of `entries`. The resulting
+  * `fields` constructor on the return value of `copy-all`. The resulting
   * `fields` is mutable.
   */
   clone(): Fields;
@@ -384,7 +384,8 @@ export class Request {
   * 
   * `headers` is the HTTP Headers for the Request.
   * 
-  * `contents` is the optional body content stream.
+  * `contents` is the optional body content stream with `none`
+  * representing a zero-length content stream.
   * Once it is closed, `trailers` future must resolve to a result.
   * If `trailers` resolves to an error, underlying connection
   * will be closed immediately.
@@ -404,7 +405,7 @@ export class Request {
   /**
   * Get the Method for the Request.
   */
-  method(): Method;
+  getMethod(): Method;
   /**
   * Set the Method for the Request. Fails if the string present in a
   * `method.other` argument is not a syntactically valid method.
@@ -414,7 +415,7 @@ export class Request {
   * Get the combination of the HTTP Path and Query for the Request.  When
   * `none`, this represents an empty Path and empty Query.
   */
-  pathWithQuery(): string | undefined;
+  getPathWithQuery(): string | undefined;
   /**
   * Set the combination of the HTTP Path and Query for the Request.  When
   * `none`, this represents an empty Path and empty Query. Fails is the
@@ -425,7 +426,7 @@ export class Request {
   * Get the HTTP Related Scheme for the Request. When `none`, the
   * implementation may choose an appropriate default scheme.
   */
-  scheme(): Scheme | undefined;
+  getScheme(): Scheme | undefined;
   /**
   * Set the HTTP Related Scheme for the Request. When `none`, the
   * implementation may choose an appropriate default scheme. Fails if the
@@ -437,7 +438,7 @@ export class Request {
   * with Related Schemes which do not require an authority. The HTTP and
   * HTTPS schemes always require an authority.
   */
-  authority(): string | undefined;
+  getAuthority(): string | undefined;
   /**
   * Set the authority of the Request's target URI. A value of `none` may be used
   * with Related Schemes which do not require an authority. The HTTP and
@@ -455,36 +456,29 @@ export class Request {
   * the parent `request` is dropped, or its ownership is transferred to
   * another component by e.g. `handler.handle`.
   */
-  options(): RequestOptions | undefined;
+  getOptions(): RequestOptions | undefined;
   /**
   * Get the headers associated with the Request.
   * 
   * The returned `headers` resource is immutable: `set`, `append`, and
   * `delete` operations will fail with `header-error.immutable`.
   */
-  headers(): Headers;
+  getHeaders(): Headers;
   /**
   * Get body of the Request.
   * 
   * Stream returned by this method represents the contents of the body.
-  * Once the stream is reported as closed, callers should await the returned future
-  * to determine whether the body was received successfully.
+  * Once the stream is reported as closed, callers should await the returned
+  * future to determine whether the body was received successfully.
   * The future will only resolve after the stream is reported as closed.
   * 
-  * The stream and future returned by this method are children:
-  * they should be closed or consumed before the parent `response`
-  * is dropped, or its ownership is transferred to another component
-  * by e.g. `handler.handle`.
+  * This function takes a `res` future as a parameter, which can be used to
+  * communicate an error in handling of the request.
   * 
-  * This method may be called multiple times.
-  * 
-  * This method will return an error if it is called while either:
-  * - a stream or future returned by a previous call to this method is still open
-  * - a stream returned by a previous call to this method has reported itself as closed
-  * Thus there will always be at most one readable stream open for a given body.
-  * Each subsequent stream picks up where the last stream left off, up until it is finished.
+  * Note that function will move the `request`, but references to headers or
+  * request options acquired from it previously will remain valid.
   */
-  body(): [ReadableStream<number>, Promise<Result<Trailers | undefined, ErrorCode>>];
+  static consumeBody(this_: Request, res: Promise<Result<void, ErrorCode>>): [ReadableStream<number>, Promise<Result<Trailers | undefined, ErrorCode>>];
 }
 
 export class RequestOptions {
@@ -495,7 +489,7 @@ export class RequestOptions {
   /**
   * The timeout for the initial connect to the HTTP Server.
   */
-  connectTimeout(): Duration | undefined;
+  getConnectTimeout(): Duration | undefined;
   /**
   * Set the timeout for the initial connect to the HTTP Server. An error
   * return value indicates that this timeout is not supported or that this
@@ -505,7 +499,7 @@ export class RequestOptions {
   /**
   * The timeout for receiving the first byte of the Response body.
   */
-  firstByteTimeout(): Duration | undefined;
+  getFirstByteTimeout(): Duration | undefined;
   /**
   * Set the timeout for receiving the first byte of the Response body. An
   * error return value indicates that this timeout is not supported or that
@@ -516,7 +510,7 @@ export class RequestOptions {
   * The timeout for receiving subsequent chunks of bytes in the Response
   * body stream.
   */
-  betweenBytesTimeout(): Duration | undefined;
+  getBetweenBytesTimeout(): Duration | undefined;
   /**
   * Set the timeout for receiving subsequent chunks of bytes in the Response
   * body stream. An error return value indicates that this timeout is not
@@ -542,7 +536,8 @@ export class Response {
   * 
   * `headers` is the HTTP Headers for the Response.
   * 
-  * `contents` is the optional body content stream.
+  * `contents` is the optional body content stream with `none`
+  * representing a zero-length content stream.
   * Once it is closed, `trailers` future must resolve to a result.
   * If `trailers` resolves to an error, underlying connection
   * will be closed immediately.
@@ -553,7 +548,7 @@ export class Response {
   /**
   * Get the HTTP Status Code for the Response.
   */
-  statusCode(): StatusCode;
+  getStatusCode(): StatusCode;
   /**
   * Set the HTTP Status Code for the Response. Fails if the status-code
   * given is not a valid http status code.
@@ -565,27 +560,20 @@ export class Response {
   * The returned `headers` resource is immutable: `set`, `append`, and
   * `delete` operations will fail with `header-error.immutable`.
   */
-  headers(): Headers;
+  getHeaders(): Headers;
   /**
   * Get body of the Response.
   * 
   * Stream returned by this method represents the contents of the body.
-  * Once the stream is reported as closed, callers should await the returned future
-  * to determine whether the body was received successfully.
+  * Once the stream is reported as closed, callers should await the returned
+  * future to determine whether the body was received successfully.
   * The future will only resolve after the stream is reported as closed.
   * 
-  * The stream and future returned by this method are children:
-  * they should be closed or consumed before the parent `response`
-  * is dropped, or its ownership is transferred to another component
-  * by e.g. `handler.handle`.
+  * This function takes a `res` future as a parameter, which can be used to
+  * communicate an error in handling of the response.
   * 
-  * This method may be called multiple times.
-  * 
-  * This method will return an error if it is called while either:
-  * - a stream or future returned by a previous call to this method is still open
-  * - a stream returned by a previous call to this method has reported itself as closed
-  * Thus there will always be at most one readable stream open for a given body.
-  * Each subsequent stream picks up where the last stream left off, up until it is finished.
+  * Note that function will move the `response`, but references to headers
+  * acquired from it previously will remain valid.
   */
-  body(): [ReadableStream<number>, Promise<Result<Trailers | undefined, ErrorCode>>];
+  static consumeBody(this_: Response, res: Promise<Result<void, ErrorCode>>): [ReadableStream<number>, Promise<Result<Trailers | undefined, ErrorCode>>];
 }
