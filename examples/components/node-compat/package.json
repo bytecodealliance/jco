@@ -1,0 +1,22 @@
+{
+  "name": "compat",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c && jco componentize -w wit -o dist/component.wasm dist/component.js",
+    "transpile": "jco transpile dist/component.wasm -o dist/transpiled",
+    "run-transpiled": "node run-transpiled.js ",
+    "all": "npm run build; npm run transpile; npm run run-transpiled"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@bytecodealliance/jco": "^1.15.4",
+    "@rollup/plugin-alias": "^6.0.0",
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-inject": "^5.0.5",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "rollup": "^4.57.0",
+    "unenv": "^2.0.0-rc.24"
+  }
+}
