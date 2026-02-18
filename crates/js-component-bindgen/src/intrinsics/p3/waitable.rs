@@ -3,7 +3,7 @@
 use super::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::p3::host::HostIntrinsic;
-use crate::intrinsics::{AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
 /// This enum contains intrinsics that enable waitable sets
@@ -146,21 +146,14 @@ impl WaitableIntrinsic {
     }
 
     /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, args: &RenderIntrinsicsArgs<'_>) {
+    pub fn render(&self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::WaitableSetClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let waitable_set_class = Self::WaitableSetClass.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
-                let maybe_shuffle = if args.determinism == AsyncDeterminismProfile::Random {
-                    "this.shuffleWaitables();"
-                } else {
-                    ""
-                };
-
-                output.push_str(&format!(r#"
+                output.push_str(&format!(
+                    r#"
                     class {waitable_set_class} {{
                         #componentIdx;
                         #waitables = [];
@@ -200,7 +193,8 @@ impl WaitableIntrinsic {
 
                         hasPendingEvent() {{
                             {debug_log_fn}('[{waitable_set_class}#hasPendingEvent()] args', {{
-                                componentIdx: this.#componentIdx
+                                componentIdx: this.#componentIdx,
+                                waitableSet: this,
                             }});
                             const waitable = this.#waitables.find(w => w.hasPendingEvent());
                             return waitable !== undefined;
@@ -208,7 +202,8 @@ impl WaitableIntrinsic {
 
                         getPendingEvent() {{
                             {debug_log_fn}('[{waitable_set_class}#getPendingEvent()] args', {{
-                                componentIdx: this.#componentIdx
+                                componentIdx: this.#componentIdx,
+                                waitableSet: this,
                             }});
                             for (const waitable of this.#waitables) {{
                                 if (!waitable.hasPendingEvent()) {{ continue; }}
@@ -216,100 +211,87 @@ impl WaitableIntrinsic {
                             }}
                             throw new Error('no waitables had a pending event');
                         }}
-
-                        async poll() {{
-                            {debug_log_fn}('[{waitable_set_class}#poll()] args', {{
-                                componentIdx: this.#componentIdx
-                            }});
-
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
-
-                            {maybe_shuffle}
-
-                            for (const waitableRep of this.#waitables) {{
-                                const w = state.waitables.get(waitableRep);
-                                if (!w) {{ throw new Error('no waitable with rep [' + waitableRep + ']'); }}
-                                waitables.push(w);
-                            }}
-
-                            const event = await Promise.race(waitables.map((w) => w.promise));
-
-                            throw new Error('{waitable_set_class}#poll() not implemented');
-                        }}
                     }}
-                "#));
+                "#
+                ));
             }
 
             Self::WaitableClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let waitable_class = Self::WaitableClass.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!(r#"
+                output.push_str(&format!(
+                    r#"
                     class {waitable_class} {{
-                        static _ID =  0n; // NOTE: this id is *not* the component model representation (aka 'rep')
-
-                        #id;
                         #componentIdx;
-                        #pendingEventFn = null;
-                        #waitableSet;
-                        #promise;
 
-                        constructor({{ promise, componentIdx }}) {{
-                            this.#id = ++{waitable_class}._ID;
+                        #pendingEventFn = null;
+
+                        #promise;
+                        #resolve;
+                        #reject;
+
+                        #waitableSet;
+
+                        target;
+
+                        constructor(args) {{
+                            const {{ componentIdx, target }} = args;
                             this.#componentIdx = componentIdx;
-                            this.#promise = promise;
+                            this.target = args.target;
+                            this.#resetPromise();
                         }}
 
                         componentIdx() {{ return this.#componentIdx; }}
                         isInSet() {{ return this.#waitableSet !== undefined; }}
 
+                        #resetPromise() {{
+                            const {{ promise, resolve, reject }} = Promise.withResolvers()
+                            this.#promise = promise;
+                            this.#resolve = resolve;
+                            this.#reject = reject;
+                        }}
+
+                        resolve() {{ this.#resolve(); }}
+                        reject(err) {{ this.#reject(err); }}
+                        promise() {{ return this.#promise; }}
+
                         hasPendingEvent() {{
                             {debug_log_fn}('[{waitable_class}#hasPendingEvent()]', {{
                                 componentIdx: this.#componentIdx,
+                                waitable: this,
                                 waitableSet: this.#waitableSet,
-                                hasPendingEvent: this.#pendingEventFn,
+                                hasPendingEvent: this.#pendingEventFn !== null,
                             }});
                             return this.#pendingEventFn !== null;
                         }}
 
                         setPendingEventFn(fn) {{
-                            {debug_log_fn}('[{waitable_class}#setPendingEvent()] args', {{ }});
+                            {debug_log_fn}('[{waitable_class}#setPendingEvent()] args', {{
+                                waitable: this,
+                                waitableSet: this.#waitableSet,
+                            }});
                             this.#pendingEventFn = fn;
                         }}
 
                         getPendingEvent() {{
-                            {debug_log_fn}('[{waitable_class}#getPendingEvent()] args', {{ }});
+                            {debug_log_fn}('[{waitable_class}#getPendingEvent()] args', {{
+                                waitable: this,
+                                waitableSet: this.#waitableSet,
+                                hasPendingEvent: this.#pendingEventFn !== null,
+                            }});
                             if (this.#pendingEventFn === null) {{ return null; }}
-                            const e = this.#pendingEventFn();
+                            const eventFn = this.#pendingEventFn;
                             this.#pendingEventFn = null;
+                            const e = eventFn();
+                            this.#resetPromise();
                             return e;
                         }}
 
-                        async poll() {{
-                            {debug_log_fn}('[{waitable_class}#poll()] args', {{
-                                componentIdx: this.#componentIdx,
-                                _id: this.#id,
-                            }});
-
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
-                            if (!state) {{
-                                throw new Error('invalid/missing async state for component instance [' + componentIdx + ']');
-                            }}
-
-                            const waitables = [];
-                            for (const waitableRep in waitableSet.waitables) {{
-                                const w = state.waitables.get(waitableRep);
-                                if (!w) {{ throw new Error('no waitable with rep [' + waitableRep + ']'); }}
-                                waitables.push(w);
-                            }}
-
-                            const event = await Promise.race(waitables.map((w) => w.promise));
-
-                            throw new Error('{waitable_class}#poll() not implemented');
-                        }}
-
                         join(waitableSet) {{
+                            {debug_log_fn}('[{waitable_class}#join()] args', {{
+                                waitable: this,
+                                waitableSet: waitableSet,
+                            }});
                             if (this.#waitableSet) {{ this.#waitableSet.removeWaitable(this); }}
                             if (!waitableSet) {{
                                 this.#waitableSet = null;
@@ -322,7 +304,7 @@ impl WaitableIntrinsic {
                         drop() {{
                             {debug_log_fn}('[{waitable_class}#drop()] args', {{
                                 componentIdx: this.#componentIdx,
-                                _id: this.#id,
+                                waitable: this,
                             }});
                             if (this.hasPendingEvent()) {{
                                 throw new Error('waitables with pending events cannot be dropped');
@@ -405,7 +387,6 @@ impl WaitableIntrinsic {
                             memoryIdx,
                             waitableSetRep,
                             resultPtr,
-                            waitableSetRep,
                             resultPtr
                         }});
 
@@ -431,9 +412,9 @@ impl WaitableIntrinsic {
                         let event;
                         const cancelDelivered = task.deliverPendingCancel({{ cancelalble: isCancellable }});
                         if (cancelDelivered) {{
-                            event = {{ code: {async_event_code_enum}.TASK_CANCELLED, index: 0, result: 0 }};
+                            event = {{ code: {async_event_code_enum}.TASK_CANCELLED, payload0: 0, payload1: 0 }};
                         }} else if (!wset.hasPendingEvent()) {{
-                            event = {{ code: {async_event_code_enum}.NONE, index: 0, result: 0 }};
+                            event = {{ code: {async_event_code_enum}.NONE, payload0: 0, payload1: 0 }};
                         }} else {{
                             event = wset.getPendingEvent();
                         }}
@@ -501,7 +482,7 @@ impl WaitableIntrinsic {
                 let waitable_join_fn = Self::WaitableJoin.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {waitable_join_fn}(componentIdx, waitableRep, waitableSetRep) {{
                         {debug_log_fn}('[{waitable_join_fn}()] args', {{ componentIdx, waitableSetRep, waitableRep }});
 
@@ -514,10 +495,11 @@ impl WaitableIntrinsic {
                             throw new Error('component instance is not marked as may leave, cannot join waitable');
                         }}
 
-                        const waitable = state.waitables.get(waitableRep);
-                        if (!waitable) {{
-                            throw new Error('failed to find waitable [' + waitableRep + '] in component instance [' + componentIdx + ']');
+                        const waitableObj = state.waitables.get(waitableRep);
+                        if (!waitableObj) {{
+                            throw new Error(`missing waitable obj (rep [${{waitableRep}}]), component idx [${{componentIdx}}])`);
                         }}
+                        const waitable = typeof waitableObj.getWaitable === 'function' ? waitableObj.getWaitable() : waitableObj;
 
                         const waitableSet = waitableSetRep === 0 ? null : state.waitableSets.get(waitableSetRep);
                         if (waitableSetRep !== 0 && !waitableSet) {{
@@ -526,7 +508,7 @@ impl WaitableIntrinsic {
 
                         waitable.join(waitableSet);
                     }}
-                "));
+                "#));
             }
         }
     }

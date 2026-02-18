@@ -2433,8 +2433,18 @@ impl<'a> Instantiator<'a, '_> {
             GlobalInitializer::ExtractCallback(ExtractCallback { index, def }) => {
                 let callback_idx = index.as_u32();
                 let core_def = self.core_def(def);
+
                 uwriteln!(self.src.js, "let callback_{callback_idx};",);
-                uwriteln!(self.src.js_init, "callback_{callback_idx} = {core_def};");
+
+                // If the function returns an async value like a stream or future,
+                // the callback that is executed in the the event loop (`AsyncTaskIntrinsic::DriverLoop`)
+                // may attempt to wait due to calling necessarily async host imports like {stream, future}.{write, read}.
+                //
+                // Here, we mark the task with an indicator that denotes whether the callback should be run this way.
+                //
+                // TODO: can we be more selective here rather than wrapping every callback in WebAssembly.promising?
+                // every callback *could* do stream.write, but many may not.
+                uwriteln!(self.src.js_init, "callback_{callback_idx} = WebAssembly.promising({core_def});");
             }
 
             GlobalInitializer::InstantiateModule(m) => match m {
