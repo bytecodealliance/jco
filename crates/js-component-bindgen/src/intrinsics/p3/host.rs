@@ -312,8 +312,8 @@ impl HostIntrinsic {
                                 if (subtask.resolved()) {{ subtask.deliverResolve(); }}
                                 return {{
                                     code: {async_event_code_enum}.SUBTASK,
-                                    index: rep,
-                                    result: subtask.getStateNumber(),
+                                    payload0: rep,
+                                    payload1: subtask.getStateNumber(),
                                 }}
                             }});
                         }});

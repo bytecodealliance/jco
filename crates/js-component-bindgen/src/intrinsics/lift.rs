@@ -908,19 +908,19 @@ impl LiftIntrinsic {
                         {debug_log_fn}('[{lift_flat_stream_fn}()] args', {{ componentTableIdx, ctx }});
                         const {{ memory, useDirectParams, params, componentIdx }} = ctx;
 
-                        const streamIdx = params[0];
-                        if (!streamIdx) {{ throw new Error('missing stream idx'); }}
+                        const streamEndIdx = params[0];
+                        if (!streamEndIdx) {{ throw new Error('missing stream idx'); }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                        const streamEnd = cstate.getStreamEnd({{ tableIdx: componentTableIdx, streamIdx }});
+                        const streamEnd = cstate.getStreamEnd({{ tableIdx: componentTableIdx, streamEndIdx }});
                         if (!streamEnd) {{
-                            throw new Error(`missing stream [${{streamIdx}}] (table [${{componentTableIdx}}]) in component [${{componentIdx}}] during lift`);
+                            throw new Error(`missing stream end [${{streamEndIdx}}] (table [${{componentTableIdx}}]) in component [${{componentIdx}}] during lift`);
                         }}
 
                         const stream = new {external_stream_class}({{
-                            hostStreamRep: streamEnd.getStreamRep(),
+                            hostStreamRep: streamEnd.streamRep(),
                             isReadable: streamEnd.isReadable(),
                             isWritable: streamEnd.isWritable(),
                             writeFn: (v) => {{ return streamEnd.write(v); }},
