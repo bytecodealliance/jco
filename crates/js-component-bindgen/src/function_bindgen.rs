@@ -2306,7 +2306,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     "stream element type mismatch"
                 );
 
-                let arg_stream_idx = operands
+                let arg_stream_end_idx = operands
                     .first()
                     .expect("unexpectedly missing stream table idx arg in StreamLift");
 
@@ -2390,7 +2390,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     const {result_var} = {stream_new_from_lift_fn}({{
                         componentIdx: {component_idx},
                         streamTableIdx: {stream_table_idx},
-                        streamIdx: {arg_stream_idx},
+                        streamEndIdx: {arg_stream_end_idx},
                         payloadLiftFn,
                         payloadTypeSize32: {payload_ty_size_js},
                         payloadLowerFn,

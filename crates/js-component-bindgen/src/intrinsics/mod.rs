@@ -728,6 +728,8 @@ impl Intrinsic {
                             this.target = args?.target;
                         }}
 
+                        data() {{ return this.#data; }}
+
                         insert(val) {{
                             {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val, target: this.target }});
                             const freeIdx = this.#data[0];

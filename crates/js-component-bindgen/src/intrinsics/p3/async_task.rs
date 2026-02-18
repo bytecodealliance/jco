@@ -392,6 +392,8 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_return_fn = Self::TaskReturn.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
                 output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
@@ -442,12 +444,20 @@ impl AsyncTaskIntrinsic {
                             results.push(val);
                         }}
 
-                        // TODO(opt): during fused guest->guest calls, we have a helper fn for lift/lower
+                        // Register an on-resolve handler that runs a tick loop
+                        task.registerOnResolveHandler(() => {{
+                            // Trigger ticking for any suspended tasks
+                            const cstate = {get_or_create_async_state_fn}(task.componentIdx());
+                            cstate.runTickLoop();
+                        }});
+
+                        // NOTE: during fused guest->guest calls, we have a helper fn for lift/lower
                         // so this task.return could be reduced to ~no-op
                         //
                         // We perform a superfluous lift and resolve in this fn to keep consistent with
                         // the task machinery as it is normally used.
                         task.resolve(results);
+
 
                         // If we are in a subtask, and have a fused helper function provided to use
                         // via PrepareCall, we can use that function rather than performing lifting manually.
@@ -839,9 +849,9 @@ impl AsyncTaskIntrinsic {
                             return this.#callbackFnName;
                         }}
 
-                        runCallbackFn(...args) {{
+                        async runCallbackFn(...args) {{
                             if (!this.#callbackFn) {{ throw new Error('on callback function has been set for task'); }}
-                            return this.#callbackFn.apply(null, args);
+                            return await this.#callbackFn.apply(null, args);
                         }}
 
                         getCalleeParams() {{
@@ -909,10 +919,12 @@ impl AsyncTaskIntrinsic {
 
                             wset.incrementNumWaiting();
 
+                            // const pendingEventWaitID = wset.registerPendingEventWait();
                             const keepGoing = await this.suspendUntil({{
                                 readyFn: () => {{
                                     const hasPendingEvent = wset.hasPendingEvent();
-                                    return readyFn() && hasPendingEvent;
+                                    const ready = readyFn();
+                                    return ready && hasPendingEvent;
                                 }},
                                 cancellable,
                             }});
@@ -922,8 +934,8 @@ impl AsyncTaskIntrinsic {
                             }} else {{
                                 event = {{
                                     code: {event_code_enum}.TASK_CANCELLED,
-                                    index: 0,
-                                    result: 0,
+                                    payload0: 0,
+                                    payload1: 0,
                                 }};
                             }}
 
@@ -987,18 +999,18 @@ impl AsyncTaskIntrinsic {
                             {debug_log_fn}('[{task_class}#yieldUntil()] args', {{ taskID: this.#id, cancellable }});
 
                             const keepGoing = await this.suspendUntil({{ readyFn, cancellable }});
-                            if (!keepGoing) {{
+                            if (keepGoing) {{
                                 return {{
-                                    code: {event_code_enum}.TASK_CANCELLED,
-                                    index: 0,
-                                    result: 0,
+                                    code: {event_code_enum}.NONE,
+                                    payload0: 0,
+                                    payload1: 0,
                                 }};
                             }}
 
                             return {{
-                                code: {event_code_enum}.NONE,
-                                index: 0,
-                                result: 0,
+                                code: {event_code_enum}.TASK_CANCELLED,
+                                payload0: 0,
+                                payload1: 0,
                             }};
                         }}
 
@@ -1019,12 +1031,12 @@ impl AsyncTaskIntrinsic {
                             {debug_log_fn}('[{task_class}#immediateSuspendUntil()] args', {{ cancellable, readyFn }});
 
                             const ready = readyFn();
-                            if (ready && !{global_async_determinism} && {coin_flip_fn}()) {{
-                                return true;
+                            if (ready && {global_async_determinism} === 'random') {{
+                                const coinFlip = {coin_flip_fn}();
+                                if (coinFlip) {{ return true }}
                             }}
 
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-                            cstate.addPendingTask(this);
+                            // TODO: it is often the case that ready is true, but since we're not doing
 
                             const keepGoing = await this.immediateSuspend({{ cancellable, readyFn }});
                             return keepGoing;
@@ -1039,12 +1051,7 @@ impl AsyncTaskIntrinsic {
                             if (pendingCancelled) {{ return false; }}
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-
-                            // TODO(fix): update this to tick until there is no more action to take.
-                            setTimeout(() => cstate.tick(), 0);
-
-                            const taskWait = await cstate.suspendTask({{ task: this, readyFn }});
-                            const keepGoing = await taskWait;
+                            const keepGoing = await cstate.suspendTask({{ task: this, readyFn }});
                             return keepGoing;
                         }}
 
@@ -1260,16 +1267,15 @@ impl AsyncTaskIntrinsic {
                             if (args.waitable) {{
                                 this.#waitable = args.waitable;
                             }} else {{
-                                const {{ promise, resolve, reject }} = promiseWithResolvers();
-                                this.#waitableResolve = resolve;
-                                this.#waitableReject = reject;
-
                                 const state = {get_or_create_async_state_fn}(this.#componentIdx);
                                 if (!state) {{
                                     throw new Error('invalid/missing async state for component instance [' + componentIdx + ']');
                                 }}
 
-                                this.#waitable = new {waitable_class}({{ promise,  componentIdx: this.#componentIdx }});
+                                this.#waitable = new {waitable_class}({{ componentIdx: this.#componentIdx }});
+                                this.#waitableResolve = () => this.#waitable.resolve();
+                                this.#waitableReject = () => this.#waitable.reject();
+
                                 this.#waitableRep = state.waitables.insert(this.#waitable);
                             }}
 
@@ -1502,12 +1508,10 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::UnpackCallbackResult => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
                 let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
                 let i32_typecheck_fn = Intrinsic::TypeCheckValidI32.name();
                 output.push_str(&format!("
                     function {unpack_callback_result_fn}(result) {{
-                        {debug_log_fn}('[{unpack_callback_result_fn}()] args', {{ result }});
                         if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value [' + result + '], not a valid i32'); }}
                         const eventCode = result & 0xF;
                         if (eventCode < 0 || eventCode > 3) {{
@@ -1642,6 +1646,13 @@ impl AsyncTaskIntrinsic {
                                             cancellable: true,
                                             readyFn: () => !componentState.isExclusivelyLocked(),
                                         }});
+                                        {debug_log_fn}('[{driver_loop_fn}()] finished yield', {{
+                                            fnName,
+                                            componentIdx,
+                                            callbackFnName,
+                                            taskID: task.id(),
+                                            asyncRes,
+                                        }});
                                         break;
 
                                     case 2: // WAIT for a given waitable set
@@ -1653,21 +1664,33 @@ impl AsyncTaskIntrinsic {
                                             waitableSetRep,
                                         }});
                                         asyncRes = await task.waitUntil({{
-                                            readyFn: () => true,
+                                            readyFn: () => !componentState.isExclusivelyLocked(),
                                             waitableSetRep,
                                             cancellable: true,
+                                        }});
+                                        {debug_log_fn}('[{driver_loop_fn}()] finished waiting for event', {{
+                                            fnName,
+                                            componentIdx,
+                                            callbackFnName,
+                                            taskID: task.id(),
+                                            waitableSetRep,
+                                            asyncRes,
                                         }});
                                         break;
 
                                     default:
-                                        throw new Error('Unrecognized async function result [' + ret + ']');
+                                        throw new Error(`Unrecognized async function result [${{ret}}]`);
                                 }}
 
                                 componentState.exclusiveLock();
 
+                                if (asyncRes.code === undefined) {{ throw new Error("missing event code from event"); }}
+                                if (asyncRes.payload0 === undefined) {{ throw new Error("missing payload0 from event"); }}
+                                if (asyncRes.payload1 === undefined) {{ throw new Error("missing payload1 from event"); }}
+
                                 eventCode = asyncRes.code; // async event enum code
-                                index = asyncRes.index; // idx of related waitable set
-                                result = asyncRes.result; // task state
+                                index = asyncRes.payload0; // varies (e.g. idx of related waitable set)
+                                result = asyncRes.payload1; // varies (e.g. task state)
                                 asyncRes = null;
 
                                 {debug_log_fn}('[{driver_loop_fn}()] performing callback', {{
@@ -1679,7 +1702,7 @@ impl AsyncTaskIntrinsic {
                                     result
                                 }});
 
-                                const callbackRes = task.runCallbackFn(
+                                const callbackRes = await task.runCallbackFn(
                                     {to_int32_fn}(eventCode),
                                     {to_int32_fn}(index),
                                     {to_int32_fn}(result),
@@ -1688,9 +1711,23 @@ impl AsyncTaskIntrinsic {
                                 unpacked = {unpack_callback_result_fn}(callbackRes);
                                 callbackCode = unpacked[0];
                                 waitableSetRep = unpacked[1];
+
+                                {debug_log_fn}('[{driver_loop_fn}()] callback result unpacked', {{
+                                    callbackRes,
+                                    callbackCode,
+                                    waitableSetRep,
+                                }});
                             }}
                         }} catch (err) {{
                             {debug_log_fn}('[{driver_loop_fn}()] error during async driver loop', {{
+                                fnName,
+                                callbackFnName,
+                                eventCode,
+                                index,
+                                result,
+                                err,
+                            }});
+                            console.error('[{driver_loop_fn}()] error during async driver loop', {{
                                 fnName,
                                 callbackFnName,
                                 eventCode,
@@ -1772,8 +1809,8 @@ impl AsyncTaskIntrinsic {
                                 if (subtask.resolved()) {{ subtask.deliverResolve(); }}
                                 return {{
                                     code: {async_event_code_enum}.SUBTASK,
-                                    index: rep,
-                                    result: subtask.getStateNumber(),
+                                    payload0: rep,
+                                    payload1: subtask.getStateNumber(),
                                 }}
                             }});
                         }});
