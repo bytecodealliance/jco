@@ -358,7 +358,30 @@ impl FunctionBindgen<'_> {
         let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CreateNewCurrentTask,
         ));
+        let global_task_map = self.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
+        ));
         let component_instance_idx = self.canon_opts.instance.as_u32();
+
+        // If we're within an async function, wait for all top level previous tasks to finish before running
+        // to ensure that guests do not try to run two tasks at the same time.
+        if is_async && self.requires_async_porcelain {
+            uwriteln!(
+                self.src,
+                r#"
+                // All other tasks must finish before we can start this one
+                const taskMetas = {global_task_map}.get({component_instance_idx});
+                if (taskMetas) {{
+                    const taskPromises = taskMetas
+                        .filter(mt => mt.componentIdx === {component_instance_idx})
+                        .map(mt => mt.task)
+                        .filter(t => !t.getParentSubtask())
+                        .map(t => t.completionPromise());
+                    await Promise.all(taskPromises);
+                }}
+                "#,
+            );
+        }
 
         uwriteln!(
             self.src,
@@ -2306,7 +2329,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     "stream element type mismatch"
                 );
 
-                let arg_stream_idx = operands
+                let arg_stream_end_idx = operands
                     .first()
                     .expect("unexpectedly missing stream table idx arg in StreamLift");
 
@@ -2390,7 +2413,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     const {result_var} = {stream_new_from_lift_fn}({{
                         componentIdx: {component_idx},
                         streamTableIdx: {stream_table_idx},
-                        streamIdx: {arg_stream_idx},
+                        streamEndIdx: {arg_stream_end_idx},
                         payloadLiftFn,
                         payloadTypeSize32: {payload_ty_size_js},
                         payloadLowerFn,

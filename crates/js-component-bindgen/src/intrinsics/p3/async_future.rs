@@ -404,7 +404,7 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         if (futureEnd.hasPendingEvent()) {{
-                          const {{ code, index, payload }} = futureEnd.getEvent();
+                          const {{ code, payload0: index, payload1 }} = futureEnd.getEvent();
                           if (code !== eventCode || index != 1) {{
                             throw new Error('invalid event, does not match expected event code');
                           }}
@@ -469,7 +469,7 @@ impl AsyncFutureIntrinsic {
                           }}
                         }}
 
-                        const {{ code, index, payload }} = e.getEvent();
+                        const {{ code, payload0: index, payload1: payload }} = e.getEvent();
                         if (futureEnd.isCopying()) {{ throw new Error('future end is still in copying state'); }}
                         if (code !== {async_event_code_enum}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {async_event_code_enum} + ']'); }}
                         if (index !== 1) {{ throw new Error('unexpected index, should be 1'); }}
