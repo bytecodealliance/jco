@@ -2444,7 +2444,10 @@ impl<'a> Instantiator<'a, '_> {
                 //
                 // TODO: can we be more selective here rather than wrapping every callback in WebAssembly.promising?
                 // every callback *could* do stream.write, but many may not.
-                uwriteln!(self.src.js_init, "callback_{callback_idx} = WebAssembly.promising({core_def});");
+                uwriteln!(
+                    self.src.js_init,
+                    "callback_{callback_idx} = WebAssembly.promising({core_def});"
+                );
             }
 
             GlobalInitializer::InstantiateModule(m) => match m {
