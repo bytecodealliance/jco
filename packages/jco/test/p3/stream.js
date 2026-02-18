@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { suite, test, assert, vi, expect } from "vitest";
+import { suite, test, assert } from "vitest";
 
 import { setupAsyncTest } from "../helpers.js";
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from "../common.js";
