@@ -168,9 +168,7 @@ suite("Stream (WASI P3)", () => {
                 transpile: {
                     extraArgs: {
                         // minify: false,
-                        asyncExports: [
-                            "jco:test-components/get-stream-async#get-stream-bool",
-                        ],
+                        asyncExports: ["jco:test-components/get-stream-async#get-stream-bool"],
                     },
                 },
             },
@@ -187,7 +185,10 @@ suite("Stream (WASI P3)", () => {
         // TODO(fix): fix this should *not* trap, as the buffer is ont he host side/already passed outside the component
         vals = [true];
         stream = await instance["jco:test-components/get-stream-async"].getStreamBool(vals);
-        await expect(() => stream.next()).rejects.toThrowError(/cannot stream non-numeric types within the same component/);
-    });
+        await expect(() => stream.next()).rejects.toThrowError(
+            /cannot stream non-numeric types within the same component/,
+        );
 
+        await cleanup();
+    });
 });
