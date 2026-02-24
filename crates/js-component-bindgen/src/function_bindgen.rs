@@ -376,7 +376,7 @@ impl FunctionBindgen<'_> {
                         .filter(mt => mt.componentIdx === {component_instance_idx})
                         .map(mt => mt.task)
                         .filter(t => !t.getParentSubtask())
-                        .map(t => t.completionPromise());
+                        .map(t => t.exitPromise());
                     await Promise.all(taskPromises);
                 }}
                 "#,

@@ -727,6 +727,9 @@ impl AsyncTaskIntrinsic {
                         #onResolveHandlers = [];
                         #completionPromise = null;
 
+                        #exitPromise = null;
+                        #onExitHandlers = [];
+
                         #memoryIdx = null;
 
                         #callbackFn = null;
@@ -783,7 +786,18 @@ impl AsyncTaskIntrinsic {
 
                            this.#onResolveHandlers.push((results) => {{
                                resolveCompletionPromise(results);
-                           }})
+                           }});
+
+                           const {{
+                               promise: exitPromise,
+                               resolve: resolveExitPromise,
+                               reject: rejectExitPromise,
+                           }} = promiseWithResolvers();
+                           this.#exitPromise = exitPromise;
+
+                           this.#onExitHandlers.push(() => {{
+                               resolveExitPromise();
+                           }});
 
                            if (opts.callbackFn) {{ this.#callbackFn = opts.callbackFn; }}
                            if (opts.callbackFnName) {{ this.#callbackFnName = opts.callbackFnName; }}
@@ -804,7 +818,9 @@ impl AsyncTaskIntrinsic {
                         componentIdx() {{ return this.#componentIdx; }}
                         isAsync() {{ return this.#isAsync; }}
                         entryFnName() {{ return this.#entryFnName; }}
+
                         completionPromise() {{ return this.#completionPromise; }}
+                        exitPromise() {{ return this.#exitPromise; }}
 
                         isAsync() {{ return this.#isAsync; }}
                         isSync() {{ return !this.isAsync(); }}
@@ -992,26 +1008,6 @@ impl AsyncTaskIntrinsic {
                             }}
                         }}
 
-                        async asyncOnBlock(awaitable) {{
-                            {debug_log_fn}('[{task_class}#asyncOnBlock()] args', {{ taskID: this.#id, awaitable }});
-                            if (!(awaitable instanceof {awaitable_class})) {{
-                                throw new Error('invalid awaitable during onBlock');
-                            }}
-                            // TODO: watch for waitable AND cancellation
-                            // TODO: if it WAS cancelled:
-                            // - return true
-                            // - only once per subtask
-                            // - do not wait on the scheduler
-                            // - control flow should go to the subtask (only once)
-                            // - Once subtask blocks/resolves, reqlinquishControl() will tehn resolve request_cancel_end (without scheduler lock release)
-                            // - control flow goes back to request_cancel
-                            //
-                            // Subtask cancellation should work similarly to an async import call -- runs sync up until
-                            // the subtask blocks or resolves
-                            //
-                            throw new Error('AsyncTask#asyncOnBlock() not yet implemented');
-                        }}
-
                         async yieldUntil(opts) {{
                             const {{ readyFn, cancellable }} = opts;
                             {debug_log_fn}('[{task_class}#yieldUntil()] args', {{ taskID: this.#id, cancellable }});
@@ -1050,12 +1046,9 @@ impl AsyncTaskIntrinsic {
 
                             const ready = readyFn();
                             if (ready && {global_async_determinism} === 'random') {{
-                                // const coinFlip = {coin_flip_fn}();
-                                // if (coinFlip) {{ return true }}
-                                return true;
+                                const coinFlip = {coin_flip_fn}();
+                                if (coinFlip) {{ return true }}
                             }}
-
-                            // TODO: it is often the case that ready is true, but since we're not doing
 
                             const keepGoing = await this.immediateSuspend({{ cancellable, readyFn }});
                             return keepGoing;
@@ -1147,9 +1140,11 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         exit() {{
-                            {debug_log_fn}('[{task_class}#exit()] args', {{ }});
+                            {debug_log_fn}('[{task_class}#exit()]', {{
+                                componentIdx: this.#componentIdx,
+                                taskID: this.#id,
+                            }});
 
-                            // TODO: ensure there is only one task at a time (scheduler.lock() functionality)
                             if (this.#state !== {task_class}.State.RESOLVED) {{
                                 // TODO(fix): only fused, manually specified post returns seem to break this invariant,
                                 // as the TaskReturn trampoline is not activated it seems.
@@ -1185,6 +1180,15 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             state.exclusiveRelease();
+
+                            for (const f of this.#onExitHandlers) {{
+                                try {{
+                                    f();
+                                }} catch (err) {{
+                                    console.error("error during task exit handler", err);
+                                    throw err;
+                                }}
+                            }}
                         }}
 
                         needsExclusiveLock() {{ return this.#needsExclusiveLock; }}
