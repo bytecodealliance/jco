@@ -502,7 +502,7 @@ impl AsyncStreamIntrinsic {
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component write, and only unit or numeric types are allowed
                                 if (this.#pendingBufferMeta.componentIdx === this.#componentIdx && !this.#elemMeta.isNoneOrNumeric) {{
-                                    throw new Error("trap: cannot stream non-numeric types withing the same component");
+                                    throw new Error("trap: cannot stream non-numeric types within the same component (send)");
                                 }}
 
                                 // If original capacities were zero, we're dealing with a unit stream,
@@ -565,7 +565,7 @@ impl AsyncStreamIntrinsic {
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component read, and only unit or numeric types are allowed
                                 if (this.#pendingBufferMeta.componentIdx === this.#componentIdx && !this.#elemMeta.isNoneOrNumeric) {{
-                                    throw new Error("trap: cannot stream non-numeric types withing the same component");
+                                    throw new Error("trap: cannot stream non-numeric types within the same component (read)");
                                 }}
 
                                 const pendingRemaining = this.#pendingBufferMeta.buffer.remainingCapacity();
@@ -653,7 +653,7 @@ impl AsyncStreamIntrinsic {
 
                              const event = this.getPendingEvent();
                              if (!event) {{ throw new Error("unexpectedly missing pending event"); }}
-                             if (!event.code || !event.payload0 || !event.payload1) {{
+                             if (event.code === undefined || event.payload0 === undefined || event.payload1 === undefined) {{
                                  throw new Error("unexpectedly malformed event");
                              }}
 

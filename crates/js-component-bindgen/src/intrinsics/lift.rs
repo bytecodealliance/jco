@@ -451,7 +451,7 @@ impl LiftIntrinsic {
                         if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {{
                             throw new Error('not enough storage remaining for lift');
                         }}
-                        val = new DataView(ctx.memory.buffer).getInt64(ctx.storagePtr, true);
+                        val = new DataView(ctx.memory.buffer).getBigInt64(ctx.storagePtr, true);
                         ctx.storagePtr += 8;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
 
@@ -479,7 +479,7 @@ impl LiftIntrinsic {
                         if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {{
                             throw new Error('not enough storage remaining for lift');
                         }}
-                        val = new DataView(ctx.memory.buffer).getUint64(ctx.storagePtr, true);
+                        val = new DataView(ctx.memory.buffer).getBigUint64(ctx.storagePtr, true);
                         ctx.storagePtr += 8;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
 
