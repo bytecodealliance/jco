@@ -31,28 +31,23 @@ interface get-stream-async {
     //     get-id() -> u32;
     // }
 
-    /// Get a stream that returns the exact same u32s that were passed in
     get-stream-u32: async func(vals: list<u32>) -> result<stream<u32>, string>;
-    /// Get a stream that returns the exact same s32s that were passed in
     get-stream-s32: async func(vals: list<s32>) -> result<stream<s32>, string>;
 
-    /// Get stream that returns bools (always `true`, then `false`)
-    //get-stream-bool: async func() -> result<stream<bool>, string>;
-    //get-stream-u8: async func(vals: list<u8>) -> result<stream<u8>, string>;
-    //get-stream-s8: async func(vals: list<s8>) -> result<stream<s8>, string>;
+    get-stream-u8: async func(vals: list<u8>) -> result<stream<u8>, string>;
+    get-stream-s8: async func(vals: list<s8>) -> result<stream<s8>, string>;
 
-    //get-stream-u16: async func(vals: list<u16>) -> result<stream<u16>, string>;
-    //get-stream-s16: async func(vals: list<s16>) -> result<stream<s16>, string>;
+    get-stream-u16: async func(vals: list<u16>) -> result<stream<u16>, string>;
+    get-stream-s16: async func(vals: list<s16>) -> result<stream<s16>, string>;
 
-    //get-stream-u64: async func(vals: list<u64>) -> result<stream<u64>, string>;
-    //get-stream-s64: async func(vals: list<s64>) -> result<stream<s64>, string>;
+    get-stream-u64: async func(vals: list<u64>) -> result<stream<u64>, string>;
+    get-stream-s64: async func(vals: list<s64>) -> result<stream<s64>, string>;
 
-    //get-stream-u64: async func(vals: list<u64>) -> result<stream<u64>, string>;
-    //get-stream-s64: async func(vals: list<s64>) -> result<stream<s64>, string>;
+    get-stream-f32: async func(vals: list<f32>) -> result<stream<f32>, string>;
 
-    //get-stream-f32: async func(vals: list<f32>) -> result<stream<f32>, string>;
+    get-stream-f64: async func(vals: list<f64>) -> result<stream<f64>, string>;
 
-    //get-stream-f64: async func(vals: list<f64>) -> result<stream<f64>, string>;
+    get-stream-bool: async func(vals: list<bool>) -> result<stream<bool>, string>;
 
     //get-stream-char: async func(vals: list<char>) -> result<stream<char>, string>;
 

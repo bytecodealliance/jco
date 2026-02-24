@@ -17,6 +17,9 @@ pub(crate) fn run() -> Result<()> {
     cmd!(sh, "cargo build -p jco-test-components")
         .read()
         .context("failed to read output from cargo build")?;
+    cmd!(sh, "cargo clean -p jco-test-components-artifacts")
+        .read()
+        .context("failed to clean output from cargo build")?;
     cmd!(sh, "cargo build -p jco-test-components-artifacts")
         .read()
         .context("failed to read output from cargo build")?;
