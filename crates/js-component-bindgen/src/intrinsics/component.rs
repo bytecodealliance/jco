@@ -390,10 +390,6 @@ impl ComponentIntrinsic {
                                 }},
                             }});
 
-                            // NOTE: we perform an explicit tick here for suspended tasks that are
-                            // immediately resumable, to ensure they do not fall too far behind
-                            // in the async event queue
-                            const done = this.tick();
                             this.runTickLoop();
 
                             return promise;
@@ -411,8 +407,7 @@ impl ComponentIntrinsic {
                             this.#tickLoop = new Promise(async (resolve) => {{
                                 let done = this.tick();
                                 while (!done) {{
-                                    // TODO(fix): reduce latency on loop
-                                    await new Promise((resolve) => setTimeout(resolve, 10));
+                                    await new Promise((resolve) => setTimeout(resolve, 0));
                                     done = this.tick();
                                 }}
                                 this.#tickLoop = null;
