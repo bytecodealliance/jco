@@ -354,7 +354,7 @@ impl HostIntrinsic {
                             // If a helper function was provided we are likely in a fused guest->guest call,
                             // and the result will be delivered (lift/lowered) via helper function
                             if (subtaskCallMeta.returnFn) {{
-                                {debug_log_fn}('[{async_start_call_fn}()] return function present while ahndling subtask result, returning early (skipping lower)');
+                                {debug_log_fn}('[{async_start_call_fn}()] return function present while handling subtask result, returning early (skipping lower)');
                                     return;
                             }}
 

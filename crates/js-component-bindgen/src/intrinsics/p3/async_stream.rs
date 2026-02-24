@@ -278,6 +278,8 @@ impl AsyncStreamIntrinsic {
 
                         #componentIdx = null;
                         #dropped = false;
+                        #onDrop;
+
                         #copyState = {stream_end_class}.CopyState.IDLE;
 
                         target;
@@ -295,6 +297,7 @@ impl AsyncStreamIntrinsic {
                             this.#tableIdx = args.tableIdx;
                             this.#componentIdx = args.componentIdx ??= null;
                             this.#waitable = args.waitable;
+                            this.#onDrop = args.onDrop;
                             this.target = args.target;
                         }}
 
@@ -365,6 +368,8 @@ impl AsyncStreamIntrinsic {
                             }}
 
                             this.#dropped = true;
+
+                            if (this.#onDrop) {{ this.#onDrop() }}
                         }}
                     }}
                 "#
@@ -451,7 +456,7 @@ impl AsyncStreamIntrinsic {
                             if (buffer.length > 2**28) {{ throw new Error('buffer uses reserved space'); }}
 
                             const packedResult = (buffer.copied() << 4) | result;
-                            return {{ code: eventCode, payload0: streamEnd.idx(), payload1: packedResult }};
+                            return {{ code: eventCode, payload0: streamEnd.waitableIdx(), payload1: packedResult }};
                         }};
 
                         const onCopy = (reclaimBufferFn) => {{
@@ -798,8 +803,7 @@ impl AsyncStreamIntrinsic {
                         streamRep() {{ return this.#streamRep; }}
                         streamTableIdx() {{ return this.#streamTableIdx; }}
 
-                        // NOTE: the stream idx is the waitable idx under which it can be found
-                        idx() {{ return this.#getEndIdxFn(); }}
+                        waitableIdx() {{ return this.#getEndIdxFn(); }}
 
                         getElemMeta() {{ return {{...this.#elemMeta}}; }}
 
@@ -850,6 +854,7 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::InternalStreamClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
                 let internal_stream_class = self.name();
                 let read_end_class = Self::StreamReadableEndClass.name();
                 let write_end_class = Self::StreamWritableEndClass.name();
@@ -859,15 +864,21 @@ impl AsyncStreamIntrinsic {
                     class {internal_stream_class} {{
                         #rep;
                         #idx;
+                        #componentIdx;
 
                         #readEnd;
                         #readEndWaitableIdx;
+                        #readEndDropped;
 
                         #writeEnd;
                         #writeEndWaitableIdx;
+                        #writeEndDropped;
 
                         #pendingBufferMeta = {{}};
                         #elemMeta;
+
+                        #localStreamTable;
+                        #globalStreamMap;
 
                         constructor(args) {{
                             if (typeof args.componentIdx !== 'number') {{ throw new Error('missing/invalid component idx'); }}
@@ -875,10 +886,17 @@ impl AsyncStreamIntrinsic {
                             if (args.tableIdx === undefined) {{ throw new Error('missing/invalid stream table idx'); }}
                             const {{ tableIdx, componentIdx, elemMeta, globalStreamMap, localStreamTable }} = args;
 
+                            this.#componentIdx = args.componentIdx;
                             this.#elemMeta = elemMeta;
 
-                            if (args.globalStreamMap) {{ this.#rep = globalStreamMap.insert(this); }}
-                            if (args.localStreamTable) {{ this.#idx = localStreamTable.insert(this); }}
+                            if (args.globalStreamMap) {{
+                                this.#globalStreamMap = args.globalStreamMap;
+                                this.#rep = globalStreamMap.insert(this);
+                            }}
+                            if (args.localStreamTable) {{
+                                this.#localStreamTable = args.localStreamTable;
+                                this.#idx = localStreamTable.insert(this);
+                            }}
 
                             this.#readEnd = new {read_end_class}({{
                                 componentIdx,
@@ -887,11 +905,23 @@ impl AsyncStreamIntrinsic {
                                 pendingBufferMeta: this.#pendingBufferMeta,
                                 streamRep: this.#rep,
                                 getEndIdxFn: () => this.#readEndWaitableIdx,
-                                target: `stream  write end (global rep [${{this.#rep}}])`,
+                                target: `stream read end (global rep [${{this.#rep}}])`,
                                 waitable: new {waitable_class}({{
                                     componentIdx,
-                                    target: `stream read end (stream local idx [${{this.#rep}}], global rep [${{this.#rep}}])`
+                                    target: `stream read end (stream local idx [${{this.#idx}}], global rep [${{this.#rep}}])`
                                 }}),
+                                onDrop: () => {{
+                                    this.#readEndDropped = true;
+                                    if (this.#readEndDropped && this.#readEndDropped) {{
+                                        {debug_log_fn}('[{internal_stream_class}] triggering drop due to end drops', {{
+                                            globalRep: this.#rep,
+                                            streamTableIdx: this.#idx,
+                                            readEndWaitableIdx: this.#readEndWaitableIdx,
+                                            writeEndWaitableIdx: this.#writeEndWaitableIdx,
+                                        }});
+                                        this.drop();
+                                    }}
+                                }},
                             }});
 
                             this.#writeEnd = new {write_end_class}({{
@@ -901,11 +931,24 @@ impl AsyncStreamIntrinsic {
                                 pendingBufferMeta: this.#pendingBufferMeta,
                                 getEndIdxFn: () => this.#writeEndWaitableIdx,
                                 streamRep: this.#rep,
-                                target: `stream  write end (global rep [${{this.#rep}}])`,
+                                target: `stream write end (global rep [${{this.#rep}}])`,
                                 waitable: new {waitable_class}({{
                                     componentIdx,
                                     target: `stream write end (stream local idx [${{this.#rep}}], global rep [${{this.#rep}}])`
                                 }}),
+                                onDrop: () => {{
+                                    this.#writeEndDropped = true;
+                                    // TODO(fix): racy
+                                    if (this.#readEndDropped && this.#writeEndDropped) {{
+                                        {debug_log_fn}('[{internal_stream_class}] triggering drop due to end drops', {{
+                                            globalRep: this.#rep,
+                                            streamTableIdx: this.#idx,
+                                            readEndWaitableIdx: this.#readEndWaitableIdx,
+                                            writeEndWaitableIdx: this.#writeEndWaitableIdx,
+                                        }});
+                                        this.drop();
+                                    }}
+                                }},
                             }});
                         }}
 
@@ -917,6 +960,23 @@ impl AsyncStreamIntrinsic {
 
                         writeEnd() {{ return this.#writeEnd; }}
                         setWriteEndWaitableIdx(idx) {{ this.#writeEndWaitableIdx = idx; }}
+
+                        drop() {{
+                            {debug_log_fn}('[{internal_stream_class}#drop()]');
+                            if (this.#globalStreamMap) {{
+                                const removed = this.#globalStreamMap.remove(this.#rep);
+                                if (!removed) {{
+                                     throw new Error(`failed to remove stream [${{this.#rep}}] in global stream map (component [${{this.#componentIdx}}] while removing stream end`);
+                                }}
+                            }}
+
+                            if (this.#localStreamTable) {{
+                                let removed = this.#localStreamTable.remove(this.#idx);
+                                if (!removed) {{
+                                     throw new Error(`failed to remove stream [${{streamEnd.waitableIdx()}}] in internal table (table [${{tableIdx}}]), component [${{this.#componentIdx}}] while removing stream end`);
+                                }}
+                            }}
+                        }}
                     }}
                     "#
                 ));

@@ -427,6 +427,25 @@ impl AsyncTaskIntrinsic {
                             throw new Error('memory must be present if more than max async flat lifts are performed');
                         }}
 
+                        // If we are in a subtask, and have a fused helper function provided to use
+                        // via PrepareCall, we can use that function rather than performing lifting manually.
+                        //
+                        // See also documentation on `HostIntrinsic::PrepareCall`
+                        const returnFn = task.getParentSubtask()?.getCallMetadata()?.returnFn;
+                        if (returnFn) {{
+                            const returnFnArgs = [...params];
+                            returnFn.apply(null, returnFnArgs);
+                            // NOTE: as the return function will directly perform the lifting/lowering
+                            // we cannot know what the task itself would return, without reading it out
+                            // of where it *would* end up.
+                            //
+                            // TODO(fix): add an explicit enum/detectable result which indicates that lift/lower
+                            // is happening via helper fns, to avoid mistaking for legitimate empty responses.
+                            //
+                            task.resolve([]);
+                            return;
+                        }}
+
                         let liftCtx = {{ memory, useDirectParams, params, componentIdx }};
                         if (!useDirectParams) {{
                             liftCtx.storagePtr = params[0];
@@ -451,24 +470,11 @@ impl AsyncTaskIntrinsic {
                             cstate.runTickLoop();
                         }});
 
-                        // NOTE: during fused guest->guest calls, we have a helper fn for lift/lower
-                        // so this task.return could be reduced to ~no-op
+                        // NOTE: during fused guest->guest calls, we have will never get here,
+                        // as the lift has the fused helper function may have already performed the relevant
+                        // lifting/lowering.
                         //
-                        // We perform a superfluous lift and resolve in this fn to keep consistent with
-                        // the task machinery as it is normally used.
                         task.resolve(results);
-
-
-                        // If we are in a subtask, and have a fused helper function provided to use
-                        // via PrepareCall, we can use that function rather than performing lifting manually.
-                        //
-                        // See also documentation on `HostIntrinsic::PrepareCall`
-                        const returnFn = task.getParentSubtask()?.getCallMetadata()?.returnFn;
-                        if (returnFn) {{
-                            const returnFnArgs = [...params];
-                            returnFn.apply(null, returnFnArgs);
-                            return;
-                        }}
                     }}
                 "#));
             }
@@ -1257,6 +1263,8 @@ impl AsyncTaskIntrinsic {
                             }}
                             this.#componentIdx = args.componentIdx;
 
+                            this.#id = ++{subtask_class}._ID;
+
                             if (!args.parentTask) {{ throw new Error('missing parent task during subtask creation'); }}
                             this.#parentTask = args.parentTask;
 
@@ -1266,13 +1274,17 @@ impl AsyncTaskIntrinsic {
 
                             if (args.waitable) {{
                                 this.#waitable = args.waitable;
+                                this.#waitable.setTarget(`subtask (internal ID [${{this.#id}}])`);
                             }} else {{
                                 const state = {get_or_create_async_state_fn}(this.#componentIdx);
                                 if (!state) {{
                                     throw new Error('invalid/missing async state for component instance [' + componentIdx + ']');
                                 }}
 
-                                this.#waitable = new {waitable_class}({{ componentIdx: this.#componentIdx }});
+                                this.#waitable = new {waitable_class}({{
+                                    componentIdx: this.#componentIdx,
+                                    target: `subtask (internal ID [${{this.#id}}])`,
+                                }});
                                 this.#waitableResolve = () => this.#waitable.resolve();
                                 this.#waitableReject = () => this.#waitable.reject();
 
@@ -1280,7 +1292,6 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             this.#lenders = [];
-                            this.#id = ++{subtask_class}._ID;
 
                             if (args.callMetadata) {{ this.#callMetadata = args.callMetadata; }}
                         }}
