@@ -1556,7 +1556,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(
                         self.src,
                         r#"
-                        const started = await task.enter();
+                        const started = await task.enter({{ isHost: hostProvided }});
                         if (!started) {{
                             {debug_log_fn}('[Instruction::CallInterface] failed to enter task', {{
                                 taskID: preparedTask.id(),
