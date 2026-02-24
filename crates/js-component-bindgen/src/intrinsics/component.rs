@@ -513,22 +513,7 @@ impl ComponentIntrinsic {
                                 throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
                             }}
 
-                            const tbl = this.#streams.get(tableIdx);
-                            if (!tbl) {{
-                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while removing stream end`);
-                            }}
-
-                            let removed = tbl.remove(streamEnd.idx());
-                            if (!removed) {{
-                                 throw new Error(`failed to remove stream [${{streamEnd.idx()}}] in internal table (table [${{tableIdx}}]), component [${{this.#componentIdx}}] while removing stream end`);
-                            }}
-
-                            removed = {global_stream_map}.remove(streamEnd.streamRep());
-                            if (!removed) {{
-                                 throw new Error(`failed to remove stream [${{streamEnd.rep()}}] in global stream map (component [${{this.#componentIdx}}] while removing stream end`);
-                            }}
-
-                            removed = this.waitables.remove(streamEndIdx);
+                            const removed = this.waitables.remove(streamEnd.waitableIdx());
                             if (!removed) {{
                                  throw new Error(`failed to remove stream [${{streamEndIdx}}] waitable obj in component [${{this.#componentIdx}}] while removing stream end`);
                             }}

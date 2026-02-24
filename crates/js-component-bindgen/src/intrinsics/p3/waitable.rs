@@ -244,6 +244,8 @@ impl WaitableIntrinsic {
                         componentIdx() {{ return this.#componentIdx; }}
                         isInSet() {{ return this.#waitableSet !== undefined; }}
 
+                        setTarget(tgt) {{ this.target = tgt; }}
+
                         #resetPromise() {{
                             const {{ promise, resolve, reject }} = Promise.withResolvers()
                             this.#promise = promise;
