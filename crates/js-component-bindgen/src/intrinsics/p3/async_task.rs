@@ -749,6 +749,8 @@ impl AsyncTaskIntrinsic {
 
                         #returnLowerFns = null;
 
+                        #entered = false;
+
                         cancelled = false;
                         requested = false;
                         alwaysTaskReturn = false;
@@ -883,12 +885,21 @@ impl AsyncTaskIntrinsic {
                             return true;
                         }}
 
-                        async enter() {{
+                        async enter(opts) {{
                             {debug_log_fn}('[{task_class}#enter()] args', {{ taskID: this.#id }});
+
+                            if (this.#entered) {{
+                                throw new Error(`task with ID [${{this.#id}}] should not be entered twice`);
+                            }}
+
+                            // If a task is either synchronous or host-provided (e.g. a host import, whether sync or async)
+                            // then we can avoid component-relevant tracking and immediately enter
+                            if (this.isSync() || opts?.isHost) {{
+                                this.#entered = true;
+                                return this.#entered;
+                            }}
+
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-
-                            if (this.isSync()) {{ return true; }}
-
                             if (cstate.hasBackpressure()) {{
                                 cstate.addBackpressureWaiter();
 
@@ -907,7 +918,8 @@ impl AsyncTaskIntrinsic {
 
                             if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
 
-                            return true;
+                            this.#entered = true;
+                            return this.#entered;
                         }}
 
                         isRunning() {{
@@ -1038,8 +1050,9 @@ impl AsyncTaskIntrinsic {
 
                             const ready = readyFn();
                             if (ready && {global_async_determinism} === 'random') {{
-                                const coinFlip = {coin_flip_fn}();
-                                if (coinFlip) {{ return true }}
+                                // const coinFlip = {coin_flip_fn}();
+                                // if (coinFlip) {{ return true }}
+                                return true;
                             }}
 
                             // TODO: it is often the case that ready is true, but since we're not doing
@@ -1168,7 +1181,7 @@ impl AsyncTaskIntrinsic {
                             state.inSyncExportCall = false;
 
                             if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
-                               throw new Error('task [' + this.#id + '] exit: component [' + this.#componentIdx + '] should have been exclusively locked');
+                               throw new Error(`task [${{this.#id}}] exit: component [${{this.#componentIdx}}] should have been exclusively locked`);
                             }}
 
                             state.exclusiveRelease();

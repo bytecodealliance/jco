@@ -326,23 +326,24 @@ impl ComponentIntrinsic {
                             task.awaitableResume();
                         }}
 
-                        // TODO: we might want to check for pre-locked status here
-                        exclusiveLock() {{ this.setLocked(true); }}
-
-                        setLocked(locked) {{
-                            this.#locked = locked;
-                        }}
-
-                        exclusiveRelease() {{
-                            {debug_log_fn}('[{class_name}#exclusiveRelease()] releasing', {{
+                        isExclusivelyLocked() {{ return this.#locked === true; }}
+                        setLocked(locked) {{ this.#locked = locked; }}
+                        // TODO(fix): we might want to check for pre-locked status here, we should be deterministically
+                        // going from locked -> unlocked and vice versa
+                        exclusiveLock() {{
+                            {debug_log_fn}('[{class_name}#exclusiveLock()]', {{
                                 locked: this.#locked,
                                 componentIdx: this.#componentIdx,
                             }});
-
+                            this.setLocked(true);
+                        }}
+                        exclusiveRelease() {{
+                            {debug_log_fn}('[{class_name}#exclusiveRelease()]', {{
+                                locked: this.#locked,
+                                componentIdx: this.#componentIdx,
+                            }});
                             this.setLocked(false);
                         }}
-
-                        isExclusivelyLocked() {{ return this.#locked === true; }}
 
                         #getSuspendedTaskMeta(taskID) {{
                             return this.#suspendedTasksByTaskID.get(taskID);
