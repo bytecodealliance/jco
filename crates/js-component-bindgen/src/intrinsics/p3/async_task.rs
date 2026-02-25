@@ -243,6 +243,12 @@ pub enum AsyncTaskIntrinsic {
     /// Global variable that represents whether the *current* task my block
     /// see `CoreDef::TaskMayBlock`
     CurrentTaskMayBlock,
+
+    /// Called before entering sync-to-sync guest-to-guest call
+    EnterSymmetricSyncGuestCall,
+
+    /// Called when exiting a sync-to-sync guest-to-guest call
+    ExitSymmetricSyncGuestCall,
 }
 
 impl AsyncTaskIntrinsic {
@@ -275,6 +281,8 @@ impl AsyncTaskIntrinsic {
             "unpackCallbackResult",
             "_driverLoop",
             "_lowerImport",
+            "_symmetricSyncGuestCallEnter",
+            "_symmetricSyncGuestCallExit",
         ]
     }
 
@@ -301,6 +309,8 @@ impl AsyncTaskIntrinsic {
             Self::UnpackCallbackResult => "unpackCallbackResult",
             Self::DriverLoop => "_driverLoop",
             Self::LowerImport => "_lowerImport",
+            Self::EnterSymmetricSyncGuestCall => "_symmetricSyncGuestCallEnter",
+            Self::ExitSymmetricSyncGuestCall => "_symmetricSyncGuestCallExit",
         }
     }
 
@@ -308,7 +318,10 @@ impl AsyncTaskIntrinsic {
     pub fn render(&self, output: &mut Source) {
         match self {
             Self::CurrentTaskMayBlock => {
-                output.push_str(&format!("let {var_name} = null;\n", var_name = self.name()));
+                output.push_str(&format!(
+                    "const {var_name} = new WebAssembly.Global({{ value: 'i32', mutable: true }}, 0);\n",
+                    var_name = self.name()
+                ));
             }
 
             Self::GlobalAsyncCurrentTaskMap => {
@@ -1896,6 +1909,42 @@ impl AsyncTaskIntrinsic {
                         return Number(subtask.waitableRep()) << 4 | subtaskState;
                     }}
                     "#
+                ));
+            }
+
+            // TODO: convert logic to perform task stack management here explicitly.
+            //
+            // This call receives the following params:
+            // - caller instance
+            // - callee async (0 for sync)
+            // - callee instance
+            //
+            Self::EnterSymmetricSyncGuestCall => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let enter_symmetric_sync_guest_call_fn = self.name();
+                output.push_str(&format!(
+                    r#"
+                    function {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx) {{
+                        {debug_log_fn}('[{enter_symmetric_sync_guest_call_fn}()] args', {{
+                            callerComponentIdx,
+                            calleeIsAsync,
+                            calleeComponentIdx
+                        }});
+                    }}
+                    "#,
+                ));
+            }
+
+            // TODO: add stack stack management here to match enter
+            Self::ExitSymmetricSyncGuestCall => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let exit_symmetric_sync_guest_call_fn = self.name();
+                output.push_str(&format!(
+                    r#"
+                    function {exit_symmetric_sync_guest_call_fn}() {{
+                        {debug_log_fn}('[{exit_symmetric_sync_guest_call_fn}()]');
+                    }}
+                    "#,
                 ));
             }
         }
