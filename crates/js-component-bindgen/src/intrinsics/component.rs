@@ -21,24 +21,13 @@ pub enum ComponentIntrinsic {
     /// Function that retrieves or creates async state for a given component instance
     GetOrCreateAsyncState,
 
-    /// Set the backpressure for a given component instance
-    ///
-    ///
-    /// The function that implements this intrinsic has the following definition:
-    ///
-    /// ```ts
-    /// type Value = 0 | 1;
-    /// function backpressureSet(componentIdx: number, value: val);
-    /// ```
-    BackpressureSet,
-
     /// Increment the backpressure for a given component instance
     ///
     ///
     /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// function backpressureSet(componentIdx: number);
+    /// function backpressureInc(componentIdx: number);
     /// ```
     BackpressureInc,
 
@@ -48,7 +37,7 @@ pub enum ComponentIntrinsic {
     /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// function backpressureSet(componentIdx: number);
+    /// function backpressureDec(componentIdx: number);
     /// ```
     BackpressureDec,
 
@@ -80,7 +69,6 @@ impl ComponentIntrinsic {
         match self {
             Self::GlobalAsyncStateMap => "ASYNC_STATE",
             Self::GetOrCreateAsyncState => "getOrCreateAsyncState",
-            Self::BackpressureSet => "backpressureSet",
             Self::BackpressureInc => "backpressureInc",
             Self::BackpressureDec => "backpressureDec",
             Self::ComponentAsyncStateClass => "ComponentAsyncState",
@@ -94,20 +82,6 @@ impl ComponentIntrinsic {
             Self::GlobalAsyncStateMap => {
                 let var_name = Self::GlobalAsyncStateMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));
-            }
-
-            Self::BackpressureSet => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let backpressure_set_fn = Self::BackpressureSet.name();
-                let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
-                output.push_str(&format!("
-                    function {backpressure_set_fn}(componentIdx, value) {{
-                        {debug_log_fn}('[{backpressure_set_fn}()] args', {{ componentIdx, value }});
-                        if (typeof value !== 'number') {{ throw new TypeError('invalid value for backpressure set'); }}
-                        const state = {get_or_create_async_state_fn}(componentIdx);
-                        state.setBackpressure(value);
-                    }}
-                "));
             }
 
             Self::BackpressureInc => {

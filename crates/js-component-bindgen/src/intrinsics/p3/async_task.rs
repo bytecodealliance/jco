@@ -239,6 +239,10 @@ pub enum AsyncTaskIntrinsic {
     /// ```
     ///
     LowerImport,
+
+    /// Global variable that represents whether the *current* task my block
+    /// see `CoreDef::TaskMayBlock`
+    CurrentTaskMayBlock,
 }
 
 impl AsyncTaskIntrinsic {
@@ -254,6 +258,7 @@ impl AsyncTaskIntrinsic {
             "ASYNC_CURRENT_COMPONENT_IDXS",
             "ASYNC_CURRENT_TASK_IDS",
             "ASYNC_TASKS_BY_COMPONENT_IDX",
+            "CURRENT_TASK_MAY_BLOCK",
             "AsyncSubtask",
             "AsyncTask",
             "asyncYield",
@@ -276,6 +281,7 @@ impl AsyncTaskIntrinsic {
     /// Get the name for the intrinsic
     pub fn name(&self) -> &'static str {
         match self {
+            Self::CurrentTaskMayBlock => "CURRENT_TASK_MAY_BLOCK",
             Self::AsyncBlockedConstant => "ASYNC_BLOCKED_CODE",
             Self::AsyncSubtaskClass => "AsyncSubtask",
             Self::AsyncTaskClass => "AsyncTask",
@@ -301,6 +307,10 @@ impl AsyncTaskIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source) {
         match self {
+            Self::CurrentTaskMayBlock => {
+                output.push_str(&format!("let {var_name} = null;\n", var_name = self.name()));
+            }
+
             Self::GlobalAsyncCurrentTaskMap => {
                 let var_name = Self::GlobalAsyncCurrentTaskMap.name();
                 output.push_str(&format!("const {var_name} = new Map();\n"));

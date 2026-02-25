@@ -1106,15 +1106,6 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ]);
     }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Component(ComponentIntrinsic::BackpressureSet))
-    {
-        args.intrinsics.extend([&Intrinsic::Component(
-            ComponentIntrinsic::GetOrCreateAsyncState,
-        )]);
-    }
-
     if args.intrinsics.contains(&Intrinsic::Component(
         ComponentIntrinsic::GetOrCreateAsyncState,
     )) {

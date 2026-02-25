@@ -152,7 +152,7 @@ pub fn ts_bindgen(
                         WorldKey::Interface(id) => funcs.push((resolve.id_of(*id).unwrap(), f)),
                     }
                 }
-                WorldItem::Interface { id, stability } => {
+                WorldItem::Interface { id, stability, .. } => {
                     let iface_name = &resolve.interfaces[*id]
                         .name
                         .as_deref()
@@ -196,8 +196,8 @@ pub fn ts_bindgen(
                         }
                     }
                 }
-                WorldItem::Type(tid) => {
-                    let ty = &resolve.types[*tid];
+                WorldItem::Type { id, .. } => {
+                    let ty = &resolve.types[*id];
                     let name = ty.name.as_ref().unwrap();
 
                     if !feature_gate_allowed(resolve, package, &ty.stability, name)
@@ -213,35 +213,31 @@ pub fn ts_bindgen(
                     generator.docs(&ty.docs);
                     match &ty.kind {
                         TypeDefKind::Record(record) => {
-                            generator.type_record(*tid, name, record, &ty.docs)
+                            generator.type_record(*id, name, record, &ty.docs)
                         }
                         TypeDefKind::Flags(flags) => {
-                            generator.type_flags(*tid, name, flags, &ty.docs)
+                            generator.type_flags(*id, name, flags, &ty.docs)
                         }
                         TypeDefKind::Tuple(tuple) => {
-                            generator.type_tuple(*tid, name, tuple, &ty.docs)
+                            generator.type_tuple(*id, name, tuple, &ty.docs)
                         }
-                        TypeDefKind::Enum(enum_) => {
-                            generator.type_enum(*tid, name, enum_, &ty.docs)
-                        }
+                        TypeDefKind::Enum(enum_) => generator.type_enum(*id, name, enum_, &ty.docs),
                         TypeDefKind::Variant(variant) => {
-                            generator.type_variant(*tid, name, variant, &ty.docs)
+                            generator.type_variant(*id, name, variant, &ty.docs)
                         }
-                        TypeDefKind::Option(t) => generator.type_option(*tid, name, t, &ty.docs),
-                        TypeDefKind::Result(r) => generator.type_result(*tid, name, r, &ty.docs),
-                        TypeDefKind::List(t) => generator.type_list(*tid, name, t, &ty.docs),
-                        TypeDefKind::FixedSizeList(t, len) => {
-                            generator.type_fixed_size_list(*tid, name, t, len, &ty.docs)
+                        TypeDefKind::Option(t) => generator.type_option(*id, name, t, &ty.docs),
+                        TypeDefKind::Result(r) => generator.type_result(*id, name, r, &ty.docs),
+                        TypeDefKind::List(t) => generator.type_list(*id, name, t, &ty.docs),
+                        TypeDefKind::FixedLengthList(t, len) => {
+                            generator.type_fixed_size_list(*id, name, t, len, &ty.docs)
                         }
-                        TypeDefKind::Type(t) => generator.type_alias(*tid, name, t, None, &ty.docs),
+                        TypeDefKind::Type(t) => generator.type_alias(*id, name, t, None, &ty.docs),
                         TypeDefKind::Future(_) => todo!("(async impl) generate for future"),
                         TypeDefKind::Stream(_) => todo!("(async impl) generate for stream"),
                         TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
-                        TypeDefKind::Resource => generator.type_resource(
-                            *tid,
-                            ty,
-                            GeneratedTypeMeta { is_export: false },
-                        ),
+                        TypeDefKind::Resource => {
+                            generator.type_resource(*id, ty, GeneratedTypeMeta { is_export: false })
+                        }
                         TypeDefKind::Handle(_) => todo!("type generation for handle"),
                         TypeDefKind::Map(_, _) => todo!("type generation for map"),
                     }
@@ -289,7 +285,7 @@ pub fn ts_bindgen(
                 }
                 funcs.push((export_name.to_lower_camel_case(), f));
             }
-            WorldItem::Interface { id, stability } => {
+            WorldItem::Interface { id, stability, .. } => {
                 let iface_id: String;
                 let (export_name, iface_name): (&str, &str) = match name {
                     WorldKey::Name(export_name) => (export_name, export_name),
@@ -317,7 +313,7 @@ pub fn ts_bindgen(
                     bindgen.export_interface(resolve, &alt_export_name, *id, files, instantiation);
                 }
             }
-            WorldItem::Type(_) => unimplemented!("type exports"),
+            WorldItem::Type { .. } => unimplemented!("type exports"),
         }
     }
     if !funcs.is_empty() {
@@ -829,7 +825,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Option(t) => self.type_option(*id, name, t, &ty.docs),
                 TypeDefKind::Result(r) => self.type_result(*id, name, r, &ty.docs),
                 TypeDefKind::List(t) => self.type_list(*id, name, t, &ty.docs),
-                TypeDefKind::FixedSizeList(t, len) => {
+                TypeDefKind::FixedLengthList(t, len) => {
                     self.type_fixed_size_list(*id, name, t, len, &ty.docs)
                 }
                 TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
@@ -897,8 +893,7 @@ impl<'a> TsInterface<'a> {
                     }
                     TypeDefKind::Variant(_) => panic!("[print_ty()] anonymous variant"),
                     TypeDefKind::List(v) => self.print_list_ty(v),
-                    // TODO: improve fixed size list
-                    TypeDefKind::FixedSizeList(v, len) => self.print_fixed_size_list(v, len),
+                    TypeDefKind::FixedLengthList(v, len) => self.print_fixed_size_list(v, len),
                     TypeDefKind::Future(maybe_ty) => {
                         self.src.push_str("Promise<");
                         self.print_optional_ty(maybe_ty.as_ref());
@@ -1060,11 +1055,11 @@ impl<'a> TsInterface<'a> {
             FunctionKind::AsyncStatic(_) => 0,
         };
 
-        for (i, (name, ty)) in func.params[param_start..].iter().enumerate() {
+        for (i, p) in func.params[param_start..].iter().enumerate() {
             if i > 0 {
                 iface.src.push_str(", ");
             }
-            let mut param_name = name.to_lower_camel_case();
+            let mut param_name = p.name.to_lower_camel_case();
             if RESERVED_KEYWORDS
                 .binary_search(&param_name.as_str())
                 .is_ok()
@@ -1073,7 +1068,7 @@ impl<'a> TsInterface<'a> {
             }
             iface.src.push_str(&param_name);
             iface.src.push_str(": ");
-            iface.print_ty(ty);
+            iface.print_ty(&p.ty);
         }
 
         iface.src.push_str(")");

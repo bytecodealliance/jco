@@ -631,9 +631,9 @@ impl<'a> Instantiator<'a, '_> {
                     WorldItem::Function(_) => {
                         unreachable!("unexpected function in import types during initialization")
                     }
-                    WorldItem::Type(ty) => {
+                    WorldItem::Type { id, .. } => {
                         assert!(!matches!(
-                            self.resolve.types[*ty].kind,
+                            self.resolve.types[*id].kind,
                             TypeDefKind::Resource
                         ))
                     }
@@ -641,7 +641,7 @@ impl<'a> Instantiator<'a, '_> {
                 continue;
             };
             match item {
-                WorldItem::Interface { id, stability: _ } => {
+                WorldItem::Interface { id, .. } => {
                     let TypeDef::ComponentInstance(instance) = import else {
                         unreachable!("unexpectedly non-component instance import in interface")
                     };
@@ -661,9 +661,9 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
                 WorldItem::Function(_) => {}
-                WorldItem::Type(ty) => match import {
+                WorldItem::Type { id, .. } => match import {
                     TypeDef::Resource(resource) => {
-                        let ty = crate::dealias(self.resolve, *ty);
+                        let ty = crate::dealias(self.resolve, *id);
                         let resource_table_ty = &self.types[*resource];
                         self.imports_resource_types
                             .insert(ty, resource_table_ty.unwrap_concrete_ty());
@@ -685,7 +685,7 @@ impl<'a> Instantiator<'a, '_> {
                 .unwrap();
             let export = &self.component.export_items[*export_idx];
             match item {
-                WorldItem::Interface { id, stability: _ } => {
+                WorldItem::Interface { id, .. } => {
                     let iface = &self.resolve.interfaces[*id];
                     let Export::Instance { exports, .. } = &export else {
                         unreachable!("unexpectedly non export instance item")
@@ -709,7 +709,7 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
                 WorldItem::Function(_) => {}
-                WorldItem::Type(_) => unreachable!("unexpected exported world item type"),
+                WorldItem::Type { .. } => unreachable!("unexpected exported world item type"),
             }
         }
     }
@@ -763,7 +763,7 @@ impl<'a> Instantiator<'a, '_> {
         // Process first n lower import initializers until the first instantiate module initializer
         for init in self.component.initializers.iter() {
             match init {
-                GlobalInitializer::InstantiateModule(_m) => {
+                GlobalInitializer::InstantiateModule(_m, _maybe_idx) => {
                     // Ensure lower import initializers are processed before the first module instantiation
                     for lower_import_init in lower_import_initializers.drain(..) {
                         self.instantiation_global_initializer(lower_import_init);
@@ -996,7 +996,6 @@ impl<'a> Instantiator<'a, '_> {
                 &mut instance_flag_defs,
                 "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, {});",
                 wasmtime_environ::component::FLAG_MAY_LEAVE
-                    | wasmtime_environ::component::FLAG_MAY_ENTER
             );
         }
         self.src.js_init.prepend_str(&instance_flag_defs);
@@ -1012,7 +1011,6 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::AsyncStartCall { .. }
                 | Trampoline::BackpressureDec { .. }
                 | Trampoline::BackpressureInc { .. }
-                | Trampoline::BackpressureSet { .. }
                 | Trampoline::ContextGet { .. }
                 | Trampoline::ContextSet { .. }
                 | Trampoline::ErrorContextDebugMessage { .. }
@@ -1089,17 +1087,6 @@ impl<'a> Instantiator<'a, '_> {
                          null,
                          {component_idx},
                      );"
-                );
-            }
-
-            Trampoline::BackpressureSet { instance } => {
-                let backpressure_set_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::BackpressureSet));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {backpressure_set_fn}.bind(null, {});\n",
-                    instance.as_u32(),
                 );
             }
 
@@ -2018,16 +2005,6 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::AlwaysTrap => {
-                uwrite!(
-                    self.src.js,
-                    "function trampoline{i}(rep) {{
-                        throw new TypeError('AlwaysTrap');
-                    }}
-                "
-                );
-            }
-
             Trampoline::Transcoder {
                 op,
                 from,
@@ -2412,13 +2389,22 @@ impl<'a> Instantiator<'a, '_> {
                     "const trampoline{i} = {yield_fn}.bind(null, {cancellable});\n",
                 );
             }
-            Trampoline::CheckBlocking => todo!("Trampoline::CheckBlocking"),
             Trampoline::ThreadIndex => todo!("Trampoline::ThreadIndex"),
             Trampoline::ThreadNewIndirect { .. } => todo!("Trampoline::ThreadNewIndirect"),
             Trampoline::ThreadSwitchTo { .. } => todo!("Trampoline::ThreadSwitchTo"),
             Trampoline::ThreadSuspend { .. } => todo!("Trampoline::ThreadSuspend"),
             Trampoline::ThreadResumeLater { .. } => todo!("Trampoline::ThreadResumeLater"),
             Trampoline::ThreadYieldTo { .. } => todo!("Trampoline::ThreadYieldTo"),
+
+            Trampoline::Trap => {
+                uwriteln!(
+                    self.src.js,
+                    "function trampoline{i}(rep) {{ throw new TypeError('Trap'); }}"
+                );
+            }
+
+            Trampoline::EnterSyncCall => todo!("Trampoline::EnterSyncCall"),
+            Trampoline::ExitSyncCall => todo!("Trampoline::ExitSyncCall"),
         }
     }
 
@@ -2450,7 +2436,7 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            GlobalInitializer::InstantiateModule(m) => match m {
+            GlobalInitializer::InstantiateModule(m, _) => match m {
                 InstantiateModule::Static(idx, args) => {
                     self.instantiate_static_module(*idx, args);
                 }
@@ -2690,9 +2676,9 @@ impl<'a> Instantiator<'a, '_> {
     ) {
         // Connect resources used in parameters
         let params_ty = &self.types[self.types[ty_func_idx].params];
-        for ((_, ty), iface_ty) in func.params.iter().zip(params_ty.types.iter()) {
-            if let Type::Id(id) = ty {
-                self.connect_resource_types(*id, iface_ty, resource_map);
+        for (p, iface_ty) in func.params.iter().zip(params_ty.types.iter()) {
+            if let Type::Id(id) = p.ty {
+                self.connect_resource_types(id, iface_ty, resource_map);
             }
         }
         // Connect resources used in results
@@ -2736,7 +2722,7 @@ impl<'a> Instantiator<'a, '_> {
                     assert_eq!(path.len(), 0);
                     (func, import_name, None)
                 }
-                WorldItem::Interface { id, stability: _ } => {
+                WorldItem::Interface { id, .. } => {
                     assert_eq!(path.len(), 1);
                     let iface = &self.resolve.interfaces[*id];
                     let func = &iface.functions[&path[0]];
@@ -2746,7 +2732,7 @@ impl<'a> Instantiator<'a, '_> {
                         Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
                     )
                 }
-                WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
+                WorldItem::Type { .. } => unreachable!("unexpected imported world item type"),
             };
 
         let is_async = is_async_fn(func, options);
@@ -3267,7 +3253,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.resolve.worlds[world]
                         .imports
                         .iter()
-                        .find(|&(_, item)| *item == WorldItem::Type(t))
+                        .find(|&(_, item)| matches!(*item, WorldItem::Type { id, .. } if id == t))
                         .unwrap()
                         .0
                         .clone(),
@@ -3613,7 +3599,7 @@ impl<'a> Instantiator<'a, '_> {
                 .params
                 .iter()
                 .enumerate()
-                .map(|(i, (name, _ty))| format!("{name}=${{arguments[{i}]}}"))
+                .map(|(i, p)| format!("{}=${{arguments[{i}]}}", p.name))
                 .collect::<Vec<String>>();
             uwriteln!(
                 self.src.js,
@@ -3803,6 +3789,7 @@ impl<'a> Instantiator<'a, '_> {
     fn core_def(&self, def: &CoreDef) -> String {
         match def {
             CoreDef::Export(e) => self.core_export_var_name(e),
+            CoreDef::TaskMayBlock => AsyncTaskIntrinsic::CurrentTaskMayBlock.name().into(),
             CoreDef::Trampoline(i) => format!("trampoline{}", i.as_u32()),
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
@@ -3858,7 +3845,7 @@ impl<'a> Instantiator<'a, '_> {
                 } => {
                     let func = match item {
                         WorldItem::Function(f) => f,
-                        WorldItem::Interface { .. } | WorldItem::Type(_) => {
+                        WorldItem::Interface { .. } | WorldItem::Type { .. } => {
                             unreachable!("unexpectedly non-function lifted function export")
                         }
                     };
@@ -3920,8 +3907,8 @@ impl<'a> Instantiator<'a, '_> {
 
                 Export::Instance { exports, .. } => {
                     let iface_id = match item {
-                        WorldItem::Interface { id, stability: _ } => *id,
-                        WorldItem::Function(_) | WorldItem::Type(_) => {
+                        WorldItem::Interface { id, .. } => *id,
+                        WorldItem::Function(_) | WorldItem::Type { .. } => {
                             unreachable!("unexpectedly non-interface export instance")
                         }
                     };
@@ -4608,12 +4595,22 @@ pub fn gen_flat_lift_fn_js_expr(
             cases_and_lifts_expr.push(']');
             format!("{lift_fn}({cases_and_lifts_expr})")
         }
+
         InterfaceType::List(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
             format!("{f}.bind(null, {ty_idx})")
         }
+
+        InterfaceType::FixedLengthList(ty_idx) => {
+            // TODO(fix): add more robust handling for fixed length lists
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
+            let ty_idx = ty_idx.as_u32();
+            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
+            format!("{f}.bind(null, {ty_idx})")
+        }
+
         InterfaceType::Tuple(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
             let ty_idx = ty_idx.as_u32();
@@ -4910,6 +4907,21 @@ pub fn gen_flat_lower_fn_js_expr(
         }
 
         InterfaceType::List(ty_idx) => {
+            intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
+            let list_ty = &component_types[*ty_idx];
+            let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(
+                intrinsic_mgr,
+                component_types,
+                &list_ty.element,
+                string_encoding,
+            );
+            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
+            let ty_idx = ty_idx.as_u32();
+            format!("{f}({{ elemLowerFn: {elem_ty_lower_expr}, typeIdx: {ty_idx} }})")
+        }
+
+        InterfaceType::FixedLengthList(ty_idx) => {
+            // TODO(fix): add more robust handling for fixed length lists
             intrinsic_mgr.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
             let list_ty = &component_types[*ty_idx];
             let elem_ty_lower_expr = gen_flat_lower_fn_js_expr(
