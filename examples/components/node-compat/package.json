@@ -1,22 +1,21 @@
 {
-  "name": "compat",
-  "description": "",
-  "main": "index.js",
+  "name": "node-compat",
+  "version": "0.0.1",
+  "description": "Example component showcasing NodeJS platform implementation with unenv",
+  "main": "src/component.js",
   "type": "module",
   "scripts": {
-    "build": "rollup -c && jco componentize -w wit -o dist/component.wasm dist/component.js",
+    "build:js": "rolldown -c rolldown.config.mjs",
+    "build:component": "jco componentize -w wit -o dist/component.wasm dist/component.js",
+    "build": "npm run build:js && npm run build:component",
     "transpile": "jco transpile dist/component.wasm -o dist/transpiled",
     "run-transpiled": "node run-transpiled.js ",
     "all": "npm run build; npm run transpile; npm run run-transpiled"
   },
   "keywords": [],
   "dependencies": {
-    "@bytecodealliance/jco": "^1.15.4",
-    "@rollup/plugin-alias": "^6.0.0",
-    "@rollup/plugin-commonjs": "^29.0.0",
-    "@rollup/plugin-inject": "^5.0.5",
-    "@rollup/plugin-node-resolve": "^16.0.3",
-    "rollup": "^4.57.0",
+    "@bytecodealliance/jco": "^1.17.0",
+    "rolldown": "^1.0.0-beta.47",
     "unenv": "^2.0.0-rc.24"
   }
 }
