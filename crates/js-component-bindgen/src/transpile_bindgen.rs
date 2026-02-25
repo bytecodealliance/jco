@@ -1013,10 +1013,12 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::BackpressureInc { .. }
                 | Trampoline::ContextGet { .. }
                 | Trampoline::ContextSet { .. }
+                | Trampoline::EnterSyncCall
                 | Trampoline::ErrorContextDebugMessage { .. }
                 | Trampoline::ErrorContextDrop { .. }
                 | Trampoline::ErrorContextNew { .. }
                 | Trampoline::ErrorContextTransfer
+                | Trampoline::ExitSyncCall
                 | Trampoline::FutureCancelRead { .. }
                 | Trampoline::FutureCancelWrite { .. }
                 | Trampoline::FutureDropReadable { .. }
@@ -1045,9 +1047,9 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::TaskReturn { .. }
                 | Trampoline::WaitableJoin { .. }
                 | Trampoline::WaitableSetDrop { .. }
+                | Trampoline::WaitableSetNew { .. }
                 | Trampoline::WaitableSetPoll { .. }
                 | Trampoline::WaitableSetWait { .. }
-                | Trampoline::WaitableSetNew { .. }
         )
     }
 
@@ -2403,8 +2405,25 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::EnterSyncCall => todo!("Trampoline::EnterSyncCall"),
-            Trampoline::ExitSyncCall => todo!("Trampoline::ExitSyncCall"),
+            Trampoline::EnterSyncCall => {
+                let enter_symmetric_sync_guest_call_fn = self.bindgen.intrinsic(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
+                );
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {enter_symmetric_sync_guest_call_fn};\n",
+                );
+            }
+
+            Trampoline::ExitSyncCall => {
+                let exit_symmetric_sync_guest_call_fn = self.bindgen.intrinsic(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ExitSymmetricSyncGuestCall),
+                );
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {exit_symmetric_sync_guest_call_fn};\n",
+                );
+            }
         }
     }
 

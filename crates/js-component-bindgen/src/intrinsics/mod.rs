@@ -950,7 +950,7 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 20] = [
+const EARLY_INTRINSICS: [Intrinsic; 21] = [
     Intrinsic::DebugLog,
     Intrinsic::GlobalAsyncDeterminism,
     Intrinsic::GlobalComponentAsyncLowersClass,
@@ -964,6 +964,7 @@ const EARLY_INTRINSICS: [Intrinsic; 20] = [
     Intrinsic::TypeCheckValidI32,
     Intrinsic::TypeCheckAsyncFn,
     Intrinsic::AsyncFunctionCtor,
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult),
