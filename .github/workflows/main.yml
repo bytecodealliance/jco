@@ -284,6 +284,10 @@ jobs:
             node: 20.x
           - os: windows-2025
             node: 18.x
+          # TODO: after debugging hang in p2 TCP streams abort
+          # see: https://github.com/bytecodealliance/jco/pull/1280#issuecomment-3957689892
+          - os: windows-2025
+            node: latest
       fail-fast: false
     runs-on: ${{ matrix.os }}
     needs:
