@@ -976,7 +976,6 @@ impl AsyncTaskIntrinsic {
 
                             wset.incrementNumWaiting();
 
-                            // const pendingEventWaitID = wset.registerPendingEventWait();
                             const keepGoing = await this.suspendUntil({{
                                 readyFn: () => {{
                                     const hasPendingEvent = wset.hasPendingEvent();

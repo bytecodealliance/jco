@@ -124,9 +124,6 @@ pub enum Intrinsic {
     /// Event codes used for async, as a JS enum
     AsyncEventCodeEnum,
 
-    /// Write an async event (e.g. result of waitable-set.wait) to linear memory
-    WriteAsyncEventToMemory,
-
     // JS helper functions
     IsLE,
     ThrowInvalidBool,
@@ -514,9 +511,11 @@ impl Intrinsic {
                         #start;
                         #ptr;
                         #capacity;
-                        #copied = 0;
+                        #processed = 0;
 
                         #data; // initial data (only filled out for host-owned)
+
+                        target;
 
                         constructor(args) {{
                             if (args.capacity >= {managed_buffer_class}.MAX_LENGTH) {{
@@ -547,11 +546,16 @@ impl Intrinsic {
                             this.#capacity = args.capacity;
                             this.#elemMeta = args.elemMeta;
                             this.#data = args.data;
+                            this.target = args.target;
                         }}
 
+                        setTarget(tgt) {{ this.target = tgt; }}
+
                         capacity() {{ return this.#capacity; }}
-                        remainingCapacity() {{ return this.#capacity - this.#copied; }}
-                        copied() {{ return this.#copied; }}
+                        remaining() {{ return this.#capacity - this.#processed; }}
+                        processed() {{ return this.#processed; }}
+
+                        componentIdx() {{ return this.#componentIdx; }}
 
                         getElemMeta() {{ return this.#elemMeta; }}
 
@@ -559,9 +563,11 @@ impl Intrinsic {
 
                         read(count) {{
                             {debug_log_fn}('[{managed_buffer_class}#read()] args', {{ count }});
-                            const rc = this.remainingCapacity();
-                            if (count > rc) {{
-                                throw new Error(`cannot read [${{count}}] elements from [${{rc}}] managed buffer`);
+                            if (count === undefined) {{ throw new TypeError("missing/undefined count"); }}
+
+                            const cap = this.capacity();
+                            if (count > cap) {{
+                                throw new Error(`cannot read [${{count}}] elements from buffer with capacity [${{cap}}]`);
                             }}
 
                             let values = [];
@@ -586,7 +592,7 @@ impl Intrinsic {
                                 }}
                             }}
 
-                            this.#copied += count;
+                            this.#processed += count;
                             return values;
                         }}
 
@@ -594,7 +600,7 @@ impl Intrinsic {
                             {debug_log_fn}('[{managed_buffer_class}#write()] args', {{ values }});
 
                             if (!Array.isArray(values)) {{ throw new TypeError('values input to write() must be an array'); }}
-                            let rc = this.remainingCapacity();
+                            let rc = this.remaining();
                             if (values.length > rc) {{
                                 throw new Error(`cannot write [${{values.length}}] elements to managed buffer with remaining capacity [${{rc}}]`);
                             }}
@@ -619,7 +625,7 @@ impl Intrinsic {
                                 }}
                             }}
 
-                            this.#copied += values.length;
+                            this.#processed += values.length;
                         }}
 
                     }}
@@ -636,6 +642,7 @@ impl Intrinsic {
                         #buffers = new Map();
                         #bufferIDs = new Map();
 
+                        // NOTE: componentIdx === null indicates the host
                         getNextBufferID(componentIdx) {{
                             const current = this.#bufferIDs.get(componentIdx);
                             if (current === undefined) {{
@@ -678,6 +685,7 @@ impl Intrinsic {
                                 capacity: args.count,
                                 elemMeta: args.elemMeta,
                                 data: args.data,
+                                target: args.target,
                             }});
 
                             if (instanceBuffers.has(nextBufID)) {{
@@ -703,17 +711,6 @@ impl Intrinsic {
                 output.push_str(&format!(
                     "const {global_buffer_manager} = new {buffer_manager_class}();"
                 ));
-            }
-
-            Intrinsic::WriteAsyncEventToMemory => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
-                output.push_str(&format!(r#"
-                    function {write_async_event_to_memory_fn}(memory, task, event, ptr) {{
-                        {debug_log_fn}('[{write_async_event_to_memory_fn}()] args', {{ memory, task, event, ptr }});
-                        throw new Error('{write_async_event_to_memory_fn}() not implemented');
-                    }}
-                "#));
             }
 
             Intrinsic::RepTableClass => {
@@ -1143,6 +1140,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
     }
 
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Waitable(WaitableIntrinsic::RemoveWaitableSet)]);
+    }
+
     if args.intrinsics.contains(&Intrinsic::Component(
         ComponentIntrinsic::GetOrCreateAsyncState,
     )) {
@@ -1420,7 +1425,6 @@ impl Intrinsic {
 
             // Helpers for working with async state
             Intrinsic::AsyncEventCodeEnum => "ASYNC_EVENT_CODE",
-            Intrinsic::WriteAsyncEventToMemory => "writeAsyncEventToMemory",
         }
     }
 }

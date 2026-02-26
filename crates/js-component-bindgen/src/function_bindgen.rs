@@ -377,7 +377,7 @@ impl FunctionBindgen<'_> {
                         .map(mt => mt.task)
                         .filter(t => !t.getParentSubtask())
                         .map(t => t.exitPromise());
-                    await Promise.all(taskPromises);
+                    await Promise.allSettled(taskPromises);
                 }}
                 "#,
             );
