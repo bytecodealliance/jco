@@ -13,7 +13,7 @@ export default defineConfig({
     input: "src/component.js",
     external: /wasi:.*/,
     output: {
-        file: "dist/guest/component.js",
+        file: "dist/component.js",
         format: "esm",
     },
     resolve: {
