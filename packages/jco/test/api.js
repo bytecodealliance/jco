@@ -226,6 +226,83 @@ suite("API", () => {
         assert.ok(optimizedComponent.byteLength < flavorfulWasmBytes.byteLength);
     });
 
+    // Shared WAT fixture: a component with two [implements=<...>] imports of the
+    // same interface under different labels ("primary" and "backup").
+    const implementsWat = `
+(component
+  (type $store-instance (instance
+    (type $set-type (func (param "key" string) (param "value" string)))
+    (export "set" (func (type $set-type)))
+  ))
+  (import "[implements=<test:implements/store>]primary" (instance $primary (type $store-instance)))
+  (import "[implements=<test:implements/store>]backup" (instance $backup (type $store-instance)))
+  (core module $mem_mod
+    (memory (export "memory") 1)
+    (func (export "cabi_realloc") (param i32 i32 i32 i32) (result i32) i32.const 0)
+  )
+  (core instance $mem (instantiate $mem_mod))
+  (core func $primary-set (canon lower (func $primary "set")
+    (memory $mem "memory") (realloc (func $mem "cabi_realloc"))))
+  (core func $backup-set (canon lower (func $backup "set")
+    (memory $mem "memory") (realloc (func $mem "cabi_realloc"))))
+  (core module $m
+    (import "env" "memory" (memory 1))
+    (import "primary" "set" (func $primary_set (param i32 i32 i32 i32)))
+    (import "backup" "set" (func $backup_set (param i32 i32 i32 i32)))
+    (func (export "run") (result i32)
+      (call $primary_set (i32.const 0) (i32.const 1) (i32.const 0) (i32.const 1))
+      (call $backup_set (i32.const 0) (i32.const 1) (i32.const 0) (i32.const 1))
+      i32.const 0
+    )
+    (func (export "cabi_post_run") (param i32))
+  )
+  (core instance $inst (instantiate $m
+    (with "env" (instance (export "memory" (memory $mem "memory"))))
+    (with "primary" (instance (export "set" (func $primary-set))))
+    (with "backup" (instance (export "set" (func $backup-set))))
+  ))
+  (type $run-type (func (result string)))
+  (func $run (type $run-type) (canon lift (core func $inst "run") (memory $mem "memory") (post-return (func $inst "cabi_post_run"))))
+  (export "run" (func $run))
+)
+`;
+
+    test("Implements - transpile component with multiple instances of same interface", async () => {
+        const component = await parse(implementsWat);
+
+        const name = "multi-store";
+        const { files, imports, exports } = await transpile(component, { name });
+
+        // Should have separate import specifiers for "primary" and "backup"
+        assert.ok(imports.includes("primary"), `Expected "primary" in imports, got: ${JSON.stringify(imports)}`);
+        assert.ok(imports.includes("backup"), `Expected "backup" in imports, got: ${JSON.stringify(imports)}`);
+
+        // Verify the generated JS source references both import names
+        const source = Buffer.from(files[name + ".js"]).toString();
+        assert.ok(source.includes("primary"), "Generated JS should reference 'primary' import");
+        assert.ok(source.includes("backup"), "Generated JS should reference 'backup' import");
+
+        // Should have the "run" export
+        assert.ok(exports.some(([exportName]) => exportName === "run"), `Expected "run" in exports, got: ${JSON.stringify(exports)}`);
+    });
+
+    test("Implements - type generation for implements items", async () => {
+        const component = await parse(implementsWat);
+
+        const name = "multi-store";
+        const { files } = await transpile(component, { name });
+
+        // Check that .d.ts files are generated for the implements items
+        const dtsFile = files[name + ".d.ts"];
+        assert.ok(dtsFile, "Should generate a .d.ts file");
+        const dtsSource = Buffer.from(dtsFile).toString();
+
+        // Both "primary" and "backup" should appear in the type definitions
+        // (as upper camel case: Primary, Backup)
+        assert.ok(dtsSource.includes("Primary"), "Type definitions should reference 'Primary'");
+        assert.ok(dtsSource.includes("Backup"), "Type definitions should reference 'Backup'");
+    });
+
     test("Transpile & Optimize & Minify", async () => {
         const name = "flavorful";
         const { files, imports, exports } = await transpile(flavorfulWasmBytes, {
