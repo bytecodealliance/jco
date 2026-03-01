@@ -460,9 +460,16 @@ impl TsBindgen {
         } else {
             // Generate a type-only export (`export type *` instead of `export *`).
             // so that users can use the interface types, even though there is no runtime code.
+            //
+            // For implements items (where a plain label like "primary" maps to
+            // a named interface like "ns:pkg/store"), use the label as the
+            // export alias so each instance gets a distinct name.
             let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
             let import_path = self.generate_interface(
-                &id_name,
+                // For implements items, both labels resolve to the same interface
+                // and share a single .d.ts file via generate_interface's dedup.
+                // The label is only used as the UpperCamelCase export alias.
+                name,
                 resolve,
                 id,
                 files,
@@ -471,7 +478,7 @@ impl TsBindgen {
             uwriteln!(
                 self.src,
                 "export type * as {} from '{import_path}'; // import {}",
-                id_name.to_upper_camel_case(),
+                name.to_upper_camel_case(),
                 id_name
             );
         }
@@ -1371,8 +1378,12 @@ trait ResolveExt {
 impl ResolveExt for Resolve {
     fn exports_interface(&self, iface_id: InterfaceId) -> bool {
         for (_world_id, world) in self.worlds.iter() {
-            for (world_key, _world_item) in world.exports.iter() {
+            for (world_key, world_item) in world.exports.iter() {
                 if matches!(world_key, WorldKey::Interface(iid) if *iid == iface_id) {
+                    return true;
+                }
+                // Also check implements items where key is Name but item has the interface
+                if matches!(world_item, WorldItem::Interface { id, .. } if *id == iface_id) {
                     return true;
                 }
             }
