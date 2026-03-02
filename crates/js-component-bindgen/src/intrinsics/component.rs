@@ -301,7 +301,9 @@ impl ComponentIntrinsic {
                         }}
 
                         isExclusivelyLocked() {{ return this.#locked === true; }}
-                        setLocked(locked) {{ this.#locked = locked; }}
+                        setLocked(locked) {{
+                            this.#locked = locked;
+                        }}
                         // TODO(fix): we might want to check for pre-locked status here, we should be deterministically
                         // going from locked -> unlocked and vice versa
                         exclusiveLock() {{

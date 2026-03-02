@@ -401,16 +401,20 @@ impl AsyncStreamIntrinsic {
                 let copy_setup_impl = format!(
                     r#"
                     setupCopy(args) {{
-                        const {{ memory, ptr, count, eventCode }} = args;
+                        const {{ memory, ptr, count, eventCode, skipStateCheck }} = args;
                         if (eventCode === undefined) {{ throw new Error("missing/invalid event code"); }}
 
                         let buffer = args.buffer;
                         let bufferID = args.bufferID;
-                        if (this.isCopying()) {{
-                            throw new Error('stream is currently undergoing a separate copy');
-                        }}
-                        if (this.getCopyState() !== {stream_end_class}.CopyState.IDLE) {{
-                            throw new Error(`stream [${{streamEndIdx}}] (tableIdx [${{streamTableIdx}}], component [${{componentIdx}}]) is not in idle state`);
+
+                        // Only check invariants if we are *not* doing a follow-up/post-blocked read
+                        if (!skipStateCheck) {{
+                            if (this.isCopying()) {{
+                                throw new Error('stream is currently undergoing a separate copy');
+                            }}
+                            if (this.getCopyState() !== {stream_end_class}.CopyState.IDLE) {{
+                                throw new Error(`stream [${{streamEndIdx}}] (tableIdx [${{streamTableIdx}}], component [${{componentIdx}}]) is not in idle state`);
+                            }}
                         }}
 
                         const elemMeta = this.getElemMeta();
@@ -419,7 +423,7 @@ impl AsyncStreamIntrinsic {
                         // If we already have a managed buffer (likely host case), we can use that, otherwise we must
                         // create a buffer (likely in the guest case)
                         if (!buffer) {{
-                            const newBuffer = {global_buffer_manager}.createBuffer({{
+                            const newBufferMeta = {global_buffer_manager}.createBuffer({{
                                 componentIdx: this.#componentIdx,
                                 memory,
                                 start: ptr,
@@ -433,8 +437,9 @@ impl AsyncStreamIntrinsic {
                                 isWritable: this.isReadable(),
                                 elemMeta,
                             }});
-                            bufferID = newBuffer.bufferID;
-                            buffer = newBuffer.buffer;
+                            bufferID = newBufferMeta.id;
+                            buffer = newBufferMeta.buffer;
+                            buffer.setTarget(`component [${{this.#componentIdx}}] {end_class_name} buffer (id [${{bufferID}}], count [${{count}}], eventCode [${{eventCode}}])`);
                         }}
 
                         const streamEnd = this;
@@ -450,46 +455,48 @@ impl AsyncStreamIntrinsic {
                             if (result < 0 || result >= 16) {{
                                 throw new Error(`unsupported stream copy result [${{result}}]`);
                             }}
-                            if (buffer.copied() >= {managed_buffer_class}.MAX_LENGTH) {{
+                            if (buffer.processed() >= {managed_buffer_class}.MAX_LENGTH) {{
                                  throw new Error(`buffer size [${{buf.length}}] greater than max length`);
                             }}
                             if (buffer.length > 2**28) {{ throw new Error('buffer uses reserved space'); }}
 
-                            const packedResult = (buffer.copied() << 4) | result;
+                            const packedResult = (buffer.processed() << 4) | result;
                             return {{ code: eventCode, payload0: streamEnd.waitableIdx(), payload1: packedResult }};
                         }};
 
-                        const onCopy = (reclaimBufferFn) => {{
+                        const onCopyFn = (reclaimBufferFn) => {{
                             streamEnd.setPendingEventFn(() => {{
                                 return processFn({stream_end_class}.CopyResult.COMPLETED, reclaimBufferFn);
                             }});
                         }};
 
-                        const onCopyDone = (result) => {{
+                        const onCopyDoneFn = (result) => {{
                             streamEnd.setPendingEventFn(() => {{
                                 return processFn(result);
                             }});
                         }};
 
-                        return {{ bufferID, buffer, onCopy, onCopyDone }};
+                        return {{ bufferID, buffer, onCopyFn, onCopyDoneFn }};
                     }}
                     "#
                 );
 
                 let (inner_rw_fn_name, inner_rw_impl) = match self {
                     // Internal implementation for writing to internal buffer after reading from a provided managed buffers
+                    //
+                    // This _write() function is primarily called by guests.
                     Self::StreamWritableEndClass => (
                         "_write",
                         format!(
                             r#"
                             _write(args) {{
-                                const {{ buffer, onCopy, onCopyDone }} = args;
+                                const {{ buffer, onCopyFn, onCopyDoneFn }} = args;
                                 if (!buffer) {{ throw new TypeError('missing/invalid buffer'); }}
-                                if (!onCopy) {{ throw new TypeError("missing/invalid onCopy handler"); }}
-                                if (!onCopyDone) {{ throw new TypeError("missing/invalid onCopyDone handler"); }}
+                                if (!onCopyFn) {{ throw new TypeError("missing/invalid onCopy handler"); }}
+                                if (!onCopyDoneFn) {{ throw new TypeError("missing/invalid onCopyDone handler"); }}
 
                                 if (!this.#pendingBufferMeta.buffer) {{
-                                    this.setPendingBufferMeta({{ componentIdx: this.#componentIdx, buffer, onCopy, onCopyDone }});
+                                    this.setPendingBufferMeta({{ componentIdx: this.#componentIdx, buffer, onCopyFn, onCopyDoneFn }});
                                     return;
                                 }}
 
@@ -501,48 +508,61 @@ impl AsyncStreamIntrinsic {
 
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component write, and only unit or numeric types are allowed
-                                if (this.#pendingBufferMeta.componentIdx === this.#componentIdx && !this.#elemMeta.isNoneOrNumeric) {{
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && !pendingElemMeta.isNoneOrNumeric) {{
                                     throw new Error("trap: cannot stream non-numeric types within the same component (send)");
                                 }}
 
                                 // If original capacities were zero, we're dealing with a unit stream,
                                 // a write to the unit stream is instantly copied without any work.
                                 if (buffer.capacity() === 0 && this.#pendingBufferMeta.buffer.capacity() === 0) {{
-                                    onCopyDone({stream_end_class}.CopyResult.COMPLETED);
+                                    onCopyDoneFn({stream_end_class}.CopyResult.COMPLETED);
                                     return;
                                 }}
 
                                 // If the internal buffer has no space left to take writes,
                                 // the write is complete, we must reset and wait for another read
                                 // to clear up space in the buffer.
-                                if (this.#pendingBufferMeta.buffer.remainingCapacity() === 0) {{
+                                if (this.#pendingBufferMeta.buffer.remaining() === 0) {{
                                     this.resetAndNotifyPending({stream_end_class}.CopyResult.COMPLETED);
-                                    this.setPendingBufferMeta({{ componentIdx, buffer, onCopy, onCopyDone }});
+                                    this.setPendingBufferMeta({{ componentIdx: this.#componentIdx, buffer, onCopyFn, onCopyDoneFn }});
                                     return;
                                 }}
 
-                                // If there is still remaining capacity in the incoming buffer, perform copy of values
+                                // At this point it is implied that remaining is > 0,
+                                // so if there is still remaining capacity in the incoming buffer, perform copy of values
                                 // to the internal buffer from the incoming buffer
-                                if (buffer.remainingCapacity() > 0) {{
-                                    const numElements = Math.min(buffer.remainingCapacity(), this.#pendingBufferMeta.buffer.remainingCapacity());
+                                let transferred = false;
+                                if (buffer.remaining() > 0) {{
+                                    const numElements = Math.min(buffer.remaining(), this.#pendingBufferMeta.buffer.remaining());
                                     this.#pendingBufferMeta.buffer.write(buffer.read(numElements));
                                     this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta());
+                                    transferred = true;
                                 }}
 
-                                onCopyDone({stream_end_class}.CopyResult.COMPLETED);
+                                onCopyDoneFn({stream_end_class}.CopyResult.COMPLETED);
+
+                                // After successfully doing a guest write, we may need to
+                                // notify a blocked/waiting host read that it can continue
+                                //
+                                // We notify the other end of the stream (likely held by the hsot)
+                                //  *after* the transfer (above) and book-keeping is done, if one occurred.
+                                if (transferred) {{ this.#otherEndNotify(); }}
                             }}
                         "#,
                         ),
                     ),
+
                     // Internal implementation for reading from an internal buffer and writing to a provided managed buffer
+                    //
+                    // This _read() function is primarily called by guests.
                     Self::StreamReadableEndClass => (
                         "_read",
                         format!(
                             r#"
                             _read(args) {{
-                                const {{ buffer, onCopyDone, onCopy }} = args;
+                                const {{ buffer, onCopyDoneFn, onCopyFn }} = args;
                                 if (this.isDropped()) {{
-                                    onCopyDone({stream_end_class}.CopyResult.DROPPED);
+                                    onCopyDoneFn({stream_end_class}.CopyResult.DROPPED);
                                     return;
                                 }}
 
@@ -550,8 +570,8 @@ impl AsyncStreamIntrinsic {
                                     this.setPendingBufferMeta({{
                                         componentIdx: this.#componentIdx,
                                         buffer,
-                                        onCopy,
-                                        onCopyDone,
+                                        onCopyFn,
+                                        onCopyDoneFn,
                                     }});
                                     return;
                                 }}
@@ -564,24 +584,37 @@ impl AsyncStreamIntrinsic {
 
                                 // If the buffer came from the same component that is currently doing the operation
                                 // we're doing a inter-component read, and only unit or numeric types are allowed
-                                if (this.#pendingBufferMeta.componentIdx === this.#componentIdx && !this.#elemMeta.isNoneOrNumeric) {{
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && !pendingElemMeta.isNoneOrNumeric) {{
                                     throw new Error("trap: cannot stream non-numeric types within the same component (read)");
                                 }}
 
-                                const pendingRemaining = this.#pendingBufferMeta.buffer.remainingCapacity();
+                                const pendingRemaining = this.#pendingBufferMeta.buffer.remaining();
+                                let transferred = false;
                                 if (pendingRemaining > 0) {{
-                                    const bufferRemaining = buffer.remainingCapacity();
+                                    const bufferRemaining = buffer.remaining();
                                     if (bufferRemaining > 0) {{
                                         const count = Math.min(pendingRemaining, bufferRemaining);
                                         buffer.write(this.#pendingBufferMeta.buffer.read(count))
                                         this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta());
+                                        transferred = true;
                                     }}
-                                    onCopyDone({stream_end_class}.CopyResult.COMPLETED);
+
+                                    onCopyDoneFn({stream_end_class}.CopyResult.COMPLETED);
+
+                                    // After successfully doing a guest read, we may need to
+                                    // notify a blocked/waiting host write that it can continue
+                                    //
+                                    // We must only notify the other end of the stream (likely held
+                                    // by the host) after a transfer (above) and book-keeping is done.
+                                    if (transferred) {{ this.#otherEndNotify(); }}
+
                                     return;
                                 }}
 
                                 this.resetAndNotifyPending({stream_end_class}.CopyResult.COMPLETED);
-                                this.setPendingBufferMeta({{ componentIdx: this.#componentIdx, buffer, onCopy, onCopyDone }});
+                                this.setPendingBufferMeta({{ componentIdx: this.#componentIdx, buffer, onCopyFn, onCopyDoneFn }});
+
+
                             }}
                             "#,
                         ),
@@ -600,7 +633,7 @@ impl AsyncStreamIntrinsic {
                 let copy_impl = format!(
                     r#"
                          async copy(args) {{
-                             const {{ isAsync, memory, componentIdx, ptr, count, eventCode }} = args;
+                             const {{ isAsync, memory, componentIdx, ptr, count, eventCode, initial }} = args;
                              if (eventCode === undefined) {{ throw new TypeError('missing/invalid event code'); }}
 
                              if (this.isDropped()) {{
@@ -612,20 +645,21 @@ impl AsyncStreamIntrinsic {
                                  return;
                              }}
 
-                             const {{ buffer, onCopy, onCopyDone }} = this.setupCopy({{
+                             const {{ buffer, onCopyFn, onCopyDoneFn }} = this.setupCopy({{
                                  memory,
                                  eventCode,
                                  ptr,
                                  count,
                                  buffer: args.buffer,
                                  bufferID: args.bufferID,
+                                 initial,
                              }});
 
                              // Perform the read/write
                              this.{inner_rw_fn_name}({{
                                  buffer,
-                                 onCopy,
-                                 onCopyDone,
+                                 onCopyFn,
+                                 onCopyDoneFn,
                              }});
 
                              // If sync, wait forever but allow task to do other things
@@ -705,25 +739,85 @@ impl AsyncStreamIntrinsic {
                          async write(v) {{
                             {debug_log_fn}('[{end_class_name}#write()] args', {{ v }});
 
-                            const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
-                                componentIdx: null, // componentIdx of null indicates the host
-                                count: 1,
-                                isReadable: true, // we need to read from this buffer later
-                                isWritable: false,
-                                elemMeta: this.#elemMeta,
-                                data: v,
-                            }});
+                            // Wait for an existing write operation to end, if present,
+                            // otherwise register this write for any future operations.
+                            //
+                            // NOTE: this complexity below is an attempt to sequence operations
+                            // to ensure consecutive writes only wait on their direct predecessors,
+                            // (i.e. write #3 must wait on write #2, *not* write #1)
+                            //
+                            let newResult = Promise.withResolvers();
+                            if (this.#result) {{
+                                try {{
+                                    const p = this.#result.promise;
+                                    this.#result = newResult;
+                                    await p;
+                                }} catch (err) {{
+                                    {debug_log_fn}('[{end_class_name}#write()] error waiting for previous write', err);
+                                    // If the previous write we were waiting on errors for any reason,
+                                    // we can ignore it and attempt to continue with this write
+                                    // which may also fail for a similar reason
+                                }}
+                            }} else {{
+                                this.#result = newResult;
+                            }}
+                            const {{ promise, resolve, reject }} = newResult;
 
-                            await this.copy({{
-                                isAsync: true,
-                                count: 1,
-                                bufferID,
-                                buffer,
-                                eventCode: {async_event_code_enum}.STREAM_WRITE,
-                            }});
+                            try {{
+                                const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
+                                    componentIdx: null, // componentIdx of null indicates the host
+                                    count: 1,
+                                    isReadable: true, // we need to read from this buffer later
+                                    isWritable: false,
+                                    elemMeta: this.#elemMeta,
+                                    data: v,
+                                }});
+                                buffer.setTarget(`host stream write buffer (id [${{bufferID}}], count [${{count}}], data len [${{v.length}}])`);
+
+                                let packedResult;
+                                packedResult = await this.copy({{
+                                    isAsync: true,
+                                    count: 1,
+                                    bufferID,
+                                    buffer,
+                                    eventCode: {async_event_code_enum}.STREAM_WRITE,
+                                }});
+
+                                if (packedResult === {async_blocked_const}) {{
+                                    // If the write was blocked, we can only make progress when
+                                    // the read side notifies us of a read, then we must attempt the copy again
+
+                                    await this.#otherEndWait();
+
+                                    packedResult = await this.copy({{
+                                        isAsync: true,
+                                        count: 1,
+                                        bufferID,
+                                        buffer,
+                                        eventCode: {async_event_code_enum}.STREAM_WRITE,
+                                        skipStateCheck: true,
+                                    }});
+
+                                    if (packedResult === {async_blocked_const}) {{
+                                        throw new Error("unexpected double block during write");
+                                    }}
+                                }}
+
+                                // If the write was not blocked, we can resolve right away
+                                this.#result = null;
+                                resolve();
+
+                            }} catch (err) {{
+                                {debug_log_fn}('[{end_class_name}#write()] error', err);
+                                console.error('[{end_class_name}#write()] error', err);
+                                reject(err);
+                            }}
+
+                            return await promise;
                          }}
                         "#
                     ),
+
                     // NOTE: Host stream reads typically take this path, via `ExternalStream` class's
                     // `read()` function which calls the underlying stream end's `read()`
                     // fn (below) via an anonymous function.
@@ -732,30 +826,99 @@ impl AsyncStreamIntrinsic {
                          async read() {{
                             {debug_log_fn}('[{end_class_name}#read()]');
 
-                            const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
-                                componentIdx: null, // componentIdx of null indicates the host
-                                count: 1,
-                                isReadable: false,
-                                isWritable: true, // we need to write out the pending buffer (if present)
-                                elemMeta: this.#elemMeta,
-                                data: [],
-                            }});
+                            // Wait for an existing read operation to end, if present,
+                            // otherwise register this read for any future operations.
+                            //
+                            // NOTE: this complexity below is an attempt to sequence operations
+                            // to ensure consecutive reads only wait on their direct predecessors,
+                            // (i.e. read #3 must wait on read #2, *not* read #1)
+                            //
+                            const newResult = Promise.withResolvers();
+                            if (this.#result) {{
+                                try {{
+                                    const p = this.#result.promise;
+                                    this.#result = newResult;
+                                    await p;
+                                }} catch (err) {{
+                                    {debug_log_fn}('[{end_class_name}#read()] error waiting for previous read', err);
+                                    // If the previous write we were waiting on errors for any reason,
+                                    // we can ignore it and attempt to continue with this read
+                                    // which may also fail for a similar reason
+                                }}
+                            }} else {{
+                                this.#result = newResult;
+                            }}
+                            const {{ promise, resolve, reject }} = newResult;
 
                             const count = 1;
-                            const packedResult = await this.copy({{
-                                isAsync: true,
-                                count,
-                                bufferID,
-                                buffer,
-                                eventCode: {async_event_code_enum}.STREAM_READ,
-                            }});
+                            try {{
+                                const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
+                                    componentIdx: null, // componentIdx of null indicates the host
+                                    count,
+                                    isReadable: false,
+                                    isWritable: true, // we need to write out the pending buffer (if present)
+                                    elemMeta: this.#elemMeta,
+                                    data: [],
+                                }});
+                                buffer.setTarget(`host stream read buffer (id [${{bufferID}}], count [${{count}}])`);
 
-                            let copied = packedResult >> 4;
-                            let result = packedResult & 0x000F;
+                                let packedResult;
+                                packedResult = await this.copy({{
+                                    isAsync: true,
+                                    count,
+                                    bufferID,
+                                    buffer,
+                                    eventCode: {async_event_code_enum}.STREAM_READ,
+                                }});
 
-                            const vs = buffer.read();
+                                if (packedResult === {async_blocked_const}) {{
+                                    // If the read was blocked, we can only make progress when
+                                    // the write side notifies us of a write, then we must attempt the copy again
 
-                            return count === 1 ? vs[0] : vs;
+                                    await this.#otherEndWait();
+
+                                    packedResult = await this.copy({{
+                                        isAsync: true,
+                                        count,
+                                        bufferID,
+                                        buffer,
+                                        eventCode: {async_event_code_enum}.STREAM_READ,
+                                        skipStateCheck: true,
+                                    }});
+
+                                    if (packedResult === {async_blocked_const}) {{
+                                        throw new Error("unexpected double block during read");
+                                    }}
+                                }}
+
+                                let copied = packedResult >> 4;
+                                let result = packedResult & 0x000F;
+
+                                // Due to async timing vagaries, it is possible to get to this point
+                                // and have an event have come out from the copy despite the writer end
+                                // being closed or the reader being otherwise done:
+                                //
+                                // - The current CopyState is done (indicating a CopyResult.DROPPED being received)
+                                // - The current CopyResult is DROPPED
+                                //
+                                // These two cases often overlap
+                                //
+                                if (this.isDone() || result === {stream_end_class}.CopyResult.DROPPED) {{
+                                    reject(new Error("read end is closed"));
+                                }}
+
+                                const vs = buffer.read(count);
+                                const res = count === 1 ? vs[0] : vs;
+                                this.#result = null;
+                                resolve(res);
+
+                            }} catch (err) {{
+                                {debug_log_fn}('[{end_class_name}#read()] error', err);
+                                console.error('[{end_class_name}#read()] error', err);
+                                reject(err);
+                            }}
+
+                            return await promise;
                          }}
                         "#
                     ),
@@ -776,6 +939,11 @@ impl AsyncStreamIntrinsic {
 
                         #streamRep;
                         #streamTableIdx;
+
+                        #result = null;
+
+                        #otherEndWait = null;
+                        #otherEndNotify = null;
 
                         constructor(args) {{
                             {debug_log_fn}('[{end_class_name}#constructor()] args', args);
@@ -798,6 +966,12 @@ impl AsyncStreamIntrinsic {
 
                             if (args.tableIdx === undefined) {{ throw new Error('missing index for stream table idx'); }}
                             this.#streamTableIdx = args.tableIdx;
+
+                            if (args.otherEndNotify === undefined) {{ throw new Error('missing fn for notification'); }}
+                            this.#otherEndNotify = args.otherEndNotify;
+
+                            if (args.otherEndWait === undefined) {{ throw new Error('missing fn for awaiting notification'); }}
+                            this.#otherEndWait = args.otherEndWait;
                         }}
 
                         streamRep() {{ return this.#streamRep; }}
@@ -811,6 +985,7 @@ impl AsyncStreamIntrinsic {
 
                         isDone() {{ this.getCopyState() === {stream_end_class}.CopyState.DONE; }}
                         isCompleted() {{ this.getCopyState() === {stream_end_class}.CopyState.COMPLETED; }}
+                        isDropped() {{ this.getCopyState() === {stream_end_class}.CopyState.DROPPED; }}
 
                         {action_impl}
                         {inner_rw_impl}
@@ -818,15 +993,15 @@ impl AsyncStreamIntrinsic {
                         {copy_impl}
 
                         setPendingBufferMeta(args) {{
-                            const {{ componentIdx, buffer, onCopy, onCopyDone }} = args;
+                            const {{ componentIdx, buffer, onCopyFn, onCopyDoneFn }} = args;
                             this.#pendingBufferMeta.componentIdx = componentIdx;
                             this.#pendingBufferMeta.buffer = buffer;
-                            this.#pendingBufferMeta.onCopyFn = onCopy;
-                            this.#pendingBufferMeta.onCopyDoneFn = onCopyDone;
+                            this.#pendingBufferMeta.onCopyFn = onCopyFn;
+                            this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
                         }}
 
                         resetPendingBufferMeta() {{
-                            this.setPendingBufferMeta({{ componentIdx: null, buffer: null, onCopy: null, onCopyDone: null }});
+                            this.setPendingBufferMeta({{ componentIdx: null, buffer: null, onCopyFn: null, onCopyDoneFn: null }});
                         }}
 
                         resetAndNotifyPending(result) {{
@@ -842,11 +1017,9 @@ impl AsyncStreamIntrinsic {
 
                         drop() {{
                             if (this.#copying) {{ throw new Error('cannot drop while copying'); }}
-
                             if (this.#pendingBufferMeta) {{
                                 this.resetAndNotifyPending({stream_end_class}.CopyResult.DROPPED);
                             }}
-
                             super.drop();
                         }}
                     }}
@@ -880,6 +1053,9 @@ impl AsyncStreamIntrinsic {
                         #localStreamTable;
                         #globalStreamMap;
 
+                        #readWaitPromise = null;
+                        #writeWaitPromise = null;
+
                         constructor(args) {{
                             if (typeof args.componentIdx !== 'number') {{ throw new Error('missing/invalid component idx'); }}
                             if (!args.elemMeta) {{ throw new Error('missing/invalid stream element metadata'); }}
@@ -897,6 +1073,19 @@ impl AsyncStreamIntrinsic {
                                 this.#localStreamTable = args.localStreamTable;
                                 this.#idx = localStreamTable.insert(this);
                             }}
+
+                            const writeNotify = () => {{
+                                if (this.#writeWaitPromise === null) {{ return; }}
+                                const resolve = this.#writeWaitPromise.resolve;
+                                this.#writeWaitPromise = null;
+                                resolve();
+                            }};
+                            const writeWait = () => {{
+                                if (this.#writeWaitPromise === null) {{
+                                    this.#writeWaitPromise = Promise.withResolvers();
+                                }}
+                                return this.#writeWaitPromise.promise;
+                            }};
 
                             this.#readEnd = new {read_end_class}({{
                                 componentIdx,
@@ -922,7 +1111,22 @@ impl AsyncStreamIntrinsic {
                                         this.drop();
                                     }}
                                 }},
+                                otherEndWait: writeWait,
+                                otherEndNotify: writeNotify,
                             }});
+
+                            const readNotify = () => {{
+                                if (this.#readWaitPromise === null) {{ return; }}
+                                const resolve = this.#readWaitPromise.resolve;
+                                this.#readWaitPromise = null;
+                                resolve();
+                            }};
+                            const readWait = () => {{
+                                if (this.#readWaitPromise === null) {{
+                                    this.#readWaitPromise = Promise.withResolvers();
+                                }}
+                                return this.#readWaitPromise.promise;
+                            }};
 
                             this.#writeEnd = new {write_end_class}({{
                                 componentIdx,
@@ -949,6 +1153,8 @@ impl AsyncStreamIntrinsic {
                                         this.drop();
                                     }}
                                 }},
+                                otherEndWait: readWait,
+                                otherEndNotify: readNotify,
                             }});
                         }}
 
@@ -1287,7 +1493,7 @@ impl AsyncStreamIntrinsic {
                             throw new Error(`stream end table idx [${{streamEnd.getStreamTableIdx()}}] != operation table idx [${{streamTableIdx}}]`);
                         }}
 
-                        const res = await streamEnd.copy({{
+                        const packedResult = await streamEnd.copy({{
                             isAsync,
                             memory: getMemoryFn(),
                             ptr,
@@ -1295,7 +1501,7 @@ impl AsyncStreamIntrinsic {
                             eventCode: {event_code},
                         }});
 
-                        return res;
+                        return packedResult;
                     }}
                 "#));
             }

@@ -546,12 +546,19 @@ impl HostIntrinsic {
                     function {store_event_in_component_memory_fn}(args) {{
                         {debug_log_fn}('[{store_event_in_component_memory_fn}()] args', args);
                         const {{ memory, ptr, event }} = args;
+
                         if (!memory) {{ throw new Error('unexpectedly missing memory'); }}
                         if (ptr === undefined || ptr === null) {{ throw new Error('unexpectedly missing pointer'); }}
                         if (!event) {{ throw new Error('event object missing'); }}
+                        if (event.code === undefined) {{ throw new Error('invalid event object, missing code'); }}
+                        if (event.payload0 === undefined) {{ throw new Error('invalid event object, missing payload0'); }}
+                        if (event.payload1 === undefined) {{ throw new Error('invalid event object, missing payload1'); }}
+
                         const dv = new DataView(memory.buffer);
-                        dv.setUint32(ptr, event.index, true);
-                        dv.setUint32(ptr + 4, event.result, true);
+                        dv.setUint32(ptr, event.payload0, true);
+                        dv.setUint32(ptr + 4, event.payload1, true);
+
+                        return event.code;
                     }}
                     "#
                 ));

@@ -367,7 +367,15 @@ impl AsyncFutureIntrinsic {
 
                         if ({is_borrowed_type}(componentIdx, future.elementTypeRep())) {{ throw new Error('borrowed types not supported'); }}
 
-                        const {{ id: bufferID }} = {global_buffer_mgr}.createBuffer({{ componentIdx, start, len, typeIdx, writable, readable }});
+                        const {{ id: bufferID }} = {global_buffer_mgr}.createBuffer({{
+                            componentIdx,
+                            start,
+                            len,
+                            typeIdx,
+                            writable,
+                            readable,
+                            target: `future read/write`,
+                        }});
 
                         const processFn = (result) => {{
                           if (.remaining(bufferID) !== 0) {{

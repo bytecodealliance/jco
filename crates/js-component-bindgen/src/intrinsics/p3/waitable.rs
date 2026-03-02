@@ -160,8 +160,12 @@ impl WaitableIntrinsic {
                         #pendingEvent = null;
                         #waiting = 0;
 
+                        target;
+
                         constructor(componentIdx) {{
+                            if (componentIdx === undefined) {{ throw new TypeError("missing/invalid component idx"); }}
                             this.#componentIdx = componentIdx;
+                            this.target = `component [${{this.#componentIdx}}] waitable set`;
                         }}
 
                         componentIdx() {{ return this.#componentIdx; }}
@@ -171,6 +175,10 @@ impl WaitableIntrinsic {
 
                         incrementNumWaiting(n) {{ this.#waiting += n ?? 1; }}
                         decrementNumWaiting(n) {{ this.#waiting -= n ?? 1; }}
+
+                        targets() {{ return this.#waitables.map(w => w.target); }}
+
+                        setTarget(tgt) {{ this.target = tgt; }}
 
                         shuffleWaitables() {{
                             this.#waitables = this.#waitables
@@ -230,7 +238,7 @@ impl WaitableIntrinsic {
                         #resolve;
                         #reject;
 
-                        #waitableSet;
+                        #waitableSet = null;
 
                         target;
 
@@ -242,7 +250,7 @@ impl WaitableIntrinsic {
                         }}
 
                         componentIdx() {{ return this.#componentIdx; }}
-                        isInSet() {{ return this.#waitableSet !== undefined; }}
+                        isInSet() {{ return this.#waitableSet !== null; }}
 
                         setTarget(tgt) {{ this.target = tgt; }}
 
@@ -312,6 +320,7 @@ impl WaitableIntrinsic {
                                 throw new Error('waitables with pending events cannot be dropped');
                             }}
                             this.join(null);
+                            // TODO: remove the waitable set
                         }}
 
                     }}
@@ -344,10 +353,11 @@ impl WaitableIntrinsic {
                 let waitable_set_wait_fn = Self::WaitableSetWait.name();
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
+                let store_event_in_component_memory_fn =
+                    Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory).name();
                 output.push_str(&format!(r#"
                     async function {waitable_set_wait_fn}(ctx, waitableSetRep, resultPtr) {{
-                        {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ args, waitableSetRep, resultPtr }});
+                        {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ ctx, waitableSetRep, resultPtr }});
                         const {{
                             componentIdx,
                             isAsync,
@@ -366,7 +376,7 @@ impl WaitableIntrinsic {
                         }}
 
                         const event = await task.waitForEvent({{ waitableSetRep, isAsync }});
-                        {write_async_event_to_memory_fn}(memory, task, event, resultPtr);
+                        return {store_event_in_component_memory_fn}(memory, task, event, resultPtr);
                     }}
                 "#));
             }
@@ -382,14 +392,13 @@ impl WaitableIntrinsic {
                     HostIntrinsic::StoreEventInComponentMemory.name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 output.push_str(&format!(r#"
-                    async function {waitable_set_poll_fn}(ctx, waitableSetRep, resultPtr) {{
+                    function {waitable_set_poll_fn}(ctx, waitableSetRep, resultPtr) {{
                         const {{ componentIdx, memoryIdx, getMemoryFn, isAsync, isCancellable }} = ctx;
                         {debug_log_fn}('[{waitable_set_poll_fn}()] args', {{
                             componentIdx,
                             memoryIdx,
                             waitableSetRep,
                             resultPtr,
-                            resultPtr
                         }});
 
                         const taskMeta = {current_task_get_fn}(componentIdx);
@@ -412,7 +421,7 @@ impl WaitableIntrinsic {
                         }}
 
                         let event;
-                        const cancelDelivered = task.deliverPendingCancel({{ cancelalble: isCancellable }});
+                        const cancelDelivered = task.deliverPendingCancel({{ cancellable: isCancellable }});
                         if (cancelDelivered) {{
                             event = {{ code: {async_event_code_enum}.TASK_CANCELLED, payload0: 0, payload1: 0 }};
                         }} else if (!wset.hasPendingEvent()) {{
@@ -421,7 +430,8 @@ impl WaitableIntrinsic {
                             event = wset.getPendingEvent();
                         }}
 
-                        return {store_event_in_component_memory_fn}({{ event, ptr: resultPtr, memory: getMemoryFn() }});
+                        const eventCode = {store_event_in_component_memory_fn}({{ event, ptr: resultPtr, memory: getMemoryFn() }});
+                        return eventCode;
                     }}
                 "#));
             }
@@ -433,8 +443,7 @@ impl WaitableIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                let remove_waitable_set_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let remove_waitable_set_fn = Self::RemoveWaitableSet.name();
                 output.push_str(&format!("
                     function {waitable_set_drop_fn}(componentIdx, waitableSetRep) {{
                         {debug_log_fn}('[{waitable_set_drop_fn}()] args', {{ componentIdx, waitableSetRep }});
@@ -448,7 +457,7 @@ impl WaitableIntrinsic {
                         const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
-                        {remove_waitable_set_fn}({{ state, waitableSetRep, task }});
+                        {remove_waitable_set_fn}({{ state, waitableSetRep }});
                     }}
                 "));
             }
@@ -456,27 +465,32 @@ impl WaitableIntrinsic {
             Self::RemoveWaitableSet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let remove_waitable_set_fn = Self::RemoveWaitableSet.name();
-                output.push_str(&format!("
-                    function {remove_waitable_set_fn}({{ state, waitableSetRep, task }}) {{
-                        {debug_log_fn}('[{remove_waitable_set_fn}()] args', {{ componentIdx, waitableSetRep }});
+                output.push_str(&format!(r#"
+                    function {remove_waitable_set_fn}(args) {{
+                        {debug_log_fn}('[{remove_waitable_set_fn}()] args', args);
+                        const {{ state, waitableSetRep }} = args;
+                        if (!state) {{ throw new TypeError("missing component state"); }}
+                        if (!waitableSetRep) {{ throw new TypeError("missing component waitableSetRep"); }}
 
                         const ws = state.waitableSets.get(waitableSetRep);
                         if (!ws) {{
                             throw new Error('cannot remove waitable set: no set present with rep [' + waitableSetRep + ']');
                         }}
-                        if (waitableSet.hasPendingEvent()) {{ throw new Error('waitable set cannot be removed with pending items remaining'); }}
+                        if (ws.hasPendingEvent()) {{
+                            throw new Error('waitable set cannot be removed with pending items remaining');
+                        }}
 
                         const waitableSet = state.waitableSets.get(waitableSetRep);
-                        if (waitableSet.numWaitables() > 0) {{
+                        if (ws.numWaitables() > 0) {{
                             throw new Error('waitable set still contains waitables');
                         }}
-                        if (waitableSet.numWaiting() > 0) {{
+                        if (ws.numWaiting() > 0) {{
                             throw new Error('waitable set still has other tasks waiting on it');
                         }}
 
                         state.waitableSets.remove(waitableSetRep);
                     }}
-                "));
+                "#));
             }
 
             Self::WaitableJoin => {
