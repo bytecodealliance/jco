@@ -74,7 +74,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: install cargo-get
-        uses: taiki-e/cache-cargo-install-action@2bfc3cedaf2ee5e7fa5d0ae034ccd5fb50cf8e1f # v3.0.2
+        uses: taiki-e/cache-cargo-install-action@59027ebf20a9617c4e819eb53ccd2673cb162b89 # v3.0.3
         with:
           tool: cargo-get
 
