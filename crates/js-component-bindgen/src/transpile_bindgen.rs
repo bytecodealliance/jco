@@ -604,40 +604,63 @@ impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
 
 impl<'a> Instantiator<'a, '_> {
     fn initialize(&mut self) {
-        // Populate reverse map from import and export names to world items
-        for (key, _) in &self.resolve.worlds[self.world].imports {
-            let name = &self.resolve.name_world_key(key);
-            self.imports.insert(name.to_string(), key.clone());
+        // Populate reverse maps from binary import/export names to world items.
+        //
+        // We build these maps by matching binary names from component.import_types
+        // and component.exports against the world's imports/exports. This avoids
+        // computing binary names from the Resolve, which may use a different
+        // package name than the binary component (e.g. when decode() synthesizes
+        // a package for components without embedded WIT metadata).
+        let world = &self.resolve.worlds[self.world];
+        for (_idx, (import_name, _ty)) in self.component.import_types.iter() {
+            if let Some(key) = find_world_key(self.resolve, world.imports.iter(), import_name) {
+                self.imports.insert(import_name.to_string(), key.clone());
+            }
         }
-        for (key, _) in &self.resolve.worlds[self.world].exports {
-            let name = &self.resolve.name_world_key(key);
-            self.exports.insert(name.to_string(), key.clone());
+        for (export_name, _idx) in self.component.exports.raw_iter() {
+            let export_name_str: &str = export_name.as_ref();
+            if let Some(key) = find_world_key(self.resolve, world.exports.iter(), export_name_str) {
+                self.exports
+                    .insert(export_name_str.to_string(), key.clone());
+            }
         }
 
-        // Populate reverse map from TypeId to ResourceIndex
-        // Populate the resource type to resource index map
+        // Build reverse maps (WorldKey -> binary name) for efficient lookup below.
+        let import_key_to_name: HashMap<WorldKey, String> = self
+            .imports
+            .iter()
+            .map(|(n, k)| (k.clone(), n.clone()))
+            .collect();
+        let export_key_to_name: HashMap<WorldKey, String> = self
+            .exports
+            .iter()
+            .map(|(n, k)| (k.clone(), n.clone()))
+            .collect();
+
+        // Populate reverse map from TypeId to ResourceIndex.
+        // Also need to handle world items that don't appear in component.import_types
+        // (e.g. non-resource types).
         for (key, item) in &self.resolve.worlds[self.world].imports {
-            let name = &self.resolve.name_world_key(key);
+            let Some(name) = import_key_to_name.get(key).cloned() else {
+                // Interface/Function world items without a corresponding
+                // binary import can occur with `implements` items — the
+                // world may declare items that aren't present as binary
+                // component imports. Safe to skip since we only need
+                // resource type mappings here.
+                if let WorldItem::Type { id, .. } = item {
+                    assert!(!matches!(
+                        self.resolve.types[*id].kind,
+                        TypeDefKind::Resource
+                    ));
+                }
+                continue;
+            };
             let Some((_, (_, import))) = self
                 .component
                 .import_types
                 .iter()
-                .find(|(_, (impt_name, _))| impt_name == name)
+                .find(|(_, (impt_name, _))| *impt_name == name)
             else {
-                match item {
-                    WorldItem::Interface { .. } => {
-                        unreachable!("unexpected interface in import types during initialization")
-                    }
-                    WorldItem::Function(_) => {
-                        unreachable!("unexpected function in import types during initialization")
-                    }
-                    WorldItem::Type { id, .. } => {
-                        assert!(!matches!(
-                            self.resolve.types[*id].kind,
-                            TypeDefKind::Resource
-                        ))
-                    }
-                }
                 continue;
             };
             match item {
@@ -676,12 +699,14 @@ impl<'a> Instantiator<'a, '_> {
         self.exports_resource_types = self.imports_resource_types.clone();
 
         for (key, item) in &self.resolve.worlds[self.world].exports {
-            let name = &self.resolve.name_world_key(key);
+            let Some(name) = export_key_to_name.get(key).cloned() else {
+                continue;
+            };
             let (_, export_idx) = self
                 .component
                 .exports
                 .raw_iter()
-                .find(|(expt_name, _)| *expt_name == name)
+                .find(|(expt_name, _)| expt_name.as_str() == name)
                 .unwrap();
             let export = &self.component.export_items[*export_idx];
             match item {
@@ -2734,8 +2759,16 @@ impl<'a> Instantiator<'a, '_> {
         let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
 
+        // For implements items, the import_name has the [implements=<...>]
+        // prefix. Strip it to get the plain label for use as the JS import
+        // specifier.
+        let import_name: &str = match parse_implements_name(import_name) {
+            Some((_, label)) => label,
+            None => import_name,
+        };
+
         // Determine the name of the function
-        let (func, func_name, iface_name) =
+        let (func, func_name, iface_name): (&Function, &str, Option<&str>) =
             match &self.resolve.worlds[self.world].imports[world_key] {
                 WorldItem::Function(func) => {
                     assert_eq!(path.len(), 0);
@@ -2747,8 +2780,11 @@ impl<'a> Instantiator<'a, '_> {
                     let func = &iface.functions[&path[0]];
                     (
                         func,
-                        &path[0],
-                        Some(iface.name.as_deref().unwrap_or_else(|| import_name)),
+                        path[0].as_str(),
+                        // For implements items, import_name is already the
+                        // plain label (shadowed above), so each labeled
+                        // instance gets its own JS import specifier.
+                        Some(iface.name.as_deref().unwrap_or(import_name)),
                     )
                 }
                 WorldItem::Type { .. } => unreachable!("unexpected imported world item type"),
@@ -3855,6 +3891,12 @@ impl<'a> Instantiator<'a, '_> {
             let export = &self.component.export_items[*export_idx];
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
+            // For implements items, strip the [implements=<...>] prefix to
+            // get the plain label for use as the JS export name.
+            let export_name: &str = match parse_implements_name(export_name) {
+                Some((_, label)) => label,
+                None => export_name,
+            };
             let mut export_resource_map = ResourceMap::new();
             match export {
                 Export::LiftedFunction {
@@ -4020,7 +4062,7 @@ impl<'a> Instantiator<'a, '_> {
         options: &CanonicalOptions,
         func: &Function,
         _func_ty_idx: &TypeFuncIndex,
-        export_name: &String,
+        export_name: &str,
         export_resource_map: &ResourceMap,
     ) {
         // Determine whether the function should be generated as async
@@ -4231,7 +4273,7 @@ impl<'a> Instantiator<'a, '_> {
                     CallType::AsyncStandard
                 }
             },
-            iface_name: iface_name.map(|v| v.as_str()),
+            iface_name,
             callee: &callee,
             opts: options,
             func,
@@ -4400,7 +4442,113 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
     (impt_sans_version.to_string(), None)
 }
 
+/// Find the `WorldKey` in a world's import/export map that corresponds to a
+/// binary import/export name.
+///
+/// Resolution follows a tiered approach:
+///
+/// For `[implements=<I>]label` binary names:
+///   Tier 1: Match `WorldKey::Name(label)` with `implements: Some(_)`
+///   Tier 2: Fall back to `WorldKey::Name(label)` without implements constraint
+///
+/// For standard binary names (e.g., `ns:pkg/iface@0.2.0`):
+///   Tier 1: Exact match via `resolve.name_world_key(key) == binary_name`
+///   Tier 2: Semver-compatible match using `semver_find_world_key()`
+fn find_world_key<'a>(
+    resolve: &Resolve,
+    world_items: impl Iterator<Item = (&'a WorldKey, &'a WorldItem)>,
+    binary_name: &str,
+) -> Option<WorldKey> {
+    let items: Vec<_> = world_items.collect();
+
+    if let Some((_iface_id, label)) = parse_implements_name(binary_name) {
+        // Tier 1: match by label with implements constraint
+        let tier1 = items.iter().find(|(k, item)| {
+            matches!(
+                (k, item),
+                (WorldKey::Name(l), WorldItem::Interface { implements: Some(_), .. })
+                if l == label
+            )
+        });
+        if let Some((k, _)) = tier1 {
+            return Some((*k).clone());
+        }
+
+        // Tier 2: label fallback — match plain label without implements constraint
+        items
+            .iter()
+            .find(|(k, _)| matches!(k, WorldKey::Name(l) if l == label))
+            .map(|(k, _)| (*k).clone())
+    } else {
+        // Tier 1: exact match
+        let exact = items
+            .iter()
+            .find(|(k, _)| resolve.name_world_key(k) == binary_name);
+        if let Some((k, _)) = exact {
+            return Some((*k).clone());
+        }
+
+        // Tier 2: semver-compatible match
+        semver_find_world_key(resolve, &items, binary_name)
+    }
+}
+
+/// Semver-compatible world key lookup. If `binary_name` has a version like
+/// `ns:pkg/iface@0.2.0`, find a world item whose key has a semver-compatible
+/// version (e.g., `ns:pkg/iface@0.2.1`). Prefers the highest compatible version.
+fn semver_find_world_key(
+    resolve: &Resolve,
+    items: &[(&WorldKey, &WorldItem)],
+    binary_name: &str,
+) -> Option<WorldKey> {
+    let at = binary_name.find('@')?;
+    let import_ver_str = &binary_name[at + 1..];
+    let (import_compat, _) = semver_compat_key(import_ver_str)?;
+    let import_base = &binary_name[..at];
+
+    let mut best: Option<(WorldKey, Version)> = None;
+    for (k, _) in items {
+        let key_name = resolve.name_world_key(k);
+        let Some(key_at) = key_name.find('@') else {
+            continue;
+        };
+        let key_base = &key_name[..key_at];
+        if key_base != import_base {
+            continue;
+        }
+        let key_ver_str = &key_name[key_at + 1..];
+        if let Some((key_compat, key_ver)) = semver_compat_key(key_ver_str)
+            && key_compat == import_compat
+        {
+            match &best {
+                Some((_, prev_ver)) if key_ver <= *prev_ver => {}
+                _ => best = Some(((*k).clone(), key_ver)),
+            }
+        }
+    }
+    best.map(|(k, _)| k)
+}
+
+/// Parse `[implements=<interface-id>]label` into `Some((interface_id, label))`.
+///
+/// Returns `None` if the name does not use the implements encoding.
+pub fn parse_implements_name(name: &str) -> Option<(&str, &str)> {
+    let rest = name.strip_prefix("[implements=<")?;
+    let end = rest.find(">]")?;
+    let iface_id = &rest[..end];
+    let label = &rest[end + 2..];
+    if iface_id.is_empty() || label.is_empty() {
+        return None;
+    }
+    Some((iface_id, label))
+}
+
 pub fn parse_world_key(name: &str) -> Option<(&str, &str, &str)> {
+    // Handle [implements=<ns:pkg/iface>]label format by parsing the embedded
+    // interface ID
+    if let Some((iface_id, _label)) = parse_implements_name(name) {
+        return parse_world_key(iface_id);
+    }
     let registry_idx = name.find(':')?;
     let ns = &name[0..registry_idx];
     match name.rfind('/') {
@@ -5282,5 +5430,258 @@ mod tests {
     #[test]
     fn test_parse_mapping_empty() {
         assert_eq!(parse_mapping(""), ("".into(), None));
+    }
+
+    #[test]
+    fn test_parse_implements_name_basic() {
+        assert_eq!(
+            parse_implements_name("[implements=<ns:pkg/iface>]label"),
+            Some(("ns:pkg/iface", "label"))
+        );
+    }
+
+    #[test]
+    fn test_parse_implements_name_with_version() {
+        assert_eq!(
+            parse_implements_name("[implements=<ns:pkg/iface@1.0.0>]my-label"),
+            Some(("ns:pkg/iface@1.0.0", "my-label"))
+        );
+    }
+
+    #[test]
+    fn test_parse_implements_name_not_implements() {
+        assert_eq!(parse_implements_name("ns:pkg/iface"), None);
+        assert_eq!(parse_implements_name("plain-name"), None);
+        assert_eq!(parse_implements_name(""), None);
+    }
+
+    #[test]
+    fn test_parse_implements_name_empty_parts() {
+        // Empty iface_id or label should return None
+        assert_eq!(parse_implements_name("[implements=<>]label"), None);
+        assert_eq!(parse_implements_name("[implements=<ns:pkg/iface>]"), None);
+    }
+
+    #[test]
+    fn test_parse_world_key_with_implements() {
+        // parse_world_key should strip the implements prefix and parse the inner iface ID
+        assert_eq!(
+            parse_world_key("[implements=<ns:pkg/iface>]label"),
+            Some(("ns", "pkg", "iface"))
+        );
+    }
+
+    #[test]
+    fn test_parse_world_key_with_implements_versioned() {
+        // parse_world_key strips the version from the interface name
+        assert_eq!(
+            parse_world_key("[implements=<ns:pkg/iface@1.0.0>]my-label"),
+            Some(("ns", "pkg", "iface"))
+        );
+    }
+
+    /// Helper: allocate a dummy interface in a Resolve and return its id.
+    fn dummy_interface(resolve: &mut Resolve) -> wit_parser::InterfaceId {
+        resolve.interfaces.alloc(wit_parser::Interface {
+            name: None,
+            types: Default::default(),
+            functions: Default::default(),
+            docs: Default::default(),
+            stability: wit_parser::Stability::Unknown,
+            package: None,
+            span: Default::default(),
+            clone_of: None,
+        })
+    }
+
+    #[test]
+    fn test_find_world_key_implements_tier1() {
+        // Tier 1: [implements=<I>]label matches WorldKey::Name("label") with implements: Some(_)
+        let mut resolve = Resolve::default();
+        let iface_id = dummy_interface(&mut resolve);
+        let items: Vec<(WorldKey, WorldItem)> = vec![(
+            WorldKey::Name("primary".into()),
+            WorldItem::Interface {
+                id: iface_id,
+                stability: wit_parser::Stability::Unknown,
+                implements: Some(iface_id),
+                span: Default::default(),
+            },
+        )];
+        let refs: Vec<_> = items.iter().map(|(k, v)| (k, v)).collect();
+        let result = find_world_key(
+            &resolve,
+            refs.into_iter(),
+            "[implements=<ns:pkg/store>]primary",
+        );
+        assert_eq!(result, Some(WorldKey::Name("primary".into())));
+    }
+
+    #[test]
+    fn test_find_world_key_implements_label_fallback() {
+        // Tier 2: [implements=<I>]label falls back to WorldKey::Name("label") without implements
+        let mut resolve = Resolve::default();
+        let iface_id = dummy_interface(&mut resolve);
+        let items: Vec<(WorldKey, WorldItem)> = vec![(
+            WorldKey::Name("primary".into()),
+            WorldItem::Interface {
+                id: iface_id,
+                stability: wit_parser::Stability::Unknown,
+                implements: None,
+                span: Default::default(),
+            },
+        )];
+        let refs: Vec<_> = items.iter().map(|(k, v)| (k, v)).collect();
+        let result = find_world_key(
+            &resolve,
+            refs.into_iter(),
+            "[implements=<ns:pkg/store>]primary",
+        );
+        assert_eq!(result, Some(WorldKey::Name("primary".into())));
+    }
+
+    #[test]
+    fn test_find_world_key_semver_compat() {
+        // Tier 2: ns:pkg/iface@0.2.0 matches world item ns:pkg/iface@0.2.1 via semver
+        let resolve = Resolve::default();
+        let items: Vec<(WorldKey, WorldItem)> = vec![(
+            WorldKey::Name("ns:pkg/iface@0.2.1".into()),
+            WorldItem::Function(Function {
+                name: "f".into(),
+                kind: FunctionKind::Freestanding,
+                params: vec![],
+                result: None,
+                docs: Default::default(),
+                stability: wit_parser::Stability::Unknown,
+                span: Default::default(),
+            }),
+        )];
+        let refs: Vec<_> = items.iter().map(|(k, v)| (k, v)).collect();
+        let result = find_world_key(&resolve, refs.into_iter(), "ns:pkg/iface@0.2.0");
+        assert_eq!(result, Some(WorldKey::Name("ns:pkg/iface@0.2.1".into())));
+    }
+
+    #[test]
+    fn test_find_world_key_semver_no_cross_major() {
+        // ns:pkg/iface@1.0.0 does NOT match ns:pkg/iface@2.0.0
+        let resolve = Resolve::default();
+        let items: Vec<(WorldKey, WorldItem)> = vec![(
+            WorldKey::Name("ns:pkg/iface@2.0.0".into()),
+            WorldItem::Function(Function {
+                name: "f".into(),
+                kind: FunctionKind::Freestanding,
+                params: vec![],
+                result: None,
+                docs: Default::default(),
+                stability: wit_parser::Stability::Unknown,
+                span: Default::default(),
+            }),
+        )];
+        let refs: Vec<_> = items.iter().map(|(k, v)| (k, v)).collect();
+        let result = find_world_key(&resolve, refs.into_iter(), "ns:pkg/iface@1.0.0");
+        assert_eq!(result, None);
+    }
+
+    /// WAT fixture: a component with two `[implements=<...>]` imports of the
+    /// same interface under different labels ("primary" and "backup").
+    #[cfg(feature = "transpile-bindgen")]
+    const IMPLEMENTS_WAT: &str = r#"
+(component
+  (type $store-instance (instance
+    (type $set-type (func (param "key" string) (param "value" string)))
+    (export "set" (func (type $set-type)))
+  ))
+  (import "[implements=<test:implements/store>]primary" (instance $primary (type $store-instance)))
+  (import "[implements=<test:implements/store>]backup" (instance $backup (type $store-instance)))
+  (core module $mem_mod
+    (memory (export "memory") 1)
+    (func (export "cabi_realloc") (param i32 i32 i32 i32) (result i32) i32.const 0)
+  )
+  (core instance $mem (instantiate $mem_mod))
+  (core func $primary-set (canon lower (func $primary "set")
+    (memory $mem "memory") (realloc (func $mem "cabi_realloc"))))
+  (core func $backup-set (canon lower (func $backup "set")
+    (memory $mem "memory") (realloc (func $mem "cabi_realloc"))))
+  (core module $m
+    (import "env" "memory" (memory 1))
+    (import "primary" "set" (func $primary_set (param i32 i32 i32 i32)))
+    (import "backup" "set" (func $backup_set (param i32 i32 i32 i32)))
+    (func (export "run") (result i32)
+      (call $primary_set (i32.const 0) (i32.const 1) (i32.const 0) (i32.const 1))
+      (call $backup_set (i32.const 0) (i32.const 1) (i32.const 0) (i32.const 1))
+      i32.const 0
+    )
+    (func (export "cabi_post_run") (param i32))
+  )
+  (core instance $inst (instantiate $m
+    (with "env" (instance (export "memory" (memory $mem "memory"))))
+    (with "primary" (instance (export "set" (func $primary-set))))
+    (with "backup" (instance (export "set" (func $backup-set))))
+  ))
+  (type $run-type (func (result string)))
+  (func $run (type $run-type) (canon lift (core func $inst "run") (memory $mem "memory") (post-return (func $inst "cabi_post_run"))))
+  (export "run" (func $run))
+)
+    "#;
+
+    #[cfg(feature = "transpile-bindgen")]
+    #[test]
+    fn test_transpile_implements_component() {
+        let component = wat::parse_str(IMPLEMENTS_WAT).expect("failed to parse WAT");
+
+        // Transpile the component
+        let opts = crate::TranspileOpts {
+            name: "multi-store".into(),
+            no_typescript: false,
+            instantiation: None,
+            map: None,
+            no_nodejs_compat: false,
+            base64_cutoff: 5000,
+            tla_compat: false,
+            valid_lifting_optimization: false,
+            tracing: false,
+            no_namespaced_exports: false,
+            multi_memory: true,
+            import_bindings: None,
+            guest: false,
+            async_mode: None,
+        };
+
+        let result = crate::transpile(&component, opts).expect("failed to transpile");
+
+        // Verify imports include "primary" and "backup"
+        assert!(
+            result.imports.iter().any(|i| i == "primary"),
+            "Expected 'primary' in imports, got: {:?}",
+            result.imports
+        );
+        assert!(
+            result.imports.iter().any(|i| i == "backup"),
+            "Expected 'backup' in imports, got: {:?}",
+            result.imports
+        );
+
+        // Verify the JS file references both import names
+        let js_file = result
+            .files
+            .iter()
+            .find(|(name, _)| name == "multi-store.js")
+            .expect("missing JS file");
+        let js_source = String::from_utf8(js_file.1.clone()).unwrap();
+        assert!(
+            js_source.contains("primary"),
+            "Generated JS should reference 'primary'"
+        );
+        assert!(
+            js_source.contains("backup"),
+            "Generated JS should reference 'backup'"
+        );
+
+        // Verify the "run" export exists
+        assert!(
+            result.exports.iter().any(|(name, _)| name == "run"),
+            "Expected 'run' in exports, got: {:?}",
+            result.exports
+        );
     }
 }
