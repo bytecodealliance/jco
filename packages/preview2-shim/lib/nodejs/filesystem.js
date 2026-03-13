@@ -81,6 +81,11 @@ class Descriptor {
 
   static _createPreopen(hostPreopen) {
     const descriptor = new Descriptor();
+    descriptor.#mode = {
+      read: true,
+      write: true,
+      mutateDirectory: true,
+    };
     descriptor.#hostPreopen = hostPreopen.endsWith("/")
       ? hostPreopen.slice(0, -1) || "/"
       : hostPreopen;
@@ -353,6 +358,25 @@ class Descriptor {
     if (preopenEntries.length === 0) {
       throw "access";
     }
+    // https://github.com/WebAssembly/WASI/blob/b7ee9febdcc0652aef5aeaf80dc329d240eb84e8/proposals/filesystem/wit/types.wit#L532-L534
+    // > If `flags` contains `descriptor-flags::mutate-directory`, and the base
+    // > descriptor doesn't have `descriptor-flags::mutate-directory` set,
+    // > `open-at` fails with `error-code::read-only`.
+    if (descriptorFlags.mutateDirectory && !this.#mode?.mutateDirectory) {
+      throw "read-only";
+    }
+    // https://github.com/WebAssembly/WASI/blob/b7ee9febdcc0652aef5aeaf80dc329d240eb84e8/proposals/filesystem/wit/types.wit#L536-L539
+    // > If `flags` contains `write` or `mutate-directory`, or `open-flags`
+    // > contains `truncate` or `create`, and the base descriptor doesn't have
+    // > `descriptor-flags::mutate-directory` set, `open-at` fails with
+    // > `error-code::read-only`.
+    if(
+      !this.#mode?.mutateDirectory
+      &&
+      (descriptorFlags.write || descriptorFlags.mutateDirectory || openFlags.truncate || openFlags.create)
+    ) {
+      throw "read-only";
+    }
     const fullPath = this.#getFullPath(path, pathFlags.symlinkFollow);
     let fsOpenFlags = 0x0;
     if (openFlags.create) {
@@ -383,7 +407,7 @@ class Descriptor {
     if (!pathFlags.symlinkFollow) {
       fsOpenFlags |= constants.O_NOFOLLOW;
     }
-    if (descriptorFlags.requestedWriteSync || descriptorFlags.mutateDirectory) {
+    if (descriptorFlags.requestedWriteSync) {
       throw "unsupported";
     }
     // Currently throw to match Wasmtime
