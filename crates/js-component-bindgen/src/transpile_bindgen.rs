@@ -2085,14 +2085,14 @@ impl<'a> Instantiator<'a, '_> {
                 if is_async || func_ty_async {
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({call});"
+                        "let trampoline{i} = new WebAssembly.Suspending({call});"
                     );
                 } else {
                     // TODO(breaking): once manually specifying async imports is removed,
                     // we can avoid the second check below.
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({call}) : {call};"
+                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({call}) : {call};"
                     );
                 }
             }
