@@ -107,3 +107,22 @@ world async-simple-return {
 world stream-tx {
   export get-stream-async;
 }
+
+interface sleep-post-return {
+  run: async func(sleep-time-millis: u64);
+}
+
+interface sleep {
+  sleep-millis: async func(time-in-millis: u64);
+}
+
+world sleep-post-return-caller {
+  import sleep;
+  import sleep-post-return;
+  export sleep-post-return;
+}
+
+world sleep-post-return-callee {
+  import sleep;
+  export sleep-post-return;
+}
