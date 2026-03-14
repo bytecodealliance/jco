@@ -1,9 +1,10 @@
 //! Intrinsics that represent helpers that enable Lower integration
 
-use crate::{
-    intrinsics::{Intrinsic, p3::error_context::ErrCtxIntrinsic, string::StringIntrinsic},
-    source::Source,
-};
+use crate::intrinsics::Intrinsic;
+use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::p3::{async_stream::AsyncStreamIntrinsic, error_context::ErrCtxIntrinsic};
+use crate::intrinsics::string::StringIntrinsic;
+use crate::source::Source;
 
 use super::conversion::ConversionIntrinsic;
 
@@ -284,6 +285,9 @@ impl LowerIntrinsic {
                         if (vals[0] > 255 || vals[0] < 0) {{ throw new Error('invalid value for core value representing u8'); }}
                         if (!memory) {{ throw new Error("missing memory for lower"); }}
                         new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
+
+                        // TODO: ALIGNMENT IS WRONG?
+
                         return 1;
                     }}
                 "#));
@@ -509,7 +513,7 @@ impl LowerIntrinsic {
                         const {{ discriminantSizeBytes, lowerMetas }} = metadata;
 
                         return function _lowerFlatVariantInner(ctx) {{
-                            {debug_log_fn}('[_lowerFlatVariant()] args', ctx);
+                            {debug_log_fn}('[_lowerFlatVariantInner()] args', ctx, discriminantSizeBytes, lowerMetas);
                             const {{ memory, realloc, vals, storageLen, componentIdx }} = ctx;
                             let storagePtr = ctx.storagePtr;
 
@@ -537,6 +541,11 @@ impl LowerIntrinsic {
                                 throw new Error("unexpectedly wrote more bytes than discriminant");
                             }}
                             storagePtr += bytesWritten;
+
+                            // Adjust alignment after discriminant write
+                            const rem = storagePtr % variant.align32;
+                            if (rem !== 0) {{ storagePtr += (variant.align32 - rem); }}
+                            bytesWritten += rem;
 
                             bytesWritten += variant.lowerFn({{ memory, realloc, vals: [val], storagePtr, storageLen, componentIdx }});
 
@@ -708,12 +717,53 @@ impl LowerIntrinsic {
 
             Self::LowerFlatStream => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _lowerFlatStream(size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_lowerFlatStream()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        throw new Error('flat lower for streams not yet implemented!');
+                let global_stream_map = AsyncStreamIntrinsic::GlobalStreamMap.name();
+                let external_stream_class = AsyncStreamIntrinsic::ExternalStreamClass.name();
+                let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
+
+                // TODO: fix writable is getting dropped before it can be read!!
+                // We need to do some waiting?
+                // Last write should have been triggering the reader to progress...
+                // Then the last reads return all the data???
+
+                output.push_str(&format!(
+                    r#"
+                    function _lowerFlatStream(streamTableIdx, ctx) {{
+                        {debug_log_fn}('[_lowerFlatStream()] args', {{ streamTableIdx, ctx }});
+                        const {{
+                            memory,
+                            realloc,
+                            vals,
+                            storagePtr: resultPtr,
+                        }} = ctx;
+
+                        const externalStream = vals[0];
+                        if (!externalStream || !(externalStream instanceof {external_stream_class})) {{
+                            throw new Error("invalid external stream value");
+                        }}
+
+                        const globalRep = externalStream.globalRep();
+                        const internalStream = {global_stream_map}.get(globalRep);
+                        if (!internalStream || !(internalStream instanceof {internal_stream_class})) {{
+                            throw new Error(`failed to find internal stream with rep [${{globalRep}}]`);
+                        }}
+
+                        const readEnd = internalStream.readEnd();
+                        const waitableIdx = readEnd.waitableIdx();
+
+                        // Write the idx of the waitable to memory (a waiting async task or caller)
+                        if (resultPtr) {{
+                            new DataView(memory.buffer).setUint32(resultPtr, waitableIdx, true);
+                        }}
+
+                        // TODO: if we flat lower another way (host -> guest async) we need to actually
+                        // modify the guests table's afresh, we can't just use the global rep!
+                        // (can detect this by whether the external stream has a rep or not)
+
+                        return waitableIdx
                     }}
-                "));
+                "#
+                ));
             }
 
             // When a component-model level error context is lowered, it contains the global error-context
@@ -727,17 +777,58 @@ impl LowerIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let lower_u32_fn = Self::LowerFlatU32.name();
                 let create_local_handle_fn = ErrCtxIntrinsic::CreateLocalHandle.name();
-                let err_ctx_ref_count_add_fn = ErrCtxIntrinsic::GlobalRefCountAdd.name();
-                let get_err_ctx_local_table_fn = ErrCtxIntrinsic::GetLocalTable.name();
+                let err_ctx_global_ref_count_add_fn = ErrCtxIntrinsic::GlobalRefCountAdd.name();
+                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
+                let global_tbl = ErrCtxIntrinsic::ComponentGlobalTable.name();
+                let get_local_tbl_fn = ErrCtxIntrinsic::GetLocalTable.name();
+
+                // NOTE: at this point the error context has already been lowered into the appropriate
+                // place for us via error context transfer.
                 output.push_str(&format!(r#"
-                    function _lowerFlatErrorContext(componentTableIdx, ctx) {{
-                        {debug_log_fn}('[_lowerFlatErrorContext()] args', {{ componentTableIdx, ctx }});
+                    function _lowerFlatErrorContext(errCtxTableIdx, ctx) {{
+                        {debug_log_fn}('[_lowerFlatErrorContext()] args', {{ errCtxTableIdx, ctx }});
                         const {{ memory, realloc, vals, storagePtr, storageLen, componentIdx }} = ctx;
-                        const errCtxRep = vals[0];
-                        const componentTable = {get_err_ctx_local_table_fn}(componentIdx, componentTableIdx, {{upsert: true}});
-                        const handle = {create_local_handle_fn}(componentTable, errCtxRep);
-                        {err_ctx_ref_count_add_fn}(errCtxRep, -1);
-                        return {lower_u32_fn}({{ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx }});
+
+                        const errCtxGlobalRep = vals[0];
+
+                        const globalTable = {global_tbl}.get();
+                        const globalErrCtx = globalTable.get(errCtxGlobalRep);
+
+                        // Clean up the previous error context, if necessary
+                        const prevComponentState = {get_or_create_async_state_fn}(globalErrCtx.componentIdx);
+                        const prevLocalErrCtx = prevComponentState.handles.get(globalErrCtx.waitableIdx);
+                        if (prevLocalErrCtx.refCount === 0) {{
+                            const removed = prevComponentState.remove(globalErrCtx.waitableIdx);
+                            if (!removed) {{
+                                throw new Error(`failed to remove err ctx [${{globalErrCtx.waitableIdx}}], component [${{globalErrCtx.componentIdx}}]`);
+                            }}
+                            const prevLocalErrCtxTable = {get_local_tbl_fn}(globalErrCtx.componentIdx, globalErrCtx.localTableIdx);
+                            prevLocalErrCtxTable.remove(globalErrCtx.localIdx)
+                        }}
+
+                        // Insert the error context into the destination tables
+                        const localErrCtxTable = {get_local_tbl_fn}(componentIdx, errCtxTableIdx, {{ upsert: true }});
+
+                        let handle = localErrCtxTable.get(componentIdx, errCtxTableIdx, );
+                        if (handle === undefined) {{
+                            const {{ waitableIdx, localIdx }} = {create_local_handle_fn}(
+                                componentIdx,
+                                localErrCtxTable,
+                                errCtxGlobalRep,
+                            );
+                            handle = waitableIdx;
+                        }} else {{
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+                            const localErrCtx = cstate.handles.get(handle);
+                            localErrCtx.refCount += 1;
+                            localErrCtx.componentIdx = componentIdx;
+                            localErrCtx.localIdx = errCtx.localIdx;
+                            localErrCtx.localTableIdx = errCtxTableIdx;
+                        }}
+
+                        {err_ctx_global_ref_count_add_fn}(errCtxGlobalRep, -1);
+
+                        {lower_u32_fn}({{ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx }});
                     }}
                 "#));
             }

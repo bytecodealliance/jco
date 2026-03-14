@@ -903,24 +903,36 @@ impl LiftIntrinsic {
                 let external_stream_class =
                     Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass).name();
                 let lift_flat_stream_fn = self.name();
-                output.push_str(&format!(r#"
-                    function {lift_flat_stream_fn}(componentTableIdx, ctx) {{
-                        {debug_log_fn}('[{lift_flat_stream_fn}()] args', {{ componentTableIdx, ctx }});
-                        const {{ memory, useDirectParams, params, componentIdx }} = ctx;
+                let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
 
-                        const streamEndIdx = params[0];
-                        if (!streamEndIdx) {{ throw new Error('missing stream idx'); }}
+                output.push_str(&format!(r#"
+                    function {lift_flat_stream_fn}(streamTableIdx, ctx) {{
+                        {debug_log_fn}('[{lift_flat_stream_fn}()] args', {{ streamTableIdx, ctx }});
+                        const {{ memory, useDirectParams, params }} = ctx;
+
+                        const {{ table, componentIdx }} = {global_stream_table_map}[streamTableIdx];
+                        if (componentIdx === undefined || !table) {{
+                            throw new Error(`invalid global stream table state for table [${{tableIdx}}]`);
+                        }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
-                        const streamEnd = cstate.getStreamEnd({{ tableIdx: componentTableIdx, streamEndIdx }});
+                        const streamEndWaitableIdx = params[0];
+                        if (!streamEndWaitableIdx) {{ throw new Error('missing stream idx'); }}
+
+                        const streamEnd = cstate.getStreamEnd({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
-                            throw new Error(`missing stream end [${{streamEndIdx}}] (table [${{componentTableIdx}}]) in component [${{componentIdx}}] during lift`);
+                            throw new Error(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}]) in component [${{componentIdx}}] during lift`);
                         }}
 
+                        // TODO: check for borrowed type
+                        // TODO: check for readable only
+                        // TODO: confirm shared type matches tyep for lift
+                        // TODO: check for IDLE state
+
                         const stream = new {external_stream_class}({{
-                            hostStreamRep: streamEnd.streamRep(),
+                            globalRep: streamEnd.globalStreamMapRep(),
                             isReadable: streamEnd.isReadable(),
                             isWritable: streamEnd.isWritable(),
                             writeFn: (v) => {{ return streamEnd.write(v); }},
@@ -948,9 +960,11 @@ impl LiftIntrinsic {
                 let get_err_ctx_local_table_fn = ErrCtxIntrinsic::GetLocalTable.name();
                 let err_ctx_ref_count_add_fn = ErrCtxIntrinsic::GlobalRefCountAdd.name();
                 let lift_flat_error_fn = self.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
                 output.push_str(&format!(r#"
-                    function {lift_flat_error_fn}(componentTableIdx, ctx) {{
+                    function {lift_flat_error_fn}(errCtxTableIdx, ctx) {{
                         {debug_log_fn}('[{lift_flat_error_fn}()] ctx', ctx);
                         const {{ useDirectParams, params, componentIdx }} = ctx;
 
@@ -960,20 +974,28 @@ impl LiftIntrinsic {
                             if (params.length === 0) {{ throw new Error('expected at least one single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                            table = {get_err_ctx_local_table_fn}(componentIdx, componentTableIdx);
+                            table = {get_err_ctx_local_table_fn}(componentIdx, errCtxTableIdx);
                         }} else {{
                             throw new Error('indirect flat lift for error-contexts not yet implemented!');
                         }}
 
-                        let errCtx = table.get(val);
-                        if (!errCtx) {{
-                            throw new Error(`missing/invalid errCtx with handle [${{val}}] in component [${{component}}] error context table [${{componentTableIdx}}]`);
+                        let handle = table.get(val);
+                        if (handle === undefined) {{
+                            throw new Error(`missing  error ctx (handle [${{val}}], component [${{componentIdx}}], error context table [${{errCtxTableIdx}}])`);
                         }}
 
-                        {err_ctx_ref_count_add_fn}(errCtx.rep);
-                        // TODO: we need to save some information for when we are going to lower it back down into somewhere?
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const errCtx = cstate.handles.get(handle);
+                        if (!errCtx || errCtx.globalRep === undefined || errCtx.refCount === undefined) {{
+                            throw new Error(`malformed error context (handle [${{handle}}], component [${{componentIdx}}])`);
+                        }}
 
-                        return [errCtx.rep, ctx];
+                        errCtx.refCount -= 1;
+                        // NOTE: we aovoid doing clean up eagerly here
+
+                        {err_ctx_ref_count_add_fn}(errCtx.globalRep);
+
+                        return [errCtx.globalRep, ctx];
                     }}
                 "#));
             }
