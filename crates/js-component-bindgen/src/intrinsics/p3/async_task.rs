@@ -479,7 +479,7 @@ impl AsyncTaskIntrinsic {
                         if (subtaskCallMetadata?.returnFn) {{
                             subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr]);
                             subtaskCallMetadata.returnFnCalled = true;
-                            task.resolve(params);
+                            task.resolve([]);
                             return;
                         }}
 

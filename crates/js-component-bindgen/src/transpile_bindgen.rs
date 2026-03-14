@@ -1889,12 +1889,12 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ErrorContextDrop { ty, .. } => {
+            Trampoline::ErrorContextDrop { instance, ty } => {
                 let drop_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop));
                 let local_err_tbl_idx = ty.as_u32();
-                let component_idx = self.types[*ty].instance.as_u32();
+                let component_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
                     r#"
