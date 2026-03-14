@@ -1305,6 +1305,14 @@ impl AsyncTaskIntrinsic {
                                     this.onResolve(results[0]);
                                     break;
                                 default:
+                                    {debug_log_fn}('[{task_class}#resolve()] unexpected number of results', {{
+                                        componentIdx: this.#componentIdx,
+                                        results,
+                                        taskID: this.#id,
+                                        subtaskID: this.#parentSubtask?.id(),
+                                        entryFnName: this.#entryFnName,
+                                        callbackFnName: this.#callbackFnName,
+                                    }});
                                     throw new Error('unexpected number of results');
                             }}
                         }}
