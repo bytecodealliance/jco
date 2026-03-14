@@ -1,7 +1,10 @@
 //! Intrinsics that represent helpers that manage per-component state
 
 use crate::{
-    intrinsics::{Intrinsic, p3::async_stream::AsyncStreamIntrinsic},
+    intrinsics::{
+        Intrinsic,
+        p3::{async_stream::AsyncStreamIntrinsic, waitable::WaitableIntrinsic},
+    },
     source::Source,
 };
 
@@ -89,13 +92,15 @@ impl ComponentIntrinsic {
                 let backpressure_inc_fn = Self::BackpressureInc.name();
                 let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
                 output.push_str(&format!(
-                    "
+                    r#"
                     function {backpressure_inc_fn}(componentIdx) {{
                         {debug_log_fn}('[{backpressure_inc_fn}()] args', {{ componentIdx }});
                         const state = {get_or_create_async_state_fn}(componentIdx);
-                        state.incrementBackpressure();
+                        if (!state) {{ throw new Error(`missing component state for component [${{componentIdx}}]`); }}
+                        const newValue = state.incrementBackpressure();
+                        {debug_log_fn}('[{backpressure_inc_fn}()] incremented', {{ componentIdx, newValue }});
                     }}
-                "
+                    "#,
                 ));
             }
 
@@ -108,21 +113,26 @@ impl ComponentIntrinsic {
                     function {backpressure_dec_fn}(componentIdx) {{
                         {debug_log_fn}('[{backpressure_dec_fn}()] args', {{ componentIdx }});
                         const state = {get_or_create_async_state_fn}(componentIdx);
-                        state.decrementBackpressure();
+                        const newValue = state.decrementBackpressure();
+                        {debug_log_fn}('[{backpressure_dec_fn}()] decremented', {{ componentIdx, newValue }});
                     }}
                 "
                 ));
             }
 
             Self::ComponentAsyncStateClass => {
+                let component_async_state_class = self.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let rep_table_class = Intrinsic::RepTableClass.name();
                 let internal_stream_class = AsyncStreamIntrinsic::InternalStreamClass.name();
                 let global_stream_map = AsyncStreamIntrinsic::GlobalStreamMap.name();
+                let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
+                let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
+                let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
 
                 output.push_str(&format!(
                     r#"
-                    class {class_name} {{
+                    class {component_async_state_class} {{
                         static EVENT_HANDLER_EVENTS = [ 'backpressure-change' ];
 
                         #componentIdx;
@@ -140,31 +150,27 @@ impl ComponentIntrinsic {
                         #handlerMap = new Map();
                         #nextHandlerID = 0n;
 
-                        #streams;
-
                         #tickLoop = null;
                         #tickLoopInterval = null;
 
+                        #onExclusiveReleaseHandlers = [];
+
                         mayLeave = true;
 
-                        waitableSets;
-                        waitables;
+                        handles;
                         subtasks;
 
                         constructor(args) {{
                             this.#componentIdx = args.componentIdx;
-                            this.waitableSets = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitable sets` }});
-                            this.waitables = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitable objects` }});
+                            this.handles = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] handles (waitable objects)` }});
                             this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
-                            this.#streams = new Map();
                         }};
 
                         componentIdx() {{ return this.#componentIdx; }}
-                        streams() {{ return this.#streams; }}
 
                         errored() {{ return this.#errored !== null; }}
                         setErrored(err) {{
-                            {debug_log_fn}('[{class_name}#setErrored()] component errored', {{ err, componentIdx: this.#componentIdx }});
+                            {debug_log_fn}('[{component_async_state_class}#setErrored()] component errored', {{ err, componentIdx: this.#componentIdx }});
                             if (this.#errored) {{ return; }}
                             if (!err) {{
                                 err = new Error('error elswehere (see other component instance error)')
@@ -193,15 +199,34 @@ impl ComponentIntrinsic {
                             await this.#syncImportWait.promise;
                         }}
 
-                        setBackpressure(v) {{ this.#backpressure = v; }}
-                        getBackpressure(v) {{ return this.#backpressure; }}
-                        incrementBackpressure() {{
-                            const newValue = this.getBackpressure() + 1;
-                            if (newValue > 2**16) {{ throw new Error("invalid backpressure value, overflow"); }}
-                            this.setBackpressure(newValue);
+                        setBackpressure(v) {{
+                            this.#backpressure = v;
+                            return this.#backpressure
                         }}
+                        getBackpressure() {{ return this.#backpressure; }}
+
+                        incrementBackpressure() {{
+                            const current = this.#backpressure;
+                            if (current < 0 || current > 2**16) {{
+                                throw new Error(`invalid current backpressure value [${{current}}]`);
+                            }}
+                            const newValue = this.getBackpressure() + 1;
+                            if (newValue >= 2**16) {{
+                                throw new Error(`invalid new backpressure value [${{newValue}}], overflow`);
+                            }}
+                            return this.setBackpressure(newValue);
+                        }}
+
                         decrementBackpressure() {{
-                            this.setBackpressure(Math.max(0, this.getBackpressure() - 1));
+                            const current = this.#backpressure;
+                            if (current < 0 || current > 2**16) {{
+                                throw new Error(`invalid current backpressure value [${{current}}]`);
+                            }}
+                            const newValue = Math.max(0, current - 1);
+                            if (newValue < 0) {{
+                                throw new Error(`invalid new backpressure value [${{newValue}}], underflow`);
+                            }}
+                            return this.setBackpressure(newValue);
                         }}
                         hasBackpressure() {{ return this.#backpressure > 0; }}
 
@@ -233,7 +258,7 @@ impl ComponentIntrinsic {
                             if (!event) {{ throw new Error("missing handler event"); }}
                             if (!fn) {{ throw new Error("missing handler fn"); }}
 
-                            if (!{class_name}.EVENT_HANDLER_EVENTS.includes(event)) {{
+                            if (!{component_async_state_class}.EVENT_HANDLER_EVENTS.includes(event)) {{
                                 throw new Error(`unrecognized event handler [${{event}}]`);
                             }}
 
@@ -266,57 +291,43 @@ impl ComponentIntrinsic {
                             }}
                         }}
 
-                        parkTaskOnAwaitable(args) {{
-                            if (!args.awaitable) {{ throw new TypeError('missing awaitable when trying to park'); }}
-                            if (!args.task) {{ throw new TypeError('missing task when trying to park'); }}
-                            const {{ awaitable, task }} = args;
-
-                            let taskList = this.#parkedTasks.get(awaitable.id());
-                            if (!taskList) {{
-                                taskList = [];
-                                this.#parkedTasks.set(awaitable.id(), taskList);
-                            }}
-                            taskList.push(task);
-
-                            this.wakeNextTaskForAwaitable(awaitable);
-                        }}
-
-                        wakeNextTaskForAwaitable(awaitable) {{
-                            if (!awaitable) {{ throw new TypeError('missing awaitable when waking next task'); }}
-                            const awaitableID = awaitable.id();
-
-                            const taskList = this.#parkedTasks.get(awaitableID);
-                            if (!taskList || taskList.length === 0) {{
-                              {debug_log_fn}('[{class_name}] no tasks waiting for awaitable', {{ awaitableID: awaitable.id() }});
-                              return;
-                            }}
-
-                            let task = taskList.shift(); // todo(perf)
-                            if (!task) {{ throw new Error('no task in parked list despite previous check'); }}
-
-                            if (!task.awaitableResume) {{
-                                throw new Error('task ready due to awaitable is missing resume', {{ taskID: task.id(), awaitableID }});
-                            }}
-                            task.awaitableResume();
-                        }}
-
                         isExclusivelyLocked() {{ return this.#locked === true; }}
-                        setLocked(locked) {{ this.#locked = locked; }}
+                        setLocked(locked) {{
+                            this.#locked = locked;
+                        }}
+
                         // TODO(fix): we might want to check for pre-locked status here, we should be deterministically
                         // going from locked -> unlocked and vice versa
                         exclusiveLock() {{
-                            {debug_log_fn}('[{class_name}#exclusiveLock()]', {{
+                            {debug_log_fn}('[{component_async_state_class}#exclusiveLock()]', {{
                                 locked: this.#locked,
                                 componentIdx: this.#componentIdx,
                             }});
                             this.setLocked(true);
                         }}
+
                         exclusiveRelease() {{
-                            {debug_log_fn}('[{class_name}#exclusiveRelease()]', {{
+                            {debug_log_fn}('[{component_async_state_class}#exclusiveRelease()] args', {{
                                 locked: this.#locked,
                                 componentIdx: this.#componentIdx,
                             }});
                             this.setLocked(false);
+
+                            this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter(v => !!v);
+                            for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {{
+                                try {{
+                                    this.#onExclusiveReleaseHandlers[idx] = null;
+                                    f();
+                                }} catch (err) {{
+                                    {debug_log_fn}("error while executing handler for next exclusive release", err);
+                                    throw err;
+                                }}
+                            }}
+                        }}
+
+                        onNextExclusiveRelease(fn) {{
+                            {debug_log_fn}('[{component_async_state_class}#()onNextExclusiveRelease] registering');
+                            this.#onExclusiveReleaseHandlers.push(fn);
                         }}
 
                         #getSuspendedTaskMeta(taskID) {{
@@ -324,7 +335,7 @@ impl ComponentIntrinsic {
                         }}
 
                         #removeSuspendedTaskMeta(taskID) {{
-                            {debug_log_fn}('[{class_name}#removeSuspendedTaskMeta()] removing suspended task', {{ taskID }});
+                            {debug_log_fn}('[{component_async_state_class}#removeSuspendedTaskMeta()] removing suspended task', {{ taskID }});
                             const idx = this.#suspendedTaskIDs.findIndex(t => t === taskID);
                             const meta = this.#suspendedTasksByTaskID.get(taskID);
                             this.#suspendedTaskIDs[idx] = null;
@@ -346,19 +357,24 @@ impl ComponentIntrinsic {
                         suspendTask(args) {{
                             const {{ task, readyFn }} = args;
                             const taskID = task.id();
-                            {debug_log_fn}('[{class_name}#suspendTask()]', {{ taskID }});
+                            {debug_log_fn}('[{component_async_state_class}#suspendTask()]', {{
+                                taskID,
+                                componentIdx: this.#componentIdx,
+                                taskEntryFnName: task.entryFnName(),
+                                subtask: task.getParentSubtask(),
+                            }});
 
                             if (this.#getSuspendedTaskMeta(taskID)) {{
                                 throw new Error(`task [${{taskID}}] already suspended`);
                             }}
 
-                            const {{ promise, resolve }} = Promise.withResolvers();
+                            const {{ promise, resolve, reject }} = Promise.withResolvers();
                             this.#addSuspendedTaskMeta({{
                                 task,
                                 taskID,
                                 readyFn,
                                 resume: () => {{
-                                    {debug_log_fn}('[{class_name}#suspendTask()] resuming suspended task', {{ taskID }});
+                                    {debug_log_fn}('[{component_async_state_class}#suspendTask()] resuming suspended task', {{ taskID }});
                                     // TODO(threads): it's thread cancellation we should be checking for below, not task
                                     resolve(!task.isCancelled());
                                 }},
@@ -377,25 +393,34 @@ impl ComponentIntrinsic {
                         }}
 
                         async runTickLoop() {{
-                            if (this.#tickLoop !== null) {{ await this.#tickLoop; }}
-                            this.#tickLoop = new Promise(async (resolve) => {{
+                            if (this.#tickLoop !== null) {{ return; }}
+                            this.#tickLoop = 1;
+                            setTimeout(async () => {{
                                 let done = this.tick();
                                 while (!done) {{
-                                    await new Promise((resolve) => setTimeout(resolve, 0));
+                                    await new Promise((resolve) => setTimeout(resolve, 30));
                                     done = this.tick();
                                 }}
                                 this.#tickLoop = null;
-                                resolve();
-                            }});
+                            }}, 10);
                         }}
 
                         tick() {{
-                            {debug_log_fn}('[{class_name}#tick()]', {{ suspendedTaskIDs: this.#suspendedTaskIDs }});
+                            // {debug_log_fn}('[{component_async_state_class}#tick()]', {{ suspendedTaskIDs: this.#suspendedTaskIDs }});
+
                             const resumableTasks = this.#suspendedTaskIDs.filter(t => t !== null);
                             for (const taskID of resumableTasks) {{
-                                const meta = this.#suspendedTasksByTaskID.get(taskID);
+                               const meta = this.#suspendedTasksByTaskID.get(taskID);
                                 if (!meta || !meta.readyFn) {{
                                     throw new Error(`missing/invalid task despite ID [${{taskID}}] being present`);
+                                }}
+
+                                // If the task failed via any means, allow the task to resume because
+                                // it's been cancelled -- the callback should immediately exit as well
+                                if (meta.task.isRejected()) {{
+                                    {debug_log_fn}('[{component_async_state_class}#suspendTask()] detected task rejection, leaving early', {{ meta }});
+                                    this.resumeTaskByID(taskID);
+                                    return;
                                 }}
 
                                 const isReady = meta.readyFn();
@@ -407,92 +432,185 @@ impl ComponentIntrinsic {
                             return this.#suspendedTaskIDs.filter(t => t !== null).length === 0;
                         }}
 
-                        addStreamEnd(args) {{
-                            {debug_log_fn}('[{class_name}#addStreamEnd()] args', args);
+                        addStreamEndToTable(args) {{
+                            {debug_log_fn}('[{component_async_state_class}#addStreamEnd()] args', args);
                             const {{ tableIdx, streamEnd }} = args;
+                            if (typeof streamEnd === 'number') {{ throw new Error("INSERTING BAD STREAMEND"); }}
 
-                            let tbl = this.#streams.get(tableIdx);
-                            if (!tbl) {{
-                                tbl = new {rep_table_class}({{ target: `stream table (idx [${{tableIdx}}], component [${{this.#componentIdx}}])` }});
-                                this.#streams.set(tableIdx, tbl);
+                            let {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
+                            if (componentIdx === undefined || !table) {{
+                                throw new Error(`invalid global stream table state for table [${{tableIdx}}]`);
                             }}
 
-                            // TODO(fix): streams are waitables so need to go there
-                            const streamIdx = tbl.insert(streamEnd);
-                            return streamIdx;
+                            const handle = table.insert(streamEnd);
+                            streamEnd.setHandle(handle);
+                            streamEnd.setStreamTableIdx(tableIdx);
+
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+                            const waitableIdx = cstate.handles.insert(streamEnd);
+                            streamEnd.setWaitableIdx(waitableIdx);
+
+                            {debug_log_fn}('[{component_async_state_class}#addStreamEnd()] added stream end', {{
+                                tableIdx,
+                                table,
+                                handle,
+                                streamEnd,
+                                destComponentIdx: componentIdx,
+                            }});
+
+                            return {{ handle, waitableIdx }};
+                        }}
+
+                        createWaitable(args) {{
+                            return new {waitable_class}({{ target: args?.target, }});
                         }}
 
                         createStream(args) {{
-                            {debug_log_fn}('[{class_name}#createStream()] args', args);
+                            {debug_log_fn}('[{component_async_state_class}#createStream()] args', args);
                             const {{ tableIdx, elemMeta }} = args;
                             if (tableIdx === undefined) {{ throw new Error("missing table idx while adding stream"); }}
                             if (elemMeta === undefined) {{ throw new Error("missing element metadata while adding stream"); }}
 
-                            let localStreamTable = this.#streams.get(tableIdx);
+                            const {{ table: localStreamTable, componentIdx }} = {global_stream_table_map}[tableIdx];
                             if (!localStreamTable) {{
-                                localStreamTable = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] streams` }});
-                                this.#streams.set(tableIdx, localStreamTable);
+                                throw new Error(`missing global stream table lookup for table [${{tableIdx}}] while creating stream`);
                             }}
+                            if (componentIdx !== this.#componentIdx) {{
+                                throw new Error('component idx mismatch while creating stream');
+                            }}
+
+                            const readWaitable = this.createWaitable();
+                            const writeWaitable = this.createWaitable();
 
                             const stream = new {internal_stream_class}({{
                                 tableIdx,
                                 componentIdx: this.#componentIdx,
                                 elemMeta,
-                                localStreamTable,
-                                globalStreamMap: {global_stream_map},
+                                readWaitable,
+                                writeWaitable,
                             }});
+                            stream.setGlobalStreamMapRep({global_stream_map}.insert(stream));
 
-                            const writeEndIdx = this.waitables.insert(stream.writeEnd());
-                            stream.setWriteEndWaitableIdx(writeEndIdx);
+                            const writeEnd = stream.writeEnd();
+                            writeEnd.setWaitableIdx(this.handles.insert(writeEnd));
+                            writeEnd.setHandle(localStreamTable.insert(writeEnd));
+                            if (writeEnd.streamTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched stream table"); }}
 
-                            const readEndIdx = this.waitables.insert(stream.readEnd());
-                            stream.setReadEndWaitableIdx(readEndIdx);
+                            const writeEndWaitableIdx = writeEnd.waitableIdx();
+                            const writeEndHandle = writeEnd.handle();
+                            writeWaitable.setTarget(`waitable for stream write end (waitable [${{writeEndWaitableIdx}}])`);
+                            writeEnd.setTarget(`stream write end (waitable [${{writeEndWaitableIdx}}])`);
 
-                            return {{ writeEndIdx, readEndIdx }};
+                            const readEnd = stream.readEnd();
+                            readEnd.setWaitableIdx(this.handles.insert(readEnd));
+                            readEnd.setHandle(localStreamTable.insert(readEnd));
+                            if (readEnd.streamTableIdx() !== tableIdx) {{ throw new Error("unexpectedly mismatched stream table"); }}
+
+                            const readEndWaitableIdx = readEnd.waitableIdx();
+                            const readEndHandle = readEnd.handle();
+                            readWaitable.setTarget(`waitable for read end (waitable [${{readEndWaitableIdx}}])`);
+                            readEnd.setTarget(`stream read end (waitable [${{readEndWaitableIdx}}])`);
+
+                            return {{
+                                writeEndWaitableIdx,
+                                writeEndHandle,
+                                readEndWaitableIdx,
+                                readEndHandle,
+                            }};
                         }}
 
                         getStreamEnd(args) {{
-                            {debug_log_fn}('[{class_name}#getStreamEnd()] args', args);
-                            const {{ tableIdx, streamEndIdx }} = args;
+                            {debug_log_fn}('[{component_async_state_class}#getStreamEnd()] args', args);
+                            const {{ tableIdx, streamEndHandle, streamEndWaitableIdx }} = args;
                             if (tableIdx === undefined) {{ throw new Error('missing table idx while getting stream end'); }}
-                            if (streamEndIdx === undefined) {{ throw new Error('missing stream idx while getting stream end'); }}
 
-                            const streamEnd = this.waitables.get(streamEndIdx);
-                            if (!streamEnd) {{
-                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while getting stream`);
+                            const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                            let streamEnd;
+                            if (streamEndWaitableIdx !== undefined) {{
+                                streamEnd = cstate.handles.get(streamEndWaitableIdx);
+                            }} else if (streamEndHandle !== undefined) {{
+                                if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while getting stream end`); }}
+                                streamEnd = table.get(streamEndHandle);
+                            }} else {{
+                                throw new TypeError("must specify either waitable idx or handle to retrieve stream");
                             }}
-                            if (streamEnd.streamTableIdx() !== tableIdx) {{
+
+                            if (!streamEnd) {{
+                                throw new Error(`missing stream end (tableIdx [${{tableIdx}}], handle [${{streamEndHandle}}], waitableIdx [${{streamEndWaitableIdx}}])`);
+                            }}
+                            if (tableIdx && streamEnd.streamTableIdx() !== tableIdx) {{
                                 throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
                             }}
 
                             return streamEnd;
                         }}
 
-                        // TODO(fix): local/global stream table checks could be simplified/removed, if we centralize tracking
-                        removeStreamEnd(args) {{
-                            {debug_log_fn}('[{class_name}#removeStreamEnd()] args', args);
-                            const {{ tableIdx, streamEndIdx }} = args;
+                        deleteStreamEnd(args) {{
+                            {debug_log_fn}('[{component_async_state_class}#deleteStreamEnd()] args', args);
+                            const {{ tableIdx, streamEndWaitableIdx }} = args;
                             if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
-                            if (streamEndIdx === undefined) {{ throw new Error("missing stream idx while removing stream end"); }}
+                            if (streamEndWaitableIdx === undefined) {{ throw new Error("missing stream idx while removing stream end"); }}
 
-                            const streamEnd = this.waitables.get(streamEndIdx);
+                            const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                            const streamEnd = cstate.handles.get(streamEndWaitableIdx);
                             if (!streamEnd) {{
-                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while getting stream`);
+                                throw new Error(`missing stream end [${{streamEndWaitableIdx}}] in component handles while deleting stream`);
                             }}
                             if (streamEnd.streamTableIdx() !== tableIdx) {{
                                 throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
                             }}
 
-                            const removed = this.waitables.remove(streamEnd.waitableIdx());
+                            let removed = cstate.handles.remove(streamEnd.waitableIdx());
                             if (!removed) {{
-                                 throw new Error(`failed to remove stream [${{streamEndIdx}}] waitable obj in component [${{this.#componentIdx}}] while removing stream end`);
+                                 throw new Error(`failed to remove stream end [${{streamEndWaitableIdx}}] waitable obj in component [${{componentIdx}}]`);
+                            }}
+
+                            removed = table.remove(streamEnd.handle());
+                            if (!removed) {{
+                                 throw new Error(`failed to remove stream end with handle [${{streamEnd.handle()}}] from stream table [${{tableIdx}}] in component [${{componentIdx}}]`);
+                            }}
+
+                            return streamEnd;
+                        }}
+
+                        removeStreamEndFromTable(args) {{
+                            {debug_log_fn}('[{component_async_state_class}#removeStreamEndFromTable()] args', args);
+
+                            const {{ tableIdx, streamWaitableIdx }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
+                            if (streamWaitableIdx === undefined) {{
+                                throw new Error("missing stream end waitable idx while removing stream end");
+                            }}
+
+                            const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
+                            if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while removing stream end`); }}
+
+                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                            const streamEnd = cstate.handles.get(streamWaitableIdx);
+                            if (!streamEnd) {{
+                                throw new Error(`missing stream end (handle [${{streamWaitableIdx}}], table [${{tableIdx}}])`);
+                            }}
+                            const handle = streamEnd.handle();
+
+                            let removed = cstate.handles.remove(streamWaitableIdx);
+                            if (!removed) {{
+                                throw new Error(`failed to remove streamEnd from handles (waitable idx [${{streamWaitableIdx}}]), component [${{componentIdx}}])`);
+                            }}
+
+                            removed = table.remove(handle);
+                            if (!removed) {{
+                                throw new Error(`failed to remove streamEnd from table (handle [${{handle}}]), table [${{tableIdx}}], component [${{componentIdx}}])`);
                             }}
 
                             return streamEnd;
                         }}
                     }}
                     "#,
-                    class_name = self.name(),
                 ));
             }
 

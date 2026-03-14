@@ -128,7 +128,7 @@ pub enum AsyncTaskIntrinsic {
     CreateNewCurrentTask,
 
     /// Function that stops the current task
-    EndCurrentTask,
+    ClearCurrentTask,
 
     /// Global that stores the current task for a given invocation.
     ///
@@ -240,6 +240,11 @@ pub enum AsyncTaskIntrinsic {
     ///
     LowerImport,
 
+    /// Version of lower import written explicitly for backwards compatibility
+    ///
+    /// TODO(breaking): remove this when specifying async imports/exports is removed.
+    LowerImportBackwardsCompat,
+
     /// Global variable that represents whether the *current* task my block
     /// see `CoreDef::TaskMayBlock`
     CurrentTaskMayBlock,
@@ -249,6 +254,9 @@ pub enum AsyncTaskIntrinsic {
 
     /// Called when exiting a sync-to-sync guest-to-guest call
     ExitSymmetricSyncGuestCall,
+
+    /// Component index that is saved across sync-to-sync guest calls
+    SymmetricSyncGuestCallStack,
 }
 
 impl AsyncTaskIntrinsic {
@@ -260,29 +268,30 @@ impl AsyncTaskIntrinsic {
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
-            "ASYNC_BLOCKED_CODE",
-            "ASYNC_CURRENT_COMPONENT_IDXS",
-            "ASYNC_CURRENT_TASK_IDS",
-            "ASYNC_TASKS_BY_COMPONENT_IDX",
-            "CURRENT_TASK_MAY_BLOCK",
-            "AsyncSubtask",
-            "AsyncTask",
-            "asyncYield",
-            "contextGet",
-            "contextSet",
-            "endCurrentTask",
-            "getCurrentTask",
-            "createNewCurrentTask",
-            "subtaskCancel",
-            "subtaskDrop",
-            "subtaskDrop",
-            "taskCancel",
-            "taskReturn",
-            "unpackCallbackResult",
-            "_driverLoop",
-            "_lowerImport",
-            "_symmetricSyncGuestCallEnter",
-            "_symmetricSyncGuestCallExit",
+            Self::CurrentTaskMayBlock.name(),
+            Self::AsyncBlockedConstant.name(),
+            Self::AsyncSubtaskClass.name(),
+            Self::AsyncTaskClass.name(),
+            Self::ContextGet.name(),
+            Self::ContextSet.name(),
+            Self::GetCurrentTask.name(),
+            Self::CreateNewCurrentTask.name(),
+            Self::ClearCurrentTask.name(),
+            Self::GlobalAsyncCurrentTaskMap.name(),
+            Self::GlobalAsyncCurrentTaskIds.name(),
+            Self::GlobalAsyncCurrentComponentIdxs.name(),
+            Self::SubtaskCancel.name(),
+            Self::SubtaskDrop.name(),
+            Self::TaskCancel.name(),
+            Self::TaskReturn.name(),
+            Self::Yield.name(),
+            Self::UnpackCallbackResult.name(),
+            Self::DriverLoop.name(),
+            Self::LowerImport.name(),
+            Self::LowerImportBackwardsCompat.name(),
+            Self::EnterSymmetricSyncGuestCall.name(),
+            Self::ExitSymmetricSyncGuestCall.name(),
+            Self::SymmetricSyncGuestCallStack.name(),
         ]
     }
 
@@ -297,7 +306,7 @@ impl AsyncTaskIntrinsic {
             Self::ContextSet => "contextSet",
             Self::GetCurrentTask => "getCurrentTask",
             Self::CreateNewCurrentTask => "createNewCurrentTask",
-            Self::EndCurrentTask => "endCurrentTask",
+            Self::ClearCurrentTask => "clearCurrentTask",
             Self::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
             Self::GlobalAsyncCurrentTaskIds => "ASYNC_CURRENT_TASK_IDS",
             Self::GlobalAsyncCurrentComponentIdxs => "ASYNC_CURRENT_COMPONENT_IDXS",
@@ -309,8 +318,10 @@ impl AsyncTaskIntrinsic {
             Self::UnpackCallbackResult => "unpackCallbackResult",
             Self::DriverLoop => "_driverLoop",
             Self::LowerImport => "_lowerImport",
+            Self::LowerImportBackwardsCompat => "_lowerImportBackwardsCompat",
             Self::EnterSymmetricSyncGuestCall => "_symmetricSyncGuestCallEnter",
             Self::ExitSymmetricSyncGuestCall => "_symmetricSyncGuestCallExit",
+            Self::SymmetricSyncGuestCallStack => "SYMMETRIC_SYNC_GUEST_CALL_STACK",
         }
     }
 
@@ -346,24 +357,29 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_set_fn = Self::ContextSet.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
-                let current_async_task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
-                let current_component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
                 let type_check_i32 = Intrinsic::TypeCheckValidI32.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
                 output.push_str(&format!(r#"
-                    function {context_set_fn}(slot, value) {{
+                    function {context_set_fn}(ctx, value) {{
+                        const {{ componentIdx, slot }} = ctx;
+                        if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                        if (slot === undefined) {{ throw new TypeError("missing slot"); }}
                         if (!({type_check_i32}(value))) {{ throw new Error('invalid value for context set (not valid i32)'); }}
-                        const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
+
+                        const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                        if (!currentTaskMeta) {{
+                            throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
+                        }}
+                        const taskID = currentTaskMeta.taskID;
+
+                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
+
                         let task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing current task in metadata while setting context'); }}
 
-                        // TODO(threads): context has been moved to be stored on the thread, not the task.
-                        // Until threads are implemented, we simulate a task with only one thread by storing
-                        // the thread state on the topmost task
-                        task = task.getRootTask();
-
                         {debug_log_fn}('[{context_set_fn}()] args', {{
-                            _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
                             slot,
                             value,
                             storage: task.storage,
@@ -381,22 +397,27 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let context_get_fn = Self::ContextGet.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
-                let current_async_task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
-                let current_component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
                 output.push_str(&format!(r#"
-                    function {context_get_fn}(slot) {{
-                        const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
-                        if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
+                    function {context_get_fn}(ctx) {{
+                        const {{ componentIdx, slot }} = ctx;
+                        if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                        if (slot === undefined) {{ throw new TypeError("missing slot"); }}
+
+                        const currentTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                        if (!currentTaskMeta) {{
+                            throw new Error(`missing/incomplete global current task meta for component idx [${{componentIdx}}] during context set`);
+                        }}
+                        const taskID = currentTaskMeta.taskID;
+
+                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                        if (!taskMeta) {{ throw new Error('failed to retrieve current task'); }}
+
                         let task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing current task in metadata while getting context'); }}
 
-                        // TODO(threads): context has been moved to be stored on the thread, not the task.
-                        // Until threads are implemented, we simulate a task with only one thread by storing
-                        // the thread state on the topmost task
-                        task = task.getRootTask();
-
                         {debug_log_fn}('[{context_get_fn}()] args', {{
-                            _globals: {{ {current_component_idx_globals}, {current_async_task_id_globals} }},
                             slot,
                             storage: task.storage,
                             taskID: task.id(),
@@ -414,29 +435,53 @@ impl AsyncTaskIntrinsic {
             Self::TaskReturn => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_return_fn = Self::TaskReturn.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
                 output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
-                        const {{ componentIdx, useDirectParams, getMemoryFn, memoryIdx, callbackFnIdx, liftFns }} = ctx;
+                        const {{
+                            componentIdx,
+                            useDirectParams,
+                            getMemoryFn,
+                            memoryIdx,
+                            callbackFnIdx,
+                            liftFns,
+                            lowerFns
+                        }} = ctx;
                         const params = [...arguments].slice(1);
                         const memory = getMemoryFn();
 
-                        {debug_log_fn}('[{task_return_fn}()] args', {{
-                            componentIdx,
-                            callbackFnIdx,
-                            memoryIdx,
-                            liftFns,
-                            params,
-                        }});
+                        const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
 
-                        const taskMeta = {current_task_get_fn}(componentIdx);
+                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
 
                         const task = taskMeta.task;
-                        if (!taskMeta) {{ throw new Error('invalid/missing current task in metadata'); }}
+                        if (!task) {{ throw new Error('invalid/missing current task in metadata'); }}
+
+                        {debug_log_fn}('[{task_return_fn}()] args', {{
+                            componentIdx,
+                            taskID: task.id(),
+                            subtaskID: task.getParentSubtask()?.id(),
+                            callbackFnIdx,
+                            memoryIdx,
+                            liftFns,
+                            lowerFns,
+                            params,
+                        }});
+
+                        // If we are in a subtask, and have a fused helper function provided to use
+                        // via PrepareCall, we can use that function rather than performing lifting manually.
+                        //
+                        // See also documentation on `HostIntrinsic::PrepareCall`
+                        const subtaskCallMetadata = task.getParentSubtask()?.getCallMetadata();
+                        if (subtaskCallMetadata?.returnFn) {{
+                            subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr]);
+                            subtaskCallMetadata.returnFnCalled = true;
+                            task.resolve(params);
+                            return;
+                        }}
 
                         const expectedMemoryIdx = task.getReturnMemoryIdx();
                         if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
@@ -447,26 +492,8 @@ impl AsyncTaskIntrinsic {
                         task.callbackFnIdx = callbackFnIdx;
 
                         if (!memory && liftFns.length > 4) {{
+                            {debug_log_fn}("[{task_return_fn}()] memory not present for max async flat lifts");
                             throw new Error('memory must be present if more than max async flat lifts are performed');
-                        }}
-
-                        // If we are in a subtask, and have a fused helper function provided to use
-                        // via PrepareCall, we can use that function rather than performing lifting manually.
-                        //
-                        // See also documentation on `HostIntrinsic::PrepareCall`
-                        const returnFn = task.getParentSubtask()?.getCallMetadata()?.returnFn;
-                        if (returnFn) {{
-                            const returnFnArgs = [...params];
-                            returnFn.apply(null, returnFnArgs);
-                            // NOTE: as the return function will directly perform the lifting/lowering
-                            // we cannot know what the task itself would return, without reading it out
-                            // of where it *would* end up.
-                            //
-                            // TODO(fix): add an explicit enum/detectable result which indicates that lift/lower
-                            // is happening via helper fns, to avoid mistaking for legitimate empty responses.
-                            //
-                            task.resolve([]);
-                            return;
                         }}
 
                         let liftCtx = {{ memory, useDirectParams, params, componentIdx }};
@@ -475,29 +502,19 @@ impl AsyncTaskIntrinsic {
                             liftCtx.storageLen = params[1];
                         }}
 
-                        const results = [];
+                        const liftedResults = [];
                         {debug_log_fn}('[{task_return_fn}()] lifting results out of memory', {{ liftCtx }});
                         for (const liftFn of liftFns) {{
                             if (liftCtx.storageLen !== undefined && liftCtx.storageLen <= 0) {{
+                                {debug_log_fn}("[{task_return_fn}()] ran out of range while writing");
                                 throw new Error('ran out of storage while writing');
                             }}
                             const [ val, newLiftCtx ] = liftFn(liftCtx);
                             liftCtx = newLiftCtx;
-                            results.push(val);
+                            liftedResults.push(val);
                         }}
 
-                        // Register an on-resolve handler that runs a tick loop
-                        task.registerOnResolveHandler(() => {{
-                            // Trigger ticking for any suspended tasks
-                            const cstate = {get_or_create_async_state_fn}(task.componentIdx());
-                            cstate.runTickLoop();
-                        }});
-
-                        // NOTE: during fused guest->guest calls, we have will never get here,
-                        // as the lift has the fused helper function may have already performed the relevant
-                        // lifting/lowering.
-                        //
-                        task.resolve(results);
+                        task.resolve(liftedResults);
                     }}
                 "#));
             }
@@ -508,12 +525,13 @@ impl AsyncTaskIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 output.push_str(&format!("
-                    function {subtask_drop_fn}(componentIdx, subtaskID) {{
-                        {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentIdx, subtaskID }});
-                        const state = {get_or_create_async_state_fn}(componentIdx);
-                        if (!state.mayLeave) {{ throw new Error('component is not marked as may leave, cannot be cancelled'); }}
+                    function {subtask_drop_fn}(componentIdx, subtaskWaitableRep) {{
+                        {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentIdx, subtaskWaitableRep }});
 
-                        const subtask =  state.subtasks.remove(subtaskID);
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        if (!cstate.mayLeave) {{ throw new Error('component is not marked as may leave, cannot be cancelled'); }}
+
+                        const subtask =  cstate.handles.remove(subtaskWaitableRep);
                         if (!subtask) {{ throw new Error('missing/invalid subtask specified for drop in component instance'); }}
 
                         subtask.drop();
@@ -525,13 +543,22 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let yield_fn = Self::Yield.name();
                 let current_task_get_fn = Self::GetCurrentTask.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
                 output.push_str(&format!(
                     "
-                    function {yield_fn}(isAsync) {{
-                        {debug_log_fn}('[{yield_fn}()] args', {{ isAsync }});
-                        const task = {current_task_get_fn}();
+                    function {yield_fn}(ctx) {{
+                        {debug_log_fn}('[{yield_fn}()] args', {{ ctx }});
+                        const {{ componentIdx, isCancellable }} = ctx;
+                        const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
+
+                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                        if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
+
+                        const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
-                        await task.yield({{ isAsync }});
+
+                        await task.yield({{ isAsync, isCancellable }});
                     }}
                 "
                 ));
@@ -543,6 +570,8 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = Self::GetCurrentTask.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
                 output.push_str(&format!("
                     function {task_cancel_fn}(componentIdx, isAsync) {{
                         {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx, isAsync }});
@@ -550,11 +579,18 @@ impl AsyncTaskIntrinsic {
                         const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
-                        const task = {current_task_get_fn}(componentIdx);
+                        const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
+
+                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                        if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
+
+                        const task = taskMeta.task;
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+
                         if (task.sync && !task.alwaysTaskReturn) {{
                             throw new Error('cannot cancel sync tasks without always task return set');
                         }}
-                        if (!task.requested) {{ throw new Error('task cancellation has not been requested'); }}
+                        if (!task.cancelRequested) {{ throw new Error('task cancellation has not been requested'); }}
                         if (task.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
                         if (task.returnCalls > 0) {{ throw new Error('cannot cancel task that has already returned a value'); }}
                         if (task.cancelled) {{ throw new Error('cannot cancel task that has already been cancelled'); }}
@@ -570,6 +606,8 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = Self::GetCurrentTask.name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
                 output.push_str(&format!("
                     function {task_cancel_fn}(componentIdx) {{
                         {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx, isAsync }});
@@ -577,10 +615,18 @@ impl AsyncTaskIntrinsic {
                         const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
-                        const task = {current_task_get_fn}(componentIdx);
+                        const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
+
+                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                        if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
+
+                        const task = taskMeta.task;
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+
                         if (task.sync && !task.alwaysTaskReturn) {{
                             throw new Error('cannot cancel sync tasks without always task return set');
                         }}
+
                         task.cancel();
                     }}
                 "));
@@ -592,6 +638,7 @@ impl AsyncTaskIntrinsic {
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 let task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
                 let component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
+
                 output.push_str(&format!(
                     r#"
                     function {fn_name}(args) {{
@@ -599,6 +646,7 @@ impl AsyncTaskIntrinsic {
                         const {{
                             componentIdx,
                             isAsync,
+                            isManualAsync,
                             entryFnName,
                             parentSubtaskID,
                             callbackFnName,
@@ -613,12 +661,13 @@ impl AsyncTaskIntrinsic {
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while starting task');
                         }}
-                        const taskMetas = {global_task_map}.get(componentIdx);
+                        let taskMetas = {global_task_map}.get(componentIdx);
                         const callbackFn = getCallbackFn ? getCallbackFn() : null;
 
                         const newTask = new {task_class}({{
                             componentIdx,
                             isAsync,
+                            isManualAsync,
                             entryFnName,
                             callbackFn,
                             callbackFnName,
@@ -631,10 +680,12 @@ impl AsyncTaskIntrinsic {
                         const newTaskID = newTask.id();
                         const newTaskMeta = {{ id: newTaskID, componentIdx, task: newTask }};
 
+                        // NOTE: do not track host tasks
                         {task_id_globals}.push(newTaskID);
                         {component_idx_globals}.push(componentIdx);
 
                         if (!taskMetas) {{
+                            taskMetas = [newTaskMeta];
                             {global_task_map}.set(componentIdx, [newTaskMeta]);
                         }} else {{
                             taskMetas.push(newTaskMeta);
@@ -650,32 +701,45 @@ impl AsyncTaskIntrinsic {
             // Debug log for this is disabled since it is fairly noisy
             Self::GetCurrentTask => {
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
+                let current_component_idx_globals =
+                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
                 output.push_str(&format!(
-                    "
-                    function {fn_name}(componentIdx) {{
+                    r#"
+                    function {fn_name}(componentIdx, taskID) {{
+                        let usedGlobal = false;
                         if (componentIdx === undefined || componentIdx === null) {{
-                            throw new Error('missing/invalid component instance index [' + componentIdx + '] while getting current task');
+                            throw new Error('missing component idx'); // TODO(fix)
+                            // componentIdx = {current_component_idx_globals}.at(-1);
+                            // usedGlobal = true;
                         }}
-                        const tasks = {global_task_map}.get(componentIdx);
-                        if (tasks === undefined) {{ return undefined; }}
-                        if (tasks.length === 0) {{ return undefined; }}
-                        return tasks[tasks.length - 1];
+
+                        const taskMetas = {global_task_map}.get(componentIdx);
+                        if (taskMetas === undefined || taskMetas.length === 0) {{ return undefined; }}
+
+                        if (taskID) {{
+                            return taskMetas.find(meta => meta.task.id() === taskID);
+                        }}
+
+                        const taskMeta = taskMetas[taskMetas.length - 1];
+                        if (!taskMeta || !taskMeta.task) {{ return undefined; }}
+
+                        return taskMeta;
                     }}
-                ",
+                "#,
                     fn_name = self.name(),
                 ));
             }
 
-            Self::EndCurrentTask => {
+            Self::ClearCurrentTask => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let fn_name = self.name();
                 let global_task_map = Self::GlobalAsyncCurrentTaskMap.name();
                 let task_id_globals = Self::GlobalAsyncCurrentTaskIds.name();
                 let component_idx_globals = Self::GlobalAsyncCurrentComponentIdxs.name();
+
                 output.push_str(&format!(
-                    "
+                    r#"
                     function {fn_name}(componentIdx, taskID) {{
-                        componentIdx ??= {component_idx_globals}.at(-1);
-                        taskID ??= {task_id_globals}.at(-1);
                         {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, taskID }});
 
                         if (componentIdx === undefined || componentIdx === null) {{
@@ -687,10 +751,10 @@ impl AsyncTaskIntrinsic {
                             throw new Error('missing/invalid tasks for component instance while ending task');
                         }}
                         if (tasks.length == 0) {{
-                            throw new Error('no current task(s) for component instance while ending task');
+                            throw new Error(`no current tasks for component instance [${{componentIdx}}] while ending task`);
                         }}
 
-                        if (taskID) {{
+                        if (taskID !== undefined) {{
                             const last = tasks[tasks.length - 1];
                             if (last.id !== taskID) {{
                                 // throw new Error('current task does not match expected task ID');
@@ -704,8 +768,7 @@ impl AsyncTaskIntrinsic {
                         const taskMeta = tasks.pop();
                         return taskMeta.task;
                     }}
-                ",
-                    fn_name = self.name()
+                "#,
                 ));
             }
 
@@ -719,9 +782,11 @@ impl AsyncTaskIntrinsic {
                 let task_class = Self::AsyncTaskClass.name();
                 let subtask_class = Self::AsyncSubtaskClass.name();
 
-                let awaitable_class = Intrinsic::AwaitableClass.name();
                 let global_async_determinism = Intrinsic::GlobalAsyncDeterminism.name();
                 let coin_flip_fn = Intrinsic::CoinFlip.name();
+                let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
+                let clear_current_task_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask).name();
 
                 output.push_str(&format!(r#"
                     class {task_class} {{
@@ -744,16 +809,18 @@ impl AsyncTaskIntrinsic {
                         #componentIdx;
                         #state;
                         #isAsync;
+                        #isManualAsync;
                         #entryFnName = null;
-                        #subtasks = [];
 
                         #onResolveHandlers = [];
                         #completionPromise = null;
+                        #rejected = false;
 
                         #exitPromise = null;
                         #onExitHandlers = [];
 
                         #memoryIdx = null;
+                        #memory = null;
 
                         #callbackFn = null;
                         #callbackFnName = null;
@@ -775,18 +842,19 @@ impl AsyncTaskIntrinsic {
 
                         #returnLowerFns = null;
 
+                        #subtasks = [];
+
                         #entered = false;
+                        #exited = false;
+                        #errored = null;
 
                         cancelled = false;
-                        requested = false;
+                        cancelRequested = false;
                         alwaysTaskReturn = false;
 
                         returnCalls =  0;
                         storage = [0, 0];
                         borrowedHandles = {{}};
-
-                        awaitableResume = null;
-                        awaitableCancel = null;
 
                         constructor(opts) {{
                            this.#id = ++{task_class}._ID;
@@ -798,6 +866,7 @@ impl AsyncTaskIntrinsic {
 
                            this.#state = {task_class}.State.INITIAL;
                            this.#isAsync = opts?.isAsync ?? false;
+                           this.#isManualAsync = opts?.isManualAsync ?? false;
                            this.#entryFnName = opts.entryFnName;
 
                            const {{
@@ -808,6 +877,13 @@ impl AsyncTaskIntrinsic {
                            this.#completionPromise = completionPromise;
 
                            this.#onResolveHandlers.push((results) => {{
+                               if (this.#errored !== null) {{
+                                   rejectCompletionPromise(this.#errored);
+                                   return;
+                               }} else if (this.#rejected) {{
+                                   rejectCompletionPromise(results);
+                                   return;
+                               }}
                                resolveCompletionPromise(results);
                            }});
 
@@ -839,7 +915,6 @@ impl AsyncTaskIntrinsic {
                         taskState() {{ return this.#state; }}
                         id() {{ return this.#id; }}
                         componentIdx() {{ return this.#componentIdx; }}
-                        isAsync() {{ return this.#isAsync; }}
                         entryFnName() {{ return this.#entryFnName; }}
 
                         completionPromise() {{ return this.#completionPromise; }}
@@ -852,8 +927,17 @@ impl AsyncTaskIntrinsic {
 
                         hasCallback() {{ return this.#callbackFn !== null; }}
 
-                        setReturnMemoryIdx(idx) {{ this.#memoryIdx = idx; }}
                         getReturnMemoryIdx() {{ return this.#memoryIdx; }}
+                        setReturnMemoryIdx(idx) {{
+                            if (idx === null) {{ return; }}
+                            this.#memoryIdx = idx;
+                        }}
+
+                        getReturnMemory() {{ return this.#memory; }}
+                        setReturnMemory(m) {{
+                            if (m === null) {{ return; }}
+                            this.#memory = m;
+                        }}
 
                         setReturnLowerFns(fns) {{ this.#returnLowerFns = fns; }}
                         getReturnLowerFns() {{ return this.#returnLowerFns; }}
@@ -906,6 +990,8 @@ impl AsyncTaskIntrinsic {
                             return this.#getCalleeParamsFn();
                         }}
 
+                        mayBlock() {{ return this.isAsync() || this.isResolvedState() }}
+
                         mayEnter(task) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (cstate.hasBackpressure()) {{
@@ -924,21 +1010,42 @@ impl AsyncTaskIntrinsic {
                             return true;
                         }}
 
+                        enterSync() {{
+                            if (this.needsExclusiveLock()) {{
+                                const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                                cstate.exclusiveLock();
+                            }}
+                            return true;
+                        }}
+
                         async enter(opts) {{
-                            {debug_log_fn}('[{task_class}#enter()] args', {{ taskID: this.#id }});
+                            {debug_log_fn}('[{task_class}#enter()] args', {{
+                                taskID: this.#id,
+                                componentIdx: this.#componentIdx,
+                                subtaskID: this.getParentSubtask()?.id(),
+                            }});
 
                             if (this.#entered) {{
                                 throw new Error(`task with ID [${{this.#id}}] should not be entered twice`);
                             }}
 
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+
                             // If a task is either synchronous or host-provided (e.g. a host import, whether sync or async)
                             // then we can avoid component-relevant tracking and immediately enter
                             if (this.isSync() || opts?.isHost) {{
                                 this.#entered = true;
+
+                                // TODO(breaking): remove once manually-spccifying async fns is removed
+                                // It is currently possible for an actually sync export to be specified
+                                // as async via JSPI
+                                if (this.#isManualAsync) {{
+                                    if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(); }}
+                                }}
+
                                 return this.#entered;
                             }}
 
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (cstate.hasBackpressure()) {{
                                 cstate.addBackpressureWaiter();
 
@@ -961,22 +1068,21 @@ impl AsyncTaskIntrinsic {
                             return this.#entered;
                         }}
 
-                        isRunning() {{
-                            return this.#state !== {task_class}.State.RESOLVED;
-                        }}
+                        isRunningState() {{ return this.#state !== {task_class}.State.RESOLVED; }}
+                        isResolvedState() {{ return this.#state === {task_class}.State.RESOLVED; }}
+                        isResolved() {{ return this.#state === {task_class}.State.RESOLVED; }}
 
                         async waitUntil(opts) {{
                             const {{ readyFn, waitableSetRep, cancellable }} = opts;
                             {debug_log_fn}('[{task_class}#waitUntil()] args', {{ taskID: this.#id, waitableSetRep, cancellable }});
 
                             const state = {get_or_create_async_state_fn}(this.#componentIdx);
-                            const wset = state.waitableSets.get(waitableSetRep);
+                            const wset = state.handles.get(waitableSetRep);
 
                             let event;
 
                             wset.incrementNumWaiting();
 
-                            // const pendingEventWaitID = wset.registerPendingEventWait();
                             const keepGoing = await this.suspendUntil({{
                                 readyFn: () => {{
                                     const hasPendingEvent = wset.hasPendingEvent();
@@ -999,36 +1105,6 @@ impl AsyncTaskIntrinsic {
                             wset.decrementNumWaiting();
 
                             return event;
-                        }}
-
-                        async onBlock(awaitable) {{
-                            {debug_log_fn}('[{task_class}#onBlock()] args', {{ taskID: this.#id, awaitable }});
-                            if (!(awaitable instanceof {awaitable_class})) {{
-                                throw new Error('invalid awaitable during onBlock');
-                            }}
-
-                            // Build a promise that this task can await on which resolves when it is awoken
-                            const {{ promise, resolve, reject }} = promiseWithResolvers();
-                            this.awaitableResume = () => {{
-                                {debug_log_fn}('[{task_class}] resuming after onBlock', {{ taskID: this.#id }});
-                                resolve();
-                            }};
-                            this.awaitableCancel = (err) => {{
-                                {debug_log_fn}('[{task_class}] rejecting after onBlock', {{ taskID: this.#id, err }});
-                                reject(err);
-                            }};
-
-                            // Park this task/execution to be handled later
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
-                            state.parkTaskOnAwaitable({{ awaitable, task: this }});
-
-                            try {{
-                                await promise;
-                                return {task_class}.BlockResult.NOT_CANCELLED;
-                            }} catch (err) {{
-                                // rejection means task cancellation
-                                return {task_class}.BlockResult.CANCELLED;
-                            }}
                         }}
 
                         async yieldUntil(opts) {{
@@ -1095,7 +1171,7 @@ impl AsyncTaskIntrinsic {
                             {debug_log_fn}('[{task_class}#deliverPendingCancel()] args', {{ cancellable }});
 
                             if (cancellable && this.#state === {task_class}.State.PENDING_CANCEL) {{
-                                this.#state = Task.State.CANCEL_DELIVERED;
+                                this.#state = {task_class}.State.CANCEL_DELIVERED;
                                 return true;
                             }}
 
@@ -1104,24 +1180,44 @@ impl AsyncTaskIntrinsic {
 
                         isCancelled() {{ return this.cancelled }}
 
-                        cancel() {{
+                        cancel(args) {{
                             {debug_log_fn}('[{task_class}#cancel()] args', {{ }});
-                            if (!this.taskState() !== {task_class}.State.CANCEL_DELIVERED) {{
-                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] invalid task state for cancellation`);
+                            if (this.taskState() !== {task_class}.State.CANCEL_DELIVERED) {{
+                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] invalid task state [${{this.taskState()}}] for cancellation`);
                             }}
                             if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
                             this.cancelled = true;
-                            this.onResolve(new Error('cancelled'));
+                            this.onResolve(args?.error ?? new Error('task cancelled'));
                             this.#state = {task_class}.State.RESOLVED;
                         }}
 
                         onResolve(taskValue) {{
-                            for (const f of this.#onResolveHandlers) {{
+                            const handlers = this.#onResolveHandlers;
+                            this.#onResolveHandlers = [];
+                            for (const f of handlers) {{
                                 try {{
+                                    // TODO(fix): resolve handlers getting called a ton?
                                     f(taskValue);
                                 }} catch (err) {{
-                                    console.error("error during task resolve handler", err);
+                                    {debug_log_fn}("[{task_class}#onResolve] error during task resolve handler", err);
                                     throw err;
+                                }}
+                            }}
+
+                            if (this.#parentSubtask) {{
+                                const meta = this.#parentSubtask.getCallMetadata();
+                                // Run the rturn fn if it has not already been called -- this *should* have happened in
+                                // `task.return`, but some paths do not go through task.return (e.g. async lower of sync fn
+                                // which goes through prepare + async-start-call)
+                                if (meta.returnFn && !meta.returnFnCalled) {{
+                                    {debug_log_fn}('[{task_class}#onResolve()] running returnFn', {{
+                                        componentIdx: this.#componentIdx,
+                                        taskID: this.#id,
+                                        subtaskID: this.#parentSubtask.id(),
+                                    }});
+                                    const memory = meta.getMemoryFn();
+                                    meta.returnFn.apply(null, [taskValue, meta.resultPtr]);
+                                    meta.returnFnCalled = true;
                                 }}
                             }}
 
@@ -1130,7 +1226,16 @@ impl AsyncTaskIntrinsic {
                                     componentIdx: this.#componentIdx,
                                     taskID: this.#id,
                                 }});
-                                this.#postReturnFn();
+                                try {{
+                                    this.#postReturnFn(taskValue);
+                                }} catch (err) {{
+                                    {debug_log_fn}("[{task_class}#onResolve] error during task resolve handler", err);
+                                    throw err;
+                                }}
+                            }}
+
+                            if (this.#parentSubtask) {{
+                                this.#parentSubtask.onResolve(taskValue);
                             }}
                         }}
 
@@ -1138,17 +1243,60 @@ impl AsyncTaskIntrinsic {
                             this.#onResolveHandlers.push(f);
                         }}
 
-                        resolve(results) {{
-                            {debug_log_fn}('[{task_class}#resolve()] args', {{
-                                results,
+                        isRejected() {{ return this.#rejected; }}
+
+                        setErrored(err) {{
+                            this.#errored = err;
+                        }}
+
+                        reject(taskErr) {{
+                            {debug_log_fn}('[{task_class}#reject()] args', {{
                                 componentIdx: this.#componentIdx,
                                 taskID: this.#id,
+                                parentSubtask: this.#parentSubtask,
+                                parentSubtaskID: this.#parentSubtask?.id(),
+                                entryFnName: this.entryFnName(),
+                                callbackFnName: this.#callbackFnName,
+                                errMsg: taskErr.message,
+                            }});
+
+                            if (this.isResolvedState() || this.#rejected) {{ return; }}
+
+                            console.log("SUBTASKS?", this.#subtasks);
+                            console.log("UPPER??", this.#parentSubtask);
+                            for (const subtask of this.#subtasks) {{
+                                subtask.reject(taskErr);
+                            }}
+
+                            this.#rejected = true;
+                            this.cancelRequested = true;
+                            this.#state = {task_class}.State.PENDING_CANCEL;
+                            const cancelled = this.deliverPendingCancel({{ cancellable: true }});
+
+// TODO: do cleanup here to reset the machinery so we can run again?
+
+
+                            this.cancel({{ error: taskErr }});
+                        }}
+
+                        resolve(results) {{
+                            {debug_log_fn}('[{task_class}#resolve()] args', {{
+                                componentIdx: this.#componentIdx,
+                                taskID: this.#id,
+                                entryFnName: this.entryFnName(),
+                                callbackFnName: this.#callbackFnName,
                             }});
 
                             if (this.#state === {task_class}.State.RESOLVED) {{
                                 throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved (did you forget to wait for an import?)`);
                             }}
-                            if (this.borrowedHandles.length > 0) {{ throw new Error('task still has borrow handles'); }}
+
+                            if (this.borrowedHandles.length > 0) {{
+                                throw new Error('task still has borrow handles');
+                            }}
+
+                            this.#state = {task_class}.State.RESOLVED;
+
                             switch (results.length) {{
                                 case 0:
                                     this.onResolve(undefined);
@@ -1159,7 +1307,6 @@ impl AsyncTaskIntrinsic {
                                 default:
                                     throw new Error('unexpected number of results');
                             }}
-                            this.#state = {task_class}.State.RESOLVED;
                         }}
 
                         exit() {{
@@ -1167,6 +1314,8 @@ impl AsyncTaskIntrinsic {
                                 componentIdx: this.#componentIdx,
                                 taskID: this.#id,
                             }});
+
+                            if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
                             if (this.#state !== {task_class}.State.RESOLVED) {{
                                 // TODO(fix): only fused, manually specified post returns seem to break this invariant,
@@ -1193,12 +1342,9 @@ impl AsyncTaskIntrinsic {
 
                             const state = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (!state) {{ throw new Error('missing async state for component [' + this.#componentIdx + ']'); }}
-                            if (!this.#isAsync && !state.inSyncExportCall) {{
-                                throw new Error('sync task must be run from components known to be in a sync export call');
-                            }}
-                            state.inSyncExportCall = false;
 
-                            if (this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
+                            // Exempt the host from exclusive lock check
+                            if (this.#componentIdx !== -1 && this.needsExclusiveLock() && !state.isExclusivelyLocked()) {{
                                throw new Error(`task [${{this.#id}}] exit: component [${{this.#componentIdx}}] should have been exclusively locked`);
                             }}
 
@@ -1212,24 +1358,55 @@ impl AsyncTaskIntrinsic {
                                     throw err;
                                 }}
                             }}
+
+                            this.#exited = true;
+                            {clear_current_task_fn}(this.#componentIdx, this.id());
                         }}
 
-                        needsExclusiveLock() {{ return this.#needsExclusiveLock; }}
+                        needsExclusiveLock() {{
+                            return !this.#isAsync || this.hasCallback();
+                        }}
 
                         createSubtask(args) {{
                             {debug_log_fn}('[{task_class}#createSubtask()] args', args);
-                            const {{ componentIdx, childTask, callMetadata }} = args;
+                            const {{ componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync }} = args;
+
+                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            if (!cstate) {{
+                                throw new Error(`invalid/missing async state for component idx [${{componentIdx}}]`);
+                            }}
+
+                            const waitable = new {waitable_class}({{
+                                componentIdx: this.#componentIdx,
+                                target: `subtask (internal ID [${{this.#id}}])`,
+                            }});
+
                             const newSubtask = new {subtask_class}({{
                                 componentIdx,
                                 childTask,
                                 parentTask: this,
                                 callMetadata,
+                                isAsync,
+                                isManualAsync,
+                                fnName,
+                                waitable,
                             }});
                             this.#subtasks.push(newSubtask);
+                            newSubtask.setTarget(`subtask (internal ID [${{newSubtask.id()}}], waitable [${{waitable.idx()}}], component [${{componentIdx}}])`);
+                            waitable.setIdx(cstate.handles.insert(newSubtask));
+                            waitable.setTarget(`waitable for subtask (waitable id [${{waitable.idx()}}], subtask internal ID [${{newSubtask.id()}}])`);
+
                             return newSubtask;
                         }}
 
-                        getLatestSubtask() {{ return this.#subtasks.at(-1); }}
+                        getLatestSubtask() {{
+                            return this.#subtasks.at(-1);
+                        }}
+
+                        getSubtaskByWaitableRep(rep) {{
+                            if (rep === undefined) {{ throw new TypeError('missing rep'); }}
+                            return this.#subtasks.find(s => s.waitableRep() === rep);
+                        }}
 
                         currentSubtask() {{
                             {debug_log_fn}('[{task_class}#currentSubtask()]');
@@ -1237,11 +1414,9 @@ impl AsyncTaskIntrinsic {
                             return this.#subtasks.at(-1);
                         }}
 
-                        endCurrentSubtask() {{
-                            {debug_log_fn}('[{task_class}#endCurrentSubtask()]');
+                        removeSubtask(subtask) {{
                             if (this.#subtasks.length === 0) {{ throw new Error('cannot end current subtask: no current subtask'); }}
-                            const subtask = this.#subtasks.pop();
-                            subtask.drop();
+                            this.#subtasks = this.#subtasks.filter(t => t !== subtask);
                             return subtask;
                         }}
                     }}
@@ -1251,9 +1426,10 @@ impl AsyncTaskIntrinsic {
             Self::AsyncSubtaskClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let subtask_class = Self::AsyncSubtaskClass.name();
-                let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let lookup_memories_for_component = Intrinsic::LookupMemoriesForComponent.name();
+
                 output.push_str(&format!(r#"
                     class {subtask_class} {{
                         static _ID = 0n;
@@ -1280,9 +1456,6 @@ impl AsyncTaskIntrinsic {
                         #lenders = null;
 
                         #waitable = null;
-                        #waitableRep = null;
-                        #waitableResolve = null;
-                        #waitableReject = null;
 
                         #callbackFn = null;
                         #callbackFnName = null;
@@ -1291,11 +1464,20 @@ impl AsyncTaskIntrinsic {
                         #onProgressFn = null;
                         #pendingEventFn = null;
 
-                        #componentRep = null;
-
                         #callMetadata = {{}};
 
+                        #resolved = false;
+
                         #onResolveHandlers = [];
+                        #onStartHandlers = [];
+
+                        #result = null;
+                        #resultSet = false;
+
+                        fnName;
+                        target;
+                        isAsync;
+                        isManualAsync;
 
                         constructor(args) {{
                             if (typeof args.componentIdx !== 'number') {{
@@ -1304,6 +1486,7 @@ impl AsyncTaskIntrinsic {
                             this.#componentIdx = args.componentIdx;
 
                             this.#id = ++{subtask_class}._ID;
+                            this.fnName = args.fnName;
 
                             if (!args.parentTask) {{ throw new Error('missing parent task during subtask creation'); }}
                             this.#parentTask = args.parentTask;
@@ -1312,28 +1495,15 @@ impl AsyncTaskIntrinsic {
 
                             if (args.memoryIdx) {{ this.#memoryIdx = args.memoryIdx; }}
 
-                            if (args.waitable) {{
-                                this.#waitable = args.waitable;
-                                this.#waitable.setTarget(`subtask (internal ID [${{this.#id}}])`);
-                            }} else {{
-                                const state = {get_or_create_async_state_fn}(this.#componentIdx);
-                                if (!state) {{
-                                    throw new Error('invalid/missing async state for component instance [' + componentIdx + ']');
-                                }}
-
-                                this.#waitable = new {waitable_class}({{
-                                    componentIdx: this.#componentIdx,
-                                    target: `subtask (internal ID [${{this.#id}}])`,
-                                }});
-                                this.#waitableResolve = () => this.#waitable.resolve();
-                                this.#waitableReject = () => this.#waitable.reject();
-
-                                this.#waitableRep = state.waitables.insert(this.#waitable);
-                            }}
-
-                            this.#lenders = [];
+                            if (!args.waitable) {{ throw new Error("missing/invalid waitable"); }}
+                            this.#waitable = args.waitable;
 
                             if (args.callMetadata) {{ this.#callMetadata = args.callMetadata; }}
+
+                            this.#lenders = [];
+                            this.target = args.target;
+                            this.isAsync = args.isAsync;
+                            this.isManualAsync = args.isManualAsync;
                         }}
 
                         id() {{ return this.#id; }}
@@ -1341,11 +1511,32 @@ impl AsyncTaskIntrinsic {
                         childTaskID() {{ return this.#childTask?.id(); }}
                         state() {{ return this.#state; }}
 
+                        waitable() {{ return this.#waitable; }}
+                        waitableRep() {{ return this.#waitable.idx(); }}
+
+                        join() {{ return this.#waitable.join(...arguments); }}
+                        getPendingEvent() {{ return this.#waitable.getPendingEvent(...arguments); }}
+                        hasPendingEvent() {{ return this.#waitable.hasPendingEvent(...arguments); }}
+                        setPendingEvent() {{ return this.#waitable.setPendingEvent(...arguments); }}
+
+                        setTarget(tgt) {{ this.target = tgt; }}
+
+                        getResult() {{
+                            if (!this.#resultSet) {{ throw new Error("subtask result has not been set") }}
+                            return this.#result;
+                        }}
+                        setResult(v) {{
+                            if (this.#resultSet) {{ throw new Error("subtask result has already been set"); }}
+                            this.#result = v;
+                            this.#resultSet = true;
+                        }}
+
                         componentIdx() {{ return this.#componentIdx; }}
 
                         setChildTask(t) {{
                             if (!t) {{ throw new Error('cannot set missing/invalid child task on subtask'); }}
                             if (this.#childTask) {{ throw new Error('child task is already set on subtask'); }}
+                            if (this.#parentTask === t) {{ throw new Error("parent cannot be child"); }}
                             this.#childTask = t;
                         }}
                         getChildTask(t) {{ return this.#childTask; }}
@@ -1379,18 +1570,23 @@ impl AsyncTaskIntrinsic {
                             return this.#state == {subtask_class}.State.STARTING;
                         }}
 
+                        registerOnStartHandler(f) {{
+                            this.#onStartHandlers.push(f);
+                        }}
+
                         onStart(args) {{
-                            if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
                             {debug_log_fn}('[{subtask_class}#onStart()] args', {{
                                 componentIdx: this.#componentIdx,
-                                taskID: this.#id,
+                                subtaskID: this.#id,
                                 parentTaskID: this.parentTaskID(),
+                                fnName: this.fnName,
                             }});
-                            this.#onProgressFn();
 
-                            let result;
+                            if (this.#onProgressFn) {{ this.#onProgressFn(); }}
 
                             this.#state = {subtask_class}.State.STARTED;
+
+                            let result;
 
                             // If we have been provided a helper start function as a result of
                             // component fusion performed by wasmtime tooling, then we can call that helper and lifts/lowers will
@@ -1399,34 +1595,37 @@ impl AsyncTaskIntrinsic {
                             // See also documentation on `HostIntrinsic::PrepareCall`
                             //
                             if (this.#callMetadata.startFn) {{
-                                const {{ resultPtr }} = this.#callMetadata;
-                                const startFnArgs = [];
-                                if (args?.startFnParams) {{ startFnArgs.push(...args.startFnParams); }}
-                                result = this.#callMetadata.startFn.apply(null, startFnArgs);
+                                result = this.#callMetadata.startFn.apply(null, args?.startFnParams ?? []);
                             }}
 
                             return result;
                         }}
 
-                        setPendingEventFn(fn) {{
-                            this.#waitable.setPendingEventFn(fn);
-                        }}
 
                         registerOnResolveHandler(f) {{
                             this.#onResolveHandlers.push(f);
+                        }}
+
+                        reject(subtaskErr) {{
+                            this.#childTask?.reject(subtaskErr);
                         }}
 
                         onResolve(subtaskValue) {{
                             {debug_log_fn}('[{subtask_class}#onResolve()] args', {{
                                 componentIdx: this.#componentIdx,
                                 subtaskID: this.#id,
+                                isAsync: this.isAsync,
                                 childTaskID: this.childTaskID(),
                                 parentTaskID: this.parentTaskID(),
-                                subtaskValue,
+                                parentTaskFnName: this.#parentTask?.entryFnName(),
+                                fnName: this.fnName,
                             }});
 
-                            if (!this.#onProgressFn) {{ throw new Error('missing on progress function'); }}
-                            this.#onProgressFn();
+                            if (this.#resolved) {{
+                                throw new Error('subtask has already been resolved');
+                            }}
+
+                            if (this.#onProgressFn) {{ this.#onProgressFn(); }}
 
                             if (subtaskValue === null) {{
                                 if (this.#cancelRequested) {{
@@ -1434,19 +1633,21 @@ impl AsyncTaskIntrinsic {
                                 }}
 
                                 if (this.#state === {subtask_class}.State.STARTING) {{
-                                    this.#state = Subtask.State.CANCELLED_BEFORE_STARTED;
+                                    this.#state = {subtask_class}.State.CANCELLED_BEFORE_STARTED;
                                 }} else {{
                                     if (this.#state !== {subtask_class}.State.STARTED) {{
-                                        throw new Error('cancelled subtask must have been started before cancellation');
+                                        throw new Error('resolved subtask must have been started before cancellation');
                                     }}
                                     this.#state = {subtask_class}.State.CANCELLED_BEFORE_RETURNED;
                                 }}
                             }} else {{
                                 if (this.#state !== {subtask_class}.State.STARTED) {{
-                                    throw new Error('cancelled subtask must have been started before cancellation');
+                                    throw new Error('resolved subtask must have been started before completion');
                                 }}
                                 this.#state = {subtask_class}.State.RETURNED;
                             }}
+
+                            this.setResult(subtaskValue);
 
                             for (const f of this.#onResolveHandlers) {{
                                 try {{
@@ -1457,18 +1658,35 @@ impl AsyncTaskIntrinsic {
                                 }}
                             }}
 
+                            const callMetadata = this.getCallMetadata();
+
+                            // TODO(fix): we should be able to easily have the caller's meomry
+                            // to lower into here, but it's not present in PrepareCall
+                            const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}({{ componentIdx: this.#parentTask?.componentIdx() }})[0];
+                            if (callMetadata && !callMetadata.returnFn && this.isAsync && callMetadata.resultPtr && memory) {{
+                                const {{ resultPtr, realloc }} = callMetadata;
+                                const lowers = callMetadata.lowers; // may have been updated in task.return of the child
+                                if (lowers && lowers.length > 0) {{
+                                    lowers[0]({{
+                                        componentIdx: this.#componentIdx,
+                                        memory,
+                                        realloc,
+                                        vals: [subtaskValue],
+                                        storagePtr: resultPtr,
+                                    }});
+                                }}
+                            }}
+
+                            this.#resolved = true;
+                            this.#parentTask.removeSubtask(this);
                         }}
 
-                        setRep(rep) {{ this.#componentRep = rep; }}
-
                         getStateNumber() {{ return this.#state; }}
-                        getWaitableRep() {{ return this.#waitableRep; }}
-
-                        waitableRep() {{ return this.#waitableRep; }}
+                        isReturned() {{ return this.#state === {subtask_class}.State.RETURNED; }}
 
                         getCallMetadata() {{ return this.#callMetadata; }}
 
-                        resolved() {{
+                        isResolved() {{
                             if (this.#state === {subtask_class}.State.STARTING
                                 || this.#state === {subtask_class}.State.STARTED) {{
                                 return false;
@@ -1485,7 +1703,7 @@ impl AsyncTaskIntrinsic {
                             {debug_log_fn}('[{subtask_class}#addLender()] args', {{ handle }});
                             if (!Number.isNumber(handle)) {{ throw new Error('missing/invalid lender handle [' + handle + ']'); }}
 
-                            if (this.#lenders.length === 0 || this.#waitable.resolved()) {{
+                            if (this.#lenders.length === 0 || this.isResolved()) {{
                                 throw new Error('subtask has no lendors or has already been resolved');
                             }}
 
@@ -1499,12 +1717,12 @@ impl AsyncTaskIntrinsic {
                                 parentTaskID: this.parentTaskID(),
                                 subtaskID: this.#id,
                                 childTaskID: this.childTaskID(),
-                                resolved: this.resolved(),
+                                resolved: this.isResolved(),
                                 resolveDelivered: this.resolveDelivered(),
                             }});
 
-                            const canDeliverResolve = !this.resolveDelivered() && this.resolved();
-                            if (!canDeliverResolve) {{
+                            const cannotDeliverResolve = this.resolveDelivered() || !this.isResolved();
+                            if (cannotDeliverResolve) {{
                                 throw new Error('subtask cannot deliver resolution twice, and the subtask must be resolved');
                             }}
 
@@ -1517,27 +1735,26 @@ impl AsyncTaskIntrinsic {
 
                         resolveDelivered() {{
                             {debug_log_fn}('[{subtask_class}#resolveDelivered()] args', {{ }});
-                            if (this.#lenders === null && !this.resolved()) {{
+                            if (this.#lenders === null && !this.isResolved()) {{
                                 throw new Error('invalid subtask state, lenders missing and subtask has not been resolved');
                             }}
                             return this.#lenders === null;
                         }}
 
                         drop() {{
-                            {debug_log_fn}('[{subtask_class}#drop()] args', {{ }});
+                            {debug_log_fn}('[{subtask_class}#drop()] args', {{
+                                componentIdx: this.#componentIdx,
+                                parentTaskID: this.#parentTask?.id(),
+                                parentTaskFnName: this.#parentTask?.entryFnName(),
+                                childTaskID: this.#childTask?.id(),
+                                childTaskFnName: this.#childTask?.entryFnName(),
+                                subtaskFnName: this.fnName,
+                            }});
+                            if (!this.#waitable) {{ throw new Error('missing/invalid inner waitable'); }}
                             if (!this.resolveDelivered()) {{
                                 throw new Error('cannot drop subtask before resolve is delivered');
                             }}
-                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
-
-                            const state = this.#getComponentState();
-                            const waitable = state.waitables.remove(this.#waitableRep);
-
-                            if (waitable !== this.#waitable) {{
-                                throw new Error('unexpectedly different waitable from removed rep');
-                            }}
-                            waitable.drop();
-
+                            if (this.#waitable) {{ this.#waitable.drop() }}
                             this.#dropped = true;
                         }}
 
@@ -1552,7 +1769,7 @@ impl AsyncTaskIntrinsic {
                         getWaitableHandleIdx() {{
                             {debug_log_fn}('[{subtask_class}#getWaitableHandleIdx()] args', {{ }});
                             if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
-                            return this.#waitableRep;
+                            return this.waitableRep();
                         }}
                     }}
                 "#));
@@ -1577,16 +1794,14 @@ impl AsyncTaskIntrinsic {
                 ));
             }
 
-            // TODO: This function likely needs to be a generator
-            // that first yields the task promise result, then tries to push resolution
             Self::DriverLoop => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let driver_loop_fn = Self::DriverLoop.name();
                 let i32_typecheck = Intrinsic::TypeCheckValidI32.name();
                 let to_int32_fn = Intrinsic::Conversion(ConversionIntrinsic::ToInt32).name();
                 let unpack_callback_result_fn = Self::UnpackCallbackResult.name();
-                let error_all_component_states_fn =
-                    Intrinsic::Component(ComponentIntrinsic::ComponentStateSetAllError).name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
                 output.push_str(&format!(r#"
                     async function {driver_loop_fn}(args) {{
@@ -1596,53 +1811,19 @@ impl AsyncTaskIntrinsic {
                             task,
                             fnName,
                             isAsync,
-                            resolve,
-                            reject,
                         }} = args;
                         let callbackResult = args.callbackResult;
 
                         const callbackFnName = task.getCallbackFnName();
                         const componentIdx = task.componentIdx();
 
-                        try {{
-                            callbackResult = await callbackResult;
-                        }} catch (err) {{
-                            err.componentIdx = componentIdx;
-
-                            componentState.setErrored(err);
-                            {error_all_component_states_fn}();
-
-                            reject(err);
-                            task.resolve([]);
-                            return;
+                        if (callbackResult instanceof Promise) {{
+                            throw new Error("callbackResult should be a value, not a promise");
                         }}
 
-                        // TODO(fix): callbackResult should not ever be undefined, *unless*
-                        // we are calling it on a function that was not async to begin with?...
-                        //
-                        // In practice, the callback of `[async]run` returns undefined.
-                        //
                         if (callbackResult === undefined) {{
-                           {debug_log_fn}('[{driver_loop_fn}()] early exit due to undefined callback result', {{
-                               taskID: task.id(),
-                               subtaskID: task.currentSubtask()?.id(),
-                               parentTaskID: task.currentSubtask()?.parentTaskID(),
-                               fnName,
-                               callbackResult
-                           }});
-                           resolve(null);
-                           task.resolve([]);
-                           return;
+                            throw new Error("callback result should never be undefined");
                         }}
-
-                        // TODO: the callback result here IS a number,
-                        // because task-return was called with a host function.
-                        //
-                        // Is our job here to resolve the task promise w/ the results?
-                        //
-                        //
-                        // Or maybe to take the results, lower them back in for the component
-                        // that did this call (possibly) to use??
 
                         let callbackCode;
                         let waitableSetRep;
@@ -1670,9 +1851,7 @@ impl AsyncTaskIntrinsic {
                         let asyncRes;
                         try {{
                             while (true) {{
-                                if (callbackCode !== 0) {{
-                                    componentState.exclusiveRelease();
-                                }}
+                                if (callbackCode !== 0) {{ componentState.exclusiveRelease(); }}
 
                                 switch (callbackCode) {{
                                     case 0: // EXIT
@@ -1683,7 +1862,6 @@ impl AsyncTaskIntrinsic {
                                             taskID: task.id()
                                         }});
                                         task.exit();
-                                        resolve(null);
                                         return;
 
                                     case 1: // YIELD
@@ -1707,12 +1885,14 @@ impl AsyncTaskIntrinsic {
                                         break;
 
                                     case 2: // WAIT for a given waitable set
+                                        const cstate = {get_or_create_async_state_fn}(componentIdx);
                                         {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{
                                             fnName,
                                             componentIdx,
                                             callbackFnName,
                                             taskID: task.id(),
                                             waitableSetRep,
+                                            waitableSetTargets: cstate.handles.get(waitableSetRep).targets(),
                                         }});
                                         asyncRes = await task.waitUntil({{
                                             readyFn: () => !componentState.isExclusivelyLocked(),
@@ -1735,6 +1915,12 @@ impl AsyncTaskIntrinsic {
 
                                 componentState.exclusiveLock();
 
+                                // If the task failed via any means, leave early and reject.
+                                if (task.isRejected()) {{
+                                    {debug_log_fn}('[{driver_loop_fn}()] detected task rejection, leaving early');
+                                    return;
+                                }}
+
                                 if (asyncRes.code === undefined) {{ throw new Error("missing event code from event"); }}
                                 if (asyncRes.payload0 === undefined) {{ throw new Error("missing payload0 from event"); }}
                                 if (asyncRes.payload1 === undefined) {{ throw new Error("missing payload1 from event"); }}
@@ -1747,6 +1933,7 @@ impl AsyncTaskIntrinsic {
                                 {debug_log_fn}('[{driver_loop_fn}()] performing callback', {{
                                     fnName,
                                     componentIdx,
+                                    taskID: task.id(),
                                     callbackFnName,
                                     eventCode,
                                     index,
@@ -1764,6 +1951,9 @@ impl AsyncTaskIntrinsic {
                                 waitableSetRep = unpacked[1];
 
                                 {debug_log_fn}('[{driver_loop_fn}()] callback result unpacked', {{
+                                    fnName,
+                                    componentIdx,
+                                    callbackFnName,
                                     callbackRes,
                                     callbackCode,
                                     waitableSetRep,
@@ -1773,20 +1963,17 @@ impl AsyncTaskIntrinsic {
                             {debug_log_fn}('[{driver_loop_fn}()] error during async driver loop', {{
                                 fnName,
                                 callbackFnName,
-                                eventCode,
-                                index,
-                                result,
+                                componentIdx,
+                                taskID: task.id(),
+                                subtaskID: task.getParentSubtask()?.id(),
+                                parentTaskID: task.getParentSubtask()?.getParentTask()?.id(),
+                                event: {{
+                                    eventCode,
+                                    index,
+                                    result,
+                                }},
                                 err,
                             }});
-                            console.error('[{driver_loop_fn}()] error during async driver loop', {{
-                                fnName,
-                                callbackFnName,
-                                eventCode,
-                                index,
-                                result,
-                                err,
-                            }});
-                            reject(err);
                         }}
                     }}
                 "#,
@@ -1816,95 +2003,162 @@ impl AsyncTaskIntrinsic {
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
 
                 output.push_str(&format!(
                     r#"
-                    function {lower_import_fn}(args, exportFn) {{
-                        const params = [...arguments].slice(2);
-                        {debug_log_fn}('[{lower_import_fn}()] args', {{ args, params, exportFn }});
+                    async function {lower_import_fn}(args) {{
+                        const params = [...arguments].slice(1);
+                        {debug_log_fn}('[{lower_import_fn}()] args', {{ args, params }});
                         const {{
                             functionIdx,
                             componentIdx,
                             isAsync,
+                            isManualAsync,
                             paramLiftFns,
                             resultLowerFns,
+                            funcTypeIsAsync,
                             metadata,
                             memoryIdx,
                             getMemoryFn,
                             getReallocFn,
+                            importFn,
                         }} = args;
 
-                        const parentTaskMeta = {current_task_get_fn}(componentIdx);
-                        const parentTask = parentTaskMeta?.task;
-                        if (!parentTask) {{ throw new Error('missing parent task during lower of import'); }}
+                        const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
+
+                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                        if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
+
+                        const task = taskMeta.task;
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
 
-                        const subtask = parentTask.createSubtask({{
+                        // TODO: re-enable this check -- postReturn can call imports though,
+                        // and that breaks things.
+                        //
+                        // if (!cstate.mayLeave) {{
+                        //     throw new Error(`cannot leave instance [${{componentIdx}}]`);
+                        // }}
+
+                        if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {{
+                            throw new Error("non async exports cannot synchronously call async functions");
+                        }}
+
+                        // If there is an existing task, this should be part of a subtask
+                        const memory = getMemoryFn();
+                        const subtask = task.createSubtask({{
                            componentIdx,
-                           parentTask,
+                           parentTask: task,
+                           fnName: importFn.fnName,
+                           isAsync,
+                           isManualAsync,
                            callMetadata: {{
                                memoryIdx,
-                               memory: getMemoryFn(),
+                               memory,
                                realloc: getReallocFn(),
                                resultPtr: params[0],
+                               lowers: resultLowerFns,
                            }}
                         }});
-                        parentTask.setReturnMemoryIdx(memoryIdx);
+                        task.setReturnMemoryIdx(memoryIdx);
+                        task.setReturnMemory(getMemoryFn());
 
-                        const rep = cstate.subtasks.insert(subtask);
-                        subtask.setRep(rep);
+                        subtask.onStart();
 
-                        subtask.setOnProgressFn(() => {{
-                            subtask.setPendingEventFn(() => {{
-                                if (subtask.resolved()) {{ subtask.deliverResolve(); }}
-                                return {{
-                                    code: {async_event_code_enum}.SUBTASK,
-                                    payload0: rep,
-                                    payload1: subtask.getStateNumber(),
+                        // If dealing with a sync lowered sync function, we can directly return results
+                        //
+                        // TODO(breaking): remove once we get rid of manual async import specification,
+                        // as func types cannot be detected in that case only (and we don't need that w/ p3)
+                        if (!isManualAsync && !isAsync && !funcTypeIsAsync) {{
+                            const res = importFn(...params);
+                            // TODO(breaking): remove once we get rid of manual async import specification,
+                            // as func types cannot be detected in that case only (and we don't need that w/ p3)
+                            if (!funcTypeIsAsync && !subtask.isReturned()) {{
+                                throw new Error('post-execution subtasks must either be async or returned');
+                            }}
+                            return subtask.getResult();
+                        }}
+
+                        // Sync-lowered async functions requires async behavior because the callee *can* block,
+                        // but this call must *act* synchronously and return immediately with the result
+                        // (i.e. not returning until the work is done)
+                        //
+                        // TODO(breaking): remove checking for manual async specification here, once we can go p3-only
+                        //
+                        if (!isManualAsync && !isAsync && funcTypeIsAsync) {{
+                            const {{ promise, resolve }} = new Promise();
+                            queueMicrotask(async () => {{
+                                if (!subtask.isResolvedState()) {{
+                                    await task.suspendUntil({{ readyFn: () => task.isResolvedState() }});
                                 }}
+                                resolve(subtask.getResult());
                             }});
-                        }});
+                            return promise;
+                        }}
 
-                        // Set up a handler on subtask completion to lower results from the call into the caller's memory region.
-                        subtask.registerOnResolveHandler((res) => {{
-                            {debug_log_fn}('[{lower_import_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
-                            const {{ memory, resultPtr, realloc }} = subtask.getCallMetadata();
-                            if (resultLowerFns.length === 0) {{ return; }}
-                            resultLowerFns[0]({{ componentIdx, memory, realloc, vals: [res], storagePtr: resultPtr }});
-                        }});
+                        // NOTE: at this point we know that we are working with an async lowered import
 
                         const subtaskState = subtask.getStateNumber();
                         if (subtaskState < 0 || subtaskState > 2**5) {{
                             throw new Error('invalid subtask state, out of valid range');
                         }}
 
-                        // NOTE: we must wait a bit before calling the export function,
-                        // to ensure the subtask state is not modified before the lower call return
+                        subtask.setOnProgressFn(() => {{
+                            subtask.setPendingEvent(() => {{
+                                if (subtask.isResolved()) {{ subtask.deliverResolve(); }}
+                                const event = {{
+                                    code: {async_event_code_enum}.SUBTASK,
+                                    payload0: subtask.waitableRep(),
+                                    payload1: subtask.getStateNumber(),
+                                }}
+                                return event;
+                            }});
+                        }});
+
+                        // This is a hack to maintain backwards compatibility with
+                        // manually-specified async imports, used in wasm exports that are
+                        // not actually async (but are specified as so).
                         //
-                        // TODO: we should trigger via subtask state changing, rather than a static wait?
-                        setTimeout(async () => {{
-                            try {{
-                                {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ exportFn, params }});
-                                exportFn.apply(null, params);
+                        // This is not normal p3 sync behavior but instead anticipating that
+                        // the caller that is doing manual async will be waiting for a promise that
+                        // resolves to the *actual* result.
+                        //
+                        // TODO(breaking): remove once manually specified async is removed
+                        //
+                        // There are a few cases:
+                        // 1. sync function with async types (e.g. `f: func() -> stream<u32>`)
+                        // 2. async function with async types (e.g. `f: async func() -> stream<u32>`)
+                        // 3. async function with sync types (e.g. `f: async func() -> list<u32>`)
+                        // 4. sync function with non-async types (e.g. `f: func() -> list<u32>`)
+                        //
+                        // This hack *only* applies to 4 -- the case where an async JS host function
+                        // is supplied to a Wasm export which does *not* need to do any async abi
+                        // lifting/lowering (async ABI did not exist when JSPI integratiton was
+                        // initially merged to enable asynchronously returning values from the host)
+                        //
+                        const requiresManualAsyncResult = !isAsync && !funcTypeIsAsync && isManualAsync;
+                        let manualAsyncResult;
+                        if (requiresManualAsyncResult) {{
+                            manualAsyncResult = Promise.withResolvers();
+                        }}
 
-                                const task = subtask.getChildTask();
-                                task.registerOnResolveHandler((res) => {{
-                                    {debug_log_fn}('[{lower_import_fn}()] cascading subtask completion', {{
-                                        childTaskID: task.id(),
-                                        subtaskID: subtask.id(),
-                                        parentTaskID: parentTask.id(),
-                                    }});
-
-                                    subtask.onResolve(res);
-
-                                    cstate.tick();
-                                }});
-                            }} catch (err) {{
-                                console.error("post-lower import fn error:", err);
-                                throw err;
+                        try {{
+                            {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ importFn, params }});
+                            const res = await importFn(...params);
+                            if (requiresManualAsyncResult) {{
+                                manualAsyncResult.resolve(subtask.getResult());
                             }}
-                        }}, 100);
+                        }} catch (err) {{
+                            {debug_log_fn}("[{lower_import_fn}()] import fn error:", err);
+                            if (requiresManualAsyncResult) {{
+                                manualAsyncResult.reject(err);
+                            }}
+                            throw err;
+                        }}
+
+                        if (requiresManualAsyncResult) {{ return manualAsyncResult.promise; }}
 
                         return Number(subtask.waitableRep()) << 4 | subtaskState;
                     }}
@@ -1912,16 +2166,210 @@ impl AsyncTaskIntrinsic {
                 ));
             }
 
-            // TODO: convert logic to perform task stack management here explicitly.
+            // This version of lower import is sync, doing any requried work in the background,
+            // explicitly for older P2 components targeted by jco transpile. We need this because
+            // JSPI will not allow calling suspending imports from regular functions, which
+            // means that a sync export will not be able to call a 'manually async' import.
             //
+            // TODO(breaking): remove when manually specifying async imports/expors is removed.
+            //
+            Self::LowerImportBackwardsCompat => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let lower_import_backwards_compat_fn = Self::LowerImportBackwardsCompat.name();
+                let current_task_get_fn = Self::GetCurrentTask.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+
+                output.push_str(&format!(
+                    r#"
+                    function {lower_import_backwards_compat_fn}(args) {{
+                        const params = [...arguments].slice(1);
+                        {debug_log_fn}('[{lower_import_backwards_compat_fn}()] args', {{ args, params }});
+                        const {{
+                            functionIdx,
+                            componentIdx,
+                            isAsync,
+                            isManualAsync,
+                            paramLiftFns,
+                            resultLowerFns,
+                            funcTypeIsAsync,
+                            metadata,
+                            memoryIdx,
+                            getMemoryFn,
+                            getReallocFn,
+                            importFn,
+                        }} = args;
+
+                        const {{ taskID }} = {get_global_current_task_meta_fn}(componentIdx);
+
+                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                        if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
+
+                        const task = taskMeta.task;
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                        // TODO: re-enable this check -- postReturn can call imports though,
+                        // and that breaks things.
+                        //
+                        // if (!cstate.mayLeave) {{
+                        //     throw new Error(`cannot leave instance [${{componentIdx}}]`);
+                        // }}
+
+                        if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {{
+                            throw new Error("non async exports cannot synchronously call async functions");
+                        }}
+
+                        // If there is an existing task, this should be part of a subtask
+                        const memory = getMemoryFn();
+                        const subtask = task.createSubtask({{
+                           componentIdx,
+                           parentTask: task,
+                           fnName: importFn.fnName,
+                           isAsync,
+                           isManualAsync,
+                           callMetadata: {{
+                               memoryIdx,
+                               memory,
+                               realloc: getReallocFn(),
+                               resultPtr: params[0],
+                               lowers: resultLowerFns,
+                           }}
+                        }});
+                        task.setReturnMemoryIdx(memoryIdx);
+                        task.setReturnMemory(getMemoryFn());
+
+                        subtask.onStart();
+
+                        // If dealing with a sync lowered sync function, we can directly return results
+                        //
+                        // TODO(breaking): remove once we get rid of manual async import specification,
+                        // as func types cannot be detected in that case only (and we don't need that w/ p3)
+                        if (!isManualAsync && !isAsync && !funcTypeIsAsync) {{
+                            const res = importFn(...params);
+                            // TODO(breaking): remove once we get rid of manual async import specification,
+                            // as func types cannot be detected in that case only (and we don't need that w/ p3)
+                            if (!funcTypeIsAsync && !subtask.isReturned()) {{
+                                throw new Error('post-execution subtasks must either be async or returned');
+                            }}
+                            return subtask.getResult();
+                        }}
+
+                        // Sync-lowered async functions requires async behavior because the callee *can* block,
+                        // but this call must *act* synchronously and return immediately with the result
+                        // (i.e. not returning until the work is done)
+                        //
+                        // TODO(breaking): remove checking for manual async specification here, once we can go p3-only
+                        //
+                        if (!isManualAsync && !isAsync && funcTypeIsAsync) {{
+                            const {{ promise, resolve }} = new Promise();
+                            queueMicrotask(async () => {{
+                                if (!subtask.isResolvedState()) {{
+                                    await task.suspendUntil({{ readyFn: () => task.isResolvedState() }});
+                                }}
+                                resolve(subtask.getResult());
+                            }});
+                            return promise;
+                        }}
+
+                        // NOTE: at this point we know that we are working with an async lowered import
+
+                        const subtaskState = subtask.getStateNumber();
+                        if (subtaskState < 0 || subtaskState > 2**5) {{
+                            throw new Error('invalid subtask state, out of valid range');
+                        }}
+
+                        subtask.setOnProgressFn(() => {{
+                            subtask.setPendingEvent(() => {{
+                                if (subtask.isResolved()) {{ subtask.deliverResolve(); }}
+                                const event = {{
+                                    code: {async_event_code_enum}.SUBTASK,
+                                    payload0: subtask.waitableRep(),
+                                    payload1: subtask.getStateNumber(),
+                                }}
+                                return event;
+                            }});
+                        }});
+
+                        // This is a hack to maintain backwards compatibility with
+                        // manually-specified async imports, used in wasm exports that are
+                        // not actually async (but are specified as so).
+                        //
+                        // This is not normal p3 sync behavior but instead anticipating that
+                        // the caller that is doing manual async will be waiting for a promise that
+                        // resolves to the *actual* result.
+                        //
+                        // TODO(breaking): remove once manually specified async is removed
+                        //
+                        // There are a few cases:
+                        // 1. sync function with async types (e.g. `f: func() -> stream<u32>`)
+                        // 2. async function with async types (e.g. `f: async func() -> stream<u32>`)
+                        // 3. async function with sync types (e.g. `f: async func() -> list<u32>`)
+                        // 4. sync function with non-async types (e.g. `f: func() -> list<u32>`)
+                        //
+                        // This hack *only* applies to 4 -- the case where an async JS host function
+                        // is supplied to a Wasm export which does *not* need to do any async abi
+                        // lifting/lowering (async ABI did not exist when JSPI integratiton was
+                        // initially merged to enable asynchronously returning values from the host)
+                        //
+                        const requiresManualAsyncResult = !isAsync && !funcTypeIsAsync && isManualAsync;
+                        let manualAsyncResult;
+                        if (requiresManualAsyncResult) {{
+                            manualAsyncResult = Promise.withResolvers();
+                        }}
+
+                        queueMicrotask(async () => {{
+                            try {{
+                                {debug_log_fn}('[{lower_import_backwards_compat_fn}()] calling lowered import', {{ importFn, params }});
+                                const res = await importFn(...params);
+                                if (requiresManualAsyncResult) {{
+                                    manualAsyncResult.resolve(subtask.getResult());
+                                }}
+                            }} catch (err) {{
+                                {debug_log_fn}("[{lower_import_backwards_compat_fn}()] import fn error:", err);
+                                if (requiresManualAsyncResult) {{
+                                    manualAsyncResult.reject(err);
+                                }}
+                                throw err;
+                            }}
+                        }});
+
+                        if (requiresManualAsyncResult) {{ return manualAsyncResult.promise; }}
+
+                        return Number(subtask.waitableRep()) << 4 | subtaskState;
+                    }}
+                    "#
+                ));
+            }
+
             // This call receives the following params:
             // - caller instance
             // - callee async (0 for sync)
             // - callee instance
             //
+            // Note that symmetric guest calls are may be called before lowered import calls as well.
+            //
+            // Symmentric guest enters are marked as as async because they must possibly wait for
+            // the availability (unlock) of component instances that they run on.
+            //
             Self::EnterSymmetricSyncGuestCall => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let enter_symmetric_sync_guest_call_fn = self.name();
+                let get_current_task_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let create_new_current_task_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask).name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let set_global_current_task_meta_fn = Intrinsic::SetGlobalCurrentTaskMetaFn.name();
+                let symmetric_sync_guest_call_stack = Self::SymmetricSyncGuestCallStack.name();
+
+                // TODO: find a way to get the callee function/export name for the executing symmetric call,
+                // at present we only have the current executing task which is far outside
+                // (ex. 'run()' that was executing in the caller when the callee is 'set_value()' in the callee)
                 output.push_str(&format!(
                     r#"
                     function {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx) {{
@@ -1930,22 +2378,108 @@ impl AsyncTaskIntrinsic {
                             calleeIsAsync,
                             calleeComponentIdx
                         }});
+
+                        const cstate = {get_or_create_async_state_fn}(calleeComponentIdx);
+
+                        if (calleeIsAsync) {{ throw new Error('symmetric sync guest->guest call should not be async'); }}
+
+                        const callerTaskMeta = {get_current_task_fn}(callerComponentIdx);
+                        if (!callerTaskMeta) {{ throw new Error('missing current caller task metadata'); }}
+                        const callerTask = callerTaskMeta.task;
+                        if (!callerTask) {{ throw new Error('missing current caller task'); }}
+
+                        const subtask = callerTask.createSubtask({{
+                           componentIdx: callerComponentIdx,
+                           parentTask: callerTask,
+                           isAsync: !!calleeIsAsync,
+                        }});
+
+                        const [newTask, newTaskID] = {create_new_current_task_fn}({{
+                            componentIdx: calleeComponentIdx,
+                            isAsync: !!calleeIsAsync,
+                            entryFnName: [
+                                'task',
+                                callerTask.id(),
+                                'subtask',
+                                subtask.id(),
+                                'task',
+                                'new-sync-guest-task',
+                            ].join("/"),
+                        }});
+
+                        subtask.setChildTask(newTask);
+                        newTask.setParentSubtask(subtask);
+
+                        subtask.onStart();
+                        newTask.enterSync();
+                        {set_global_current_task_meta_fn}({{
+                            taskID: newTask.id(),
+                            componentIdx: newTask.componentIdx(),
+                        }});
+                        {symmetric_sync_guest_call_stack}.push({{
+                            componentIdx: newTask.componentIdx(),
+                        }});
+
+                        {debug_log_fn}('[{enter_symmetric_sync_guest_call_fn}()] finished preparing', {{
+                            callerComponentIdx,
+                            calleeComponentIdx,
+                            subtaskID: subtask.id(),
+                            newTaskID: newTask.id(),
+                        }});
                     }}
                     "#,
                 ));
             }
 
-            // TODO: add stack stack management here to match enter
             Self::ExitSymmetricSyncGuestCall => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let exit_symmetric_sync_guest_call_fn = self.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let get_current_task_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let clear_global_current_task_meta_fn =
+                    Intrinsic::ClearGlobalCurrentTaskMetaFn.name();
+                let symmetric_sync_guest_call_stack = Self::SymmetricSyncGuestCallStack.name();
+
+                // NOTE: we need to end the task (and clear task machinery/set relevant state)
+                // for sync->sync guest calls here because normal task machinery does not work
+                // *at all* during the guest sync execution (i.e. there is no call to `CallWasm`).
+                //
                 output.push_str(&format!(
                     r#"
                     function {exit_symmetric_sync_guest_call_fn}() {{
-                        {debug_log_fn}('[{exit_symmetric_sync_guest_call_fn}()]');
+                        const {{ componentIdx }} = {symmetric_sync_guest_call_stack}.pop();
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+
+                        const taskMeta = {get_current_task_fn}(componentIdx);
+                        if (!taskMeta) {{ throw new Error('missing current caller task metadata'); }}
+                        const task = taskMeta.task;
+                        if (!task) {{ throw new Error('missing current caller task'); }}
+
+                        {debug_log_fn}('[{exit_symmetric_sync_guest_call_fn}()] exiting', {{
+                            componentIdx,
+                            taskID: task.id(),
+                            subtask: task.getParentSubtask(),
+                            subtaskID: task.getParentSubtask()?.id(),
+                            parent: task.getParentSubtask()?.getParentTask(),
+                        }});
+
+                        task.resolve([]);
+                        task.exit();
+
+                        {clear_global_current_task_meta_fn}({{
+                            taskID: task.id(),
+                            componentIdx: task.componentIdx(),
+                        }});
                     }}
                     "#,
                 ));
+            }
+
+            Self::SymmetricSyncGuestCallStack => {
+                let var_name = self.name();
+                output.push_str(&format!("let {var_name} = [];\n"));
             }
         }
     }

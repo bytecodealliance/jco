@@ -117,15 +117,8 @@ pub enum Intrinsic {
     /// Representations of objects stored in one of these tables is a u32 (0 is expected to be an invalid index).
     RepTableClass,
 
-    /// Class that wraps `Promise`s and other things that can be awaited so that we can
-    /// keep track of whether resolutions have happened
-    AwaitableClass,
-
     /// Event codes used for async, as a JS enum
     AsyncEventCodeEnum,
-
-    /// Write an async event (e.g. result of waitable-set.wait) to linear memory
-    WriteAsyncEventToMemory,
 
     // JS helper functions
     IsLE,
@@ -140,17 +133,32 @@ pub enum Intrinsic {
     /// handle, so this helper checks for that.
     IsBorrowedType,
 
-    /// Async lower functions that are saved by component instance
-    GlobalComponentAsyncLowersClass,
-
-    /// Param lowering functions saved by a component instance, interface and function
-    ///
-    /// This lookup is keyed by a combination of the component instance, interface
-    /// and generated JS function name where the lowering should be performed.
-    GlobalAsyncParamLowersClass,
+    /// Tracking of component memories
+    GlobalComponentMemoryMap,
 
     /// Tracking of component memories
-    GlobalComponentMemoriesClass,
+    RegisterGlobalMemoryForComponent,
+
+    /// Tracking of component memories
+    LookupMemoriesForComponent,
+
+    /// Global that tracks the current task
+    GlobalCurrentTaskMeta,
+
+    /// Gets the current global task state
+    GetGlobalCurrentTaskMetaFn,
+
+    /// Gets the current global task state
+    SetGlobalCurrentTaskMetaFn,
+
+    /// Execute a closure with a certain set current task
+    WithGlobalCurrentTaskMetaFn,
+
+    /// Execute an async closure with a certain set current task
+    WithGlobalCurrentTaskMetaFnAsync,
+
+    /// Clear the global task meta
+    ClearGlobalCurrentTaskMetaFn,
 }
 
 impl Intrinsic {
@@ -182,40 +190,6 @@ impl Intrinsic {
                 output.push_str(&format!(
                     "const {var_name} = () => {{ return Math.random() > 0.5; }};\n",
                     var_name = self.name(),
-                ));
-            }
-
-            Intrinsic::AwaitableClass => {
-                output.push_str(&format!(
-                    "
-                    class {class_name} {{
-                        static _ID = 0n;
-
-                        #id;
-                        #promise;
-                        #resolved = false;
-
-                        constructor(promise) {{
-                            if (!promise) {{
-                                throw new TypeError('Awaitable must have an interior promise');
-                            }}
-
-                            if (!('then' in promise) || typeof promise.then !== 'function') {{
-                                throw new Error('missing/invalid promise');
-                            }}
-                            promise.then(() => this.#resolved  = true);
-                            this.#promise = promise;
-                            this.#id = ++{class_name}._ID;
-                        }}
-
-                        id() {{ return this.#id; }}
-
-                        resolved() {{ return this.#resolved; }}
-
-                        then() {{ return this.#promise.then(...arguments); }}
-                    }}
-                ",
-                    class_name = self.name(),
                 ));
             }
 
@@ -439,7 +413,7 @@ impl Intrinsic {
                     const {fn_name} = (...args) => {{
                         if (!globalThis?.process?.env?.JCO_DEBUG) {{ return; }}
                         console.debug(...args);
-                    }}
+                    }};
                 "
                 ));
             }
@@ -513,18 +487,20 @@ impl Intrinsic {
 
                         #start;
                         #ptr;
-                        #capacity;
-                        #copied = 0;
+                        capacity;
+                        processed = 0;
 
-                        #data; // initial data (only filled out for host-owned)
+                        #hostOnlyData; // initial data (only filled out for host-owned)
+
+                        target;
 
                         constructor(args) {{
-                            if (args.capacity >= {managed_buffer_class}.MAX_LENGTH) {{
+                            if (args.capacity > {managed_buffer_class}.MAX_LENGTH) {{
                                  throw new Error(`buffer size [${{args.capacity}}] greater than max length`);
                             }}
                             if (args.componentIdx === undefined) {{ throw new TypeError('missing/invalid component idx'); }}
                             if (args.capacity === undefined) {{ throw new TypeError('missing/invalid capacity'); }}
-                            if (args.elemMeta === undefined || typeof args.elemMeta.align32 !== 'number') {{
+                            if (!args.elemMeta || typeof args.elemMeta.align32 !== 'number') {{
                                 throw new TypeError('missing/invalid element metadata');
                             }}
 
@@ -536,22 +512,30 @@ impl Intrinsic {
                                 throw new TypeError('missing/invalid start ptr, depsite memory being present');
                             }}
 
-                            if (args.start && args.start % args.elemMeta.align32 !== 0) {{
-                                throw new Error(`invalid alignment: type with 32bit alignment [${{this.#elemMeta.align32}}] at starting pointer [${{start}}]`);
+                            if (!args.elemMeta.isNone && args.capacity > 0) {{
+                                if (args.start && args.start % args.elemMeta.align32 !== 0) {{
+                                    throw new Error(`invalid alignment: type with 32bit alignment [${{args.elemMeta.align32}}] at starting pointer [${{args.start}}]`);
+                                }}
+                                // TODO: memory lenght bounds check
                             }}
 
                             this.#componentIdx = args.componentIdx;
                             this.#memory = args.memory;
                             this.#start = args.start;
                             this.#ptr = this.#start;
-                            this.#capacity = args.capacity;
+                            this.capacity = args.capacity;
                             this.#elemMeta = args.elemMeta;
-                            this.#data = args.data;
+                            this.#hostOnlyData = args.data;
+                            this.target = args.target;
                         }}
 
-                        capacity() {{ return this.#capacity; }}
-                        remainingCapacity() {{ return this.#capacity - this.#copied; }}
-                        copied() {{ return this.#copied; }}
+                        setTarget(tgt) {{ this.target = tgt; }}
+
+                        remaining() {{
+                            return this.capacity - this.processed;
+                        }}
+
+                        componentIdx() {{ return this.#componentIdx; }}
 
                         getElemMeta() {{ return this.#elemMeta; }}
 
@@ -559,26 +543,30 @@ impl Intrinsic {
 
                         read(count) {{
                             {debug_log_fn}('[{managed_buffer_class}#read()] args', {{ count }});
-                            const rc = this.remainingCapacity();
-                            if (count > rc) {{
-                                throw new Error(`cannot read [${{count}}] elements from [${{rc}}] managed buffer`);
+                            if (count === undefined || count <= 0) {{
+                                throw new TypeError(`missing/invalid count [${{count}}]`);
+                            }}
+
+                            const cap = this.capacity;
+                            if (count > cap) {{
+                                throw new Error(`cannot read [${{count}}] elements from buffer with capacity [${{cap}}]`);
                             }}
 
                             let values = [];
-                            if (this.#elemMeta.typeIdx === null) {{
+                            if (this.#elemMeta.isNone) {{
                                 values = [...new Array(count)].map(() => null);
                             }} else {{
                                 if (this.isHostOwned()) {{
-                                    const remainingItems = this.#data.slice(count);
-                                    values.push(...this.#data.slice(0, count));
-                                    this.#data = remainingItems;
+                                    const remainingItems = this.#hostOnlyData.slice(count);
+                                    values.push(...this.#hostOnlyData.slice(0, count));
+                                    this.#hostOnlyData = remainingItems;
                                 }} else {{
                                     let currentCount = count;
                                     let startPtr = this.#ptr;
                                     let liftCtx = {{ storagePtr: startPtr, memory: this.#memory }};
                                     if (currentCount < 0) {{ throw new Error('unexpectedly invalid count'); }}
                                     while (currentCount > 0) {{
-                                        const [ value, _ctx ] = this.#elemMeta.liftFn(liftCtx)
+                                        const [value, _ctx] = this.#elemMeta.liftFn(liftCtx);
                                         values.push(value);
                                         currentCount -= 1;
                                     }}
@@ -586,7 +574,7 @@ impl Intrinsic {
                                 }}
                             }}
 
-                            this.#copied += count;
+                            this.processed += count;
                             return values;
                         }}
 
@@ -594,18 +582,18 @@ impl Intrinsic {
                             {debug_log_fn}('[{managed_buffer_class}#write()] args', {{ values }});
 
                             if (!Array.isArray(values)) {{ throw new TypeError('values input to write() must be an array'); }}
-                            let rc = this.remainingCapacity();
+                            let rc = this.remaining();
                             if (values.length > rc) {{
                                 throw new Error(`cannot write [${{values.length}}] elements to managed buffer with remaining capacity [${{rc}}]`);
                             }}
 
-                            if (this.#elemMeta.typeIdx === null) {{
+                            if (this.#elemMeta.isNone) {{
                                 if (!values.every(v => v === null)) {{
                                     throw new Error('non-null values in write() to unit managed buffer');
                                 }}
                             }} else {{
                                 if (this.isHostOwned()) {{
-                                    this.#data.push(...values);
+                                    this.#hostOnlyData.push(...values);
                                 }} else {{
                                     let startPtr = this.#ptr;
                                     for (const v of values) {{
@@ -619,7 +607,7 @@ impl Intrinsic {
                                 }}
                             }}
 
-                            this.#copied += values.length;
+                            this.processed += values.length;
                         }}
 
                     }}
@@ -636,6 +624,7 @@ impl Intrinsic {
                         #buffers = new Map();
                         #bufferIDs = new Map();
 
+                        // NOTE: componentIdx === -1 indicates the host
                         getNextBufferID(componentIdx) {{
                             const current = this.#bufferIDs.get(componentIdx);
                             if (current === undefined) {{
@@ -662,7 +651,7 @@ impl Intrinsic {
 
                             if (args.start !== undefined && args.componentIdx === undefined) {{ throw new TypeError('missing/invalid component idx'); }}
                             if (args.count === undefined) {{ throw new TypeError('missing/invalid obj count'); }}
-                            if (args.elemMeta === undefined) {{ throw new TypeError('missing/invalid element metadata for use with managed buffer'); }}
+                            if (!args.elemMeta) {{ throw new TypeError('missing/invalid element metadata for use with managed buffer'); }}
 
                             const {{ componentIdx, data, start, count }} = args;
 
@@ -678,6 +667,7 @@ impl Intrinsic {
                                 capacity: args.count,
                                 elemMeta: args.elemMeta,
                                 data: args.data,
+                                target: args.target,
                             }});
 
                             if (instanceBuffers.has(nextBufID)) {{
@@ -705,17 +695,6 @@ impl Intrinsic {
                 ));
             }
 
-            Intrinsic::WriteAsyncEventToMemory => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
-                output.push_str(&format!(r#"
-                    function {write_async_event_to_memory_fn}(memory, task, event, ptr) {{
-                        {debug_log_fn}('[{write_async_event_to_memory_fn}()] args', {{ memory, task, event, ptr }});
-                        throw new Error('{write_async_event_to_memory_fn}() not implemented');
-                    }}
-                "#));
-            }
-
             Intrinsic::RepTableClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let rep_table_class = Intrinsic::RepTableClass.name();
@@ -736,17 +715,22 @@ impl Intrinsic {
                             if (freeIdx === 0) {{
                                 this.#data.push(val);
                                 this.#data.push(null);
-                                return (this.#data.length >> 1) - 1;
+                                const rep = (this.#data.length >> 1) - 1;
+                                {debug_log_fn}('[{rep_table_class}#insert()] inserted', {{ val, target: this.target, rep }});
+                                return rep;
                             }}
                             this.#data[0] = this.#data[freeIdx << 1];
                             const placementIdx = freeIdx << 1;
                             this.#data[placementIdx] = val;
                             this.#data[placementIdx + 1] = null;
+                            {debug_log_fn}('[{rep_table_class}#insert()] inserted', {{ val, target: this.target, rep: freeIdx }});
                             return freeIdx;
                         }}
 
                         get(rep) {{
                             {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
+                            if (rep === 0) {{ throw new Error('invalid resource rep during get, (cannot be 0)'); }}
+
                             const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
                             return val;
@@ -754,17 +738,19 @@ impl Intrinsic {
 
                         contains(rep) {{
                             {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
+                            if (rep === 0) {{ throw new Error('invalid resource rep during contains, (cannot be 0)'); }}
+
                             const baseIdx = rep << 1;
                             return !!this.#data[baseIdx];
                         }}
 
                         remove(rep) {{
                             {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
+                            if (rep === 0) {{ throw new Error('invalid resource rep during remove, (cannot be 0)'); }}
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
                             const baseIdx = rep << 1;
                             const val = this.#data[baseIdx];
-                            if (val === 0) {{ throw new Error('invalid resource rep (cannot be 0)'); }}
 
                             this.#data[baseIdx] = this.#data[0];
                             this.#data[0] = rep;
@@ -780,132 +766,206 @@ impl Intrinsic {
                 "#));
             }
 
-            Intrinsic::GlobalAsyncParamLowersClass => {
-                let global_async_param_lowers_class = self.name();
+            Intrinsic::GlobalComponentMemoryMap => {
+                let global_component_memory_map = Intrinsic::GlobalComponentMemoryMap.name();
                 output.push_str(&format!(
-                    r#"
-                    class {global_async_param_lowers_class} {{
-                        static map = new Map();
-
-                        static generateKey(args) {{
-                            const {{ componentIdx, iface, fnName }} = args;
-                            if (componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
-                            if (iface === undefined) {{ throw new TypeError("missing iface name"); }}
-                            if (fnName === undefined) {{ throw new TypeError("missing function name"); }}
-                            return `${{componentIdx}}-${{iface}}-${{fnName}}`;
-                        }}
-
-                        static define(args) {{
-                            const {{ componentIdx, iface, fnName, fn }} = args;
-                            if (!fn) {{ throw new TypeError('missing function'); }}
-                            const key = {global_async_param_lowers_class}.generateKey(args);
-                            {global_async_param_lowers_class}.map.set(key, fn);
-                        }}
-
-                        static lookup(args) {{
-                            const {{ componentIdx, iface, fnName }} = args;
-                            const key = {global_async_param_lowers_class}.generateKey(args);
-                            return {global_async_param_lowers_class}.map.get(key);
-                        }}
-                    }}
-                    "#
+                    "const {global_component_memory_map} = new Map();\n"
                 ));
             }
 
-            Intrinsic::GlobalComponentAsyncLowersClass => {
-                let global_component_lowers_class =
-                    Intrinsic::GlobalComponentAsyncLowersClass.name();
+            Intrinsic::RegisterGlobalMemoryForComponent => {
+                let global_component_memory_map = Intrinsic::GlobalComponentMemoryMap.name();
+                let register_global_component_memory =
+                    Intrinsic::RegisterGlobalMemoryForComponent.name();
                 output.push_str(&format!(
                     r#"
-                    class {global_component_lowers_class} {{
-                        static map = new Map();
+                      function {register_global_component_memory}(args) {{
+                          const {{ componentIdx, memory, memoryIdx }} = args ?? {{}};
+                          if (componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
+                          if (memory === undefined && memoryIdx === undefined) {{ throw new TypeError('missing both memory & memory idx'); }}
+                          let inner = {global_component_memory_map}.get(componentIdx);
+                          if (!inner) {{
+                              inner = {{}};
+                              {global_component_memory_map}.set(componentIdx, inner);
+                          }}
 
-                        constructor() {{ throw new Error('{global_component_lowers_class} should not be constructed'); }}
+                          inner[memoryIdx] = {{ memory, memoryIdx, componentIdx }};
+                      }}
+                    "#)
+                );
+            }
 
-                        static define(args) {{
-                            const {{ componentIdx, qualifiedImportFn, fn }} = args;
-                            let inner = {global_component_lowers_class}.map.get(componentIdx);
-                            if (!inner) {{
-                                inner = new Map();
-                                {global_component_lowers_class}.map.set(componentIdx, inner);
-                            }}
+            Intrinsic::LookupMemoriesForComponent => {
+                let global_component_memory_map = Intrinsic::GlobalComponentMemoryMap.name();
+                let lookup_global_memories_for_component =
+                    Intrinsic::LookupMemoriesForComponent.name();
+                output.push_str(&format!(
+                    r#"
+                      function {lookup_global_memories_for_component}(args) {{
+                          const {{ componentIdx }} = args ?? {{}};
+                          if (args.componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
 
-                            inner.set(qualifiedImportFn, fn);
-                        }}
+                          const metas = {global_component_memory_map}.get(componentIdx);
+                          if (!metas) {{ return []; }}
 
-                        static lookup(componentIdx, qualifiedImportFn) {{
-                            let inner = {global_component_lowers_class}.map.get(componentIdx);
-                            if (!inner) {{
-                                inner = new Map();
-                                {global_component_lowers_class}.map.set(componentIdx, inner);
-                            }}
+                          if (args.memoryIdx === undefined) {{
+                              return Object.values(metas);
+                          }}
 
-                            const found = inner.get(qualifiedImportFn);
-                            if (found) {{ return found; }}
+                          const meta = metas[args.memoryIdx];
+                          return meta?.memory;
+                      }}
+                    "#)
+                );
+            }
 
-                            // In some cases, async lowers are *not* host provided, and
-                            // but contain/will call an async function in the host.
-                            //
-                            // One such case is `stream.write`/`stream.read` trampolines which are
-                            // actually re-exported through a patch up container *before*
-                            // they call the relevant async host trampoline.
-                            //
-                            // So the path of execution from a component export would be:
-                            //
-                            // async guest export --> stream.write import (host wired) -> guest export (patch component) -> async host trampoline
-                            //
-                            // On top of all this, the trampoline that is eventually called is async,
-                            // so we must await the patched guest export call.
-                            //
-                            if (qualifiedImportFn.includes("[stream-write-") || qualifiedImportFn.includes("[stream-read-")) {{
-                                return async (...args) => {{
-                                    const [originalFn, ...params] = args;
-                                    return await originalFn(...params);
-                                }};
-                            }}
+            Self::GlobalCurrentTaskMeta => {
+                let name = self.name();
+                output.push_str(&format!("const {name} = {{}};\n"));
+            }
 
-                            // All other cases can call the registered function directly
-                            return (...args) => {{
-                                const [originalFn, ...params] = args;
-                                return originalFn(...params);
-                            }};
-                        }}
-                    }}
-                "#
+            Self::GetGlobalCurrentTaskMetaFn => {
+                let get_current_global_task_meta_fn = Self::GetGlobalCurrentTaskMetaFn.name();
+                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+                output.push_str(&format!(
+                    r#"
+                      function {get_current_global_task_meta_fn}(componentIdx) {{
+                          const v = {global_current_task_meta_obj}[componentIdx];
+                          if (v === undefined) {{ return v; }}
+                          return {{ ...v }};
+                      }}
+                    "#,
                 ));
             }
 
-            Intrinsic::GlobalComponentMemoriesClass => {
-                let global_component_memories_class =
-                    Intrinsic::GlobalComponentMemoriesClass.name();
+            Self::SetGlobalCurrentTaskMetaFn => {
+                let set_global_current_task_meta_fn = Self::SetGlobalCurrentTaskMetaFn.name();
+                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
                 output.push_str(&format!(
                     r#"
-                    class {global_component_memories_class} {{
-                        static map = new Map();
+                      function {set_global_current_task_meta_fn}(args) {{
+                          if (!args) {{ throw new TypeError('args missing'); }}
+                          if (args.taskID === undefined) {{ throw new TypeError('missing task ID'); }}
+                          if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
+                          const {{ taskID, componentIdx }} = args;
+                          return {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
+                      }}
+                    "#,
+                ));
+            }
 
-                        constructor() {{ throw new Error('{global_component_memories_class} should not be constructed'); }}
+            Self::WithGlobalCurrentTaskMetaFn => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let with_global_current_task_meta_fn = Self::WithGlobalCurrentTaskMetaFn.name();
+                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
 
-                        static save(args) {{
-                            const {{ idx, componentIdx, memory }} = args;
-                            let inner = {global_component_memories_class}.map.get(componentIdx);
-                            if (!inner) {{
-                                inner = [];
-                                {global_component_memories_class}.map.set(componentIdx, inner);
-                            }}
-                            inner.push({{ memory, idx }});
-                        }}
+                output.push_str(&format!(
+                    r#"
+                      function {with_global_current_task_meta_fn}(args) {{
+                          {debug_log_fn}('[{with_global_current_task_meta_fn}()] args', args);
+                          if (!args) {{ throw new TypeError('args missing'); }}
+                          if (args.taskID === undefined) {{ throw new TypeError('missing task ID'); }}
+                          if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
+                          if (!args.fn) {{ throw new TypeError('missing fn'); }}
+                          const {{ taskID, componentIdx, fn }} = args;
 
-                        static getMemoriesForComponentIdx(componentIdx) {{
-                            const metas = {global_component_memories_class}.map.get(componentIdx);
-                            return metas.map(meta => meta.memory);
-                        }}
+                          try {{
+                              {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
+                              return fn();
+                          }} catch (err) {{
+                              {debug_log_fn}("error while executing sync callee/callback", {{
+                                  ...args,
+                                  err,
+                              }});
+                              throw err;
+                          }} finally {{
+                              {global_current_task_meta_obj}[componentIdx] = null;
+                          }}
+                      }}
+                    "#,
+                ));
+            }
 
-                        static getMemory(componentIdx, idx) {{
-                            const metas = {global_component_memories_class}.map.get(componentIdx);
-                            return metas.find(meta => meta.idx === idx)?.memory;
-                        }}
-                    }}
-                "#
+            Self::WithGlobalCurrentTaskMetaFnAsync => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let with_global_current_task_meta_async_fn =
+                    Self::WithGlobalCurrentTaskMetaFnAsync.name();
+                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+                let get_or_create_async_state_fn = ComponentIntrinsic::GetOrCreateAsyncState.name();
+
+                output.push_str(&format!(
+                    r#"
+                      async function {with_global_current_task_meta_async_fn}(args) {{
+                          {debug_log_fn}('[{with_global_current_task_meta_async_fn}()] args', args);
+                          if (!args) {{ throw new TypeError('args missing'); }}
+                          if (args.taskID === undefined) {{ throw new TypeError('missing task ID'); }}
+                          if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
+                          if (!args.fn) {{ throw new TypeError('missing fn'); }}
+                          const {{ taskID, componentIdx, fn }} = args;
+
+                          // If there is already an async task executing, we must wait for it
+                          // to complete before we can can run the closure we were given
+                          //
+                          let current = {global_current_task_meta_obj}[componentIdx];
+                          let cstate;
+                          if (current && current.taskID !== taskID) {{
+                              cstate = {get_or_create_async_state_fn}(componentIdx);
+                              while (current && current.taskID !== taskID) {{
+                                  const {{ promise, resolve }} = Promise.withResolvers();
+                                  cstate.onNextExclusiveRelease(resolve);
+                                  await promise;
+                                  current = {global_current_task_meta_obj}[componentIdx];
+                              }}
+
+                              // Since we've just waited for the component to not be locked, re-lock
+                              // exclusivity so we can run the fn below (likely a callee/callback)
+                              cstate.exclusiveLock();
+                          }}
+
+                          try {{
+                              {global_current_task_meta_obj}[componentIdx] = {{ taskID, componentIdx }};
+                              return await fn();
+                          }} catch (err) {{
+                              {debug_log_fn}("error while executing async callee/callback", {{
+                                  ...args,
+                                  err,
+                              }});
+                              throw err;
+                          }} finally {{
+                              {global_current_task_meta_obj}[componentIdx] = null;
+                          }}
+                      }}
+                    "#,
+                ));
+            }
+
+            Self::ClearGlobalCurrentTaskMetaFn => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let clear_global_current_task_meta_fn = Self::ClearGlobalCurrentTaskMetaFn.name();
+                let global_current_task_meta_obj = Self::GlobalCurrentTaskMeta.name();
+
+                output.push_str(&format!(
+                    r#"
+                      async function {clear_global_current_task_meta_fn}(args) {{
+                          {debug_log_fn}('[{clear_global_current_task_meta_fn}()] args', args);
+                          if (!args) {{ throw new TypeError('args missing'); }}
+                          if (args.taskID === undefined) {{ throw new TypeError('missing task ID'); }}
+                          if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
+                          const {{ taskID, componentIdx }} = args;
+
+                          const meta = {global_current_task_meta_obj}[componentIdx];
+                          if (!meta) {{ throw new Error(`missing current task meta for component idx [${{componentIdx}}]`); }}
+
+                          if (meta.taskID !== taskID) {{
+                              throw new Error(`task ID [${{meta.taskID}}] != requested ID [${{taskID}}]`);
+                          }}
+                          if (meta.componentIdx !== componentIdx) {{
+                              throw new Error(`component idx [${{meta.componentIdx}}] != requested idx [${{componentIdx}}]`);
+                          }}
+
+                          {global_current_task_meta_obj}[componentIdx] = null;
+                      }}
+                    "#,
                 ));
             }
         }
@@ -950,12 +1010,19 @@ pub struct RenderIntrinsicsArgs<'a> {
 }
 
 /// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 21] = [
+const EARLY_INTRINSICS: [Intrinsic; 31] = [
+    Intrinsic::PromiseWithResolversPonyfill,
     Intrinsic::DebugLog,
     Intrinsic::GlobalAsyncDeterminism,
-    Intrinsic::GlobalComponentAsyncLowersClass,
-    Intrinsic::GlobalAsyncParamLowersClass,
-    Intrinsic::GlobalComponentMemoriesClass,
+    Intrinsic::GlobalComponentMemoryMap,
+    Intrinsic::GlobalCurrentTaskMeta,
+    Intrinsic::GetGlobalCurrentTaskMetaFn,
+    Intrinsic::SetGlobalCurrentTaskMetaFn,
+    Intrinsic::WithGlobalCurrentTaskMetaFn,
+    Intrinsic::WithGlobalCurrentTaskMetaFnAsync,
+    Intrinsic::ClearGlobalCurrentTaskMetaFn,
+    Intrinsic::LookupMemoriesForComponent,
+    Intrinsic::RegisterGlobalMemoryForComponent,
     Intrinsic::RepTableClass,
     Intrinsic::CoinFlip,
     Intrinsic::ScopeId,
@@ -964,14 +1031,17 @@ const EARLY_INTRINSICS: [Intrinsic; 21] = [
     Intrinsic::TypeCheckValidI32,
     Intrinsic::TypeCheckAsyncFn,
     Intrinsic::AsyncFunctionCtor,
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
     Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult),
-    Intrinsic::PromiseWithResolversPonyfill,
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
     Intrinsic::Host(HostIntrinsic::PrepareCall),
     Intrinsic::Host(HostIntrinsic::AsyncStartCall),
     Intrinsic::Host(HostIntrinsic::SyncStartCall),
+    Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
+    Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap),
 ];
 
 /// Emits the intrinsic `i` to this file and then returns the name of the
@@ -1121,7 +1191,6 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
             &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
             &Intrinsic::RepTableClass,
-            &Intrinsic::AwaitableClass,
             &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
             &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
         ]);
@@ -1143,6 +1212,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
     }
 
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Waitable(WaitableIntrinsic::RemoveWaitableSet)]);
+    }
+
     if args.intrinsics.contains(&Intrinsic::Component(
         ComponentIntrinsic::GetOrCreateAsyncState,
     )) {
@@ -1150,6 +1227,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             &Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
             &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
         ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::Component(
+        ComponentIntrinsic::ComponentAsyncStateClass,
+    )) {
+        args.intrinsics.extend([&Intrinsic::AsyncStream(
+            AsyncStreamIntrinsic::GlobalStreamMap,
+        )]);
     }
 
     if args
@@ -1228,7 +1313,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
         || args
             .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask))
+            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask))
     {
         args.intrinsics.extend([
             &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
@@ -1242,6 +1327,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     {
         args.intrinsics.extend([
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWritableEndClass),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass),
         ]);
@@ -1263,6 +1349,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     )) {
         args.intrinsics.extend([
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
         ]);
@@ -1284,6 +1371,21 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
 
     if args.intrinsics.contains(&Intrinsic::BufferManagerClass) {
         args.intrinsics.extend([&Intrinsic::ManagedBufferClass]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::AsyncTask(
+        AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
+    )) || args.intrinsics.contains(&Intrinsic::AsyncTask(
+        AsyncTaskIntrinsic::ExitSymmetricSyncGuestCall,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
+            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
+            &Intrinsic::ClearGlobalCurrentTaskMetaFn,
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::SymmetricSyncGuestCallStack),
+        ]);
     }
 
     for current_intrinsic in args.intrinsics.iter() {
@@ -1348,7 +1450,6 @@ impl Intrinsic {
                 "URL",
                 "WebAssembly",
                 "GlobalComponentMemories",
-                "GlobalComponentAsyncLowers",
             ])
     }
 
@@ -1404,11 +1505,20 @@ impl Intrinsic {
 
             // Async
             Intrinsic::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",
-            Intrinsic::AwaitableClass => "Awaitable",
             Intrinsic::CoinFlip => "_coinFlip",
-            Intrinsic::GlobalComponentAsyncLowersClass => "GlobalComponentAsyncLowers",
-            Intrinsic::GlobalAsyncParamLowersClass => "GlobalAsyncParamLowers",
-            Intrinsic::GlobalComponentMemoriesClass => "GlobalComponentMemories",
+
+            // Global current task tracking machinery
+            Self::GlobalCurrentTaskMeta => "CURRENT_TASK_META",
+            Self::GetGlobalCurrentTaskMetaFn => "_getGlobalCurrentTaskMeta",
+            Self::SetGlobalCurrentTaskMetaFn => "_setGlobalCurrentTaskMeta",
+            Self::WithGlobalCurrentTaskMetaFn => "_withGlobalCurrentTaskMeta",
+            Self::WithGlobalCurrentTaskMetaFnAsync => "_withGlobalCurrentTaskMetaAsync",
+            Self::ClearGlobalCurrentTaskMetaFn => "_clearCurrentTask",
+
+            // Iteratively saved metadata
+            Intrinsic::GlobalComponentMemoryMap => "GLOBAL_COMPONENT_MEMORY_MAP",
+            Intrinsic::RegisterGlobalMemoryForComponent => "registerGlobalMemoryForComponent",
+            Intrinsic::LookupMemoriesForComponent => "lookupMemoriesForComponent",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",
@@ -1420,7 +1530,6 @@ impl Intrinsic {
 
             // Helpers for working with async state
             Intrinsic::AsyncEventCodeEnum => "ASYNC_EVENT_CODE",
-            Intrinsic::WriteAsyncEventToMemory => "writeAsyncEventToMemory",
         }
     }
 }
