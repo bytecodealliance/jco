@@ -1,9 +1,9 @@
 /* global Buffer */
 
 import { extname, basename, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { minify } from "terser";
-import { fileURLToPath } from "node:url";
 
 import { optimizeComponent } from "./opt.js";
 

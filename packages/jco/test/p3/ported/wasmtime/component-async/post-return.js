@@ -1,8 +1,8 @@
 import { join } from "node:path";
 
-import { suite, test, expect, vi } from "vitest";
+import { suite, test, assert, expect, vi } from "vitest";
 
-import { buildAndTranspile, composeCallerCallee, COMPONENT_FIXTURES_DIR } from "./common.js";
+import { buildAndTranspile, composeCallerCallee, LOCAL_TEST_COMPONENTS_DIR, COMPONENT_FIXTURES_DIR } from "./common.js";
 
 // These tests are ported from upstream wasmtime's component-async-tests
 //
@@ -46,7 +46,7 @@ suite("post-return scenario", () => {
 //
 suite("post-return async sleep scenario", () => {
     test("callee", async () => {
-        const componentPath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-sleep-post-return-callee.wasm");
+        const componentPath = join(LOCAL_TEST_COMPONENTS_DIR, "async-sleep-post-return-callee.wasm");
 
         const waitTimeMs = 300;
         const sleepMillis = vi.fn(async (ms) => {
@@ -65,75 +65,7 @@ suite("post-return async sleep scenario", () => {
                 noCleanup: true,
                 instantiation: {
                     imports: {
-                        "local:local/sleep": {
-                            // WIT:
-                            //
-                            // ```
-                            // sleep-millis: async func(time-in-millis: u64);
-                            // ```
-                            // see: wasmtime/crates/misc/component-async-tests/wit/test.wit
-                            sleepMillis,
-                        },
-                    },
-                },
-                transpile: {
-                    extraArgs: {
-                        minify: false,
-                        asyncImports: [
-                            // Host-provided async imports must be marked as such
-                            "local:local/sleep#sleep-millis",
-                        ],
-                        asyncExports: [
-                            // NOTE: Provided by the component, but *does* trigger calling
-                            // of the host-provided async improt
-                            "local:local/sleep-post-return#run",
-                        ],
-                    },
-                },
-            });
-            const instance = res.instance;
-            cleanup = res.cleanup;
-
-            const result = await instance["local:local/sleep-post-return"].run(waitTimeMs);
-            expect(result).toBeUndefined();
-
-            // Although the original async export call has finished, we expect that the spawned task
-            // that occurred during it to run to completion (and eventually call the import we provided),
-            // in the runtime itself.
-            await vi.waitFor(() => expect(sleepMillis).toHaveBeenCalled(), { timeout: 5_000 });
-        } finally {
-            if (cleanup) {
-                await cleanup();
-            }
-        }
-    });
-
-    test("caller & callee", async () => {
-        const callerPath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-sleep-post-return-caller.wasm");
-        const calleePath = join(COMPONENT_FIXTURES_DIR, "p3/general/async-sleep-post-return-callee.wasm");
-        const componentPath = await composeCallerCallee({
-            callerPath,
-            calleePath,
-        });
-
-        const waitTimeMs = 300;
-        const sleepMillis = vi.fn(async (ms) => {
-            // NOTE: as written, the caller/callee manipulate (double) the original wait time before use
-            expect(ms).toStrictEqual(BigInt(waitTimeMs * 2));
-            if (ms > BigInt(Number.MAX_SAFE_INTEGER) || ms < BigInt(Number.MIN_SAFE_INTEGER)) {
-                throw new Error("wait time value cannot be represented safely as a Number");
-            }
-            return await new Promise((resolve) => setTimeout(resolve, Number(ms)));
-        });
-
-        let cleanup;
-        try {
-            const res = await buildAndTranspile({
-                componentPath,
-                noCleanup: true,
-                instantiation: {
-                    imports: {
-                        "local:local/sleep": {
+                        "jco:test-components/sleep": {
                             // WIT:
                             //
                             // ```
@@ -149,12 +81,12 @@ suite("post-return async sleep scenario", () => {
                         // minify: false,
                         asyncImports: [
                             // Host-provided async imports must be marked as such
-                            "local:local/sleep#sleep-millis",
+                            "jco:test-components/sleep#sleep-millis",
                         ],
                         asyncExports: [
                             // NOTE: Provided by the component, but *does* trigger calling
                             // of the host-provided async improt
-                            "local:local/sleep-post-return#run",
+                            "jco:test-components/sleep-post-return#run",
                         ],
                     },
                 },
@@ -162,13 +94,82 @@ suite("post-return async sleep scenario", () => {
             const instance = res.instance;
             cleanup = res.cleanup;
 
-            const result = await instance["local:local/sleep-post-return"].run(waitTimeMs);
+            const result = await instance["jco:test-components/sleep-post-return"].run(waitTimeMs);
             expect(result).toBeUndefined();
 
             // Although the original async export call has finished, we expect that the spawned task
             // that occurred during it to run to completion (and eventually call the import we provided),
             // in the runtime itself.
             await vi.waitFor(() => expect(sleepMillis).toHaveBeenCalled(), { timeout: 5_000 });
+        } finally {
+            if (cleanup) {
+                await cleanup();
+            }
+        }
+    });
+
+    // NOTE: this test was changed upstream
+    // see: https://github.com/bytecodealliance/wasmtime/pull/12567
+    test("caller & callee", async () => {
+        const callerPath = join(LOCAL_TEST_COMPONENTS_DIR, "async-sleep-post-return-caller.wasm");
+        const calleePath = join(LOCAL_TEST_COMPONENTS_DIR, "async-sleep-post-return-callee.wasm");
+        const componentPath = await composeCallerCallee({
+            callerPath,
+            calleePath,
+        });
+
+        const waitTimeMs = 300;
+        const observedValues = [];
+        const expectedValues = [BigInt(waitTimeMs * 2), BigInt(waitTimeMs * 2), BigInt(waitTimeMs)];
+
+        // NOTE: sleepMillis is called twice by callee then once by caller
+        // twice with 2x waitTimeMs, then once with 1x
+        const sleepMillis = vi.fn(async (ms) => {
+            assert(expectedValues.includes(ms));
+            observedValues.push(ms);
+            if (ms > BigInt(Number.MAX_SAFE_INTEGER) || ms < BigInt(Number.MIN_SAFE_INTEGER)) {
+                throw new Error("wait time value cannot be represented safely as a Number");
+            }
+            return await new Promise((resolve) => setTimeout(resolve, Number(ms)));
+        });
+
+        let cleanup;
+        try {
+            const res = await buildAndTranspile({
+                componentPath,
+                noCleanup: true,
+                instantiation: {
+                    imports: {
+                        "jco:test-components/sleep": {
+                            // WIT:
+                            //
+                            // ```
+                            // sleep-millis: async func(time-in-millis: u64);
+                            // ```
+                            // see: wasmtime/crates/misc/component-async-tests/wit/test.wit
+                            sleepMillis,
+                        },
+                    },
+                },
+                // transpile: {
+                //     extraArgs: {
+                //         minify: false,
+                //     },
+                // },
+            });
+            const instance = res.instance;
+            cleanup = res.cleanup;
+
+            const result = await instance["jco:test-components/sleep-post-return"].run(waitTimeMs);
+            expect(result).toBeUndefined();
+
+            // Although the original async export call has finished, we expect that the spawned task
+            // that occurred during it to run to completion (and eventually call the import we provided),
+            // in the runtime itself.
+            await vi.waitFor(() => expect(sleepMillis).toBeCalledTimes(3), { timeout: 5_000 });
+
+            assert.lengthOf(observedValues, 3, "sleepMillis was not called three times");
+            assert.sameMembers(observedValues, expectedValues, "all expected values were not observed");
         } finally {
             if (cleanup) {
                 await cleanup();
