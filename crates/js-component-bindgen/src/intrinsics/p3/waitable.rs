@@ -233,6 +233,8 @@ impl WaitableIntrinsic {
             Self::WaitableClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let waitable_class = Self::WaitableClass.name();
+                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
+
                 output.push_str(&format!(
                     r#"
                     class {waitable_class} {{
@@ -269,7 +271,7 @@ impl WaitableIntrinsic {
                         setTarget(tgt) {{ this.target = tgt; }}
 
                         #resetPromise() {{
-                            const {{ promise, resolve, reject }} = Promise.withResolvers()
+                            const {{ promise, resolve, reject }} = {promise_with_resolvers_fn}()
                             this.#promise = promise;
                             this.#resolve = resolve;
                             this.#reject = reject;

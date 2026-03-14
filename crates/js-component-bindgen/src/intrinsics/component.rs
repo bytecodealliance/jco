@@ -129,6 +129,7 @@ impl ComponentIntrinsic {
                 let global_stream_table_map = AsyncStreamIntrinsic::GlobalStreamTableMap.name();
                 let waitable_class = Intrinsic::Waitable(WaitableIntrinsic::WaitableClass).name();
                 let get_or_create_async_state_fn = Self::GetOrCreateAsyncState.name();
+                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
 
                 output.push_str(&format!(
                     r#"
@@ -137,7 +138,7 @@ impl ComponentIntrinsic {
 
                         #componentIdx;
                         #callingAsyncImport = false;
-                        #syncImportWait = promiseWithResolvers();
+                        #syncImportWait = {promise_with_resolvers_fn}();
                         #locked = false;
                         #parkedTasks = new Map();
                         #suspendedTasksByTaskID = new Map();
@@ -191,7 +192,7 @@ impl ComponentIntrinsic {
 
                         #notifySyncImportEnd() {{
                             const existing = this.#syncImportWait;
-                            this.#syncImportWait = promiseWithResolvers();
+                            this.#syncImportWait = {promise_with_resolvers_fn}();
                             existing.resolve();
                         }}
 
@@ -368,7 +369,7 @@ impl ComponentIntrinsic {
                                 throw new Error(`task [${{taskID}}] already suspended`);
                             }}
 
-                            const {{ promise, resolve, reject }} = Promise.withResolvers();
+                            const {{ promise, resolve, reject }} = {promise_with_resolvers_fn}();
                             this.#addSuspendedTaskMeta({{
                                 task,
                                 taskID,

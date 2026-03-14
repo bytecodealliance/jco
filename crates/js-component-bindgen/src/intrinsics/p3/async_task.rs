@@ -2012,6 +2012,7 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
 
                 output.push_str(&format!(
                     r#"
@@ -2149,7 +2150,7 @@ impl AsyncTaskIntrinsic {
                         const requiresManualAsyncResult = !isAsync && !funcTypeIsAsync && isManualAsync;
                         let manualAsyncResult;
                         if (requiresManualAsyncResult) {{
-                            manualAsyncResult = Promise.withResolvers();
+                            manualAsyncResult = {promise_with_resolvers_fn}();
                         }}
 
                         try {{
@@ -2189,6 +2190,7 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
 
                 output.push_str(&format!(
                     r#"
@@ -2326,7 +2328,7 @@ impl AsyncTaskIntrinsic {
                         const requiresManualAsyncResult = !isAsync && !funcTypeIsAsync && isManualAsync;
                         let manualAsyncResult;
                         if (requiresManualAsyncResult) {{
-                            manualAsyncResult = Promise.withResolvers();
+                            manualAsyncResult = {promise_with_resolvers_fn}();
                         }}
 
                         queueMicrotask(async () => {{
