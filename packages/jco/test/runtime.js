@@ -34,6 +34,7 @@ const CODEGEN_TRANSPILE_DEPS = {
     resource_borrow_simple: ["resource_borrow_simple/resource_borrow_simple.js"],
 };
 
+// NOTE: if you find this test failing despite code changes, you may need to clear the test/output folder
 suite("Runtime", async () => {
     await tsGenerationPromise();
 
@@ -62,7 +63,6 @@ suite("Runtime", async () => {
     for (const [fixtureName, testName] of runtimes) {
         test.concurrent(testName, async () => {
             // Perform transpilation on deps where necessary
-
             if (CODEGEN_TRANSPILE_DEPS[testName]) {
                 for (const filename of CODEGEN_TRANSPILE_DEPS[testName]) {
                     // Skip files that have already been generated
