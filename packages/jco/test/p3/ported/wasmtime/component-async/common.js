@@ -12,6 +12,8 @@ const exec = promisify(syncExec);
 
 export const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL("../../../../fixtures/components", import.meta.url));
 
+export { LOCAL_TEST_COMPONENTS_DIR } from "../../../../common.js";
+
 /** Ensure that the given file path exists */
 async function ensureFile(filePath) {
     if (!filePath) {

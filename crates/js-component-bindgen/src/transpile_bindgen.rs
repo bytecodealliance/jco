@@ -13,7 +13,7 @@ use wasmtime_environ::component::{
     CoreDef, CoreExport, Export, ExportItem, FixedEncoding, GlobalInitializer, InstantiateModule,
     InterfaceType, LinearMemoryOptions, LoweredIndex, ResourceIndex, RuntimeComponentInstanceIndex,
     RuntimeImportIndex, RuntimeInstanceIndex, StaticModuleIndex, Trampoline, TrampolineIndex,
-    TypeDef, TypeFuncIndex, TypeResourceTableIndex,
+    TypeDef, TypeFuncIndex, TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wasmtime_environ::component::{
     ExportIndex, ExtractCallback, NameMap, NameMapNoIntern, Transcode,
@@ -234,6 +234,22 @@ pub fn transpile_bindgen(
     );
     bindgen.core_module_cnt = modules.len();
 
+    // Generate mapping of stream tables to components that are related
+    let mut stream_tables = BTreeMap::new();
+    for idx in 0..component.component.num_stream_tables {
+        let stream_table_idx = TypeStreamTableIndex::from_u32(idx as u32);
+        let stream_table_ty = &types[stream_table_idx];
+        stream_tables.insert(stream_table_idx, stream_table_ty.instance);
+    }
+
+    // Generate mapping of err_ctx tables to components that are related
+    let mut err_ctx_tables = BTreeMap::new();
+    for idx in 0..component.component.num_error_context_tables {
+        let err_ctx_table_idx = TypeComponentLocalErrorContextTableIndex::from_u32(idx as u32);
+        let err_ctx_table_ty = &types[err_ctx_table_idx];
+        err_ctx_tables.insert(err_ctx_table_idx, err_ctx_table_ty.instance);
+    }
+
     // Bindings are generated when the `instantiate` method is called on the
     // Instantiator structure created below
     let mut instantiator = Instantiator {
@@ -268,7 +284,8 @@ pub fn transpile_bindgen(
         exports_resource_types: Default::default(),
         resources_initialized: BTreeMap::new(),
         resource_tables_initialized: BTreeMap::new(),
-        init_host_async_import_lookup: BTreeMap::new(),
+        stream_tables,
+        err_ctx_tables,
     };
     instantiator.sizes.fill(resolve);
     instantiator.initialize();
@@ -333,6 +350,8 @@ impl JsBindgen<'_> {
                     "{local_name} = WebAssembly.promising({core_export_fn});",
                 );
             } else {
+                // TODO: run may be sync lifted, but it COULD call an async lowered function!
+
                 uwriteln!(core_exported_funcs, "{local_name} = {core_export_fn};",);
             }
         }
@@ -458,7 +477,7 @@ impl JsBindgen<'_> {
                         }}
                         const maybeSyncReturn = runNext(null);
                         return promise || maybeSyncReturn;
-                    }}
+                    }};
                 ",
                 &self.src.js_init as &str,
                 &self.src.js as &str,
@@ -586,14 +605,12 @@ struct Instantiator<'a, 'b> {
     lowering_options:
         PrimaryMap<LoweredIndex, (&'a CanonicalOptions, TrampolineIndex, TypeFuncIndex)>,
 
-    /// Temporary storage for async host lowered functions that must be wired during
-    /// component intializer processsing
-    ///
-    /// This lookup depends on initializer processing order -- it expects that
-    /// module instantiations come first, then are quickly followed by relevant import lowerings
-    /// such that the lookup is filled and emptied to bridge a module and the lowered imports it
-    /// uses.
-    init_host_async_import_lookup: BTreeMap<String, StaticModuleIndex>,
+    // Mapping of stream table indices to component indices
+    stream_tables: BTreeMap<TypeStreamTableIndex, RuntimeComponentInstanceIndex>,
+
+    // Mapping of err ctx indices to component indices
+    err_ctx_tables:
+        BTreeMap<TypeComponentLocalErrorContextTableIndex, RuntimeComponentInstanceIndex>,
 }
 
 impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
@@ -749,6 +766,30 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 uwriteln!(self.src.js_init, "]).catch(() => {{}});");
             }
+        }
+
+        // Set up global stream map, which is used by intrinsics like stream.transfer
+        let global_stream_table_map =
+            Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap).name();
+        let rep_table_class = Intrinsic::RepTableClass.name();
+        for (table_idx, component_idx) in self.stream_tables.iter() {
+            self.src.js.push_str(&format!(
+                "{global_stream_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
+                table_idx.as_u32(),
+                component_idx.as_u32(),
+            ));
+        }
+
+        // Set up global error context map, which is used by intrinsics like err_ctx.transfer
+        let global_err_ctx_table_map =
+            Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap).name();
+        let rep_table_class = Intrinsic::RepTableClass.name();
+        for (table_idx, component_idx) in self.err_ctx_tables.iter() {
+            self.src.js.push_str(&format!(
+                "{global_err_ctx_table_map}[{}] = {{ componentIdx: {}, table: new {rep_table_class}() }};\n",
+                table_idx.as_u32(),
+                component_idx.as_u32(),
+            ));
         }
 
         // Process global initializers
@@ -1231,7 +1272,8 @@ impl<'a> Instantiator<'a, '_> {
                     flat_count_js,
                     lift_fn_js,
                     lower_fn_js,
-                    is_none_or_numeric_type_js,
+                    is_none_js,
+                    is_numeric_type_js,
                     is_borrow_js,
                     is_async_value_js,
                 ) = match stream_ty.payload {
@@ -1242,7 +1284,8 @@ impl<'a> Instantiator<'a, '_> {
                         "0".into(),
                         "null".into(),
                         "null".into(),
-                        "true".into(),
+                        "true",
+                        "false".into(),
                         "false".into(),
                         "false".into(),
                     ),
@@ -1267,6 +1310,7 @@ impl<'a> Instantiator<'a, '_> {
                             &ty,
                             &wasmtime_environ::component::StringEncoding::Utf8,
                         ),
+                        "false",
                         format!(
                             "{}",
                             matches!(
@@ -1300,7 +1344,8 @@ impl<'a> Instantiator<'a, '_> {
                             liftFn: {lift_fn_js},
                             lowerFn: {lower_fn_js},
                             typeIdx: {stream_ty_idx_js},
-                            isNoneOrNumeric: {is_none_or_numeric_type_js},
+                            isNone: {is_none_js},
+                            isNumeric: {is_numeric_type_js},
                             isBorrowed: {is_borrow_js},
                             isAsyncValue: {is_async_value_js},
                             flatCount: {flat_count_js},
@@ -1339,9 +1384,13 @@ impl<'a> Instantiator<'a, '_> {
                     unreachable!("missing/invalid data model for options during stream.read")
                 };
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
-                let realloc_idx = realloc
-                    .map(|v| v.as_u32().to_string())
-                    .unwrap_or_else(|| "null".into());
+                let (realloc_idx, get_realloc_fn_js) = match realloc {
+                    Some(v) => {
+                        let v = v.as_u32().to_string();
+                        (v.to_string(), format!("() => realloc{v}"))
+                    }
+                    None => ("null".into(), "null".into()),
+                };
 
                 let component_instance_id = instance.as_u32();
                 let string_encoding = string_encoding_js_literal(string_encoding);
@@ -1350,21 +1399,36 @@ impl<'a> Instantiator<'a, '_> {
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead));
 
+                // PrepareCall for an async call is sometimes missing memories,
+                // so we augment and save here, knowing that any stream.write/read operation
+                // that uses a memory is indicative of that component's memory
+                //
+                let register_global_memory_for_component_fn =
+                    Intrinsic::RegisterGlobalMemoryForComponent.name();
+                uwriteln!(
+                    self.src.js_init,
+                    r#"{register_global_memory_for_component_fn}({{
+                         componentIdx: {component_instance_id},
+                         memoryIdx: {memory_idx},
+                         memory: memory{memory_idx},
+                     }});"#
+                );
+
                 uwriteln!(
                     self.src.js,
-                    r#"const trampoline{i} = {stream_read_fn}.bind(
+                    r#"const trampoline{i} = new WebAssembly.Suspending({stream_read_fn}.bind(
                          null,
                          {{
                              componentIdx: {component_instance_id},
                              memoryIdx: {memory_idx},
                              getMemoryFn: () => memory{memory_idx},
                              reallocIdx: {realloc_idx},
-                             getReallocFn: () => realloc{realloc_idx},
+                             getReallocFn: {get_realloc_fn_js},
                              stringEncoding: {string_encoding},
                              isAsync: {async_},
                              streamTableIdx: {stream_table_idx},
                          }}
-                     );
+                     ));
                     "#,
                 );
             }
@@ -1405,7 +1469,7 @@ impl<'a> Instantiator<'a, '_> {
                         let v = v.as_u32().to_string();
                         (v.to_string(), format!("() => realloc{v}"))
                     }
-                    None => ("null".into(), "null".into()),
+                    None => ("null".into(), "() => null".into()),
                 };
 
                 let string_encoding = string_encoding_js_literal(string_encoding);
@@ -1413,6 +1477,20 @@ impl<'a> Instantiator<'a, '_> {
                 let stream_write_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite));
+
+                // PrepareCall for an async call is sometimes missing memories,
+                // so we augment and save here, knowing that any stream.write/read operation
+                // that uses a memory is indicative of that component's memory
+                let register_global_memory_for_component_fn =
+                    Intrinsic::RegisterGlobalMemoryForComponent.name();
+                uwriteln!(
+                    self.src.js_init,
+                    r#"{register_global_memory_for_component_fn}({{
+                         componentIdx: {component_instance_id},
+                         memoryIdx: {memory_idx},
+                         memory: memory{memory_idx},
+                     }});"#
+                );
 
                 uwriteln!(
                     self.src.js,
@@ -1434,52 +1512,56 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamCancelRead { ty, async_, .. } => {
-                let stream_cancel_read_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
-                    AsyncStreamIntrinsic::StreamCancelRead,
-                ));
+            Trampoline::StreamCancelRead {
+                instance,
+                ty,
+                async_,
+            }
+            | Trampoline::StreamCancelWrite {
+                instance,
+                ty,
+                async_,
+            } => {
+                let stream_cancel_fn = match trampoline {
+                    Trampoline::StreamCancelRead { .. } => self.bindgen.intrinsic(
+                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamCancelRead),
+                    ),
+                    Trampoline::StreamCancelWrite { .. } => self.bindgen.intrinsic(
+                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamCancelWrite),
+                    ),
+                    _ => unreachable!("unexpected trampoline"),
+                };
+
+                let stream_table_idx = ty.as_u32();
+                let component_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_cancel_read_fn}.bind(null, {stream_idx}, {async_});\n",
-                    stream_idx = ty.as_u32(),
+                    r#"
+                      const trampoline{i} = new WebAssembly.Suspending({stream_cancel_fn}.bind(null, {{
+                          streamTableIdx: {stream_table_idx},
+                          isAsync: {async_},
+                          componentIdx: {component_idx},
+                      }}));
+                    "#,
                 );
             }
 
-            Trampoline::StreamCancelWrite { ty, async_, .. } => {
-                let stream_cancel_write_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
-                    AsyncStreamIntrinsic::StreamCancelWrite,
-                ));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {stream_cancel_write_fn}.bind(null, {stream_idx}, {async_});\n",
-                    stream_idx = ty.as_u32(),
-                );
-            }
-
-            Trampoline::StreamDropReadable { ty, instance } => {
-                let stream_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
-                    AsyncStreamIntrinsic::StreamDropReadable,
-                ));
+            Trampoline::StreamDropReadable { ty, instance }
+            | Trampoline::StreamDropWritable { ty, instance } => {
+                let intrinsic_fn = match trampoline {
+                    Trampoline::StreamDropReadable { .. } => self.bindgen.intrinsic(
+                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamDropReadable),
+                    ),
+                    Trampoline::StreamDropWritable { .. } => self.bindgen.intrinsic(
+                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamDropWritable),
+                    ),
+                    _ => unreachable!("unexpected trampoline"),
+                };
                 let stream_idx = ty.as_u32();
                 let instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_drop_readable_fn}.bind(null, {{
-                        streamTableIdx: {stream_idx},
-                        componentIdx: {instance_idx},
-                    }});\n",
-                );
-            }
-
-            Trampoline::StreamDropWritable { ty, instance } => {
-                let stream_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
-                    AsyncStreamIntrinsic::StreamDropWritable,
-                ));
-                let stream_idx = ty.as_u32();
-                let instance_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {stream_drop_writable_fn}.bind(null, {{
+                    "const trampoline{i} = {intrinsic_fn}.bind(null, {{
                         streamTableIdx: {stream_idx},
                         componentIdx: {instance_idx},
                     }});\n",
@@ -1714,9 +1796,10 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ErrorContextDebugMessage { ty, options, .. } => {
+            Trampoline::ErrorContextDebugMessage {
+                instance, options, ..
+            } => {
                 let CanonicalOptions {
-                    instance,
                     async_,
                     callback,
                     post_return,
@@ -1793,14 +1876,12 @@ impl<'a> Instantiator<'a, '_> {
                 );
 
                 let component_idx = instance.as_u32();
-                let local_err_tbl_idx = ty.as_u32();
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {debug_message_fn}.bind(
                          null,
                          {{
                              componentIdx: {component_idx},
-                             localTableIdx: {local_err_tbl_idx},
                              options: {options_obj},
                              writeStrFn: trampoline{i}OutputStr,
                          }}
@@ -1808,12 +1889,12 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ErrorContextDrop { ty, .. } => {
+            Trampoline::ErrorContextDrop { instance, ty } => {
                 let drop_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop));
                 let local_err_tbl_idx = ty.as_u32();
-                let component_idx = self.types[*ty].instance.as_u32();
+                let component_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
                     r#"
@@ -1889,37 +1970,31 @@ impl<'a> Instantiator<'a, '_> {
                              getPostReturnFn: () => {post_return_fn},
                              callbackIdx: {callback_idx},
                              getCallbackFn: () => {callback_fn},
-                             getCallee: () => {callback_fn},
                          }},
                      );",
                 );
             }
 
             Trampoline::LowerImport {
-                index,
+                index: _,
                 lower_ty,
                 options,
             } => {
-                let lower_import_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImport));
-                let global_component_lowers_class = self
-                    .bindgen
-                    .intrinsic(Intrinsic::GlobalComponentAsyncLowersClass);
                 let canon_opts = self
                     .component
                     .options
                     .get(*options)
                     .expect("failed to find options");
 
-                let fn_idx = index.as_u32();
+                // TODO(fix): remove Global lowers, should enable using just exports[x] to export[y] call
+                // TODO(fix): promising for the run (*as well as exports*)
+                // TODO(fix): delete all asyncImports/exports
+                // TODO(opt): opt-in sync import
 
                 let component_idx = canon_opts.instance.as_u32();
                 let is_async = canon_opts.async_;
-                let cancellable = canon_opts.cancellable;
 
-                // TODO: is there *anything* that connects this lower import trampoline
-                // and the earlier module instantiation??
+                let cancellable = canon_opts.cancellable;
 
                 let func_ty = self.types.index(*lower_ty);
 
@@ -1973,38 +2048,53 @@ impl<'a> Instantiator<'a, '_> {
                     memory_exprs.unwrap_or_else(|| ("null".into(), "() => null".into()));
                 let realloc_expr_js = realloc_expr_js.unwrap_or_else(|| "() => null".into());
 
-                // NOTE: we make this lowering trampoline identifiable by two things:
-                // - component idx
-                // - type index of exported function (in the relevant component)
-                //
-                // This is required to be able to wire up the [async-lower] import
-                // that will be put on the glue/shim module (via which the host wires up trampolines).
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                    {global_component_lowers_class}.define({{
-                        componentIdx: lowered_import_{fn_idx}_metadata.moduleIdx,
-                        qualifiedImportFn: lowered_import_{fn_idx}_metadata.qualifiedImportFn,
-                        fn: {lower_import_fn}.bind(
-                            null,
-                            {{
-                                trampolineIdx: {i},
-                                componentIdx: {component_idx},
-                                isAsync: {is_async},
-                                paramLiftFns: {param_lift_fns_js},
-                                metadata: lowered_import_{fn_idx}_metadata,
-                                resultLowerFns: {result_lower_fns_js},
-                                getCallbackFn: {get_callback_fn_js},
-                                getPostReturnFn: {get_post_return_fn_js},
-                                isCancellable: {cancellable},
-                                memoryIdx: {memory_idx_js},
-                                getMemoryFn: {memory_expr_js},
-                                getReallocFn: {realloc_expr_js},
-                            }},
-                        ),
-                    }});
-                    "#,
+                // Build the lower import call that will wrap the actual trampoline
+                let func_ty_async = func_ty.async_;
+                let call = format!(
+                    r#"{lower_import_intrinsic}.bind(
+                        null,
+                        {{
+                            trampolineIdx: {i},
+                            componentIdx: {component_idx},
+                            isAsync: {is_async},
+                            isManualAsync: _trampoline{i}.manuallyAsync,
+                            paramLiftFns: {param_lift_fns_js},
+                            resultLowerFns: {result_lower_fns_js},
+                            funcTypeIsAsync: {func_ty_async},
+                            getCallbackFn: {get_callback_fn_js},
+                            getPostReturnFn: {get_post_return_fn_js},
+                            isCancellable: {cancellable},
+                            memoryIdx: {memory_idx_js},
+                            getMemoryFn: {memory_expr_js},
+                            getReallocFn: {realloc_expr_js},
+                            importFn: _trampoline{i},
+                        }},
+                    )"#,
+                    lower_import_intrinsic = if is_async || func_ty_async {
+                        self.bindgen
+                            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImport))
+                    } else {
+                        self.bindgen.intrinsic(Intrinsic::AsyncTask(
+                            AsyncTaskIntrinsic::LowerImportBackwardsCompat,
+                        ))
+                    }
                 );
+
+                // NOTE: For Trampoline::LowerImport, the trampoline index is actually already defined,
+                // but we *redefine* it to call the lower import function first.
+                if is_async || func_ty_async {
+                    uwriteln!(
+                        self.src.js,
+                        "let trampoline{i} = new WebAssembly.Suspending({call});"
+                    );
+                } else {
+                    // TODO(breaking): once manually specifying async imports is removed,
+                    // we can avoid the second check below.
+                    uwriteln!(
+                        self.src.js,
+                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({call}) : {call};"
+                    );
+                }
             }
 
             Trampoline::Transcoder {
@@ -2022,12 +2112,13 @@ impl<'a> Instantiator<'a, '_> {
                 match op {
                     Transcode::Copy(FixedEncoding::Utf8) => {
                         uwriteln!(
-                                            self.src.js,
-                                            "function trampoline{i} (from_ptr, len, to_ptr) {{
-                                new Uint8Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
-                            }}
-                            "
-                                        );
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  new Uint8Array(memory{to}.buffer, to_ptr, len).set(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                              }}
+                            "#
+                        );
                     }
                     Transcode::Copy(FixedEncoding::Utf16) => unimplemented!("utf16 copier"),
                     Transcode::Copy(FixedEncoding::Latin1) => unimplemented!("latin1 copier"),
@@ -2042,14 +2133,15 @@ impl<'a> Instantiator<'a, '_> {
                     Transcode::Utf16ToLatin1 => unimplemented!("utf16 to latin1 transcoder"),
                     Transcode::Utf16ToUtf8 => {
                         uwriteln!(
-                                            self.src.js,
-                                            "function trampoline{i} (src, src_len, dst, dst_len) {{
-                                const encoder = new TextEncoder();
-                                const {{ read, written }} = encoder.encodeInto(String.fromCharCode.apply(null, new Uint16Array(memory{from}.buffer, src, src_len)), new Uint8Array(memory{to}.buffer, dst, dst_len));
-                                return [read, written];
-                            }}
-                            "
-                                        );
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (src, src_len, dst, dst_len) {{
+                                  const encoder = new TextEncoder();
+                                  const {{ read, written }} = encoder.encodeInto(String.fromCharCode.apply(null, new Uint16Array(memory{from}.buffer, src, src_len)), new Uint8Array(memory{to}.buffer, dst, dst_len));
+                                  return [read, written];
+                              }}
+                            "#,
+                        );
                     }
                     Transcode::Utf8ToCompactUtf16 => {
                         unimplemented!("utf8 to compact utf16 transcoder")
@@ -2057,19 +2149,20 @@ impl<'a> Instantiator<'a, '_> {
                     Transcode::Utf8ToLatin1 => unimplemented!("utf8 to latin1 transcoder"),
                     Transcode::Utf8ToUtf16 => {
                         uwriteln!(
-                                            self.src.js,
-                                            "function trampoline{i} (from_ptr, len, to_ptr) {{
-                                const decoder = new TextDecoder();
-                                const content = decoder.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
-                                const strlen = content.length
-                                const view = new Uint16Array(memory{to}.buffer, to_ptr, strlen * 2)
-                                for (var i = 0; i < strlen; i++) {{
-                                    view[i] = content.charCodeAt(i);
-                                }}
-                                return strlen;
-                            }}
-                            "
-                                        );
+                            self.src.js,
+                            r#"
+                              function trampoline{i} (from_ptr, len, to_ptr) {{
+                                  const decoder = new TextDecoder();
+                                  const content = decoder.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                                  const strlen = content.length
+                                  const view = new Uint16Array(memory{to}.buffer, to_ptr, strlen * 2)
+                                  for (var i = 0; i < strlen; i++) {{
+                                      view[i] = content.charCodeAt(i);
+                                  }}
+                                  return strlen;
+                              }}
+                            "#,
+                        );
                     }
                 };
             }
@@ -2238,23 +2331,35 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ContextSet { slot, .. } => {
+            Trampoline::ContextSet { instance, slot, .. } => {
                 let context_set_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet));
+                let component_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {context_set_fn}.bind(null, {slot});"
+                    r#"
+                      const trampoline{i} = {context_set_fn}.bind(null, {{
+                          componentIdx: {component_idx},
+                          slot: {slot},
+                      }});
+                    "#
                 );
             }
 
-            Trampoline::ContextGet { slot, .. } => {
+            Trampoline::ContextGet { instance, slot } => {
                 let context_get_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet));
+                let component_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {context_get_fn}.bind(null, {slot});"
+                    r#"
+                      const trampoline{i} = {context_get_fn}.bind(null, {{
+                          componentIdx: {component_idx},
+                          slot: {slot},
+                      }});
+                    "#
                 );
             }
 
@@ -2330,6 +2435,22 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 let lift_fns_js = format!("[{}]", lift_fns.join(","));
 
+                // Build up a list of all the lowering functions that will be needed for the types
+                // that are actually being passed through task.return
+                //
+                // This is usually only necessary if this task is part of a guest->guest async call
+                // (i.e. via prepare & async start call)
+                let mut lower_fns: Vec<String> = Vec::with_capacity(result_types.len());
+                for result_ty in result_types {
+                    lower_fns.push(gen_flat_lower_fn_js_expr(
+                        self.bindgen,
+                        self.types,
+                        result_ty,
+                        &canon_opts.string_encoding,
+                    ));
+                }
+                let lower_fns_js = format!("[{}]", lower_fns.join(","));
+
                 let get_memory_fn_js = memory
                     .map(|idx| format!("() => memory{}", idx.as_u32()))
                     .unwrap_or_else(|| "() => null".into());
@@ -2355,6 +2476,7 @@ impl<'a> Instantiator<'a, '_> {
                              memoryIdx: {memory_idx_js},
                              callbackFnIdx: {callback_fn_idx},
                              liftFns: {lift_fns_js},
+                             lowerFns: {lower_fns_js},
                          }},
                      );",
                 );
@@ -2382,13 +2504,22 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ThreadYield { cancellable, .. } => {
+            Trampoline::ThreadYield {
+                cancellable,
+                instance,
+            } => {
                 let yield_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
+                let component_instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {yield_fn}.bind(null, {cancellable});\n",
+                    r#"
+                      const trampoline{i} = {yield_fn}.bind(null, {{
+                          isCancellable: {cancellable},
+                          componentIdx: {component_instance_idx},
+                      }});
+                    "#,
                 );
             }
             Trampoline::ThreadIndex => todo!("Trampoline::ThreadIndex"),
@@ -2411,7 +2542,9 @@ impl<'a> Instantiator<'a, '_> {
                 );
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {enter_symmetric_sync_guest_call_fn};\n",
+                    r#"
+                      const trampoline{i} = {enter_symmetric_sync_guest_call_fn};
+                    "#,
                 );
             }
 
@@ -2451,7 +2584,10 @@ impl<'a> Instantiator<'a, '_> {
                 // every callback *could* do stream.write, but many may not.
                 uwriteln!(
                     self.src.js_init,
-                    "callback_{callback_idx} = WebAssembly.promising({core_def});"
+                    r#"
+                      callback_{callback_idx} = WebAssembly.promising({core_def});
+                      callback_{callback_idx}.fnName = "{core_def}";
+                    "#
                 );
             }
 
@@ -2466,74 +2602,59 @@ impl<'a> Instantiator<'a, '_> {
             },
 
             GlobalInitializer::LowerImport { index, import } => {
-                let fn_idx = index.as_u32();
-                let (import_index, path) = &self.component.imports[*import];
-                let (import_iface, _type_def) = &self.component.import_types[*import_index];
-
-                let qualified_import_fn = match &path[..] {
-                    // Likely a bare name like `[async]foo` which becomes 'foo'
-                    [] => format!("$root#{}", import_iface.trim_start_matches("[async]")),
-                    // Fully qualified function name `ns:pkg/iface#[async]foo` which becomes `ns:pkg/iface#foo`
-                    [fn_name] => {
-                        format!("{import_iface}#{}", fn_name.trim_start_matches("[async]"))
-                    }
-                    _ => unimplemented!(
-                        "multi-part import paths ({path:?}) not supported (iface: '{import_iface}') -- only single function names are allowed"
-                    ),
-                };
-
-                let maybe_module_idx = self
-                    .init_host_async_import_lookup
-                    .remove(&qualified_import_fn)
-                    .map(|x| x.as_u32().to_string())
-                    .unwrap_or_else(|| "null".into());
-
-                uwriteln!(
-                    self.src.js,
-                    r#"
-                    let lowered_import_{fn_idx}_metadata = {{
-                        qualifiedImportFn: '{qualified_import_fn}',
-                        moduleIdx: {maybe_module_idx},
-                    }};
-                    "#,
-                );
-
                 self.lower_import(*index, *import);
             }
 
             GlobalInitializer::ExtractMemory(m) => {
-                let component_idx = m.export.instance.as_u32();
                 let def = self.core_export_var_name(&m.export);
                 let idx = m.index.as_u32();
-                let global_component_memories_class =
-                    Intrinsic::GlobalComponentMemoriesClass.name();
                 uwriteln!(self.src.js, "let memory{idx};");
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
-                uwriteln!(
-                    self.src.js_init,
-                    "{global_component_memories_class}.save({{ idx: {idx}, componentIdx: {component_idx}, memory: memory{idx} }});"
-                );
             }
 
             GlobalInitializer::ExtractRealloc(r) => {
                 let def = self.core_def(&r.def);
                 let idx = r.index.as_u32();
                 uwriteln!(self.src.js, "let realloc{idx};");
+                uwriteln!(self.src.js, "let realloc{idx}Async;");
                 uwriteln!(self.src.js_init, "realloc{idx} = {def};",);
+                // NOTE: sometimes we may be fed a realloc that isn't a webassembly function at all
+                // but has instead been converted to JS (see 'flavorful' test in test/runtime.js')
+                uwriteln!(
+                    self.src.js_init,
+                    r#"
+                      try {{
+                          realloc{idx}Async = WebAssembly.promising({def});
+                      }} catch(err) {{
+                          realloc{idx}Async = {def};
+                      }}
+                    "#
+                );
             }
 
             GlobalInitializer::ExtractPostReturn(p) => {
                 let def = self.core_def(&p.def);
                 let idx = p.index.as_u32();
                 uwriteln!(self.src.js, "let postReturn{idx};");
+                uwriteln!(self.src.js, "let postReturn{idx}Async;");
                 uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
+                // NOTE: sometimes we may be fed a post return fn that isn't a webassembly function
+                // at all but has instead been converted to JS (see 'flavorful' test in test/runtime.js)
+                uwriteln!(
+                    self.src.js_init,
+                    r#"
+                      try {{
+                          postReturn{idx}Async = WebAssembly.promising({def});
+                      }} catch(err) {{
+                          postReturn{idx}Async = {def};
+                      }}
+                    "#
+                );
             }
 
             GlobalInitializer::Resource(_) => {}
 
-            GlobalInitializer::ExtractTable(extract_table) => {
-                let _ = extract_table;
-            }
+            GlobalInitializer::ExtractTable(_) => {}
         }
     }
 
@@ -2544,93 +2665,7 @@ impl<'a> Instantiator<'a, '_> {
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
         for (module, name, arg) in self.modules[module_idx].imports(args) {
-            // By default, async-lower gets patched to the relevant export function directly,
-            // but it *should* be patched to the lower import intrinsic, as subtask rep/state
-            // needs to be returned to the calling component.
-            //
-            // The LowerImport intrinsic will take care of calling the original export,
-            // which will likely trigger an `Instruction::CallInterface for the actual import
-            // that was called.
-            //
-            let def = if name.starts_with("[async-lower]")
-                && let core::AugmentedImport::CoreDef(CoreDef::Export(CoreExport {
-                    item: ExportItem::Index(EntityIndex::Function(_)),
-                    ..
-                })) = arg
-            {
-                let global_lowers_class = Intrinsic::GlobalComponentAsyncLowersClass.name();
-                let key = name
-                    .trim_start_matches("[async-lower]")
-                    .trim_start_matches("[async]");
-
-                // For host imports that are asynchronous, we must wrap with WebAssembly.promising,
-                // as the callee will be a host function (that will suspend).
-                //
-                // Note that there is also a separate case where the import *is* from another component,
-                // and we do not want to call that as a promise, because it will return an async return code
-                // and follow the normal p3 async component call pattern.
-                //
-                let full_async_import_key = format!("{module}#{key}");
-
-                let mut exec_fn = self.augmented_import_def(&arg);
-
-                // NOTE: Regardless of whether we're using a host import or not, we are likely *not*
-                // actually wrapping a host javascript function below -- rather, the host import is
-                // called via a trip a trip *through* an exporting component table.
-                //
-                // The host import is imported, passed through an indirect call in a component,
-                // (see $wit-component.shims, $wit-component.fixups modules in generated transpile output)
-                // then it is called from the component that is actually performing the call..
-                //
-                let mut import_js = format!(
-                    "{global_lowers_class}.lookup({}, '{full_async_import_key}')?.bind(null, {exec_fn})",
-                    module_idx.as_u32(),
-                );
-
-                let is_known_iface_import = self.async_imports.contains(&full_async_import_key);
-                let is_known_root_import = self
-                    .async_imports
-                    .contains(full_async_import_key.trim_start_matches("$root#"));
-                let is_known_import = is_known_iface_import || is_known_root_import;
-                let is_stream_op = full_async_import_key.contains("[stream-write-")
-                    || full_async_import_key.contains("[stream-read-");
-
-                if is_known_import {
-                    // For root imports or imports that don't need any special handling,
-                    // we can look up and use the async import function after saving the import key for later
-
-                    // Save the import for later to match it with it's lower import initializer
-                    self.init_host_async_import_lookup
-                        .insert(full_async_import_key.clone(), module_idx);
-                    exec_fn = format!("WebAssembly.promising({exec_fn})");
-                    import_js = format!(
-                        "{global_lowers_class}.lookup({}, '{full_async_import_key}')?.bind(null, {exec_fn})",
-                        module_idx.as_u32(),
-                    );
-                } else if is_stream_op {
-                    // stream.{write,read} are always handled by async functions when patched
-                    //
-                    // We must treat them like functions that call host async imports because
-                    // the call that will do the stream operation is piped through a patchup component
-                    //
-                    // wasm export -> wasm import -> host-provided trampoline
-                    //
-                    // In this case, we know that the trampoline that eventually gets called
-                    // will be an async host function (`streamWrite`/`streamRead`), which will
-                    // be wrapped in `WebAssembly.Suspending` (as the terminal fn is known, no need to save it)
-                    exec_fn = format!("WebAssembly.promising({exec_fn})");
-                    import_js = format!(
-                        "new WebAssembly.Suspending({global_lowers_class}.lookup({}, '{full_async_import_key}').bind(null, {exec_fn}))",
-                        module_idx.as_u32(),
-                    );
-                }
-
-                import_js
-            } else {
-                // All other imports can be connected directly to the relevant export
-                self.augmented_import_def(&arg)
-            };
-
+            let def = self.augmented_import_def(&arg);
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
             assert!(
@@ -2898,33 +2933,38 @@ impl<'a> Instantiator<'a, '_> {
             .params
             .len();
 
-        // Generate the JS trampoline function
+        // Generate the JS trampoline function for a bound import
         let trampoline_idx = trampoline.as_u32();
         match self.bindgen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                // Write out function declaration start
-                if requires_async_porcelain || is_async {
-                    // If an import is either an async host import (i.e. JSPI powered)
-                    // or a guest async lifted import from another component,
-                    // use WebAssembly.Suspending to allow suspending this component
+                // TODO(breaking): remove as we do not not need to manually specify async imports anymore in P3 w/ native coloring
+                if is_async | requires_async_porcelain {
+                    // NOTE: for async imports that will go through Trampoline::LowerImport,
+                    // we prefix the raw import with '_' as it will later be used in the
+                    // definition of trampoline{i} which will actually be fed into
+                    // unbundled modules
                     uwrite!(
                         self.src.js,
-                        "\nconst trampoline{trampoline_idx} = new WebAssembly.Suspending(async function",
+                        "\nconst _trampoline{trampoline_idx} = async function"
                     );
                 } else {
-                    // If the import is not async in any way, use a regular trampoline
-                    uwrite!(self.src.js, "\nfunction trampoline{trampoline_idx}");
+                    uwrite!(
+                        self.src.js,
+                        "\nconst _trampoline{trampoline_idx} = function"
+                    );
                 }
+
+                let iface_name = if import_name.is_empty() {
+                    None
+                } else {
+                    Some(import_name.to_string())
+                };
 
                 // Write out the function (brace + body + brace)
                 self.bindgen(JsFunctionBindgenArgs {
                     nparams,
                     call_type,
-                    iface_name: if import_name.is_empty() {
-                        None
-                    } else {
-                        Some(import_name)
-                    },
+                    iface_name: iface_name.as_deref(),
                     callee: &callee_name,
                     opts: options,
                     func,
@@ -2935,11 +2975,18 @@ impl<'a> Instantiator<'a, '_> {
                 });
                 uwriteln!(self.src.js, "");
 
-                // Write new function ending
-                if requires_async_porcelain | is_async {
-                    uwriteln!(self.src.js, ");");
-                } else {
-                    uwriteln!(self.src.js, "");
+                uwriteln!(
+                    self.src.js,
+                    "_trampoline{trampoline_idx}.fnName = '{}#{callee_name}';",
+                    iface_name.unwrap_or_default(),
+                );
+
+                // TODO(breaking): remove once support for manually specified async imports is removed
+                if requires_async_porcelain {
+                    uwriteln!(
+                        self.src.js,
+                        "_trampoline{trampoline_idx}.manuallyAsync = true;"
+                    );
                 }
             }
 
@@ -3067,22 +3114,9 @@ impl<'a> Instantiator<'a, '_> {
 
         // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
-            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => (
-                // TODO: if we want to avoid the naming of 'async<fn name>' (e.g. 'asyncSleepMillis'
-                // vs 'sleepMillis' which just *is* an imported async function)....
-                //
-                // We need to use the code below:
-                //
-                // func_name
-                //     .strip_prefix("[async]")
-                //     .unwrap_or(func_name)
-                //     .to_lower_camel_case(),
-                //
-                // This has the potential to break a lot of downstream consumers who are expecting to
-                // provide 'async<fn name>`, so it must be done before a breaking change.
-                func_name.to_lower_camel_case(),
-                callee_name,
-            ),
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                (func_name.to_lower_camel_case(), callee_name)
+            }
 
             FunctionKind::Method(tid)
             | FunctionKind::AsyncMethod(tid)
@@ -3356,7 +3390,7 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     /// Connect resources that are defined at the type levels in `wit-parser`
-    /// to their types as defined in `wamstime-environ`
+    /// to their types as defined in `wasmtime-environ`
     ///
     /// The types that are connected here are stored in the `resource_map` for
     /// use later.
@@ -3569,15 +3603,33 @@ impl<'a> Instantiator<'a, '_> {
             {
                 (
                     memory.map(|idx| format!("memory{}", idx.as_u32())),
-                    realloc.map(|idx| format!("realloc{}", idx.as_u32())),
+                    realloc.map(|idx| {
+                        format!(
+                            "realloc{}{}",
+                            idx.as_u32(),
+                            if is_async {
+                                "Async"
+                            } else {
+                                Default::default()
+                            }
+                        )
+                    }),
                 )
             } else {
                 (None, None)
             };
 
-        let post_return = opts
-            .post_return
-            .map(|idx| format!("postReturn{}", idx.as_u32()));
+        let post_return = opts.post_return.map(|idx| {
+            format!(
+                "postReturn{}{}",
+                idx.as_u32(),
+                if is_async {
+                    "Async"
+                } else {
+                    Default::default()
+                }
+            )
+        });
 
         let tracing_prefix = format!(
             "[iface=\"{}\", function=\"{}\"]",
@@ -4058,13 +4110,10 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let {local_name};");
                 self.bindgen
                     .all_core_exported_funcs
-                    // NOTE: this breaks because using WebAssembly.promising and trying to
-                    // await JS from the host is a bug ("trying to suspend JS frames")
-                    //
-                    // We trigger this either with --async-exports *OR* by widening the check as below
-                    //
-                    // .push((core_export_fn.clone(), requires_async_porcelain || is_async));
-                    .push((core_export_fn.clone(), requires_async_porcelain));
+                    // TODO(breaking): remove requires_async_porcelain  once support
+                    // for manual async import specification is removed, as p3 has
+                    // built-in function async coloring
+                    .push((core_export_fn.clone(), is_async | requires_async_porcelain));
                 local_name
             }
         };
@@ -4074,72 +4123,6 @@ impl<'a> Instantiator<'a, '_> {
         } else {
             Some(export_name)
         };
-
-        // TODO: re-enable when needed for more complex objects
-        //
-        // // Output the lift and lowering functions for the fn
-        // //
-        // // We do this here mostly to avoid introducing a breaking change at the FunctionBindgen
-        // // level, and to encourage re-use of param lowering.
-        // //
-        // // TODO(breaking): pass `Function` reference along to `FunctionBindgen` and generate *and* lookup lower there
-        // //
-        // // This function will be called early in execution of generated functions that correspond
-        // // to an async export, to lower parameters that were passed by JS into the component's memory.
-        // //
-        // if is_async {
-        //     let component_idx = options.instance.as_u32();
-        //     let global_async_param_lower_class = {
-        //         self.add_intrinsic(Intrinsic::GlobalAsyncParamLowersClass);
-        //         Intrinsic::GlobalAsyncParamLowersClass.name()
-        //     };
-
-        //     // Get the interface-level types for the parameters to the function
-        //     // in case we need to do async lowering
-        //     let func_ty = &self.types[*func_ty_idx];
-        //     let param_types = func_ty.params;
-        //     let func_param_iface_types = &self.types[param_types].types;
-
-        //     // Generate lowering functions for params
-        //     let lower_fns_list_js = gen_flat_lower_fn_list_js_expr(
-        //         self,
-        //         self.types,
-        //         func_param_iface_types,
-        //         &options.string_encoding,
-        //     );
-
-        //     // TODO(fix): add tests for indirect param (> 16 args)
-        //     //
-        //     // We *should* be able to just jump to the memory location in question and then
-        //     // start doing the reading.
-        //     self.src.js(&format!(
-        //         r#"
-        //         {global_async_param_lower_class}.define({{
-        //             componentIdx: '{component_idx}',
-        //             iface: '{iface}',
-        //             fnName: '{callee}',
-        //             fn: (args) => {{
-        //                 const {{ loweringParams, vals, memory, indirect }} = args;
-        //                 if (!memory) {{ throw new TypeError("missing memory for async param lower"); }}
-        //                 if (indirect === undefined) {{ throw new TypeError("missing memory for async param lower"); }}
-        //                 if (indirect) {{ throw new Error("indirect aysnc param lowers not yet supported"); }}
-
-        //                 const lowerFns = {lower_fns_list_js};
-        //                 const lowerCtx = {{
-        //                     params: loweringParams,
-        //                     vals,
-        //                     memory,
-        //                     componentIdx: {component_idx},
-        //                     useDirectParams: !indirect,
-        //                 }};
-
-        //                 for (const lowerFn of lowerFns) {{ lowerFn(lowerCtx); }}
-        //             }},
-        //         }});
-        //         "#,
-        //         iface = iface_name.map(|v| v.as_str()).unwrap_or( "$root"),
-        //     ));
-        // }
 
         // Write function preamble (everything up to the `(` in `function (...`)
         match func.kind {

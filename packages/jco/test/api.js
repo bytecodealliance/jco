@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { platform } from "node:process";
 import { readFile } from "node:fs/promises";
 
-import { suite, test, assert, beforeAll } from "vitest";
+import { suite, test, assert, beforeAll, expect } from "vitest";
 
 import {
     transpile,
@@ -23,7 +23,8 @@ const isWindows = platform === "win32";
 // - (2025/02/04) increased due to incoming implementations of async and new flush impl
 // - (2025/08/07) increased due to async task implementations, refactors
 // - (2025/12/16) increased due to more async task impl
-const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 100_000;
+// - (2026/03/09) increased due to more async task impl
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 150_000;
 
 suite("API", () => {
     let flavorfulWasmBytes;
@@ -239,6 +240,6 @@ suite("API", () => {
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(exports.length, 3);
         assert.deepStrictEqual(exports[0], ["test", "instance"]);
-        assert.ok(files[name + ".js"].length < FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
+        expect(files[name + ".js"].length).lessThan(FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT);
     });
 });

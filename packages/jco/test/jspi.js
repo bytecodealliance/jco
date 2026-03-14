@@ -101,8 +101,9 @@ suite("Host Import Async (JSPI)", () => {
         }
 
         const tmpDir = await getTmpDir();
-        const outDir = resolve(tmpDir, "out-component-dir");
+        const outputDir = resolve(tmpDir, "out-component-dir");
         const outFile = resolve(tmpDir, "out-component-file");
+        await mkdir(outputDir, { recursive: true });
 
         const modulesDir = resolve(tmpDir, "node_modules", "@bytecodealliance");
         await mkdir(modulesDir, { recursive: true });
@@ -116,6 +117,7 @@ suite("Host Import Async (JSPI)", () => {
             asyncMode: "jspi",
             component: {
                 name: "async_call",
+                outputDir,
                 path: resolve("test/fixtures/components/simple-nested.component.wasm"),
                 imports: {
                     "calvinrp:test-async-funcs/hello": {
@@ -126,6 +128,7 @@ suite("Host Import Async (JSPI)", () => {
             jco: {
                 transpile: {
                     extraArgs: {
+                        // minify: false,
                         asyncImports: ["calvinrp:test-async-funcs/hello#hello-world"],
                         asyncExports: ["hello-world"],
                     },
@@ -143,7 +146,7 @@ suite("Host Import Async (JSPI)", () => {
 
         await cleanup();
         try {
-            await rm(outDir, { recursive: true });
+            await rm(outputDir, { recursive: true });
             await rm(outFile);
         } catch {}
     });

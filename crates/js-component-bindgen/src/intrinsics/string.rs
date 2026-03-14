@@ -8,14 +8,24 @@ use crate::{intrinsics::Intrinsic, source::Source};
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum StringIntrinsic {
     Utf16Decoder,
+
     Utf16Encode,
+
+    Utf16EncodeAsync,
+
     /// UTF8 Decoder (a JS `TextDecoder`)
     GlobalTextDecoderUtf8,
+
     /// UTF8 Encoder (a JS `TextEncoder`)
     GlobalTextEncoderUtf8,
+
     /// Encode a single string to memory
     Utf8Encode,
+
+    Utf8EncodeAsync,
+
     ValidateGuestChar,
+
     ValidateHostChar,
 }
 
@@ -30,9 +40,11 @@ impl StringIntrinsic {
         [
             Self::Utf16Decoder.name(),
             Self::Utf16Encode.name(),
+            Self::Utf16EncodeAsync.name(),
             Self::GlobalTextDecoderUtf8.name(),
             Self::GlobalTextEncoderUtf8.name(),
             Self::Utf8Encode.name(),
+            Self::Utf8EncodeAsync.name(),
             Self::ValidateGuestChar.name(),
             Self::ValidateHostChar.name(),
         ]
@@ -43,9 +55,11 @@ impl StringIntrinsic {
         match self {
             Self::Utf16Decoder => "utf16Decoder",
             Self::Utf16Encode => "_utf16AllocateAndEncode",
+            Self::Utf16EncodeAsync => "_utf16AllocateAndEncodeAsync",
             Self::GlobalTextDecoderUtf8 => "TEXT_DECODER_UTF8",
             Self::GlobalTextEncoderUtf8 => "TEXT_ENCODER_UTF8",
             Self::Utf8Encode => "_utf8AllocateAndEncode",
+            Self::Utf8EncodeAsync => "_utf8AllocateAndEncodeAsync",
             Self::ValidateGuestChar => "validateGuestChar",
             Self::ValidateHostChar => "validateHostChar",
         }
@@ -57,14 +71,19 @@ impl StringIntrinsic {
         match self {
             Self::Utf16Decoder => uwriteln!(output, "const {name} = new TextDecoder('utf-16');"),
 
-            Self::Utf16Encode => {
+            Self::Utf16Encode | Self::Utf16EncodeAsync => {
                 let is_le = Intrinsic::IsLE.name();
+                let (fn_preamble, realloc_call) = match self {
+                    Self::Utf16Encode => ("", "realloc"),
+                    Self::Utf16EncodeAsync => ("async ", "await realloc"),
+                    _ => unreachable!("unexpected intrinsic"),
+                };
                 uwriteln!(
                     output,
                     r#"
-                      function {name}(str, realloc, memory) {{
+                      {fn_preamble}function {name}(str, realloc, memory) {{
                           const len = str.length;
-                          const ptr = realloc(0, 0, 2, len * 2);
+                          const ptr = {realloc_call}(0, 0, 2, len * 2);
                           const out = new Uint16Array(memory.buffer, ptr, len);
                           let i = 0;
                           if ({is_le}) {{
@@ -84,20 +103,26 @@ impl StringIntrinsic {
             Self::GlobalTextDecoderUtf8 => uwriteln!(output, "const {name} = new TextDecoder();"),
             Self::GlobalTextEncoderUtf8 => uwriteln!(output, "const {name} = new TextEncoder();"),
 
-            Self::Utf8Encode => {
+            Self::Utf8Encode | Self::Utf8EncodeAsync => {
                 let encoder = Self::GlobalTextEncoderUtf8.name();
+                let (fn_preamble, realloc_call) = match self {
+                    Self::Utf8Encode => ("", "realloc"),
+                    Self::Utf8EncodeAsync => ("async ", "await realloc"),
+                    _ => unreachable!("unexpected intrinsic"),
+                };
                 uwriteln!(
                     output,
                     r#"
-                      function {name}(s, realloc, memory) {{
+                      {fn_preamble}function {name}(s, realloc, memory) {{
                           if (typeof s !== 'string') {{
                               throw new TypeError('expected a string, received [' + typeof s + ']');
                           }}
                           if (s.length === 0) {{ return {{ ptr: 1, len: 0 }}; }}
                           let buf = {encoder}.encode(s);
-                          let ptr = realloc(0, 0, 1, buf.length);
+                          let ptr = {realloc_call}(0, 0, 1, buf.length);
                           new Uint8Array(memory.buffer).set(buf, ptr);
-                          return {{ ptr, len: buf.length, codepoints: [...s].length }};
+                          const res = {{ ptr, len: buf.length, codepoints: [...s].length }};
+                          return res;
                       }}
                     "#
                 );

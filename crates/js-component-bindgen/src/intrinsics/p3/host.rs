@@ -131,6 +131,8 @@ impl HostIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let create_new_current_task_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask).name();
+                let set_global_current_task_meta_fn = Intrinsic::SetGlobalCurrentTaskMetaFn.name();
+
                 output.push_str(&format!(
                   r#"
                     function {prepare_call_fn}(
@@ -138,46 +140,40 @@ impl HostIntrinsic {
                         getMemoryFn,
                         startFn,
                         returnFn,
-                        callerInstanceIdx,
-                        calleeInstanceIdx,
+                        callerComponentIdx,
+                        calleeComponentIdx,
                         taskReturnTypeIdx,
-                        isCalleeAsyncInt,
+                        calleeIsAsyncInt,
                         stringEncoding,
                         resultCountOrAsync,
                     ) {{
                         {debug_log_fn}('[{prepare_call_fn}()]', {{
-                            callerInstanceIdx,
-                            calleeInstanceIdx,
+                            memoryIdx,
+                            callerComponentIdx,
+                            calleeComponentIdx,
                             taskReturnTypeIdx,
-                            isCalleeAsyncInt,
+                            calleeIsAsyncInt,
                             stringEncoding,
                             resultCountOrAsync,
                         }});
                         const argArray = [...arguments];
 
-                        // Since Rust will happily pass large u32s over, resultCountOrAsync should be one of:
-                        // (a) u32 max size     => callee is async fn with no result
-                        // (b) u32 max size - 1 => callee is async fn with result
-                        // (c) any other value  => callee is sync with the given result count
-                        //
-                        // Due to JS handling the value as 2s complement, the `resultCountOrAsync` ends up being:
-                        // (a) -1 as u32 max size
-                        // (b) -2 as u32 max size - 1
-                        // (c) x
-                        //
-                        // Due to JS mishandling the value as 2s complement, the actual values we get are:
-                        // see. https://github.com/wasm-bindgen/wasm-bindgen/issues/1388
+                        // value passed in *may* be as large as u32::MAX which may be mangled into -2
+                        resultCountOrAsync >>>= 0;
+
                         let isAsync = false;
                         let hasResultPointer = false;
-                        if (resultCountOrAsync === -1) {{
+                        if (resultCountOrAsync === 2**32 - 1) {{
+                            // prepare async with no result (u32::MAX)
                             isAsync = true;
                             hasResultPointer = false;
-                        }} else if (resultCountOrAsync === -2) {{
+                        }} else if (resultCountOrAsync === 2**32 - 2) {{
+                            // prepare async with result (u32::MAX - 1)
                             isAsync = true;
                             hasResultPointer = true;
                         }}
 
-                        const currentCallerTaskMeta = {current_task_get_fn}(callerInstanceIdx);
+                        const currentCallerTaskMeta = {current_task_get_fn}(callerComponentIdx);
                         if (!currentCallerTaskMeta) {{
                             throw new Error('invalid/missing current task for caller during prepare call');
                         }}
@@ -187,18 +183,19 @@ impl HostIntrinsic {
                             throw new Error('unexpectedly missing task in meta for caller during prepare call');
                         }}
 
-                        if (currentCallerTask.componentIdx() !== callerInstanceIdx) {{
-                            throw new Error(`task component idx [${{ currentCallerTask.componentIdx() }}] !== [${{ callerInstanceIdx }}] (callee ${{ calleeInstanceIdx }})`);
+                        if (currentCallerTask.componentIdx() !== callerComponentIdx) {{
+                            throw new Error(`task component idx [${{ currentCallerTask.componentIdx() }}] !== [${{ callerComponentIdx }}] (callee ${{ calleeComponentIdx }})`);
                         }}
 
                         let getCalleeParamsFn;
                         let resultPtr = null;
+                        let directParamsArr;
                         if (hasResultPointer) {{
-                            const directParamsArr = argArray.slice(11);
+                            directParamsArr = argArray.slice(10, argArray.length - 1);
                             getCalleeParamsFn = () => directParamsArr;
-                            resultPtr = argArray[10];
+                            resultPtr = argArray[argArray.length - 1];
                         }} else {{
-                            const directParamsArr = argArray.slice(10);
+                            directParamsArr = argArray.slice(10);
                             getCalleeParamsFn = () => directParamsArr;
                         }}
 
@@ -217,21 +214,12 @@ impl HostIntrinsic {
                                 throw new Error(`unrecognized string encoding enum [${{stringEncoding}}]`);
                         }}
 
-                        const [newTask, newTaskID] = {create_new_current_task_fn}({{
-                            componentIdx: calleeInstanceIdx,
-                            isAsync: isCalleeAsyncInt !== 0,
-                            getCalleeParamsFn,
-                            // TODO: find a way to pass the import name through here
-                            entryFnName: 'task/' + currentCallerTask.id() + '/new-prepare-task',
-                            stringEncoding,
-                        }});
-
                         const subtask = currentCallerTask.createSubtask({{
-                           componentIdx: callerInstanceIdx,
+                           componentIdx: callerComponentIdx,
                            parentTask: currentCallerTask,
-                           childTask: newTask,
+                           isAsync,
                            callMetadata: {{
-                              memory: getMemoryFn(),
+                              getMemoryFn,
                               memoryIdx,
                               resultPtr,
                               returnFn,
@@ -239,10 +227,37 @@ impl HostIntrinsic {
                            }}
                         }});
 
+                        const [newTask, newTaskID] = {create_new_current_task_fn}({{
+                            componentIdx: calleeComponentIdx,
+                            isAsync,
+                            getCalleeParamsFn,
+                            entryFnName: [
+                                'task',
+                                subtask.getParentTask().id(),
+                                'subtask',
+                                subtask.id(),
+                                'new-prepared-async-task'
+                            ].join('/'),
+                            stringEncoding,
+                        }});
                         newTask.setParentSubtask(subtask);
-                        // NOTE: This isn't really a return memory idx for the caller, it's for checking
-                        // against the task.return (which will be called from the callee)
                         newTask.setReturnMemoryIdx(memoryIdx);
+                        newTask.setReturnMemory(getMemoryFn);
+                        subtask.setChildTask(newTask);
+
+                        newTask.subtaskMeta = {{
+                            subtask,
+                            calleeComponentIdx,
+                            callerComponentIdx,
+                            getCalleeParamsFn,
+                            stringEncoding,
+                            isAsync,
+                        }};
+
+                        {set_global_current_task_meta_fn}({{
+                            taskID: newTask.id(),
+                            componentIdx: newTask.componentIdx(),
+                        }});
                     }}
               "#
                 ));
@@ -257,39 +272,64 @@ impl HostIntrinsic {
             Self::AsyncStartCall => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let async_start_call_fn = Self::AsyncStartCall.name();
-                let current_async_task_id_globals =
-                    AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds.name();
-                let current_component_idx_globals =
-                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
                 let async_driver_loop_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop).name();
-                let subtask_class =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass).name();
-                let global_component_memories_class =
-                    Intrinsic::GlobalComponentMemoriesClass.name();
+                let lookup_memories_for_component_fn = Intrinsic::LookupMemoriesForComponent.name();
+                let current_component_idx_globals =
+                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
+                let get_current_task_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let with_global_current_task_meta_async_fn =
+                    Intrinsic::WithGlobalCurrentTaskMetaFnAsync.name();
+                let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
 
                 // TODO: lower here for non-zero param count
                 // https://github.com/bytecodealliance/wasmtime/blob/69ef9afc11a2846248c9e94affca0223dbd033fc/crates/wasmtime/src/runtime/component/concurrent.rs#L1775
+                //
+                // NOTE: relying on the globals here for the currently executing  not ideal,
+                // but given that prepare is synchronous and so is async start call, we should be OK
+                // at least due to the execution order.
+                //
                 output.push_str(&format!(r#"
                     function {async_start_call_fn}(args, callee, paramCount, resultCount, flags) {{
-                        const {{ getCallbackFn, callbackIdx, getPostReturnFn, postReturnIdx }} = args;
-                        {debug_log_fn}('[{async_start_call_fn}()] args', args);
+                        const componentIdx = {current_component_idx_globals}.at(-1);
 
-                        const taskMeta = {current_task_get_fn}({current_component_idx_globals}.at(-1), {current_async_task_id_globals}.at(-1));
-                        if (!taskMeta) {{ throw new Error('invalid/missing current async task meta during prepare call'); }}
+                        const globalTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                        if (!globalTaskMeta) {{ throw new Error('missing global current task globalTaskMeta'); }}
+                        const taskID = globalTaskMeta.taskID;
+
+                        {debug_log_fn}('[{async_start_call_fn}()] args', {{ args, componentIdx }});
+                        const {{ getCallbackFn, callbackIdx, getPostReturnFn, postReturnIdx }} = args;
+
+                        const preparedTaskMeta = {get_current_task_fn}(componentIdx, taskID);
+                        if (!preparedTaskMeta) {{ throw new Error('unexpectedly missing current task'); }}
+
+                        const preparedTask = preparedTaskMeta.task;
+                        if (!preparedTask) {{ throw new Error('unexpectedly missing current task'); }}
+                        if (!preparedTask.subtaskMeta) {{ throw new Error('missing subtask meta from prepare'); }}
+
+                        const {{
+                            subtask,
+                            returnMemoryIdx,
+                            getReturnMemoryFn,
+                            callerComponentIdx,
+                            calleeComponentIdx,
+                            getCalleeParamsFn,
+                            isAsync,
+                            stringEncoding,
+                        }} = preparedTask.subtaskMeta;
+                        if (!subtask) {{ throw new Error("missing subtask from cstate during async start call"); }}
+                        if (calleeComponentIdx !== preparedTask.componentIdx()) {{
+                                throw new Error(`meta callee idx [${{calleeComponentIdx}}] != current task idx [${{preparedTask.componentIdx()}}] during async start call`);
+                            }}
+                        if (calleeComponentIdx !== componentIdx) {{
+                            throw new Error("mismatched componentIdx for async start call (does not match prepare)");
+                        }}
 
                         const argArray = [...arguments];
-
-                        // NOTE: at this point we know the current task is the one that was started
-                        // in PrepareCall, so we *should* be able to pop it back off and be left with
-                        // the previous task
-                        const preparedTask = taskMeta.task;
-                        if (!preparedTask) {{ throw new Error('unexpectedly missing task in task meta during prepare call'); }}
 
                         if (resultCount < 0 || resultCount > 1) {{ throw new Error('invalid/unsupported result count'); }}
 
@@ -298,34 +338,17 @@ impl HostIntrinsic {
                         preparedTask.setCallbackFn(callbackFn, callbackFnName);
                         preparedTask.setPostReturnFn(getPostReturnFn());
 
-                        const subtask = preparedTask.getParentSubtask();
-
-                        if (resultCount < 0 || resultCount > 1) {{ throw new Error(`unsupported result count [${{ resultCount }}]`); }}
+                        if (resultCount < 0 || resultCount > 1) {{
+                            throw new Error(`unsupported result count [${{ resultCount }}]`);
+                        }}
 
                         const params = preparedTask.getCalleeParams();
                         if (paramCount !== params.length) {{
+console.log("callee params", params);
                             throw new Error(`unexpected callee param count [${{ params.length }}], {async_start_call_fn} invocation expected [${{ paramCount }}]`);
                         }}
 
-                        subtask.setOnProgressFn(() => {{
-                            subtask.setPendingEventFn(() => {{
-                                if (subtask.resolved()) {{ subtask.deliverResolve(); }}
-                                return {{
-                                    code: {async_event_code_enum}.SUBTASK,
-                                    payload0: rep,
-                                    payload1: subtask.getStateNumber(),
-                                }}
-                            }});
-                        }});
-
-                        const subtaskState = subtask.getStateNumber();
-                        if (subtaskState < 0 || subtaskState > 2**5) {{
-                            throw new Error('invalid subtask state, out of valid range');
-                        }}
-
                         const callerComponentState = {get_or_create_async_state_fn}(subtask.componentIdx());
-                        const rep = callerComponentState.subtasks.insert(subtask);
-                        subtask.setRep(rep);
 
                         const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
                         const calleeBackpressure = calleeComponentState.hasBackpressure();
@@ -336,6 +359,7 @@ impl HostIntrinsic {
                         // lowering manually, as fused modules provider helper functions that can
                         subtask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{async_start_call_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
+
                             let subtaskCallMeta = subtask.getCallMetadata();
 
                             // NOTE: in the case of guest -> guest async calls, there may be no memory/realloc present,
@@ -353,9 +377,14 @@ impl HostIntrinsic {
 
                             // If a helper function was provided we are likely in a fused guest->guest call,
                             // and the result will be delivered (lift/lowered) via helper function
-                            if (subtaskCallMeta.returnFn) {{
+                            if (subtaskCallMeta && subtaskCallMeta.returnFn) {{
                                 {debug_log_fn}('[{async_start_call_fn}()] return function present while handling subtask result, returning early (skipping lower)');
-                                    return;
+
+                                // TODO: centralize calling of returnFn to *one place* (if possible)
+                                if (subtaskCallMeta.returnFnCalled) {{ return; }}
+
+                                subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]);
+                                return;
                             }}
 
                             // If there is no where to lower the results, exit early
@@ -365,27 +394,31 @@ impl HostIntrinsic {
                             }}
 
                             let callerMemory;
-                            if (callerMemoryIdx) {{
-                                callerMemory = {global_component_memories_class}.getMemory(callerComponentIdx, callerMemoryIdx);
+                            if (callerMemoryIdx !== null && callerMemoryIdx !== undefined) {{
+                                callerMemory = {lookup_memories_for_component_fn}({{ componentIdx: callerComponentIdx, memoryIdx: callerMemoryIdx }});
                             }} else {{
-                                const callerMemories = {global_component_memories_class}.getMemoriesForComponentIdx(callerComponentIdx);
-                                if (callerMemories.length != 1) {{ throw new Error(`unsupported amount of caller memories`); }}
+                                const callerMemories = {lookup_memories_for_component_fn}({{ componentIdx: callerComponentIdx }});
+                                if (callerMemories.length !== 1) {{ throw new Error(`unsupported amount of caller memories`); }}
                                 callerMemory = callerMemories[0];
                             }}
 
                             if (!callerMemory) {{
+                                {debug_log_fn}('[{async_start_call_fn}()] missing memory', {{ subtaskID: subtask.id(), res }});
                                 throw new Error(`missing memory for to guest->guest call result (subtask [${{subtask.id()}}])`);
                             }}
 
                             const lowerFns = calleeTask.getReturnLowerFns();
                             if (!lowerFns || lowerFns.length === 0) {{
-                                throw new Error(`missing result lower metadata for guest->guests call (subtask [${{subtask.id()}}])`);
+                                {debug_log_fn}('[{async_start_call_fn}()] missing result lower metadata for guest->guest call', {{ subtaskID: subtask.id() }});
+                                throw new Error(`missing result lower metadata for guest->guest call (subtask [${{subtask.id()}}])`);
                             }}
 
                             if (lowerFns.length !== 1) {{
+                                {debug_log_fn}('[{async_start_call_fn}()] only single result reportetd for guest->guest call', {{ subtaskID: subtask.id() }});
                                 throw new Error(`only single result supported for guest->guest calls (subtask [${{subtask.id()}}])`);
                             }}
 
+                            {debug_log_fn}('[{async_start_call_fn}()] lowering results', {{ subtaskID: subtask.id() }});
                             lowerFns[0]({{
                                 realloc: undefined,
                                 memory: callerMemory,
@@ -396,90 +429,27 @@ impl HostIntrinsic {
 
                         }});
 
-                        // Build call params
-                        const subtaskCallMeta = subtask.getCallMetadata();
-                        let startFnParams = [];
-                        let calleeParams = [];
-                        if (subtaskCallMeta.startFn && subtaskCallMeta.resultPtr) {{
-                            // If we're using a fused component start fn  and a result pointer is present,
-                            // then we need to pass the result pointer and other params to the start fn
-                            startFnParams.push(subtaskCallMeta.resultPtr, ...params);
-                        }} else {{
-                            // if not we need to pass params to the callee instead
-                            startFnParams.push(...params);
-                            calleeParams.push(...params);
-                        }}
-
-                        preparedTask.registerOnResolveHandler((res) => {{
-                            {debug_log_fn}('[{async_start_call_fn}()] signaling subtask completion due to task completion', {{
-                                childTaskID: preparedTask.id(),
-                                subtaskID: subtask.id(),
-                                parentTaskID: subtask.getParentTask().id(),
+                        subtask.setOnProgressFn(() => {{
+                            subtask.setPendingEvent(() => {{
+                                if (subtask.isResolved()) {{ subtask.deliverResolve(); }}
+                                const event = {{
+                                    code: {async_event_code_enum}.SUBTASK,
+                                    payload0: subtask.waitableRep(),
+                                    payload1: subtask.getStateNumber(),
+                                }};
+                                return event;
                             }});
-                            subtask.onResolve(res);
                         }});
-
-                        // TODO(fix): start fns sometimes produce results, how should they be used?
-                        // the result should theoretically be used for flat lowering, but fused components do
-                        // this automatically!
-                        subtask.onStart({{ startFnParams }});
-
-                        {debug_log_fn}("[{async_start_call_fn}()] initial call", {{
-                            task: preparedTask.id(),
-                            subtaskID: subtask.id(),
-                            calleeFnName: callee.name,
-                        }});
-
-                        const callbackResult = callee.apply(null, calleeParams);
-
-                        {debug_log_fn}("[{async_start_call_fn}()] after initial call", {{
-                            task: preparedTask.id(),
-                            subtaskID: subtask.id(),
-                            calleeFnName: callee.name,
-                        }});
-
-                        const doSubtaskResolve = () => {{
-                            subtask.deliverResolve();
-                        }};
-
-                        // If a single call resolved the subtask and there is no backpressure in the guest,
-                        // we can return immediately
-                        if (subtask.resolved() && !calleeBackpressure) {{
-                            {debug_log_fn}("[{async_start_call_fn}()] instantly resolved", {{
-                                calleeComponentIdx: preparedTask.componentIdx(),
-                                task: preparedTask.id(),
-                                subtaskID: subtask.id(),
-                                callerComponentIdx: subtask.componentIdx(),
-                            }});
-
-                            // If a fused component return function was specified for the subtask,
-                            // we've likely already called it during resolution of the task.
-                            //
-                            // In this case, we do not want to actually return 2 AKA "RETURNED",
-                            // but the normal started task state, because the fused component expects to get
-                            // the waitable + the original subtask state (0 AKA "STARTING")
-                            //
-                            if (subtask.getCallMetadata().returnFn) {{
-                                return Number(subtask.waitableRep()) << 4 | subtaskState;
-                            }}
-
-                            doSubtaskResolve();
-                            return {subtask_class}.State.RETURNED;
-                        }}
 
                         // Start the (event) driver loop that will resolve the task
-                        new Promise(async (resolve, reject) => {{
-                            if (subtask.resolved() && calleeBackpressure) {{
-                                await calleeComponentState.waitForBackpressure();
+                        queueMicrotask(async () => {{
+                            let startRes = subtask.onStart({{ startFnParams: params }});
+                            startRes = Array.isArray(startRes) ? startRes : [startRes];
 
-                                {debug_log_fn}("[{async_start_call_fn}()] instantly resolved after cleared backpressure", {{
-                                    calleeComponentIdx: preparedTask.componentIdx(),
-                                    task: preparedTask.id(),
-                                    subtaskID: subtask.id(),
-                                    callerComponentIdx: subtask.componentIdx(),
-                                }});
-                                return;
-                            }}
+                            await calleeComponentState.suspendTask({{
+                                task: preparedTask,
+                                readyFn: () => !calleeComponentState.isExclusivelyLocked(),
+                            }});
 
                             const started = await preparedTask.enter();
                             if (!started) {{
@@ -491,20 +461,64 @@ impl HostIntrinsic {
                                 return;
                             }}
 
-                            // TODO: retrieve/pass along actual fn name the callback corresponds to
-                            // (at least something like `<lifted fn name>_callback`)
-                            const fnName = [
-                                '<task ',
-                                subtask.parentTaskID(),
-                                '/subtask ',
-                                subtask.id(),
-                                '/task ',
-                                preparedTask.id(),
-                                '>',
-                            ].join("");
+                            let callbackResult;
+                            try {{
+                                let jspiCallee = WebAssembly.promising(callee);
+                                callbackResult = await {with_global_current_task_meta_async_fn}({{
+                                    taskID: preparedTask.id(),
+                                    componentIdx: preparedTask.componentIdx(),
+                                    fn: () => {{
+                                        return jspiCallee.apply(null, startRes);
+                                    }}
+                                }});
+                            }} catch(err) {{
+                                {debug_log_fn}("[{async_start_call_fn}()] initial subtask callee run failed", err);
+                                // NOTE: a good place to rejectt the parent task, if rejection API is enabled
+                                // subtask.reject(err);
+                                // subtask.getParentTask().reject(err);
+
+                                subtask.getParentTask().setErrored(err);
+
+                                return;
+                            }}
+
+                            // If there was no callback function, we're dealing with a sync function
+                            // that was lifted as async without one, there is only the callee.
+                            if (!callbackFn) {{
+                                {debug_log_fn}("[{async_start_call_fn}()] no callback, resolving w/ callee result", {{
+                                    taskID: preparedTask.id(),
+                                    componentIdx: preparedTask.componentIdx(),
+                                    preparedTask,
+                                    stateNumber: preparedTask.taskState(),
+                                    isResolved: preparedTask.isResolved(),
+                                    callbackFn,
+                                }});
+                                preparedTask.resolve([callbackResult]);
+                                return;
+                            }}
+
+                            let fnName = callbackFn.fnName;
+                            if (!fnName) {{
+                                fnName = [
+                                    '<task ',
+                                    subtask.parentTaskID(),
+                                    '/subtask ',
+                                    subtask.id(),
+                                    '/task ',
+                                    preparedTask.id(),
+                                    '>',
+                                ].join("");
+                            }}
 
                             try {{
-                              {debug_log_fn}("[{async_start_call_fn}()] starting driver loop", {{ fnName, componentIdx: preparedTask.componentIdx(), }});
+                                {debug_log_fn}("[{async_start_call_fn}()] starting driver loop", {{
+                                    fnName,
+                                    componentIdx: preparedTask.componentIdx(),
+                                    subtaskID: subtask.id(),
+                                    childTaskID: subtask.childTaskID(),
+                                    parentTaskID: subtask.parentTaskID(),
+                                }});
+
                                 await {async_driver_loop_fn}({{
                                     componentState: calleeComponentState,
                                     task: preparedTask,
@@ -518,6 +532,18 @@ impl HostIntrinsic {
                                 {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
                             }}
 
+                        }});
+
+                        const subtaskState = subtask.getStateNumber();
+                        if (subtaskState < 0 || subtaskState > 2**5) {{
+                            throw new Error('invalid subtask state, out of valid range');
+                        }}
+
+                        {debug_log_fn}('[{async_start_call_fn}()] returning subtask rep & state', {{
+                            subtask: {{
+                                rep: subtask.waitableRep(),
+                                state: subtaskState,
+                            }}
                         }});
 
                         return Number(subtask.waitableRep()) << 4 | subtaskState;
@@ -546,12 +572,19 @@ impl HostIntrinsic {
                     function {store_event_in_component_memory_fn}(args) {{
                         {debug_log_fn}('[{store_event_in_component_memory_fn}()] args', args);
                         const {{ memory, ptr, event }} = args;
+
                         if (!memory) {{ throw new Error('unexpectedly missing memory'); }}
                         if (ptr === undefined || ptr === null) {{ throw new Error('unexpectedly missing pointer'); }}
                         if (!event) {{ throw new Error('event object missing'); }}
+                        if (event.code === undefined) {{ throw new Error('invalid event object, missing code'); }}
+                        if (event.payload0 === undefined) {{ throw new Error('invalid event object, missing payload0'); }}
+                        if (event.payload1 === undefined) {{ throw new Error('invalid event object, missing payload1'); }}
+
                         const dv = new DataView(memory.buffer);
-                        dv.setUint32(ptr, event.index, true);
-                        dv.setUint32(ptr + 4, event.result, true);
+                        dv.setUint32(ptr, event.payload0, true);
+                        dv.setUint32(ptr + 4, event.payload1, true);
+
+                        return event.code;
                     }}
                     "#
                 ));

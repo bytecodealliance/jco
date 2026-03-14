@@ -225,7 +225,7 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         elementTypeRep() {{ return this.#elementTypeRep; }}
-                        isHostOwned() {{ return this.#componentIdx === null; }}
+                        isHostOwned() {{ return this.#componentIdx === -1; }}
                     }}
                 "));
             }
@@ -291,16 +291,16 @@ impl AsyncFutureIntrinsic {
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         let future = new Promise();
-                        let writeEndIdx = {global_future_map}.insert(new {future_writable_end_class}({{
+                        let writeEndWaitableIdx = {global_future_map}.insert(new {future_writable_end_class}({{
                             isFuture: true,
                             elementTypeRep,
                         }}));
-                        let readEndIdx = {global_future_map}.insert(new {future_readable_end_class}({{
+                        let readEndWaitableIdx = {global_future_map}.insert(new {future_readable_end_class}({{
                             isFuture: true,
                             elementTypeRep,
                         }}));
 
-                        return BigInt(writeEndIdx) << 32n | BigInt(readEndIdx);
+                        return BigInt(writeEndWaitableIdx) << 32n | BigInt(readEndWaitableIdx);
                     }}
                 "));
             }
@@ -367,7 +367,15 @@ impl AsyncFutureIntrinsic {
 
                         if ({is_borrowed_type}(componentIdx, future.elementTypeRep())) {{ throw new Error('borrowed types not supported'); }}
 
-                        const {{ id: bufferID }} = {global_buffer_mgr}.createBuffer({{ componentIdx, start, len, typeIdx, writable, readable }});
+                        const {{ id: bufferID }} = {global_buffer_mgr}.createBuffer({{
+                            componentIdx,
+                            start,
+                            len,
+                            typeIdx,
+                            writable,
+                            readable,
+                            target: `future read/write`,
+                        }});
 
                         const processFn = (result) => {{
                           if (.remaining(bufferID) !== 0) {{
@@ -390,7 +398,7 @@ impl AsyncFutureIntrinsic {
                         futureEnd.copy({{
                             bufferID,
                             onCopyDone: (result) => {{
-                              if (result === CopyResult.DROPPED && eventCode === Eventcode.FUTURE_WRITE) {{
+                              if (result === CopyResult.DROPPED && eventCode === EventCode.FUTURE_WRITE) {{
                                 throw new Error('cannot have a future write when the future is dropped');
                               }}
                               futureEnd.setEvent(processFn(result));
@@ -404,7 +412,7 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         if (futureEnd.hasPendingEvent()) {{
-                          const {{ code, payload0: index, payload1 }} = futureEnd.getEvent();
+                          const {{ code, payload0: index, payload1 }} = futureEnd.getPendingEvent();
                           if (code !== eventCode || index != 1) {{
                             throw new Error('invalid event, does not match expected event code');
                           }}
@@ -469,10 +477,10 @@ impl AsyncFutureIntrinsic {
                           }}
                         }}
 
-                        const {{ code, payload0: index, payload1: payload }} = e.getEvent();
+                        const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
                         if (futureEnd.isCopying()) {{ throw new Error('future end is still in copying state'); }}
                         if (code !== {async_event_code_enum}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {async_event_code_enum} + ']'); }}
-                        if (index !== 1) {{ throw new Error('unexpected index, should be 1'); }}
+                        if (index !== streamEndIdx) {{ throw new Error('index does not match stream end'); }}
 
                         return payload;
                     }}
