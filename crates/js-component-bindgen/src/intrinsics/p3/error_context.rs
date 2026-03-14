@@ -327,8 +327,9 @@ impl ErrCtxIntrinsic {
                         }}
 
                         errCtx.refCount -= 1;
-                        if (errCtx.refCount === 0) {{
+                        if (errCtx.refCount <= 0) {{
                             localErrCtxTable.remove(errCtx.localIdx);
+                            cstate.handles.remove(handle);
                         }}
 
                         const globalRefCount = {global_ref_count_add_fn}(errCtx.globalRep, -1);
@@ -370,20 +371,41 @@ impl ErrCtxIntrinsic {
                         const srcComponentState = {get_or_create_async_state_fn}(srcComponentIdx);
 
                         const errCtx = srcComponentState.handles.get(waitableIdx);
-                        if (!errCtx) {{ throw new Error(`missing error context (waitable idx [${{waitableIdx}}])`); }}
-                        if (!errCtx.localIdx) {{ throw new Error(`unexpectedly missing local idx from error context object`); }}
-                        if (!errCtx.globalRep) {{ throw new Error(`unexpectedly missing globalRep from error context object`); }}
-
-                        errCtx.refCount -= 1;
-                        if (errCtx.refCount === 0) {{
-                            const removed = fromTbl.remove(errCtx.localIdx);
-                            if (!removed) {{
-                                throw new Error(`failed to remove error context (global rep [${{errCtx.globalRep}}], component [${{componentIdx}}]`);
-                            }}
-                            srcComponentState.handles.remove(waitableIdx);
+                        if (!errCtx) {{
+                            throw new Error(`missing error context (waitable idx [${{waitableIdx}}])`);
+                        }}
+                        if (!errCtx.localIdx) {{
+                            throw new Error(`unexpectedly missing local idx from error context object`);
+                        }}
+                        if (!errCtx.globalRep) {{
+                            throw new Error(`unexpectedly missing globalRep from error context object`);
                         }}
 
-                        const {{ waitableIdx: newWaitableIdx }} = {create_local_handle_fn}(destComponentIdx, toTbl, errCtx.globalRep);
+                        errCtx.refCount -= 1;
+                        // NOTE: we avoid automatic removal here because return functions (e.g. in composed components)
+                        // may attempt to drop *after* the transfer. This change is really only about ownership,
+                        // even though we update the refcount
+
+                        const {{ waitableIdx: newWaitableIdx, localIdx }} = {create_local_handle_fn}(
+                            destComponentIdx,
+                            toTbl,
+                            errCtx.globalRep,
+                        );
+
+                        {debug_log_fn}('[{err_ctx_transfer_fn}()] successfully transferred', {{
+                            dest: {{
+                                errCtxHandle: localIdx,
+                                errCtxWaitableIdx: newWaitableIdx,
+                                tableIdx: destTableIdx,
+                                componentIdx: destComponentIdx,
+                            }},
+                            src: {{
+                                errCtxWaitableIdx: waitableIdx,
+                                tableIdx: srcTableIdx,
+                                componentIdx: srcComponentIdx,
+                            }},
+                        }});
+
                         return newWaitableIdx;
                     }}
                 "#));
