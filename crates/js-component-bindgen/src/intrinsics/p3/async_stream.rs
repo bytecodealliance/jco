@@ -746,6 +746,7 @@ impl AsyncStreamIntrinsic {
                 };
 
                 let async_event_code_enum = Intrinsic::AsyncEventCodeEnum.name();
+                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
 
                 // NOTE: these action implementations `write()` and `read()` are normally called
                 // from the host -- internally components will use the `stream.{write, read}` intrinsics
@@ -763,7 +764,7 @@ impl AsyncStreamIntrinsic {
                             // to ensure consecutive writes only wait on their direct predecessors,
                             // (i.e. write #3 must wait on write #2, *not* write #1)
                             //
-                            let newResult = Promise.withResolvers();
+                            let newResult = {promise_with_resolvers_fn}();
                             if (this.#result) {{
                                 try {{
                                     const p = this.#result.promise;
@@ -852,7 +853,7 @@ impl AsyncStreamIntrinsic {
                             // to ensure consecutive reads only wait on their direct predecessors,
                             // (i.e. read #3 must wait on read #2, *not* read #1)
                             //
-                            const newResult = Promise.withResolvers();
+                            const newResult = {promise_with_resolvers_fn}();
                             if (this.#result) {{
                                 try {{
                                     const p = this.#result.promise;
@@ -1054,6 +1055,7 @@ impl AsyncStreamIntrinsic {
                 let internal_stream_class_name = self.name();
                 let read_end_class = Self::StreamReadableEndClass.name();
                 let write_end_class = Self::StreamWritableEndClass.name();
+                let promise_with_resolvers_fn = Intrinsic::PromiseWithResolversPonyfill.name();
 
                 output.push_str(&format!(
                     r#"
@@ -1092,7 +1094,7 @@ impl AsyncStreamIntrinsic {
                             }};
                             const writeWait = () => {{
                                 if (this.#writeWaitPromise === null) {{
-                                    this.#writeWaitPromise = Promise.withResolvers();
+                                    this.#writeWaitPromise = {promise_with_resolvers_fn}();
                                 }}
                                 return this.#writeWaitPromise.promise;
                             }};
@@ -1115,7 +1117,7 @@ impl AsyncStreamIntrinsic {
                             }};
                             const readWait = () => {{
                                 if (this.#readWaitPromise === null) {{
-                                    this.#readWaitPromise = Promise.withResolvers();
+                                    this.#readWaitPromise = {promise_with_resolvers_fn}();
                                 }}
                                 return this.#readWaitPromise.promise;
                             }};
