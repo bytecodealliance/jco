@@ -4549,13 +4549,13 @@ pub fn gen_flat_lift_fn_js_expr(
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord).name();
             let record_ty = &component_types[*ty_idx];
             let mut keys_and_lifts_expr = String::from("[");
+            // For each field we build a list of [name, liftFn, 32bit alignment]
+            // so that the record lifting function (which is a higher level function)
+            // can properly generate a function that lifts the fields.
             for f in &record_ty.fields {
-                // For each field we build a list of [name, liftFn, 32bit alignment]
-                // so that the record lifting function (which is a higher level function)
-                // can properly generate a function that lifts the fields.
                 keys_and_lifts_expr.push_str(&format!(
-                    "['{}', {}, {}],",
-                    f.name,
+                    "['{}', {}, {}, {}],",
+                    f.name.to_lower_camel_case(),
                     gen_flat_lift_fn_js_expr(
                         intrinsic_mgr,
                         component_types,
@@ -4563,6 +4563,7 @@ pub fn gen_flat_lift_fn_js_expr(
                         string_encoding
                     ),
                     component_types.canonical_abi(ty).size32,
+                    component_types.canonical_abi(ty).align32,
                 ));
             }
             keys_and_lifts_expr.push(']');
@@ -4575,24 +4576,24 @@ pub fn gen_flat_lift_fn_js_expr(
             let variant_ty = &component_types[*ty_idx];
             let mut cases_and_lifts_expr = String::from("[");
             for (name, maybe_ty) in &variant_ty.cases {
-                cases_and_lifts_expr.push_str(&format!(
-                    "['{}', {}, {}],",
-                    name,
-                    maybe_ty
-                        .as_ref()
-                        .map(|ty| gen_flat_lift_fn_js_expr(
-                            intrinsic_mgr,
-                            component_types,
-                            ty,
-                            string_encoding
-                        ))
-                        .unwrap_or(String::from("null")),
-                    maybe_ty
-                        .as_ref()
-                        .map(|ty| component_types.canonical_abi(ty).size32)
-                        .map(|n| n.to_string())
-                        .unwrap_or(String::from("null")),
-                ));
+                let lift_args = match maybe_ty {
+                    None => format!("['{}', null, null, null],", name),
+                    Some(ty) => {
+                        format!(
+                            "['{}', {}, {}, {}],",
+                            name,
+                            gen_flat_lift_fn_js_expr(
+                                intrinsic_mgr,
+                                component_types,
+                                ty,
+                                string_encoding
+                            ),
+                            component_types.canonical_abi(ty).size32,
+                            component_types.canonical_abi(ty).align32,
+                        )
+                    }
+                };
+                cases_and_lifts_expr.push_str(&lift_args);
             }
             cases_and_lifts_expr.push(']');
             format!("{lift_fn}({cases_and_lifts_expr})")
@@ -4619,24 +4620,43 @@ pub fn gen_flat_lift_fn_js_expr(
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple).name();
             format!("{f}.bind(null, {ty_idx})")
         }
+
         InterfaceType::Flags(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
             let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags).name();
             format!("{f}.bind(null, {ty_idx})")
         }
+
         InterfaceType::Enum(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
             let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name();
             format!("{f}.bind(null, {ty_idx})")
         }
+
         InterfaceType::Option(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
-            let ty_idx = ty_idx.as_u32();
             let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOption).name();
-            format!("{f}.bind(null, {ty_idx})")
+            let option_ty = &component_types[*ty_idx];
+            let payload_offset_32 = option_ty.info.payload_offset32;
+            let align_32 = option_ty.abi.align32;
+            let size_32 = option_ty.abi.size32;
+            let lift_fn_js = gen_flat_lift_fn_js_expr(
+                intrinsic_mgr,
+                component_types,
+                &option_ty.ty,
+                string_encoding,
+            );
+            // NOTE: options are treated as variants
+            format!(
+                "{f}.bind(null, [
+                     ['some', {lift_fn_js}, {align_32}, {size_32}, {payload_offset_32} ],
+                     ['none', null, null, null, null ],
+                 ])"
+            )
         }
+
         InterfaceType::Result(ty_idx) => {
             intrinsic_mgr.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
             let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatResult).name();
@@ -4860,7 +4880,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 // so that the record lowering function (which is a higher level function)
                 // can properly generate a function that lowers the fields.
                 keys_and_lowers_expr.push_str(&format!(
-                    "{{ field: '{}', lowerFn: {}, align32: {} }},",
+                    "['{}', {}, {}, {} ],",
                     f.name,
                     gen_flat_lower_fn_js_expr(
                         intrinsic_mgr,
@@ -4868,11 +4888,12 @@ pub fn gen_flat_lower_fn_js_expr(
                         &f.ty,
                         string_encoding
                     ),
+                    component_types.canonical_abi(ty).size32,
                     component_types.canonical_abi(ty).align32,
                 ));
             }
             keys_and_lowers_expr.push(']');
-            format!("{lower_fn}({keys_and_lowers_expr})")
+            format!("{lower_fn}.bind(null, {keys_and_lowers_expr})")
         }
 
         InterfaceType::Variant(ty_idx) => {
