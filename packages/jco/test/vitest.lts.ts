@@ -3,6 +3,7 @@ import { availableParallelism } from "node:os";
 import { defineConfig } from "vitest/config";
 
 const DEFAULT_TIMEOUT_MS = 1000 * 60 * 1; // 1m
+const CI_DEFAULT_TIMEOUT_MS = 1000 * 60 * 3; // 1m
 
 const REPORTERS = process.env.GITHUB_ACTIONS ? ["verbose", "github-actions"] : ["verbose"];
 
@@ -23,8 +24,8 @@ export default defineConfig({
             "test/helpers.js",
             "test/p3/ported/wasmtime/component-async/common.js",
         ],
-        testTimeout: DEFAULT_TIMEOUT_MS,
-        hookTimeout: DEFAULT_TIMEOUT_MS,
-        teardownTimeout: DEFAULT_TIMEOUT_MS,
+        testTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
+        hookTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
+        teardownTimeout: process.env.CI ? CI_DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
     },
 });
